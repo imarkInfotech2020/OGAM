@@ -61,6 +61,9 @@ function App() {
       // Initialize model manager and load downloaded models list
       await modelManager.initialize();
 
+      // Clean up any mmproj files that were incorrectly added as standalone models
+      await modelManager.cleanupMMProjEntries();
+
       // Wire up background download metadata persistence
       const { setBackgroundDownload, activeBackgroundDownloads, addDownloadedModel } = useAppStore.getState();
       modelManager.setBackgroundDownloadMetadataCallback((downloadId, info) => {
@@ -81,11 +84,10 @@ function App() {
         console.error('[App] Failed to sync background downloads:', err);
       }
 
-      const downloadedModels = await modelManager.getDownloadedModels();
-      setDownloadedModels(downloadedModels);
-
-      // Load image models list
-      const imageModels = await modelManager.getDownloadedImageModels();
+      // Scan for any models that may have been downloaded externally or
+      // when app was killed before JS callback fired
+      const { textModels, imageModels } = await modelManager.refreshModelLists();
+      setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
 
       // Check if passphrase is set and lock app if needed

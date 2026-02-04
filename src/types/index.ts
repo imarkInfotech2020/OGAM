@@ -84,12 +84,16 @@ export interface ModelRecommendation {
 // Media attachment types
 export interface MediaAttachment {
   id: string;
-  type: 'image';
+  type: 'image' | 'document';
   uri: string;
   mimeType?: string;
   width?: number;
   height?: number;
   fileName?: string;
+  /** For documents: the extracted text content */
+  textContent?: string;
+  /** For documents: file size in bytes */
+  fileSize?: number;
 }
 
 // Generation metadata - details about how a message was generated
@@ -126,6 +130,8 @@ export interface Message {
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;
+  /** Indicates this is a system info message (model loaded/unloaded, etc.) */
+  isSystemInfo?: boolean;
   attachments?: MediaAttachment[];
   /** Generation duration in milliseconds */
   generationTimeMs?: number;
@@ -207,6 +213,7 @@ export interface ONNXImageModel {
   downloadedAt: string;
   size: number; // Total size of all model files in bytes
   style?: string; // e.g., 'creative', 'photorealistic', 'anime'
+  backend?: 'mnn' | 'qnn'; // 'mnn' for CPU, 'qnn' for Qualcomm NPU
 }
 
 // Image generation state for UI

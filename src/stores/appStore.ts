@@ -201,16 +201,17 @@ export const useAppStore = create<AppState>()(
         // Model to use for LLM-based classification (null = use current model)
         classifierModelId: null as string | null,
         // Image generation steps (more = better quality but slower)
-        // For standard SD: 20-30 steps, For LCM: 4-8 steps
-        imageSteps: 8,
+        // For SD1.5 models: 20 steps is a good default with DPM scheduler
+        imageSteps: 20,
         // Guidance scale for image generation
-        // For standard SD: 7.5, For LCM: 1.0-2.0
-        imageGuidanceScale: 2.0,
+        // For SD1.5 models: 7.5 is the standard default
+        imageGuidanceScale: 7.5,
         // CPU threads for image generation (applies on next image model load)
         imageThreads: 4,
         // Image generation resolution (width and height in pixels, must be divisible by 8)
-        imageWidth: 256,
-        imageHeight: 256,
+        // SD1.5 models are trained at 512x512
+        imageWidth: 512,
+        imageHeight: 512,
         // Model loading strategy: 'performance' = keep loaded, 'memory' = load on demand
         modelLoadingStrategy: 'memory' as ModelLoadingStrategy,
         // GPU acceleration for text inference (try GPU offloading when available)

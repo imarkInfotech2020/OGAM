@@ -200,6 +200,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     setShowActionMenu(false);
   };
 
+  // Render system info messages (model loaded/unloaded) differently
+  if (message.isSystemInfo) {
+    return (
+      <View style={styles.systemInfoContainer}>
+        <Text style={styles.systemInfoText}>{displayContent}</Text>
+      </View>
+    );
+  }
+
   return (
     <>
       <TouchableOpacity
@@ -521,6 +530,17 @@ const styles = StyleSheet.create({
   },
   assistantContainer: {
     alignItems: 'flex-start',
+  },
+  systemInfoContainer: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  systemInfoText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   bubble: {
     maxWidth: '85%',

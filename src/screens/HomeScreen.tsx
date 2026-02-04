@@ -1,20 +1,18 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Modal,
   ActivityIndicator,
-  AppState,
-  AppStateStatus,
+  InteractionManager,
 } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { Button, Card } from '../components';
+import { Button, Card, CustomAlert, AlertState, initialAlertState, showAlert, hideAlert } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
@@ -39,12 +37,26 @@ type HomeScreenProps = {
 
 type ModelPickerType = 'text' | 'image' | null;
 
+type LoadingState = {
+  isLoading: boolean;
+  type: 'text' | 'image' | null;
+  modelName: string | null;
+};
+
+// Track if we've synced native state to avoid repeated calls
+let hasInitializedNativeSync = false;
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [resourceUsage, setResourceUsage] = useState<ResourceUsage | null>(null);
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    isLoading: false,
+    type: null,
+    modelName: null,
+  });
   const [isEjecting, setIsEjecting] = useState(false);
-  const appState = useRef(AppState.currentState);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [memoryInfo, setMemoryInfo] = useState<ResourceUsage | null>(null);
+  const isFirstMount = useRef(true);
 
   const {
     downloadedModels,
@@ -61,35 +73,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
   const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
 
-  const refreshResourceUsage = useCallback(async () => {
+  useEffect(() => {
+    // Defer heavy operations until after navigation animations complete
+    const task = InteractionManager.runAfterInteractions(() => {
+      loadData();
+      // Only sync native state once per app session to avoid lag on screen transitions
+      if (!hasInitializedNativeSync) {
+        hasInitializedNativeSync = true;
+        activeModelService.syncWithNativeState();
+      }
+    });
+
+    isFirstMount.current = false;
+
+    return () => task.cancel();
+  }, []);
+
+  // Refresh memory info periodically and when models change
+  const refreshMemoryInfo = useCallback(async () => {
     try {
-      const usage = await activeModelService.getResourceUsage();
-      setResourceUsage(usage);
+      const info = await activeModelService.getResourceUsage();
+      setMemoryInfo(info);
     } catch (error) {
-      // Silently fail on resource fetch errors
+      console.warn('[HomeScreen] Failed to get memory info:', error);
     }
   }, []);
 
+  // Refresh memory when models are loaded/unloaded (subscribe to changes)
   useEffect(() => {
-    loadData();
-    refreshResourceUsage();
+    // Initial fetch
+    refreshMemoryInfo();
 
-    // Refresh resources every 5 seconds when app is active
-    const interval = setInterval(refreshResourceUsage, 5000);
-
-    // Handle app state changes
-    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && nextState === 'active') {
-        refreshResourceUsage();
-      }
-      appState.current = nextState;
+    // Subscribe to model changes to refresh when models load/unload
+    const unsubscribe = activeModelService.subscribe(() => {
+      refreshMemoryInfo();
     });
 
-    return () => {
-      clearInterval(interval);
-      subscription.remove();
-    };
-  }, [refreshResourceUsage]);
+    return () => unsubscribe();
+  }, [refreshMemoryInfo]);
 
   const loadData = async () => {
     if (!deviceInfo) {
@@ -103,58 +124,148 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const handleSelectTextModel = async (model: DownloadedModel) => {
     if (activeModelId === model.id) return;
 
-    setIsLoading(true);
+    // Check memory before loading
+    const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
+
+    if (!memoryCheck.canLoad) {
+      // Critical: Not enough memory, don't allow loading
+      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+      return;
+    }
+
+    if (memoryCheck.severity === 'warning') {
+      // Warning: Ask user to confirm
+      setAlertState(showAlert(
+        'Low Memory Warning',
+        memoryCheck.message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Load Anyway',
+            style: 'default',
+            onPress: () => {
+              setAlertState(hideAlert());
+              proceedWithTextModelLoad(model);
+            },
+          },
+        ]
+      ));
+      return;
+    }
+
+    // Safe to load
+    proceedWithTextModelLoad(model);
+  };
+
+  const proceedWithTextModelLoad = async (model: DownloadedModel) => {
+    setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
+    setPickerType(null); // Close modal when loading starts
+
+    // Give UI time to update before starting heavy native operation
+    // This prevents the app from appearing frozen
+    await new Promise(resolve => requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 100);
+      });
+    }));
+
     try {
-      // Use activeModelService singleton - prevents duplicate loads
       await activeModelService.loadTextModel(model.id);
     } catch (error) {
-      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
+      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
     } finally {
-      setIsLoading(false);
+      setLoadingState({ isLoading: false, type: null, modelName: null });
     }
   };
 
   const handleUnloadTextModel = async () => {
-    setIsLoading(true);
+    console.log('[HomeScreen] handleUnloadTextModel called, activeModelId:', activeModelId);
+    setLoadingState({ isLoading: true, type: 'text', modelName: null });
+    setPickerType(null); // Close modal
     try {
       await activeModelService.unloadTextModel();
+      console.log('[HomeScreen] unloadTextModel completed');
     } catch (error) {
-      Alert.alert('Error', 'Failed to unload model');
+      console.log('[HomeScreen] unloadTextModel error:', error);
+      setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
-      setIsLoading(false);
+      setLoadingState({ isLoading: false, type: null, modelName: null });
     }
   };
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
 
-    setIsLoading(true);
+    // Check memory before loading
+    const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'image');
+
+    if (!memoryCheck.canLoad) {
+      // Critical: Not enough memory, don't allow loading
+      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+      return;
+    }
+
+    if (memoryCheck.severity === 'warning') {
+      // Warning: Ask user to confirm
+      setAlertState(showAlert(
+        'Low Memory Warning',
+        memoryCheck.message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Load Anyway',
+            style: 'default',
+            onPress: () => {
+              setAlertState(hideAlert());
+              proceedWithImageModelLoad(model);
+            },
+          },
+        ]
+      ));
+      return;
+    }
+
+    // Safe to load
+    proceedWithImageModelLoad(model);
+  };
+
+  const proceedWithImageModelLoad = async (model: ONNXImageModel) => {
+    setLoadingState({ isLoading: true, type: 'image', modelName: model.name });
+    setPickerType(null); // Close modal when loading starts
+
+    // Give UI time to update before starting heavy native operation
+    await new Promise(resolve => requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 100);
+      });
+    }));
+
     try {
-      // Use activeModelService singleton - prevents duplicate loads
       await activeModelService.loadImageModel(model.id);
     } catch (error) {
-      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
+      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
     } finally {
-      setIsLoading(false);
+      setLoadingState({ isLoading: false, type: null, modelName: null });
     }
   };
 
   const handleUnloadImageModel = async () => {
-    setIsLoading(true);
+    setLoadingState({ isLoading: true, type: 'image', modelName: null });
+    setPickerType(null); // Close modal
     try {
       await activeModelService.unloadImageModel();
     } catch (error) {
-      Alert.alert('Error', 'Failed to unload model');
+      setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
-      setIsLoading(false);
+      setLoadingState({ isLoading: false, type: null, modelName: null });
     }
   };
 
-  const handleEjectAll = async () => {
+  const handleEjectAll = () => {
     const hasModels = activeModelId || activeImageModelId;
     if (!hasModels) return;
 
-    Alert.alert(
+    setAlertState(showAlert(
       'Eject All Models',
       'Unload all active models to free up memory?',
       [
@@ -163,23 +274,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           text: 'Eject All',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             setIsEjecting(true);
             try {
               const results = await activeModelService.unloadAllModels();
-              await refreshResourceUsage();
               const count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
               if (count > 0) {
-                Alert.alert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`);
+                setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to unload models');
+              setAlertState(showAlert('Error', 'Failed to unload models'));
             } finally {
               setIsEjecting(false);
             }
           },
         },
       ]
-    );
+    ));
   };
 
   const startNewChat = () => {
@@ -195,7 +306,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   };
 
   const handleDeleteConversation = (conversation: Conversation) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Conversation',
       `Delete "${conversation.title}"?`,
       [
@@ -203,10 +314,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteConversation(conversation.id),
+          onPress: () => {
+            setAlertState(hideAlert());
+            deleteConversation(conversation.id);
+          },
         },
       ]
-    );
+    ));
   };
 
   const renderRightActions = (conversation: Conversation) => (
@@ -229,57 +343,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <Text style={styles.title}>Local LLM</Text>
         </View>
 
-        {/* Resource Monitor - Only show when models are loaded */}
-        {resourceUsage && (activeModelId || activeImageModelId) && (
-          <TouchableOpacity
-            style={styles.resourceCard}
-            onPress={refreshResourceUsage}
-            activeOpacity={0.7}
-          >
-            <View style={styles.resourceRow}>
-              <View style={styles.resourceItem}>
-                <View style={styles.resourceHeader}>
-                  <Icon name="cpu" size={14} color={COLORS.textMuted} />
-                  <Text style={styles.resourceLabel}>Model Memory (est.)</Text>
-                  <Icon name="refresh-cw" size={12} color={COLORS.textMuted} style={styles.refreshIcon} />
-                </View>
-                {resourceUsage.estimatedModelMemory > 0 && (
-                  <>
-                    <View style={styles.resourceBarContainer}>
-                      <View
-                        style={[
-                          styles.resourceBar,
-                          {
-                            width: `${Math.min((resourceUsage.estimatedModelMemory / resourceUsage.memoryTotal) * 100, 100)}%`,
-                            backgroundColor: (resourceUsage.estimatedModelMemory / resourceUsage.memoryTotal) > 0.6 ? COLORS.warning : COLORS.primary,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.modelMemoryValue}>
-                      ~{hardwareService.formatBytes(resourceUsage.estimatedModelMemory)} / {hardwareService.formatBytes(resourceUsage.memoryTotal)} RAM
-                    </Text>
-                  </>
-                )}
-              </View>
-              <TouchableOpacity
-                style={styles.ejectButton}
-                onPress={handleEjectAll}
-                disabled={isEjecting}
-              >
-                {isEjecting ? (
-                  <ActivityIndicator size="small" color={COLORS.text} />
-                ) : (
-                  <>
-                    <Icon name="power" size={14} color={COLORS.error} />
-                    <Text style={styles.ejectButtonText}>Eject All</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
-
         {/* Active Models Section */}
         <View style={styles.modelsRow}>
           {/* Text Model */}
@@ -290,9 +353,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.modelCardHeader}>
               <Icon name="message-square" size={16} color={COLORS.textMuted} />
               <Text style={styles.modelCardLabel}>Text</Text>
-              <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+              {loadingState.isLoading && loadingState.type === 'text' ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+              )}
             </View>
-            {activeTextModel ? (
+            {loadingState.isLoading && loadingState.type === 'text' ? (
+              <>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {loadingState.modelName || 'Unloading...'}
+                </Text>
+                <Text style={styles.modelCardLoading}>Loading...</Text>
+              </>
+            ) : activeTextModel ? (
               <>
                 <Text style={styles.modelCardName} numberOfLines={1}>
                   {activeTextModel.name}
@@ -316,9 +390,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={COLORS.textMuted} />
               <Text style={styles.modelCardLabel}>Image</Text>
-              <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+              {loadingState.isLoading && loadingState.type === 'image' ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+              )}
             </View>
-            {activeImageModel ? (
+            {loadingState.isLoading && loadingState.type === 'image' ? (
+              <>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {loadingState.modelName || 'Unloading...'}
+                </Text>
+                <Text style={styles.modelCardLoading}>Loading...</Text>
+              </>
+            ) : activeImageModel ? (
               <>
                 <Text style={styles.modelCardName} numberOfLines={1}>
                   {activeImageModel.name}
@@ -334,6 +419,72 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Memory Usage Indicator - Shows loaded models and their estimated RAM */}
+        {(activeTextModel || activeImageModel) && (
+          <View style={styles.memoryIndicator}>
+            <View style={styles.memoryHeader}>
+              <Icon name="cpu" size={14} color={COLORS.textMuted} />
+              <Text style={styles.memoryTitle}>Loaded Models</Text>
+              <TouchableOpacity onPress={refreshMemoryInfo} style={styles.refreshButton}>
+                <Icon name="refresh-cw" size={14} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {activeTextModel && (
+              <View style={styles.memoryModelRow}>
+                <Icon name="message-square" size={12} color={COLORS.textMuted} />
+                <Text style={styles.memoryModelName} numberOfLines={1}>
+                  {activeTextModel.name}{activeTextModel.isVisionModel ? ' + Vision' : ''}
+                </Text>
+                <Text style={styles.memoryModelSize}>
+                  ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                </Text>
+              </View>
+            )}
+            {activeImageModel && (
+              <View style={styles.memoryModelRow}>
+                <Icon name="image" size={12} color={COLORS.textMuted} />
+                <Text style={styles.memoryModelName} numberOfLines={1}>{activeImageModel.name}</Text>
+                <Text style={styles.memoryModelSize}>
+                  ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                </Text>
+              </View>
+            )}
+            {activeTextModel && activeImageModel && (
+              <View style={styles.memoryTotalRow}>
+                <Text style={styles.memoryTotalLabel}>Total estimated RAM</Text>
+                <Text style={styles.memoryTotalValue}>
+                  ~{((((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) + (activeImageModel.size * 1.8)) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                </Text>
+              </View>
+            )}
+            {activeTextModel && activeImageModel && (
+              <Text style={styles.memoryWarningText}>
+                Running both models uses significant memory. If the app becomes slow, try unloading one.
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Eject All - Show when models are loaded OR loading (so user can cancel) */}
+        {(activeModelId || activeImageModelId || loadingState.isLoading) && (
+          <TouchableOpacity
+            style={styles.ejectAllButton}
+            onPress={handleEjectAll}
+            disabled={isEjecting}
+          >
+            {isEjecting ? (
+              <ActivityIndicator size="small" color={COLORS.error} />
+            ) : (
+              <>
+                <Icon name="power" size={14} color={COLORS.error} />
+                <Text style={styles.ejectAllText}>
+                  {loadingState.isLoading ? 'Cancel Loading' : 'Eject All Models'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
 
         {/* New Chat Button */}
         {activeTextModel ? (
@@ -364,7 +515,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           onPress={() => (navigation as any).navigate('Gallery')}
           activeOpacity={0.7}
         >
-          <Icon name="image" size={18} color={COLORS.primary} />
+          <Icon name="grid" size={18} color={COLORS.primary} />
           <View style={styles.galleryCardInfo}>
             <Text style={styles.galleryCardTitle}>Image Gallery</Text>
             <Text style={styles.galleryCardMeta}>
@@ -449,12 +600,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {isLoading && (
-              <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="small" color={COLORS.text} />
-                <Text style={styles.loadingText}>Loading model...</Text>
-              </View>
-            )}
 
             <ScrollView style={styles.modalScroll}>
               {pickerType === 'text' && (
@@ -478,33 +623,49 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         <TouchableOpacity
                           style={styles.unloadButton}
                           onPress={handleUnloadTextModel}
-                          disabled={isLoading}
+                          disabled={loadingState.isLoading}
                         >
                           <Icon name="power" size={16} color={COLORS.error} />
                           <Text style={styles.unloadButtonText}>Unload current model</Text>
                         </TouchableOpacity>
                       )}
-                      {downloadedModels.map((model) => (
-                        <TouchableOpacity
-                          key={model.id}
-                          style={[
-                            styles.pickerItem,
-                            activeModelId === model.id && styles.pickerItemActive,
-                          ]}
-                          onPress={() => handleSelectTextModel(model)}
-                          disabled={isLoading}
-                        >
-                          <View style={styles.pickerItemInfo}>
-                            <Text style={styles.pickerItemName}>{model.name}</Text>
-                            <Text style={styles.pickerItemMeta}>
-                              {model.quantization} · {hardwareService.formatBytes(model.fileSize)}
-                            </Text>
-                          </View>
-                          {activeModelId === model.id && (
-                            <Icon name="check" size={18} color={COLORS.text} />
-                          )}
-                        </TouchableOpacity>
-                      ))}
+                      {downloadedModels.map((model) => {
+                        // Estimate runtime memory (file size * 1.5 for KV cache/activations)
+                        // Include mmproj file size for vision models
+                        const totalSize = model.fileSize + (model.mmProjFileSize || 0);
+                        const estimatedMemoryGB = (totalSize * 1.5) / (1024 * 1024 * 1024);
+                        const memoryFits = memoryInfo
+                          ? estimatedMemoryGB < memoryInfo.memoryAvailable / (1024 * 1024 * 1024) - 1.5
+                          : true;
+                        return (
+                          <TouchableOpacity
+                            key={model.id}
+                            style={[
+                              styles.pickerItem,
+                              activeModelId === model.id && styles.pickerItemActive,
+                              !memoryFits && styles.pickerItemWarning,
+                            ]}
+                            onPress={() => handleSelectTextModel(model)}
+                            disabled={loadingState.isLoading}
+                          >
+                            <View style={styles.pickerItemInfo}>
+                              <Text style={styles.pickerItemName}>
+                                {model.name}{model.isVisionModel ? ' 👁' : ''}
+                              </Text>
+                              <Text style={styles.pickerItemMeta}>
+                                {model.quantization} · {hardwareService.formatModelSize(model)}
+                                {model.isVisionModel && ' (Vision)'}
+                              </Text>
+                              <Text style={[styles.pickerItemMemory, !memoryFits && styles.pickerItemMemoryWarning]}>
+                                ~{estimatedMemoryGB.toFixed(1)} GB RAM {!memoryFits && '(may not fit)'}
+                              </Text>
+                            </View>
+                            {activeModelId === model.id && (
+                              <Icon name="check" size={18} color={COLORS.text} />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </>
                   )}
                 </>
@@ -531,33 +692,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         <TouchableOpacity
                           style={styles.unloadButton}
                           onPress={handleUnloadImageModel}
-                          disabled={isLoading}
+                          disabled={loadingState.isLoading}
                         >
                           <Icon name="power" size={16} color={COLORS.error} />
                           <Text style={styles.unloadButtonText}>Unload current model</Text>
                         </TouchableOpacity>
                       )}
-                      {downloadedImageModels.map((model) => (
-                        <TouchableOpacity
-                          key={model.id}
-                          style={[
-                            styles.pickerItem,
-                            activeImageModelId === model.id && styles.pickerItemActive,
-                          ]}
-                          onPress={() => handleSelectImageModel(model)}
-                          disabled={isLoading}
-                        >
-                          <View style={styles.pickerItemInfo}>
-                            <Text style={styles.pickerItemName}>{model.name}</Text>
-                            <Text style={styles.pickerItemMeta}>
-                              {model.style || 'Image'} · {hardwareService.formatBytes(model.size)}
-                            </Text>
-                          </View>
-                          {activeImageModelId === model.id && (
-                            <Icon name="check" size={18} color={COLORS.text} />
-                          )}
-                        </TouchableOpacity>
-                      ))}
+                      {downloadedImageModels.map((model) => {
+                        // Estimate runtime memory (file size * 1.8 for ONNX runtime)
+                        const estimatedMemoryGB = (model.size * 1.8) / (1024 * 1024 * 1024);
+                        const memoryFits = memoryInfo
+                          ? estimatedMemoryGB < memoryInfo.memoryAvailable / (1024 * 1024 * 1024) - 1.5
+                          : true;
+                        return (
+                          <TouchableOpacity
+                            key={model.id}
+                            style={[
+                              styles.pickerItem,
+                              activeImageModelId === model.id && styles.pickerItemActive,
+                              !memoryFits && styles.pickerItemWarning,
+                            ]}
+                            onPress={() => handleSelectImageModel(model)}
+                            disabled={loadingState.isLoading}
+                          >
+                            <View style={styles.pickerItemInfo}>
+                              <Text style={styles.pickerItemName}>{model.name}</Text>
+                              <Text style={styles.pickerItemMeta}>
+                                {model.style || 'Image'} · {hardwareService.formatBytes(model.size)}
+                              </Text>
+                              <Text style={[styles.pickerItemMemory, !memoryFits && styles.pickerItemMemoryWarning]}>
+                                ~{estimatedMemoryGB.toFixed(1)} GB RAM {!memoryFits && '(may not fit)'}
+                              </Text>
+                            </View>
+                            {activeImageModelId === model.id && (
+                              <Icon name="check" size={18} color={COLORS.text} />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </>
                   )}
                 </>
@@ -577,6 +749,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Full-screen loading overlay - blocks all touches during model loading */}
+      <Modal
+        visible={loadingState.isLoading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingTitle}>
+              {loadingState.type === 'text' ? 'Loading Text Model' : 'Loading Image Model'}
+            </Text>
+            <Text style={styles.loadingModelName} numberOfLines={2}>
+              {loadingState.modelName || 'Please wait...'}
+            </Text>
+            <Text style={styles.loadingHint}>
+              This may take a moment for larger models.{'\n'}
+              The app will be unresponsive during loading.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Alert Modal */}
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -612,66 +817,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: COLORS.text,
-  },
-  resourceCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  resourceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  resourceItem: {
-    flex: 1,
-  },
-  resourceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  resourceLabel: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    fontWeight: '500',
-  },
-  refreshIcon: {
-    marginLeft: 'auto',
-  },
-  resourceBarContainer: {
-    height: 6,
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  resourceBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  modelMemoryValue: {
-    fontSize: 12,
-    color: COLORS.text,
-    fontFamily: 'monospace',
-    marginTop: 4,
-  },
-  ejectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  ejectButtonText: {
-    fontSize: 12,
-    color: COLORS.error,
-    fontWeight: '500',
   },
   modelsRow: {
     flexDirection: 'row',
@@ -709,6 +854,90 @@ const styles = StyleSheet.create({
   modelCardEmpty: {
     fontSize: 13,
     color: COLORS.textMuted,
+  },
+  modelCardLoading: {
+    fontSize: 12,
+    color: COLORS.primary,
+    marginTop: 2,
+  },
+  // Memory indicator styles
+  memoryIndicator: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+  },
+  memoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  memoryTitle: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  refreshButton: {
+    padding: 4,
+  },
+  memoryModelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  memoryModelName: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  memoryModelSize: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  memoryTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    marginTop: 8,
+    paddingTop: 8,
+  },
+  memoryTotalLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  memoryTotalValue: {
+    fontSize: 13,
+    color: COLORS.warning,
+    fontWeight: '600',
+  },
+  memoryWarningText: {
+    fontSize: 11,
+    color: COLORS.warning,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  ejectAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  ejectAllText: {
+    fontSize: 14,
+    color: COLORS.error,
+    fontWeight: '500',
   },
   newChatButton: {
     marginBottom: 24,
@@ -846,18 +1075,6 @@ const styles = StyleSheet.create({
   modalScroll: {
     padding: 16,
   },
-  loadingOverlay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    backgroundColor: COLORS.surface,
-    gap: 8,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
   pickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -881,6 +1098,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMuted,
     marginTop: 2,
+  },
+  pickerItemMemory: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  pickerItemMemoryWarning: {
+    color: COLORS.warning,
+  },
+  pickerItemWarning: {
+    borderWidth: 1,
+    borderColor: COLORS.warning,
   },
   unloadButton: {
     flexDirection: 'row',
@@ -918,5 +1147,39 @@ const styles = StyleSheet.create({
   browseMoreText: {
     fontSize: 14,
     color: COLORS.textMuted,
+  },
+  // Loading overlay styles
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    marginHorizontal: 40,
+    maxWidth: 300,
+  },
+  loadingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 20,
+  },
+  loadingModelName: {
+    fontSize: 14,
+    color: COLORS.primary,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  loadingHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 16,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

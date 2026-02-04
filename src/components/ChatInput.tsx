@@ -214,6 +214,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
+
   const canSend = (message.trim() || attachments.length > 0) && !isGenerating;
 
   return (
@@ -228,10 +229,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         >
           {attachments.map(attachment => (
             <View key={attachment.id} style={styles.attachmentPreview}>
-              <Image
-                source={{ uri: attachment.uri }}
-                style={styles.attachmentImage}
-              />
+              {attachment.type === 'image' ? (
+                <Image
+                  source={{ uri: attachment.uri }}
+                  style={styles.attachmentImage}
+                />
+              ) : (
+                <View style={styles.documentPreview}>
+                  <Icon name="file-text" size={24} color={COLORS.primary} />
+                  <Text style={styles.documentName} numberOfLines={2}>
+                    {attachment.fileName || 'Document'}
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(attachment.id)}
@@ -272,6 +282,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </TouchableOpacity>
           )}
 
+
           {/* Image generation mode toggle - only show in manual mode */}
           {settings.imageGenerationMode === 'manual' && imageModelLoaded && (
             <TouchableOpacity
@@ -283,7 +294,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled || isGenerating}
             >
               <Icon
-                name="image"
+                name="zap"
                 size={18}
                 color={imageMode === 'force' ? COLORS.primary : COLORS.textSecondary}
               />
@@ -373,6 +384,20 @@ const styles = StyleSheet.create({
   attachmentImage: {
     width: '100%',
     height: '100%',
+  },
+  documentPreview: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
+  },
+  documentName: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 4,
   },
   removeAttachment: {
     position: 'absolute',

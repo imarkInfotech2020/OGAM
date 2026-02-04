@@ -23,121 +23,23 @@ import { Card, ModelCard, Button } from '../components';
 import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS } from '../constants';
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
+import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
-// HuggingFace file structure for LCM model
-const LCM_HUGGINGFACE_FILES = [
-  { path: 'text_encoder/model.onnx', size: 247 * 1024 * 1024 },
-  { path: 'unet/model.onnx', size: 93.7 * 1024 * 1024 },
-  { path: 'unet/model.onnx_data', size: 1.64 * 1024 * 1024 * 1024 },
-  { path: 'unet/config.json', size: 2 * 1024 },
-  { path: 'vae_decoder/model.onnx', size: 2.11 * 1024 * 1024 },
-  { path: 'vae_decoder/model.onnx_data', size: 97.4 * 1024 * 1024 },
-  { path: 'vae_decoder/config.json', size: 1 * 1024 },
-  { path: 'tokenizer/vocab.json', size: 1.06 * 1024 * 1024 },
-  { path: 'tokenizer/merges.txt', size: 525 * 1024 },
-  { path: 'tokenizer/tokenizer_config.json', size: 2 * 1024 },
-  { path: 'tokenizer/special_tokens_map.json', size: 1 * 1024 },
-];
+type BackendFilter = 'all' | 'mnn' | 'qnn';
 
-// Predefined ONNX image models available for download
-// Note: Only 1GB+ models from patch-14022024 work reliably. The 600MB models from patch-25022024 have compatibility issues.
-const AVAILABLE_IMAGE_MODELS: Array<{
+interface ImageModelDescriptor {
   id: string;
   name: string;
   description: string;
-  downloadUrl?: string;
-  huggingFaceRepo?: string;
-  huggingFaceFiles?: Array<{ path: string; size: number }>;
+  downloadUrl: string;
   size: number;
   style: string;
-}> = [
-  // === Photorealistic Models (patch-14022024 - 1GB+, stable) ===
-  {
-    id: 'absolute_reality',
-    name: 'Absolute Reality',
-    description: 'Best photorealistic model - high fidelity portraits and scenes',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-14022024/majicmix.zip',
-    size: 1034 * 1024 * 1024, // ~1GB
-    style: 'photorealistic',
-  },
-  {
-    id: 'chilloutmix',
-    name: 'ChilloutMix',
-    description: 'Popular for realistic portraits, especially Asian features',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-14022024/chilloutmix.zip',
-    size: 1034 * 1024 * 1024, // ~1GB
-    style: 'photorealistic',
-  },
-  {
-    id: 'realvision',
-    name: 'Realistic Vision',
-    description: 'Top-tier realistic model - excellent for human faces and scenes',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-14022024/realvision.zip',
-    size: 1034 * 1024 * 1024, // ~1GB
-    style: 'photorealistic',
-  },
-  // === Creative/Artistic Models ===
-  {
-    id: 'lcm_dreamshaper_v7',
-    name: 'LCM DreamShaper v7',
-    description: 'Fast generation (4-8 steps) - versatile creative model',
-    huggingFaceRepo: 'aislamov/lcm-dreamshaper-v7-onnx',
-    huggingFaceFiles: LCM_HUGGINGFACE_FILES,
-    size: 2.22 * 1024 * 1024 * 1024, // ~2.22GB
-    style: 'creative',
-  },
-  // === Additional Models (patch-25022024 - 600MB, may have compatibility issues) ===
-  {
-    id: 'deliberate',
-    name: 'Deliberate',
-    description: 'Digital art & realism blend - detailed artistic illustrations',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/deliberate.zip',
-    size: 604 * 1024 * 1024, // ~600MB
-    style: 'artistic',
-  },
-  {
-    id: 'dreamshaper',
-    name: 'DreamShaper',
-    description: 'Versatile model for fantasy, sci-fi, and artistic styles',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/dreamshaper.zip',
-    size: 604 * 1024 * 1024, // ~600MB
-    style: 'creative',
-  },
-  {
-    id: 'cyberrealistic',
-    name: 'CyberRealistic',
-    description: 'High-quality photorealistic images with modern aesthetics',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/cyberrealistic_v32.zip',
-    size: 603 * 1024 * 1024, // ~600MB
-    style: 'photorealistic',
-  },
-  {
-    id: 'epicrealism',
-    name: 'Epic Realism',
-    description: 'Hyper-realistic images - one of the best for realism',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/epicrealism_pureEvolutionV4.zip',
-    size: 603 * 1024 * 1024, // ~600MB
-    style: 'photorealistic',
-  },
-  {
-    id: 'counterfeit',
-    name: 'Counterfeit v3',
-    description: 'Top anime model - high-quality anime art generation',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/counterfit-v3.0.zip',
-    size: 605 * 1024 * 1024, // ~600MB
-    style: 'anime',
-  },
-  {
-    id: 'meinamix',
-    name: 'MeinaMix',
-    description: 'Popular anime/stylized model with vibrant colors',
-    downloadUrl: 'https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-ONXX/releases/download/patch-25022024/meinamix.zip',
-    size: 603 * 1024 * 1024, // ~600MB
-    style: 'anime',
-  },
-];
+  backend: 'mnn' | 'qnn';
+  huggingFaceRepo?: string;
+  huggingFaceFiles?: { path: string; size: number }[];
+}
 
 type CredibilityFilter = 'all' | ModelSource;
 type ModelTypeFilter = 'all' | 'text' | 'vision' | 'code' | 'image-gen';
@@ -194,11 +96,36 @@ export const ModelsScreen: React.FC = () => {
   const [imageModelProgress, setImageModelProgress] = useState<number>(0);
   const [imageModelDownloadId, setImageModelDownloadId] = useState<number | null>(null);
 
+  const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
+  const [hfModelsLoading, setHfModelsLoading] = useState(false);
+  const [hfModelsError, setHfModelsError] = useState<string | null>(null);
+  const [backendFilter, setBackendFilter] = useState<BackendFilter>('all');
+  const [imageSearchQuery, setImageSearchQuery] = useState('');
+
+  const loadHFModels = useCallback(async (forceRefresh = false) => {
+    setHfModelsLoading(true);
+    setHfModelsError(null);
+    try {
+      const models = await fetchAvailableModels(forceRefresh);
+      setAvailableHFModels(models);
+    } catch (error: any) {
+      setHfModelsError(error?.message || 'Failed to fetch models');
+    } finally {
+      setHfModelsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadInitialModels();
     loadDownloadedModels();
     loadDownloadedImageModels();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
+      loadHFModels();
+    }
+  }, [activeTab]);
 
   // Handle system back button when model detail view is shown
   useFocusEffect(
@@ -263,11 +190,14 @@ export const ModelsScreen: React.FC = () => {
     await loadInitialModels();
     await loadDownloadedModels();
     await loadDownloadedImageModels();
+    if (activeTab === 'image') {
+      await loadHFModels(true);
+    }
     setIsRefreshing(false);
-  }, []);
+  }, [activeTab, loadHFModels]);
 
   // Download from HuggingFace (multi-file download)
-  const handleDownloadHuggingFaceModel = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadHuggingFaceModel = async (modelInfo: ImageModelDescriptor) => {
     if (!modelInfo.huggingFaceRepo || !modelInfo.huggingFaceFiles) {
       Alert.alert('Error', 'Invalid HuggingFace model configuration');
       return;
@@ -339,6 +269,7 @@ export const ModelsScreen: React.FC = () => {
         downloadedAt: new Date().toISOString(),
         size: modelInfo.size,
         style: modelInfo.style,
+        backend: modelInfo.backend,
       };
 
       await modelManager.addDownloadedImageModel(imageModel);
@@ -369,7 +300,7 @@ export const ModelsScreen: React.FC = () => {
   };
 
   // Image model download/management - uses native background download service
-  const handleDownloadImageModel = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadImageModel = async (modelInfo: ImageModelDescriptor) => {
     if (imageModelDownloading) {
       Alert.alert('Download in Progress', 'Please wait for the current download to complete.');
       return;
@@ -507,7 +438,7 @@ export const ModelsScreen: React.FC = () => {
   };
 
   // Fallback download method using RNFS (for iOS or when native module unavailable)
-  const handleDownloadImageModelFallback = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadImageModelFallback = async (modelInfo: ImageModelDescriptor) => {
     setImageModelDownloading(modelInfo.id);
     setImageModelProgress(0);
 
@@ -564,6 +495,7 @@ export const ModelsScreen: React.FC = () => {
         downloadedAt: new Date().toISOString(),
         size: modelInfo.size,
         style: modelInfo.style,
+        backend: modelInfo.backend,
       };
 
       await modelManager.addDownloadedImageModel(imageModel);
@@ -741,6 +673,17 @@ export const ModelsScreen: React.FC = () => {
     });
   }, [searchResults, credibilityFilter, modelTypeFilter, showCompatibleOnly, ramGB]);
 
+  // Filter HuggingFace image models - must be before any conditional returns
+  const filteredHFModels = useMemo(() => {
+    const query = imageSearchQuery.toLowerCase().trim();
+    return availableHFModels.filter((m) => {
+      if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
+      if (downloadedImageModels.some((d) => d.id === m.id)) return false;
+      if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [availableHFModels, backendFilter, downloadedImageModels, imageSearchQuery]);
+
   const renderModelItem = ({ item }: { item: ModelInfo }) => {
     // Check if any file from this model is downloaded
     const isAnyFileDownloaded = downloadedModels.some((m) =>
@@ -867,11 +810,21 @@ export const ModelsScreen: React.FC = () => {
   // Count of active downloads for badge
   const activeDownloadCount = Object.keys(downloadProgress).length;
 
+  const hfModelToDescriptor = (hfModel: HFImageModel): ImageModelDescriptor => ({
+    id: hfModel.id,
+    name: hfModel.displayName,
+    description: `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
+    downloadUrl: hfModel.downloadUrl,
+    size: hfModel.size,
+    style: guessStyle(hfModel.name),
+    backend: hfModel.backend,
+  });
+
   // Render image models section
   const renderImageModelsSection = () => (
     <View style={styles.imageModelsSection}>
       <Text style={styles.imageSectionSubtitle}>
-        ONNX-based Stable Diffusion models for on-device image generation
+        Stable Diffusion models for on-device image generation
       </Text>
 
       {/* Downloaded image models */}
@@ -914,16 +867,86 @@ export const ModelsScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Available image models to download */}
+      {/* Search and filter */}
       <Text style={styles.availableTitle}>Available for Download</Text>
-      {AVAILABLE_IMAGE_MODELS.filter(
-        (m) => !downloadedImageModels.some((d) => d.id === m.id)
-      ).map((model) => (
+      <TextInput
+        style={styles.imageSearchInput}
+        placeholder="Search models..."
+        placeholderTextColor={COLORS.textMuted}
+        value={imageSearchQuery}
+        onChangeText={setImageSearchQuery}
+        returnKeyType="search"
+      />
+      <View style={styles.backendFilterRow}>
+        {([
+          { key: 'all' as BackendFilter, label: 'All' },
+          { key: 'mnn' as BackendFilter, label: 'CPU' },
+          { key: 'qnn' as BackendFilter, label: 'NPU' },
+        ]).map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[
+              styles.filterChip,
+              backendFilter === option.key && styles.filterChipActive,
+            ]}
+            onPress={() => setBackendFilter(option.key)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                backendFilter === option.key && styles.filterChipTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Loading / Error / List */}
+      {hfModelsLoading && (
+        <View style={styles.hfLoadingContainer}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading models...</Text>
+        </View>
+      )}
+
+      {hfModelsError && !hfModelsLoading && (
+        <View style={styles.hfErrorContainer}>
+          <Text style={styles.hfErrorText}>{hfModelsError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => loadHFModels(true)}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model) => (
         <Card key={model.id} style={styles.imageModelCard}>
           <View style={styles.imageModelHeader}>
             <View style={styles.imageModelInfo}>
-              <Text style={styles.imageModelName}>{model.name}</Text>
-              <Text style={styles.imageModelDesc}>{model.description}</Text>
+              <View style={styles.modelNameRow}>
+                <Text style={styles.imageModelName}>{model.displayName}</Text>
+              </View>
+              <View style={styles.badgeRow}>
+                <View style={[styles.backendBadge, model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
+                  <Text style={styles.backendBadgeText}>
+                    {model.backend === 'qnn' ? 'NPU' : 'CPU'}
+                  </Text>
+                </View>
+                {model.variant && (
+                  <View style={styles.variantBadge}>
+                    <Text style={styles.variantBadgeText}>{model.variant}</Text>
+                  </View>
+                )}
+              </View>
+              {model.variant && (
+                <Text style={styles.variantHint}>
+                  {getVariantLabel(model.variant)}
+                </Text>
+              )}
               <Text style={styles.imageModelSize}>
                 {formatBytes(model.size)}
               </Text>
@@ -946,7 +969,7 @@ export const ModelsScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.downloadImageButton}
-              onPress={() => handleDownloadImageModel(model)}
+              onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
               disabled={!!imageModelDownloading}
             >
               <Icon name="download" size={16} color={COLORS.text} />
@@ -956,11 +979,13 @@ export const ModelsScreen: React.FC = () => {
         </Card>
       ))}
 
-      {AVAILABLE_IMAGE_MODELS.every((m) =>
-        downloadedImageModels.some((d) => d.id === m.id)
-      ) && (
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.length === 0 && availableHFModels.length > 0 && (
         <Text style={styles.allDownloadedText}>
-          All available image models are downloaded
+          {imageSearchQuery.trim()
+            ? 'No models match your search'
+            : backendFilter === 'all'
+              ? 'All available models are downloaded'
+              : `All ${backendFilter === 'mnn' ? 'CPU' : 'NPU'} models are downloaded`}
         </Text>
       )}
     </View>
@@ -1503,5 +1528,92 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 12,
     marginTop: 8,
+  },
+  imageSearchInput: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: COLORS.text,
+    fontSize: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  backendFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modelNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  backendBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  cpuBadge: {
+    backgroundColor: COLORS.primary + '25',
+  },
+  npuBadge: {
+    backgroundColor: '#FF990025',
+  },
+  backendBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  variantBadge: {
+    backgroundColor: COLORS.surfaceLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  variantBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  variantHint: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginBottom: 2,
+  },
+  hfLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 24,
+  },
+  hfErrorContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 12,
+  },
+  hfErrorText: {
+    fontSize: 13,
+    color: COLORS.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 });

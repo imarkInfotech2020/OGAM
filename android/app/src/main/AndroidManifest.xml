@@ -27,7 +27,8 @@
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true"
       android:largeHeap="true"
-      android:hardwareAccelerated="true">
+      android:hardwareAccelerated="true"
+      android:extractNativeLibs="true">
 
       <!-- GPU-accelerated LLM inference on Qualcomm SoCs -->
       <uses-native-library android:name="libOpenCL.so" android:required="false" />

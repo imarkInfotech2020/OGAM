@@ -7,13 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   TouchableOpacity,
   Modal,
   ScrollView,
   Image,
   Dimensions,
   PermissionsAndroid,
+  InteractionManager,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
@@ -26,10 +26,15 @@ import {
   Card,
   ModelSelectorModal,
   GenerationSettingsModal,
+  CustomAlert,
+  AlertState,
+  initialAlertState,
+  showAlert,
+  hideAlert,
 } from '../components';
 import { COLORS, APP_CONFIG } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -58,10 +63,13 @@ export const ChatScreen: React.FC = () => {
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   // Track which conversation a generation was started for
   const generatingForConversationRef = useRef<string | null>(null);
   // Track when generation started for timing
   const generationStartTimeRef = useRef<number | null>(null);
+  // Track model load start time for system messages
+  const modelLoadStartTimeRef = useRef<number | null>(null);
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
 
@@ -170,13 +178,17 @@ export const ChatScreen: React.FC = () => {
       generatingForConversationRef.current = null;
     }
 
-    // Clear KV cache when switching conversations to prevent stale context
+    // Defer KV cache clear until after animations complete to prevent UI lag
     // This helps prevent the slowdown after many messages issue
-    if (llmService.isModelLoaded()) {
-      llmService.clearKVCache(false).catch(() => {
-        // Ignore errors - cache clear is best effort
-      });
-    }
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (llmService.isModelLoaded()) {
+        llmService.clearKVCache(false).catch(() => {
+          // Ignore errors - cache clear is best effort
+        });
+      }
+    });
+
+    return () => task.cancel();
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -186,13 +198,27 @@ export const ChatScreen: React.FC = () => {
     }
   }, [activeModelId]);
 
-  // Load image models on mount
+  // Check vision support when activeModel changes (based on mmProjPath metadata)
+  // Models with mmProjPath are vision models - verify runtime support after load
   useEffect(() => {
-    const loadImageModels = async () => {
+    if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
+      const multimodalSupport = llmService.getMultimodalSupport();
+      if (multimodalSupport?.vision) {
+        setSupportsVision(true);
+      }
+    } else if (!activeModel?.mmProjPath) {
+      // Model doesn't have vision projector - no vision support
+      setSupportsVision(false);
+    }
+  }, [activeModel?.mmProjPath]);
+
+  // Load image models on mount - defer to avoid blocking navigation
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
       const models = await modelManager.getDownloadedImageModels();
       setDownloadedImageModels(models);
-    };
-    loadImageModels();
+    });
+    return () => task.cancel();
   }, []);
 
   // Preload classifier model when LLM classification is enabled with a specific model
@@ -260,6 +286,16 @@ export const ChatScreen: React.FC = () => {
     scrollViewHeightRef.current = event.nativeEvent.layout.height;
   };
 
+  // Helper to add system message to current conversation
+  const addSystemMessage = (content: string) => {
+    if (!activeConversationId || !settings.showGenerationDetails) return;
+    addMessage(activeConversationId, {
+      role: 'assistant',
+      content: `_${content}_`,
+      isSystemInfo: true,
+    });
+  };
+
   const ensureModelLoaded = async () => {
     if (!activeModel || !activeModelId) return;
 
@@ -276,16 +312,65 @@ export const ChatScreen: React.FC = () => {
       return;
     }
 
-    setIsModelLoading(true);
+    // Check if model is already being loaded by activeModelService (e.g., from HomeScreen)
+    const modelInfo = activeModelService.getActiveModels();
+    const alreadyLoading = modelInfo.text.isLoading;
+
+    // Check memory before loading (only if we're initiating the load)
+    if (!alreadyLoading) {
+      const memoryCheck = await activeModelService.checkMemoryForModel(activeModelId, 'text');
+
+      if (!memoryCheck.canLoad) {
+        // Critical: Not enough memory
+        setAlertState(showAlert(
+          'Insufficient Memory',
+          `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`
+        ));
+        return;
+      }
+
+      // For warnings, add a system message but proceed with loading
+      if (memoryCheck.severity === 'warning' && settings.showGenerationDetails) {
+        // Will add warning message after load attempt
+      }
+    }
+
+    // Only show our own loading indicator if we're the one starting the load
+    if (!alreadyLoading) {
+      setIsModelLoading(true);
+      modelLoadStartTimeRef.current = Date.now();
+
+      // Give UI time to render the full-screen loading state before heavy native operation
+      // Use a longer delay to ensure React has time to complete the re-render
+      await new Promise(resolve => requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 200); // Increased from 50ms to allow full render
+        });
+      }));
+    }
+
     try {
       // Use activeModelService singleton - prevents duplicate loads
+      // If already loading, this will wait for the existing load to complete
       await activeModelService.loadTextModel(activeModelId);
       const multimodalSupport = llmService.getMultimodalSupport();
       setSupportsVision(multimodalSupport?.vision || false);
+
+      // Add system message about model loading (if we did the load and details are enabled)
+      if (!alreadyLoading && modelLoadStartTimeRef.current && settings.showGenerationDetails) {
+        const loadTime = ((Date.now() - modelLoadStartTimeRef.current) / 1000).toFixed(1);
+        addSystemMessage(`Model loaded: ${activeModel.name} (${loadTime}s)`);
+      }
     } catch (error: any) {
-      Alert.alert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`);
+      // Only show error if we were the one doing the load
+      if (!alreadyLoading) {
+        setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
+      }
     } finally {
-      setIsModelLoading(false);
+      if (!alreadyLoading) {
+        setIsModelLoading(false);
+        modelLoadStartTimeRef.current = null;
+      }
     }
   };
 
@@ -296,7 +381,50 @@ export const ChatScreen: React.FC = () => {
       return;
     }
 
+    // Check memory before loading
+    const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
+
+    if (!memoryCheck.canLoad) {
+      // Critical: Not enough memory, don't allow loading
+      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+      return;
+    }
+
+    if (memoryCheck.severity === 'warning') {
+      // Warning: Ask user to confirm
+      setAlertState(showAlert(
+        'Low Memory Warning',
+        memoryCheck.message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Load Anyway',
+            style: 'default',
+            onPress: () => {
+              setAlertState(hideAlert());
+              proceedWithModelLoad(model);
+            },
+          },
+        ]
+      ));
+      return;
+    }
+
+    // Safe to load
+    proceedWithModelLoad(model);
+  };
+
+  const proceedWithModelLoad = async (model: DownloadedModel) => {
     setIsModelLoading(true);
+    modelLoadStartTimeRef.current = Date.now();
+
+    // Give UI time to render the full-screen loading state before heavy native operation
+    await new Promise(resolve => requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 200);
+      });
+    }));
+
     try {
       // Use activeModelService singleton - prevents duplicate loads
       await activeModelService.loadTextModel(model.id);
@@ -304,15 +432,28 @@ export const ChatScreen: React.FC = () => {
       const multimodalSupport = llmService.getMultimodalSupport();
       setSupportsVision(multimodalSupport?.vision || false);
 
-      // Create a new conversation if none exists
-      if (!activeConversationId) {
+      // Add system message about model loading
+      if (modelLoadStartTimeRef.current && settings.showGenerationDetails) {
+        const loadTime = ((Date.now() - modelLoadStartTimeRef.current) / 1000).toFixed(1);
+        // We need to add to the conversation after it might be created
+        const convId = activeConversationId || createConversation(model.id);
+        if (convId) {
+          addMessage(convId, {
+            role: 'assistant',
+            content: `_Model loaded: ${model.name} (${loadTime}s)_`,
+            isSystemInfo: true,
+          });
+        }
+      } else if (!activeConversationId) {
+        // Create a new conversation if none exists
         createConversation(model.id);
       }
     } catch (error) {
-      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
+      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
     } finally {
       setIsModelLoading(false);
       setShowModelSelector(false);
+      modelLoadStartTimeRef.current = null;
     }
   };
 
@@ -323,12 +464,18 @@ export const ChatScreen: React.FC = () => {
       clearStreamingMessage();
     }
 
+    const modelName = activeModel?.name;
     setIsModelLoading(true);
     try {
       await activeModelService.unloadTextModel();
       setSupportsVision(false);
+
+      // Add system message about model unloading
+      if (settings.showGenerationDetails && modelName) {
+        addSystemMessage(`Model unloaded: ${modelName}`);
+      }
     } catch (error) {
-      Alert.alert('Error', `Failed to unload model: ${(error as Error).message}`);
+      setAlertState(showAlert('Error', `Failed to unload model: ${(error as Error).message}`));
     } finally {
       setIsModelLoading(false);
       setShowModelSelector(false);
@@ -396,7 +543,7 @@ export const ChatScreen: React.FC = () => {
   // Handle image generation - delegates to lifecycle-independent service
   const handleImageGeneration = async (prompt: string, conversationId: string, skipUserMessage = false) => {
     if (!activeImageModel) {
-      Alert.alert('Error', 'No image model loaded.');
+      setAlertState(showAlert('Error', 'No image model loaded.'));
       return;
     }
 
@@ -425,21 +572,31 @@ export const ChatScreen: React.FC = () => {
 
     // Show error if generation failed (and wasn't cancelled)
     if (!result && imageGenState.error && !imageGenState.error.includes('cancelled')) {
-      Alert.alert('Error', `Image generation failed: ${imageGenState.error}`);
+      setAlertState(showAlert('Error', `Image generation failed: ${imageGenState.error}`));
     }
   };
 
   const handleSend = async (text: string, attachments?: MediaAttachment[], forceImageMode?: boolean) => {
     if (!activeConversationId || !activeModel) {
-      Alert.alert('No Model Selected', 'Please select a model first.');
+      setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
       return;
     }
 
     // Capture the conversation ID at the start - this won't change even if user switches chats
     const targetConversationId = activeConversationId;
 
+    // Append document content to the message text
+    let messageText = text;
+    if (attachments) {
+      const documentAttachments = attachments.filter(a => a.type === 'document' && a.textContent);
+      for (const doc of documentAttachments) {
+        const fileName = doc.fileName || 'document';
+        messageText += `\n\n---\n📄 **Attached Document: ${fileName}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`;
+      }
+    }
+
     // Check if this should be routed to image generation
-    const shouldGenerateImage = await shouldRouteToImageGeneration(text, forceImageMode);
+    const shouldGenerateImage = await shouldRouteToImageGeneration(messageText, forceImageMode);
 
     if (shouldGenerateImage && activeImageModel) {
       await handleImageGeneration(text, targetConversationId);
@@ -449,7 +606,7 @@ export const ChatScreen: React.FC = () => {
     // If image was requested but no model loaded, add a note
     if (shouldGenerateImage && !activeImageModel) {
       // Continue with text response but mention image capability
-      text = `[User wanted an image but no image model is loaded] ${text}`;
+      messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
     }
 
     generatingForConversationRef.current = targetConversationId;
@@ -463,18 +620,18 @@ export const ChatScreen: React.FC = () => {
     if (needsModelLoad) {
       await ensureModelLoaded();
       if (!llmService.isModelLoaded() || llmService.getLoadedModelPath() !== activeModel.filePath) {
-        Alert.alert('Error', 'Failed to load model. Please try again.');
+        setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
         generatingForConversationRef.current = null;
         return;
       }
     }
 
-    // Add user message with attachments
+    // Add user message with attachments (show original text, not with document content appended)
     const userMessage = addMessage(
       targetConversationId,
       {
         role: 'user',
-        content: text,
+        content: text, // Keep original text for display
       },
       attachments
     );
@@ -487,6 +644,12 @@ export const ChatScreen: React.FC = () => {
       || settings.systemPrompt
       || APP_CONFIG.defaultSystemPrompt;
 
+    // Create a version of the user message with document content for the LLM context
+    const userMessageForContext: Message = {
+      ...userMessage,
+      content: messageText, // Include document content for the LLM
+    };
+
     const messagesForContext: Message[] = [
       {
         id: 'system',
@@ -495,7 +658,7 @@ export const ChatScreen: React.FC = () => {
         timestamp: 0,
       },
       ...conversationMessages,
-      userMessage,
+      userMessageForContext,
     ];
 
     // Update debug info and check if truncation occurred
@@ -532,19 +695,26 @@ export const ChatScreen: React.FC = () => {
         }
       );
     } catch (error: any) {
-      Alert.alert('Generation Error', error.message || 'Failed to generate response');
+      setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
     }
     generatingForConversationRef.current = null;
   };
 
   const handleStop = async () => {
-    // Stop text generation via generationService
+    console.log('[ChatScreen] handleStop called');
     generatingForConversationRef.current = null;
 
-    // This will stop generation and save any partial content
-    generationService.stopGeneration().catch(() => {
+    // Stop text generation - call both services to ensure it stops
+    // generationService.stopGeneration() calls llmService.stopGeneration() internally,
+    // but we also call it directly as a fallback
+    try {
+      await Promise.all([
+        generationService.stopGeneration().catch(() => {}),
+        llmService.stopGeneration().catch(() => {}),
+      ]);
+    } catch (e) {
       // Ignore errors - generation may have already finished
-    });
+    }
 
     // Stop image generation if in progress
     if (isGeneratingImage) {
@@ -555,7 +725,7 @@ export const ChatScreen: React.FC = () => {
   const handleDeleteConversation = () => {
     if (!activeConversationId || !activeConversation) return;
 
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Conversation',
       'Are you sure you want to delete this conversation? This will also delete all images generated in this chat.',
       [
@@ -564,6 +734,7 @@ export const ChatScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             // Stop any ongoing generation first
             if (isStreaming) {
               await llmService.stopGeneration();
@@ -580,7 +751,7 @@ export const ChatScreen: React.FC = () => {
           },
         },
       ]
-    );
+    ));
   };
 
   const handleCopyMessage = (content: string) => {
@@ -659,7 +830,7 @@ export const ChatScreen: React.FC = () => {
         messagesForContext
       );
     } catch (error: any) {
-      Alert.alert('Generation Error', error.message || 'Failed to generate response');
+      setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
     }
     generatingForConversationRef.current = null;
   };
@@ -689,7 +860,7 @@ export const ChatScreen: React.FC = () => {
 
   const handleGenerateImageFromMessage = async (prompt: string) => {
     if (!activeConversationId || !activeImageModel) {
-      Alert.alert('No Image Model', 'Please load an image model first from the Models screen.');
+      setAlertState(showAlert('No Image Model', 'Please load an image model first from the Models screen.'));
       return;
     }
 
@@ -743,15 +914,15 @@ export const ChatScreen: React.FC = () => {
       // Copy the file
       await RNFS.copyFile(sourcePath, destPath);
 
-      Alert.alert(
+      setAlertState(showAlert(
         'Image Saved',
         Platform.OS === 'android'
           ? `Saved to Pictures/LocalLLM/${fileName}`
           : `Saved to ${fileName}`
-      );
+      ));
     } catch (error: any) {
       console.error('[ChatScreen] Failed to save image:', error);
-      Alert.alert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`);
+      setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
     }
   };
 
@@ -834,14 +1005,24 @@ export const ChatScreen: React.FC = () => {
   }
 
   if (isModelLoading) {
+    const loadingModelName = activeModel?.name || 'model';
+    const modelSize = activeModel ? hardwareService.formatModelSize(activeModel) : '';
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading model...</Text>
-          <Text style={styles.loadingSubtext}>
-            This may take a moment for larger models.
+          <Text style={styles.loadingText}>Loading {loadingModelName}</Text>
+          {modelSize ? (
+            <Text style={styles.loadingSubtext}>{modelSize}</Text>
+          ) : null}
+          <Text style={styles.loadingHint}>
+            Preparing model for inference. This may take a moment for larger models.
           </Text>
+          {activeModel?.mmProjPath && (
+            <Text style={styles.loadingHint}>
+              Vision capabilities will be enabled.
+            </Text>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -1291,6 +1472,15 @@ export const ChatScreen: React.FC = () => {
           )}
         </View>
       </Modal>
+
+      {/* Custom Alert Modal */}
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -1448,15 +1638,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    paddingHorizontal: 24,
   },
   loadingText: {
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
     color: COLORS.text,
   },
   loadingSubtext: {
     fontSize: 14,
     color: COLORS.textSecondary,
+  },
+  loadingHint: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 16,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
   noModelContainer: {
     flex: 1,
