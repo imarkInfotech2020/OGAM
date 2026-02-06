@@ -77,33 +77,36 @@ const ThinkingIndicator: React.FC = () => {
   const dot3Anim = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
-    const animateDots = () => {
-      const duration = 400;
-      const sequence = Animated.loop(
-        Animated.sequence([
-          Animated.timing(dot1Anim, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(dot1Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-        ])
-      );
-      const sequence2 = Animated.loop(
-        Animated.sequence([
-          Animated.delay(150),
-          Animated.timing(dot2Anim, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(dot2Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-        ])
-      );
-      const sequence3 = Animated.loop(
-        Animated.sequence([
-          Animated.delay(300),
-          Animated.timing(dot3Anim, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(dot3Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-        ])
-      );
-      sequence.start();
-      sequence2.start();
-      sequence3.start();
+    const duration = 400;
+    const sequence = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dot1Anim, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(dot1Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+      ])
+    );
+    const sequence2 = Animated.loop(
+      Animated.sequence([
+        Animated.delay(150),
+        Animated.timing(dot2Anim, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(dot2Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+      ])
+    );
+    const sequence3 = Animated.loop(
+      Animated.sequence([
+        Animated.delay(300),
+        Animated.timing(dot3Anim, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(dot3Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+      ])
+    );
+    sequence.start();
+    sequence2.start();
+    sequence3.start();
+
+    return () => {
+      sequence.stop();
+      sequence2.stop();
+      sequence3.stop();
     };
-    animateDots();
   }, []);
 
   return (

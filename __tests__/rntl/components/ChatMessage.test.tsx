@@ -90,7 +90,8 @@ describe('ChatMessage', () => {
       const { queryByText, getByTestId } = render(<ChatMessage message={message} />);
 
       // Should not crash and should render container
-      expect(getByTestId(`message-container-${message.role}`)).toBeTruthy();
+      const containerId = message.role === 'user' ? 'user-message' : 'assistant-message';
+      expect(getByTestId(containerId)).toBeTruthy();
       // Should not show "undefined" or "null" as text
       expect(queryByText('undefined')).toBeNull();
       expect(queryByText('null')).toBeNull();
@@ -110,7 +111,7 @@ describe('ChatMessage', () => {
 
       const { getByTestId } = render(<ChatMessage message={message} />);
 
-      expect(getByTestId('message-container-user')).toBeTruthy();
+      expect(getByTestId('user-message')).toBeTruthy();
     });
 
     it('renders assistant message with left alignment container', () => {
@@ -118,7 +119,7 @@ describe('ChatMessage', () => {
 
       const { getByTestId } = render(<ChatMessage message={message} />);
 
-      expect(getByTestId('message-container-assistant')).toBeTruthy();
+      expect(getByTestId('assistant-message')).toBeTruthy();
     });
   });
 
@@ -337,7 +338,7 @@ describe('ChatMessage', () => {
       const { getByText, getByTestId } = render(<ChatMessage message={message} />);
 
       expect(getByText(/Here is your image/)).toBeTruthy();
-      expect(getByTestId('message-image-0')).toBeTruthy();
+      expect(getByTestId('generated-image')).toBeTruthy();
     });
   });
 
@@ -352,7 +353,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showActions={true} />
       );
 
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       // Action menu should appear
       expect(getByTestId('action-menu')).toBeTruthy();
@@ -366,7 +367,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showActions={false} />
       );
 
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       // No menu should appear
       expect(queryByTestId('action-menu')).toBeNull();
@@ -379,7 +380,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showActions={true} isStreaming={true} />
       );
 
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       expect(queryByTestId('action-menu')).toBeNull();
     });
@@ -393,7 +394,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       // Press copy
       fireEvent.press(getByTestId('action-copy'));
@@ -413,7 +414,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       // Press retry
       fireEvent.press(getByTestId('action-retry'));
@@ -430,7 +431,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-user'), 'longPress');
+      fireEvent(getByTestId('user-message'), 'longPress');
 
       // Edit should be available
       expect(getByTestId('action-edit')).toBeTruthy();
@@ -445,7 +446,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
 
       // Edit option should not be available
       expect(queryByTestId('action-edit')).toBeNull();
@@ -465,7 +466,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-user'), 'longPress');
+      fireEvent(getByTestId('user-message'), 'longPress');
 
       expect(getByTestId('action-generate-image')).toBeTruthy();
     });
@@ -484,7 +485,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-user'), 'longPress');
+      fireEvent(getByTestId('user-message'), 'longPress');
 
       expect(queryByTestId('action-generate-image')).toBeNull();
     });
@@ -503,7 +504,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu and generate
-      fireEvent(getByTestId('message-container-user'), 'longPress');
+      fireEvent(getByTestId('user-message'), 'longPress');
       fireEvent.press(getByTestId('action-generate-image'));
 
       expect(onGenerateImage).toHaveBeenCalledWith('A beautiful sunset');
@@ -517,7 +518,7 @@ describe('ChatMessage', () => {
       );
 
       // Open menu
-      fireEvent(getByTestId('message-container-assistant'), 'longPress');
+      fireEvent(getByTestId('assistant-message'), 'longPress');
       expect(getByTestId('action-menu')).toBeTruthy();
 
       // Press cancel
