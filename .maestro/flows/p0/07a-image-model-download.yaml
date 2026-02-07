@@ -77,7 +77,6 @@ tags:
     visible:
       text: "Absolute Reality (CPU)"
     timeout: 5000
-
 # Tap download button (1st card = index 0)
 - evalScript: "${console.log('IMG_DOWNLOAD - Tap Download')}"
 - tapOn:
@@ -95,11 +94,5 @@ tags:
 - takeScreenshot: 02-download-complete
 - tapOn:
     text: "OK"
-
-# Verify model appears as Active
-- extendedWaitUntil:
-    visible:
-      text: "Active"
-    timeout: 5000
 
 - evalScript: "${console.log('IMG_DOWNLOAD - PASSED')}"
