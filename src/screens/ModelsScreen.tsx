@@ -12,6 +12,7 @@ import {
   ScrollView,
   Switch,
   BackHandler,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -167,6 +168,7 @@ export const ModelsScreen: React.FC = () => {
   };
 
   const handleSearch = async () => {
+    Keyboard.dismiss();
     if (!searchQuery.trim()) {
       loadInitialModels();
       return;
@@ -687,7 +689,7 @@ export const ModelsScreen: React.FC = () => {
     });
   }, [availableHFModels, backendFilter, downloadedImageModels, imageSearchQuery]);
 
-  const renderModelItem = ({ item }: { item: ModelInfo }) => {
+  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
     // Check if any file from this model is downloaded
     const isAnyFileDownloaded = downloadedModels.some((m) =>
       m.id.startsWith(item.id)
@@ -698,11 +700,12 @@ export const ModelsScreen: React.FC = () => {
         model={item}
         isDownloaded={isAnyFileDownloaded}
         onPress={() => handleSelectModel(item)}
+        testID={`model-card-${index}`}
       />
     );
   };
 
-  const renderFileItem = ({ item }: { item: ModelFile }) => {
+  const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     if (!selectedModel) return null;
 
     const downloadKey = `${selectedModel.id}/${item.name}`;
@@ -729,6 +732,7 @@ export const ModelsScreen: React.FC = () => {
         isDownloading={isDownloading}
         downloadProgress={progress?.progress}
         isCompatible={isCompatible}
+        testID={`file-card-${index}`}
         onDownload={
           !isDownloaded && !isDownloading
             ? () => handleDownload(selectedModel, item)
@@ -741,8 +745,16 @@ export const ModelsScreen: React.FC = () => {
   if (selectedModel) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
+        <View testID="model-detail-screen" style={{flex: 1}}>
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1}>
+          <TouchableOpacity
+            onPress={() => { setSelectedModel(null); setModelFiles([]); }}
+            testID="model-detail-back"
+            style={{ padding: 4, marginRight: 8 }}
+          >
+            <Icon name="arrow-left" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>
             {selectedModel.name}
           </Text>
         </View>
@@ -806,6 +818,7 @@ export const ModelsScreen: React.FC = () => {
             }
           />
         )}
+        </View>
       </SafeAreaView>
     );
   }
@@ -995,12 +1008,14 @@ export const ModelsScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View testID="models-screen" style={{flex: 1}}>
       <View style={styles.header}>
         <Text style={styles.title}>Models</Text>
         <TouchableOpacity
           style={styles.downloadManagerButton}
           onPress={() => navigation.navigate('DownloadManager')}
+          testID="downloads-icon"
         >
           <Icon name="download" size={22} color={COLORS.text} />
           {(activeDownloadCount > 0 || downloadedModels.length > 0) && (
@@ -1045,7 +1060,7 @@ export const ModelsScreen: React.FC = () => {
               returnKeyType="search"
               testID="search-input"
             />
-            <Button title="Search" size="small" onPress={handleSearch} />
+            <Button title="Search" size="small" onPress={handleSearch} testID="search-button" />
           </View>
 
           {/* Filters Section */}
@@ -1170,6 +1185,7 @@ export const ModelsScreen: React.FC = () => {
           </ScrollView>
         )
       }
+      </View>
     </SafeAreaView >
   );
 };

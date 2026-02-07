@@ -344,6 +344,7 @@ export const DownloadManagerScreen: React.FC = () => {
         </View>
         <TouchableOpacity
           style={styles.deleteButton}
+          testID="delete-model-button"
           onPress={() => {
             if (item.modelType === 'image') {
               const model = downloadedImageModels.find(m => m.id === item.modelId);
@@ -375,7 +376,7 @@ export const DownloadManagerScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
