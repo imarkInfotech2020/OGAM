@@ -4,8 +4,8 @@
 
 <div align="center">
 
-https://github.com/user-attachments/assets/33085feb-15dc-4c59-939a-357da5ec50ad
-
+  https://github.com/user-attachments/assets/c3218c22-6714-4f2b-9c55-4dc1fd8dfe25
+  
 **Watch the full demo above to see LocalLLM in action**
 
 </div>
