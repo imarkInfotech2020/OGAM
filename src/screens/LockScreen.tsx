@@ -4,12 +4,17 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../components';
+import { Button, CustomAlert } from '../components';
+import {
+  showAlert,
+  hideAlert,
+  initialAlertState,
+  type AlertState,
+} from '../components/CustomAlert';
 import { COLORS } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
@@ -22,6 +27,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [passphrase, setPassphrase] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     failedAttempts,
@@ -48,7 +54,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
   const handleUnlock = useCallback(async () => {
     if (!passphrase.trim()) {
-      Alert.alert('Error', 'Please enter your passphrase');
+      setAlertState(showAlert('Error', 'Please enter your passphrase'));
       return;
     }
 
@@ -70,22 +76,26 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         setPassphrase('');
 
         if (isLockedOut) {
-          Alert.alert(
-            'Too Many Attempts',
-            'You have been locked out for 5 minutes due to too many failed attempts.'
+          setAlertState(
+            showAlert(
+              'Too Many Attempts',
+              'You have been locked out for 5 minutes due to too many failed attempts.'
+            )
           );
         } else {
           const remaining = 5 - (failedAttempts + 1);
-          Alert.alert(
-            'Incorrect Passphrase',
-            remaining > 0
-              ? `${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`
-              : 'Incorrect passphrase.'
+          setAlertState(
+            showAlert(
+              'Incorrect Passphrase',
+              remaining > 0
+                ? `${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`
+                : 'Incorrect passphrase.'
+            )
           );
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to verify passphrase');
+      setAlertState(showAlert('Error', 'Failed to verify passphrase'));
     } finally {
       setIsVerifying(false);
     }
@@ -156,6 +166,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           </Text>
         </View>
       </KeyboardAvoidingView>
+
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };

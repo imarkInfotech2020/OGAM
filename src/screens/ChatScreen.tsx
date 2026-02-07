@@ -32,7 +32,7 @@ import {
   showAlert,
   hideAlert,
 } from '../components';
-import { COLORS, APP_CONFIG } from '../constants';
+import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta } from '../types';
@@ -1516,13 +1516,14 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerTitle: {
+    ...TYPOGRAPHY.h2,
     fontSize: 17,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textMuted,
   },
   modelSelector: {
@@ -1530,9 +1531,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modelSelectorArrow: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    marginLeft: 4,
+    marginLeft: SPACING.xs,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1549,6 +1550,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconButtonText: {
+    ...TYPOGRAPHY.body,
     fontSize: 15,
     color: COLORS.textSecondary,
   },
@@ -1561,7 +1563,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   projectButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.primary,
   },
@@ -1585,31 +1587,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyChatIconText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.textMuted,
   },
   emptyChatTitle: {
+    ...TYPOGRAPHY.h1,
     fontSize: 20,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   emptyChatText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: SPACING.xl,
   },
   projectHint: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginBottom: 16,
-    gap: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
   },
   projectHintIcon: {
     width: 24,
@@ -1620,23 +1623,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   projectHintIconText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     fontWeight: '600',
     color: COLORS.primary,
   },
   projectHintText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.primary,
     fontWeight: '500',
   },
   privacyReminder: {
-    backgroundColor: COLORS.secondary + '15',
+    backgroundColor: COLORS.info + '15',
     borderWidth: 1,
-    borderColor: COLORS.secondary + '40',
+    borderColor: COLORS.info + '40',
     maxWidth: 300,
   },
   privacyText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
@@ -1648,19 +1651,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   loadingText: {
+    ...TYPOGRAPHY.h1,
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     color: COLORS.text,
   },
   loadingSubtext: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   loadingHint: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginTop: 16,
+    marginTop: SPACING.lg,
     textAlign: 'center',
     paddingHorizontal: 32,
   },
@@ -1668,45 +1672,44 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: SPACING.xxl,
   },
   noModelIconContainer: {
     width: 80,
     height: 80,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: COLORS.textMuted,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   noModelIconText: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.textMuted,
   },
   noModelTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h1,
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   noModelText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
   selectModelButton: {
-    marginTop: 24,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    marginTop: SPACING.xl,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: 8,
   },
   selectModelButtonText: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
+    color: COLORS.primary,
   },
   projectModalOverlay: {
     flex: 1,
@@ -1728,12 +1731,13 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   projectModalTitle: {
+    ...TYPOGRAPHY.h1,
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.text,
   },
   projectModalClose: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.primary,
     fontWeight: '500',
   },
@@ -1763,7 +1767,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   projectOptionIconText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     fontWeight: '600',
     color: COLORS.primary,
   },
@@ -1771,20 +1775,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   projectOptionName: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     fontWeight: '600',
     color: COLORS.text,
   },
   projectOptionDesc: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   projectCheckmark: {
+    ...TYPOGRAPHY.h1,
     fontSize: 18,
     color: COLORS.primary,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: SPACING.sm,
   },
   debugModalOverlay: {
     flex: 1,
@@ -1806,12 +1811,13 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   debugModalTitle: {
+    ...TYPOGRAPHY.h1,
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.text,
   },
   debugModalClose: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.primary,
     fontWeight: '500',
   },
@@ -1822,10 +1828,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   debugSectionTitle: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.primary,
-    marginBottom: 10,
+    marginBottom: SPACING.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1838,12 +1844,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   debugStatValue: {
-    fontSize: 24,
+    ...TYPOGRAPHY.h1,
     fontWeight: '700',
     color: COLORS.text,
   },
   debugStatLabel: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -1867,11 +1873,11 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.surface,
   },
   debugLabel: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textSecondary,
   },
   debugValue: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
     fontWeight: '500',
   },
@@ -1886,16 +1892,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   debugCode: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.text,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     lineHeight: 16,
   },
   debugHint: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     fontStyle: 'italic',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   debugMessage: {
     backgroundColor: COLORS.surface,
@@ -1910,7 +1915,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   debugMessageRole: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     fontWeight: '700',
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1921,15 +1926,15 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   debugRoleAssistant: {
-    backgroundColor: COLORS.secondary + '30',
-    color: COLORS.secondary,
+    backgroundColor: COLORS.info + '30',
+    color: COLORS.info,
   },
   debugMessageIndex: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   debugMessageContent: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     lineHeight: 16,
   },
@@ -1972,12 +1977,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageProgressTitle: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.text,
   },
   imageProgressStatus: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     marginTop: 1,
   },
@@ -1996,10 +2001,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   imageProgressSteps: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     fontWeight: '600',
     color: COLORS.primary,
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   imagePreview: {
     width: 100,
@@ -2050,9 +2055,9 @@ const styles = StyleSheet.create({
     minWidth: 80,
   },
   imageViewerButtonText: {
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.text,
-    marginTop: 4,
-    fontSize: 12,
+    marginTop: SPACING.xs,
     fontWeight: '500',
   },
 });

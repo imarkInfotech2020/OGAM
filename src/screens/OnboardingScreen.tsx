@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../components';
-import { COLORS, ONBOARDING_SLIDES } from '../constants';
+import { COLORS, ONBOARDING_SLIDES, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -160,11 +160,11 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: 8,
     backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xxl,
   },
   icon: {
     fontSize: 56,

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { llmService, hardwareService } from '../services';
 import { ONNXImageModel } from '../types';
@@ -767,14 +767,12 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   closeButton: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   statsBar: {
     flexDirection: 'row',
@@ -787,16 +785,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   statsLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   statsValue: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.primary,
     fontWeight: '600',
   },
   statsSeparator: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   content: {
@@ -817,18 +815,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   settingLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   settingValue: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.primary,
     fontWeight: '700',
-    fontFamily: 'monospace',
   },
   settingDescription: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginBottom: 8,
   },
@@ -842,7 +838,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   sliderMinMax: {
-    fontSize: 11,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
   },
   resetButton: {
@@ -855,9 +851,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   resetButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    fontWeight: '500',
   },
   bottomPadding: {
     height: 40,
@@ -870,7 +865,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionTitle: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -893,12 +888,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modelPickerLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginBottom: 2,
   },
   modelPickerValue: {
-    fontSize: 15,
+    ...TYPOGRAPHY.bodySmall,
     fontWeight: '600',
     color: COLORS.text,
   },
@@ -922,22 +917,22 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + '25',
   },
   modelPickerItemText: {
-    fontSize: 15,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.text,
   },
   modelPickerItemDesc: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   noModelsText: {
     padding: 14,
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textMuted,
     textAlign: 'center',
   },
   classifierNote: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     fontStyle: 'italic',
     marginTop: 10,
@@ -962,13 +957,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modeToggleLabel: {
-    fontSize: 15,
+    ...TYPOGRAPHY.bodySmall,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 4,
   },
   modeToggleDesc: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   modeToggleButtons: {
@@ -990,7 +985,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   modeButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.textSecondary,
   },
