@@ -55,6 +55,20 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val modelId = params.getString("modelId") ?: ""
             val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
 
+            // Clean up any existing file with the same name to prevent DownloadManager
+            // from auto-renaming (e.g., file.gguf → file-1.gguf)
+            val existingFile = File(
+                reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                fileName
+            )
+            if (existingFile.exists()) {
+                android.util.Log.d("DownloadManager", "Deleting existing file before download: ${existingFile.absolutePath}")
+                existingFile.delete()
+            }
+
+            // Also clean up any stale entries from previous sessions
+            cleanupStaleDownloads()
+
             val request = DownloadManager.Request(Uri.parse(url))
                 .setTitle(title)
                 .setDescription(description)
@@ -181,10 +195,34 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val fileName = downloadInfo?.optString("fileName")
                 ?: throw IllegalArgumentException("Download info not found")
 
-            val sourceFile = File(
-                reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                fileName
-            )
+            // First try to get the actual file path from DownloadManager (handles auto-renamed files)
+            var sourceFile: File? = null
+            val statusInfo = queryDownloadStatus(id)
+            val localUri = statusInfo.getString("localUri")
+            if (!localUri.isNullOrEmpty()) {
+                try {
+                    val uri = Uri.parse(localUri)
+                    val path = uri.path
+                    if (path != null) {
+                        val uriFile = File(path)
+                        if (uriFile.exists()) {
+                            sourceFile = uriFile
+                            android.util.Log.d("DownloadManager", "Using DownloadManager localUri: ${uriFile.absolutePath}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("DownloadManager", "Failed to resolve localUri: $localUri", e)
+                }
+            }
+
+            // Fallback to persisted fileName
+            if (sourceFile == null) {
+                sourceFile = File(
+                    reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    fileName
+                )
+                android.util.Log.d("DownloadManager", "Using persisted fileName: ${sourceFile.absolutePath}")
+            }
 
             if (!sourceFile.exists()) {
                 throw IllegalArgumentException("Downloaded file not found: ${sourceFile.absolutePath}")
@@ -253,22 +291,24 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
 
             val previousStatus = download.optString("status", "pending")
+            val completedEventSent = download.optBoolean("completedEventSent", false)
+            android.util.Log.d("DownloadManager", "Polling $downloadId: status=$status, previousStatus=$previousStatus, eventSent=$completedEventSent, bytesDownloaded=${statusInfo.getDouble("bytesDownloaded")}, totalBytes=${statusInfo.getDouble("totalBytes")}")
 
             when (status) {
                 "completed" -> {
-                    android.util.Log.d("DownloadManager", "Download $downloadId completed! previousStatus=$previousStatus")
+                    android.util.Log.d("DownloadManager", "Download $downloadId completed! previousStatus=$previousStatus, eventSent=$completedEventSent")
                     eventParams.putString("localUri", statusInfo.getString("localUri"))
-                    // Only emit DownloadComplete once — skip if already marked completed
-                    if (previousStatus != "completed") {
+                    // Only emit DownloadComplete once — check if we've sent the event, not just if status is completed
+                    if (!completedEventSent) {
                         android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
                         sendEvent("DownloadComplete", eventParams)
                         updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
                     } else {
-                        // Already completed - remove stale entries to stop polling spam
+                        // Event already sent - remove stale entries to stop polling spam
                         val completedAt = download.optLong("completedAt", 0L)
                         val ageMs = System.currentTimeMillis() - completedAt
-                        // If completed more than 30 seconds ago and still in list, it's stale - remove it  
-                        if (completedAt > 0 && ageMs > 30_000) {
+                        // If completed more than 5 seconds ago and still in list, it's stale - remove it
+                        if (completedAt > 0 && ageMs > 5_000) {
                             android.util.Log.d("DownloadManager", "Removing stale completed download $downloadId (completed ${ageMs/1000}s ago)")
                             removeDownload(downloadId)
                         }
@@ -307,7 +347,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         if (file.exists() && file.length() > 0) {
                             android.util.Log.d("DownloadManager", "File exists, treating as completed: ${file.absolutePath}")
                             eventParams.putString("localUri", file.toURI().toString())
-                            if (previousStatus != "completed") {
+                            if (!completedEventSent) {
                                 sendEvent("DownloadComplete", eventParams)
                             }
                             updateDownloadStatus(downloadId, "completed", file.toURI().toString())
@@ -430,7 +470,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             if (localUri != null) {
                 info.put("localUri", localUri)
             }
-            info.put("completedAt", System.currentTimeMillis())
+            if (status == "completed") {
+                info.put("completedAt", System.currentTimeMillis())
+                info.put("completedEventSent", true)
+            }
             persistDownload(downloadId, info)
         }
     }
@@ -458,6 +501,54 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
         }
         return null
+    }
+
+    /**
+     * Clean up stale download entries from SharedPreferences.
+     * Removes entries where DownloadManager no longer has the download (status=unknown)
+     * or entries that have been completed for more than 5 seconds.
+     */
+    private fun cleanupStaleDownloads() {
+        val downloads = getAllPersistedDownloads()
+        val cleanedDownloads = JSONArray()
+        var removedCount = 0
+
+        for (i in 0 until downloads.length()) {
+            val download = downloads.getJSONObject(i)
+            val downloadId = download.getLong("downloadId")
+            val statusInfo = queryDownloadStatus(downloadId)
+            val status = statusInfo.getString("status")
+            val previousStatus = download.optString("status", "pending")
+
+            // Remove if DownloadManager doesn't know about it anymore
+            if (status == "unknown") {
+                android.util.Log.d("DownloadManager", "Cleanup: removing unknown download $downloadId")
+                removedCount++
+                continue
+            }
+
+            // Remove completed entries that are stale (older than 5s) AND have sent the event
+            if (previousStatus == "completed") {
+                val completedAt = download.optLong("completedAt", 0L)
+                val eventSent = download.optBoolean("completedEventSent", false)
+                val ageMs = System.currentTimeMillis() - completedAt
+                // Only remove if event was sent and it's been long enough
+                if (completedAt > 0 && eventSent && ageMs > 5_000) {
+                    android.util.Log.d("DownloadManager", "Cleanup: removing stale completed download $downloadId (${ageMs/1000}s old)")
+                    removedCount++
+                    continue
+                } else if (completedAt > 0 && !eventSent) {
+                    android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
+                }
+            }
+
+            cleanedDownloads.put(download)
+        }
+
+        if (removedCount > 0) {
+            android.util.Log.d("DownloadManager", "Cleanup: removed $removedCount stale entries")
+            sharedPrefs.edit().putString(DOWNLOADS_KEY, cleanedDownloads.toString()).apply()
+        }
     }
 
     private fun getAllPersistedDownloads(): JSONArray {
