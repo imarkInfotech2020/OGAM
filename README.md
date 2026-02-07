@@ -2,9 +2,15 @@
 
 **Truly offline-first LLM manager for mobile. Your AI, your device, your data.**
 
-https://github.com/user-attachments/assets/your-video-id-here
+<div align="center">
 
-> Watch the full demo above to see LocalLLM in action.
+https://github.com/user-attachments/assets/33085feb-15dc-4c59-939a-357da5ec50ad
+
+**Watch the full demo above to see LocalLLM in action**
+
+</div>
+
+---
 
 LocalLLM is a React Native application that brings large language models, vision AI, and image generation directly to mobile devices. All inference runs entirely on-device using llama.cpp, whisper.cpp, and local-dream—no internet required after initial model download, no data transmission, complete privacy guaranteed.
 
@@ -20,7 +26,7 @@ LocalLLM is a React Native application that brings large language models, vision
 - **GPU Acceleration** - Optional OpenCL GPU offloading for text models
 - **Auto/Manual Image Generation** - Automatic intent detection or manual toggle for image generation
 - **Passphrase Lock** - Secure sensitive conversations with passphrase protection
-- **Advanced Model Settings** - Per-model configuration for text and image models
+- **Advanced Model Settings** - Global configuration for text and image models
 - **Performance Tuning** - Configurable threads, batch size, context length, GPU layers
 - **Overload Prevention** - Pre-load memory checks prevent OOM crashes
 - **Storage Management** - Orphaned file detection, stale download cleanup
@@ -63,11 +69,11 @@ Multimodal understanding via vision-language models (VLMs) with automatic mmproj
 - mmproj files loaded via `llmService.initMultimodal()`
 - Image URIs converted to `file://` paths and passed in OAI message format
 - Vision models tracked separately with `isVisionModel` flag and combined size calculation
-- SmolVLM 500M-2.2B recommended (fast, stable); Qwen3-VL 2B has known hanging issues
+- SmolVLM 500M-2.2B recommended (fast, 7-10s inference); Qwen models support multilingual vision
 
 **Supported Vision Models:**
-- SmolVLM (500M, 2.2B) - 7-10s inference on flagship devices
-- Qwen2-VL, Qwen3-VL - Multilingual vision (stability issues on some quantizations)
+- SmolVLM (500M, 2.2B) - Fast, compact, 7-10s inference on flagship devices
+- Qwen2-VL, Qwen3-VL - Excellent multilingual vision understanding
 - LLaVA - Large Language and Vision Assistant
 - MiniCPM-V - Efficient multimodal
 
@@ -123,7 +129,7 @@ Implementation uses separate message array with enhancement-specific system prom
 - CPU: ~15s for 512×512 @ 20 steps (Snapdragon 8 Gen 3)
 - NPU: ~5-10s for 512×512 @ 20 steps (chipset-dependent)
 
-### Voice Input
+### Voice Transcription
 
 On-device speech recognition using whisper.cpp via whisper.rn native bindings:
 
@@ -131,11 +137,134 @@ On-device speech recognition using whisper.cpp via whisper.rn native bindings:
 - **Real-time partial transcription** - Streaming word-by-word results
 - **Hold-to-record interface** - Slide-to-cancel gesture support
 - **No network** - All transcription happens on-device
+- **Auto-download** - Whisper models downloaded on first use
+- **Language support** - Multilingual transcription
 
 **Implementation:**
 - whisper.rn native module handles audio recording and inference
 - Transcription results passed via callbacks to React Native
 - Audio temporarily buffered in native code, cleared after transcription
+- Model selection in settings (Tiny: fastest, Base: balanced, Small: most accurate)
+
+### Image Generation Modes
+
+**Auto Detection:**
+- AI automatically classifies user intent (text response vs image generation)
+- Uses pattern matching or LLM-based classification (configurable)
+- Pattern mode: Fast keyword matching ("draw", "generate", "create image")
+- LLM mode: More accurate, uses loaded text model for classification
+
+**Manual Override:**
+- Toggle button forces image generation mode
+- Useful when auto-detection misclassifies
+- Stays active for current message only
+
+**Settings Configuration:**
+```typescript
+// Image generation mode setting
+imageGenerationMode: 'off' | 'auto' | 'manual'
+
+// Auto-detection method
+autoDetectMethod: 'pattern' | 'llm'
+```
+
+### Security Features
+
+**Passphrase Lock:**
+- Protect conversations with passphrase
+- App-level security layer on top of OS encryption
+- Locks on app backgrounding (configurable timeout)
+- Biometric unlock (planned)
+
+**Implementation:**
+- Passphrase stored securely in Android Keystore
+- Conversations encrypted with AES-256
+- No biometric data stored on device
+
+### Model Settings
+
+**Text Model Settings:**
+- Temperature (0-2.0) - Creativity control
+- Max tokens (64-4096) - Response length limit
+- Top-p (0.1-1.0) - Nucleus sampling threshold
+- Repeat penalty (1.0-2.0) - Repetition reduction
+- Context length (512-8192) - Conversation memory window
+- CPU threads (1-12) - Performance tuning
+- Batch size (32-512) - Processing chunk size
+- GPU layers (0-99) - GPU offload configuration
+- Enable GPU (on/off) - Toggle GPU acceleration
+
+**Image Model Settings:**
+- Steps (4-50) - Quality vs speed (default: 20)
+- Guidance scale (1-20) - Prompt adherence (default: 7.5)
+- Seed (random/fixed) - Reproducibility control
+- Resolution (256x256-512x512) - Output size
+- Preview interval (1-10) - Real-time preview frequency
+- Enhance prompts (on/off) - AI prompt enhancement toggle
+- Detection method (pattern/LLM) - Intent classification mode
+- Threads (1-8) - CPU thread count for image generation
+
+**Global Configuration:**
+All settings are global and apply to every model. Settings persist across app restarts and affect all models uniformly.
+
+### Overload Prevention
+
+**Pre-Load Memory Checks:**
+Before loading any model, system calculates:
+```typescript
+// Text models
+requiredRAM = fileSize * 1.5  // KV cache, activations
+
+// Vision models
+requiredRAM = (modelFileSize + mmProjSize) * 1.5
+
+// Image models
+requiredRAM = fileSize * 1.8  // MNN/QNN runtime overhead
+```
+
+**Memory Budget:**
+- Uses 60% of device RAM as safe limit
+- Warns at 50% (yellow warning UI)
+- Blocks at 60%+ (red error, prevents load)
+
+**User-Friendly Messages:**
+```
+"Cannot load Qwen3-7B-Q4_K_M (~5.5GB required) - would exceed
+device safe limit of 4.8GB. Unload current model or choose smaller."
+```
+
+**Benefits:**
+- Prevents app crashes from OOM
+- Guides users toward compatible models
+- Shows exact RAM requirements before download
+
+### Performance Settings Deep Dive
+
+**CPU Threads:**
+- More threads = faster inference (to a point)
+- Optimal: 4-6 threads on most devices
+- Flagship: 6-8 threads
+- Diminishing returns beyond 8
+
+**Batch Size:**
+- Smaller (32-128): Faster first token
+- Larger (256-512): Better throughput
+- Default 256: Balanced for mobile
+
+**Context Length:**
+- Longer context = more memory + slower
+- Automatic truncation when exceeded
+- Recommendations:
+  - 512: Short conversations
+  - 2048: Standard (default)
+  - 4096-8192: Long conversations (requires 8GB+ RAM)
+
+**GPU Offloading:**
+- Specify number of layers to offload (0-99)
+- More layers = faster (if stable)
+- OpenCL backend experimental (can crash)
+- Start with 0, incrementally increase
+- Automatic fallback to CPU if fails
 
 ---
 
@@ -259,7 +388,7 @@ async loadTextModel(modelId: string) {
 }
 ```
 
-Vision models add mmproj overhead, image models multiply by 1.8× for ONNX runtime.
+Vision models add mmproj overhead, image models multiply by 1.8× for MNN/QNN runtime.
 
 **4. Combined Asset Tracking**
 
@@ -558,7 +687,7 @@ Subscribers are weakly held, services never leak references.
 - Warns at 50% usage (yellow warning)
 - Blocks at 60%+ usage (red error)
 - Text models: file size × 1.5 (KV cache, activations)
-- Image models: file size × 1.8 (ONNX runtime, intermediate tensors)
+- Image models: file size × 1.8 (MNN/QNN runtime, intermediate tensors)
 - Vision models: text estimate + mmproj overhead
 
 **Pre-load Checks:**
@@ -651,20 +780,11 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 
 ### Vision Models
 
-**Qwen3-VL 2B Hanging:**
-- Model hangs during vision inference with no token output
-- Occurs after "Waiting for first token..." log
-- Likely causes: mmproj incompatibility, quantization issue, or llama.rn bug
-- Workaround: Use SmolVLM models (500M, 2.2B) which work reliably
-
-**Debugging additions:**
-Added comprehensive logging to track vision inference:
-```typescript
-console.log('[LLM] 🖼️ Generation mode:', useMultimodal ? 'VISION' : 'TEXT-ONLY');
-console.log('[LLM] 🚀 Calling context.completion...');
-console.log('[LLM] Waiting for first token...');
-console.log('[LLM] ✅ First token received after', firstTokenTime, 'ms');
-```
+**Performance Considerations:**
+- Vision inference can take 10-30+ seconds depending on model size and device
+- Larger models (2B+) are slower but provide better understanding
+- SmolVLM models offer fastest inference (7-15s on flagship devices)
+- Comprehensive logging tracks vision inference progress for debugging
 
 ### GPU Acceleration
 
@@ -675,21 +795,6 @@ console.log('[LLM] ✅ First token received after', firstTokenTime, 'ms');
 - User can manually reduce GPU layers or disable entirely
 
 **Recommendation:** Start with 0 GPU layers, incrementally increase while monitoring stability.
-
-### Text Generation After Image Generation
-
-**Issue (Fixed):** Text generation would become flaky after image generation with prompt enhancement enabled.
-
-**Root Cause:** Both text generation and prompt enhancement use `llmService`. After enhancement, service state wasn't fully reset, causing `isGenerating` flag to be stuck `true` or KV cache to contain residual context.
-
-**Fix:** Aggressive cleanup after enhancement:
-```typescript
-// After prompt enhancement completes
-await llmService.stopGeneration();  // Reset generating flag
-// KV cache NOT cleared - significantly slows vision inference
-```
-
-KV cache clearing removed because it increased vision inference time from ~7s to 30-60s on subsequent requests.
 
 ---
 
@@ -730,6 +835,24 @@ KV cache clearing removed because it increased vision inference time from ~7s to
 - Background download support
 - Progress polling and event emission to React Native
 - Proper cleanup and error handling
+
+---
+
+## Getting Started
+
+### Install Pre-built APK
+
+The fastest way to get started:
+
+1. **Download** the latest APK from [GitHub Releases](https://github.com/alichherawalla/offline-mobile-llm-manager/releases/latest)
+2. **Transfer** to your Android device
+3. **Enable** "Install from Unknown Sources" in Android Settings → Security
+4. **Install** and launch LocalLLM
+5. **Download a model** from the Models tab and start chatting
+
+### Build from Source
+
+For developers who want to build from source or contribute:
 
 ---
 
