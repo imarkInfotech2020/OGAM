@@ -1029,7 +1029,8 @@ export const ChatScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} testID="chat-screen">
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View testID="chat-screen" style={{flex: 1}}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1065,6 +1066,7 @@ export const ChatScreen: React.FC = () => {
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setShowSettingsPanel(true)}
+                testID="chat-settings-icon"
               >
                 <Text style={styles.iconButtonText}>⚙</Text>
               </TouchableOpacity>
@@ -1482,6 +1484,7 @@ export const ChatScreen: React.FC = () => {
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
       />
+      </View>
     </SafeAreaView>
   );
 };

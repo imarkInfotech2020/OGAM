@@ -387,6 +387,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.modelCard}
             onPress={() => setPickerType('image')}
+            testID="image-model-card"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={COLORS.textMuted} />

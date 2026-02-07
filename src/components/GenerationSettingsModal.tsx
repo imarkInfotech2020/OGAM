@@ -275,6 +275,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                     settings.imageGenerationMode === 'auto' && styles.modeButtonActive,
                   ]}
                   onPress={() => updateSettings({ imageGenerationMode: 'auto' })}
+                  testID="image-gen-mode-auto"
                 >
                   <Text
                     style={[
@@ -291,6 +292,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                     settings.imageGenerationMode === 'manual' && styles.modeButtonActive,
                   ]}
                   onPress={() => updateSettings({ imageGenerationMode: 'manual' })}
+                  testID="image-gen-mode-manual"
                 >
                   <Text
                     style={[
@@ -322,6 +324,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                       settings.autoDetectMethod === 'pattern' && styles.modeButtonActive,
                     ]}
                     onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
+                    testID="auto-detect-method-pattern"
                   >
                     <Text
                       style={[
@@ -338,6 +341,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                       settings.autoDetectMethod === 'llm' && styles.modeButtonActive,
                     ]}
                     onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
+                    testID="auto-detect-method-llm"
                   >
                     <Text
                       style={[

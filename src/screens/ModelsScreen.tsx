@@ -867,6 +867,7 @@ export const ModelsScreen: React.FC = () => {
                   <TouchableOpacity
                     style={styles.setActiveButton}
                     onPress={() => handleSetActiveImageModel(model.id)}
+                    testID="set-active-image-model"
                   >
                     <Text style={styles.setActiveButtonText}>Set Active</Text>
                   </TouchableOpacity>
