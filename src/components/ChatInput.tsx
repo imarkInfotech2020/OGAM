@@ -255,22 +255,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           ))}
         </ScrollView>
       )}
-
-      {/* Text Input Row */}
-      <View style={styles.inputRow}>
-        <TextInput
-          testID="chat-input"
-          style={styles.input}
-          value={message}
-          onChangeText={setMessage}
-          placeholder={placeholder}
-          placeholderTextColor={COLORS.textMuted}
-          multiline
-          maxLength={2000}
-          editable={!disabled}
-        />
-      </View>
-
       {/* Toolbar Row */}
       <View style={styles.toolbarRow}>
         {/* Left side: Vision, Image Gen (manual only), Status */}
@@ -322,10 +306,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             )}
           </View>
         </View>
-
-        {/* Right side: Send/Mic button (WhatsApp style) */}
-        <View style={styles.toolbarRight}>
-          {/* Show stop button when generating */}
+      </View>
+      {/* Text Input Row - Input + Send Button */}
+      <View style={styles.inputRow}>
+        <TextInput
+          testID="chat-input"
+          style={styles.input}
+          value={message}
+          onChangeText={setMessage}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.textMuted}
+          multiline
+          maxLength={2000}
+          editable={!disabled}
+        />
+        {/* Send/Mic button on the right side of input */}
+        <View style={styles.inputActions}>
           {isGenerating ? (
             <TouchableOpacity
               testID="stop-button"
@@ -335,7 +331,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <Icon name="square" size={18} color={COLORS.text} />
             </TouchableOpacity>
           ) : canSend ? (
-            /* Show send button when there's content */
             <TouchableOpacity
               testID="send-button"
               style={styles.sendButton}
@@ -344,7 +339,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <Icon name="send" size={18} color={COLORS.text} />
             </TouchableOpacity>
           ) : (
-            /* Show mic button when input is empty (WhatsApp style) */
             <VoiceRecordButton
               isRecording={isRecording}
               isAvailable={voiceAvailable}
@@ -425,18 +419,26 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     backgroundColor: COLORS.surface,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    marginBottom: 8,
+    marginTop: 8,
+    gap: 8,
   },
   input: {
+    flex: 1,
     color: COLORS.text,
     fontSize: 16,
     minHeight: 44,
     maxHeight: 100,
     textAlignVertical: 'top',
+  },
+  inputActions: {
+    justifyContent: 'flex-end',
+    paddingBottom: 3,
   },
   toolbarRow: {
     flexDirection: 'row',

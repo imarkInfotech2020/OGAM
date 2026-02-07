@@ -1502,6 +1502,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    zIndex: 10,
+    elevation: 4,
   },
   headerRow: {
     flexDirection: 'row',
