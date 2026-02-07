@@ -337,7 +337,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const recentConversations = conversations.slice(0, 4);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} testID="home-screen">
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View testID="home-screen" style={styles.scrollView}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Local LLM</Text>
@@ -386,6 +387,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <TouchableOpacity
             style={styles.modelCard}
             onPress={() => setPickerType('image')}
+            testID="image-model-card"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={COLORS.textMuted} />
@@ -495,7 +497,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             testID="new-chat-button"
           />
         ) : (
-          <Card style={styles.setupCard}>
+          <Card style={styles.setupCard} testID="setup-card">
             <Text style={styles.setupText}>
               {downloadedModels.length > 0
                 ? 'Select a text model to start chatting'
@@ -506,6 +508,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               variant="outline"
               size="small"
               onPress={() => downloadedModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab')}
+              testID="browse-models-button"
             />
           </Card>
         )}
@@ -579,6 +582,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
       </ScrollView>
+      </View>
 
       {/* Model Picker Modal */}
       <Modal
@@ -642,6 +646,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         return (
                           <TouchableOpacity
                             key={model.id}
+                            testID="model-item"
                             style={[
                               styles.pickerItem,
                               activeModelId === model.id && styles.pickerItemActive,
@@ -709,6 +714,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                         return (
                           <TouchableOpacity
                             key={model.id}
+                            testID="model-item"
                             style={[
                               styles.pickerItem,
                               activeImageModelId === model.id && styles.pickerItemActive,
