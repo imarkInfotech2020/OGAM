@@ -245,13 +245,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                           : parsedContent.isThinkingComplete ? 'T' : '...'}
                       </Text>
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.thinkingHeaderTextContainer}>
                       <Text testID="thinking-block-title" style={styles.thinkingHeaderText}>
                         {parsedContent.thinkingLabel || (parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...')}
                       </Text>
-                      {!showThinking && parsedContent.thinking && (
-                        <Text style={styles.thinkingPreview} numberOfLines={1}>
-                          {parsedContent.thinking.slice(0, 60)}...
+                      {!showThinking && parsedContent.thinking && parsedContent.thinking.length > 0 && (
+                        <Text style={styles.thinkingPreview} numberOfLines={1} ellipsizeMode="tail">
+                          {parsedContent.thinking.length > 50
+                            ? `${parsedContent.thinking.slice(0, 50)}...`
+                            : parsedContent.thinking}
                         </Text>
                       )}
                     </View>
@@ -637,6 +639,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primary,
   },
+  thinkingHeaderTextContainer: {
+    flex: 1,
+    marginRight: SPACING.xs,
+  },
   thinkingHeaderText: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
@@ -645,7 +651,7 @@ const styles = StyleSheet.create({
   thinkingPreview: {
     ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: SPACING.xs,
     fontStyle: 'italic',
   },
   thinkingToggle: {
