@@ -495,10 +495,11 @@ describe('ModelManager', () => {
   describe('getOrphanedFiles', () => {
     it('finds untracked GGUF files', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.readDir.mockResolvedValue([
-        { name: 'orphan.gguf', path: '/models/orphan.gguf', size: 5000, isFile: () => true, isDirectory: () => false } as any,
-      ]);
-      // getDownloadedModels returns empty (no tracked models)
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'orphan.gguf', path: '/models/orphan.gguf', size: 5000, isFile: () => true, isDirectory: () => false } as any,
+        ])
+        .mockResolvedValueOnce([]); // image models dir empty
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const orphaned = await modelManager.getOrphanedFiles();
@@ -509,9 +510,11 @@ describe('ModelManager', () => {
 
     it('excludes tracked files', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.readDir.mockResolvedValue([
-        { name: 'tracked.gguf', path: '/models/tracked.gguf', size: 5000, isFile: () => true, isDirectory: () => false } as any,
-      ]);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'tracked.gguf', path: '/models/tracked.gguf', size: 5000, isFile: () => true, isDirectory: () => false } as any,
+        ])
+        .mockResolvedValueOnce([]); // image models dir empty
       const storedModels = [{ id: 'm1', filePath: '/models/tracked.gguf', fileSize: 5000 }];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
 
@@ -528,6 +531,25 @@ describe('ModelManager', () => {
       const orphaned = await modelManager.getOrphanedFiles();
 
       expect(orphaned).toEqual([]);
+    });
+
+    it('finds orphaned image model directories', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([]) // text models dir empty
+        .mockResolvedValueOnce([
+          { name: 'anythingv5_cpu', path: '/image_models/anythingv5_cpu', size: 0, isFile: () => false, isDirectory: () => true } as any,
+        ])
+        .mockResolvedValueOnce([ // contents of orphaned image model dir
+          { name: 'model.onnx', path: '/image_models/anythingv5_cpu/model.onnx', size: 500000, isFile: () => true, isDirectory: () => false } as any,
+        ]);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const orphaned = await modelManager.getOrphanedFiles();
+
+      expect(orphaned).toHaveLength(1);
+      expect(orphaned[0].name).toBe('anythingv5_cpu');
+      expect(orphaned[0].size).toBe(500000);
     });
   });
 
