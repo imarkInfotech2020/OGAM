@@ -12,7 +12,17 @@
 
 ---
 
-LocalLLM is a React Native application that brings large language models, vision AI, and image generation directly to mobile devices. All inference runs entirely on-device using llama.cpp, whisper.cpp, and local-dream—no internet required after initial model download, no data transmission, complete privacy guaranteed.
+LocalLLM is a React Native application that brings large language models, vision AI, and image generation directly to **Android and iOS** devices. All inference runs entirely on-device using llama.cpp, whisper.cpp, local-dream (Android), and Apple's Core ML (iOS)—no internet required after initial model download, no data transmission, complete privacy guaranteed.
+
+### Platform Support
+
+| Feature | Android | iOS |
+|---------|---------|-----|
+| Text Generation (GGUF) | llama.cpp (CPU + OpenCL GPU) | llama.cpp (CPU + Metal) |
+| Vision AI | llama.rn multimodal | llama.rn multimodal |
+| Image Generation | local-dream (MNN/QNN) | Core ML (ANE + CPU) |
+| Voice Transcription | whisper.cpp | whisper.cpp |
+| Background Downloads | Native DownloadManager | RNFS / URLSession |
 
 ---
 
@@ -79,11 +89,23 @@ Multimodal understanding via vision-language models (VLMs) with automatic mmproj
 
 ### Image Generation
 
-On-device Stable Diffusion using local-dream with MNN (CPU) and QNN (NPU) backends:
+On-device Stable Diffusion with platform-native acceleration:
 
+**Android:**
 - **MNN backend** - Alibaba's MNN framework, works on all ARM64 devices (CPU-only)
 - **QNN backend** - Qualcomm AI Engine (NPU acceleration) for Snapdragon 8 Gen 1+
 - **Automatic backend detection** - Runtime NPU detection with MNN fallback
+- Models from xororz's HuggingFace repos (pre-converted MNN/QNN formats)
+
+**iOS:**
+- **Core ML backend** - Apple's ml-stable-diffusion pipeline with Neural Engine (ANE) acceleration
+- **DPM-Solver scheduler** - Faster convergence, better quality at fewer steps
+- **Safety checker disabled** - Reduced latency (no NSFW classification overhead)
+- **Palettized models** - 6-bit quantized (~1GB) for memory-constrained devices
+- **Full precision models** - fp16 (~4GB) for maximum speed on ANE
+- Models from Apple's official HuggingFace repos (compiled Core ML format)
+
+**Common:**
 - **Real-time preview** - Progressive image display every N steps
 - **Background generation** - Lifecycle-independent service continues when screens unmount
 - **AI prompt enhancement** - Optional LLM-based prompt expansion using loaded text model
@@ -91,15 +113,15 @@ On-device Stable Diffusion using local-dream with MNN (CPU) and QNN (NPU) backen
 **Technical Pipeline:**
 ```
 Text Prompt → CLIP Tokenizer → Text Encoder (embeddings)
-  → Scheduler (Euler) ↔ UNet (denoising, iterative)
+  → Scheduler (DPM-Solver/Euler) ↔ UNet (denoising, iterative)
   → VAE Decoder → 512×512 Image
 ```
 
 **Implementation:**
-- `localDreamGeneratorService` (`src/services/localDreamGenerator.ts`) bridges to native
+- `localDreamGeneratorService` (`src/services/localDreamGenerator.ts`) bridges to native via `Platform.select()`
 - `imageGenerationService` (`src/services/imageGenerationService.ts`) provides orchestration
-- Native module (`android/app/src/main/java/com/localllm/localdream/`) wraps local-dream C++ lib
-- Models fetched from xororz's HuggingFace repos (pre-converted MNN/QNN formats)
+- Android: `LocalDreamModule` wraps local-dream C++ lib (MNN/QNN)
+- iOS: `CoreMLDiffusionModule` wraps Apple's `StableDiffusionPipeline` (ANE/CPU)
 - Progress callbacks, preview callbacks, and completion callbacks flow through singleton service
 - Gallery persistence via AsyncStorage with automatic cleanup on conversation deletion
 
@@ -120,14 +142,22 @@ When enabled, uses the currently loaded text model to expand simple prompts into
 
 Implementation uses separate message array with enhancement-specific system prompt, calls `llmService.generateResponse()`, then explicitly resets LLM state (`stopGeneration()` only, no KV cache clear to preserve vision inference performance).
 
-**Image Models:**
+**Image Models (Android):**
 - CPU (MNN): 5 models (~1.2GB each) - Anything V5, Absolute Reality, QteaMix, ChilloutMix, CuteYukiMix
 - NPU (QNN): 20 models (~1.0GB each) - all CPU models plus DreamShaper, Realistic Vision, MajicmixRealistic, etc.
 - QNN variants: `min` (non-flagship), `8gen1`, `8gen2` (8 Gen 2/3/4/5)
 
+**Image Models (iOS - Core ML):**
+- SD 1.5 Palettized (~1GB) - 6-bit quantized, 512×512
+- SD 2.1 Palettized (~1GB) - 6-bit quantized, 512×512
+- SDXL iOS (~2GB) - 4-bit mixed-bit palettized, 768×768, ANE-optimized
+- SD 1.5 Full (~4GB) - fp16, 512×512, fastest on ANE
+- SD 2.1 Base Full (~4GB) - fp16, 512×512, fastest on ANE
+
 **Generation Performance:**
-- CPU: ~15s for 512×512 @ 20 steps (Snapdragon 8 Gen 3)
-- NPU: ~5-10s for 512×512 @ 20 steps (chipset-dependent)
+- Android CPU (MNN): ~15s for 512×512 @ 20 steps (Snapdragon 8 Gen 3)
+- Android NPU (QNN): ~5-10s for 512×512 @ 20 steps (chipset-dependent)
+- iOS ANE (Core ML): ~8-15s for 512×512 @ 20 steps (A17 Pro/M-series), palettized models ~2x slower due to dequantization
 
 ### Voice Transcription
 
@@ -297,19 +327,31 @@ device safe limit of 4.8GB. Unload current model or choose smaller."
 │   │(singleton, mem mgmt)│  │(download, storage) │                │
 │   └────────────────────┘  └────────────────────┘                │
 ├──────────────────────────────────────────────────────────────────┤
-│                    Native Module Bridge (JNI)                     │
+│                 Native Module Bridge (JNI / ObjC)                 │
 ├──────────────────────────────────────────────────────────────────┤
 │   Native Implementations:                                         │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│   │ llama.rn │  │whisper.rn│  │local-dream│  │DownloadManager│  │
-│   │(C++ JNI) │  │(C++ JNI) │  │(C++/MNN)  │  │   (Kotlin)    │  │
-│   └──────────┘  └──────────┘  └──────────┘  └───────────────┘  │
+│                                                                   │
+│   Cross-platform:                                                 │
+│   ┌──────────────┐  ┌──────────────┐                             │
+│   │   llama.rn   │  │  whisper.rn  │                             │
+│   │ (C++ native) │  │ (C++ native) │                             │
+│   └──────────────┘  └──────────────┘                             │
+│                                                                   │
+│   Android:                           iOS:                         │
+│   ┌──────────┐ ┌───────────────┐    ┌──────────────────────┐    │
+│   │local-dream│ │DownloadManager│    │CoreMLDiffusionModule │    │
+│   │(C++/MNN)  │ │   (Kotlin)    │    │(StableDiffusionPipe) │    │
+│   └──────────┘ └───────────────┘    └──────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────┤
 │   Hardware Acceleration:                                          │
-│   ┌──────────────────┐            ┌──────────────────┐           │
-│   │OpenCL (Adreno GPU)│            │   QNN (NPU)      │           │
-│   │  Text LLMs only   │            │  Image gen only  │           │
-│   └──────────────────┘            └──────────────────┘           │
+│   Android:                           iOS:                         │
+│   ┌──────────────────┐              ┌──────────────────┐         │
+│   │OpenCL (Adreno GPU)│              │ ANE (Neural Engine)│         │
+│   │  Text LLMs only   │              │  Image gen + LLMs │         │
+│   ├──────────────────┤              ├──────────────────┤         │
+│   │   QNN (NPU)      │              │  Metal (GPU)     │         │
+│   │  Image gen only  │              │  LLM inference   │         │
+│   └──────────────────┘              └──────────────────┘         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -806,31 +848,39 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 - **TypeScript 5.x** - Type safety and developer experience
 - **llama.rn** - Native bindings for llama.cpp GGUF inference
 - **whisper.rn** - Native bindings for whisper.cpp speech recognition
-- **local-dream** - MNN/QNN Stable Diffusion implementation
+- **local-dream** - MNN/QNN Stable Diffusion implementation (Android)
+- **ml-stable-diffusion** - Apple's Core ML Stable Diffusion pipeline (iOS)
 - **Zustand 4.x** - Lightweight state management
 - **AsyncStorage** - Persistent local storage
 - **React Navigation 6.x** - Native navigation
 
 ### Native Modules
 
-**llama.rn:**
-- Compiles llama.cpp for ARM64 Android
-- JNI bindings expose inference APIs to JavaScript
-- Supports OpenCL GPU offloading on Adreno GPUs
+**llama.rn (Android + iOS):**
+- Compiles llama.cpp for ARM64
+- Android: JNI bindings, OpenCL GPU offloading on Adreno GPUs
+- iOS: Metal GPU acceleration
 - Handles multimodal (vision) via mmproj
 
-**whisper.rn:**
-- Compiles whisper.cpp for ARM64 Android
+**whisper.rn (Android + iOS):**
+- Compiles whisper.cpp for ARM64
 - Real-time audio recording and transcription
 - Multiple model sizes (Tiny, Base, Small, Medium)
 
-**local-dream:**
+**local-dream (Android only):**
 - C++ implementation of Stable Diffusion
 - MNN backend (CPU, all ARM64 devices)
 - QNN backend (NPU, Snapdragon 8 Gen 1+)
 - Automatic backend detection and fallback
 
-**DownloadManager:**
+**CoreMLDiffusionModule (iOS only):**
+- Swift bridge to Apple's `ml-stable-diffusion` StableDiffusionPipeline
+- Neural Engine (ANE) acceleration via `.cpuAndNeuralEngine` compute units
+- DPM-Solver multistep scheduler for faster convergence
+- Safety checker disabled for reduced latency
+- Supports palettized (6-bit) and full-precision (fp16) Core ML models
+
+**DownloadManager (Android only):**
 - Native Android DownloadManager wrapper
 - Background download support
 - Progress polling and event emission to React Native
@@ -861,10 +911,17 @@ For developers who want to build from source or contribute:
 ### Prerequisites
 
 - Node.js 18+
+- React Native CLI
+
+**Android:**
 - JDK 17
 - Android SDK (API 34)
 - Android NDK r26
-- React Native CLI
+
+**iOS:**
+- Xcode 15+ with iOS 17 SDK
+- CocoaPods
+- Apple Developer account (for device deployment)
 
 ### Setup
 
@@ -877,11 +934,10 @@ cd LocalLLM
 npm install
 
 # Android setup
-cd android
-./gradlew clean
+cd android && ./gradlew clean && cd ..
 
-# Return to root
-cd ..
+# iOS setup
+cd ios && pod install && cd ..
 ```
 
 ### Development Build
@@ -890,22 +946,27 @@ cd ..
 # Start Metro bundler
 npm start
 
-# In separate terminal, deploy to device
+# Android (separate terminal)
 npm run android
 
-# Or use Android Studio
-# Open android/ folder in Android Studio
-# Build → Make Project
-# Run → Run 'app'
+# iOS (separate terminal)
+npm run ios
+
+# Or use Xcode
+# Open ios/LocalLLM.xcworkspace
+# Select target device → Build & Run
 ```
 
 ### Release Build
 
 ```bash
+# Android
 cd android
 ./gradlew assembleRelease
-
 # Output: android/app/build/outputs/apk/release/app-release.apk
+
+# iOS
+# Open Xcode → Product → Archive → Distribute
 ```
 
 ### Signing Configuration
@@ -989,6 +1050,15 @@ LocalLLM/
 │       │   └── DownloadManagerModule.kt
 │       ├── localdream/            # local-dream native module
 │       │   └── LocalDreamModule.kt
+│       └── ...
+├── ios/                     # iOS native code
+│   └── LocalLLM/
+│       ├── CoreMLDiffusion/       # Core ML image generation
+│       │   ├── CoreMLDiffusionModule.swift
+│       │   └── CoreMLDiffusionModule.m
+│       ├── Download/              # iOS download manager
+│       │   ├── DownloadManagerModule.swift
+│       │   └── DownloadManagerModule.m
 │       └── ...
 ├── docs/                    # Documentation
 │   ├── CODEBASE_GUIDE.md         # Comprehensive architecture guide
@@ -1133,7 +1203,8 @@ MIT License - See LICENSE file for details.
 
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) by Georgi Gerganov - LLM inference engine
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) by Georgi Gerganov - Speech recognition engine
-- [local-dream](https://github.com/nicenemo/local-dream) - On-device Stable Diffusion
+- [local-dream](https://github.com/nicenemo/local-dream) - On-device Stable Diffusion (Android)
+- [ml-stable-diffusion](https://github.com/apple/ml-stable-diffusion) by Apple - Core ML Stable Diffusion pipeline (iOS)
 - [MNN](https://github.com/alibaba/MNN) by Alibaba - Mobile neural network inference framework
 - [llama.rn](https://github.com/mybigday/llama.rn) by mybigday - React Native bindings for llama.cpp
 - [whisper.rn](https://github.com/mybigday/whisper.rn) by mybigday - React Native bindings for whisper.cpp

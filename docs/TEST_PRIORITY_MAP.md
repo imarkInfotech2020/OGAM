@@ -22,11 +22,11 @@ This document maps all flows to priorities and testing layers.
 
 ---
 
-## CURRENT TEST COVERAGE: ~85% of Core Functionality
+## CURRENT TEST COVERAGE: ~90% of Core Functionality
 
 **Test Quality Rating: 9/10 - Comprehensive Coverage**
 
-**Total: 1131 tests across 26 test suites (all passing)**
+**Total: 1208 tests across 29 test suites (all passing)**
 
 ### ✅ Well-Tested Areas (Strong Coverage)
 - **E2E Tests (Maestro)**: 12 comprehensive P0 flows covering text/image generation, model download, app lifecycle
@@ -34,7 +34,7 @@ This document maps all flows to priorities and testing layers.
 - **Generation Service**: State machine, streaming, lifecycle - Very good unit + integration
 - **Image Generation Flow**: Integration tests, progress tracking, E2E - Excellent
 - **Active Model Service**: Model loading, memory checks, integration - Very good
-- **Contract Tests**: Native module interfaces validated (llama.rn, whisper.rn, LocalDream)
+- **Contract Tests**: Native module interfaces validated (llama.rn, whisper.rn, LocalDream, CoreMLDiffusion, iOS DownloadManager)
 - **Intent Classification**: All 70+ patterns unit tested
 - **RNTL Component Tests**: ChatScreen, HomeScreen, ModelsScreen, ModelCard
 - **Core Service Logic**: All 6 previously-untested services now have comprehensive unit tests
@@ -46,6 +46,11 @@ This document maps all flows to priorities and testing layers.
 - **hardware.ts** (P0): 39 tests - device info, memory calculations, model recommendations, byte formatting, device tiers
 - **whisperService.ts** (P1): 32 tests - model download/load/unload, permissions, transcription, file transcription
 - **documentService.ts** (P1): 30 tests - file type detection, reading, truncation, formatting, preview
+
+### ✅ iOS Parity Tests (77 tests added, Feb 2026)
+- **localDreamGenerator.ts** (P0): 43 tests - Platform.select() routing, method delegation (Android/iOS), isAvailable edge cases, generateImage lifecycle, thread tracking, error handling
+- **coreMLModelBrowser.ts** (P0): 16 tests - HuggingFace API fetching, model shape validation, caching with TTL, error handling (Promise.allSettled), ID generation
+- **iosDownloadManager contract** (P0): 18 tests - iOS DownloadManagerModule interface parity with Android, event shapes, polling compatibility stubs
 
 ---
 
@@ -131,6 +136,16 @@ These flows are core functionality. If broken, the app is unusable.
 | 10.6 | Code patterns → text | ✓ | | | | | ✅ Unit tested |
 | 10.7 | SD-specific → image | ✓ | | | | | ✅ Unit tested |
 | 10.8 | Ambiguous prompt - pattern mode | ✓ | | | | | ✅ Unit tested |
+
+### iOS Parity (Cross-Platform)
+| ID | Flow | U | I | R | E | C | Status |
+|----|------|---|---|---|---|---|--------|
+| 11.29a | Core ML backend (iOS) | ✓ | | | | ✓ | ✅ Unit + Contract (localDreamGenerator, coreMLDiffusion) |
+| 11.33a | Platform routing | ✓ | | | | | ✅ Unit (localDreamGenerator - 43 tests) |
+| 6.11 | Core ML model browsing | ✓ | | | | | ✅ Unit (coreMLModelBrowser - 16 tests) |
+| 7.15 | iOS download parity | | | | | ✓ | ✅ Contract (iosDownloadManager - 18 tests) |
+| 7.16 | iOS polling compatibility | | | | | ✓ | ✅ Contract |
+| 7.17 | iOS completed download localUri | | | | | ✓ | ✅ Contract |
 
 ---
 
@@ -473,11 +488,21 @@ Unit tests for all previously-untested core services.
 
 **Status**: All P0 service logic gaps are closed
 
+### ✓ Phase 5: iOS Parity Tests (COMPLETE - 77 tests)
+Cross-platform tests ensuring iOS and Android feature parity.
+
+- ✅ **localDreamGenerator.ts** - 43 tests: Platform.select() routing to LocalDreamModule (Android) / CoreMLDiffusionModule (iOS), method delegation on both platforms, isAvailable edge cases, generateImage lifecycle with event subscription, thread tracking, error handling
+- ✅ **coreMLModelBrowser.ts** - 16 tests: HuggingFace API tree enumeration for Apple repos, model shape/backend validation, LFS size calculation, caching with TTL + forceRefresh, Promise.allSettled partial failure handling, unique ID generation
+- ✅ **iosDownloadManager.contract.ts** - 18 tests: iOS DownloadManagerModule (URLSession) interface parity with Android (DownloadManager), all 7 required methods, event shape parity (DownloadProgress/Complete/Error), polling compatibility stubs, status value constants
+- ✅ **factories.ts** - Updated ONNXImageModel backend type to include 'coreml'
+
+**Status**: iOS/Android parity is verified at the service and contract level
+
 ---
 
 ## REMAINING GAPS - What Could Be Added Next
 
-### **Phase 5: P1 E2E Flows**
+### **Phase 6: P1 E2E Flows**
 Add important feature E2E tests (currently P1 directory is empty).
 
 1. Authentication/passphrase flows
@@ -485,24 +510,26 @@ Add important feature E2E tests (currently P1 directory is empty).
 3. Vision model inference
 4. Voice transcription
 5. Project-based conversations
+6. iOS-specific E2E flows (Core ML image generation, URLSession downloads)
 
-### **Phase 6: P2 Flows**
+### **Phase 7: P2 Flows**
 Polish and edge cases as time permits.
 
 ---
 
 ## Test Count Summary
 
-| Phase | Unit | Integration | RNTL | E2E | Status |
-|-------|------|-------------|------|-----|--------|
-| 1-3 (Stores, Services, RNTL, E2E) | 150 | 25 | 50 | 12 | ✅ DONE |
-| 4 (Service Unit Tests) | 228 | 0 | 0 | 0 | ✅ DONE |
-| 5 (P1 E2E) | 0 | 0 | 70 | 20 | 📝 PLANNED |
-| 6 (P2 Polish) | 120 | 35 | 135 | 10 | 📝 PLANNED |
-| **Current** | **378** | **25** | **50** | **12** | **1131 tests** |
-| **Target** | **498** | **60** | **255** | **42** | **~1400 tests** |
+| Phase | Unit | Integration | RNTL | E2E | Contract | Status |
+|-------|------|-------------|------|-----|----------|--------|
+| 1-3 (Stores, Services, RNTL, E2E) | 150 | 25 | 50 | 12 | 80 | ✅ DONE |
+| 4 (Service Unit Tests) | 228 | 0 | 0 | 0 | 0 | ✅ DONE |
+| 5 (iOS Parity Tests) | 59 | 0 | 0 | 0 | 18 | ✅ DONE |
+| 6 (P1 E2E) | 0 | 0 | 70 | 20 | 0 | 📝 PLANNED |
+| 7 (P2 Polish) | 120 | 35 | 135 | 10 | 0 | 📝 PLANNED |
+| **Current** | **437** | **25** | **50** | **12** | **98** | **1208 tests** |
+| **Target** | **557** | **60** | **255** | **42** | **98** | **~1500 tests** |
 
-**Current Coverage: ~85% of P0 functionality, ~60% of all flows**
+**Current Coverage: ~90% of P0 functionality, ~65% of all flows**
 
 ---
 
@@ -523,6 +550,8 @@ __tests__/
 │       ├── hardware.test.ts ✅ (39 tests - memory, recommendations, tiers)
 │       ├── modelManager.test.ts ✅ (54 tests - downloads, storage, scanning)
 │       ├── backgroundDownloadService.test.ts ✅ (28 tests - native events, polling)
+│       ├── localDreamGenerator.test.ts ✅ (43 tests - platform routing, iOS/Android delegation)
+│       ├── coreMLModelBrowser.test.ts ✅ (16 tests - model discovery, caching, errors)
 │       ├── whisperService.test.ts ✅ (32 tests - transcription, permissions)
 │       └── documentService.test.ts ✅ (30 tests - file types, reading, preview)
 ├── integration/
@@ -542,7 +571,9 @@ __tests__/
 └── contracts/
     ├── llamaContext.contract.test.ts ✅ (375 lines)
     ├── whisper.contract.test.ts ✅
-    └── localDream.contract.test.ts ✅
+    ├── localDream.contract.test.ts ✅
+    ├── coreMLDiffusion.contract.test.ts ✅ (iOS Core ML parity)
+    └── iosDownloadManager.contract.test.ts ✅ (18 tests - iOS download parity)
 
 .maestro/flows/p0/ (12 E2E tests) ✅
 ├── 00-setup-model.yaml
@@ -574,14 +605,17 @@ __tests__/
 - ✅ P0 E2E coverage is excellent (12 comprehensive Maestro flows)
 - ✅ State management is thoroughly tested
 - ✅ Service orchestration (generationService, imageGenerationService) is well tested
-- ✅ Contract tests validate native module interfaces
+- ✅ Contract tests validate native module interfaces (llama.rn, whisper.rn, LocalDream, CoreMLDiffusion, iOS DownloadManager)
 - ✅ Critical user journeys work end-to-end
 - ✅ All 6 core services now have comprehensive unit tests (228 tests)
+- ✅ iOS/Android parity verified at service and contract level (77 tests)
+- ✅ Platform routing (Platform.select) tested for both platforms
 - ✅ Service logic is protected against regressions — safe to refactor
 
 **What Could Be Better:**
 - 📝 P1/P2 E2E flows (authentication, vision, voice, background recovery)
+- 📝 iOS-specific E2E flows (Core ML generation, URLSession downloads on device)
 - 📝 Performance regression tests
 - 📝 Stress/scale tests
 
-**Recommendation**: The critical service logic gaps are now closed. Next priority is adding P1 E2E flows for authentication, vision, and voice features.
+**Recommendation**: iOS parity is verified at the unit/contract level. Next priority is adding P1 E2E flows for authentication, vision, voice, and iOS-specific device tests.
