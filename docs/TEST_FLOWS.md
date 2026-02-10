@@ -8,7 +8,7 @@ This document catalogs every testable flow in the application.
 - 📝 = Planned but not implemented
 - ❌ = No test coverage
 
-**Current Overall Coverage: ~85% of P0 flows, ~60% of all flows**
+**Current Overall Coverage: ~90% of P0 flows, ~65% of all flows**
 
 See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` for how to write tests.
 
@@ -160,17 +160,20 @@ See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` fo
 | 6.5 | Image model extraction progress | Zip extraction progress |
 | 6.6 | View downloaded image models | List downloaded SD models |
 | 6.7 | Delete image model | Remove from disk |
-| 6.8 | Backend indicator | MNN vs QNN badge |
+| 6.8 | Backend indicator | MNN vs QNN vs Core ML badge |
 | 6.9 | QNN compatibility | Shows if device supports QNN |
 | 6.10 | Image model size warning | Large model → warning |
+| 6.11 | Core ML model browsing (iOS) | Fetch available models from Apple repos |
+| 6.12 | Core ML model caching | Cache model list with 5-min TTL |
+| 6.13 | Core ML partial failure | Some repos fail → return partial results |
 
 ---
 
-## 7. Background Downloads (Android)
+## 7. Background Downloads (Cross-Platform)
 
 | # | Flow | Description |
 |---|------|-------------|
-| 7.1 | Start background download | Select → uses DownloadManager |
+| 7.1 | Start background download | Select → uses DownloadManager (Android) / URLSession (iOS) |
 | 7.2 | Notification appears | System notification shows progress |
 | 7.3 | Download manager screen | View all background downloads |
 | 7.4 | Progress in download manager | Percentage + bytes downloaded |
@@ -184,7 +187,9 @@ See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` fo
 | 7.12 | App reopens - download failed | Shows failed state |
 | 7.13 | Clear completed downloads | Remove from list |
 | 7.14 | Multiple background downloads | Several simultaneous |
-| 7.15 | Background download on iOS | Not available → uses foreground |
+| 7.15 | iOS download parity | Same DownloadManagerModule interface via URLSession |
+| 7.16 | iOS polling compatibility | startProgressPolling/stopProgressPolling are no-ops on iOS |
+| 7.17 | iOS completed download localUri | Completed download includes localUri (moved from temp) |
 
 ---
 
@@ -355,18 +360,19 @@ See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` fo
 ### Backend Selection
 | # | Flow | Description |
 |---|------|-------------|
-| 11.25 | MNN backend | CPU-based generation |
-| 11.26 | QNN backend | NPU-accelerated generation |
+| 11.25 | MNN backend (Android) | CPU-based generation |
+| 11.26 | QNN backend (Android) | NPU-accelerated generation |
 | 11.27 | QNN not available | Falls back to MNN |
 | 11.28 | Auto backend selection | Picks best for device |
+| 11.29a | Core ML backend (iOS) | ANE-accelerated generation via ml-stable-diffusion |
 
 ### Generation Errors
 | # | Flow | Description |
 |---|------|-------------|
-| 11.29 | Generation error | Error message shown |
-| 11.30 | No image model loaded | Prompt to download/select |
-| 11.31 | OOM during generation | Error + lower resolution suggestion |
-| 11.32 | LocalDream unavailable (iOS) | Graceful "not supported" message |
+| 11.30 | Generation error | Error message shown |
+| 11.31 | No image model loaded | Prompt to download/select |
+| 11.32 | OOM during generation | Error + lower resolution suggestion |
+| 11.33a | Platform routing | Platform.select routes to correct native module |
 
 ### Image Metadata
 | # | Flow | Description |
@@ -877,7 +883,7 @@ See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` fo
 
 ## Summary
 
-**Total flows: 350+**
+**Total flows: 360+**
 
 | Category | Count |
 |----------|-------|
@@ -886,12 +892,12 @@ See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` fo
 | Permissions | 8 |
 | Home Screen | 11 |
 | Text Model Management | 48 |
-| Image Model Management | 10 |
-| Background Downloads | 15 |
+| Image Model Management | 13 |
+| Background Downloads | 17 |
 | Model Loading | 22 |
 | Text Generation | 41 |
 | Intent Classification | 17 |
-| Image Generation | 35 |
+| Image Generation | 36 |
 | Vision Models | 12 |
 | Document Attachments | 9 |
 | Voice Input | 22 |

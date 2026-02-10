@@ -6,14 +6,17 @@ This document defines the standard format for test specifications in LocalLLM. W
 - ✅ Jest (unit, integration, RNTL, contract tests)
 - ✅ Maestro (E2E tests on real device)
 - ✅ Factories and test helpers (`__tests__/utils/`)
-- ✅ 1131 existing tests across 26 suites (see `TEST_PRIORITY_MAP.md` for breakdown)
+- ✅ 1208 existing tests across 29 suites (see `TEST_PRIORITY_MAP.md` for breakdown)
 
 **See existing tests for examples:**
 - Unit: `__tests__/unit/stores/chatStore.test.ts` (comprehensive example)
+- Unit (cross-platform): `__tests__/unit/services/localDreamGenerator.test.ts` (Platform.select routing with jest.isolateModules)
+- Unit (API mocking): `__tests__/unit/services/coreMLModelBrowser.test.ts` (fetch mocking with jest.resetModules)
 - Integration: `__tests__/integration/models/activeModelService.test.ts`
 - RNTL: `__tests__/rntl/screens/ChatScreen.test.tsx`
 - E2E: `.maestro/flows/p0/02-text-generation.yaml`
 - Contract: `__tests__/contracts/llamaContext.contract.test.ts`
+- Contract (iOS parity): `__tests__/contracts/iosDownloadManager.contract.test.ts`
 
 ---
 

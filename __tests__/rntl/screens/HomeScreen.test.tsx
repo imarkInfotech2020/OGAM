@@ -60,6 +60,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
 jest.mock('../../../src/services/modelManager', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
+    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
 }));
 

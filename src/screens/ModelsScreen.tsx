@@ -12,6 +12,7 @@ import {
   Switch,
   BackHandler,
   Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -25,10 +26,12 @@ import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } f
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
+import { fetchAvailableCoreMLModels, CoreMLImageModel } from '../services/coreMLModelBrowser';
+import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
-type BackendFilter = 'all' | 'mnn' | 'qnn';
+type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
 
 interface ImageModelDescriptor {
   id: string;
@@ -37,9 +40,13 @@ interface ImageModelDescriptor {
   downloadUrl: string;
   size: number;
   style: string;
-  backend: 'mnn' | 'qnn';
+  backend: 'mnn' | 'qnn' | 'coreml';
   huggingFaceRepo?: string;
   huggingFaceFiles?: { path: string; size: number }[];
+  /** Multi-file download manifest (Core ML full-precision models) */
+  coremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
+  /** HuggingFace repo slug (e.g. 'apple/coreml-stable-diffusion-2-1-base-palettized') */
+  repo?: string;
 }
 
 type CredibilityFilter = 'all' | ModelSource;
@@ -91,11 +98,19 @@ export const ModelsScreen: React.FC = () => {
     removeDownloadedImageModel,
     activeImageModelId,
     setActiveImageModelId,
+    imageModelDownloading,
+    addImageModelDownloading,
+    removeImageModelDownloading,
+    imageModelDownloadIds,
+    setImageModelDownloadId,
+    setBackgroundDownload,
   } = useAppStore();
 
-  const [imageModelDownloading, setImageModelDownloading] = useState<string | null>(null);
-  const [imageModelProgress, setImageModelProgress] = useState<number>(0);
-  const [imageModelDownloadId, setImageModelDownloadId] = useState<number | null>(null);
+  const [imageModelProgress, setImageModelProgress] = useState<Record<string, number>>({});
+  const updateModelProgress = (modelId: string, progress: number) =>
+    setImageModelProgress(prev => ({ ...prev, [modelId]: progress }));
+  const clearModelProgress = (modelId: string) =>
+    setImageModelProgress(prev => { const next = { ...prev }; delete next[modelId]; return next; });
 
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
   const [hfModelsLoading, setHfModelsLoading] = useState(false);
@@ -107,8 +122,26 @@ export const ModelsScreen: React.FC = () => {
     setHfModelsLoading(true);
     setHfModelsError(null);
     try {
-      const models = await fetchAvailableModels(forceRefresh);
-      setAvailableHFModels(models);
+      if (Platform.OS === 'ios') {
+        const coremlModels = await fetchAvailableCoreMLModels(forceRefresh);
+        // Map CoreMLImageModel to HFImageModel shape for unified rendering
+        const mapped: HFImageModel[] = coremlModels.map((m) => ({
+          id: m.id,
+          name: m.name,
+          displayName: m.displayName,
+          backend: 'mnn' as const, // placeholder — overridden by badge logic
+          fileName: m.fileName,
+          downloadUrl: m.downloadUrl,
+          size: m.size,
+          repo: m.repo,
+          _coreml: true, // marker for badge rendering
+          _coremlFiles: m.files, // multi-file download manifest (if no zip available)
+        }));
+        setAvailableHFModels(mapped);
+      } else {
+        const models = await fetchAvailableModels(forceRefresh);
+        setAvailableHFModels(models);
+      }
     } catch (error: any) {
       setHfModelsError(error?.message || 'Failed to fetch models');
     } finally {
@@ -135,25 +168,26 @@ export const ModelsScreen: React.FC = () => {
 
     try {
       const activeDownloads = await modelManager.getActiveBackgroundDownloads();
-
-      // Find image model downloads (modelId starts with "image:")
-      const imageDownload = activeDownloads.find(d =>
+      const imageDownloads = activeDownloads.filter(d =>
         d.modelId.startsWith('image:') &&
         (d.status === 'running' || d.status === 'pending' || d.status === 'paused')
       );
 
-      if (imageDownload) {
-        // Extract the actual model ID (remove "image:" prefix)
-        const modelId = imageDownload.modelId.replace('image:', '');
-        setImageModelDownloading(modelId);
-        setImageModelDownloadId(imageDownload.downloadId);
+      // Clean stale downloads: imageModelDownloading has models with no matching native download
+      const activeNativeModelIds = new Set(imageDownloads.map(d => d.modelId.replace('image:', '')));
+      for (const modelId of imageModelDownloading) {
+        if (!activeNativeModelIds.has(modelId)) {
+          removeImageModelDownloading(modelId);
+        }
+      }
 
-        // Calculate progress
-        const progress = imageDownload.totalBytes > 0
-          ? imageDownload.bytesDownloaded / imageDownload.totalBytes
-          : 0;
-        setImageModelProgress(progress);
-
+      // Restore each active download
+      for (const download of imageDownloads) {
+        const modelId = download.modelId.replace('image:', '');
+        addImageModelDownloading(modelId);
+        setImageModelDownloadId(modelId, download.downloadId);
+        const progress = download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0;
+        updateModelProgress(modelId, progress);
         console.log('[ModelsScreen] Restored image download state:', modelId, `${Math.round(progress * 100)}%`);
       }
     } catch (error) {
@@ -238,8 +272,8 @@ export const ModelsScreen: React.FC = () => {
       return;
     }
 
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -279,9 +313,8 @@ export const ModelsScreen: React.FC = () => {
           discretionary: false,
           progressInterval: 500,
           progress: (res) => {
-            const fileProgress = res.bytesWritten / res.contentLength;
             const overallProgress = (downloadedSize + res.bytesWritten) / totalSize;
-            setImageModelProgress(overallProgress * 0.95);
+            updateModelProgress(modelInfo.id, overallProgress * 0.95);
           },
         });
 
@@ -292,7 +325,7 @@ export const ModelsScreen: React.FC = () => {
         }
 
         downloadedSize += file.size;
-        setImageModelProgress((downloadedSize / totalSize) * 0.95);
+        updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
       }
 
       // Register the model
@@ -314,7 +347,7 @@ export const ModelsScreen: React.FC = () => {
         setActiveImageModelId(imageModel.id);
       }
 
-      setImageModelProgress(1);
+      updateModelProgress(modelInfo.id, 1);
       setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
       console.error('[HuggingFace] Download error:', error);
@@ -329,21 +362,22 @@ export const ModelsScreen: React.FC = () => {
         console.warn('[HuggingFace] Failed to clean up:', e);
       }
     } finally {
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
   // Image model download/management - uses native background download service
   const handleDownloadImageModel = async (modelInfo: ImageModelDescriptor) => {
-    if (imageModelDownloading) {
-      setAlertState(showAlert('Download in Progress', 'Please wait for the current download to complete.'));
-      return;
-    }
-
     // Route to HuggingFace downloader if it's a HuggingFace model
     if (modelInfo.huggingFaceRepo && modelInfo.huggingFaceFiles) {
       await handleDownloadHuggingFaceModel(modelInfo);
+      return;
+    }
+
+    // Route to multi-file downloader for Core ML models without zip archives
+    if (modelInfo.coremlFiles && modelInfo.coremlFiles.length > 0) {
+      await handleDownloadCoreMLMultiFile(modelInfo);
       return;
     }
 
@@ -354,8 +388,8 @@ export const ModelsScreen: React.FC = () => {
       return;
     }
 
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const fileName = `${modelInfo.id}.zip`;
@@ -370,14 +404,23 @@ export const ModelsScreen: React.FC = () => {
         totalBytes: modelInfo.size,
       });
 
-      setImageModelDownloadId(downloadInfo.downloadId);
+      setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
+
+      // Store metadata so DownloadManagerScreen can find and cancel this download
+      setBackgroundDownload(downloadInfo.downloadId, {
+        modelId: `image:${modelInfo.id}`,
+        fileName: fileName,
+        quantization: '',
+        author: 'Image Generation',
+        totalBytes: modelInfo.size,
+      });
 
       // Subscribe to progress events
       const unsubProgress = backgroundDownloadService.onProgress(downloadInfo.downloadId, (event) => {
         const progress = event.totalBytes > 0
           ? (event.bytesDownloaded / event.totalBytes) * 0.9
           : 0;
-        setImageModelProgress(progress);
+        updateModelProgress(modelInfo.id, progress);
       });
 
       // Subscribe to completion
@@ -387,7 +430,7 @@ export const ModelsScreen: React.FC = () => {
         unsubError();
 
         try {
-          setImageModelProgress(0.9);
+          updateModelProgress(modelInfo.id, 0.9);
 
           // Move the downloaded file to the image models directory
           const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -402,7 +445,7 @@ export const ModelsScreen: React.FC = () => {
           // Move the completed download
           await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
 
-          setImageModelProgress(0.92);
+          updateModelProgress(modelInfo.id, 0.92);
 
           // Create the model directory
           if (!(await RNFS.exists(modelDir))) {
@@ -413,7 +456,12 @@ export const ModelsScreen: React.FC = () => {
           console.log(`[ImageModels] Extracting ${zipPath} to ${modelDir}`);
           await unzip(zipPath, modelDir);
 
-          setImageModelProgress(0.95);
+          // Resolve nested directory for Core ML zips
+          const resolvedModelDir = modelInfo.backend === 'coreml'
+            ? await resolveCoreMLModelDir(modelDir)
+            : modelDir;
+
+          updateModelProgress(modelInfo.id, 0.95);
 
           // Clean up the ZIP file
           try {
@@ -428,7 +476,7 @@ export const ModelsScreen: React.FC = () => {
             id: modelInfo.id,
             name: modelInfo.name,
             description: modelInfo.description,
-            modelPath: modelDir,
+            modelPath: resolvedModelDir,
             downloadedAt: new Date().toISOString(),
             size: modelInfo.size,
             style: modelInfo.style,
@@ -442,14 +490,14 @@ export const ModelsScreen: React.FC = () => {
             setActiveImageModelId(imageModel.id);
           }
 
-          setImageModelProgress(1);
+          updateModelProgress(modelInfo.id, 1);
           setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
         } catch (extractError: any) {
           setAlertState(showAlert('Extraction Failed', extractError?.message || 'Failed to extract model'));
         } finally {
-          setImageModelDownloading(null);
-          setImageModelProgress(0);
-          setImageModelDownloadId(null);
+          removeImageModelDownloading(modelInfo.id);
+          clearModelProgress(modelInfo.id);
+          setBackgroundDownload(downloadInfo.downloadId, null);
         }
       });
 
@@ -459,9 +507,9 @@ export const ModelsScreen: React.FC = () => {
         unsubComplete();
         unsubError();
         setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
-        setImageModelDownloading(null);
-        setImageModelProgress(0);
-        setImageModelDownloadId(null);
+        removeImageModelDownloading(modelInfo.id);
+        clearModelProgress(modelInfo.id);
+        setBackgroundDownload(downloadInfo.downloadId, null);
       });
 
       // Start polling after listeners are attached
@@ -469,16 +517,15 @@ export const ModelsScreen: React.FC = () => {
 
     } catch (error: any) {
       setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
-      setImageModelDownloadId(null);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
   // Fallback download method using RNFS (for iOS or when native module unavailable)
   const handleDownloadImageModelFallback = async (modelInfo: ImageModelDescriptor) => {
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -499,7 +546,7 @@ export const ModelsScreen: React.FC = () => {
         progressInterval: 500,
         progress: (res) => {
           const progress = res.bytesWritten / res.contentLength;
-          setImageModelProgress(progress * 0.9);
+          updateModelProgress(modelInfo.id, progress * 0.9);
         },
       });
 
@@ -509,7 +556,7 @@ export const ModelsScreen: React.FC = () => {
         throw new Error(`Download failed with status ${result.statusCode}`);
       }
 
-      setImageModelProgress(0.9);
+      updateModelProgress(modelInfo.id, 0.9);
 
       // Create the model directory
       if (!(await RNFS.exists(modelDir))) {
@@ -519,17 +566,22 @@ export const ModelsScreen: React.FC = () => {
       // Extract the zip file
       await unzip(zipPath, modelDir);
 
-      setImageModelProgress(0.95);
+      // Resolve nested directory for Core ML zips
+      const resolvedModelDir = modelInfo.backend === 'coreml'
+        ? await resolveCoreMLModelDir(modelDir)
+        : modelDir;
+
+      updateModelProgress(modelInfo.id, 0.95);
 
       // Clean up the ZIP file
       await RNFS.unlink(zipPath).catch(() => { });
 
-      // Register the model
+      // Register the model with resolved path (handles nested zip extraction)
       const imageModel: ONNXImageModel = {
         id: modelInfo.id,
         name: modelInfo.name,
         description: modelInfo.description,
-        modelPath: modelDir,
+        modelPath: resolvedModelDir,
         downloadedAt: new Date().toISOString(),
         size: modelInfo.size,
         style: modelInfo.style,
@@ -543,13 +595,118 @@ export const ModelsScreen: React.FC = () => {
         setActiveImageModelId(imageModel.id);
       }
 
-      setImageModelProgress(1);
+      updateModelProgress(modelInfo.id, 1);
       setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
       setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
     } finally {
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
+    }
+  };
+
+  // Multi-file download handler for Core ML models without zip archives
+  const handleDownloadCoreMLMultiFile = async (modelInfo: ImageModelDescriptor) => {
+    if (!backgroundDownloadService.isAvailable()) {
+      setAlertState(showAlert('Not Available', 'Background downloads not available'));
+      return;
+    }
+    if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
+
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
+
+    try {
+      const imageModelsDir = modelManager.getImageModelsDirectory();
+      const modelDir = `${imageModelsDir}/${modelInfo.id}`;
+
+      // Start multi-file background download
+      const downloadInfo = await backgroundDownloadService.startMultiFileDownload({
+        files: modelInfo.coremlFiles.map(f => ({
+          url: f.downloadUrl,
+          relativePath: f.relativePath,
+          size: f.size,
+        })),
+        fileName: modelInfo.id,
+        modelId: `image:${modelInfo.id}`,
+        destinationDir: modelDir,
+        totalBytes: modelInfo.size,
+      });
+
+      setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
+
+      // Store metadata so DownloadManagerScreen can find and cancel this download
+      setBackgroundDownload(downloadInfo.downloadId, {
+        modelId: `image:${modelInfo.id}`,
+        fileName: modelInfo.id,
+        quantization: 'Core ML',
+        author: 'Image Generation',
+        totalBytes: modelInfo.size,
+      });
+
+      const unsubProgress = backgroundDownloadService.onProgress(downloadInfo.downloadId, (event) => {
+        const progress = event.totalBytes > 0
+          ? (event.bytesDownloaded / event.totalBytes)
+          : 0;
+        updateModelProgress(modelInfo.id, progress * 0.95);
+      });
+
+      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async () => {
+        unsubProgress();
+        unsubComplete();
+        unsubError();
+
+        try {
+          // Download tokenizer files for Core ML models (not included in compiled dir)
+          if (modelInfo.backend === 'coreml' && modelInfo.repo) {
+            await downloadCoreMLTokenizerFiles(modelDir, modelInfo.repo);
+          }
+
+          // Register the model (files are already in modelDir)
+          const imageModel: ONNXImageModel = {
+            id: modelInfo.id,
+            name: modelInfo.name,
+            description: modelInfo.description,
+            modelPath: modelDir,
+            downloadedAt: new Date().toISOString(),
+            size: modelInfo.size,
+            style: modelInfo.style,
+            backend: modelInfo.backend,
+          };
+
+          await modelManager.addDownloadedImageModel(imageModel);
+          addDownloadedImageModel(imageModel);
+
+          if (!activeImageModelId) {
+            setActiveImageModelId(imageModel.id);
+          }
+
+          updateModelProgress(modelInfo.id, 1);
+          setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
+        } catch (regError: any) {
+          setAlertState(showAlert('Registration Failed', regError?.message || 'Failed to register model'));
+        } finally {
+          removeImageModelDownloading(modelInfo.id);
+          clearModelProgress(modelInfo.id);
+          setBackgroundDownload(downloadInfo.downloadId, null);
+        }
+      });
+
+      const unsubError = backgroundDownloadService.onError(downloadInfo.downloadId, (event) => {
+        unsubProgress();
+        unsubComplete();
+        unsubError();
+        setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
+        removeImageModelDownloading(modelInfo.id);
+        clearModelProgress(modelInfo.id);
+        setBackgroundDownload(downloadInfo.downloadId, null);
+      });
+
+      backgroundDownloadService.startProgressPolling();
+    } catch (error: any) {
+      setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
@@ -863,14 +1020,18 @@ export const ModelsScreen: React.FC = () => {
   // Total count: downloaded text models + downloaded image models + currently downloading
   const totalModelCount = downloadedModels.length + downloadedImageModels.length + activeDownloadCount;
 
-  const hfModelToDescriptor = (hfModel: HFImageModel): ImageModelDescriptor => ({
+  const hfModelToDescriptor = (hfModel: HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] }): ImageModelDescriptor => ({
     id: hfModel.id,
     name: hfModel.displayName,
-    description: `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
+    description: hfModel._coreml
+      ? `Core ML model from ${hfModel.repo}`
+      : `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
     downloadUrl: hfModel.downloadUrl,
     size: hfModel.size,
     style: guessStyle(hfModel.name),
-    backend: hfModel.backend,
+    backend: hfModel._coreml ? 'coreml' : hfModel.backend,
+    coremlFiles: hfModel._coremlFiles,
+    repo: hfModel.repo,
   });
 
   // Render image models section
@@ -931,31 +1092,33 @@ export const ModelsScreen: React.FC = () => {
         onChangeText={setImageSearchQuery}
         returnKeyType="search"
       />
-      <View style={styles.backendFilterRow}>
-        {([
-          { key: 'all' as BackendFilter, label: 'All' },
-          { key: 'mnn' as BackendFilter, label: 'CPU' },
-          { key: 'qnn' as BackendFilter, label: 'NPU' },
-        ]).map((option) => (
-          <TouchableOpacity
-            key={option.key}
-            style={[
-              styles.filterChip,
-              backendFilter === option.key && styles.filterChipActive,
-            ]}
-            onPress={() => setBackendFilter(option.key)}
-          >
-            <Text
+      {Platform.OS !== 'ios' && (
+        <View style={styles.backendFilterRow}>
+          {([
+            { key: 'all' as BackendFilter, label: 'All' },
+            { key: 'mnn' as BackendFilter, label: 'CPU' },
+            { key: 'qnn' as BackendFilter, label: 'NPU' },
+          ]).map((option) => (
+            <TouchableOpacity
+              key={option.key}
               style={[
-                styles.filterChipText,
-                backendFilter === option.key && styles.filterChipTextActive,
+                styles.filterChip,
+                backendFilter === option.key && styles.filterChipActive,
               ]}
+              onPress={() => setBackendFilter(option.key)}
             >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  backendFilter === option.key && styles.filterChipTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Loading / Error / List */}
       {hfModelsLoading && (
@@ -985,9 +1148,9 @@ export const ModelsScreen: React.FC = () => {
                 <Text style={styles.imageModelName}>{model.displayName}</Text>
               </View>
               <View style={styles.badgeRow}>
-                <View style={[styles.backendBadge, model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
+                <View style={[styles.backendBadge, (model as any)._coreml ? styles.cpuBadge : model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
                   <Text style={styles.backendBadgeText}>
-                    {model.backend === 'qnn' ? 'NPU' : 'CPU'}
+                    {(model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU'}
                   </Text>
                 </View>
                 {model.variant && (
@@ -1006,16 +1169,16 @@ export const ModelsScreen: React.FC = () => {
               </Text>
             </View>
           </View>
-          {imageModelDownloading === model.id ? (
+          {imageModelDownloading.includes(model.id) ? (
             <View style={styles.imageDownloadProgress}>
               <Text style={styles.imageDownloadText}>
-                Downloading... {Math.round(imageModelProgress * 100)}%
+                Downloading... {Math.round((imageModelProgress[model.id] || 0) * 100)}%
               </Text>
               <View style={styles.imageProgressBar}>
                 <View
                   style={[
                     styles.imageProgressFill,
-                    { width: `${imageModelProgress * 100}%` },
+                    { width: `${(imageModelProgress[model.id] || 0) * 100}%` },
                   ]}
                 />
               </View>
@@ -1024,7 +1187,7 @@ export const ModelsScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.downloadImageButton}
               onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
-              disabled={!!imageModelDownloading}
+              disabled={imageModelDownloading.includes(model.id)}
             >
               <Icon name="download" size={16} color={COLORS.primary} />
               <Text style={styles.downloadImageButtonText}>Download</Text>

@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -52,14 +51,15 @@ export const DownloadManagerScreen: React.FC = () => {
     downloadedImageModels,
     setDownloadedImageModels,
     removeDownloadedImageModel,
+    removeImageModelDownloading,
   } = useAppStore();
 
   // Load active background downloads on mount
   useEffect(() => {
     loadActiveDownloads();
 
-    // Always start polling on Android to catch completed/stuck downloads
-    if (Platform.OS === 'android') {
+    // Start polling to catch completed/stuck downloads
+    if (backgroundDownloadService.isAvailable()) {
       modelManager.startBackgroundDownloadPolling();
     }
 
@@ -70,7 +70,7 @@ export const DownloadManagerScreen: React.FC = () => {
 
   // Subscribe to background download events
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
+    if (!backgroundDownloadService.isAvailable()) return;
 
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
       const key = `${event.modelId}/${event.fileName}`;
@@ -106,7 +106,7 @@ export const DownloadManagerScreen: React.FC = () => {
   }, []);
 
   const loadActiveDownloads = async () => {
-    if (Platform.OS === 'android') {
+    if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
       setActiveDownloads(downloads.filter(d => d.status === 'running' || d.status === 'pending' || d.status === 'paused'));
     }
@@ -156,6 +156,12 @@ export const DownloadManagerScreen: React.FC = () => {
                 setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
                 setBackgroundDownload(downloadId, null);
                 await modelManager.cancelBackgroundDownload(downloadId);
+              }
+
+              // Clear image model download state so ModelsScreen unblocks
+              if (item.modelId.startsWith('image:')) {
+                const actualModelId = item.modelId.replace('image:', '');
+                removeImageModelDownloading(actualModelId);
               }
 
               // Wait a bit for native cancellation to complete, then reload
@@ -539,6 +545,8 @@ function formatBytes(bytes: number): string {
 }
 
 function extractQuantization(fileName: string): string {
+  // Core ML models
+  if (fileName.toLowerCase().includes('coreml')) return 'Core ML';
   const upperName = fileName.toUpperCase();
   const patterns = ['Q2_K', 'Q3_K_S', 'Q3_K_M', 'Q4_0', 'Q4_K_S', 'Q4_K_M', 'Q5_K_S', 'Q5_K_M', 'Q6_K', 'Q8_0'];
   for (const pattern of patterns) {
