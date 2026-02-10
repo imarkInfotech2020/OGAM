@@ -311,7 +311,7 @@ device safe limit of 4.8GB. Unload current model or choose smaller."
 │                                                                   │
 │   Core Services (background-safe singletons):                    │
 │   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐│
-│   │   llmService    │  │  whisperService │  │ hardwareService ││
+│   │   llmService    │  │  whisperService │  │ hardware ││
 │   │  (llama.rn)     │  │  (whisper.rn)   │  │  (RAM/CPU info) ││
 │   └─────────────────┘  └─────────────────┘  └─────────────────┘│
 │                                                                   │
@@ -419,7 +419,7 @@ async loadTextModel(modelId: string) {
   const estimatedRAM = (model.fileSize / (1024**3)) * 1.5;
 
   // Check against device RAM budget (60% of total)
-  const deviceRAM = await hardwareService.getDeviceInfo();
+  const deviceRAM = await hardware.getDeviceInfo();
   const budget = (deviceRAM.totalMemory / (1024**3)) * 0.6;
 
   if (estimatedRAM > budget) {
@@ -508,21 +508,37 @@ export const SPACING = {
 **Colors (monochromatic palette):**
 ```typescript
 export const COLORS = {
-  background: '#0A0A0A',      // Pure black
-  surface: '#141414',         // Cards, elevated elements
-  surfaceHover: '#1E1E1E',
-  border: '#252525',
+  // Primary accent
+  primary: '#34D399',         // Emerald - only color accent
+  primaryDark: '#10B981',
+  primaryLight: '#6EE7B7',
 
+  // Backgrounds
+  background: '#0A0A0A',     // Pure black
+  surface: '#141414',        // Cards, elevated elements
+  surfaceLight: '#1E1E1E',
+  surfaceHover: '#252525',
+
+  // Text hierarchy
   text: '#FFFFFF',            // Primary text
-  textSecondary: '#B0B0B0',   // Secondary text
-  textMuted: '#808080',       // Metadata
-  textDisabled: '#404040',
+  textSecondary: '#B0B0B0',  // Secondary text
+  textMuted: '#808080',      // Metadata
+  textDisabled: '#4A4A4A',
 
-  accent: '#34D399',          // Emerald - only color accent
-  accentHover: '#10B981',
+  // Borders
+  border: '#1E1E1E',
+  borderLight: '#2A2A2A',
+  borderFocus: '#34D399',
 
-  error: '#EF4444',           // Red for errors only
-  success: '#34D399',         // Same as accent
+  // Semantic colors
+  success: '#B0B0B0',        // No green — matches textSecondary
+  warning: '#FFFFFF',         // Bright white = attention
+  error: '#EF4444',           // Only color exception besides primary
+  info: '#B0B0B0',            // No blue — stays monochrome
+
+  // Special
+  overlay: 'rgba(0, 0, 0, 0.7)',
+  divider: '#1A1A1A',
 };
 ```
 
@@ -541,11 +557,11 @@ export const COLORS = {
   paddingVertical: SPACING.sm,
   paddingHorizontal: SPACING.md,
   borderWidth: 1,
-  borderColor: isActive ? COLORS.accent : COLORS.border,
+  borderColor: isActive ? COLORS.primary : COLORS.border,
   backgroundColor: 'transparent', // Never filled
   borderRadius: 8,
 }}>
-  <Text style={[TYPOGRAPHY.body, { color: isActive ? COLORS.accent : COLORS.text }]}>
+  <Text style={[TYPOGRAPHY.body, { color: isActive ? COLORS.primary : COLORS.text }]}>
     {label}
   </Text>
 </TouchableOpacity>
@@ -584,9 +600,20 @@ Application state managed via Zustand with AsyncStorage persistence:
 
 **chatStore** (`src/stores/chatStore.ts`):
 - Conversations and messages
-- Projects (custom system prompts)
 - Streaming state (current streaming message)
 - Message operations (add, update, delete, edit)
+
+**projectStore** (`src/stores/projectStore.ts`):
+- Projects (custom system prompts)
+- Active project selection
+
+**authStore** (`src/stores/authStore.ts`):
+- Passphrase lock state
+- Authentication status
+
+**whisperStore** (`src/stores/whisperStore.ts`):
+- Whisper model state and selection
+- Transcription configuration
 
 **Persistence:**
 ```typescript
@@ -735,7 +762,7 @@ Subscribers are weakly held, services never leak references.
 **Pre-load Checks:**
 ```typescript
 async checkMemoryForModel(modelId: string, modelType: 'text' | 'image') {
-  const deviceRAM = await hardwareService.getDeviceInfo();
+  const deviceRAM = await hardware.getDeviceInfo();
   const budget = (deviceRAM.totalMemory / (1024**3)) * 0.60;
 
   const model = findModel(modelId, modelType);
@@ -844,15 +871,15 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 
 ### Core Dependencies
 
-- **React Native 0.74** - Cross-platform mobile framework
+- **React Native 0.83** - Cross-platform mobile framework
 - **TypeScript 5.x** - Type safety and developer experience
 - **llama.rn** - Native bindings for llama.cpp GGUF inference
 - **whisper.rn** - Native bindings for whisper.cpp speech recognition
 - **local-dream** - MNN/QNN Stable Diffusion implementation (Android)
 - **ml-stable-diffusion** - Apple's Core ML Stable Diffusion pipeline (iOS)
-- **Zustand 4.x** - Lightweight state management
+- **Zustand 5.x** - Lightweight state management
 - **AsyncStorage** - Persistent local storage
-- **React Navigation 6.x** - Native navigation
+- **React Navigation 7.x** - Native navigation
 
 ### Native Modules
 
@@ -910,7 +937,7 @@ For developers who want to build from source or contribute:
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - React Native CLI
 
 **Android:**
@@ -1010,25 +1037,41 @@ LocalLLM/
 │   │   ├── ChatInput.tsx           # Message input with attachments
 │   │   ├── ChatMessage.tsx         # Message bubbles with metadata
 │   │   ├── ModelCard.tsx           # Model display card
-│   │   ├── ModelSelectorModal/     # Quick model switcher
+│   │   ├── ModelSelectorModal.tsx  # Quick model switcher
+│   │   ├── GenerationSettingsModal.tsx # Image generation settings
 │   │   ├── CustomAlert.tsx         # Consistent alert dialogs
-│   │   └── ...
+│   │   ├── Button.tsx              # Reusable button component
+│   │   ├── Card.tsx                # Reusable card component
+│   │   ├── ThinkingIndicator.tsx   # LLM thinking animation
+│   │   └── VoiceRecordButton.tsx   # Voice recording button
 │   ├── constants/           # Design tokens and configuration
 │   │   └── index.ts               # TYPOGRAPHY, SPACING, COLORS
 │   ├── hooks/               # Custom React hooks
-│   │   ├── useKeyboard.ts         # Keyboard visibility
-│   │   ├── useDebounce.ts         # Debounced values
-│   │   └── ...
+│   │   ├── useAppState.ts         # App lifecycle state
+│   │   ├── useVoiceRecording.ts   # Voice recording logic
+│   │   └── useWhisperTranscription.ts # Whisper transcription
 │   ├── navigation/          # React Navigation setup
 │   │   └── AppNavigator.tsx       # Tab and stack navigators
 │   ├── screens/             # Main app screens
 │   │   ├── HomeScreen.tsx         # Dashboard with model status
 │   │   ├── ChatScreen.tsx         # Main chat interface
+│   │   ├── ChatsListScreen.tsx    # Conversation list
 │   │   ├── ModelsScreen.tsx       # Browse and download models
+│   │   ├── ModelDownloadScreen.tsx # Model download details
+│   │   ├── ModelSettingsScreen.tsx # Text and image model settings
 │   │   ├── GalleryScreen.tsx      # Generated images gallery
 │   │   ├── DownloadManagerScreen.tsx # Download tracking
 │   │   ├── StorageSettingsScreen.tsx # Storage management
-│   │   └── ...
+│   │   ├── SettingsScreen.tsx     # App settings hub
+│   │   ├── ProjectsScreen.tsx     # Project list
+│   │   ├── ProjectDetailScreen.tsx # Project detail view
+│   │   ├── ProjectEditScreen.tsx  # Create/edit projects
+│   │   ├── SecuritySettingsScreen.tsx # Security settings
+│   │   ├── PassphraseSetupScreen.tsx # Passphrase configuration
+│   │   ├── LockScreen.tsx         # App lock screen
+│   │   ├── OnboardingScreen.tsx   # First-launch onboarding
+│   │   ├── DeviceInfoScreen.tsx   # Device hardware info
+│   │   └── VoiceSettingsScreen.tsx # Whisper settings
 │   ├── services/            # Core business logic
 │   │   ├── llm.ts                 # Text LLM inference
 │   │   ├── activeModelService.ts  # Model lifecycle management
@@ -1036,34 +1079,57 @@ LocalLLM/
 │   │   ├── generationService.ts   # Text generation orchestration
 │   │   ├── imageGenerationService.ts # Image generation orchestration
 │   │   ├── localDreamGenerator.ts # local-dream bridge
-│   │   ├── hardwareService.ts     # Device info and memory
+│   │   ├── imageGenerator.ts      # Image generation utilities
+│   │   ├── hardware.ts            # Device info and memory
 │   │   ├── documentService.ts     # Document text extraction
-│   │   └── ...
+│   │   ├── authService.ts         # Passphrase authentication
+│   │   ├── voiceService.ts        # Voice recording
+│   │   ├── whisperService.ts      # Whisper transcription
+│   │   ├── intentClassifier.ts    # Image generation intent detection
+│   │   ├── huggingFaceModelBrowser.ts # HF model browsing
+│   │   ├── huggingface.ts         # HF API utilities
+│   │   ├── coreMLModelBrowser.ts  # iOS Core ML model browsing
+│   │   ├── backgroundDownloadService.ts # Background download management
+│   │   └── index.ts               # Service exports
 │   ├── stores/              # Zustand state management
 │   │   ├── appStore.ts            # Global app state
-│   │   └── chatStore.ts           # Conversations and messages
+│   │   ├── chatStore.ts           # Conversations and messages
+│   │   ├── authStore.ts           # Authentication state
+│   │   ├── projectStore.ts        # Projects state
+│   │   ├── whisperStore.ts        # Whisper model state
+│   │   └── index.ts               # Store exports
 │   └── types/               # TypeScript type definitions
-│       └── index.ts               # All interfaces and types
+│       ├── index.ts               # All interfaces and types
+│       └── whisper.rn.d.ts        # Whisper native module types
 ├── android/                 # Android native code
 │   └── app/src/main/java/com/localllm/
+│       ├── MainActivity.kt        # Main activity
+│       ├── MainApplication.kt     # Application entry point
 │       ├── download/              # Background download manager
-│       │   └── DownloadManagerModule.kt
-│       ├── localdream/            # local-dream native module
-│       │   └── LocalDreamModule.kt
-│       └── ...
+│       │   ├── DownloadManagerModule.kt
+│       │   ├── DownloadManagerPackage.kt
+│       │   └── DownloadCompleteBroadcastReceiver.kt
+│       └── localdream/            # local-dream native module
+│           ├── LocalDreamModule.kt
+│           └── LocalDreamPackage.kt
 ├── ios/                     # iOS native code
 │   └── LocalLLM/
+│       ├── AppDelegate.swift      # Application delegate
 │       ├── CoreMLDiffusion/       # Core ML image generation
 │       │   ├── CoreMLDiffusionModule.swift
 │       │   └── CoreMLDiffusionModule.m
-│       ├── Download/              # iOS download manager
-│       │   ├── DownloadManagerModule.swift
-│       │   └── DownloadManagerModule.m
-│       └── ...
+│       └── Download/              # iOS download manager
+│           ├── DownloadManagerModule.swift
+│           └── DownloadManagerModule.m
 ├── docs/                    # Documentation
 │   ├── CODEBASE_GUIDE.md         # Comprehensive architecture guide
 │   ├── DESIGN_PHILOSOPHY_SYSTEM.md # Design system reference
-│   └── ...
+│   ├── VISUAL_HIERARCHY_STANDARD.md # Visual hierarchy guidelines
+│   ├── IOS_PARITY_PLAN.md        # iOS feature parity plan
+│   ├── TEST_FLOWS.md             # End-to-end test flows
+│   ├── TEST_COVERAGE_REPORT.md   # Test coverage report
+│   ├── TEST_PRIORITY_MAP.md      # Test priority mapping
+│   └── TEST_SPEC_FORMAT.md       # Test specification format
 └── .claude/                 # Claude Code configuration
     ├── memory/                    # Auto memory files
     └── skills/                    # Custom skills/guidelines
