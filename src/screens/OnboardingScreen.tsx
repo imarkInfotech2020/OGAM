@@ -1,17 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   Dimensions,
   Animated,
 } from 'react-native';
+import ReanimatedAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components';
-import { COLORS, ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -21,6 +29,75 @@ type OnboardingScreenProps = {
 
 const { width } = Dimensions.get('window');
 
+/** Animated slide with staggered entrance for icon, title, description */
+const SlideContent: React.FC<{
+  item: typeof ONBOARDING_SLIDES[0];
+  isActive: boolean;
+  styles: ReturnType<typeof createStyles>;
+  primaryColor: string;
+}> = ({
+  item,
+  isActive,
+  styles,
+  primaryColor,
+}) => {
+  const iconScale = useSharedValue(0.6);
+  const iconOpacity = useSharedValue(0);
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(16);
+  const descOpacity = useSharedValue(0);
+  const descTranslateY = useSharedValue(16);
+
+  useEffect(() => {
+    if (isActive) {
+      // Reset
+      iconScale.value = 0.6;
+      iconOpacity.value = 0;
+      titleOpacity.value = 0;
+      titleTranslateY.value = 16;
+      descOpacity.value = 0;
+      descTranslateY.value = 16;
+
+      // Stagger in
+      iconScale.value = withSpring(1, { damping: 12, stiffness: 150 });
+      iconOpacity.value = withTiming(1, { duration: 300 });
+      titleOpacity.value = withDelay(150, withTiming(1, { duration: 300 }));
+      titleTranslateY.value = withDelay(150, withTiming(0, { duration: 300 }));
+      descOpacity.value = withDelay(300, withTiming(1, { duration: 300 }));
+      descTranslateY.value = withDelay(300, withTiming(0, { duration: 300 }));
+    }
+  }, [isActive]);
+
+  const iconStyle = useAnimatedStyle(() => ({
+    opacity: iconOpacity.value,
+    transform: [{ scale: iconScale.value }],
+  }));
+
+  const titleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const descStyle = useAnimatedStyle(() => ({
+    opacity: descOpacity.value,
+    transform: [{ translateY: descTranslateY.value }],
+  }));
+
+  return (
+    <View style={styles.slide}>
+      <ReanimatedAnimated.View style={[styles.iconContainer, iconStyle]}>
+        <Icon name={item.icon} size={64} color={primaryColor} />
+      </ReanimatedAnimated.View>
+      <ReanimatedAnimated.View style={titleStyle}>
+        <Text style={styles.title}>{item.title}</Text>
+      </ReanimatedAnimated.View>
+      <ReanimatedAnimated.View style={descStyle}>
+        <Text style={styles.description}>{item.description}</Text>
+      </ReanimatedAnimated.View>
+    </View>
+  );
+};
+
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
@@ -28,6 +105,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const handleNext = () => {
     if (currentIndex < ONBOARDING_SLIDES.length - 1) {
@@ -49,14 +128,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     navigation.replace('ModelDownload');
   };
 
-  const renderSlide = ({ item }: { item: typeof ONBOARDING_SLIDES[0] }) => (
-    <View style={styles.slide}>
-      <View style={styles.iconContainer}>
-        <Icon name={item.icon} size={64} color={COLORS.primary} />
-      </View>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.description}>{item.description}</Text>
-    </View>
+  const renderSlide = ({ item, index }: { item: typeof ONBOARDING_SLIDES[0]; index: number }) => (
+    <SlideContent item={item} isActive={currentIndex === index} styles={styles} primaryColor={colors.primary} />
   );
 
   const renderDots = () => (
@@ -140,14 +213,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     minHeight: 48,
@@ -155,42 +228,43 @@ const styles = StyleSheet.create({
   slide: {
     width,
     paddingHorizontal: SPACING.xxl,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   iconContainer: {
     width: 120,
     height: 120,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xxl,
+    ...shadows.medium,
   },
   title: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.text,
-    textAlign: 'center',
+    color: colors.text,
+    textAlign: 'center' as const,
     marginBottom: SPACING.md,
   },
   description: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
   },
   dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginVertical: SPACING.xl,
   },
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     marginHorizontal: SPACING.xs,
   },
   footer: {
@@ -198,6 +272,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   nextButton: {
-    width: '100%',
+    width: '100%' as const,
   },
 });

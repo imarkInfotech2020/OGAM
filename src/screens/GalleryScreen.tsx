@@ -7,16 +7,21 @@ import {
   Image,
   TouchableOpacity,
   Modal,
+  ScrollView,
   Dimensions,
   Platform,
   PermissionsAndroid,
+  Share,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { AnimatedEntry } from '../components/AnimatedEntry';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { imageGenerationService, onnxImageGeneratorService } from '../services';
 import type { ImageGenerationState } from '../services';
@@ -36,6 +41,9 @@ export const GalleryScreen: React.FC = () => {
   const conversationId = route.params?.conversationId;
 
   const { generatedImages, removeGeneratedImage } = useAppStore();
+
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   // Multi-select mode state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -180,23 +188,28 @@ export const GalleryScreen: React.FC = () => {
 
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
-      if (Platform.OS === 'android') {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-          {
-            title: 'Storage Permission',
-            message: 'App needs access to save images',
-            buttonNeutral: 'Ask Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
+      if (Platform.OS === 'ios') {
+        // On iOS, open the native share sheet so the user can save to Photos
+        await Share.share({
+          url: `file://${image.imagePath}`,
+        });
+        return;
       }
 
+      // Android: save to Pictures directory
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        {
+          title: 'Storage Permission',
+          message: 'App needs access to save images',
+          buttonNeutral: 'Ask Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      );
+
       const sourcePath = image.imagePath;
-      const picturesDir = Platform.OS === 'android'
-        ? `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`
-        : `${RNFS.DocumentDirectoryPath}/LocalLLM_Images`;
+      const picturesDir = `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`;
 
       if (!(await RNFS.exists(picturesDir))) {
         await RNFS.mkdir(picturesDir);
@@ -208,12 +221,7 @@ export const GalleryScreen: React.FC = () => {
 
       await RNFS.copyFile(sourcePath, destPath);
 
-      setAlertState(showAlert(
-        'Image Saved',
-        Platform.OS === 'android'
-          ? `Saved to Pictures/LocalLLM/${fileName}`
-          : `Saved to ${fileName}`
-      ));
+      setAlertState(showAlert('Image Saved', `Saved to Pictures/LocalLLM/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
     }
@@ -235,39 +243,41 @@ export const GalleryScreen: React.FC = () => {
     });
   };
 
-  const renderGridItem = ({ item }: { item: GeneratedImage }) => {
+  const renderGridItem = ({ item, index }: { item: GeneratedImage; index: number }) => {
     const isSelected = selectedIds.has(item.id);
 
     return (
-      <TouchableOpacity
-        style={styles.gridItem}
-        onPress={() => {
-          if (isSelectMode) {
-            toggleImageSelection(item.id);
-          } else {
-            setSelectedImage(item);
-          }
-        }}
-        onLongPress={() => {
-          if (!isSelectMode) {
-            setIsSelectMode(true);
-            setSelectedIds(new Set([item.id]));
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Image
-          source={{ uri: `file://${item.imagePath}` }}
-          style={styles.gridImage}
-        />
-        {isSelectMode && (
-          <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-              {isSelected && <Icon name="check" size={14} color="#fff" />}
+      <AnimatedEntry index={index} staggerMs={40} maxItems={15}>
+        <TouchableOpacity
+          style={styles.gridItem}
+          onPress={() => {
+            if (isSelectMode) {
+              toggleImageSelection(item.id);
+            } else {
+              setSelectedImage(item);
+            }
+          }}
+          onLongPress={() => {
+            if (!isSelectMode) {
+              setIsSelectMode(true);
+              setSelectedIds(new Set([item.id]));
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <Image
+            source={{ uri: `file://${item.imagePath}` }}
+            style={styles.gridImage}
+          />
+          {isSelectMode && (
+            <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Icon name="check" size={14} color="#fff" />}
+              </View>
             </View>
-          </View>
-        )}
-      </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </AnimatedEntry>
     );
   };
 
@@ -281,7 +291,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.closeButton}
               onPress={toggleSelectMode}
             >
-              <Icon name="x" size={24} color={COLORS.text} />
+              <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>
               {selectedIds.size} selected
@@ -297,7 +307,7 @@ export const GalleryScreen: React.FC = () => {
               onPress={handleDeleteSelected}
               disabled={selectedIds.size === 0}
             >
-              <Icon name="trash-2" size={20} color={selectedIds.size === 0 ? COLORS.textMuted : COLORS.error} />
+              <Icon name="trash-2" size={20} color={selectedIds.size === 0 ? colors.textMuted : colors.error} />
             </TouchableOpacity>
           </>
         ) : (
@@ -306,7 +316,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.closeButton}
               onPress={() => navigation.goBack()}
             >
-              <Icon name="x" size={24} color={COLORS.text} />
+              <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{screenTitle}</Text>
             <Text style={styles.countBadge}>
@@ -317,7 +327,7 @@ export const GalleryScreen: React.FC = () => {
                 style={styles.headerButton}
                 onPress={toggleSelectMode}
               >
-                <Icon name="check-square" size={20} color={COLORS.text} />
+                <Icon name="check-square" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
           </>
@@ -362,7 +372,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.genCancelButton}
               onPress={handleCancelGeneration}
             >
-              <Icon name="x" size={16} color={COLORS.error} />
+              <Icon name="x" size={16} color={colors.error} />
             </TouchableOpacity>
           </View>
         </View>
@@ -371,7 +381,7 @@ export const GalleryScreen: React.FC = () => {
       {/* Grid */}
       {displayImages.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Icon name="image" size={48} color={COLORS.textMuted} />
+          <Icon name="image" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>
             {conversationId ? 'No images in this chat' : 'No generated images yet'}
           </Text>
@@ -412,71 +422,85 @@ export const GalleryScreen: React.FC = () => {
           />
           {selectedImage && (
             <View style={styles.viewerContent}>
-              <Image
-                source={{ uri: `file://${selectedImage.imagePath}` }}
-                style={styles.fullscreenImage}
-                resizeMode="contain"
-              />
+              {!showDetails && (
+                <Image
+                  source={{ uri: `file://${selectedImage.imagePath}` }}
+                  style={styles.fullscreenImage}
+                  resizeMode="contain"
+                />
+              )}
 
-              {/* Details panel */}
+              {/* Details bottom sheet (replaces image view) */}
               {showDetails && (
-                <View style={styles.detailsPanel}>
-                  <Text style={styles.detailsTitle}>Details</Text>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Prompt</Text>
-                    <Text style={styles.detailValue} numberOfLines={3}>
-                      {selectedImage.prompt}
-                    </Text>
+                <View style={styles.detailsSheet}>
+                  <View style={styles.detailsSheetHeader}>
+                    <Text style={styles.detailsSheetTitle}>Image Details</Text>
+                    <TouchableOpacity onPress={() => setShowDetails(false)}>
+                      <Text style={styles.detailsSheetClose}>Done</Text>
+                    </TouchableOpacity>
                   </View>
-                  {selectedImage.negativePrompt ? (
+                  <Image
+                    source={{ uri: `file://${selectedImage.imagePath}` }}
+                    style={styles.detailsPreview}
+                    resizeMode="contain"
+                  />
+                  <ScrollView style={styles.detailsContent}>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Negative</Text>
-                      <Text style={styles.detailValue} numberOfLines={2}>
-                        {selectedImage.negativePrompt}
+                      <Text style={styles.detailLabel}>PROMPT</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedImage.prompt}
                       </Text>
                     </View>
-                  ) : null}
-                  <View style={styles.detailsMetaRow}>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>{selectedImage.steps} steps</Text>
+                    {selectedImage.negativePrompt ? (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>NEGATIVE</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedImage.negativePrompt}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.detailsMetaRow}>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>{selectedImage.steps} steps</Text>
+                      </View>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>
+                          {selectedImage.width}x{selectedImage.height}
+                        </Text>
+                      </View>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>Seed: {selectedImage.seed}</Text>
+                      </View>
                     </View>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>
-                        {selectedImage.width}x{selectedImage.height}
-                      </Text>
-                    </View>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>Seed: {selectedImage.seed}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.detailDate}>
-                    {formatDate(selectedImage.createdAt)}
-                  </Text>
+                    <Text style={styles.detailDate}>
+                      {formatDate(selectedImage.createdAt)}
+                    </Text>
+                  </ScrollView>
                 </View>
               )}
 
               {/* Action buttons */}
               <View style={styles.viewerActions}>
                 <TouchableOpacity
-                  style={styles.viewerButton}
+                  style={[styles.viewerButton, showDetails && styles.viewerButtonActive]}
                   onPress={() => setShowDetails(!showDetails)}
                 >
-                  <Icon name="info" size={22} color={COLORS.text} />
-                  <Text style={styles.viewerButtonText}>Info</Text>
+                  <Icon name="info" size={22} color={showDetails ? colors.primary : colors.text} />
+                  <Text style={[styles.viewerButtonText, showDetails && { color: colors.primary }]}>Info</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
                   onPress={() => handleSaveImage(selectedImage)}
                 >
-                  <Icon name="download" size={22} color={COLORS.text} />
+                  <Icon name="download" size={22} color={colors.text} />
                   <Text style={styles.viewerButtonText}>Save</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
                   onPress={() => handleDelete(selectedImage)}
                 >
-                  <Icon name="trash-2" size={22} color={COLORS.error} />
-                  <Text style={[styles.viewerButtonText, { color: COLORS.error }]}>Delete</Text>
+                  <Icon name="trash-2" size={22} color={colors.error} />
+                  <Text style={[styles.viewerButtonText, { color: colors.error }]}>Delete</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
@@ -485,7 +509,7 @@ export const GalleryScreen: React.FC = () => {
                     setShowDetails(false);
                   }}
                 >
-                  <Icon name="x" size={22} color={COLORS.text} />
+                  <Icon name="x" size={22} color={colors.text} />
                   <Text style={styles.viewerButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -504,18 +528,21 @@ export const GalleryScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
+    zIndex: 1,
   },
   closeButton: {
     padding: SPACING.xs,
@@ -523,12 +550,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   countBadge: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginRight: SPACING.sm,
   },
   headerButton: {
@@ -540,55 +567,55 @@ const styles = StyleSheet.create({
   },
   headerButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   // Active generation banner
   genBanner: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.md,
     borderRadius: SPACING.md,
     padding: SPACING.md,
   },
   genBannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.sm + 2, // 10
   },
   genPreview: {
     width: 40,
     height: 40,
     borderRadius: SPACING.sm,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
   },
   genBannerInfo: {
     flex: 1,
   },
   genBannerTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 0,
   },
   genBannerPrompt: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   genProgressBar: {
     height: 4,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 2,
     marginTop: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   genProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 2,
   },
   genSteps: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   genCancelButton: {
     padding: SPACING.sm - 2, // 6
@@ -605,17 +632,17 @@ const styles = StyleSheet.create({
     width: CELL_SIZE,
     height: CELL_SIZE,
     borderRadius: SPACING.sm,
-    overflow: 'hidden',
-    backgroundColor: COLORS.surfaceLight,
+    overflow: 'hidden' as const,
+    backgroundColor: colors.surfaceLight,
   },
   gridImage: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
   },
   selectionOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
+    justifyContent: 'flex-start' as const,
+    alignItems: 'flex-end' as const,
     padding: SPACING.sm - 2, // 6
   },
   selectionOverlaySelected: {
@@ -628,116 +655,140 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   checkboxSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   // Empty state
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     padding: SPACING.xxl,
   },
   emptyTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.lg,
   },
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     marginTop: SPACING.sm,
   },
   // Fullscreen viewer
   viewerContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   viewerBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
   viewerContent: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%' as const,
+    height: '100%' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   fullscreenImage: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height * 0.65,
   },
   viewerActions: {
-    flexDirection: 'row',
-    position: 'absolute',
+    flexDirection: 'row' as const,
+    position: 'absolute' as const,
     bottom: 60,
     gap: SPACING.lg + 4, // 20
   },
   viewerButton: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: SPACING.md + 2, // 14
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: SPACING.md + 2, // 14
     minWidth: 70,
   },
+  viewerButtonActive: {
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
   viewerButtonText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.xs,
   },
-  // Details panel
-  detailsPanel: {
-    position: 'absolute',
-    top: 80,
-    left: SPACING.lg,
-    right: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: SPACING.md + 2, // 14
-    padding: SPACING.lg,
+  // Details sheet (inside fullscreen viewer)
+  detailsSheet: {
+    flex: 1,
+    width: '100%' as const,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    marginTop: 60,
+    overflow: 'hidden' as const,
   },
-  detailsTitle: {
+  detailsSheetHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailsSheetTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
+    color: colors.text,
+  },
+  detailsSheetClose: {
+    ...TYPOGRAPHY.body,
+    color: colors.primary,
+  },
+  detailsPreview: {
+    width: '100%' as const,
+    height: 200,
+    backgroundColor: colors.background,
+  },
+  detailsContent: {
+    padding: SPACING.lg,
   },
   detailRow: {
     marginBottom: SPACING.sm + 2, // 10
   },
   detailLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   detailValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     lineHeight: 20,
   },
   detailsMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: SPACING.sm,
     marginTop: SPACING.xs,
   },
   detailChip: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: SPACING.sm + 2, // 10
     paddingVertical: SPACING.xs,
     borderRadius: SPACING.sm,
   },
   detailChipText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   detailDate: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.sm + 2, // 10
   },
 });

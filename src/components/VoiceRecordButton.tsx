@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   Animated,
   PanResponder,
@@ -10,8 +9,17 @@ import {
   PanResponderGestureState,
   Vibration,
 } from 'react-native';
+import ReanimatedAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 
 interface VoiceRecordButtonProps {
@@ -44,11 +52,43 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   onCancelRecording,
   asSendButton = false,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const loadingAnim = useRef(new Animated.Value(0)).current;
   const cancelOffsetX = useRef(new Animated.Value(0)).current;
   const isDraggingToCancel = useRef(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+
+  // Reanimated ripple ring
+  const rippleScale = useSharedValue(1);
+  const rippleOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (isRecording) {
+      rippleScale.value = 1;
+      rippleOpacity.value = 0.4;
+      rippleScale.value = withRepeat(
+        withTiming(2.2, { duration: 1200, easing: Easing.out(Easing.ease) }),
+        -1,
+        false
+      );
+      rippleOpacity.value = withRepeat(
+        withTiming(0, { duration: 1200, easing: Easing.out(Easing.ease) }),
+        -1,
+        false
+      );
+    } else {
+      rippleScale.value = 1;
+      rippleOpacity.value = 0;
+    }
+  }, [isRecording]);
+
+  const rippleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: rippleScale.value }],
+    opacity: rippleOpacity.value,
+  }));
 
   // Loading animation for model loading or transcribing
   useEffect(() => {
@@ -178,7 +218,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
             ]}
           >
             {asSendButton ? (
-              <Icon name="mic" size={18} color={COLORS.primary} />
+              <Icon name="mic" size={18} color={colors.primary} />
             ) : (
               <View style={styles.loadingIndicator} />
             )}
@@ -214,7 +254,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
             ]}
           >
             {asSendButton ? (
-              <Icon name="mic" size={18} color={COLORS.info} />
+              <Icon name="mic" size={18} color={colors.info} />
             ) : (
               <View style={styles.loadingIndicator} />
             )}
@@ -242,7 +282,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         >
           <View style={[styles.button, asSendButton && styles.buttonAsSendUnavailable, !asSendButton && styles.buttonUnavailable]}>
             {asSendButton ? (
-              <Icon name="mic-off" size={18} color={COLORS.textMuted} />
+              <Icon name="mic-off" size={18} color={colors.textMuted} />
             ) : (
               <>
                 <View style={styles.micIcon}>
@@ -294,6 +334,11 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         </View>
       )}
 
+      {/* Ripple ring behind button when recording */}
+      {isRecording && (
+        <ReanimatedAnimated.View style={[styles.rippleRing, rippleStyle]} />
+      )}
+
       {/* Main button with pan responder for hold-to-record */}
       <Animated.View
         style={[
@@ -317,9 +362,9 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         >
           {/* Show send icon by default when asSendButton, mic when recording */}
           {asSendButton && !isRecording ? (
-            <Icon name="send" size={18} color={COLORS.primary} />
+            <Icon name="send" size={18} color={colors.primary} />
           ) : asSendButton && isRecording ? (
-            <Icon name="mic" size={18} color={COLORS.primary} />
+            <Icon name="mic" size={18} color={colors.primary} />
           ) : (
             <View style={styles.micIcon}>
               <View style={[
@@ -355,10 +400,19 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  rippleRing: {
+    position: 'absolute' as const,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: colors.error,
+    backgroundColor: 'transparent',
   },
   buttonWrapper: {
   },
@@ -366,9 +420,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: COLORS.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   buttonAsSend: {
     width: 44,
@@ -376,137 +430,137 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   buttonAsSendUnavailable: {
     width: 44,
     height: 38,
     borderRadius: 19,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
   },
   buttonAsSendLoading: {
     width: 44,
     height: 38,
     borderRadius: 19,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     borderTopColor: 'transparent',
   },
   buttonRecording: {
-    backgroundColor: COLORS.error,
+    backgroundColor: colors.error,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
   buttonLoading: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     borderTopColor: 'transparent',
   },
   buttonTranscribing: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: COLORS.info,
+    borderColor: colors.info,
     borderTopColor: 'transparent',
   },
   buttonUnavailable: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderStyle: 'dashed' as const,
   },
   loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   loadingIndicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
   },
   loadingText: {
     fontSize: 11,
-    color: COLORS.primary,
+    color: colors.primary,
     marginLeft: 6,
   },
   transcribingText: {
     fontSize: 11,
-    color: COLORS.info,
+    color: colors.info,
     marginLeft: 6,
   },
   micIcon: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   micBody: {
     width: 8,
     height: 12,
-    backgroundColor: COLORS.textSecondary,
+    backgroundColor: colors.textSecondary,
     borderRadius: 4,
   },
   micBodyRecording: {
-    backgroundColor: COLORS.text,
+    backgroundColor: colors.text,
   },
   micBodyAsSend: {
-    backgroundColor: COLORS.text,
+    backgroundColor: colors.text,
   },
   micBodyUnavailable: {
-    backgroundColor: COLORS.textMuted,
+    backgroundColor: colors.textMuted,
   },
   micBase: {
     width: 12,
     height: 3,
-    backgroundColor: COLORS.textSecondary,
+    backgroundColor: colors.textSecondary,
     borderRadius: 1.5,
     marginTop: 2,
   },
   unavailableSlash: {
-    position: 'absolute',
+    position: 'absolute' as const,
     width: 24,
     height: 2,
-    backgroundColor: COLORS.textMuted,
+    backgroundColor: colors.textMuted,
     transform: [{ rotate: '-45deg' }],
   },
   cancelHint: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: -100,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: COLORS.error + '40',
+    backgroundColor: colors.error + '40',
     borderRadius: 12,
   },
   cancelHintText: {
-    color: COLORS.error,
+    color: colors.error,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   cancelButton: {
     marginLeft: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.error,
+    borderColor: colors.error,
   },
   cancelButtonText: {
-    color: COLORS.error,
+    color: colors.error,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
   partialResultContainer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: 50,
     maxWidth: 200,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
   },
   partialResultText: {
-    color: COLORS.text,
+    color: colors.text,
     fontSize: 12,
   },
 });

@@ -236,6 +236,74 @@ jest.mock('react-native-gesture-handler', () => {
 // Mock the direct import of Swipeable
 jest.mock('react-native-gesture-handler/Swipeable', () => 'View');
 
+// react-native-worklets mock — must come before reanimated
+jest.mock('react-native-worklets', () => ({}));
+
+// react-native-reanimated mock — fully manual to avoid loading native worklets
+jest.mock('react-native-reanimated', () => {
+  const { View, Text, Image } = require('react-native');
+  return {
+    __esModule: true,
+    default: {
+      createAnimatedComponent: (component: any) => component || View,
+      addWhitelistedNativeProps: jest.fn(),
+      addWhitelistedUIProps: jest.fn(),
+      View,
+      Text,
+      Image,
+    },
+    useSharedValue: jest.fn((init: any) => ({ value: init })),
+    useAnimatedStyle: jest.fn((fn: any) => fn()),
+    useDerivedValue: jest.fn((fn: any) => ({ value: fn() })),
+    useAnimatedProps: jest.fn((fn: any) => fn()),
+    useReducedMotion: jest.fn(() => false),
+    withSpring: jest.fn((val: any) => val),
+    withTiming: jest.fn((val: any) => val),
+    withDelay: jest.fn((_: any, val: any) => val),
+    withSequence: jest.fn((...vals: any[]) => vals[vals.length - 1]),
+    withRepeat: jest.fn((val: any) => val),
+    cancelAnimation: jest.fn(),
+    Easing: {
+      linear: jest.fn(),
+      ease: jest.fn(),
+      bezier: jest.fn(() => jest.fn()),
+      in: jest.fn(),
+      out: jest.fn(),
+      inOut: jest.fn(),
+    },
+    FadeIn: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
+    FadeOut: { duration: jest.fn().mockReturnThis(), delay: jest.fn().mockReturnThis() },
+    SlideInDown: { duration: jest.fn().mockReturnThis() },
+    SlideOutDown: { duration: jest.fn().mockReturnThis() },
+    Layout: { duration: jest.fn().mockReturnThis() },
+    createAnimatedComponent: (component: any) => component || View,
+  };
+});
+
+// react-native-haptic-feedback mock
+jest.mock('react-native-haptic-feedback', () => ({
+  trigger: jest.fn(),
+}));
+
+// @react-native-community/blur mock
+jest.mock('@react-native-community/blur', () => ({
+  BlurView: 'BlurView',
+}));
+
+// lottie-react-native mock
+jest.mock('lottie-react-native', () => 'LottieView');
+
+// react-native-linear-gradient mock
+jest.mock('react-native-linear-gradient', () => 'LinearGradient');
+
+// moti mock (kept for any transitive imports)
+jest.mock('moti', () => ({
+  MotiView: 'MotiView',
+  MotiText: 'MotiText',
+  MotiImage: 'MotiImage',
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
+}), { virtual: true });
+
 // react-native-zip-archive mock
 jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(() => Promise.resolve('/mock/unzipped/path')),

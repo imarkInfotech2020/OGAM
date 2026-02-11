@@ -348,37 +348,3 @@ export const SPACING = {
   xxl: 32,
 };
 
-// Colors - Monochromatic palette with emerald accent
-export const COLORS = {
-  // Primary accent
-  primary: '#34D399',
-  primaryDark: '#10B981',
-  primaryLight: '#6EE7B7',
-
-  // Backgrounds
-  background: '#0A0A0A',
-  surface: '#141414',
-  surfaceLight: '#1E1E1E',
-  surfaceHover: '#252525',
-
-  // Text hierarchy
-  text: '#FFFFFF',
-  textSecondary: '#B0B0B0',
-  textMuted: '#808080',
-  textDisabled: '#4A4A4A',
-
-  // Borders
-  border: '#1E1E1E',
-  borderLight: '#2A2A2A',
-  borderFocus: '#34D399',
-
-  // Semantic colors
-  success: '#B0B0B0',        // no green — matches textSecondary
-  warning: '#FFFFFF',         // bright white = attention
-  error: '#EF4444',           // only color exception besides primary
-  info: '#B0B0B0',            // no blue — stays monochrome
-
-  // Special
-  overlay: 'rgba(0, 0, 0, 0.7)',
-  divider: '#1A1A1A',
-};
