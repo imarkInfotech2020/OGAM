@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS, FONTS, SPACING } from '../constants';
+import { COLORS, FONTS, SPACING, SHADOWS } from '../constants';
 import { MediaAttachment, ImageModeState } from '../types';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { triggerHaptic } from '../utils/haptics';
@@ -385,9 +385,10 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    ...SHADOWS.medium,
   },
   attachmentsContainer: {
     marginBottom: 8,

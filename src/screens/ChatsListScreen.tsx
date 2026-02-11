@@ -14,7 +14,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
 import { Conversation } from '../types';
@@ -201,6 +201,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.small,
+    zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -238,6 +241,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: 12,
     marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   chatIcon: {
     width: 44,

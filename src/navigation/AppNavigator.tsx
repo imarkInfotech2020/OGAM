@@ -8,7 +8,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, SHADOWS } from '../constants';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
@@ -263,6 +263,7 @@ const styles = StyleSheet.create({
     height: 80,
     paddingBottom: 20,
     paddingTop: 10,
+    ...SHADOWS.medium,
   },
   tabLabel: {
     fontSize: 11,

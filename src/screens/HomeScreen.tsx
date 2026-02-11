@@ -17,8 +17,9 @@ import { Button, Card, CustomAlert, initialAlertState, showAlert, hideAlert } fr
 import type { AlertState } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, FONTS, TYPOGRAPHY, SPACING } from '../constants';
+import { COLORS, FONTS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
@@ -357,9 +358,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
         <View style={styles.modelsRow}>
           {/* Text Model */}
-          <TouchableOpacity
+          <AnimatedPressable
             style={styles.modelCard}
             onPress={() => setPickerType('text')}
+            hapticType="selectionClick"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="message-square" size={16} color={COLORS.textMuted} />
@@ -391,13 +393,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 {downloadedModels.length > 0 ? 'Tap to select' : 'No models'}
               </Text>
             )}
-          </TouchableOpacity>
+          </AnimatedPressable>
 
           {/* Image Model */}
-          <TouchableOpacity
+          <AnimatedPressable
             style={styles.modelCard}
             onPress={() => setPickerType('image')}
             testID="image-model-card"
+            hapticType="selectionClick"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={COLORS.textMuted} />
@@ -429,7 +432,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 {downloadedImageModels.length > 0 ? 'Tap to select' : 'No models'}
               </Text>
             )}
-          </TouchableOpacity>
+          </AnimatedPressable>
         </View>
         </AnimatedEntry>
 
@@ -525,10 +528,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         )}
 
         {/* Image Gallery */}
-        <TouchableOpacity
+        <AnimatedPressable
           style={styles.galleryCard}
           onPress={() => (navigation as any).navigate('Gallery')}
-          activeOpacity={0.7}
+          hapticType="selectionClick"
         >
           <Icon name="grid" size={18} color={COLORS.primary} />
           <View style={styles.galleryCardInfo}>
@@ -538,7 +541,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Text>
           </View>
           <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
-        </TouchableOpacity>
+        </AnimatedPressable>
 
         {/* Recent Conversations */}
         {recentConversations.length > 0 && (
@@ -835,6 +838,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 14,
+    ...SHADOWS.small,
   },
   modelCardHeader: {
     flexDirection: 'row',
@@ -872,6 +876,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
+    ...SHADOWS.small,
   },
   memoryHeader: {
     flexDirection: 'row',
@@ -953,6 +958,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 16,
     gap: 12,
+    ...SHADOWS.small,
   },
   galleryCardInfo: {
     flex: 1,
@@ -1002,6 +1008,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 6,
+    ...SHADOWS.small,
   },
   conversationInfo: {
     flex: 1,
@@ -1029,6 +1036,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
+    ...SHADOWS.small,
   },
   statItem: {
     flex: 1,
@@ -1163,6 +1171,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 40,
     maxWidth: 300,
+    ...SHADOWS.large,
   },
   loadingTitle: {
     ...TYPOGRAPHY.h2,

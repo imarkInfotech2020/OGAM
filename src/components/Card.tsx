@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { COLORS } from '../constants';
+import { COLORS, SHADOWS } from '../constants';
 
 interface CardProps {
   children: React.ReactNode;
@@ -55,6 +55,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
+    ...SHADOWS.small,
   },
   header: {
     flexDirection: 'row',

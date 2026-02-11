@@ -11,7 +11,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS, SHADOWS } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -248,6 +248,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.small,
+    zIndex: 1,
   },
   backButton: {
     padding: SPACING.xs,
@@ -345,12 +348,13 @@ const styles = StyleSheet.create({
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.md,
     borderRadius: 6,
     marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   chatIcon: {
     width: 28,

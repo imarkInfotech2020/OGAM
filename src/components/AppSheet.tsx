@@ -11,7 +11,7 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING, ELEVATION } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, ELEVATION, SHADOWS } from '../constants';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -240,6 +240,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     overflow: 'hidden',
+    ...SHADOWS.large,
   },
   handleContainer: {
     alignItems: 'center',

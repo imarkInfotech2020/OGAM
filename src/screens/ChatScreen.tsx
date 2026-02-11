@@ -36,7 +36,7 @@ import {
 } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedPressable } from '../components/AnimatedPressable';
-import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
+import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY, SHADOWS } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
@@ -1381,9 +1381,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.surface,
     zIndex: 10,
-    elevation: 4,
+    ...SHADOWS.small,
   },
   headerRow: {
     flexDirection: 'row',

@@ -383,6 +383,38 @@ export const COLORS = {
   divider: '#1A1A1A',
 };
 
+// Shadow System - Depth hierarchy (iOS shadows + Android elevation)
+export const SHADOWS = {
+  small: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  medium: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  large: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  glow: {
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+} as const;
+
 // Elevation System - Layered surface hierarchy
 export const ELEVATION = {
   level0: {

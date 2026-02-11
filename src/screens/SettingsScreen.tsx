@@ -4,16 +4,18 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
+import { useAppStore } from '../stores';
 import { SettingsStackParamList } from '../navigation/types';
 import packageJson from '../../package.json';
 
@@ -22,6 +24,18 @@ type NavigationProp = NativeStackNavigationProp<SettingsStackParamList, 'Setting
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
+  const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+
+  const handleResetOnboarding = () => {
+    setOnboardingComplete(false);
+    // Navigate to root stack and reset to Onboarding
+    navigation.getParent()?.getParent()?.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'Onboarding' }],
+      })
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -85,6 +99,16 @@ export const SettingsScreen: React.FC = () => {
             </Text>
           </Card>
         </AnimatedEntry>
+
+        {/* Dev-only: Reset Onboarding */}
+        {__DEV__ && (
+          <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
+            <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
+              <Icon name="rotate-ccw" size={14} color={COLORS.textMuted} />
+              <Text style={styles.devButtonText}>Reset Onboarding</Text>
+            </TouchableOpacity>
+          </AnimatedEntry>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,6 +124,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.small,
+    zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -118,6 +145,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: SPACING.lg,
     overflow: 'hidden',
+    ...SHADOWS.small,
   },
   navItem: {
     flexDirection: 'row',
@@ -197,5 +225,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  devButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    borderRadius: 6,
+  },
+  devButtonText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textMuted,
   },
 });

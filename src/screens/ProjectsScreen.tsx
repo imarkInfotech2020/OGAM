@@ -13,7 +13,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS, SHADOWS } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -135,6 +135,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    ...SHADOWS.small,
+    zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -170,12 +173,13 @@ const styles = StyleSheet.create({
   projectItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.md,
     borderRadius: 6,
     marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   projectIcon: {
     width: 32,

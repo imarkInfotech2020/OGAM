@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components';
-import { COLORS, ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
+import { COLORS, ONBOARDING_SLIDES, SPACING, TYPOGRAPHY, SHADOWS } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.xxl,
+    ...SHADOWS.medium,
   },
   title: {
     ...TYPOGRAPHY.h1,
