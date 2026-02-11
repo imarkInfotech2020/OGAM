@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   ChatMessage,
   ChatInput,
@@ -33,6 +34,8 @@ import {
   ProjectSelectorSheet,
   DebugSheet,
 } from '../components';
+import { AnimatedEntry } from '../components/AnimatedEntry';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
@@ -55,6 +58,10 @@ export const ChatScreen: React.FC = () => {
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  // Message entry animation gating — only animate newly arriving messages
+  const lastMessageCountRef = useRef(0);
+  const [animateLastN, setAnimateLastN] = useState(0);
   // Track which conversation a generation was started for
   const generatingForConversationRef = useRef<string | null>(null);
   // Track when generation started for timing
@@ -261,8 +268,9 @@ export const ChatScreen: React.FC = () => {
   const handleScroll = (event: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    // Consider "near bottom" if within 100 pixels of the bottom
-    isNearBottomRef.current = distanceFromBottom < 100;
+    const nearBottom = distanceFromBottom < 100;
+    isNearBottomRef.current = nearBottom;
+    setShowScrollToBottom(!nearBottom);
   };
 
   const handleContentSizeChange = (width: number, height: number) => {
@@ -935,7 +943,7 @@ export const ChatScreen: React.FC = () => {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => (
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => (
     <ChatMessage
       message={item}
       isStreaming={item.id === 'streaming'}
@@ -946,6 +954,7 @@ export const ChatScreen: React.FC = () => {
       onImagePress={handleImagePress}
       canGenerateImage={imageModelLoaded && !isStreaming && !isGeneratingImage}
       showGenerationDetails={settings.showGenerationDetails}
+      animateEntry={animateLastN > 0 && index >= displayMessages.length - animateLastN}
     />
   );
 
@@ -976,6 +985,22 @@ export const ChatScreen: React.FC = () => {
           },
         ]
       : allMessages;
+
+  // Track new messages for entry animation
+  useEffect(() => {
+    const prev = lastMessageCountRef.current;
+    const curr = displayMessages.length;
+    if (curr > prev && prev > 0) {
+      setAnimateLastN(curr - prev);
+    }
+    lastMessageCountRef.current = curr;
+  }, [displayMessages.length]);
+
+  // Reset animation count on conversation switch
+  useEffect(() => {
+    lastMessageCountRef.current = 0;
+    setAnimateLastN(0);
+  }, [activeConversationId]);
 
   if (!activeModelId || !activeModel) {
     return (
@@ -1102,32 +1127,42 @@ export const ChatScreen: React.FC = () => {
         {/* Messages */}
         {displayMessages.length === 0 ? (
           <View style={styles.emptyChat}>
-            <View style={styles.emptyChatIconContainer}>
-              <Icon name="message-square" size={32} color={COLORS.textMuted} />
-            </View>
-            <Text style={styles.emptyChatTitle}>Start a Conversation</Text>
-            <Text style={styles.emptyChatText}>
-              Type a message below to begin chatting with {activeModel.name}.
-            </Text>
-            <TouchableOpacity
-              style={styles.projectHint}
-              onPress={() => setShowProjectSelector(true)}
-            >
-              <View style={styles.projectHintIcon}>
-                <Text style={styles.projectHintIconText}>
-                  {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
-                </Text>
+            <AnimatedEntry index={0} staggerMs={60}>
+              <View style={styles.emptyChatIconContainer}>
+                <Icon name="message-square" size={32} color={COLORS.textMuted} />
               </View>
-              <Text style={styles.projectHintText}>
-                Project: {activeProject?.name || 'Default'} — tap to change
+            </AnimatedEntry>
+            <AnimatedEntry index={1} staggerMs={60}>
+              <Text style={styles.emptyChatTitle}>Start a Conversation</Text>
+            </AnimatedEntry>
+            <AnimatedEntry index={2} staggerMs={60}>
+              <Text style={styles.emptyChatText}>
+                Type a message below to begin chatting with {activeModel.name}.
               </Text>
-            </TouchableOpacity>
-            <Card style={styles.privacyReminder}>
-              <Text style={styles.privacyText}>
-                This conversation is completely private. All processing
-                happens on your device.
-              </Text>
-            </Card>
+            </AnimatedEntry>
+            <AnimatedEntry index={3} staggerMs={60}>
+              <TouchableOpacity
+                style={styles.projectHint}
+                onPress={() => setShowProjectSelector(true)}
+              >
+                <View style={styles.projectHintIcon}>
+                  <Text style={styles.projectHintIconText}>
+                    {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
+                  </Text>
+                </View>
+                <Text style={styles.projectHintText}>
+                  Project: {activeProject?.name || 'Default'} — tap to change
+                </Text>
+              </TouchableOpacity>
+            </AnimatedEntry>
+            <AnimatedEntry index={4} staggerMs={60}>
+              <Card style={styles.privacyReminder}>
+                <Text style={styles.privacyText}>
+                  This conversation is completely private. All processing
+                  happens on your device.
+                </Text>
+              </Card>
+            </AnimatedEntry>
           </View>
         ) : (
           <FlatList
@@ -1147,6 +1182,22 @@ export const ChatScreen: React.FC = () => {
               autoscrollToTopThreshold: 100,
             }}
           />
+        )}
+
+        {/* Scroll-to-bottom button */}
+        {showScrollToBottom && displayMessages.length > 0 && (
+          <Animated.View
+            entering={FadeIn.duration(150)}
+            style={styles.scrollToBottomContainer}
+          >
+            <AnimatedPressable
+              hapticType="impactLight"
+              style={styles.scrollToBottomButton}
+              onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            >
+              <Icon name="chevron-down" size={20} color={COLORS.textSecondary} />
+            </AnimatedPressable>
+          </Animated.View>
         )}
 
         {/* Image generation progress indicator with preview */}
@@ -1395,6 +1446,22 @@ const styles = StyleSheet.create({
   },
   messageList: {
     paddingVertical: 16,
+  },
+  scrollToBottomContainer: {
+    position: 'absolute',
+    bottom: 80,
+    right: 16,
+    zIndex: 10,
+  },
+  scrollToBottomButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyChat: {
     flex: 1,

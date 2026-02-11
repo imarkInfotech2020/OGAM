@@ -8,16 +8,95 @@ import {
   Clipboard,
   Modal,
   TextInput,
-  Animated,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  useReducedMotion,
+  FadeIn,
+} from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/Feather';
 import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { Message } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { triggerHaptic } from '../utils/haptics';
+import { AnimatedEntry } from './AnimatedEntry';
+import { AnimatedPressable } from './AnimatedPressable';
+import { AppSheet } from './AppSheet';
 
+
+// Animated blinking cursor for streaming state
+function BlinkingCursor() {
+  const reducedMotion = useReducedMotion();
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    if (reducedMotion) return;
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0, { duration: 400 }),
+        withTiming(1, { duration: 400 }),
+      ),
+      -1,
+      false,
+    );
+  }, [reducedMotion]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.Text testID="streaming-cursor" style={[{ color: COLORS.primary, fontFamily: FONTS.mono, fontWeight: '300' }, style]}>
+      _
+    </Animated.Text>
+  );
+}
+
+// Image with fade-in on load
+function FadeInImage({
+  uri,
+  imageStyle,
+  testID,
+  wrapperTestID,
+  onPress,
+}: {
+  uri: string;
+  imageStyle: any;
+  testID?: string;
+  wrapperTestID?: string;
+  onPress?: () => void;
+}) {
+  const opacity = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={[fadeInImageStyles.wrapper, fadeStyle]}>
+      <TouchableOpacity
+        testID={wrapperTestID}
+        style={fadeInImageStyles.wrapper}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
+        <Image
+          testID={testID}
+          source={{ uri }}
+          style={imageStyle}
+          resizeMode="cover"
+          onLoad={() => { opacity.value = withTiming(1, { duration: 300 }); }}
+        />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const fadeInImageStyles = StyleSheet.create({
+  wrapper: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+});
 
 interface ChatMessageProps {
   message: Message;
@@ -30,6 +109,7 @@ interface ChatMessageProps {
   showActions?: boolean;
   canGenerateImage?: boolean;
   showGenerationDetails?: boolean;
+  animateEntry?: boolean;
 }
 
 // Parse message content to extract <think> blocks
@@ -94,6 +174,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   showActions = true,
   canGenerateImage = false,
   showGenerationDetails = false,
+  animateEntry = false,
 }) => {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -116,6 +197,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const handleCopy = () => {
     Clipboard.setString(displayContent);
+    triggerHaptic('notificationSuccess');
     if (onCopy) {
       onCopy(displayContent);
     }
@@ -150,6 +232,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const handleLongPress = () => {
     if (showActions && !isStreaming) {
+      triggerHaptic('impactMedium');
       setShowActionMenu(true);
     }
   };
@@ -185,8 +268,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     );
   }
 
-  return (
-    <>
+  const messageBody = (
       <TouchableOpacity
         testID={isUser ? 'user-message' : 'assistant-message'}
         style={[
@@ -208,20 +290,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {hasAttachments && (
             <View testID="message-attachments" style={styles.attachmentsContainer}>
               {message.attachments!.map((attachment, index) => (
-                <TouchableOpacity
+                <FadeInImage
                   key={attachment.id}
-                  testID={isUser ? `message-attachment-${index}` : `generated-image`}
-                  style={styles.attachmentWrapper}
+                  uri={attachment.uri}
+                  imageStyle={styles.attachmentImage}
+                  wrapperTestID={isUser ? `message-attachment-${index}` : `generated-image`}
+                  testID={isUser ? `message-image-${index}` : `generated-image-content`}
                   onPress={() => onImagePress?.(attachment.uri)}
-                  activeOpacity={0.8}
-                >
-                  <Image
-                    testID={isUser ? `message-image-${index}` : `generated-image-content`}
-                    source={{ uri: attachment.uri }}
-                    style={styles.attachmentImage}
-                    resizeMode="cover"
-                  />
-                </TouchableOpacity>
+                />
               ))}
             </View>
           )}
@@ -277,7 +353,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   selectable
                 >
                   {parsedContent.response}
-                  {isStreaming && <Text testID="streaming-cursor" style={styles.cursor}>|</Text>}
+                  {isStreaming && <BlinkingCursor />}
                 </Text>
               ) : isStreaming && !parsedContent.isThinkingComplete ? (
                 /* Still in thinking phase, show indicator */
@@ -286,13 +362,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 </View>
               ) : isStreaming ? (
                 <Text testID="message-text" style={[styles.text, styles.assistantText]}>
-                  <Text testID="streaming-cursor" style={styles.cursor}>|</Text>
+                  <BlinkingCursor />
                 </Text>
               ) : null}
             </View>
           ) : isStreaming ? (
             <Text testID="message-text" style={[styles.text, styles.assistantText]}>
-              <Text testID="streaming-cursor" style={styles.cursor}>|</Text>
+              <BlinkingCursor />
             </Text>
           ) : null}
         </View>
@@ -316,6 +392,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
         {/* Generation details */}
         {showGenerationDetails && message.generationMeta && message.role === 'assistant' && (
+          <Animated.View
+            entering={FadeIn.duration(250)}
+          >
           <View testID="generation-meta" style={styles.generationMetaRow}>
             <Text style={styles.generationMetaText}>
               {message.generationMeta.gpuBackend || (message.generationMeta.gpu ? 'GPU' : 'CPU')}
@@ -381,68 +460,72 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               </>
             )}
           </View>
+          </Animated.View>
         )}
       </TouchableOpacity>
+  );
 
-      {/* Action Menu Modal */}
-      <Modal
+  return (
+    <>
+      {animateEntry ? <AnimatedEntry index={0}>{messageBody}</AnimatedEntry> : messageBody}
+
+      {/* Action Sheet */}
+      <AppSheet
         visible={showActionMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowActionMenu(false)}
+        onClose={() => setShowActionMenu(false)}
+        enableDynamicSizing
+        title="Actions"
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowActionMenu(false)}
-        >
-          <View testID="action-menu" style={styles.actionMenu}>
-            <TouchableOpacity testID="action-copy" style={styles.actionItem} onPress={handleCopy}>
-              <View style={styles.actionIconBox}>
-                <Text style={styles.actionIconText}>C</Text>
-              </View>
-              <Text style={styles.actionText}>Copy</Text>
-            </TouchableOpacity>
+        <View testID="action-menu" style={styles.actionSheetContent}>
+          <AnimatedPressable
+            testID="action-copy"
+            hapticType="selection"
+            style={styles.actionSheetItem}
+            onPress={handleCopy}
+          >
+            <Icon name="copy" size={18} color={COLORS.textSecondary} />
+            <Text style={styles.actionSheetText}>Copy</Text>
+          </AnimatedPressable>
 
-            {isUser && onEdit && (
-              <TouchableOpacity testID="action-edit" style={styles.actionItem} onPress={handleEdit}>
-                <View style={styles.actionIconBox}>
-                  <Text style={styles.actionIconText}>E</Text>
-                </View>
-                <Text style={styles.actionText}>Edit</Text>
-              </TouchableOpacity>
-            )}
-
-            {onRetry && (
-              <TouchableOpacity testID="action-retry" style={styles.actionItem} onPress={handleRetry}>
-                <View style={styles.actionIconBox}>
-                  <Text style={styles.actionIconText}>R</Text>
-                </View>
-                <Text style={styles.actionText}>
-                  {isUser ? 'Resend' : 'Regenerate'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {canGenerateImage && onGenerateImage && (
-              <TouchableOpacity testID="action-generate-image" style={styles.actionItem} onPress={handleGenerateImage}>
-                <View style={[styles.actionIconBox, styles.actionIconBoxImage]}>
-                  <Text style={styles.actionIconText}>I</Text>
-                </View>
-                <Text style={styles.actionText}>Generate Image</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              testID="action-cancel"
-              style={[styles.actionItem, styles.actionItemCancel]}
-              onPress={() => setShowActionMenu(false)}
+          {isUser && onEdit && (
+            <AnimatedPressable
+              testID="action-edit"
+              hapticType="selection"
+              style={styles.actionSheetItem}
+              onPress={handleEdit}
             >
-              <Text style={styles.actionTextCancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+              <Icon name="edit-2" size={18} color={COLORS.textSecondary} />
+              <Text style={styles.actionSheetText}>Edit</Text>
+            </AnimatedPressable>
+          )}
+
+          {onRetry && (
+            <AnimatedPressable
+              testID="action-retry"
+              hapticType="selection"
+              style={styles.actionSheetItem}
+              onPress={handleRetry}
+            >
+              <Icon name="refresh-cw" size={18} color={COLORS.textSecondary} />
+              <Text style={styles.actionSheetText}>
+                {isUser ? 'Resend' : 'Regenerate'}
+              </Text>
+            </AnimatedPressable>
+          )}
+
+          {canGenerateImage && onGenerateImage && (
+            <AnimatedPressable
+              testID="action-generate-image"
+              hapticType="selection"
+              style={styles.actionSheetItem}
+              onPress={handleGenerateImage}
+            >
+              <Icon name="image" size={18} color={COLORS.textSecondary} />
+              <Text style={styles.actionSheetText}>Generate Image</Text>
+            </AnimatedPressable>
+          )}
+        </View>
+      </AppSheet>
 
       {/* Edit Modal */}
       <Modal
@@ -713,55 +796,22 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     opacity: 0.5,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  actionSheetContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
-  actionMenu: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 8,
-    minWidth: 200,
-  },
-  actionItem: {
+  actionSheetItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
+    gap: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  actionItemCancel: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    justifyContent: 'center',
-  },
-  actionIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: COLORS.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  actionIconBoxImage: {
-    backgroundColor: COLORS.info + '30',
-  },
-  actionIconText: {
+  actionSheetText: {
     ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  actionText: {
-    ...TYPOGRAPHY.h2,
     color: COLORS.text,
-  },
-  actionTextCancel: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.error,
-    textAlign: 'center',
   },
   editModalOverlay: {
     flex: 1,
