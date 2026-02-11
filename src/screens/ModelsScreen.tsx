@@ -1456,7 +1456,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   tabBar: {
     flexDirection: 'row' as const,
     paddingHorizontal: 16,
-    paddingVertical: SPACING.sm,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
     gap: 8,
   },
   tab: {

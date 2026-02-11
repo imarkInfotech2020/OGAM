@@ -592,6 +592,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
   },
   listContent: {
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
   section: {
