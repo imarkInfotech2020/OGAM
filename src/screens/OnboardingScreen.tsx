@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,13 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
+import ReanimatedAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
@@ -20,6 +27,68 @@ type OnboardingScreenProps = {
 };
 
 const { width } = Dimensions.get('window');
+
+/** Animated slide with staggered entrance for icon, title, description */
+const SlideContent: React.FC<{ item: typeof ONBOARDING_SLIDES[0]; isActive: boolean }> = ({
+  item,
+  isActive,
+}) => {
+  const iconScale = useSharedValue(0.6);
+  const iconOpacity = useSharedValue(0);
+  const titleOpacity = useSharedValue(0);
+  const titleTranslateY = useSharedValue(16);
+  const descOpacity = useSharedValue(0);
+  const descTranslateY = useSharedValue(16);
+
+  useEffect(() => {
+    if (isActive) {
+      // Reset
+      iconScale.value = 0.6;
+      iconOpacity.value = 0;
+      titleOpacity.value = 0;
+      titleTranslateY.value = 16;
+      descOpacity.value = 0;
+      descTranslateY.value = 16;
+
+      // Stagger in
+      iconScale.value = withSpring(1, { damping: 12, stiffness: 150 });
+      iconOpacity.value = withTiming(1, { duration: 300 });
+      titleOpacity.value = withDelay(150, withTiming(1, { duration: 300 }));
+      titleTranslateY.value = withDelay(150, withTiming(0, { duration: 300 }));
+      descOpacity.value = withDelay(300, withTiming(1, { duration: 300 }));
+      descTranslateY.value = withDelay(300, withTiming(0, { duration: 300 }));
+    }
+  }, [isActive]);
+
+  const iconStyle = useAnimatedStyle(() => ({
+    opacity: iconOpacity.value,
+    transform: [{ scale: iconScale.value }],
+  }));
+
+  const titleStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{ translateY: titleTranslateY.value }],
+  }));
+
+  const descStyle = useAnimatedStyle(() => ({
+    opacity: descOpacity.value,
+    transform: [{ translateY: descTranslateY.value }],
+  }));
+
+  return (
+    <View style={styles.slide}>
+      <ReanimatedAnimated.View style={[styles.iconContainer, iconStyle]}>
+        <Icon name={item.icon} size={64} color={COLORS.primary} />
+      </ReanimatedAnimated.View>
+      <ReanimatedAnimated.View style={titleStyle}>
+        <Text style={styles.title}>{item.title}</Text>
+      </ReanimatedAnimated.View>
+      <ReanimatedAnimated.View style={descStyle}>
+        <Text style={styles.description}>{item.description}</Text>
+      </ReanimatedAnimated.View>
+    </View>
+  );
+};
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
@@ -49,14 +118,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     navigation.replace('ModelDownload');
   };
 
-  const renderSlide = ({ item }: { item: typeof ONBOARDING_SLIDES[0] }) => (
-    <View style={styles.slide}>
-      <View style={styles.iconContainer}>
-        <Icon name={item.icon} size={64} color={COLORS.primary} />
-      </View>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.description}>{item.description}</Text>
-    </View>
+  const renderSlide = ({ item, index }: { item: typeof ONBOARDING_SLIDES[0]; index: number }) => (
+    <SlideContent item={item} isActive={currentIndex === index} />
   );
 
   const renderDots = () => (
