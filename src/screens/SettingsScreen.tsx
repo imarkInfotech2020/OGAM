@@ -2,9 +2,9 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -14,7 +14,9 @@ import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { SettingsStackParamList } from '../navigation/types';
 import packageJson from '../../package.json';
@@ -24,7 +26,11 @@ type NavigationProp = NativeStackNavigationProp<SettingsStackParamList, 'Setting
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+  const themeMode = useAppStore((s) => s.themeMode);
+  const setThemeMode = useAppStore((s) => s.setThemeMode);
 
   const handleResetOnboarding = () => {
     setOnboardingComplete(false);
@@ -44,6 +50,22 @@ export const SettingsScreen: React.FC = () => {
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
 
+        {/* Dark Mode Toggle */}
+        <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.themeToggleRow}>
+            <View style={styles.themeToggleInfo}>
+              <Icon name="moon" size={16} color={colors.textSecondary} />
+              <Text style={styles.themeToggleLabel}>Dark Mode</Text>
+            </View>
+            <Switch
+              value={themeMode === 'dark'}
+              onValueChange={(val) => setThemeMode(val ? 'dark' : 'light')}
+              trackColor={{ false: colors.surfaceLight, true: colors.primary + '60' }}
+              thumbColor={themeMode === 'dark' ? colors.primary : colors.textMuted}
+            />
+          </View>
+        </AnimatedEntry>
+
         {/* Navigation Items */}
         <View style={styles.navSection}>
           {[
@@ -55,26 +77,26 @@ export const SettingsScreen: React.FC = () => {
           ].map((item, index, arr) => (
             <AnimatedListItem
               key={item.screen}
-              index={index}
+              index={index + 1}
               staggerMs={40}
               trigger={focusTrigger}
               style={[styles.navItem, index === arr.length - 1 && styles.navItemLast]}
               onPress={() => navigation.navigate(item.screen)}
             >
               <View style={styles.navItemIcon}>
-                <Icon name={item.icon} size={16} color={COLORS.textSecondary} />
+                <Icon name={item.icon} size={16} color={colors.textSecondary} />
               </View>
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>{item.title}</Text>
                 <Text style={styles.navItemDesc}>{item.desc}</Text>
               </View>
-              <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
             </AnimatedListItem>
           ))}
         </View>
 
         {/* About */}
-        <AnimatedEntry index={5} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.section}>
             <View style={styles.aboutRow}>
               <Text style={styles.aboutLabel}>Version</Text>
@@ -87,10 +109,10 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Privacy */}
-        <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.privacyCard}>
             <View style={styles.privacyIconContainer}>
-              <Icon name="shield" size={18} color={COLORS.textSecondary} />
+              <Icon name="shield" size={18} color={colors.textSecondary} />
             </View>
             <Text style={styles.privacyTitle}>Privacy First</Text>
             <Text style={styles.privacyText}>
@@ -102,9 +124,9 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Dev-only: Reset Onboarding */}
         {__DEV__ && (
-          <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
+          <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
             <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
-              <Icon name="rotate-ccw" size={14} color={COLORS.textMuted} />
+              <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding</Text>
             </TouchableOpacity>
           </AnimatedEntry>
@@ -114,23 +136,23 @@ export const SettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    ...SHADOWS.small,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
     zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -140,19 +162,38 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
+  themeToggleRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    ...shadows.small,
+  },
+  themeToggleInfo: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
+  themeToggleLabel: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+  },
   navSection: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     marginBottom: SPACING.lg,
-    overflow: 'hidden',
-    ...SHADOWS.small,
+    overflow: 'hidden' as const,
+    ...shadows.small,
   },
   navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   navItemLast: {
     borderBottomWidth: 0,
@@ -162,8 +203,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 6,
     backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.md,
   },
   navItemContent: {
@@ -171,75 +212,75 @@ const styles = StyleSheet.create({
   },
   navItemTitle: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
-    color: COLORS.text,
+    fontWeight: '400' as const,
+    color: colors.text,
   },
   navItemDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   section: {
     marginBottom: SPACING.lg,
   },
   aboutRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.sm,
   },
   aboutLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   aboutValue: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
-    color: COLORS.text,
+    fontWeight: '400' as const,
+    color: colors.text,
   },
   aboutText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     lineHeight: 18,
   },
   privacyCard: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
   },
   privacyIconContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.md,
   },
   privacyTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   privacyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
   },
   devButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: SPACING.sm,
     paddingVertical: SPACING.md,
     marginTop: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderStyle: 'dashed' as const,
     borderRadius: 6,
   },
   devButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
 });

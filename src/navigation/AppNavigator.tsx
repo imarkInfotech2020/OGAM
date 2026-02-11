@@ -1,14 +1,15 @@
 import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
@@ -48,11 +49,12 @@ const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 // Chats Tab Stack
 const ChatsStackNavigator: React.FC = () => {
+  const { colors } = useTheme();
   return (
     <ChatsStack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <ChatsStack.Screen name="ChatsList" component={ChatsListScreen} />
@@ -63,11 +65,12 @@ const ChatsStackNavigator: React.FC = () => {
 
 // Projects Tab Stack
 const ProjectsStackNavigator: React.FC = () => {
+  const { colors } = useTheme();
   return (
     <ProjectsStack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <ProjectsStack.Screen name="ProjectsList" component={ProjectsScreen} />
@@ -83,11 +86,12 @@ const ProjectsStackNavigator: React.FC = () => {
 
 // Models Tab Stack
 const ModelsStackNavigator: React.FC = () => {
+  const { colors } = useTheme();
   return (
     <ModelsStack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <ModelsStack.Screen name="ModelsList" component={ModelsScreen} />
@@ -97,11 +101,12 @@ const ModelsStackNavigator: React.FC = () => {
 
 // Settings Tab Stack
 const SettingsStackNavigator: React.FC = () => {
+  const { colors } = useTheme();
   return (
     <SettingsStack.Navigator
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
       }}
     >
       <SettingsStack.Screen name="SettingsMain" component={SettingsScreen} />
@@ -124,6 +129,7 @@ const TAB_ICON_MAP: Record<string, string> = {
 };
 
 const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
+  const { colors } = useTheme();
   const scale = useSharedValue(focused ? 1.1 : 1);
 
   useEffect(() => {
@@ -135,33 +141,54 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
   }));
 
   return (
-    <View style={styles.tabIconContainer}>
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={animatedStyle}>
         <Icon
           name={TAB_ICON_MAP[name] || 'circle'}
           size={22}
-          color={focused ? COLORS.primary : COLORS.textMuted}
+          color={focused ? colors.primary : colors.textMuted}
         />
       </Animated.View>
-      {focused && <View style={styles.tabIndicator} />}
+      {focused && (
+        <View style={{
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: colors.primary,
+          marginTop: 3,
+        }} />
+      )}
     </View>
   );
 };
 
 // Main Tab Navigator
 const MainTabs: React.FC = () => {
+  const { colors, shadows } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         animation: 'fade',
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 80,
+          paddingBottom: 20,
+          paddingTop: 10,
+          ...shadows.medium,
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarIcon: ({ focused }) => (
           <TabBarIcon name={route.name} focused={focused} />
         ),
-        tabBarLabelStyle: styles.tabLabel,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500' as const,
+        },
       })}
     >
       <Tab.Screen
@@ -220,6 +247,7 @@ const MainTabs: React.FC = () => {
 
 // Root Navigator
 export const AppNavigator: React.FC = () => {
+  const { colors } = useTheme();
   const hasCompletedOnboarding = useAppStore((s) => s.hasCompletedOnboarding);
   const downloadedModels = useAppStore((s) => s.downloadedModels);
 
@@ -234,7 +262,7 @@ export const AppNavigator: React.FC = () => {
       initialRouteName={initialRoute}
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: COLORS.background },
+        contentStyle: { backgroundColor: colors.background },
         animation: 'slide_from_right',
       }}
     >
@@ -254,30 +282,3 @@ export const AppNavigator: React.FC = () => {
     </RootStack.Navigator>
   );
 };
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: COLORS.surface,
-    borderTopColor: COLORS.border,
-    borderTopWidth: 1,
-    height: 80,
-    paddingBottom: 20,
-    paddingTop: 10,
-    ...SHADOWS.medium,
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  tabIconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.primary,
-    marginTop: 3,
-  },
-});

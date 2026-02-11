@@ -10,7 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
-import { COLORS } from './src/constants';
+import { useTheme, getTheme } from './src/theme';
 import { hardwareService, modelManager, authService } from './src/services';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
@@ -25,6 +25,8 @@ function App() {
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
+
+  const { colors, isDark } = useTheme();
 
   const {
     isEnabled: authEnabled,
@@ -118,9 +120,9 @@ function App() {
     return (
       <GestureHandlerRootView style={styles.flex}>
         <SafeAreaProvider>
-          <View style={styles.loadingContainer} testID="app-loading">
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-            <ActivityIndicator size="large" color={COLORS.primary} />
+          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
         </SafeAreaProvider>
       </GestureHandlerRootView>
@@ -132,7 +134,7 @@ function App() {
     return (
       <GestureHandlerRootView style={styles.flex} testID="app-locked">
         <SafeAreaProvider>
-          <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
           <LockScreen onUnlock={handleUnlock} />
         </SafeAreaProvider>
       </GestureHandlerRootView>
@@ -142,17 +144,17 @@ function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
         <NavigationContainer
           theme={{
-            dark: true,
+            dark: isDark,
             colors: {
-              primary: COLORS.primary,
-              background: COLORS.background,
-              card: COLORS.surface,
-              text: COLORS.text,
-              border: COLORS.border,
-              notification: COLORS.primary,
+              primary: colors.primary,
+              background: colors.background,
+              card: colors.surface,
+              text: colors.text,
+              border: colors.border,
+              notification: colors.primary,
             },
             fonts: {
               regular: {
@@ -187,7 +189,6 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
