@@ -7,6 +7,7 @@ import {
   Image,
   TouchableOpacity,
   Modal,
+  ScrollView,
   Dimensions,
   Platform,
   PermissionsAndroid,
@@ -413,57 +414,71 @@ export const GalleryScreen: React.FC = () => {
           />
           {selectedImage && (
             <View style={styles.viewerContent}>
-              <Image
-                source={{ uri: `file://${selectedImage.imagePath}` }}
-                style={styles.fullscreenImage}
-                resizeMode="contain"
-              />
+              {!showDetails && (
+                <Image
+                  source={{ uri: `file://${selectedImage.imagePath}` }}
+                  style={styles.fullscreenImage}
+                  resizeMode="contain"
+                />
+              )}
 
-              {/* Details panel */}
+              {/* Details bottom sheet (replaces image view) */}
               {showDetails && (
-                <View style={styles.detailsPanel}>
-                  <Text style={styles.detailsTitle}>Details</Text>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Prompt</Text>
-                    <Text style={styles.detailValue} numberOfLines={3}>
-                      {selectedImage.prompt}
-                    </Text>
+                <View style={styles.detailsSheet}>
+                  <View style={styles.detailsSheetHeader}>
+                    <Text style={styles.detailsSheetTitle}>Image Details</Text>
+                    <TouchableOpacity onPress={() => setShowDetails(false)}>
+                      <Text style={styles.detailsSheetClose}>Done</Text>
+                    </TouchableOpacity>
                   </View>
-                  {selectedImage.negativePrompt ? (
+                  <Image
+                    source={{ uri: `file://${selectedImage.imagePath}` }}
+                    style={styles.detailsPreview}
+                    resizeMode="contain"
+                  />
+                  <ScrollView style={styles.detailsContent}>
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Negative</Text>
-                      <Text style={styles.detailValue} numberOfLines={2}>
-                        {selectedImage.negativePrompt}
+                      <Text style={styles.detailLabel}>PROMPT</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedImage.prompt}
                       </Text>
                     </View>
-                  ) : null}
-                  <View style={styles.detailsMetaRow}>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>{selectedImage.steps} steps</Text>
+                    {selectedImage.negativePrompt ? (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>NEGATIVE</Text>
+                        <Text style={styles.detailValue}>
+                          {selectedImage.negativePrompt}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.detailsMetaRow}>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>{selectedImage.steps} steps</Text>
+                      </View>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>
+                          {selectedImage.width}x{selectedImage.height}
+                        </Text>
+                      </View>
+                      <View style={styles.detailChip}>
+                        <Text style={styles.detailChipText}>Seed: {selectedImage.seed}</Text>
+                      </View>
                     </View>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>
-                        {selectedImage.width}x{selectedImage.height}
-                      </Text>
-                    </View>
-                    <View style={styles.detailChip}>
-                      <Text style={styles.detailChipText}>Seed: {selectedImage.seed}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.detailDate}>
-                    {formatDate(selectedImage.createdAt)}
-                  </Text>
+                    <Text style={styles.detailDate}>
+                      {formatDate(selectedImage.createdAt)}
+                    </Text>
+                  </ScrollView>
                 </View>
               )}
 
               {/* Action buttons */}
               <View style={styles.viewerActions}>
                 <TouchableOpacity
-                  style={styles.viewerButton}
+                  style={[styles.viewerButton, showDetails && styles.viewerButtonActive]}
                   onPress={() => setShowDetails(!showDetails)}
                 >
-                  <Icon name="info" size={22} color={COLORS.text} />
-                  <Text style={styles.viewerButtonText}>Info</Text>
+                  <Icon name="info" size={22} color={showDetails ? COLORS.primary : COLORS.text} />
+                  <Text style={[styles.viewerButtonText, showDetails && { color: COLORS.primary }]}>Info</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
@@ -687,25 +702,49 @@ const styles = StyleSheet.create({
     borderRadius: SPACING.md + 2, // 14
     minWidth: 70,
   },
+  viewerButtonActive: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
   viewerButtonText: {
     ...TYPOGRAPHY.meta,
     color: COLORS.text,
     marginTop: SPACING.xs,
   },
-  // Details panel
-  detailsPanel: {
-    position: 'absolute',
-    top: 80,
-    left: SPACING.lg,
-    right: SPACING.lg,
+  // Details sheet (inside fullscreen viewer)
+  detailsSheet: {
+    flex: 1,
+    width: '100%',
     backgroundColor: COLORS.surface,
-    borderRadius: SPACING.md + 2, // 14
-    padding: SPACING.lg,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    marginTop: 60,
+    overflow: 'hidden',
   },
-  detailsTitle: {
+  detailsSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  detailsSheetTitle: {
     ...TYPOGRAPHY.h3,
     color: COLORS.text,
-    marginBottom: SPACING.md,
+  },
+  detailsSheetClose: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.primary,
+  },
+  detailsPreview: {
+    width: '100%',
+    height: 200,
+    backgroundColor: COLORS.background,
+  },
+  detailsContent: {
+    padding: SPACING.lg,
   },
   detailRow: {
     marginBottom: SPACING.sm + 2, // 10
