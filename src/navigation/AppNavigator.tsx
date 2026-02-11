@@ -1,9 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
+import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
   OnboardingScreen,
@@ -108,22 +114,37 @@ const SettingsStackNavigator: React.FC = () => {
   );
 };
 
-// Tab icon component
+// Animated tab icon with scale spring on focus
+const TAB_ICON_MAP: Record<string, string> = {
+  HomeTab: 'home',
+  ChatsTab: 'message-circle',
+  ProjectsTab: 'folder',
+  ModelsTab: 'cpu',
+  SettingsTab: 'settings',
+};
+
 const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
-  const iconMap: Record<string, string> = {
-    HomeTab: 'home',
-    ChatsTab: 'message-circle',
-    ProjectsTab: 'folder',
-    ModelsTab: 'cpu',
-    SettingsTab: 'settings',
-  };
+  const scale = useSharedValue(focused ? 1.1 : 1);
+
+  useEffect(() => {
+    scale.value = withSpring(focused ? 1.1 : 1, { damping: 15, stiffness: 150 });
+  }, [focused]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
-    <Icon
-      name={iconMap[name] || 'circle'}
-      size={22}
-      color={focused ? COLORS.primary : COLORS.textMuted}
-    />
+    <View style={styles.tabIconContainer}>
+      <Animated.View style={animatedStyle}>
+        <Icon
+          name={TAB_ICON_MAP[name] || 'circle'}
+          size={22}
+          color={focused ? COLORS.primary : COLORS.textMuted}
+        />
+      </Animated.View>
+      {focused && <View style={styles.tabIndicator} />}
+    </View>
   );
 };
 
@@ -133,6 +154,7 @@ const MainTabs: React.FC = () => {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        animation: 'fade',
         tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
@@ -146,6 +168,9 @@ const MainTabs: React.FC = () => {
         name="HomeTab"
         component={HomeScreen}
         options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }}
+        listeners={() => ({
+          tabPress: () => { triggerHaptic('selectionClick'); },
+        })}
       />
       <Tab.Screen
         name="ChatsTab"
@@ -153,7 +178,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            // Prevent default behavior and always reset to ChatsList
+            triggerHaptic('selectionClick');
             e.preventDefault();
             navigation.navigate('ChatsTab', { screen: 'ChatsList' });
           },
@@ -163,14 +188,17 @@ const MainTabs: React.FC = () => {
         name="ProjectsTab"
         component={ProjectsStackNavigator}
         options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }}
+        listeners={() => ({
+          tabPress: () => { triggerHaptic('selectionClick'); },
+        })}
       />
       <Tab.Screen
         name="ModelsTab"
         component={ModelsStackNavigator}
         options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
         listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            // Reset to ModelsList when tab is pressed
+          tabPress: () => {
+            triggerHaptic('selectionClick');
             navigation.navigate('ModelsTab', { screen: 'ModelsList' });
           },
         })}
@@ -180,8 +208,8 @@ const MainTabs: React.FC = () => {
         component={SettingsStackNavigator}
         options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }}
         listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            // Reset to SettingsMain when tab is pressed
+          tabPress: () => {
+            triggerHaptic('selectionClick');
             navigation.navigate('SettingsTab', { screen: 'SettingsMain' });
           },
         })}
@@ -239,5 +267,16 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
+  },
+  tabIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIndicator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+    marginTop: 3,
   },
 });
