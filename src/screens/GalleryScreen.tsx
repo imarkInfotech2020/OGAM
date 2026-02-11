@@ -17,6 +17,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { AnimatedEntry } from '../components/AnimatedEntry';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
@@ -237,39 +238,41 @@ export const GalleryScreen: React.FC = () => {
     });
   };
 
-  const renderGridItem = ({ item }: { item: GeneratedImage }) => {
+  const renderGridItem = ({ item, index }: { item: GeneratedImage; index: number }) => {
     const isSelected = selectedIds.has(item.id);
 
     return (
-      <TouchableOpacity
-        style={styles.gridItem}
-        onPress={() => {
-          if (isSelectMode) {
-            toggleImageSelection(item.id);
-          } else {
-            setSelectedImage(item);
-          }
-        }}
-        onLongPress={() => {
-          if (!isSelectMode) {
-            setIsSelectMode(true);
-            setSelectedIds(new Set([item.id]));
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Image
-          source={{ uri: `file://${item.imagePath}` }}
-          style={styles.gridImage}
-        />
-        {isSelectMode && (
-          <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-              {isSelected && <Icon name="check" size={14} color="#fff" />}
+      <AnimatedEntry index={index} staggerMs={40} maxItems={15}>
+        <TouchableOpacity
+          style={styles.gridItem}
+          onPress={() => {
+            if (isSelectMode) {
+              toggleImageSelection(item.id);
+            } else {
+              setSelectedImage(item);
+            }
+          }}
+          onLongPress={() => {
+            if (!isSelectMode) {
+              setIsSelectMode(true);
+              setSelectedIds(new Set([item.id]));
+            }
+          }}
+          activeOpacity={0.8}
+        >
+          <Image
+            source={{ uri: `file://${item.imagePath}` }}
+            style={styles.gridImage}
+          />
+          {isSelectMode && (
+            <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>
+              <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                {isSelected && <Icon name="check" size={14} color="#fff" />}
+              </View>
             </View>
-          </View>
-        )}
-      </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </AnimatedEntry>
     );
   };
 
