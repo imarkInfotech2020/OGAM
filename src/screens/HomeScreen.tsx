@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   InteractionManager,
 } from 'react-native';
+import { AppSheet } from '../components/AppSheet';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -598,29 +599,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       </ScrollView>
       </View>
 
-      {/* Model Picker Modal */}
-      <Modal
+      {/* Model Picker Sheet */}
+      <AppSheet
         visible={pickerType !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPickerType(null)}
+        onClose={() => setPickerType(null)}
+        title={pickerType === 'text' ? 'Text Models' : 'Image Models'}
+        snapPoints={['70%']}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerType(null)}
-        >
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {pickerType === 'text' ? 'Text Models' : 'Image Models'}
-              </Text>
-              <TouchableOpacity onPress={() => setPickerType(null)}>
-                <Icon name="x" size={24} color={COLORS.text} />
-              </TouchableOpacity>
-            </View>
-
-
             <ScrollView style={styles.modalScroll}>
               {pickerType === 'text' && (
                 <>
@@ -768,9 +753,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Text style={styles.browseMoreText}>Browse more models</Text>
               <Icon name="arrow-right" size={16} color={COLORS.textMuted} />
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      </AppSheet>
 
       {/* Full-screen loading overlay - blocks all touches during model loading */}
       <Modal
