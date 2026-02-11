@@ -1381,9 +1381,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     zIndex: 10,
-    ...SHADOWS.small,
   },
   headerRow: {
     flexDirection: 'row',

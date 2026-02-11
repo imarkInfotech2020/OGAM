@@ -385,10 +385,9 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    ...SHADOWS.medium,
   },
   attachmentsContainer: {
     marginBottom: 8,
