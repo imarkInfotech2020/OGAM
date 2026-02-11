@@ -382,3 +382,49 @@ export const COLORS = {
   overlay: 'rgba(0, 0, 0, 0.7)',
   divider: '#1A1A1A',
 };
+
+// Elevation System - Layered surface hierarchy
+export const ELEVATION = {
+  level0: {
+    backgroundColor: COLORS.background,
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  level1: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  level2: {
+    backgroundColor: COLORS.surfaceLight,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  level3: {
+    backgroundColor: `${COLORS.surface}F2`,
+    borderTopWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 16,
+    blur: {
+      ios: { blurAmount: 10, blurType: 'dark' },
+      android: { overlayColor: 'rgba(0,0,0,0.7)' },
+    },
+  },
+  level4: {
+    backgroundColor: `${COLORS.surface}FA`,
+    borderTopWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 16,
+    blur: {
+      ios: { blurAmount: 15, blurType: 'dark' },
+      android: { overlayColor: 'rgba(0,0,0,0.8)' },
+    },
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.textMuted,
+    borderRadius: 2,
+    alignSelf: 'center' as const,
+  },
+} as const;
