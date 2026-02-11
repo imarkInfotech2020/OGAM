@@ -35,6 +35,8 @@ LocalLLM is a React Native application that brings large language models, vision
 - **Voice Transcription** - On-device Whisper for speech-to-text, multiple model sizes
 - **GPU Acceleration** - Optional OpenCL GPU offloading for text models
 - **Auto/Manual Image Generation** - Automatic intent detection or manual toggle for image generation
+- **Dark Mode** - Full light/dark theme with dynamic color palettes and elevation system
+- **Animations** - Staggered entrance animations, spring-based press feedback, haptic responses
 - **Passphrase Lock** - Secure sensitive conversations with passphrase protection
 - **Advanced Model Settings** - Global configuration for text and image models
 - **Performance Tuning** - Configurable threads, batch size, context length, GPU layers
@@ -467,15 +469,50 @@ Vision inference can be 30-60s slower if KV cache is cleared after every enhance
 
 ---
 
-## Design System Implementation
+## Design System
 
 ### Brutalist Design Philosophy
 
-LocalLLM uses a terminal-inspired brutalist design system implemented in February 2026, refactoring 20+ screens and components. The system rejects modern mobile UI conventions (rounded corners, shadows, gradients, colorful accents) in favor of information density and functional minimalism.
+LocalLLM uses a terminal-inspired brutalist design system with full light/dark theme support. The system emphasizes information density and functional minimalism with a monochromatic palette and emerald accent.
+
+### Theme System
+
+Dynamic light/dark theming via `src/theme/`:
+
+- **`palettes.ts`** — `COLORS_LIGHT`, `COLORS_DARK`, `SHADOWS_LIGHT`, `SHADOWS_DARK`, `createElevation()`
+- **`index.ts`** — `useTheme()` hook, `getTheme(mode)`, `Theme` type
+- **`useThemedStyles.ts`** — `useThemedStyles(createStyles)` memoized style factory
+
+Theme mode is stored in `appStore.themeMode` (persisted) and toggled via the Settings screen Dark Mode switch.
+
+**Usage pattern (every screen/component):**
+```typescript
+const { colors } = useTheme();
+const styles = useThemedStyles(createStyles);
+
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  container: { backgroundColor: colors.background },
+  card: { ...shadows.medium, backgroundColor: colors.surface },
+});
+```
+
+**Token split:**
+- Theme-independent tokens stay in `src/constants/`: `TYPOGRAPHY`, `SPACING`, `FONTS`
+- Dynamic tokens come from hooks: `colors.*`, `shadows.*`
+
+### Animations and Interaction
+
+Powered by `react-native-reanimated` with spring-based physics and `react-native-haptic-feedback`:
+
+- **`AnimatedEntry`** — Staggered fade+slide entrance for lists and grids, with configurable delay, respects `useReducedMotion()`
+- **`AnimatedListItem`** — Combines staggered entry animation with spring-based press scale feedback
+- **`AnimatedPressable`** — Spring scale-down on press with haptic feedback (selection, impact, notification types)
+- **`AppSheet`** — Custom swipe-to-dismiss bottom sheet with spring animation, replacing React Native modals
+- **`useFocusTrigger`** — Hook that replays stagger animations on every tab focus
+- **Tab transitions** — Fade animations and haptic feedback on bottom tab switches
+- **Modal screens** — `slide_from_bottom` animation for all modal presentations
 
 ### Design Tokens
-
-All styling uses centralized tokens defined in `src/constants/index.ts`:
 
 **Typography (10-level scale, all Menlo monospace):**
 ```typescript
@@ -495,92 +532,8 @@ export const TYPOGRAPHY = {
 
 **Spacing (6-step scale):**
 ```typescript
-export const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-};
+export const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 ```
-
-**Colors (monochromatic palette):**
-```typescript
-export const COLORS = {
-  // Primary accent
-  primary: '#34D399',         // Emerald - only color accent
-  primaryDark: '#10B981',
-  primaryLight: '#6EE7B7',
-
-  // Backgrounds
-  background: '#0A0A0A',     // Pure black
-  surface: '#141414',        // Cards, elevated elements
-  surfaceLight: '#1E1E1E',
-  surfaceHover: '#252525',
-
-  // Text hierarchy
-  text: '#FFFFFF',            // Primary text
-  textSecondary: '#B0B0B0',  // Secondary text
-  textMuted: '#808080',      // Metadata
-  textDisabled: '#4A4A4A',
-
-  // Borders
-  border: '#1E1E1E',
-  borderLight: '#2A2A2A',
-  borderFocus: '#34D399',
-
-  // Semantic colors
-  success: '#B0B0B0',        // No green — matches textSecondary
-  warning: '#FFFFFF',         // Bright white = attention
-  error: '#EF4444',           // Only color exception besides primary
-  info: '#B0B0B0',            // No blue — stays monochrome
-
-  // Special
-  overlay: 'rgba(0, 0, 0, 0.7)',
-  divider: '#1A1A1A',
-};
-```
-
-### UI Patterns
-
-**Labels (uppercase, small, muted):**
-```typescript
-<Text style={[TYPOGRAPHY.label, { color: COLORS.textMuted, letterSpacing: 0.3 }]}>
-  ACTIVE MODEL
-</Text>
-```
-
-**Buttons (transparent with borders, no fill):**
-```typescript
-<TouchableOpacity style={{
-  paddingVertical: SPACING.sm,
-  paddingHorizontal: SPACING.md,
-  borderWidth: 1,
-  borderColor: isActive ? COLORS.primary : COLORS.border,
-  backgroundColor: 'transparent', // Never filled
-  borderRadius: 8,
-}}>
-  <Text style={[TYPOGRAPHY.body, { color: isActive ? COLORS.primary : COLORS.text }]}>
-    {label}
-  </Text>
-</TouchableOpacity>
-```
-
-**Cards (subtle surface, minimal borders):**
-```typescript
-<View style={{
-  backgroundColor: COLORS.surface,
-  borderRadius: 8,
-  borderWidth: 1,
-  borderColor: COLORS.border,
-  padding: SPACING.md,
-}}>
-  {/* content */}
-</View>
-```
-
-**No exceptions:** Every UI element uses these tokens. Zero hardcoded colors, font sizes, or spacing values anywhere in codebase.
 
 ---
 
@@ -880,6 +833,8 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 - **Zustand 5.x** - Lightweight state management
 - **AsyncStorage** - Persistent local storage
 - **React Navigation 7.x** - Native navigation
+- **React Native Reanimated 4.x** - Performant native-thread animations
+- **React Native Haptic Feedback** - Haptic responses on interactions
 
 ### Native Modules
 
@@ -1034,20 +989,27 @@ android {
 LocalLLM/
 ├── src/
 │   ├── components/          # Reusable UI components
+│   │   ├── AnimatedEntry.tsx       # Staggered fade+slide entrance animation
+│   │   ├── AnimatedListItem.tsx    # Entry animation + press feedback combo
+│   │   ├── AnimatedPressable.tsx   # Spring scale + haptic press wrapper
+│   │   ├── AppSheet.tsx            # Custom swipe-to-dismiss bottom sheet
 │   │   ├── ChatInput.tsx           # Message input with attachments
 │   │   ├── ChatMessage.tsx         # Message bubbles with metadata
+│   │   ├── DebugSheet.tsx          # Developer debug bottom sheet
 │   │   ├── ModelCard.tsx           # Model display card
 │   │   ├── ModelSelectorModal.tsx  # Quick model switcher
 │   │   ├── GenerationSettingsModal.tsx # Image generation settings
+│   │   ├── ProjectSelectorSheet.tsx # Project picker bottom sheet
 │   │   ├── CustomAlert.tsx         # Consistent alert dialogs
 │   │   ├── Button.tsx              # Reusable button component
 │   │   ├── Card.tsx                # Reusable card component
 │   │   ├── ThinkingIndicator.tsx   # LLM thinking animation
 │   │   └── VoiceRecordButton.tsx   # Voice recording button
 │   ├── constants/           # Design tokens and configuration
-│   │   └── index.ts               # TYPOGRAPHY, SPACING, COLORS
+│   │   └── index.ts               # TYPOGRAPHY, SPACING, FONTS
 │   ├── hooks/               # Custom React hooks
 │   │   ├── useAppState.ts         # App lifecycle state
+│   │   ├── useFocusTrigger.ts     # Focus-based animation replay trigger
 │   │   ├── useVoiceRecording.ts   # Voice recording logic
 │   │   └── useWhisperTranscription.ts # Whisper transcription
 │   ├── navigation/          # React Navigation setup
@@ -1098,6 +1060,12 @@ LocalLLM/
 │   │   ├── projectStore.ts        # Projects state
 │   │   ├── whisperStore.ts        # Whisper model state
 │   │   └── index.ts               # Store exports
+│   ├── theme/               # Dynamic light/dark theme system
+│   │   ├── index.ts               # useTheme() hook, getTheme(), exports
+│   │   ├── palettes.ts            # Light/dark color palettes, shadows, elevation
+│   │   └── useThemedStyles.ts     # Memoized themed stylesheet factory
+│   ├── utils/               # Utility functions
+│   │   └── haptics.ts             # Haptic feedback triggers
 │   └── types/               # TypeScript type definitions
 │       ├── index.ts               # All interfaces and types
 │       └── whisper.rn.d.ts        # Whisper native module types
@@ -1124,6 +1092,7 @@ LocalLLM/
 ├── docs/                    # Documentation
 │   ├── CODEBASE_GUIDE.md         # Comprehensive architecture guide
 │   ├── DESIGN_PHILOSOPHY_SYSTEM.md # Design system reference
+│   ├── UI_UX_ELEVATION_PLAN.md   # UI/UX elevation plan
 │   ├── VISUAL_HIERARCHY_STANDARD.md # Visual hierarchy guidelines
 │   ├── IOS_PARITY_PLAN.md        # iOS feature parity plan
 │   ├── TEST_FLOWS.md             # End-to-end test flows
@@ -1250,7 +1219,8 @@ Contributions welcome. Please:
 
 ### Development Guidelines
 
-- Use design tokens (TYPOGRAPHY, SPACING, COLORS) for all styling
+- Use `useTheme()` and `useThemedStyles()` for all styling — never hardcode colors
+- Use `TYPOGRAPHY` and `SPACING` from `src/constants/` for theme-independent tokens
 - Follow singleton pattern for services
 - Implement background-safe operations for long-running tasks
 - Add comprehensive logging for debugging
