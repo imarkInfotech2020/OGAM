@@ -18,6 +18,8 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/blur": "^4.4.1",
     "@react-native-community/slider": "^5.1.2",
+    "@react-native-documents/picker": "^12.0.1",
+    "@react-native-documents/viewer": "^3.0.1",
     "@react-native-voice/voice": "^3.2.4",
     "@react-native/new-app-screen": "0.83.1",
     "@react-navigation/bottom-tabs": "^7.10.1",

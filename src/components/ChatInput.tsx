@@ -9,11 +9,13 @@ import {
   Text,
 } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
+import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { FONTS, SPACING } from '../constants';
 import { MediaAttachment, ImageModeState } from '../types';
+import { documentService } from '../services/documentService';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { triggerHaptic } from '../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
@@ -32,6 +34,9 @@ interface ChatInputProps {
   onImageModeChange?: (mode: ImageModeState) => void;
   onOpenSettings?: () => void;
   activeImageModelName?: string | null;
+  queueCount?: number;
+  queuedTexts?: string[];
+  onClearQueue?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -46,6 +51,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onImageModeChange,
   onOpenSettings,
   activeImageModelName,
+  queueCount = 0,
+  queuedTexts = [],
+  onClearQueue,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -229,8 +237,43 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setAttachments(prev => prev.filter(a => a.id !== id));
   };
 
+  const handlePickDocument = async () => {
+    try {
+      const result = await pick({
+        type: [types.allFiles],
+        allowMultiSelection: false,
+      });
 
-  const canSend = (message.trim() || attachments.length > 0) && !isGenerating;
+      const file = result[0];
+      if (!file) return;
+
+      const fileName = file.name || 'document';
+
+      if (!documentService.isSupported(fileName)) {
+        setAlertState(showAlert(
+          'Unsupported File',
+          `"${fileName}" is not supported. Supported types: txt, md, csv, json, pdf, and code files.`,
+          [{ text: 'OK' }]
+        ));
+        return;
+      }
+
+      const attachment = await documentService.processDocumentFromPath(file.uri, fileName);
+      if (attachment) {
+        setAttachments(prev => [...prev, attachment]);
+      }
+    } catch (error: any) {
+      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
+      console.error('Error picking document:', error);
+      setAlertState(showAlert(
+        'Error',
+        error.message || 'Failed to read document',
+        [{ text: 'OK' }]
+      ));
+    }
+  };
+
+  const canSend = (message.trim() || attachments.length > 0) && !disabled;
 
   return (
     <View style={styles.container}>
@@ -274,13 +317,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <View style={styles.toolbarRow}>
         {/* Left side: Vision, Image Gen (manual only), Status */}
         <View style={styles.toolbarLeft}>
+          {/* Document picker button - always visible (works with any text model) */}
+          <TouchableOpacity
+            testID="document-picker-button"
+            style={styles.toolbarButton}
+            onPress={handlePickDocument}
+            disabled={disabled}
+          >
+            <Icon name="paperclip" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           {/* Image picker button - only show if vision is supported */}
           {supportsVision && (
             <TouchableOpacity
               testID="camera-button"
               style={styles.toolbarButton}
               onPress={handlePickImage}
-              disabled={disabled || isGenerating}
+              disabled={disabled}
             >
               <Icon name="camera" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -296,7 +349,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 imageMode === 'force' && styles.imageGenButtonForce,
               ]}
               onPress={handleImageModeToggle}
-              disabled={disabled || isGenerating}
+              disabled={disabled}
             >
               <Icon
                 name="zap"
@@ -320,6 +373,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </Text>
             )}
           </View>
+
+          {/* Queue indicator */}
+          {queueCount > 0 && (
+            <View testID="queue-indicator" style={styles.queueBadge}>
+              <Text style={styles.queueBadgeText}>
+                {queueCount} queued
+              </Text>
+              {queuedTexts.length > 0 && (
+                <Text style={styles.queuePreview} numberOfLines={1}>
+                  {queuedTexts[0].length > 30
+                    ? queuedTexts[0].substring(0, 30) + '...'
+                    : queuedTexts[0]}
+                </Text>
+              )}
+              <TouchableOpacity
+                testID="clear-queue-button"
+                onPress={onClearQueue}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="x" size={12} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
       {/* Text Input Row - Input + Send Button */}
@@ -335,17 +411,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           maxLength={2000}
           editable={!disabled}
         />
-        {/* Send/Mic button on the right side of input */}
+        {/* Action buttons on the right side of input */}
         <View style={styles.inputActions}>
-          {isGenerating ? (
+          {isGenerating && onStop && (
             <TouchableOpacity
               testID="stop-button"
               style={[styles.sendButton, styles.stopButton]}
               onPress={handleStop}
             >
-              <Icon name="square" size={18} color={colors.text} />
+              <Icon name="square" size={16} color={colors.error} />
             </TouchableOpacity>
-          ) : canSend ? (
+          )}
+          {canSend ? (
             <TouchableOpacity
               testID="send-button"
               style={styles.sendButton}
@@ -353,7 +430,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             >
               <Icon name="send" size={18} color={colors.text} />
             </TouchableOpacity>
-          ) : (
+          ) : !isGenerating ? (
             <VoiceRecordButton
               isRecording={isRecording}
               isAvailable={voiceAvailable}
@@ -370,7 +447,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               }}
               asSendButton
             />
-          )}
+          ) : null}
         </View>
       </View>
       <CustomAlert
@@ -461,7 +538,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textAlignVertical: 'top' as const,
   },
   inputActions: {
-    justifyContent: 'flex-end' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: 6,
     paddingBottom: 3,
   },
   toolbarRow: {
@@ -541,5 +620,27 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   stopButton: {
     backgroundColor: colors.surface,
     borderColor: colors.textMuted,
+  },
+  queueBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  queueBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    fontWeight: '500' as const,
+    color: colors.primary,
+  },
+  queuePreview: {
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+    color: colors.textMuted,
+    maxWidth: 140,
   },
 });
