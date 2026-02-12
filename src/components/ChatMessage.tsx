@@ -32,6 +32,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { AnimatedEntry } from './AnimatedEntry';
 import { AnimatedPressable } from './AnimatedPressable';
 import { AppSheet } from './AppSheet';
+import { viewDocument, isErrorWithCode } from '@react-native-documents/viewer';
 
 
 // Animated blinking cursor for streaming state
@@ -294,16 +295,73 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {/* Attachments */}
           {hasAttachments && (
             <View testID="message-attachments" style={styles.attachmentsContainer}>
-              {message.attachments!.map((attachment, index) => (
-                <FadeInImage
-                  key={attachment.id}
-                  uri={attachment.uri}
-                  imageStyle={styles.attachmentImage}
-                  wrapperTestID={isUser ? `message-attachment-${index}` : `generated-image`}
-                  testID={isUser ? `message-image-${index}` : `generated-image-content`}
-                  onPress={() => onImagePress?.(attachment.uri)}
-                />
-              ))}
+              {message.attachments!.map((attachment, index) =>
+                attachment.type === 'document' ? (
+                  <TouchableOpacity
+                    key={attachment.id}
+                    testID={`document-badge-${index}`}
+                    style={[
+                      styles.documentBadge,
+                      isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
+                    ]}
+                    onPress={() => {
+                      if (!attachment.uri) return;
+                      const ext = (attachment.fileName || '').split('.').pop()?.toLowerCase();
+                      const mimeMap: Record<string, string> = {
+                        pdf: 'application/pdf',
+                        txt: 'text/plain',
+                        md: 'text/markdown',
+                        csv: 'text/csv',
+                        json: 'application/json',
+                        xml: 'application/xml',
+                        html: 'text/html',
+                        py: 'text/x-python',
+                        js: 'text/javascript',
+                        ts: 'text/typescript',
+                      };
+                      const mimeType = ext ? mimeMap[ext] || 'application/octet-stream' : undefined;
+                      viewDocument({
+                        uri: attachment.uri.startsWith('/') ? `file://${attachment.uri}` : attachment.uri,
+                        mimeType,
+                        grantPermissions: 'read',
+                      }).catch((err: any) => {
+                        console.warn('[ChatMessage] Failed to open document:', err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="file-text" size={14} color={isUser ? colors.background : colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.documentBadgeText,
+                        isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {attachment.fileName || 'Document'}
+                    </Text>
+                    {attachment.fileSize != null && (
+                      <Text
+                        style={[
+                          styles.documentBadgeSize,
+                          isUser ? styles.documentBadgeSizeUser : styles.documentBadgeSizeAssistant,
+                        ]}
+                      >
+                        {formatFileSize(attachment.fileSize)}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <FadeInImage
+                    key={attachment.id}
+                    uri={attachment.uri}
+                    imageStyle={styles.attachmentImage}
+                    wrapperTestID={isUser ? `message-attachment-${index}` : `generated-image`}
+                    testID={isUser ? `message-image-${index}` : `generated-image-content`}
+                    onPress={() => onImagePress?.(attachment.uri)}
+                  />
+                )
+              )}
             </View>
           )}
 
@@ -596,6 +654,12 @@ function formatTime(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) {
     return `${ms}ms`;
@@ -658,6 +722,42 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   attachmentWrapper: {
     borderRadius: 12,
     overflow: 'hidden' as const,
+  },
+  documentBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  documentBadgeUser: {
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  documentBadgeAssistant: {
+    backgroundColor: colors.surfaceLight,
+  },
+  documentBadgeText: {
+    fontSize: 12,
+    fontFamily: FONTS.mono,
+    fontWeight: '500' as const,
+    maxWidth: 140,
+  },
+  documentBadgeTextUser: {
+    color: colors.background,
+  },
+  documentBadgeTextAssistant: {
+    color: colors.text,
+  },
+  documentBadgeSize: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+  },
+  documentBadgeSizeUser: {
+    color: 'rgba(0, 0, 0, 0.4)',
+  },
+  documentBadgeSizeAssistant: {
+    color: colors.textMuted,
   },
   attachmentImage: {
     width: 140,
