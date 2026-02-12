@@ -1011,7 +1011,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 12,
-    marginBottom: 6,
+    marginBottom: 10,
     ...shadows.small,
   },
   conversationInfo: {

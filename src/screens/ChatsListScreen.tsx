@@ -243,7 +243,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     padding: SPACING.md,
     borderRadius: 12,
-    marginBottom: SPACING.sm,
+    marginBottom: 10,
     ...shadows.small,
   },
   chatIcon: {

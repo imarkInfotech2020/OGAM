@@ -1,14 +1,9 @@
 // Light and dark color palettes + shadow definitions
-import { Platform } from 'react-native';
 
 export type ThemeColors = typeof COLORS_LIGHT;
 
 interface ShadowStyle {
-  shadowColor: string;
-  shadowOffset: { width: number; height: number };
-  shadowOpacity: number;
-  shadowRadius: number;
-  elevation: number;
+  boxShadow: string;
 }
 
 export type ThemeShadows = {
@@ -88,76 +83,39 @@ export const COLORS_DARK = {
   divider: '#1A1A1A',
 };
 
-// ── Light shadows (standard black shadows) ──────────────────────────
-// On Android, elevation creates a Material Design shadow that looks like
-// an ugly blur/glow behind items (especially during animated entry).
-// We disable elevation for small/medium shadows on Android and rely on
-// borders for depth cues instead. iOS uses shadowColor/shadowRadius.
-const androidElevation = (level: number) =>
-  Platform.OS === 'android' ? 0 : level;
-
-export const SHADOWS_LIGHT = {
+// ── Light shadows ────────────────────────────────────────────────────
+// Uses CSS boxShadow (RN 0.76+ with New Architecture) for cross-platform
+// shadow rendering. Works identically on iOS and Android.
+export const SHADOWS_LIGHT: ThemeShadows = {
   small: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: androidElevation(3),
+    boxShadow: '0px 1px 8px 0px rgba(0,0,0,0.18)',
   },
   medium: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: androidElevation(6),
+    boxShadow: '0px 2px 10px 0px rgba(0,0,0,0.22)',
   },
   large: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 12,
+    boxShadow: '0px 4px 18px 0px rgba(0,0,0,0.35)',
   },
   glow: {
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: androidElevation(4),
+    boxShadow: '0px 0px 12px 0px rgba(5,150,105,0.25)',
   },
-} as const;
+};
 
-// ── Dark shadows (tight crisp glow — no soft halos) ───
-export const SHADOWS_DARK = {
+// ── Dark shadows (crisp white glow for depth) ───────────────────────
+export const SHADOWS_DARK: ThemeShadows = {
   small: {
-    shadowColor: '#FFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.08,
-    shadowRadius: 1,
-    elevation: androidElevation(3),
+    boxShadow: '0px 0px 6px 0px rgba(255,255,255,0.18)',
   },
   medium: {
-    shadowColor: '#FFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.10,
-    shadowRadius: 2,
-    elevation: androidElevation(6),
+    boxShadow: '0px 0px 6px 0px rgba(255,255,255,0.20)',
   },
   large: {
-    shadowColor: '#FFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 12,
+    boxShadow: '0px 0px 10px 0px rgba(255,255,255,0.25)',
   },
   glow: {
-    shadowColor: '#34D399',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: androidElevation(4),
+    boxShadow: '0px 0px 8px 0px rgba(52,211,153,0.30)',
   },
-} as const;
+};
 
 // ── Elevation factory ──────────────────────────────────────────────
 export function createElevation(colors: ThemeColors) {
