@@ -321,6 +321,158 @@ describe('ChatMessage', () => {
       expect(onImagePress).toHaveBeenCalledWith('file:///test/image.jpg');
     });
 
+    it('renders document attachment as badge (not image)', () => {
+      const attachment = createDocumentAttachment({
+        fileName: 'report.pdf',
+        fileSize: 1024 * 512, // 512KB
+        textContent: 'PDF content here',
+      });
+      const message = createUserMessage('See this report', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId, getByText, queryByTestId } = render(
+        <ChatMessage message={message} />
+      );
+
+      expect(getByTestId('message-attachments')).toBeTruthy();
+      // Should render as badge, not as FadeInImage
+      expect(getByTestId('document-badge-0')).toBeTruthy();
+      expect(getByText('report.pdf')).toBeTruthy();
+      expect(getByText('512KB')).toBeTruthy();
+      // Should NOT render an image element for documents
+      expect(queryByTestId('message-image-0')).toBeNull();
+    });
+
+    it('renders document badge in assistant message', () => {
+      const attachment = createDocumentAttachment({
+        fileName: 'data.csv',
+        fileSize: 2048,
+      });
+      const message = createAssistantMessage('Here is the analysis', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />
+      );
+
+      expect(getByTestId('document-badge-0')).toBeTruthy();
+      expect(getByText('data.csv')).toBeTruthy();
+    });
+
+    it('renders mixed image and document attachments', () => {
+      const imageAttachment = createImageAttachment({
+        uri: 'file:///test/image.jpg',
+      });
+      const docAttachment = createDocumentAttachment({
+        fileName: 'notes.txt',
+        fileSize: 256,
+      });
+      const message = createUserMessage('Image and doc', {
+        attachments: [imageAttachment, docAttachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      // Image renders as FadeInImage
+      expect(getByTestId('message-image-0')).toBeTruthy();
+      // Document renders as badge
+      expect(getByTestId('document-badge-1')).toBeTruthy();
+    });
+
+    it('renders document with missing fileSize (no size badge)', () => {
+      const attachment: import('../../../src/types').MediaAttachment = {
+        id: 'doc-no-size',
+        type: 'document',
+        uri: '/path/to/readme.md',
+        fileName: 'readme.md',
+        textContent: 'content',
+        // fileSize intentionally omitted
+      };
+      const message = createUserMessage('Read this', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId, getByText, queryByText } = render(
+        <ChatMessage message={message} />
+      );
+
+      expect(getByTestId('document-badge-0')).toBeTruthy();
+      expect(getByText('readme.md')).toBeTruthy();
+      // No size should be displayed
+      expect(queryByText(/KB|MB|B$/)).toBeNull();
+    });
+
+    it('renders document with missing fileName (shows "Document")', () => {
+      const attachment: import('../../../src/types').MediaAttachment = {
+        id: 'doc-no-name',
+        type: 'document',
+        uri: '/path/to/file',
+        fileSize: 512,
+        textContent: 'content',
+        // fileName intentionally omitted
+      };
+      const message = createUserMessage('Check this', {
+        attachments: [attachment],
+      });
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText('Document')).toBeTruthy();
+    });
+
+    it('renders multiple document attachments', () => {
+      const doc1 = createDocumentAttachment({ fileName: 'file1.txt', fileSize: 100 });
+      const doc2 = createDocumentAttachment({ fileName: 'file2.csv', fileSize: 2048 });
+      const message = createUserMessage('Two docs', {
+        attachments: [doc1, doc2],
+      });
+
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByTestId('document-badge-0')).toBeTruthy();
+      expect(getByTestId('document-badge-1')).toBeTruthy();
+      expect(getByText('file1.txt')).toBeTruthy();
+      expect(getByText('file2.csv')).toBeTruthy();
+    });
+
+    it('formats file sizes correctly at boundaries', () => {
+      // 0 bytes
+      const doc0 = createDocumentAttachment({ fileName: 'a.txt', fileSize: 0 });
+      const msg0 = createUserMessage('', { attachments: [doc0] });
+      const { getByText: getText0 } = render(<ChatMessage message={msg0} />);
+      expect(getText0('0B')).toBeTruthy();
+    });
+
+    it('formats KB file sizes', () => {
+      const doc = createDocumentAttachment({ fileName: 'b.txt', fileSize: 1024 });
+      const msg = createUserMessage('', { attachments: [doc] });
+      const { getByText } = render(<ChatMessage message={msg} />);
+      expect(getByText('1KB')).toBeTruthy();
+    });
+
+    it('formats MB file sizes', () => {
+      const doc = createDocumentAttachment({ fileName: 'c.txt', fileSize: 1024 * 1024 });
+      const msg = createUserMessage('', { attachments: [doc] });
+      const { getByText } = render(<ChatMessage message={msg} />);
+      expect(getByText('1.0MB')).toBeTruthy();
+    });
+
+    it('formats sub-KB file sizes as bytes', () => {
+      const doc = createDocumentAttachment({ fileName: 'd.txt', fileSize: 500 });
+      const msg = createUserMessage('', { attachments: [doc] });
+      const { getByText } = render(<ChatMessage message={msg} />);
+      expect(getByText('500B')).toBeTruthy();
+    });
+
+    it('formats fractional MB correctly', () => {
+      const doc = createDocumentAttachment({ fileName: 'e.txt', fileSize: 2.5 * 1024 * 1024 });
+      const msg = createUserMessage('', { attachments: [doc] });
+      const { getByText } = render(<ChatMessage message={msg} />);
+      expect(getByText('2.5MB')).toBeTruthy();
+    });
+
     it('renders generated image in assistant message', () => {
       const attachment = createImageAttachment({
         uri: 'file:///generated/sunset.png',

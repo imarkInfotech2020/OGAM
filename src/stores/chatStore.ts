@@ -70,10 +70,8 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
-          // Clear any streaming state when creating a new conversation
-          streamingMessage: '',
-          isStreaming: false,
-          isThinking: false,
+          // Don't clear streaming state - generation may be in progress for another conversation
+          // The UI checks streamingForConversationId to scope streaming display to the correct chat
         }));
 
         return id;

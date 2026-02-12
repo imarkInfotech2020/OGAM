@@ -8,6 +8,7 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.localllm.download.DownloadManagerPackage
 import com.localllm.localdream.LocalDreamPackage
+import com.localllm.pdf.PDFExtractorPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -19,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
           // Packages that cannot be autolinked yet can be added manually here, for example:
           add(DownloadManagerPackage())
           add(LocalDreamPackage())
+          add(PDFExtractorPackage())
         },
     )
   }

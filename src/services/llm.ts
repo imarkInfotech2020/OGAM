@@ -629,6 +629,12 @@ class LLMService {
       return;
     }
 
+    // Don't clear KV cache while generation is in progress — it would corrupt the active inference
+    if (this.isGenerating) {
+      console.log('[LLM] Skipping KV cache clear — generation in progress');
+      return;
+    }
+
     try {
       await (this.context as any).clearCache(clearData);
       console.log('[LLM] KV cache cleared');

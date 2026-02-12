@@ -13,6 +13,8 @@
 		04B9D63F2F38E71E00F1A435 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04B9D63E2F38E71E00F1A435 /* Images.xcassets */; };
 		04B9D6422F38EC7700F1A435 /* DownloadManagerModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04B9D6412F38EC7700F1A435 /* DownloadManagerModule.swift */; };
 		04B9D6432F38EC7700F1A435 /* DownloadManagerModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 04B9D6402F38EC7700F1A435 /* DownloadManagerModule.m */; };
+		0A7B3D032F3A0B1200CC5FA1 /* PDFExtractorModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0A7B3D012F3A0B1200CC5FA1 /* PDFExtractorModule.m */; };
+		0A7B3D042F3A0B1200CC5FA1 /* PDFExtractorModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7B3D022F3A0B1200CC5FA1 /* PDFExtractorModule.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		80EE15520A374D84DFA0E523 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
@@ -26,6 +28,8 @@
 		04B9D63E2F38E71E00F1A435 /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
 		04B9D6402F38EC7700F1A435 /* DownloadManagerModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = DownloadManagerModule.m; sourceTree = "<group>"; };
 		04B9D6412F38EC7700F1A435 /* DownloadManagerModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerModule.swift; sourceTree = "<group>"; };
+		0A7B3D012F3A0B1200CC5FA1 /* PDFExtractorModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PDFExtractorModule.m; sourceTree = "<group>"; };
+		0A7B3D022F3A0B1200CC5FA1 /* PDFExtractorModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFExtractorModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* LocalLLM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalLLM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = LocalLLM/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = LocalLLM/Info.plist; sourceTree = "<group>"; };
@@ -57,6 +61,8 @@
 				049521632F390D4500AA4EB4 /* CoreMLDiffusionModule.m */,
 				049521642F390D4500AA4EB4 /* CoreMLDiffusionModule.swift */,
 				04B9D6402F38EC7700F1A435 /* DownloadManagerModule.m */,
+				0A7B3D012F3A0B1200CC5FA1 /* PDFExtractorModule.m */,
+				0A7B3D022F3A0B1200CC5FA1 /* PDFExtractorModule.swift */,
 				04B9D6412F38EC7700F1A435 /* DownloadManagerModule.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
@@ -271,6 +277,8 @@
 				04B9D6432F38EC7700F1A435 /* DownloadManagerModule.m in Sources */,
 				049521652F390D4500AA4EB4 /* CoreMLDiffusionModule.m in Sources */,
 				049521662F390D4500AA4EB4 /* CoreMLDiffusionModule.swift in Sources */,
+				0A7B3D032F3A0B1200CC5FA1 /* PDFExtractorModule.m in Sources */,
+				0A7B3D042F3A0B1200CC5FA1 /* PDFExtractorModule.swift in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

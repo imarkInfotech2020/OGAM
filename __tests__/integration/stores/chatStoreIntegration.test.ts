@@ -346,7 +346,7 @@ describe('ChatStore Streaming Integration', () => {
       expect(conversation?.messages).toHaveLength(0);
     });
 
-    it('should create conversation and clear streaming state together', () => {
+    it('should create conversation and preserve streaming state', () => {
       const conversationId = setupWithConversation();
       const chatStore = useChatStore.getState();
 
@@ -354,13 +354,14 @@ describe('ChatStore Streaming Integration', () => {
       chatStore.startStreaming(conversationId);
       chatStore.appendToStreamingMessage('Content');
 
-      // Create new conversation (should clear streaming)
+      // Create new conversation (streaming state preserved — scoped by streamingForConversationId)
       const newConvId = chatStore.createConversation('model-id', 'New Conv');
 
       const state = getChatState();
       expect(state.activeConversationId).toBe(newConvId);
-      expect(state.streamingMessage).toBe('');
-      expect(state.isStreaming).toBe(false);
+      // Streaming state is preserved — UI uses streamingForConversationId to scope display
+      expect(state.streamingMessage).toBe('Content');
+      expect(state.isStreaming).toBe(true);
     });
   });
 });
