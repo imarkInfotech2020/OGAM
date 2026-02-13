@@ -49,6 +49,7 @@ function BlinkingCursor() {
       -1,
       false,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reducedMotion]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (

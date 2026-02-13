@@ -106,6 +106,7 @@ export const DownloadManagerScreen: React.FC = () => {
       unsubComplete();
       unsubError();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadActiveDownloads = async () => {
@@ -123,6 +124,7 @@ export const DownloadManagerScreen: React.FC = () => {
     const imageModels = await modelManager.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRemoveDownload = async (item: DownloadItem) => {

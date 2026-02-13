@@ -160,12 +160,14 @@ export const ModelsScreen: React.FC = () => {
     loadDownloadedModels();
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
       loadHFModels();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   // Restore active image model downloads on mount (after app restart)
@@ -269,6 +271,7 @@ export const ModelsScreen: React.FC = () => {
       await loadHFModels(true);
     }
     setIsRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadHFModels]);
 
   // Download from HuggingFace (multi-file download)
@@ -872,6 +875,7 @@ export const ModelsScreen: React.FC = () => {
 
       return true;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchResults, credibilityFilter, modelTypeFilter, showCompatibleOnly, ramGB]);
 
   // Filter HuggingFace image models - must be before any conditional returns

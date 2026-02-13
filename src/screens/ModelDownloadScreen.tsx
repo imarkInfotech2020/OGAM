@@ -46,6 +46,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
 
   useEffect(() => {
     initializeHardwareAndModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initializeHardwareAndModels = async () => {

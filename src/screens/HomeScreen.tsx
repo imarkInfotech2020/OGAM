@@ -98,6 +98,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     isFirstMount.current = false;
 
     return () => task.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refresh memory info periodically and when models change

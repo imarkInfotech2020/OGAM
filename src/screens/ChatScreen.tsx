@@ -166,6 +166,7 @@ export const ChatScreen: React.FC = () => {
       // This handles the "New Chat" button from ChatsListScreen
       createConversation(activeModelId, undefined, projectId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.conversationId, route.params?.projectId]);
 
   // Clear generation ref and KV cache when conversation changes (user switched chats)
@@ -195,6 +196,7 @@ export const ChatScreen: React.FC = () => {
     if (activeModelId && activeModel) {
       ensureModelLoaded();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelId]);
 
   // Check vision support when activeModel changes (based on mmProjPath metadata)
@@ -218,6 +220,7 @@ export const ChatScreen: React.FC = () => {
       setDownloadedImageModels(models);
     });
     return () => task.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Preload classifier model when LLM classification is enabled with a specific model
@@ -254,6 +257,7 @@ export const ChatScreen: React.FC = () => {
       }
     };
     preloadClassifierModel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
 
   useEffect(() => {

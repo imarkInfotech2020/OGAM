@@ -47,6 +47,7 @@ export const StorageSettingsScreen: React.FC = () => {
   useEffect(() => {
     loadStorageInfo();
     scanForOrphanedFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadedModels, downloadedImageModels]);
 
   const loadStorageInfo = async () => {
@@ -93,6 +94,7 @@ export const StorageSettingsScreen: React.FC = () => {
         },
       ]
     ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDeleteAllOrphaned = useCallback(() => {
@@ -124,6 +126,7 @@ export const StorageSettingsScreen: React.FC = () => {
         },
       ]
     ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orphanedFiles]);
 
   const handleClearStaleDownload = useCallback((downloadId: number) => {
