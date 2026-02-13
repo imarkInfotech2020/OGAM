@@ -18,7 +18,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
   private var cancelRequested = false
 
   // Serial queue for all pipeline operations
-  private let pipelineQueue = DispatchQueue(label: "com.localllm.coreml.diffusion", qos: .userInitiated)
+  private let pipelineQueue = DispatchQueue(label: "ai.offgridmobile.coreml.diffusion", qos: .userInitiated)
 
   // MARK: - RCTEventEmitter
 
