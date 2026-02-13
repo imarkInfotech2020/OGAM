@@ -1,6 +1,6 @@
 # iOS Feature Parity Plan
 
-A comprehensive, implementation-ready plan for bringing LocalLLM's iOS build to full feature parity with Android. Covers architecture, cross-platform abstractions, native module design, model ecosystem, and every file that needs to change.
+A comprehensive, implementation-ready plan for bringing OffgridMobile's iOS build to full feature parity with Android. Covers architecture, cross-platform abstractions, native module design, model ecosystem, and every file that needs to change.
 
 ---
 
@@ -39,7 +39,7 @@ A comprehensive, implementation-ready plan for bringing LocalLLM's iOS build to 
 
 ### What iOS was missing (now implemented)
 
-> **Note (Feb 2026):** Image generation via Core ML and the Core ML model browser have been implemented. Background downloads via URLSession are still pending. See `ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.swift` and `src/services/coreMLModelBrowser.ts`.
+> **Note (Feb 2026):** Image generation via Core ML and the Core ML model browser have been implemented. Background downloads via URLSession are still pending. See `ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.swift` and `src/services/coreMLModelBrowser.ts`.
 
 | Feature | Android Implementation | iOS Status |
 |---------|----------------------|------------|
@@ -238,7 +238,7 @@ This is Apple's official Swift package for running Stable Diffusion on Apple Sil
 
 ### 4.3 Native Module: `CoreMLDiffusionModule.swift`
 
-**Location**: `ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.swift`
+**Location**: `ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.swift`
 
 ```swift
 import StableDiffusion  // Apple's ml-stable-diffusion package
@@ -251,7 +251,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
     private var isCurrentlyGenerating = false
     private var cancelFlag = false
     private let generationQueue = DispatchQueue(
-        label: "com.localllm.coreml.generation",
+        label: "ai.offgridmobile.coreml.generation",
         qos: .userInitiated
     )
 
@@ -620,13 +620,13 @@ iOS background downloads use `URLSession` with a background configuration. The a
 
 **Critical design decision**: Name this module `DownloadManagerModule` (same as Android) so that `NativeModules.DownloadManagerModule` resolves on both platforms. This means zero changes to `backgroundDownloadService.ts` beyond removing the `Platform.OS === 'android'` check.
 
-**Location**: `ios/LocalLLM/BackgroundDownload/BackgroundDownloadModule.swift`
+**Location**: `ios/OffgridMobile/BackgroundDownload/BackgroundDownloadModule.swift`
 
 ```swift
 @objc(DownloadManagerModule)
 class BackgroundDownloadModule: RCTEventEmitter, URLSessionDownloadDelegate {
 
-    static let sessionId = "com.localllm.backgrounddownload"
+    static let sessionId = "ai.offgridmobile.backgrounddownload"
     static var shared: BackgroundDownloadModule?
     private var backgroundCompletionHandler: (() -> Void)?
 
@@ -806,7 +806,7 @@ class BackgroundDownloadModule: RCTEventEmitter, URLSessionDownloadDelegate {
 
     private func persistDownloads() {
         // Encode activeDownloads to JSON, save to UserDefaults
-        // Key: "com.localllm.activeDownloads"
+        // Key: "ai.offgridmobile.activeDownloads"
     }
 
     private func restoreDownloads() {
@@ -824,7 +824,7 @@ class BackgroundDownloadModule: RCTEventEmitter, URLSessionDownloadDelegate {
 
 ### 5.3 AppDelegate Changes
 
-**File**: `ios/LocalLLM/AppDelegate.swift`
+**File**: `ios/OffgridMobile/AppDelegate.swift`
 
 Add this method to handle downloads completing while app was suspended/terminated:
 
@@ -1070,11 +1070,11 @@ const IMAGE_MODEL_OVERHEAD_MULTIPLIER = Platform.OS === 'ios' ? 1.5 : 1.8;
 | File | Change |
 |------|--------|
 | `ios/Podfile` | `platform :ios, '13.0'` → `platform :ios, '17.0'` |
-| `ios/LocalLLM.xcodeproj/project.pbxproj` | All `IPHONEOS_DEPLOYMENT_TARGET` → `17.0` |
+| `ios/OffgridMobile.xcodeproj/project.pbxproj` | All `IPHONEOS_DEPLOYMENT_TARGET` → `17.0` |
 
 ### 8.2 Entitlements
 
-**New file**: `ios/LocalLLM/LocalLLM.entitlements`
+**New file**: `ios/OffgridMobile/OffgridMobile.entitlements`
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1108,13 +1108,13 @@ Add `ml-stable-diffusion` via Xcode's SPM integration:
 
 - **URL**: `https://github.com/apple/ml-stable-diffusion`
 - **Version**: Latest stable (currently 1.x)
-- **Add to**: `LocalLLM` target
+- **Add to**: `OffgridMobile` target
 
 This is added via `project.pbxproj` modifications (Xcode handles this when you add the package through its UI).
 
 ### 8.5 Bridging Header
 
-If one doesn't exist, create `ios/LocalLLM/LocalLLM-Bridging-Header.h`:
+If one doesn't exist, create `ios/OffgridMobile/OffgridMobile-Bridging-Header.h`:
 
 ```objc
 #import <React/RCTBridgeModule.h>
@@ -1129,11 +1129,11 @@ If one doesn't exist, create `ios/LocalLLM/LocalLLM-Bridging-Header.h`:
 
 | File | Lines (est.) | Purpose |
 |------|-------------|---------|
-| `ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.swift` | ~500 | Core ML SD native module |
-| `ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.m` | ~40 | ObjC bridge macros |
-| `ios/LocalLLM/BackgroundDownload/BackgroundDownloadModule.swift` | ~400 | URLSession download module |
-| `ios/LocalLLM/BackgroundDownload/BackgroundDownloadModule.m` | ~30 | ObjC bridge macros |
-| `ios/LocalLLM/LocalLLM.entitlements` | ~10 | Increased memory limit |
+| `ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.swift` | ~500 | Core ML SD native module |
+| `ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.m` | ~40 | ObjC bridge macros |
+| `ios/OffgridMobile/BackgroundDownload/BackgroundDownloadModule.swift` | ~400 | URLSession download module |
+| `ios/OffgridMobile/BackgroundDownload/BackgroundDownloadModule.m` | ~30 | ObjC bridge macros |
+| `ios/OffgridMobile/OffgridMobile.entitlements` | ~10 | Increased memory limit |
 | `src/services/coreMLModelBrowser.ts` | ~150 | Core ML model discovery |
 | `__tests__/contracts/coreMLDiffusion.contract.test.ts` | ~80 | Interface contract test |
 | `__tests__/contracts/iosDownloadManager.contract.test.ts` | ~80 | Interface contract test |
@@ -1143,9 +1143,9 @@ If one doesn't exist, create `ios/LocalLLM/LocalLLM-Bridging-Header.h`:
 | File | What Changes | Scope |
 |------|-------------|-------|
 | `ios/Podfile` | Deployment target 13.0 → 17.0 | 1 line |
-| `ios/LocalLLM.xcodeproj/project.pbxproj` | Target, SPM package, entitlements, new sources | Config |
-| `ios/LocalLLM/Info.plist` | Add UIBackgroundModes | 4 lines |
-| `ios/LocalLLM/AppDelegate.swift` | Add handleEventsForBackgroundURLSession | ~10 lines |
+| `ios/OffgridMobile.xcodeproj/project.pbxproj` | Target, SPM package, entitlements, new sources | Config |
+| `ios/OffgridMobile/Info.plist` | Add UIBackgroundModes | 4 lines |
+| `ios/OffgridMobile/AppDelegate.swift` | Add handleEventsForBackgroundURLSession | ~10 lines |
 | `src/types/index.ts` | Add `'coreml'` to backend union | 1 line |
 | `src/services/localDreamGenerator.ts` | Platform-select native module | ~10 lines + find-replace |
 | `src/services/backgroundDownloadService.ts` | Remove Platform.OS check | 1 line |
@@ -1415,10 +1415,10 @@ ANDROID-SPECIFIC:
   android/app/src/main/java/com/localllm/download/DownloadManagerModule.kt
 
 iOS-SPECIFIC:
-  ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.swift
-  ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.m
-  ios/LocalLLM/BackgroundDownload/BackgroundDownloadModule.swift
-  ios/LocalLLM/BackgroundDownload/BackgroundDownloadModule.m
+  ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.swift
+  ios/OffgridMobile/CoreMLDiffusion/CoreMLDiffusionModule.m
+  ios/OffgridMobile/BackgroundDownload/BackgroundDownloadModule.swift
+  ios/OffgridMobile/BackgroundDownload/BackgroundDownloadModule.m
 
 PLATFORM ROUTING (TypeScript):
   src/services/localDreamGenerator.ts       ← Platform.select() picks native module

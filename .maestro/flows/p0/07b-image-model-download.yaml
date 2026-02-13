@@ -2,7 +2,7 @@
 # Tests downloading an image model from the Models screen
 # Assumes no image model is currently downloaded
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Image Model Download"
 tags:
   - p0
@@ -25,7 +25,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('IMG_DOWNLOAD - Skip onboarding')}"
       - tapOn:

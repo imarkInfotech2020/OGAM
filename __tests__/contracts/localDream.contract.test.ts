@@ -105,7 +105,7 @@ describe('LocalDream Contract', () => {
       (mockLocalDreamModule.loadModel as jest.Mock).mockResolvedValue(true);
 
       const params = {
-        modelPath: '/data/user/0/com.localllm/files/models/sdxl-turbo',
+        modelPath: '/data/user/0/ai.offgridmobile/files/models/sdxl-turbo',
         threads: 4,
         backend: 'qnn' as const,
       };
@@ -207,7 +207,7 @@ describe('LocalDream Contract', () => {
     it('should accept valid generation params', async () => {
       const mockResult = {
         id: 'img-123',
-        imagePath: '/data/user/0/com.localllm/files/generated/img-123.png',
+        imagePath: '/data/user/0/ai.offgridmobile/files/generated/img-123.png',
         width: 512,
         height: 512,
         seed: 12345,
@@ -448,7 +448,7 @@ describe('LocalDream Contract', () => {
         step: 15,
         totalSteps: 20,
         progress: 0.75,
-        previewPath: '/data/user/0/com.localllm/files/previews/step-15.png',
+        previewPath: '/data/user/0/ai.offgridmobile/files/previews/step-15.png',
       };
 
       const progressWithoutPreview = {

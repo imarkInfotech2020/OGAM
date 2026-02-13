@@ -1,4 +1,4 @@
-# LocalLLM Test Flows - Comprehensive Inventory
+# OffgridMobile Test Flows - Comprehensive Inventory
 
 This document catalogs every testable flow in the application.
 

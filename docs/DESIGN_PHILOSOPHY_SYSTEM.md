@@ -1,8 +1,8 @@
-# LocalLLM Design Philosophy & System
+# OffgridMobile Design Philosophy & System
 
 ## Core Philosophy
 
-LocalLLM follows a **brutalist, minimal design system** inspired by terminal aesthetics and focused on functionality over decoration. The interface emphasizes clarity, efficiency, and respect for the user's attention.
+OffgridMobile follows a **brutalist, minimal design system** inspired by terminal aesthetics and focused on functionality over decoration. The interface emphasizes clarity, efficiency, and respect for the user's attention.
 
 ---
 

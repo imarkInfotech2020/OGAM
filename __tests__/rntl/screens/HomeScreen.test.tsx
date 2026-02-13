@@ -121,7 +121,7 @@ describe('HomeScreen', () => {
     it('shows app title or header', () => {
       const { queryByText } = renderWithNavigation(<HomeScreen />);
 
-      // May show "LocalLLM" or similar
+      // May show "Off Grid" or similar
     });
 
     it('shows model sections', () => {

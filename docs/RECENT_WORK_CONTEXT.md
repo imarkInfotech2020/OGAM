@@ -2,7 +2,7 @@
 
 ## Summary
 
-Implemented a comprehensive **brutalist design system** for LocalLLM, transforming the UI from a colorful, rounded interface to a minimal, monochromatic terminal-inspired aesthetic with emerald green as the sole accent color.
+Implemented a comprehensive **brutalist design system** for OffgridMobile, transforming the UI from a colorful, rounded interface to a minimal, monochromatic terminal-inspired aesthetic with emerald green as the sole accent color.
 
 ---
 

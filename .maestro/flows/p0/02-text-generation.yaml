@@ -2,7 +2,7 @@
 # Tests the complete text generation cycle
 # Prerequisites: Text model must be loaded
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Text Generation"
 tags:
   - p0
@@ -22,7 +22,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - tapOn:
           text: "Skip"

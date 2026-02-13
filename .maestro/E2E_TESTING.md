@@ -131,7 +131,7 @@ Required test IDs:
 
 ### Basic Structure
 ```yaml
-appId: com.localllm
+appId: ai.offgridmobile
 name: "Test Name"
 tags:
   - p0
