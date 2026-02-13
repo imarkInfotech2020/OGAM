@@ -104,11 +104,21 @@ const SETTINGS_CONFIG: SettingConfig[] = [
 interface GenerationSettingsModalProps {
   visible: boolean;
   onClose: () => void;
+  onOpenProject?: () => void;
+  onOpenGallery?: () => void;
+  onDeleteConversation?: () => void;
+  conversationImageCount?: number;
+  activeProjectName?: string | null;
 }
 
 export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
   visible,
   onClose,
+  onOpenProject,
+  onOpenGallery,
+  onDeleteConversation,
+  conversationImageCount = 0,
+  activeProjectName,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -124,6 +134,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   const [performanceStats, setPerformanceStats] = useState(llmService.getPerformanceStats());
   const [showImageModelPicker, setShowImageModelPicker] = useState(false);
   const [showClassifierModelPicker, setShowClassifierModelPicker] = useState(false);
+  const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
+  const [textSettingsOpen, setTextSettingsOpen] = useState(false);
+  const [performanceSettingsOpen, setPerformanceSettingsOpen] = useState(false);
 
   const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
   const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
@@ -153,7 +166,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
       visible={visible}
       onClose={onClose}
       snapPoints={['50%', '90%']}
-      title="Generation Settings"
+      title="Chat Settings"
     >
       {/* Performance Stats */}
       {performanceStats.lastTokensPerSecond > 0 && (
@@ -178,9 +191,61 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
+        {/* Conversation Actions - shown first for quick access */}
+        {(onOpenProject || onOpenGallery || onDeleteConversation) && (
+          <View>
+            {onOpenProject && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => { onClose(); setTimeout(onOpenProject, 200); }}
+              >
+                <Icon name="folder" size={16} color={colors.textSecondary} />
+                <Text style={styles.actionText}>
+                  Project: {activeProjectName || 'Default'}
+                </Text>
+                <Icon name="chevron-right" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+            {onOpenGallery && conversationImageCount > 0 && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => { onClose(); setTimeout(onOpenGallery, 200); }}
+              >
+                <Icon name="image" size={16} color={colors.textSecondary} />
+                <Text style={styles.actionText}>
+                  Gallery ({conversationImageCount})
+                </Text>
+                <Icon name="chevron-right" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+            {onDeleteConversation && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => { onClose(); setTimeout(onDeleteConversation, 200); }}
+              >
+                <Icon name="trash-2" size={16} color={colors.error} />
+                <Text style={[styles.actionText, { color: colors.error }]}>
+                  Delete Conversation
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {/* IMAGE GENERATION SETTINGS */}
-        <Text style={[styles.sectionLabel, { marginTop: 0 }]}>IMAGE GENERATION</Text>
-        <View style={styles.sectionCard}>
+        <TouchableOpacity
+          style={[styles.accordionHeader, (onOpenProject || onOpenGallery || onDeleteConversation) ? {} : { marginTop: 0 }]}
+          onPress={() => setImageSettingsOpen(!imageSettingsOpen)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.accordionTitle}>IMAGE GENERATION</Text>
+          <Icon
+            name={imageSettingsOpen ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+        {imageSettingsOpen && <View style={styles.sectionCard}>
           <TouchableOpacity
             style={styles.modelPickerButton}
             onPress={() => setShowImageModelPicker(!showImageModelPicker)}
@@ -563,11 +628,22 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             </TouchableOpacity>
           </View>
         </View>
-        </View>
+        </View>}
 
         {/* TEXT GENERATION SETTINGS */}
-        <Text style={styles.sectionLabel}>TEXT GENERATION</Text>
-        <View style={styles.sectionCard}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => setTextSettingsOpen(!textSettingsOpen)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.accordionTitle}>TEXT GENERATION</Text>
+          <Icon
+            name={textSettingsOpen ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+        {textSettingsOpen && <View style={styles.sectionCard}>
 
         {SETTINGS_CONFIG.map((config) => (
           <View key={config.key} style={styles.settingGroup}>
@@ -598,11 +674,22 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             </View>
           </View>
         ))}
-        </View>
+        </View>}
 
         {/* PERFORMANCE SETTINGS */}
-        <Text style={styles.sectionLabel}>PERFORMANCE</Text>
-        <View style={styles.sectionCard}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => setPerformanceSettingsOpen(!performanceSettingsOpen)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.accordionTitle}>PERFORMANCE</Text>
+          <Icon
+            name={performanceSettingsOpen ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+        {performanceSettingsOpen && <View style={styles.sectionCard}>
 
         {/* GPU Acceleration Toggle - hidden on iOS (Core ML auto-dispatches) */}
         {Platform.OS !== 'ios' && (
@@ -763,7 +850,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           </View>
         </View>
 
-        </View>
+        </View>}
 
         {/* Reset Button */}
         <TouchableOpacity style={styles.resetButton} onPress={handleResetDefaults}>
@@ -815,6 +902,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     marginTop: SPACING.xl,
     marginBottom: SPACING.md,
   },
+  accordionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: SPACING.xl,
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  accordionTitle: {
+    ...TYPOGRAPHY.label,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+  },
   sectionCard: {
     backgroundColor: colors.surface,
     borderRadius: 8,
@@ -859,6 +960,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   sliderMinMax: {
     ...TYPOGRAPHY.label,
     color: colors.textMuted,
+  },
+  actionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.background,
+    padding: SPACING.md,
+    borderRadius: 8,
+    marginBottom: SPACING.sm,
+    gap: SPACING.md,
+  },
+  actionText: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+    flex: 1,
   },
   resetButton: {
     backgroundColor: colors.surface,
