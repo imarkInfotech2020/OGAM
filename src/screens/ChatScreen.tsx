@@ -1151,41 +1151,22 @@ export const ChatScreen: React.FC = () => {
                 <Text style={styles.headerSubtitle} numberOfLines={1} testID="model-loaded-indicator">
                   {activeModel.name}
                 </Text>
+                {activeImageModel && (
+                  <View style={styles.headerImageBadge}>
+                    <Icon name="image" size={10} color={colors.primary} />
+                  </View>
+                )}
                 <Text style={styles.modelSelectorArrow}>▼</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.headerActions}>
-              {conversationImageCount > 0 && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={() => (navigation as any).navigate('Gallery', { conversationId: activeConversationId })}
-                >
-                  <Icon name="image" size={14} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setShowSettingsPanel(true)}
                 testID="chat-settings-icon"
               >
-                <Text style={styles.iconButtonText}>⚙</Text>
+                <Icon name="sliders" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.projectButton}
-                onPress={() => setShowProjectSelector(true)}
-              >
-                <Text style={styles.projectButtonText}>
-                  {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
-                </Text>
-              </TouchableOpacity>
-              {activeConversation && (
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  onPress={handleDeleteConversation}
-                >
-                  <Text style={styles.iconButtonText}>✕</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
         </View>
@@ -1333,7 +1314,6 @@ export const ChatScreen: React.FC = () => {
           imageModelLoaded={imageModelLoaded}
           onImageModeChange={setCurrentImageMode}
           onOpenSettings={() => setShowSettingsPanel(true)}
-          activeImageModelName={activeImageModel?.name || null}
           queueCount={queueCount}
           queuedTexts={queuedTexts}
           onClearQueue={() => generationService.clearQueue()}
@@ -1379,6 +1359,11 @@ export const ChatScreen: React.FC = () => {
         <GenerationSettingsModal
           visible={showSettingsPanel}
           onClose={() => setShowSettingsPanel(false)}
+          onOpenProject={() => setShowProjectSelector(true)}
+          onOpenGallery={conversationImageCount > 0 ? () => (navigation as any).navigate('Gallery', { conversationId: activeConversationId }) : undefined}
+          onDeleteConversation={activeConversation ? handleDeleteConversation : undefined}
+          conversationImageCount={conversationImageCount}
+          activeProjectName={activeProject?.name || null}
         />
 
         {/* Fullscreen Image Viewer Modal */}
@@ -1478,6 +1463,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textMuted,
     marginLeft: SPACING.xs,
   },
+  headerImageBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginLeft: 6,
+  },
   headerActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -1492,37 +1486,19 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  iconButtonText: {
-    ...TYPOGRAPHY.body,
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  projectButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: colors.primary + '30',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  projectButtonText: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '600' as const,
-    color: colors.primary,
-  },
   messageList: {
     paddingVertical: 16,
   },
   scrollToBottomContainer: {
     position: 'absolute' as const,
-    bottom: 80,
+    bottom: 130,
     right: 16,
     zIndex: 10,
   },
   scrollToBottomButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
