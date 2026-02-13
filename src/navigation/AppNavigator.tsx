@@ -53,6 +53,7 @@ const ChatsStackNavigator: React.FC = () => {
     <ChatsStack.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
         contentStyle: { backgroundColor: colors.background },
       }}
     >
@@ -69,6 +70,7 @@ const ProjectsStackNavigator: React.FC = () => {
     <ProjectsStack.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
         contentStyle: { backgroundColor: colors.background },
       }}
     >
@@ -90,6 +92,7 @@ const ModelsStackNavigator: React.FC = () => {
     <ModelsStack.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
         contentStyle: { backgroundColor: colors.background },
       }}
     >
@@ -105,6 +108,7 @@ const SettingsStackNavigator: React.FC = () => {
     <SettingsStack.Navigator
       screenOptions={{
         headerShown: false,
+        animation: 'slide_from_right',
         contentStyle: { backgroundColor: colors.background },
       }}
     >

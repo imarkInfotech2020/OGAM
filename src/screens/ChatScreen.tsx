@@ -1139,6 +1139,12 @@ export const ChatScreen: React.FC = () => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Icon name="arrow-left" size={20} color={colors.text} />
+            </TouchableOpacity>
             <View style={styles.headerLeft}>
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {activeConversation?.title || 'New Chat'}
@@ -1440,6 +1446,10 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
+    gap: SPACING.md,
+  },
+  backButton: {
+    padding: SPACING.xs,
   },
   headerLeft: {
     flex: 1,
