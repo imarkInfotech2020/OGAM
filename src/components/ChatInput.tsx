@@ -33,7 +33,6 @@ interface ChatInputProps {
   imageModelLoaded?: boolean;
   onImageModeChange?: (mode: ImageModeState) => void;
   onOpenSettings?: () => void;
-  activeImageModelName?: string | null;
   queueCount?: number;
   queuedTexts?: string[];
   onClearQueue?: () => void;
@@ -50,7 +49,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   imageModelLoaded = false,
   onImageModeChange,
   onOpenSettings: _onOpenSettings,
-  activeImageModelName,
   queueCount = 0,
   queuedTexts = [],
   onClearQueue,
@@ -339,39 +337,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
 
 
-          {/* Image generation mode toggle - only show in manual mode */}
+          {/* Image generation mode toggle - only in manual mode (actionable) */}
           {settings.imageGenerationMode === 'manual' && imageModelLoaded && (
             <TouchableOpacity
               testID="image-mode-toggle"
-              style={[
-                styles.imageGenButton,
-                imageMode === 'force' && styles.imageGenButtonForce,
-              ]}
+              style={styles.toolbarButton}
               onPress={handleImageModeToggle}
               disabled={disabled}
             >
               <Icon
-                name="zap"
-                size={18}
+                name="image"
+                size={20}
                 color={imageMode === 'force' ? colors.primary : colors.textSecondary}
               />
-              {imageMode === 'force' && (
-                <Text testID="image-mode-on-badge" style={styles.imageGenLabelForce}>ON</Text>
-              )}
             </TouchableOpacity>
           )}
-
-          {/* Status indicators */}
-          <View testID="status-indicators" style={styles.statusIndicators}>
-            {supportsVision && (
-              <Text testID="vision-indicator" style={styles.statusText}>Vision</Text>
-            )}
-            {activeImageModelName && settings.imageGenerationMode === 'auto' && (
-              <Text testID="auto-image-model-indicator" style={styles.statusText} numberOfLines={1}>
-                Auto: {activeImageModelName}
-              </Text>
-            )}
-          </View>
 
           {/* Queue indicator */}
           {queueCount > 0 && (
@@ -565,41 +545,6 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     backgroundColor: 'transparent',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-  },
-  imageGenButton: {
-    height: 32,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    flexDirection: 'row' as const,
-    gap: 4,
-  },
-  imageGenButtonForce: {
-    backgroundColor: colors.surface,
-    borderColor: colors.textSecondary,
-  },
-  imageGenLabelForce: {
-    fontSize: 11,
-    fontFamily: FONTS.mono,
-    fontWeight: '500' as const,
-    color: colors.primary,
-  },
-  statusIndicators: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    flex: 1,
-    gap: 4,
-    marginLeft: 4,
-  },
-  statusText: {
-    fontSize: 11,
-    fontFamily: FONTS.mono,
-    fontWeight: '300' as const,
-    color: colors.textMuted,
   },
   sendButton: {
     width: 36,

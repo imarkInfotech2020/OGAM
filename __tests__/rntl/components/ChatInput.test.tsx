@@ -887,31 +887,6 @@ describe('ChatInput', () => {
   });
 
   // ============================================================================
-  // Status Indicators
-  // ============================================================================
-  describe('status indicators', () => {
-    it('shows auto image model name when in auto mode', () => {
-      // Override mock for auto mode
-      mockUseAppStore.mockReturnValue({
-        settings: {
-          imageGenerationMode: 'auto',
-        },
-      });
-
-      const { getByTestId } = render(
-        <ChatInput
-          {...defaultProps}
-          imageModelLoaded={true}
-          activeImageModelName="SDXL Turbo"
-        />
-      );
-
-      const indicator = getByTestId('auto-image-model-indicator');
-      expect(indicator.props.children).toContain('SDXL Turbo');
-    });
-  });
-
-  // ============================================================================
   // Edge Cases
   // ============================================================================
   describe('edge cases', () => {
