@@ -2,7 +2,7 @@
 # Tests selecting a downloaded image model from the home screen picker
 # Assumes an image model is already downloaded but not active
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Image Model Set Active"
 tags:
   - p0
@@ -25,7 +25,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('IMG_SET_ACTIVE - Skip onboarding')}"
       - tapOn:

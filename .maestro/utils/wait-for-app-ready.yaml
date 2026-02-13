@@ -1,7 +1,7 @@
 # Utility: Wait for app to be ready
 # Waits for the main UI to be visible
 
-appId: com.localllm
+appId: ai.offgridmobile
 ---
 
 # Wait for home screen or chat screen to be visible

@@ -1217,7 +1217,7 @@ export const ModelsScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
         <View style={styles.header}>
           <Text style={styles.title}>Models</Text>
           <TouchableOpacity

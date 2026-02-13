@@ -1,6 +1,6 @@
 # Test Specification Format
 
-This document defines the standard format for test specifications in LocalLLM. When implementing a feature, create a test spec following this format.
+This document defines the standard format for test specifications in OffgridMobile. When implementing a feature, create a test spec following this format.
 
 **Current Test Infrastructure:**
 - ✅ Jest (unit, integration, RNTL, contract tests)

@@ -5,7 +5,7 @@
 # Test: Search for model → Download → Verify success
 # Postcondition: Model downloaded and available
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Model Download"
 tags:
   - p0
@@ -31,7 +31,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('DOWNLOAD - Skip onboarding')}"
       - tapOn:

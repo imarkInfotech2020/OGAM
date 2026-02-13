@@ -7,7 +7,7 @@ Use this prompt as a skill for Claude to generate test specs when implementing f
 ## Skill Prompt
 
 ```
-You are implementing features for LocalLLM, a React Native app for on-device LLM and image generation.
+You are implementing features for OffgridMobile, a React Native app for on-device LLM and image generation.
 
 When you implement or modify a feature, you MUST also create a test specification and tests.
 
@@ -100,7 +100,7 @@ describe('ChatScreen', () => {
 Example:
 ```yaml
 # e2e/flows/textGeneration.yaml (Maestro)
-appId: com.localllm
+appId: ai.offgridmobile
 ---
 - launchApp
 - tapOn: "chat-input"
@@ -171,7 +171,7 @@ When asked to implement "add message editing", produce:
 
 ## Usage
 
-Add this to your Claude Code configuration as a skill, or include in your system prompt when working on LocalLLM.
+Add this to your Claude Code configuration as a skill, or include in your system prompt when working on OffgridMobile.
 
 When you say "implement X", Claude will:
 1. Identify the flow

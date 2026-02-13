@@ -1,6 +1,6 @@
 # UI/UX Elevation Plan — "Venture Studio Grade"
 
-> **Goal**: Transform LocalLLM from a solid brutalist interface into a polished, premium product that screams venture studio quality — while preserving the brutalist DNA. We're adding *motion, depth, and tactile feedback*, not color or decoration.
+> **Goal**: Transform OffgridMobile from a solid brutalist interface into a polished, premium product that screams venture studio quality — while preserving the brutalist DNA. We're adding *motion, depth, and tactile feedback*, not color or decoration.
 
 ---
 

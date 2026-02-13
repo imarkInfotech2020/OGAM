@@ -2,7 +2,7 @@
 # Tests the complete image generation cycle including model download
 # This test ensures image model is downloaded and tests image generation
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Image Generation"
 tags:
   - p0
@@ -25,7 +25,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('IMAGE_GEN - Skip onboarding')}"
       - tapOn:

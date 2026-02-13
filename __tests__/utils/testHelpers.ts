@@ -1,7 +1,7 @@
 /**
  * Test Helpers
  *
- * Utility functions for testing LocalLLM components and services.
+ * Utility functions for testing Off Grid components and services.
  */
 
 import { act } from '@testing-library/react-native';

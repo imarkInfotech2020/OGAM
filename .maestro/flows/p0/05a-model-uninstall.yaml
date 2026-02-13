@@ -5,7 +5,7 @@
 # Test: Go to Models tab → Delete model → Verify removed
 # Postcondition: Model removed from downloaded list
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Model Uninstall"
 tags:
   - p0
@@ -30,7 +30,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('UNINSTALL - Skip onboarding')}"
       - tapOn:

@@ -7,7 +7,7 @@
 # 3. Otherwise navigate to Models tab directly and download if needed
 # 4. Then select the model from picker
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Setup Test Model"
 tags:
   - p0
@@ -33,7 +33,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('SETUP - Skip onboarding')}"
       - tapOn:
