@@ -199,7 +199,7 @@ export const useChatStore = create<ChatState>()(
 
       appendToStreamingMessage: (token) => {
         set((state) => ({
-          streamingMessage: stripControlTokens(state.streamingMessage + token),
+          streamingMessage: state.streamingMessage + token,
           isStreaming: true,
           isThinking: false,
         }));

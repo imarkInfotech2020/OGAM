@@ -41,6 +41,35 @@ class GenerationService {
   private abortRequested: boolean = false;
   private queueProcessor: QueueProcessor | null = null;
 
+  // Token batching — collect tokens and flush to UI at a controlled rate
+  private tokenBuffer: string = '';
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly FLUSH_INTERVAL_MS = 50; // Update UI at most ~20 times/sec
+
+  /**
+   * Flush buffered tokens to the chat store in a single batched update.
+   * Called on a timer (~50ms) to limit UI re-renders during streaming.
+   */
+  private flushTokenBuffer(): void {
+    if (this.tokenBuffer) {
+      const chatStore = useChatStore.getState();
+      chatStore.appendToStreamingMessage(this.tokenBuffer);
+      this.tokenBuffer = '';
+    }
+    this.flushTimer = null;
+  }
+
+  /**
+   * Force-flush any remaining tokens (used on completion/abort).
+   */
+  private forceFlushTokens(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.flushTokenBuffer();
+  }
+
   /**
    * Get current generation state
    */
@@ -117,13 +146,14 @@ class GenerationService {
     // Initialize streaming state in chat store
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
+    this.tokenBuffer = '';
     let firstTokenReceived = false;
 
     try {
       console.log('[GenerationService] 📤 Calling llmService.generateResponse...');
       await llmService.generateResponse(
         messages,
-        // onStream
+        // onStream — tokens are batched to avoid flooding the JS thread
         (token) => {
           // Check if generation was aborted
           if (this.abortRequested) {
@@ -136,16 +166,24 @@ class GenerationService {
             onFirstToken?.();
           }
 
-          // Accumulate streaming content
-          const newContent = this.state.streamingContent + token;
-          this.updateState({ streamingContent: newContent });
+          // Accumulate in internal state (no listeners fired)
+          this.state.streamingContent += token;
 
-          // Also update the chat store's streaming message for UI reactivity
-          chatStore.appendToStreamingMessage(token);
+          // Buffer tokens and flush to UI on a timer (~20 updates/sec max)
+          this.tokenBuffer += token;
+          if (!this.flushTimer) {
+            this.flushTimer = setTimeout(
+              () => this.flushTokenBuffer(),
+              GenerationService.FLUSH_INTERVAL_MS,
+            );
+          }
         },
         // onComplete
         () => {
           console.log('[GenerationService] ✅ Text generation completed');
+          // Flush any remaining buffered tokens before finalizing
+          this.forceFlushTokens();
+
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
           } else {
@@ -178,6 +216,12 @@ class GenerationService {
         (error) => {
           console.error('[GenerationService] ❌ Generation error:', error);
           console.error('[GenerationService] Error message:', error?.message || 'Unknown');
+          // Cancel any pending flush
+          if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = null;
+          }
+          this.tokenBuffer = '';
           chatStore.clearStreamingMessage();
           this.resetState();
         },
@@ -206,6 +250,9 @@ class GenerationService {
     if (!this.state.isGenerating) {
       return '';
     }
+
+    // Flush any remaining buffered tokens so partial content is complete
+    this.forceFlushTokens();
 
     const conversationId = this.state.conversationId;
     const streamingContent = this.state.streamingContent;
@@ -318,6 +365,13 @@ class GenerationService {
 
   private resetState(): void {
     const hasQueuedItems = this.state.queuedMessages.length > 0;
+
+    // Clear any pending token flush
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.tokenBuffer = '';
 
     this.updateState({
       isGenerating: false,
