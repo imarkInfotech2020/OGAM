@@ -5,7 +5,7 @@
 # Test: Open picker → Select model → Verify loaded
 # Postcondition: Model loaded and ready
 
-appId: com.localllm
+appId: ai.offgridmobile
 name: "P0: Model Selection"
 tags:
   - p0
@@ -30,7 +30,7 @@ tags:
 - runFlow:
     when:
       visible:
-        text: "Welcome to Local LLM"
+        text: "Welcome to Off Grid"
     commands:
       - evalScript: "${console.log('SELECTION - Skip onboarding')}"
       - tapOn:
