@@ -64,8 +64,6 @@ export const ChatScreen: React.FC = () => {
   const [animateLastN, setAnimateLastN] = useState(0);
   // Track which conversation a generation was started for
   const generatingForConversationRef = useRef<string | null>(null);
-  // Track when generation started for timing
-  const generationStartTimeRef = useRef<number | null>(null);
   // Track model load start time for system messages
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const navigation = useNavigation();

@@ -684,15 +684,12 @@ class LLMService {
   private formatMessages(messages: Message[]): string {
     // Format for ChatML-style models (Qwen, etc.)
     let prompt = '';
-    let systemPromptContent = '';
-
     // First pass: collect system prompt content and build conversation
     for (const message of messages) {
       if (message.role === 'system') {
         // Collect system messages (there might be multiple: main + context note)
         if (message.id === 'system') {
           // This is the main project system prompt
-          systemPromptContent = message.content;
           prompt += `<|im_start|>system\n${message.content}<|im_end|>\n`;
         } else {
           // Context notes or other system messages

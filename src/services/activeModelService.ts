@@ -744,7 +744,7 @@ class ActiveModelService {
     const store = useAppStore.getState();
     // Check text model
     const textModelLoaded = llmService.isModelLoaded();
-    const textModelPath = llmService.getLoadedModelPath();
+    // Model path available via llmService.getLoadedModelPath() if needed
 
     if (!textModelLoaded) {
       this.loadedTextModelId = null;

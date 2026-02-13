@@ -184,15 +184,14 @@ class ImageGenerationService {
           },
         ];
 
-        let fullResponse = '';
         console.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
         enhancedPrompt = await llmService.generateResponse(
           enhancementMessages,
-          (token) => {
-            fullResponse += token;
+          (_token) => {
+            // Token streaming callback - enhancement tracked via return value
           },
-          (complete) => {
-            fullResponse = complete;
+          (_complete) => {
+            // Complete callback - enhancement tracked via return value
           },
           (error) => {
             console.error('[ImageGen] ❌ Enhancement error callback:', error);
