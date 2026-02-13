@@ -783,7 +783,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingBottom: 32,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -791,8 +791,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   modelsRow: {
     flexDirection: 'row' as const,
-    gap: 20,
-    marginBottom: 24,
+    gap: 16,
+    marginBottom: 20,
   },
   modelCard: {
     flex: 1,
@@ -838,7 +838,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'center' as const,
     gap: 8,
     paddingVertical: 12,
-    marginBottom: 24,
+    marginBottom: 20,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -850,7 +850,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontWeight: '500' as const,
   },
   newChatButton: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   galleryCard: {
     flexDirection: 'row' as const,
@@ -858,7 +858,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 16,
     ...shadows.small,
   },
@@ -878,7 +878,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   setupCard: {
     alignItems: 'center' as const,
     padding: 20,
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 12,
   },
   setupText: {
@@ -887,7 +887,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textAlign: 'center' as const,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row' as const,

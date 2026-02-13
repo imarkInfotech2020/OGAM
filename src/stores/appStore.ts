@@ -132,7 +132,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Theme
-      themeMode: 'dark' as 'light' | 'dark',
+      themeMode: 'light' as 'light' | 'dark',
       setThemeMode: (mode) => set({ themeMode: mode }),
 
       // Onboarding

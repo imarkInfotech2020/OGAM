@@ -156,7 +156,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   title: {
     ...TYPOGRAPHY.h2,
     color: colors.text,
-    lineHeight: 36,
   },
   scrollView: {
     flex: 1,

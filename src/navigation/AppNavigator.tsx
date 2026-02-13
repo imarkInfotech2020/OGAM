@@ -151,11 +151,12 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
       </Animated.View>
       {focused && (
         <View style={{
+          position: 'absolute',
+          top: -6,
           width: 4,
           height: 4,
           borderRadius: 2,
           backgroundColor: colors.primary,
-          marginTop: 3,
         }} />
       )}
     </View>
