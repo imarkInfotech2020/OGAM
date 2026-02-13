@@ -1,18 +1,20 @@
-# LocalLLM
+<div align="center">
+
+<img src="src/assets/logo.png" alt="Off Grid Logo" width="128" />
+
+# Off Grid
 
 **Truly offline-first LLM manager for mobile. Your AI, your device, your data.**
 
-<div align="center">
-
   https://github.com/user-attachments/assets/c3218c22-6714-4f2b-9c55-4dc1fd8dfe25
-  
-**Watch the full demo above to see LocalLLM in action**
+
+**Watch the full demo above to see Off Grid in action**
 
 </div>
 
 ---
 
-LocalLLM is a React Native application that brings large language models, vision AI, and image generation directly to **Android and iOS** devices. All inference runs entirely on-device using llama.cpp, whisper.cpp, local-dream (Android), and Apple's Core ML (iOS)—no internet required after initial model download, no data transmission, complete privacy guaranteed.
+OffgridMobile is a React Native application that brings large language models, vision AI, and image generation directly to **Android and iOS** devices. All inference runs entirely on-device using llama.cpp, whisper.cpp, local-dream (Android), and Apple's Core ML (iOS)—no internet required after initial model download, no data transmission, complete privacy guaranteed.
 
 ### Platform Support
 
@@ -473,7 +475,7 @@ Vision inference can be 30-60s slower if KV cache is cleared after every enhance
 
 ### Brutalist Design Philosophy
 
-LocalLLM uses a terminal-inspired brutalist design system with full light/dark theme support. The system emphasizes information density and functional minimalism with a monochromatic palette and emerald accent.
+OffgridMobile uses a terminal-inspired brutalist design system with full light/dark theme support. The system emphasizes information density and functional minimalism with a monochromatic palette and emerald accent.
 
 ### Theme System
 
@@ -876,10 +878,10 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 
 The fastest way to get started:
 
-1. **Download** the latest APK from [GitHub Releases](https://github.com/alichherawalla/offline-mobile-llm-manager/releases/latest)
+1. **Download** the latest APK from [GitHub Releases](https://github.com/alichherawalla/offgrid-mobile/releases/latest)
 2. **Transfer** to your Android device
 3. **Enable** "Install from Unknown Sources" in Android Settings → Security
-4. **Install** and launch LocalLLM
+4. **Install** and launch OffgridMobile
 5. **Download a model** from the Models tab and start chatting
 
 ### Build from Source
@@ -909,8 +911,8 @@ For developers who want to build from source or contribute:
 
 ```bash
 # Clone repository
-git clone https://github.com/alichherawalla/offline-mobile-llm-manager.git
-cd LocalLLM
+git clone https://github.com/alichherawalla/offgrid-mobile.git
+cd OffgridMobile
 
 # Install JavaScript dependencies
 npm install
@@ -935,7 +937,7 @@ npm run android
 npm run ios
 
 # Or use Xcode
-# Open ios/LocalLLM.xcworkspace
+# Open ios/OffgridMobile.xcworkspace
 # Select target device → Build & Run
 ```
 
@@ -986,7 +988,7 @@ android {
 ## Project Structure
 
 ```
-LocalLLM/
+OffgridMobile/
 ├── src/
 │   ├── components/          # Reusable UI components
 │   │   ├── AnimatedEntry.tsx       # Staggered fade+slide entrance animation
@@ -1081,7 +1083,7 @@ LocalLLM/
 │           ├── LocalDreamModule.kt
 │           └── LocalDreamPackage.kt
 ├── ios/                     # iOS native code
-│   └── LocalLLM/
+│   └── OffgridMobile/
 │       ├── AppDelegate.swift      # Application delegate
 │       ├── CoreMLDiffusion/       # Core ML image generation
 │       │   ├── CoreMLDiffusionModule.swift
@@ -1249,4 +1251,4 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**LocalLLM** — Your AI, your device, your data. Built with privacy in mind, powered by open-source AI.
+**Off Grid** — Your AI, your device, your data. Built with privacy in mind, powered by open-source AI.

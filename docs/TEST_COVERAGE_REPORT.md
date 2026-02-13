@@ -1,4 +1,4 @@
-# LocalLLM Test Coverage Report
+# OffgridMobile Test Coverage Report
 
 **Generated:** February 2026
 **Updated:** February 2026 (iOS Parity Tests)
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-LocalLLM has **comprehensive test coverage** across all layers. All P0 user flows have E2E coverage, state management is thoroughly tested, all 6 core services have dedicated unit tests (228 tests added Feb 2026), and iOS/Android parity is verified at the service and contract level (77 tests added Feb 2026).
+OffgridMobile has **comprehensive test coverage** across all layers. All P0 user flows have E2E coverage, state management is thoroughly tested, all 6 core services have dedicated unit tests (228 tests added Feb 2026), and iOS/Android parity is verified at the service and contract level (77 tests added Feb 2026).
 
 ### Key Findings
 

@@ -1,6 +1,6 @@
-# LocalLLM — Comprehensive Codebase & Product Flows Guide
+# OffgridMobile — Comprehensive Codebase & Product Flows Guide
 
-This document provides an in-depth reference for the LocalLLM application: its architecture, every major subsystem, data models, native integrations, and detailed product flows.
+This document provides an in-depth reference for the OffgridMobile application: its architecture, every major subsystem, data models, native integrations, and detailed product flows.
 
 ---
 
@@ -26,7 +26,7 @@ This document provides an in-depth reference for the LocalLLM application: its a
 
 ## 1. Product Overview
 
-LocalLLM is a **privacy-first, on-device AI assistant** built with React Native. It runs large language models (LLMs), Stable Diffusion image generators, and Whisper speech-to-text models entirely on the user's phone — no server, no internet required after initial model download.
+OffgridMobile is a **privacy-first, on-device AI assistant** built with React Native. It runs large language models (LLMs), Stable Diffusion image generators, and Whisper speech-to-text models entirely on the user's phone — no server, no internet required after initial model download.
 
 **Core capabilities:**
 - Text chat with streaming LLM inference (llama.cpp via `llama.rn`)
@@ -84,9 +84,9 @@ LocalLLM is a **privacy-first, on-device AI assistant** built with React Native.
 ## 3. Directory Structure
 
 ```
-LocalLLM/
+OffgridMobile/
 ├── App.tsx                              # Root component: init, auth gate, navigation
-├── app.json                             # RN app config (name: "LocalLLM", bundle: com.localllm)
+├── app.json                             # RN app config (name: "OffgridMobile", bundle: ai.offgridmobile)
 ├── package.json                         # Dependencies & scripts
 ├── tsconfig.json                        # TypeScript config
 │
@@ -186,7 +186,7 @@ LocalLLM/
 │           └── DownloadCompleteBroadcastReceiver.kt # Broadcast receiver
 │
 ├── ios/                                 # iOS native code
-│   └── LocalLLM/
+│   └── OffgridMobile/
 │       ├── AppDelegate.swift            # Application delegate
 │       ├── CoreMLDiffusion/
 │       │   ├── CoreMLDiffusionModule.swift  # Core ML image generation
@@ -223,7 +223,7 @@ LocalLLM/
 ├── releases/                            # Release APKs
 │
 └── (Claude Code Memory — External)      # NOT in repo
-    ~/.claude/projects/-Users-mac-wednesday-on-device-llm-LocalLLM/memory/
+    ~/.claude/projects/-Users-mac-wednesday-on-device-llm-OffgridMobile/memory/
     └── MEMORY.md                        # Persistent learnings across conversations
 ```
 
@@ -708,7 +708,7 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 **Slides content:**
 | Slide | Title | Message |
 |-------|-------|---------|
-| 1 | Welcome to Local LLM | Run AI models directly on your device. No internet required, complete privacy. |
+| 1 | Welcome to Off Grid | Run AI models directly on your device. No internet required, complete privacy. |
 | 2 | Your Privacy Matters | All conversations stay on your device. No data is sent to any server. |
 | 3 | Works Offline | Once you download a model, it works without internet. |
 | 4 | Choose Your Model | Smaller models are faster, larger models are smarter. We'll help you pick. |
@@ -1283,7 +1283,7 @@ Auto-selection: If QNN model downloaded and device supports QNN → use QNN. Oth
 
 **Steps:**
 1. Copy image to device-accessible location:
-   - Android: `Pictures/LocalLLM/` or `Documents/LocalLLM_Images/`
+   - Android: `Pictures/OffgridMobile/` or `Documents/OffgridMobile_Images/`
    - iOS: Camera Roll (via photo library API)
 2. Show success confirmation
 
@@ -1522,7 +1522,7 @@ React Native Testing Library tests for screens:
 
 ### E2E Tests (Maestro, `.maestro/`)
 
-**Configuration:** App ID `com.localllm`, 30-second default timeout, screenshots on failure.
+**Configuration:** App ID `ai.offgridmobile`, 30-second default timeout, screenshots on failure.
 
 #### P0 Critical Path Flows
 
@@ -1682,7 +1682,7 @@ Documents/
 │   ├── ggml-tiny.en.bin
 │   └── ...
 │
-└── LocalLLM_Images/               # User-saved generated images
+└── OffgridMobile_Images/               # User-saved generated images
     └── ...
 
 Caches/
@@ -1745,7 +1745,7 @@ This project uses **Claude Code** (Anthropic's official CLI) for development ass
 ### Memory Location
 
 ```
-~/.claude/projects/-Users-mac-wednesday-on-device-llm-LocalLLM/memory/
+~/.claude/projects/-Users-mac-wednesday-on-device-llm-OffgridMobile/memory/
 ├── MEMORY.md                    # Main memory file (loaded into Claude's context)
 └── [topic-files].md             # Optional: detailed topic-specific notes
 ```
