@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService, QueuedMessage } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -97,6 +97,15 @@ export const ChatScreen: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  // Subscribe to generation service for queue state
+  useEffect(() => {
+    const unsubscribe = generationService.subscribe((state) => {
+      setQueueCount(state.queuedMessages.length);
+      setQueuedTexts(state.queuedMessages.map(m => m.text));
+    });
+    return unsubscribe;
+  }, []);
+
   // Derived state from service for convenience
   const isGeneratingImage = imageGenState.isGenerating;
   const imageGenerationProgress = imageGenState.progress;
@@ -124,6 +133,30 @@ export const ChatScreen: React.FC = () => {
   } = useChatStore();
   const { projects, getProject } = useProjectStore();
 
+  // Refs to always hold the latest versions (avoids dependency churn in useCallback)
+  const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
+  const addMessageRef = useRef(addMessage);
+  addMessageRef.current = addMessage;
+
+  // Queue processor — called by generationService when a queued message should be processed
+  const handleQueuedSend = useCallback(async (item: QueuedMessage) => {
+    addMessageRef.current(
+      item.conversationId,
+      {
+        role: 'user',
+        content: item.text,
+      },
+      item.attachments
+    );
+    await startGenerationRef.current(item.conversationId, item.messageText);
+  }, []);
+
+  // Register queue processor on mount, clean up on unmount
+  useEffect(() => {
+    generationService.setQueueProcessor(handleQueuedSend);
+    return () => generationService.setQueueProcessor(null);
+  }, [handleQueuedSend]);
+
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
   );
@@ -133,6 +166,10 @@ export const ChatScreen: React.FC = () => {
     : null;
   const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId);
   const imageModelLoaded = !!activeImageModel;
+
+  // Queue state from generation service
+  const [queueCount, setQueueCount] = useState(0);
+  const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
 
   // Track image mode state
   const [_currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
@@ -174,7 +211,7 @@ export const ChatScreen: React.FC = () => {
     // If we switched to a different conversation than what's generating,
     // invalidate the generation so tokens don't leak
     if (generatingForConversationRef.current &&
-        generatingForConversationRef.current !== activeConversationId) {
+      generatingForConversationRef.current !== activeConversationId) {
       generatingForConversationRef.current = null;
     }
 
@@ -609,6 +646,7 @@ export const ChatScreen: React.FC = () => {
     const shouldGenerateImage = await shouldRouteToImageGeneration(messageText, forceImageMode);
 
     if (shouldGenerateImage && activeImageModel) {
+      // Image generation bypasses the queue — goes immediately
       await handleImageGeneration(text, targetConversationId);
       return;
     }
@@ -619,11 +657,42 @@ export const ChatScreen: React.FC = () => {
       messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
     }
 
+    // If currently generating, enqueue (message added to chat later when processed)
+    if (generationService.getState().isGenerating) {
+      generationService.enqueueMessage({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        conversationId: targetConversationId,
+        text,
+        attachments,
+        messageText,
+      });
+      return;
+    }
+
+    // Add user message to chat
+    addMessage(
+      targetConversationId,
+      {
+        role: 'user',
+        content: text,
+      },
+      attachments
+    );
+
+    // Proceed with generation
+    await startGeneration(targetConversationId, messageText);
+  };
+
+  /**
+   * Start generation for a conversation. Builds context from current conversation
+   * state and calls generationService.generateResponse.
+   */
+  const startGeneration = async (targetConversationId: string, messageText: string) => {
+    if (!activeModel) return;
+
     generatingForConversationRef.current = targetConversationId;
 
     // Ensure the correct model is loaded (not just any model)
-    // This is important after LLM classification in memory mode, where the classifier
-    // model may be loaded instead of the text generation model
     const currentLoadedPath = llmService.getLoadedModelPath();
     const needsModelLoad = !currentLoadedPath || currentLoadedPath !== activeModel.filePath;
 
@@ -636,29 +705,23 @@ export const ChatScreen: React.FC = () => {
       }
     }
 
-    // Add user message with attachments (show original text, not with document content appended)
-    const userMessage = addMessage(
-      targetConversationId,
-      {
-        role: 'user',
-        content: text, // Keep original text for display
-      },
-      attachments
-    );
-
-    // Prepare messages for context
-    const conversationMessages = activeConversation?.messages || [];
+    // Rebuild context from current conversation state (messages may have changed since enqueue)
+    const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
+    const conversationMessages = conversation?.messages || [];
 
     // Use project system prompt if available, otherwise use default
-    const systemPrompt = activeProject?.systemPrompt
+    const project = conversation?.projectId
+      ? useProjectStore.getState().getProject(conversation.projectId)
+      : null;
+    const systemPrompt = project?.systemPrompt
       || settings.systemPrompt
       || APP_CONFIG.defaultSystemPrompt;
 
-    // Create a version of the user message with document content for the LLM context
-    const userMessageForContext: Message = {
-      ...userMessage,
-      content: messageText, // Include document content for the LLM
-    };
+    // Find the last user message to create context version with document content
+    const lastUserMsg = conversationMessages[conversationMessages.length - 1];
+    const userMessageForContext: Message = lastUserMsg?.role === 'user'
+      ? { ...lastUserMsg, content: messageText }
+      : lastUserMsg;
 
     const messagesForContext: Message[] = [
       {
@@ -667,7 +730,8 @@ export const ChatScreen: React.FC = () => {
         content: systemPrompt,
         timestamp: 0,
       },
-      ...conversationMessages,
+      // All messages except the last (which we replace with the context version)
+      ...conversationMessages.slice(0, -1),
       userMessageForContext,
     ];
 
@@ -680,8 +744,6 @@ export const ChatScreen: React.FC = () => {
         ...contextDebug,
       });
 
-      // If messages were truncated or context is > 70% full, clear KV cache
-      // This helps prevent inconsistent state and performance degradation
       if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
         shouldClearCache = true;
       }
@@ -689,9 +751,8 @@ export const ChatScreen: React.FC = () => {
       console.log('Debug info error:', e);
     }
 
-    // Clear KV cache if needed to prevent performance degradation
     if (shouldClearCache) {
-      await llmService.clearKVCache(false).catch(() => {});
+      await llmService.clearKVCache(false).catch(() => { });
     }
 
     // Use generationService for background-safe generation
@@ -700,7 +761,6 @@ export const ChatScreen: React.FC = () => {
         targetConversationId,
         messagesForContext,
         () => {
-          // onFirstToken callback - generation has started producing tokens
           console.log('[ChatScreen] First token received for conversation:', targetConversationId);
         }
       );
@@ -709,6 +769,7 @@ export const ChatScreen: React.FC = () => {
     }
     generatingForConversationRef.current = null;
   };
+  startGenerationRef.current = startGeneration;
 
   const handleStop = async () => {
     console.log('[ChatScreen] handleStop called');
@@ -719,8 +780,8 @@ export const ChatScreen: React.FC = () => {
     // but we also call it directly as a fallback
     try {
       await Promise.all([
-        generationService.stopGeneration().catch(() => {}),
-        llmService.stopGeneration().catch(() => {}),
+        generationService.stopGeneration().catch(() => { }),
+        llmService.stopGeneration().catch(() => { }),
       ]);
     } catch (_e) {
       // Ignore errors - generation may have already finished
@@ -728,7 +789,7 @@ export const ChatScreen: React.FC = () => {
 
     // Stop image generation if in progress
     if (isGeneratingImage) {
-      imageGenerationService.cancelGeneration().catch(() => {});
+      imageGenerationService.cancelGeneration().catch(() => { });
     }
   };
 
@@ -969,26 +1030,26 @@ export const ChatScreen: React.FC = () => {
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
   const displayMessages = isThinking && isStreamingForThisConversation
     ? [
-        ...allMessages,
-        {
-          id: 'thinking',
-          role: 'assistant' as const,
-          content: '',
-          timestamp: Date.now(),
-          isThinking: true,
-        },
-      ]
+      ...allMessages,
+      {
+        id: 'thinking',
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+        isThinking: true,
+      },
+    ]
     : streamingMessage && isStreamingForThisConversation
       ? [
-          ...allMessages,
-          {
-            id: 'streaming',
-            role: 'assistant' as const,
-            content: streamingMessage,
-            timestamp: Date.now(),
-            isStreaming: true,
-          },
-        ]
+        ...allMessages,
+        {
+          id: 'streaming',
+          role: 'assistant' as const,
+          content: streamingMessage,
+          timestamp: Date.now(),
+          isStreaming: true,
+        },
+      ]
       : allMessages;
 
   // Track new messages for entry animation
@@ -1266,13 +1327,16 @@ export const ChatScreen: React.FC = () => {
           onSend={handleSend}
           onStop={handleStop}
           disabled={!llmService.isModelLoaded()}
-          isGenerating={isStreaming}
+          isGenerating={isStreaming || isThinking}
           supportsVision={supportsVision}
           conversationId={activeConversationId}
           imageModelLoaded={imageModelLoaded}
           onImageModeChange={setCurrentImageMode}
           onOpenSettings={() => setShowSettingsPanel(true)}
           activeImageModelName={activeImageModel?.name || null}
+          queueCount={queueCount}
+          queuedTexts={queuedTexts}
+          onClearQueue={() => generationService.clearQueue()}
           placeholder={
             llmService.isModelLoaded()
               ? supportsVision
@@ -1282,90 +1346,90 @@ export const ChatScreen: React.FC = () => {
           }
         />
 
-      {/* Project Selector Sheet */}
-      <ProjectSelectorSheet
-        visible={showProjectSelector}
-        onClose={() => setShowProjectSelector(false)}
-        projects={projects}
-        activeProject={activeProject || null}
-        onSelectProject={handleSelectProject}
-      />
+        {/* Project Selector Sheet */}
+        <ProjectSelectorSheet
+          visible={showProjectSelector}
+          onClose={() => setShowProjectSelector(false)}
+          projects={projects}
+          activeProject={activeProject || null}
+          onSelectProject={handleSelectProject}
+        />
 
-      {/* Debug Sheet */}
-      <DebugSheet
-        visible={showDebugPanel}
-        onClose={() => setShowDebugPanel(false)}
-        debugInfo={debugInfo}
-        activeProject={activeProject || null}
-        settings={settings}
-        activeConversation={activeConversation || null}
-      />
+        {/* Debug Sheet */}
+        <DebugSheet
+          visible={showDebugPanel}
+          onClose={() => setShowDebugPanel(false)}
+          debugInfo={debugInfo}
+          activeProject={activeProject || null}
+          settings={settings}
+          activeConversation={activeConversation || null}
+        />
 
-      {/* Model Selector Modal */}
-      <ModelSelectorModal
-        visible={showModelSelector}
-        onClose={() => setShowModelSelector(false)}
-        onSelectModel={handleModelSelect}
-        onUnloadModel={handleUnloadModel}
-        isLoading={isModelLoading}
-        currentModelPath={llmService.getLoadedModelPath()}
-      />
+        {/* Model Selector Modal */}
+        <ModelSelectorModal
+          visible={showModelSelector}
+          onClose={() => setShowModelSelector(false)}
+          onSelectModel={handleModelSelect}
+          onUnloadModel={handleUnloadModel}
+          isLoading={isModelLoading}
+          currentModelPath={llmService.getLoadedModelPath()}
+        />
 
-      {/* Generation Settings Modal */}
-      <GenerationSettingsModal
-        visible={showSettingsPanel}
-        onClose={() => setShowSettingsPanel(false)}
-      />
+        {/* Generation Settings Modal */}
+        <GenerationSettingsModal
+          visible={showSettingsPanel}
+          onClose={() => setShowSettingsPanel(false)}
+        />
 
-      {/* Fullscreen Image Viewer Modal */}
-      <Modal
-        visible={!!viewerImageUri}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewerImageUri(null)}
-      >
-        <View style={styles.imageViewerContainer}>
-          <TouchableOpacity
-            style={styles.imageViewerBackdrop}
-            activeOpacity={1}
-            onPress={() => setViewerImageUri(null)}
-          />
-          {viewerImageUri && (
-            <View style={styles.imageViewerContent}>
-              <Image
-                source={{ uri: viewerImageUri }}
-                style={styles.fullscreenImage}
-                resizeMode="contain"
-              />
-              <View style={styles.imageViewerActions}>
-                <TouchableOpacity
-                  style={styles.imageViewerButton}
-                  onPress={handleSaveImage}
-                >
-                  <Icon name="download" size={24} color={colors.text} />
-                  <Text style={styles.imageViewerButtonText}>Save</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.imageViewerButton}
-                  onPress={() => setViewerImageUri(null)}
-                >
-                  <Icon name="x" size={24} color={colors.text} />
-                  <Text style={styles.imageViewerButtonText}>Close</Text>
-                </TouchableOpacity>
+        {/* Fullscreen Image Viewer Modal */}
+        <Modal
+          visible={!!viewerImageUri}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setViewerImageUri(null)}
+        >
+          <View style={styles.imageViewerContainer}>
+            <TouchableOpacity
+              style={styles.imageViewerBackdrop}
+              activeOpacity={1}
+              onPress={() => setViewerImageUri(null)}
+            />
+            {viewerImageUri && (
+              <View style={styles.imageViewerContent}>
+                <Image
+                  source={{ uri: viewerImageUri }}
+                  style={styles.fullscreenImage}
+                  resizeMode="contain"
+                />
+                <View style={styles.imageViewerActions}>
+                  <TouchableOpacity
+                    style={styles.imageViewerButton}
+                    onPress={handleSaveImage}
+                  >
+                    <Icon name="download" size={24} color={colors.text} />
+                    <Text style={styles.imageViewerButtonText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.imageViewerButton}
+                    onPress={() => setViewerImageUri(null)}
+                  >
+                    <Icon name="x" size={24} color={colors.text} />
+                    <Text style={styles.imageViewerButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
-        </View>
-      </Modal>
+            )}
+          </View>
+        </Modal>
 
-      {/* Custom Alert Modal */}
-      <CustomAlert
-        visible={alertState.visible}
-        title={alertState.title}
-        message={alertState.message}
-        buttons={alertState.buttons}
-        onClose={() => setAlertState(hideAlert())}
-      />
+        {/* Custom Alert Modal */}
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

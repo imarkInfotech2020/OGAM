@@ -20,10 +20,32 @@ jest.mock('react-native-image-picker', () => ({
   launchCamera: jest.fn(),
 }));
 
-// Mock document picker if used
-jest.mock('react-native-document-picker', () => ({
-  pick: jest.fn(),
-}), { virtual: true });
+// Mock document picker — define mocks outside factory, use getter pattern
+const mockPick = jest.fn();
+const mockIsErrorWithCode = jest.fn(() => false);
+jest.mock('@react-native-documents/picker', () => ({
+  get pick() { return mockPick; },
+  get isErrorWithCode() { return mockIsErrorWithCode; },
+  types: { allFiles: '*/*' },
+  errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' },
+}));
+
+// Mock document service
+const mockIsSupported = jest.fn(() => true);
+const mockProcessDocument = jest.fn(() => Promise.resolve({
+  id: 'doc-1',
+  type: 'document' as const,
+  uri: 'file:///mock/document.txt',
+  fileName: 'document.txt',
+  textContent: 'File content here',
+  fileSize: 1234,
+}));
+jest.mock('../../../src/services/documentService', () => ({
+  documentService: {
+    get isSupported() { return mockIsSupported; },
+    get processDocumentFromPath() { return mockProcessDocument; },
+  },
+}));
 
 // Mock the stores
 const mockUseWhisperStore = jest.fn();
@@ -233,15 +255,12 @@ describe('ChatInput', () => {
   // Generation State
   // ============================================================================
   describe('generation state', () => {
-    it('shows stop button when isGenerating is true', () => {
-      const { getByTestId, queryByTestId } = render(
-        <ChatInput {...defaultProps} isGenerating={true} />
+    it('shows stop button next to input when isGenerating is true', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
       );
 
-      // Stop button should be visible
       expect(getByTestId('stop-button')).toBeTruthy();
-      // Send button should not be visible
-      expect(queryByTestId('send-button')).toBeNull();
     });
 
     it('calls onStop when stop button is pressed', () => {
@@ -256,12 +275,22 @@ describe('ChatInput', () => {
       expect(onStop).toHaveBeenCalled();
     });
 
-    it('hides mic button during generation', () => {
-      const { queryByTestId } = render(
-        <ChatInput {...defaultProps} isGenerating={true} />
+    it('shows both stop and send buttons during generation when text entered', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
       );
 
-      // Mic/voice button should not be visible
+      fireEvent.changeText(getByTestId('chat-input'), 'queued message');
+      expect(getByTestId('stop-button')).toBeTruthy();
+      expect(getByTestId('send-button')).toBeTruthy();
+    });
+
+    it('hides voice button during generation', () => {
+      const { queryByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
+      );
+
+      // Voice button hidden during generation — stop button takes its place
       expect(queryByTestId('voice-record-button')).toBeNull();
     });
   });
@@ -514,6 +543,282 @@ describe('ChatInput', () => {
         ]),
         false
       );
+    });
+
+    it('renders document picker button always', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} supportsVision={false} />
+      );
+
+      // Document picker button should always be visible
+      expect(getByTestId('document-picker-button')).toBeTruthy();
+    });
+
+    it('opens document picker when paperclip is pressed', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/document.txt',
+        name: 'document.txt',
+        type: 'text/plain',
+        size: 1234,
+      }]);
+
+      const { getByTestId, queryByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(mockPick).toHaveBeenCalled();
+        expect(queryByTestId('attachments-container')).toBeTruthy();
+      });
+    });
+
+    it('shows error alert for unsupported file types', async () => {
+      mockIsSupported.mockReturnValue(false);
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/file.docx',
+        name: 'file.docx',
+        type: 'application/vnd.openxmlformats',
+        size: 5000,
+      }]);
+
+      const { getByTestId, getByText } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(getByText('Unsupported File')).toBeTruthy();
+      });
+
+      // Reset mock
+      mockIsSupported.mockReturnValue(true);
+    });
+
+    it('does nothing when document picker is cancelled', async () => {
+      const cancelError = new Error('User cancelled');
+      (cancelError as any).code = 'OPERATION_CANCELED';
+      mockPick.mockRejectedValue(cancelError);
+      mockIsErrorWithCode.mockReturnValue(true);
+
+      const { getByTestId, queryByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(mockPick).toHaveBeenCalled();
+      });
+
+      // No attachments should be added
+      expect(queryByTestId('attachments-container')).toBeNull();
+
+      // Reset mock
+      mockIsErrorWithCode.mockReturnValue(false);
+    });
+
+    it('shows document preview with file icon after picking document', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/data.csv',
+        name: 'data.csv',
+        type: 'text/csv',
+        size: 2048,
+      }]);
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-csv',
+        type: 'document' as const,
+        uri: 'file:///mock/data.csv',
+        fileName: 'data.csv',
+        textContent: 'col1,col2\nval1,val2',
+        fileSize: 2048,
+      });
+
+      const { getByTestId, getByText } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        // Document preview should show filename
+        expect(getByText('data.csv')).toBeTruthy();
+      });
+    });
+
+    it('sends message with document attachment', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/notes.txt',
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 500,
+      }]);
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-notes',
+        type: 'document' as const,
+        uri: 'file:///mock/notes.txt',
+        fileName: 'notes.txt',
+        textContent: 'My notes content',
+        fileSize: 500,
+      });
+
+      const onSend = jest.fn();
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} onSend={onSend} />
+      );
+
+      // Pick document
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(getByTestId('attachments-container')).toBeTruthy();
+      });
+
+      // Send without text — just the attachment
+      const sendButton = getByTestId('send-button');
+      fireEvent.press(sendButton);
+
+      expect(onSend).toHaveBeenCalledWith(
+        '',
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'document',
+            fileName: 'notes.txt',
+          }),
+        ]),
+        false
+      );
+    });
+
+    it('shows error alert when processDocumentFromPath fails', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/bad-file.txt',
+        name: 'bad-file.txt',
+        type: 'text/plain',
+        size: 100,
+      }]);
+      mockProcessDocument.mockRejectedValue(new Error('File is too large. Maximum size is 5MB'));
+
+      const { getByTestId, getByText } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(getByText('Error')).toBeTruthy();
+        expect(getByText('File is too large. Maximum size is 5MB')).toBeTruthy();
+      });
+
+      // Reset mock
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-1',
+        type: 'document' as const,
+        uri: 'file:///mock/document.txt',
+        fileName: 'document.txt',
+        textContent: 'File content here',
+        fileSize: 1234,
+      });
+    });
+
+    it('handles processDocumentFromPath returning null', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/null-result.txt',
+        name: 'null-result.txt',
+        type: 'text/plain',
+        size: 100,
+      }]);
+      mockProcessDocument.mockResolvedValue(null as any);
+
+      const { getByTestId, queryByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      // Wait for picker to resolve
+      await waitFor(() => {
+        expect(mockPick).toHaveBeenCalled();
+      });
+
+      // No attachment should be added
+      expect(queryByTestId('attachments-container')).toBeNull();
+
+      // Reset mock
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-1',
+        type: 'document' as const,
+        uri: 'file:///mock/document.txt',
+        fileName: 'document.txt',
+        textContent: 'File content here',
+        fileSize: 1234,
+      });
+    });
+
+    it('keeps document picker enabled during generation', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} />
+      );
+
+      const button = getByTestId('document-picker-button');
+      // Document picker should remain enabled during generation (user can queue messages)
+      expect(button.props.accessibilityState?.disabled).toBeFalsy();
+    });
+
+    it('can remove a document attachment from preview', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/removable.txt',
+        name: 'removable.txt',
+        type: 'text/plain',
+        size: 100,
+      }]);
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-remove',
+        type: 'document' as const,
+        uri: 'file:///mock/removable.txt',
+        fileName: 'removable.txt',
+        textContent: 'remove me',
+        fileSize: 100,
+      });
+
+      const { getByTestId, queryByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        expect(getByTestId('attachments-container')).toBeTruthy();
+      });
+
+      // Press remove button
+      const removeButton = getByTestId('remove-attachment-doc-remove');
+      fireEvent.press(removeButton);
+
+      // Attachment should be removed
+      expect(queryByTestId('attachments-container')).toBeNull();
+    });
+
+    it('handles empty name from document picker', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/unnamed',
+        name: null, // null name from picker
+        type: 'application/octet-stream',
+        size: 100,
+      }]);
+
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.press(getByTestId('document-picker-button'));
+
+      await waitFor(() => {
+        // Should use 'document' as fallback fileName
+        expect(mockIsSupported).toHaveBeenCalledWith('document');
+      });
     });
 
     it('clears attachments after sending', async () => {

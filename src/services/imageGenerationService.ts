@@ -154,6 +154,28 @@ class ImageGenerationService {
           result: null,
         });
 
+        // Build conversation context BEFORE adding the temp thinking message
+        // so the context snapshot doesn't include the "Enhancing your prompt..." message
+        const contextMessages: Message[] = [];
+        if (params.conversationId) {
+          const chatStore = useChatStore.getState();
+          const conversation = chatStore.conversations.find(c => c.id === params.conversationId);
+          if (conversation?.messages) {
+            // Take last 10 messages for context
+            const recent = conversation.messages.slice(-10);
+            for (const msg of recent) {
+              if (msg.role === 'user' || msg.role === 'assistant') {
+                contextMessages.push({
+                  id: `ctx-${msg.id}`,
+                  role: msg.role,
+                  content: msg.content.slice(0, 500), // Truncate long messages
+                  timestamp: msg.timestamp,
+                });
+              }
+            }
+          }
+        }
+
         // Add message to show enhancement in progress with thinking animation
         if (params.conversationId) {
           const chatStore = useChatStore.getState();
@@ -169,13 +191,21 @@ class ImageGenerationService {
         }
 
         try {
+
+        const hasContext = contextMessages.length > 0;
+        const systemContent = hasContext
+          ? `You are an expert at creating detailed image generation prompts. The user is in a conversation and wants to generate an image. Use the conversation history to understand context and references (e.g. "make it darker", "same but at night"). Enhance the user's latest request into a detailed, descriptive prompt for an image generation model. Include artistic style, lighting, composition, and quality modifiers. Keep it under 75 words. Only respond with the enhanced prompt, no explanation.`
+          : `You are an expert at creating detailed image generation prompts. Take the user's request and enhance it into a detailed, descriptive prompt that will produce better results from an image generation model. Include artistic style, lighting, composition, and quality modifiers. Keep it under 75 words. Only respond with the enhanced prompt, no explanation.`;
+
         const enhancementMessages: Message[] = [
           {
             id: 'system-enhance',
             role: 'system',
-            content: `You are an expert at creating detailed image generation prompts. Take the user's request and enhance it into a detailed, descriptive prompt that will produce better results from an image generation model. Include artistic style, lighting, composition, and quality modifiers. Keep it under 75 words. Only respond with the enhanced prompt, no explanation.`,
+            content: systemContent,
             timestamp: Date.now(),
           },
+          // Include conversation context so the model understands references
+          ...contextMessages,
           {
             id: 'user-enhance',
             role: 'user',

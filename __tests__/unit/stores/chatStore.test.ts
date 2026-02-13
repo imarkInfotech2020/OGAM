@@ -62,10 +62,10 @@ describe('chatStore', () => {
       expect(getChatState().conversations[0].projectId).toBe('project-123');
     });
 
-    it('resets streaming state when creating conversation', () => {
+    it('preserves streaming state when creating conversation', () => {
       const store = useChatStore.getState();
 
-      // Simulate streaming state
+      // Simulate streaming state (generation may be in progress for another conversation)
       useChatStore.setState({
         streamingMessage: 'partial content',
         isStreaming: true,
@@ -75,9 +75,10 @@ describe('chatStore', () => {
       store.createConversation('test-model-id');
 
       const state = getChatState();
-      expect(state.streamingMessage).toBe('');
-      expect(state.isStreaming).toBe(false);
-      expect(state.isThinking).toBe(false);
+      // Streaming state is preserved — the UI uses streamingForConversationId to scope display
+      expect(state.streamingMessage).toBe('partial content');
+      expect(state.isStreaming).toBe(true);
+      expect(state.isThinking).toBe(true);
     });
 
     it('prepends new conversation to list', () => {

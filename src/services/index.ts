@@ -13,7 +13,7 @@ export { backgroundDownloadService } from './backgroundDownloadService';
 export { activeModelService } from './activeModelService';
 export type { ActiveModelInfo, ResourceUsage, ModelType, MemoryCheckResult, MemoryCheckSeverity } from './activeModelService';
 export { generationService } from './generationService';
-export type { GenerationState } from './generationService';
+export type { GenerationState, QueuedMessage } from './generationService';
 export { imageGenerationService } from './imageGenerationService';
 export type { ImageGenerationState } from './imageGenerationService';
 export { fetchAvailableModels, getVariantLabel, guessStyle } from './huggingFaceModelBrowser';

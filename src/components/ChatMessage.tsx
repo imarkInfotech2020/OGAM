@@ -6,10 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Clipboard,
-  Modal,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -32,6 +29,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { AnimatedEntry } from './AnimatedEntry';
 import { AnimatedPressable } from './AnimatedPressable';
 import { AppSheet } from './AppSheet';
+import { viewDocument } from '@react-native-documents/viewer';
 
 
 // Animated blinking cursor for streaming state
@@ -295,16 +293,77 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {/* Attachments */}
           {hasAttachments && (
             <View testID="message-attachments" style={styles.attachmentsContainer}>
-              {message.attachments!.map((attachment, index) => (
-                <FadeInImage
-                  key={attachment.id}
-                  uri={attachment.uri}
-                  imageStyle={styles.attachmentImage}
-                  wrapperTestID={isUser ? `message-attachment-${index}` : `generated-image`}
-                  testID={isUser ? `message-image-${index}` : `generated-image-content`}
-                  onPress={() => onImagePress?.(attachment.uri)}
-                />
-              ))}
+              {message.attachments!.map((attachment, index) =>
+                attachment.type === 'document' ? (
+                  <TouchableOpacity
+                    key={attachment.id}
+                    testID={`document-badge-${index}`}
+                    style={[
+                      styles.documentBadge,
+                      isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
+                    ]}
+                    onPress={() => {
+                      if (!attachment.uri) return;
+                      const ext = (attachment.fileName || '').split('.').pop()?.toLowerCase();
+                      const mimeMap: Record<string, string> = {
+                        pdf: 'application/pdf',
+                        txt: 'text/plain',
+                        md: 'text/markdown',
+                        csv: 'text/csv',
+                        json: 'application/json',
+                        xml: 'application/xml',
+                        html: 'text/html',
+                        py: 'text/x-python',
+                        js: 'text/javascript',
+                        ts: 'text/typescript',
+                      };
+                      const mimeType = ext ? mimeMap[ext] || 'application/octet-stream' : undefined;
+                      // Ensure proper URI format: absolute paths need file:// prefix
+                      let uri = attachment.uri;
+                      if (uri.startsWith('/')) {
+                        uri = `file://${uri}`;
+                      } else if (!uri.includes('://')) {
+                        uri = `file://${uri}`;
+                      }
+                      console.log('[ChatMessage] Opening document:', uri);
+                      viewDocument({ uri, mimeType, grantPermissions: 'read' }).catch((err: any) => {
+                        console.warn('[ChatMessage] Failed to open document:', err?.message || err);
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="file-text" size={14} color={isUser ? colors.background : colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.documentBadgeText,
+                        isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {attachment.fileName || 'Document'}
+                    </Text>
+                    {attachment.fileSize != null && (
+                      <Text
+                        style={[
+                          styles.documentBadgeSize,
+                          isUser ? styles.documentBadgeSizeUser : styles.documentBadgeSizeAssistant,
+                        ]}
+                      >
+                        {formatFileSize(attachment.fileSize)}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <FadeInImage
+                    key={attachment.id}
+                    uri={attachment.uri}
+                    imageStyle={styles.attachmentImage}
+                    wrapperTestID={isUser ? `message-attachment-${index}` : `generated-image`}
+                    testID={isUser ? `message-image-${index}` : `generated-image-content`}
+                    onPress={() => onImagePress?.(attachment.uri)}
+                  />
+                )
+              )}
             </View>
           )}
 
@@ -533,52 +592,42 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </View>
       </AppSheet>
 
-      {/* Edit Modal */}
-      <Modal
+      {/* Edit Sheet */}
+      <AppSheet
         visible={isEditing}
-        transparent
-        animationType="slide"
-        onRequestClose={handleCancelEdit}
-        statusBarTranslucent
+        onClose={handleCancelEdit}
+        title="EDIT MESSAGE"
+        enableDynamicSizing
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.editModalOverlay}
-        >
-          <TouchableOpacity
-            style={styles.editModalBackdrop}
-            activeOpacity={1}
-            onPress={handleCancelEdit}
+        <View style={styles.editSheetContent}>
+          <TextInput
+            style={styles.editInput}
+            defaultValue={message.content}
+            onChangeText={setEditedContent}
+            multiline
+            autoFocus
+            placeholder="Enter message..."
+            placeholderTextColor={colors.textMuted}
+            textAlignVertical="top"
           />
-          <View style={styles.editModal}>
-            <Text style={styles.editModalTitle}>Edit Message</Text>
-            <TextInput
-              style={styles.editInput}
-              defaultValue={message.content}
-              onChangeText={setEditedContent}
-              multiline
-              autoFocus
-              placeholder="Enter message..."
-              placeholderTextColor={colors.textMuted}
-              textAlignVertical="top"
-            />
-            <View style={styles.editActions}>
-              <TouchableOpacity
-                style={[styles.editButton, styles.editButtonCancel]}
-                onPress={handleCancelEdit}
-              >
-                <Text style={styles.editButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editButton, styles.editButtonSave]}
-                onPress={handleSaveEdit}
-              >
-                <Text style={styles.editButtonTextSave}>Save & Resend</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.editActions}>
+            <AnimatedPressable
+              hapticType="selection"
+              style={[styles.editButton, styles.editButtonCancel]}
+              onPress={handleCancelEdit}
+            >
+              <Text style={styles.editButtonText}>CANCEL</Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              hapticType="impactMedium"
+              style={[styles.editButton, styles.editButtonSave]}
+              onPress={handleSaveEdit}
+            >
+              <Text style={[styles.editButtonText, styles.editButtonTextSave]}>SAVE & RESEND</Text>
+            </AnimatedPressable>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      </AppSheet>
 
       {/* CustomAlert */}
       <CustomAlert
@@ -595,6 +644,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 function formatDuration(ms: number): string {
@@ -659,6 +714,42 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   attachmentWrapper: {
     borderRadius: 12,
     overflow: 'hidden' as const,
+  },
+  documentBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  documentBadgeUser: {
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  documentBadgeAssistant: {
+    backgroundColor: colors.surfaceLight,
+  },
+  documentBadgeText: {
+    fontSize: 12,
+    fontFamily: FONTS.mono,
+    fontWeight: '500' as const,
+    maxWidth: 140,
+  },
+  documentBadgeTextUser: {
+    color: colors.background,
+  },
+  documentBadgeTextAssistant: {
+    color: colors.text,
+  },
+  documentBadgeSize: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+  },
+  documentBadgeSizeUser: {
+    color: 'rgba(0, 0, 0, 0.4)',
+  },
+  documentBadgeSizeAssistant: {
+    color: colors.textMuted,
   },
   attachmentImage: {
     width: 140,
@@ -819,32 +910,17 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.text,
   },
-  editModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end' as const,
-  },
-  editModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  editModal: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 40,
-  },
-  editModalTitle: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 18,
-    color: colors.text,
-    marginBottom: SPACING.lg,
-    textAlign: 'center' as const,
+  editSheetContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
   editInput: {
-    ...TYPOGRAPHY.h2,
+    ...TYPOGRAPHY.body,
+    fontFamily: FONTS.mono,
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: SPACING.md,
     color: colors.text,
     minHeight: 100,
@@ -853,31 +929,32 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   editActions: {
     flexDirection: 'row' as const,
-    gap: 12,
-    marginTop: 16,
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
   },
   editButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    borderRadius: 4,
     alignItems: 'center' as const,
+    borderWidth: 1,
   },
   editButtonCancel: {
     backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   editButtonSave: {
     backgroundColor: 'transparent' as const,
-    borderWidth: 1,
     borderColor: colors.primary,
   },
-  editButtonTextCancel: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    fontWeight: '500' as const,
+  editButtonText: {
+    ...TYPOGRAPHY.label,
+    fontFamily: FONTS.mono,
+    color: colors.textSecondary,
+    letterSpacing: 1,
   },
   editButtonTextSave: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
+    color: colors.primary,
     fontWeight: '600' as const,
   },
 });

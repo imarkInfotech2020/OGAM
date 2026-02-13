@@ -219,6 +219,35 @@ jest.mock('@react-native-voice/voice', () => ({
   onSpeechError: null,
 }));
 
+// @react-native-documents/picker mock
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(() => Promise.resolve([{
+    uri: 'file:///mock/document.txt',
+    name: 'document.txt',
+    type: 'text/plain',
+    size: 1234,
+  }])),
+  types: {
+    allFiles: '*/*',
+    plainText: 'text/plain',
+    csv: 'text/csv',
+    pdf: 'application/pdf',
+  },
+  isErrorWithCode: jest.fn(() => false),
+  errorCodes: {
+    OPERATION_CANCELED: 'OPERATION_CANCELED',
+  },
+}));
+
+// @react-native-documents/viewer mock
+jest.mock('@react-native-documents/viewer', () => ({
+  viewDocument: jest.fn(() => Promise.resolve(null)),
+  isErrorWithCode: jest.fn(() => false),
+  errorCodes: {
+    UNABLE_TO_OPEN: 'UNABLE_TO_OPEN',
+  },
+}));
+
 // react-native-gesture-handler mock
 jest.mock('react-native-gesture-handler', () => {
   const MockView = 'View';
