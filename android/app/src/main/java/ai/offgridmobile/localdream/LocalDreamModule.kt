@@ -1,4 +1,4 @@
-package com.localllm.localdream
+package ai.offgridmobile.localdream
 
 import android.graphics.Bitmap
 import android.os.Build

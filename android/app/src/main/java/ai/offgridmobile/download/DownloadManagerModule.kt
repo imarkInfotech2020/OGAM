@@ -1,4 +1,4 @@
-package com.localllm.download
+package ai.offgridmobile.download
 
 import android.app.DownloadManager
 import android.content.Context
@@ -19,7 +19,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     companion object {
         const val NAME = "DownloadManagerModule"
-        const val PREFS_NAME = "LocalLLMDownloads"
+        const val PREFS_NAME = "OffgridMobileDownloads"
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
     }

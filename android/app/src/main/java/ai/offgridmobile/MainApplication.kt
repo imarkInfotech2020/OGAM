@@ -1,4 +1,4 @@
-package com.localllm
+package ai.offgridmobile
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -6,8 +6,8 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.localllm.download.DownloadManagerPackage
-import com.localllm.localdream.LocalDreamPackage
+import ai.offgridmobile.download.DownloadManagerPackage
+import ai.offgridmobile.localdream.LocalDreamPackage
 
 class MainApplication : Application(), ReactApplication {
 

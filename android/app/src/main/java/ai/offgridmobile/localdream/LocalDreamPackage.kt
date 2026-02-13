@@ -1,4 +1,4 @@
-package com.localllm.localdream
+package ai.offgridmobile.localdream
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

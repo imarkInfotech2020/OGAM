@@ -1,4 +1,4 @@
-package com.localllm.download
+package ai.offgridmobile.download
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

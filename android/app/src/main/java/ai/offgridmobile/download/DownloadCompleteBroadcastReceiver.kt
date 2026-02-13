@@ -1,4 +1,4 @@
-package com.localllm.download
+package ai.offgridmobile.download
 
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
