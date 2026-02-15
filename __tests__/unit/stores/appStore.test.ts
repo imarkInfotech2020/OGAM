@@ -1098,4 +1098,279 @@ describe('appStore', () => {
       expect(result.imageModelDownloading).toEqual([]);
     });
   });
+
+  // ============================================================================
+  // Settings defaults completeness
+  // ============================================================================
+  describe('settings defaults completeness', () => {
+    it('has correct default systemPrompt', () => {
+      expect(getAppState().settings.systemPrompt).toContain('helpful AI assistant');
+    });
+
+    it('has correct default repeatPenalty', () => {
+      expect(getAppState().settings.repeatPenalty).toBe(1.1);
+    });
+
+    it('has correct default nThreads', () => {
+      expect(getAppState().settings.nThreads).toBe(6);
+    });
+
+    it('has correct default nBatch', () => {
+      expect(getAppState().settings.nBatch).toBe(256);
+    });
+
+    it('has correct default autoDetectMethod', () => {
+      expect(getAppState().settings.autoDetectMethod).toBe('pattern');
+    });
+
+    it('has null classifierModelId by default', () => {
+      expect(getAppState().settings.classifierModelId).toBeNull();
+    });
+
+    it('has correct default imageThreads', () => {
+      expect(getAppState().settings.imageThreads).toBe(4);
+    });
+
+    it('has correct default image dimensions', () => {
+      const settings = getAppState().settings;
+      expect(settings.imageWidth).toBe(512);
+      expect(settings.imageHeight).toBe(512);
+    });
+
+    it('has enhanceImagePrompts disabled by default', () => {
+      expect(getAppState().settings.enhanceImagePrompts).toBe(false);
+    });
+
+    it('has modelLoadingStrategy set to memory by default', () => {
+      expect(getAppState().settings.modelLoadingStrategy).toBe('memory');
+    });
+
+    it('has gpuLayers set to 6 by default', () => {
+      expect(getAppState().settings.gpuLayers).toBe(6);
+    });
+
+    it('has showGenerationDetails disabled by default', () => {
+      expect(getAppState().settings.showGenerationDetails).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Concurrent state operations
+  // ============================================================================
+  describe('concurrent state operations', () => {
+    it('handles rapid sequential model additions', () => {
+      const { addDownloadedModel } = useAppStore.getState();
+
+      for (let i = 0; i < 10; i++) {
+        addDownloadedModel(createDownloadedModel({ id: `model-${i}`, name: `Model ${i}` }));
+      }
+
+      expect(getAppState().downloadedModels).toHaveLength(10);
+    });
+
+    it('handles rapid sequential image model additions', () => {
+      const { addDownloadedImageModel } = useAppStore.getState();
+
+      for (let i = 0; i < 5; i++) {
+        addDownloadedImageModel(createONNXImageModel({ id: `img-${i}` }));
+      }
+
+      expect(getAppState().downloadedImageModels).toHaveLength(5);
+    });
+
+    it('handles interleaved download progress updates', () => {
+      const { setDownloadProgress } = useAppStore.getState();
+
+      // Simulate three concurrent downloads with interleaved updates
+      setDownloadProgress('m1', { progress: 0.1, bytesDownloaded: 100, totalBytes: 1000 });
+      setDownloadProgress('m2', { progress: 0.2, bytesDownloaded: 200, totalBytes: 1000 });
+      setDownloadProgress('m3', { progress: 0.3, bytesDownloaded: 300, totalBytes: 1000 });
+      setDownloadProgress('m1', { progress: 0.5, bytesDownloaded: 500, totalBytes: 1000 });
+      setDownloadProgress('m2', null); // m2 completes
+      setDownloadProgress('m1', { progress: 0.9, bytesDownloaded: 900, totalBytes: 1000 });
+
+      const progress = getAppState().downloadProgress;
+      expect(progress['m1'].progress).toBe(0.9);
+      expect(progress['m2']).toBeUndefined();
+      expect(progress['m3'].progress).toBe(0.3);
+    });
+
+    it('handles model add and remove in sequence', () => {
+      const { addDownloadedModel, removeDownloadedModel, setActiveModelId } = useAppStore.getState();
+      const model1 = createDownloadedModel({ id: 'keep-model' });
+      const model2 = createDownloadedModel({ id: 'temp-model' });
+
+      addDownloadedModel(model1);
+      addDownloadedModel(model2);
+      setActiveModelId('keep-model');
+      removeDownloadedModel('temp-model');
+
+      expect(getAppState().downloadedModels).toHaveLength(1);
+      expect(getAppState().downloadedModels[0].id).toBe('keep-model');
+      expect(getAppState().activeModelId).toBe('keep-model');
+    });
+  });
+
+  // ============================================================================
+  // Settings edge cases
+  // ============================================================================
+  describe('settings edge cases', () => {
+    it('updateSettings with empty object does not change anything', () => {
+      const { updateSettings } = useAppStore.getState();
+      const before = { ...getAppState().settings };
+
+      updateSettings({});
+
+      expect(getAppState().settings).toEqual(before);
+    });
+
+    it('updateSettings can set temperature to 0', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ temperature: 0 });
+
+      expect(getAppState().settings.temperature).toBe(0);
+    });
+
+    it('updateSettings can set maxTokens to very high value', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ maxTokens: 32768 });
+
+      expect(getAppState().settings.maxTokens).toBe(32768);
+    });
+
+    it('updateSettings can toggle enhanceImagePrompts', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ enhanceImagePrompts: true });
+      expect(getAppState().settings.enhanceImagePrompts).toBe(true);
+
+      updateSettings({ enhanceImagePrompts: false });
+      expect(getAppState().settings.enhanceImagePrompts).toBe(false);
+    });
+
+    it('updateSettings can set classifierModelId', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ classifierModelId: 'some-model-id' });
+      expect(getAppState().settings.classifierModelId).toBe('some-model-id');
+
+      updateSettings({ classifierModelId: null });
+      expect(getAppState().settings.classifierModelId).toBeNull();
+    });
+
+    it('updateSettings can toggle showGenerationDetails', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ showGenerationDetails: true });
+      expect(getAppState().settings.showGenerationDetails).toBe(true);
+    });
+
+    it('updateSettings handles all image generation modes', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ imageGenerationMode: 'manual' });
+      expect(getAppState().settings.imageGenerationMode).toBe('manual');
+
+      updateSettings({ imageGenerationMode: 'disabled' });
+      expect(getAppState().settings.imageGenerationMode).toBe('disabled');
+
+      updateSettings({ imageGenerationMode: 'auto' });
+      expect(getAppState().settings.imageGenerationMode).toBe('auto');
+    });
+
+    it('updateSettings handles autoDetectMethod values', () => {
+      const { updateSettings } = useAppStore.getState();
+
+      updateSettings({ autoDetectMethod: 'llm' });
+      expect(getAppState().settings.autoDetectMethod).toBe('llm');
+
+      updateSettings({ autoDetectMethod: 'pattern' });
+      expect(getAppState().settings.autoDetectMethod).toBe('pattern');
+    });
+  });
+
+  // ============================================================================
+  // Image generation state full lifecycle
+  // ============================================================================
+  describe('image generation lifecycle', () => {
+    it('simulates complete image generation lifecycle', () => {
+      const {
+        setIsGeneratingImage,
+        setImageGenerationStatus,
+        setImageGenerationProgress,
+        setImagePreviewPath,
+        addGeneratedImage,
+      } = useAppStore.getState();
+
+      // Start generation
+      setIsGeneratingImage(true);
+      setImageGenerationStatus('Loading model...');
+      expect(getAppState().isGeneratingImage).toBe(true);
+
+      // Progress updates
+      setImageGenerationStatus('Generating image...');
+      setImageGenerationProgress({ step: 1, totalSteps: 20 });
+      setImageGenerationProgress({ step: 10, totalSteps: 20 });
+      expect(getAppState().imageGenerationProgress?.step).toBe(10);
+
+      // Preview available
+      setImagePreviewPath('/tmp/preview.png');
+      expect(getAppState().imagePreviewPath).toBe('/tmp/preview.png');
+
+      // Complete
+      setImageGenerationProgress({ step: 20, totalSteps: 20 });
+      addGeneratedImage(createGeneratedImage({ id: 'result-img' }));
+      setIsGeneratingImage(false);
+      setImageGenerationProgress(null);
+      setImageGenerationStatus(null);
+      setImagePreviewPath(null);
+
+      // Verify final state
+      expect(getAppState().isGeneratingImage).toBe(false);
+      expect(getAppState().imageGenerationProgress).toBeNull();
+      expect(getAppState().imageGenerationStatus).toBeNull();
+      expect(getAppState().imagePreviewPath).toBeNull();
+      expect(getAppState().generatedImages).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // Background download edge cases
+  // ============================================================================
+  describe('background download edge cases', () => {
+    it('handles multiple background downloads for same model ID', () => {
+      const { setBackgroundDownload } = useAppStore.getState();
+
+      // Two different downloadIds for different files of same model
+      setBackgroundDownload(1, {
+        modelId: 'model-1',
+        fileName: 'model.gguf',
+        quantization: 'Q4_K_M',
+        author: 'author',
+        totalBytes: 4000000000,
+      });
+      setBackgroundDownload(2, {
+        modelId: 'model-1',
+        fileName: 'mmproj.gguf',
+        quantization: '',
+        author: 'author',
+        totalBytes: 500000000,
+      });
+
+      const downloads = getAppState().activeBackgroundDownloads;
+      expect(downloads[1].fileName).toBe('model.gguf');
+      expect(downloads[2].fileName).toBe('mmproj.gguf');
+    });
+
+    it('clearBackgroundDownloads is idempotent', () => {
+      const { clearBackgroundDownloads } = useAppStore.getState();
+
+      clearBackgroundDownloads();
+      clearBackgroundDownloads();
+
+      expect(getAppState().activeBackgroundDownloads).toEqual({});
+    });
+  });
 });

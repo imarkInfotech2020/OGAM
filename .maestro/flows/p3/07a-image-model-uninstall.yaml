@@ -2,7 +2,7 @@
 # Tests deleting a downloaded image model via Download Manager
 # Assumes an image model is already downloaded
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Image Model Uninstall"
 tags:
   - p0

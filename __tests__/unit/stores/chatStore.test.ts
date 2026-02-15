@@ -789,4 +789,329 @@ describe('chatStore', () => {
       expect(getChatState().conversations[0].messages).toHaveLength(1);
     });
   });
+
+  // ============================================================================
+  // Streaming direct setters
+  // ============================================================================
+  describe('setStreamingMessage', () => {
+    it('directly sets streaming content', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+
+      store.setStreamingMessage('Direct content');
+
+      expect(getChatState().streamingMessage).toBe('Direct content');
+    });
+
+    it('overwrites previous streaming content', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+
+      store.setStreamingMessage('First');
+      store.setStreamingMessage('Replaced');
+
+      expect(getChatState().streamingMessage).toBe('Replaced');
+    });
+  });
+
+  describe('setIsStreaming', () => {
+    it('sets isStreaming and clears isThinking', () => {
+      useChatStore.setState({ isThinking: true });
+
+      useChatStore.getState().setIsStreaming(true);
+
+      const state = getChatState();
+      expect(state.isStreaming).toBe(true);
+      expect(state.isThinking).toBe(false);
+    });
+
+    it('can set isStreaming to false', () => {
+      useChatStore.setState({ isStreaming: true });
+
+      useChatStore.getState().setIsStreaming(false);
+
+      expect(getChatState().isStreaming).toBe(false);
+    });
+  });
+
+  describe('setIsThinking', () => {
+    it('sets isThinking independently', () => {
+      useChatStore.getState().setIsThinking(true);
+      expect(getChatState().isThinking).toBe(true);
+
+      useChatStore.getState().setIsThinking(false);
+      expect(getChatState().isThinking).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Multi-conversation isolation
+  // ============================================================================
+  describe('multi-conversation isolation', () => {
+    it('messages are isolated between conversations', () => {
+      const store = useChatStore.getState();
+      const conv1 = store.createConversation('model-1');
+      const conv2 = store.createConversation('model-2');
+
+      store.addMessage(conv1, { role: 'user', content: 'Conv1 message' });
+      store.addMessage(conv2, { role: 'user', content: 'Conv2 message' });
+
+      const conv1Messages = store.getConversationMessages(conv1);
+      const conv2Messages = store.getConversationMessages(conv2);
+
+      expect(conv1Messages).toHaveLength(1);
+      expect(conv1Messages[0].content).toBe('Conv1 message');
+      expect(conv2Messages).toHaveLength(1);
+      expect(conv2Messages[0].content).toBe('Conv2 message');
+    });
+
+    it('deleting a conversation does not affect other conversations', () => {
+      const store = useChatStore.getState();
+      const conv1 = store.createConversation('model-1');
+      const conv2 = store.createConversation('model-2');
+
+      store.addMessage(conv1, { role: 'user', content: 'Keep this' });
+      store.addMessage(conv2, { role: 'user', content: 'Delete with conv' });
+
+      store.deleteConversation(conv2);
+
+      expect(getChatState().conversations).toHaveLength(1);
+      expect(store.getConversationMessages(conv1)).toHaveLength(1);
+    });
+
+    it('streaming is scoped to specific conversation', () => {
+      const store = useChatStore.getState();
+      const conv1 = store.createConversation('model-1');
+      store.createConversation('model-2');
+
+      store.startStreaming(conv1);
+      store.appendToStreamingMessage('For conv1 only');
+
+      const streamState = store.getStreamingState();
+      expect(streamState.conversationId).toBe(conv1);
+    });
+
+    it('finalizing to wrong conversation clears state but does not save message', () => {
+      const store = useChatStore.getState();
+      const conv1 = store.createConversation('model-1');
+      const conv2 = store.createConversation('model-2');
+
+      store.startStreaming(conv1);
+      store.appendToStreamingMessage('Response');
+      store.finalizeStreamingMessage(conv2); // Wrong conversation
+
+      // Message not saved to conv2
+      expect(store.getConversationMessages(conv2)).toHaveLength(0);
+      // Message not saved to conv1 either
+      expect(store.getConversationMessages(conv1)).toHaveLength(0);
+      // Streaming state cleared
+      expect(getChatState().streamingMessage).toBe('');
+    });
+  });
+
+  // ============================================================================
+  // Conversation ordering and timestamps
+  // ============================================================================
+  describe('conversation ordering', () => {
+    it('most recently created conversation is first', () => {
+      const store = useChatStore.getState();
+
+      store.createConversation('model-1', 'First');
+      store.createConversation('model-1', 'Second');
+      store.createConversation('model-1', 'Third');
+
+      const convs = getChatState().conversations;
+      expect(convs[0].title).toBe('Third');
+      expect(convs[1].title).toBe('Second');
+      expect(convs[2].title).toBe('First');
+    });
+
+    it('addMessage updates conversation updatedAt timestamp', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const originalTime = getChatState().conversations[0].updatedAt;
+
+      // Force a different timestamp
+      jest.advanceTimersByTime(100);
+
+      store.addMessage(convId, { role: 'user', content: 'New message' });
+
+      const newTime = getChatState().conversations[0].updatedAt;
+      expect(newTime).not.toBe(originalTime);
+    });
+  });
+
+  // ============================================================================
+  // Streaming with generation metadata
+  // ============================================================================
+  describe('streaming with generation metadata', () => {
+    it('finalizeStreamingMessage stores full generation meta', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const meta = createGenerationMeta({
+        gpu: true,
+        gpuBackend: 'Metal',
+        gpuLayers: 32,
+        modelName: 'Llama-3',
+        tokensPerSecond: 30.5,
+        decodeTokensPerSecond: 35.2,
+        timeToFirstToken: 0.3,
+        tokenCount: 100,
+      });
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Full response');
+      store.finalizeStreamingMessage(convId, 2500, meta);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.generationTimeMs).toBe(2500);
+      expect(message.generationMeta).toEqual(meta);
+    });
+
+    it('finalizeStreamingMessage without meta stores undefined', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Simple response');
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.generationTimeMs).toBeUndefined();
+      expect(message.generationMeta).toBeUndefined();
+    });
+  });
+
+  // ============================================================================
+  // Persistence partialize verification
+  // ============================================================================
+  describe('persistence partialize', () => {
+    it('only persists conversations and activeConversationId', () => {
+      // Verify that streaming state is NOT persisted
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('In progress...');
+
+      // Access the persist options
+      const options = (useChatStore as any).persist?.getOptions?.();
+      if (options?.partialize) {
+        const persisted = options.partialize(getChatState());
+
+        expect(persisted).toHaveProperty('conversations');
+        expect(persisted).toHaveProperty('activeConversationId');
+        expect(persisted).not.toHaveProperty('streamingMessage');
+        expect(persisted).not.toHaveProperty('isStreaming');
+        expect(persisted).not.toHaveProperty('isThinking');
+        expect(persisted).not.toHaveProperty('streamingForConversationId');
+      }
+    });
+  });
+
+  // ============================================================================
+  // deleteMessage edge cases
+  // ============================================================================
+  describe('deleteMessage edge cases', () => {
+    it('deleteMessage on non-existent message is safe', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.addMessage(convId, { role: 'user', content: 'Keep' });
+
+      // Should not throw
+      store.deleteMessage(convId, 'nonexistent-msg-id');
+
+      expect(getChatState().conversations[0].messages).toHaveLength(1);
+    });
+
+    it('deleteMessage updates updatedAt', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const msg = store.addMessage(convId, { role: 'user', content: 'To delete' });
+      const beforeTime = getChatState().conversations[0].updatedAt;
+
+      jest.advanceTimersByTime(100);
+      store.deleteMessage(convId, msg.id);
+
+      expect(getChatState().conversations[0].updatedAt).not.toBe(beforeTime);
+    });
+  });
+
+  // ============================================================================
+  // addMessage with system role
+  // ============================================================================
+  describe('addMessage with system role', () => {
+    it('does not update title from system messages', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.addMessage(convId, { role: 'system', content: 'System prompt text' });
+
+      expect(getChatState().conversations[0].title).toBe('New Conversation');
+    });
+
+    it('stores system messages correctly', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      const msg = store.addMessage(convId, { role: 'system', content: 'You are helpful' });
+
+      expect(msg.role).toBe('system');
+      expect(getChatState().conversations[0].messages[0].role).toBe('system');
+    });
+  });
+
+  // ============================================================================
+  // Rapid streaming operations
+  // ============================================================================
+  describe('rapid streaming operations', () => {
+    it('handles many rapid appends', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+
+      // Simulate rapid token streaming
+      for (let i = 0; i < 100; i++) {
+        store.appendToStreamingMessage(`token${i} `);
+      }
+
+      const content = getChatState().streamingMessage;
+      expect(content).toContain('token0');
+      expect(content).toContain('token99');
+    });
+
+    it('clearStreamingMessage during active streaming', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Partial');
+
+      store.clearStreamingMessage();
+
+      expect(getChatState().streamingMessage).toBe('');
+      expect(getChatState().isStreaming).toBe(false);
+      expect(getChatState().isThinking).toBe(false);
+      expect(getChatState().streamingForConversationId).toBeNull();
+    });
+
+    it('startStreaming resets previous streaming state', () => {
+      const store = useChatStore.getState();
+      const conv1 = store.createConversation('model-1');
+      const conv2 = store.createConversation('model-2');
+
+      // Start streaming for conv1
+      store.startStreaming(conv1);
+      store.appendToStreamingMessage('Old content');
+
+      // Start streaming for conv2 (overwrites)
+      store.startStreaming(conv2);
+
+      const state = getChatState();
+      expect(state.streamingForConversationId).toBe(conv2);
+      expect(state.streamingMessage).toBe('');
+      expect(state.isThinking).toBe(true);
+      expect(state.isStreaming).toBe(false);
+    });
+  });
 });

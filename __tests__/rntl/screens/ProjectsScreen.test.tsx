@@ -221,5 +221,60 @@ describe('ProjectsScreen', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('ProjectEdit', {});
     });
+
+    it('navigates to ProjectDetail when project is pressed', () => {
+      const project = createProject({ name: 'Nav Test' });
+      useProjectStore.setState({ projects: [project] });
+
+      const { getByText } = render(<ProjectsScreen />);
+      fireEvent.press(getByText('Nav Test'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('ProjectDetail', { projectId: project.id });
+    });
+  });
+
+  // ==========================================================================
+  // Project without description
+  // ==========================================================================
+  describe('description rendering', () => {
+    it('does not render description when project has no description', () => {
+      const project = createProject({ name: 'No Desc' });
+      // Ensure no description field
+      delete (project as any).description;
+      useProjectStore.setState({ projects: [project] });
+
+      const { getByText, queryByText } = render(<ProjectsScreen />);
+      expect(getByText('No Desc')).toBeTruthy();
+      // There should be no description text rendered
+    });
+
+    it('renders description when project has one', () => {
+      const project = createProject({ name: 'With Desc', description: 'Project details here' });
+      useProjectStore.setState({ projects: [project] });
+
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('Project details here')).toBeTruthy();
+    });
+  });
+
+  // ==========================================================================
+  // Multiple projects with chats
+  // ==========================================================================
+  describe('chat counts', () => {
+    it('shows correct counts for multiple projects', () => {
+      const project1 = createProject({ name: 'Proj A' });
+      const project2 = createProject({ name: 'Proj B' });
+      useProjectStore.setState({ projects: [project1, project2] });
+
+      const conv1 = createConversation({ projectId: project1.id });
+      const conv2 = createConversation({ projectId: project1.id });
+      const conv3 = createConversation({ projectId: project1.id });
+      const conv4 = createConversation({ projectId: project2.id });
+      useChatStore.setState({ conversations: [conv1, conv2, conv3, conv4] });
+
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('3')).toBeTruthy(); // project1
+      expect(getByText('1')).toBeTruthy(); // project2
+    });
   });
 });

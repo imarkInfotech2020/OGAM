@@ -2,7 +2,7 @@
 # Tests the complete image generation cycle including model download
 # This test ensures image model is downloaded and tests image generation
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Image Generation"
 tags:
   - p0

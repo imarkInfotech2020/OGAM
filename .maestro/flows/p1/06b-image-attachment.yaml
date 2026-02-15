@@ -10,7 +10,7 @@
 # 5. Dismiss dialog
 # 6. Verify chat remains functional
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Image Attachment"
 tags:
   - p0

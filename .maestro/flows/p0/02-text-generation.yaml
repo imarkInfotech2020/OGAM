@@ -2,7 +2,7 @@
 # Tests the complete text generation cycle
 # Prerequisites: Text model must be loaded
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Text Generation"
 tags:
   - p0
