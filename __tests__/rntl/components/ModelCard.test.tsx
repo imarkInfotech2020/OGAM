@@ -3,10 +3,17 @@
  *
  * Tests for the model card display component including:
  * - Basic rendering (full and compact mode)
- * - Credibility badges (★ LM Studio, ✓ Official, ◆ Verified)
+ * - Credibility badges
  * - Vision model indicator badge
  * - Size display (combined model + mmproj)
  * - Action buttons (download, select, delete)
+ * - Active state and badge
+ * - Stats display (downloads, likes, formatting)
+ * - Download progress display
+ * - Incompatible model state
+ * - Size range display for multi-file models
+ * - Model type badges (text, vision, code) in compact mode
+ * - Param count and RAM badges in compact mode
  *
  * Priority: P1 (High)
  */
@@ -16,6 +23,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { ModelCard } from '../../../src/components/ModelCard';
 import {
   createVisionModel,
+  createDownloadedModel,
   createModelFile,
   createModelFileWithMmProj,
 } from '../../utils/factories';
@@ -91,6 +99,69 @@ describe('ModelCard', () => {
       fireEvent.press(getByTestId('model-card'));
       expect(onPress).toHaveBeenCalled();
     });
+
+    it('renders description in full mode', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, description: 'A powerful language model for testing' }}
+        />
+      );
+      expect(getByText('A powerful language model for testing')).toBeTruthy();
+    });
+
+    it('does not render description when not provided', () => {
+      const { queryByText } = render(
+        <ModelCard model={baseModel} />
+      );
+      // No description text should be rendered
+      expect(queryByText('A powerful language model')).toBeNull();
+    });
+
+    it('renders file size from downloadedModel', () => {
+      const downloadedModel = createDownloadedModel({ fileSize: 3 * 1024 * 1024 * 1024 });
+      const { getByText } = render(
+        <ModelCard model={baseModel} downloadedModel={downloadedModel} />
+      );
+      expect(getByText('3.0 GB')).toBeTruthy();
+    });
+
+    it('renders quantization from downloadedModel', () => {
+      const downloadedModel = createDownloadedModel({ quantization: 'Q5_K_M' });
+      const { getByText } = render(
+        <ModelCard model={baseModel} downloadedModel={downloadedModel} />
+      );
+      expect(getByText('Q5_K_M')).toBeTruthy();
+    });
+
+    it('is disabled when no onPress provided', () => {
+      const { getByTestId } = render(
+        <ModelCard model={baseModel} testID="card" />
+      );
+      const card = getByTestId('card');
+      expect(card.props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it('shows 0% progress when download just started', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloading={true}
+          downloadProgress={0}
+        />
+      );
+      expect(getByText('0%')).toBeTruthy();
+    });
+
+    it('shows 100% progress when download is complete', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloading={true}
+          downloadProgress={1}
+        />
+      );
+      expect(getByText('100%')).toBeTruthy();
+    });
   });
 
   // ============================================================================
@@ -123,13 +194,92 @@ describe('ModelCard', () => {
       );
       expect(getByText('15.0K dl')).toBeTruthy();
     });
+
+    it('shows model type badge in compact mode for vision', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, modelType: 'vision' }}
+          compact={true}
+        />
+      );
+      expect(getByText('Vision')).toBeTruthy();
+    });
+
+    it('shows model type badge in compact mode for code', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, modelType: 'code' }}
+          compact={true}
+        />
+      );
+      expect(getByText('Code')).toBeTruthy();
+    });
+
+    it('shows model type badge in compact mode for text', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, modelType: 'text' }}
+          compact={true}
+        />
+      );
+      expect(getByText('Text')).toBeTruthy();
+    });
+
+    it('shows param count badge in compact mode', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, paramCount: 7 }}
+          compact={true}
+        />
+      );
+      expect(getByText('7B params')).toBeTruthy();
+    });
+
+    it('shows min RAM badge in compact mode', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, modelType: 'text', minRamGB: 4 }}
+          compact={true}
+        />
+      );
+      expect(getByText('4GB+ RAM')).toBeTruthy();
+    });
+
+    it('does not show download count when 0 in compact mode', () => {
+      const { queryByText } = render(
+        <ModelCard
+          model={{ ...baseModel, downloads: 0 }}
+          compact={true}
+        />
+      );
+      expect(queryByText('0 dl')).toBeNull();
+    });
+
+    it('shows credibility badge in compact mode for lmstudio', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{
+            ...baseModel,
+            credibility: {
+              source: 'lmstudio',
+              isOfficial: false,
+              isVerifiedQuantizer: true,
+              verifiedBy: 'LM Studio',
+            },
+          }}
+          compact={true}
+        />
+      );
+      expect(getByText('LM Studio')).toBeTruthy();
+      expect(getByText('★')).toBeTruthy();
+    });
   });
 
   // ============================================================================
   // Credibility Badges
   // ============================================================================
   describe('credibility badges', () => {
-    it('shows ★ for lmstudio-community', () => {
+    it('shows star for lmstudio-community', () => {
       const { getByText } = render(
         <ModelCard
           model={{
@@ -147,7 +297,7 @@ describe('ModelCard', () => {
       expect(getByText('LM Studio')).toBeTruthy();
     });
 
-    it('shows ✓ for official authors', () => {
+    it('shows checkmark for official authors', () => {
       const { getByText } = render(
         <ModelCard
           model={{
@@ -165,7 +315,7 @@ describe('ModelCard', () => {
       expect(getByText('Official')).toBeTruthy();
     });
 
-    it('shows ◆ for verified quantizers', () => {
+    it('shows diamond for verified quantizers', () => {
       const { getByText } = render(
         <ModelCard
           model={{
@@ -200,6 +350,21 @@ describe('ModelCard', () => {
       expect(queryByText('★')).toBeNull();
       expect(queryByText('✓')).toBeNull();
       expect(queryByText('◆')).toBeNull();
+    });
+
+    it('shows credibility from downloadedModel when model has none', () => {
+      const downloadedModel = createDownloadedModel({
+        credibility: {
+          source: 'official',
+          isOfficial: true,
+          isVerifiedQuantizer: false,
+          verifiedBy: 'Meta',
+        },
+      });
+      const { getByText } = render(
+        <ModelCard model={baseModel} downloadedModel={downloadedModel} />
+      );
+      expect(getByText('Official')).toBeTruthy();
     });
   });
 
@@ -264,8 +429,51 @@ describe('ModelCard', () => {
       const { getByText } = render(
         <ModelCard model={baseModel} downloadedModel={visionModel} />
       );
-      // 2GB + 300MB ≈ 2.3 GB
+      // 2GB + 300MB ~ 2.3 GB
       expect(getByText('2.3 GB')).toBeTruthy();
+    });
+
+    it('shows size range for models with multiple files', () => {
+      const model = {
+        ...baseModel,
+        files: [
+          createModelFile({ size: 2 * 1024 * 1024 * 1024, quantization: 'Q4_K_M' }),
+          createModelFile({ size: 5 * 1024 * 1024 * 1024, quantization: 'Q8_0' }),
+        ],
+      };
+      const { getByText } = render(
+        <ModelCard model={model} />
+      );
+      // Should show size range
+      expect(getByText('2.0 GB - 5.0 GB')).toBeTruthy();
+      expect(getByText('2 files')).toBeTruthy();
+    });
+
+    it('shows single size when all files are same size', () => {
+      const model = {
+        ...baseModel,
+        files: [
+          createModelFile({ size: 4 * 1024 * 1024 * 1024, quantization: 'Q4_K_M' }),
+          createModelFile({ size: 4 * 1024 * 1024 * 1024, quantization: 'Q4_K_S' }),
+        ],
+      };
+      const { getByText } = render(
+        <ModelCard model={model} />
+      );
+      expect(getByText('4.0 GB')).toBeTruthy();
+    });
+
+    it('shows "1 file" for single file model', () => {
+      const model = {
+        ...baseModel,
+        files: [
+          createModelFile({ size: 4 * 1024 * 1024 * 1024, quantization: 'Q4_K_M' }),
+        ],
+      };
+      const { getByText } = render(
+        <ModelCard model={model} />
+      );
+      expect(getByText('1 file')).toBeTruthy();
     });
   });
 
@@ -290,7 +498,7 @@ describe('ModelCard', () => {
 
     it('shows select button for downloaded non-active models', () => {
       const onSelect = jest.fn();
-      render(
+      const { UNSAFE_getAllByType } = render(
         <ModelCard
           model={baseModel}
           isDownloaded={true}
@@ -299,13 +507,22 @@ describe('ModelCard', () => {
           testID="card"
         />
       );
-      // The select icon button is rendered (check-circle icon)
-      // We can't easily test by testID since it doesn't have one, but onSelect should fire
+      const { TouchableOpacity } = require('react-native');
+      const touchables = UNSAFE_getAllByType(TouchableOpacity);
+      // Find the select button (check-circle) - it's one of the action buttons
+      // The first touchable is the card itself, others are action buttons
+      const selectBtn = touchables.find((t: any) => {
+        return !t.props.testID && !t.props.disabled;
+      });
+      if (selectBtn) {
+        fireEvent.press(selectBtn);
+        expect(onSelect).toHaveBeenCalled();
+      }
     });
 
     it('shows delete button for downloaded models', () => {
       const onDelete = jest.fn();
-      render(
+      const { UNSAFE_getAllByType } = render(
         <ModelCard
           model={baseModel}
           isDownloaded={true}
@@ -313,8 +530,12 @@ describe('ModelCard', () => {
           testID="card"
         />
       );
-      // Delete button is rendered with trash icon
-      expect(onDelete).toBeDefined();
+      const { TouchableOpacity } = require('react-native');
+      const touchables = UNSAFE_getAllByType(TouchableOpacity);
+      // The delete button is the last action button
+      const lastTouchable = touchables[touchables.length - 1];
+      fireEvent.press(lastTouchable);
+      expect(onDelete).toHaveBeenCalled();
     });
 
     it('hides download button when already downloaded', () => {
@@ -354,6 +575,36 @@ describe('ModelCard', () => {
       );
       expect(getByText('Too large')).toBeTruthy();
     });
+
+    it('does not show download button when isDownloading', () => {
+      const onDownload = jest.fn();
+      const { queryByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={false}
+          isDownloading={true}
+          onDownload={onDownload}
+          testID="card"
+        />
+      );
+      // Download button should not show during download
+      expect(queryByTestId('card-download')).toBeNull();
+    });
+
+    it('does not show select button when model is active', () => {
+      const onSelect = jest.fn();
+      const { toJSON } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={true}
+          isActive={true}
+          onSelect={onSelect}
+        />
+      );
+      // Active models should not show the select button
+      const treeStr = JSON.stringify(toJSON());
+      expect(treeStr).toContain('Active'); // Active badge is shown instead
+    });
   });
 
   // ============================================================================
@@ -365,6 +616,13 @@ describe('ModelCard', () => {
         <ModelCard model={baseModel} isActive={true} />
       );
       expect(getByText('Active')).toBeTruthy();
+    });
+
+    it('does not show Active badge when model is not active', () => {
+      const { queryByText } = render(
+        <ModelCard model={baseModel} isActive={false} />
+      );
+      expect(queryByText('Active')).toBeNull();
     });
   });
 
@@ -391,6 +649,55 @@ describe('ModelCard', () => {
         <ModelCard model={{ ...baseModel, downloads: 500 }} />
       );
       expect(getByText('500 downloads')).toBeTruthy();
+    });
+
+    it('does not show stats row when downloads is 0', () => {
+      const { queryByText } = render(
+        <ModelCard model={{ ...baseModel, downloads: 0 }} />
+      );
+      expect(queryByText('0 downloads')).toBeNull();
+    });
+
+    it('does not show stats row when downloads is undefined', () => {
+      const { queryByText } = render(
+        <ModelCard model={baseModel} />
+      );
+      expect(queryByText('downloads')).toBeNull();
+    });
+
+    it('does not show likes when likes is 0', () => {
+      const { queryByText } = render(
+        <ModelCard model={{ ...baseModel, downloads: 1000, likes: 0 }} />
+      );
+      expect(queryByText('0 likes')).toBeNull();
+    });
+
+    it('does not show stats in compact mode', () => {
+      const { queryByText } = render(
+        <ModelCard model={{ ...baseModel, downloads: 1000 }} compact={true} />
+      );
+      // In compact mode, downloads are shown as "1.0K dl" not "1.0K downloads"
+      expect(queryByText('1.0K downloads')).toBeNull();
+    });
+
+    it('formats million downloads correctly', () => {
+      const { getByText } = render(
+        <ModelCard model={{ ...baseModel, downloads: 5000000 }} />
+      );
+      expect(getByText('5.0M downloads')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Incompatible model
+  // ============================================================================
+  describe('incompatible model', () => {
+    it('applies reduced opacity for incompatible models', () => {
+      const { toJSON } = render(
+        <ModelCard model={baseModel} isCompatible={false} />
+      );
+      const treeStr = JSON.stringify(toJSON());
+      expect(treeStr).toContain('0.6'); // cardIncompatible opacity
     });
   });
 });

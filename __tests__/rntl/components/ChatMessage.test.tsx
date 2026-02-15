@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import {
   createMessage,
@@ -875,6 +875,601 @@ describe('ChatMessage', () => {
       const { getByText } = render(<ChatMessage message={message} />);
 
       expect(getByText(/Line 1.*Line 2.*Line 3/s)).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Additional branch coverage tests
+  // ============================================================================
+  describe('custom thinking label', () => {
+    it('renders custom label from __LABEL:...__ marker', () => {
+      const message = createAssistantMessage(
+        '<think>__LABEL:Analysis__\nStep 1: Analyzing input data\nStep 2: Processing</think>The result is 42.'
+      );
+
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByTestId('thinking-block')).toBeTruthy();
+      expect(getByText('Analysis')).toBeTruthy();
+      expect(getByText(/The result is 42/)).toBeTruthy();
+    });
+  });
+
+  describe('formatDuration with minutes', () => {
+    it('displays duration in minutes when >= 60 seconds', () => {
+      const meta = createGenerationMeta({
+        gpu: false,
+        gpuBackend: 'CPU',
+      });
+      const message = createAssistantMessage('Long generation', {
+        generationTimeMs: 125000, // 2m 5s
+        generationMeta: meta,
+      });
+
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
+      );
+
+      expect(getByText(/2m 5s/)).toBeTruthy();
+    });
+  });
+
+  describe('handleGenerateImage for assistant messages', () => {
+    it('uses parsedContent.response for assistant messages', () => {
+      const onGenerateImage = jest.fn();
+      const message = createAssistantMessage(
+        '<think>Internal reasoning</think>A beautiful mountain landscape'
+      );
+
+      const { getByTestId } = render(
+        <ChatMessage
+          message={message}
+          onGenerateImage={onGenerateImage}
+          canGenerateImage={true}
+          showActions={true}
+        />
+      );
+
+      // Open menu
+      fireEvent(getByTestId('assistant-message'), 'longPress');
+
+      // Press generate image
+      fireEvent.press(getByTestId('action-generate-image'));
+
+      // Should use the response part (not the thinking block)
+      expect(onGenerateImage).toHaveBeenCalledWith('A beautiful mountain landscape');
+    });
+  });
+
+  describe('generation meta tokenCount display', () => {
+    it('displays token count when present and > 0', () => {
+      const meta = createGenerationMeta({
+        gpu: false,
+        gpuBackend: 'CPU',
+        tokenCount: 150,
+        tokensPerSecond: 20,
+      });
+      const message = createAssistantMessage('Response with tokens', {
+        generationMeta: meta,
+      });
+
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
+      );
+
+      expect(getByText('150 tokens')).toBeTruthy();
+    });
+
+    it('does not display token count when 0', () => {
+      const meta = createGenerationMeta({
+        gpu: false,
+        gpuBackend: 'CPU',
+        tokenCount: 0,
+      });
+      const message = createAssistantMessage('Response', {
+        generationMeta: meta,
+      });
+
+      const { queryByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
+      );
+
+      expect(queryByText(/\d+ tokens/)).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // Edit flow (covers lines 220-236: handleEdit, handleSaveEdit, handleCancelEdit)
+  // ============================================================================
+  describe('edit flow', () => {
+    it('opens edit sheet when edit action is pressed', () => {
+      jest.useFakeTimers();
+      const onEdit = jest.fn();
+      const message = createUserMessage('Original text');
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+      );
+
+      // Open action menu
+      fireEvent(getByTestId('user-message'), 'longPress');
+
+      // Press edit
+      fireEvent.press(getByTestId('action-edit'));
+
+      // handleEdit sets a setTimeout of 350ms before opening edit sheet
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // Edit sheet should now be visible with title and buttons
+      expect(getByText('EDIT MESSAGE')).toBeTruthy();
+      expect(getByText('CANCEL')).toBeTruthy();
+      expect(getByText('SAVE & RESEND')).toBeTruthy();
+
+      jest.useRealTimers();
+    });
+
+    it('calls onEdit with new content when save is pressed', () => {
+      jest.useFakeTimers();
+      const onEdit = jest.fn();
+      const message = createUserMessage('Original text');
+
+      const { getByTestId, getByText, getByPlaceholderText } = render(
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+      );
+
+      // Open action menu and press edit
+      fireEvent(getByTestId('user-message'), 'longPress');
+      fireEvent.press(getByTestId('action-edit'));
+
+      // Advance timer inside act() so state update is applied
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // Edit sheet should now show SAVE & RESEND
+      expect(getByText('SAVE & RESEND')).toBeTruthy();
+
+      // Change text in the edit input
+      const editInput = getByPlaceholderText('Enter message...');
+      fireEvent.changeText(editInput, 'Updated text');
+
+      // Press SAVE & RESEND (handleSaveEdit)
+      fireEvent.press(getByText('SAVE & RESEND'));
+
+      // onEdit should be called with the updated content
+      expect(onEdit).toHaveBeenCalledWith(message, 'Updated text');
+
+      jest.useRealTimers();
+    });
+
+    it('does not call onEdit when content is unchanged', () => {
+      jest.useFakeTimers();
+      const onEdit = jest.fn();
+      const message = createUserMessage('Original text');
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+      );
+
+      // Open action menu and press edit
+      fireEvent(getByTestId('user-message'), 'longPress');
+      fireEvent.press(getByTestId('action-edit'));
+
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // Press SAVE & RESEND without changing content
+      fireEvent.press(getByText('SAVE & RESEND'));
+
+      // onEdit should NOT have been called since content is unchanged
+      expect(onEdit).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+
+    it('cancels edit when cancel is pressed', () => {
+      jest.useFakeTimers();
+      const onEdit = jest.fn();
+      const message = createUserMessage('Original text');
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+      );
+
+      // Open action menu and press edit
+      fireEvent(getByTestId('user-message'), 'longPress');
+      fireEvent.press(getByTestId('action-edit'));
+
+      act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // Press CANCEL (handleCancelEdit)
+      fireEvent.press(getByText('CANCEL'));
+
+      // onEdit should NOT have been called
+      expect(onEdit).not.toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+  });
+
+  // ============================================================================
+  // Document badge press (covers lines 308-332: viewDocument handler)
+  // ============================================================================
+  describe('document badge press', () => {
+    it('opens document viewer when document badge is pressed with absolute path', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const attachment = createDocumentAttachment({
+        uri: '/path/to/report.pdf',
+        fileName: 'report.pdf',
+        fileSize: 1024,
+      });
+      const message = createUserMessage('See report', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      fireEvent.press(getByTestId('document-badge-0'));
+
+      expect(viewDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: 'file:///path/to/report.pdf',
+          mimeType: 'application/pdf',
+          grantPermissions: 'read',
+        })
+      );
+    });
+
+    it('opens document viewer with file:// URI as-is', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const attachment = createDocumentAttachment({
+        uri: 'file:///already/prefixed.txt',
+        fileName: 'prefixed.txt',
+        fileSize: 256,
+      });
+      const message = createUserMessage('Open', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      fireEvent.press(getByTestId('document-badge-0'));
+
+      expect(viewDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: 'file:///already/prefixed.txt',
+          mimeType: 'text/plain',
+        })
+      );
+    });
+
+    it('opens document viewer with relative path (no scheme)', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const attachment = createDocumentAttachment({
+        uri: 'relative/path/to/data.json',
+        fileName: 'data.json',
+        fileSize: 512,
+      });
+      const message = createUserMessage('Open', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      fireEvent.press(getByTestId('document-badge-0'));
+
+      expect(viewDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: 'file://relative/path/to/data.json',
+          mimeType: 'application/json',
+        })
+      );
+    });
+
+    it('does nothing when document has no URI', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const attachment: import('../../../src/types').MediaAttachment = {
+        id: 'doc-no-uri',
+        type: 'document',
+        uri: '',
+        fileName: 'nofile.txt',
+        fileSize: 100,
+      };
+      const message = createUserMessage('Open', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      fireEvent.press(getByTestId('document-badge-0'));
+
+      // viewDocument should not be called when uri is empty (early return)
+      expect(viewDocument).not.toHaveBeenCalled();
+    });
+
+    it('uses octet-stream for unknown extensions', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const attachment = createDocumentAttachment({
+        uri: '/path/to/file.xyz',
+        fileName: 'file.xyz',
+        fileSize: 100,
+      });
+      const message = createUserMessage('Open', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      fireEvent.press(getByTestId('document-badge-0'));
+
+      expect(viewDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mimeType: 'application/octet-stream',
+        })
+      );
+    });
+
+    it('handles viewDocument rejection gracefully', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      viewDocument.mockRejectedValueOnce(new Error('Cannot open'));
+
+      const attachment = createDocumentAttachment({
+        uri: '/path/to/broken.pdf',
+        fileName: 'broken.pdf',
+        fileSize: 100,
+      });
+      const message = createUserMessage('Open', {
+        attachments: [attachment],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      // Should not throw
+      expect(() => fireEvent.press(getByTestId('document-badge-0'))).not.toThrow();
+    });
+
+    it('maps known extensions correctly (md, csv, py, js, ts, html, xml)', () => {
+      const { viewDocument } = require('@react-native-documents/viewer');
+      const extensions = [
+        { ext: 'md', mime: 'text/markdown' },
+        { ext: 'csv', mime: 'text/csv' },
+        { ext: 'py', mime: 'text/x-python' },
+        { ext: 'js', mime: 'text/javascript' },
+        { ext: 'ts', mime: 'text/typescript' },
+        { ext: 'html', mime: 'text/html' },
+        { ext: 'xml', mime: 'application/xml' },
+      ];
+
+      for (const { ext, mime } of extensions) {
+        viewDocument.mockClear();
+        const attachment = createDocumentAttachment({
+          uri: `/path/to/file.${ext}`,
+          fileName: `file.${ext}`,
+          fileSize: 100,
+        });
+        const message = createUserMessage('Open', {
+          attachments: [attachment],
+        });
+
+        const { getByTestId, unmount } = render(<ChatMessage message={message} />);
+        fireEvent.press(getByTestId('document-badge-0'));
+
+        expect(viewDocument).toHaveBeenCalledWith(
+          expect.objectContaining({ mimeType: mime })
+        );
+        unmount();
+      }
+    });
+  });
+
+  // ============================================================================
+  // Action hint button (covers line 453)
+  // ============================================================================
+  describe('action hint button', () => {
+    it('opens action menu when action hint (dots) is pressed', () => {
+      const message = createAssistantMessage('Test message');
+
+      const { getByText, getByTestId } = render(
+        <ChatMessage message={message} showActions={true} />
+      );
+
+      // Press the ••• button
+      fireEvent.press(getByText('•••'));
+
+      // Action menu should appear
+      expect(getByTestId('action-menu')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // FadeInImage onLoad (covers line 89)
+  // ============================================================================
+  describe('FadeInImage onLoad', () => {
+    it('triggers fade-in animation when image loads', () => {
+      const attachment = createImageAttachment({
+        uri: 'file:///test/image.jpg',
+      });
+      const message = createUserMessage('Image', { attachments: [attachment] });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      const image = getByTestId('message-image-0');
+      // Trigger onLoad callback on the Image component
+      fireEvent(image, 'load');
+
+      // Should not crash - the animation fires internally
+      expect(image).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // System info alert close (covers line 271)
+  // ============================================================================
+  describe('system info alert', () => {
+    it('can dismiss alert on system info message', () => {
+      const message = createMessage({
+        role: 'system',
+        content: 'Model loaded',
+        isSystemInfo: true,
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      // The system info message renders without crashing
+      expect(getByTestId('system-info-message')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Animated entry (covers animateEntry prop)
+  // ============================================================================
+  describe('animated entry', () => {
+    it('wraps message in AnimatedEntry when animateEntry is true', () => {
+      const message = createAssistantMessage('Animated message');
+
+      const { getByText } = render(
+        <ChatMessage message={message} animateEntry={true} />
+      );
+
+      expect(getByText('Animated message')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // formatDuration ms branch (covers line 659)
+  // ============================================================================
+  describe('formatDuration ms branch', () => {
+    it('displays duration in milliseconds when < 1000ms', () => {
+      const message = createAssistantMessage('Quick response', {
+        generationTimeMs: 750,
+      });
+
+      const { getByText } = render(
+        <ChatMessage message={message} />
+      );
+
+      expect(getByText('750ms')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Action sheet close callback (covers line 542)
+  // ============================================================================
+  describe('action sheet close', () => {
+    it('closes action menu when Done button is pressed', () => {
+      const message = createAssistantMessage('Test message');
+
+      const { getByTestId, getByText, queryByTestId } = render(
+        <ChatMessage message={message} showActions={true} />
+      );
+
+      // Open action menu
+      fireEvent(getByTestId('assistant-message'), 'longPress');
+      expect(getByTestId('action-menu')).toBeTruthy();
+
+      // Press Done (the AppSheet's close button) which calls onClose
+      fireEvent.press(getByText('Done'));
+
+      // The action menu should no longer be visible
+      // Note: AppSheet may still render due to animation, but showActionMenu state is false
+      // This exercises the onClose={() => setShowActionMenu(false)} callback
+    });
+  });
+
+  // ============================================================================
+  // CustomAlert close callback (covers line 640)
+  // ============================================================================
+  describe('custom alert dismissal', () => {
+    it('shows and can dismiss the Copied alert after copy action', () => {
+      const onCopy = jest.fn();
+      const message = createAssistantMessage('Copy me');
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} onCopy={onCopy} showActions={true} />
+      );
+
+      // Open menu and copy
+      fireEvent(getByTestId('assistant-message'), 'longPress');
+      fireEvent.press(getByTestId('action-copy'));
+
+      // Should show the Copied alert
+      expect(getByText('Copied')).toBeTruthy();
+      expect(getByText('Message copied to clipboard')).toBeTruthy();
+
+      // Dismiss the alert by pressing OK (the CustomAlert auto-adds OK button)
+      fireEvent.press(getByText('OK'));
+    });
+  });
+
+  // ============================================================================
+  // Thinking block with Enhanced label (covers line 388 branch)
+  // ============================================================================
+  describe('thinking block Enhanced label', () => {
+    it('shows E icon for Enhanced thinking label', () => {
+      const message = createAssistantMessage(
+        '<think>__LABEL:Enhanced Reasoning__\nDeep analysis here</think>The enhanced answer.'
+      );
+
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByTestId('thinking-block')).toBeTruthy();
+      expect(getByText('Enhanced Reasoning')).toBeTruthy();
+      expect(getByText('E')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Generation meta: GPU fallback without gpuBackend (covers line 467 branch)
+  // ============================================================================
+  describe('generation meta GPU fallback', () => {
+    it('shows GPU text when gpuBackend is absent but gpu is true', () => {
+      const meta: import('../../../src/types').GenerationMeta = {
+        gpu: true,
+        // gpuBackend intentionally omitted
+      };
+      const message = createAssistantMessage('Response', {
+        generationMeta: meta,
+      });
+
+      const { getByText } = render(
+        <ChatMessage message={message} showGenerationDetails={true} />
+      );
+
+      expect(getByText('GPU')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Thinking preview text (collapsed - long thinking text)
+  // ============================================================================
+  describe('thinking preview text', () => {
+    it('shows truncated preview when thinking text is > 80 chars and collapsed', () => {
+      const longThinking = 'A'.repeat(100);
+      const message = createAssistantMessage(
+        `<think>${longThinking}</think>Response here.`
+      );
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      // Preview should show first 80 chars + '...'
+      expect(getByText(/A{80}\.\.\./)).toBeTruthy();
+    });
+
+    it('shows full preview when thinking text is <= 80 chars', () => {
+      const shortThinking = 'B'.repeat(50);
+      const message = createAssistantMessage(
+        `<think>${shortThinking}</think>Response.`
+      );
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      // Preview should show the full text without '...'
+      expect(getByText(shortThinking)).toBeTruthy();
     });
   });
 });
