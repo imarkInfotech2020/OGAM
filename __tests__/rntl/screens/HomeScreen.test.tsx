@@ -32,7 +32,7 @@ import {
 } from '../../utils/factories';
 
 // Mock requestAnimationFrame
-(global as any).requestAnimationFrame = (cb: () => void) => {
+(globalThis as any).requestAnimationFrame = (cb: () => void) => {
   return setTimeout(cb, 0);
 };
 
@@ -58,7 +58,7 @@ const mockLoadImageModel = jest.fn(() => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockUnloadImageModel = jest.fn(() => Promise.resolve());
 const mockUnloadAllModels = jest.fn(() => Promise.resolve({ textUnloaded: true, imageUnloaded: true }));
-const mockCheckMemoryForModel = jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: null }));
+const mockCheckMemoryForModel = jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' }));
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
@@ -230,7 +230,7 @@ describe('HomeScreen', () => {
     mockCheckMemoryForModel.mockResolvedValue({
       canLoad: true,
       severity: 'safe',
-      message: null,
+      message: '',
     });
     (activeModelService.getResourceUsage as jest.Mock).mockResolvedValue({
       textModelMemory: 0,
@@ -833,9 +833,6 @@ describe('HomeScreen', () => {
     it('shows "No text models downloaded" when picker opened with no models', () => {
       const { getByText, queryByText } = renderHomeScreen();
 
-      // Press the text card via the "No models" text area
-      const { TouchableOpacity } = require('react-native');
-
       // Use "Select Model" button for models-exist case, but for no-models case
       // the card shows "No models" - press the Text card area
       // Since our mock AnimatedPressable wraps with TouchableOpacity, we can press it
@@ -1001,7 +998,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const model = createDownloadedModel({ name: 'Safe Model' });
@@ -1237,7 +1234,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const model = createDownloadedModel({ name: 'Crash Model' });
@@ -1260,7 +1257,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const imageModel = createONNXImageModel({ name: 'Crash Image' });
@@ -1332,7 +1329,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const { getByText, getByTestId, queryByText } = renderHomeScreen();
@@ -1356,7 +1353,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const { getByTestId, queryByText } = renderHomeScreen();
@@ -1461,7 +1458,7 @@ describe('HomeScreen', () => {
       mockCheckMemoryForModel.mockResolvedValue({
         canLoad: true,
         severity: 'safe',
-        message: null,
+        message: '',
       });
 
       const { getByText, getByTestId, queryByText } = renderHomeScreen();
@@ -1662,7 +1659,7 @@ describe('HomeScreen', () => {
 
     it('navigates to ModelsTab from empty image picker Browse Models button', () => {
       // No image models downloaded
-      const { getByTestId, getByText, getAllByText } = renderHomeScreen();
+      const { getByTestId, getAllByText } = renderHomeScreen();
 
       // Open image model picker
       fireEvent.press(getByTestId('image-model-card'));

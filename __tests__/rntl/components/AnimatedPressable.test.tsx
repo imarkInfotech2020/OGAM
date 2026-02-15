@@ -113,12 +113,12 @@ describe('AnimatedPressable', () => {
   // ============================================================================
   it('triggers haptic feedback when hapticType is provided', () => {
     const { getByTestId } = render(
-      <AnimatedPressable hapticType="light" testID="pressable">
+      <AnimatedPressable hapticType="impactLight" testID="pressable">
         <Text>Haptic</Text>
       </AnimatedPressable>,
     );
     fireEvent(getByTestId('pressable'), 'pressIn');
-    expect(mockTriggerHaptic).toHaveBeenCalledWith('light');
+    expect(mockTriggerHaptic).toHaveBeenCalledWith('impactLight');
   });
 
   it('does not trigger haptic feedback when hapticType is not provided', () => {

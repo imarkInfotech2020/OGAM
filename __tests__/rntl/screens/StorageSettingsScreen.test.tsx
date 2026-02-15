@@ -66,7 +66,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
@@ -112,20 +112,20 @@ const mockFormatBytes = jest.fn((bytes: number) => {
   return `${(bytes / Math.pow(k, i)).toFixed(i > 1 ? 2 : 0)} ${sizes[i]}`;
 });
 
-const mockGetOrphanedFiles = jest.fn(() => Promise.resolve([]));
+const mockGetOrphanedFiles = jest.fn<Promise<any[]>, any[]>(() => Promise.resolve([]));
 const mockDeleteOrphanedFile = jest.fn(() => Promise.resolve());
 
 jest.mock('../../../src/services', () => ({
   hardwareService: {
     getFreeDiskStorageGB: jest.fn(() => 50),
     formatModelSize: jest.fn(() => '4.00 GB'),
-    formatBytes: (...args: any[]) => mockFormatBytes(...args),
+    formatBytes: (...args: any[]) => (mockFormatBytes as any)(...args),
   },
   modelManager: {
     getStorageUsed: jest.fn(() => Promise.resolve(4 * 1024 * 1024 * 1024)),
     getAvailableStorage: jest.fn(() => Promise.resolve(50 * 1024 * 1024 * 1024)),
-    getOrphanedFiles: (...args: any[]) => mockGetOrphanedFiles(...args),
-    deleteOrphanedFile: (...args: any[]) => mockDeleteOrphanedFile(...args),
+    getOrphanedFiles: (...args: any[]) => (mockGetOrphanedFiles as any)(...args),
+    deleteOrphanedFile: (...args: any[]) => (mockDeleteOrphanedFile as any)(...args),
   },
 }));
 
@@ -304,7 +304,7 @@ describe('StorageSettingsScreen', () => {
 
     // Wait for async scan to complete
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     expect(result.getByText('No orphaned files found')).toBeTruthy();
@@ -318,7 +318,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     expect(result.getByText('stale-model.gguf')).toBeTruthy();
@@ -333,7 +333,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     expect(result.getByText(/files\/folders exist on disk but aren't tracked/)).toBeTruthy();
@@ -443,7 +443,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // The trash icon button for individual orphaned files is within the orphanedRow
@@ -477,7 +477,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // Find and press the individual trash button
@@ -512,7 +512,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // Find and press the individual trash button
@@ -547,7 +547,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // Press "Delete All Orphaned Files" button
@@ -577,7 +577,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // Should still render without crashing
@@ -608,7 +608,7 @@ describe('StorageSettingsScreen', () => {
     const result = render(<StorageSettingsScreen />);
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
 
     // Clear first call from initial render
@@ -625,7 +625,7 @@ describe('StorageSettingsScreen', () => {
     }
 
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
   });
 
@@ -663,7 +663,7 @@ describe('StorageSettingsScreen', () => {
     // Resolve to complete scanning
     await act(async () => {
       resolveOrphaned([]);
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
   });
 });

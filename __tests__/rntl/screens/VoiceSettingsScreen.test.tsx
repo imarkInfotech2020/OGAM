@@ -50,7 +50,7 @@ const mockShowAlert = jest.fn((title: string, message: string, buttons?: any[]) 
 }));
 
 jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
+  CustomAlert: ({ visible, title, message, buttons, _onClose }: any) => {
     if (!visible) return null;
     const { View, Text, TouchableOpacity } = require('react-native');
     return (
@@ -65,7 +65,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));

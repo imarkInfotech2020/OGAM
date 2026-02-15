@@ -133,7 +133,7 @@ describe('projectStore', () => {
   // ============================================================================
   describe('updateProject', () => {
     it('updates project name', () => {
-      const { createProject, updateProject, getProject } = useProjectStore.getState();
+      const { createProject, updateProject } = useProjectStore.getState();
       const project = createProject({
         name: 'Original Name',
         description: 'Desc',
@@ -277,7 +277,7 @@ describe('projectStore', () => {
   // ============================================================================
   describe('deleteProject', () => {
     it('removes the project from the store', () => {
-      const { createProject, deleteProject, getProject } = useProjectStore.getState();
+      const { createProject, deleteProject } = useProjectStore.getState();
       const project = createProject({
         name: 'To Delete',
         description: 'Will be deleted',
@@ -360,7 +360,7 @@ describe('projectStore', () => {
 
     it('returns the correct project when multiple exist', () => {
       const { createProject } = useProjectStore.getState();
-      const p1 = createProject({
+      createProject({
         name: 'First',
         description: 'D1',
         systemPrompt: 'P1',

@@ -2,7 +2,6 @@ import {
   fetchAvailableModels,
   getVariantLabel,
   guessStyle,
-  HFImageModel,
 } from '../../../src/services/huggingFaceModelBrowser';
 
 // ---------------------------------------------------------------------------
@@ -10,7 +9,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const mockFetch = jest.fn();
-global.fetch = mockFetch;
+(globalThis as any).fetch = mockFetch;
 
 /** Build a fake HuggingFace tree entry. */
 function treeEntry(

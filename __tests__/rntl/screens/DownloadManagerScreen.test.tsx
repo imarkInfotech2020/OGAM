@@ -18,7 +18,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { TouchableOpacity } from 'react-native';
 
 // Navigation is globally mocked in jest.setup.ts
@@ -108,8 +108,8 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
-  hideAlert: (...args: any[]) => mockHideAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
+  hideAlert: (...args: any[]) => (mockHideAlert as any)(...args),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
 
@@ -903,7 +903,7 @@ describe('DownloadManagerScreen', () => {
       return selector ? selector(state) : state;
     });
 
-    const { getByText, queryByText } = render(<DownloadManagerScreen />);
+    const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('valid-file.gguf')).toBeTruthy();
     // The invalid entry should be skipped (no NaN rendering)
   });

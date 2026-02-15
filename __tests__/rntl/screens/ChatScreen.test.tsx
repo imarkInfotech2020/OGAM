@@ -24,19 +24,16 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
-import { resetStores, setupWithActiveModel, setupFullChat } from '../../utils/testHelpers';
+import { resetStores, setupFullChat } from '../../utils/testHelpers';
 import {
   createDownloadedModel,
   createONNXImageModel,
   createConversation,
-  createMessage,
   createUserMessage,
   createAssistantMessage,
   createVisionModel,
   createImageAttachment,
-  createGenerationMeta,
   createProject,
-  createDocumentAttachment,
 } from '../../utils/factories';
 
 // Mock navigation
@@ -374,7 +371,7 @@ jest.mock('../../../src/components', () => ({
   hideAlert: () => ({ visible: false, title: '', message: '', buttons: [] }),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
   AlertState: {},
-  ProjectSelectorSheet: ({ visible, onClose, onSelectProject, projects, activeProject }: any) => {
+  ProjectSelectorSheet: ({ visible, onClose, onSelectProject, projects, _activeProject }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
     if (!visible) return null;
     return (
@@ -421,7 +418,7 @@ jest.mock('../../../src/components/AnimatedPressable', () => ({
 
 // Mock requestAnimationFrame to execute callbacks via setTimeout(0)
 // This is needed because ChatScreen uses requestAnimationFrame in model loading flows
-(global as any).requestAnimationFrame = (cb: () => void) => {
+(globalThis as any).requestAnimationFrame = (cb: () => void) => {
   return setTimeout(cb, 0);
 };
 
@@ -432,9 +429,6 @@ import { llmService } from '../../../src/services/llm';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { activeModelService } from '../../../src/services/activeModelService';
 import { modelManager } from '../../../src/services/modelManager';
-import { intentClassifier } from '../../../src/services/intentClassifier';
-import { Keyboard, Platform } from 'react-native';
-const RNFS = require('react-native-fs');
 
 const renderChatScreen = () => {
   return render(
@@ -926,7 +920,7 @@ describe('ChatScreen', () => {
     });
 
     it('sends a message and adds it to the conversation', async () => {
-      const { modelId, conversationId } = setupFullChat();
+      const { conversationId } = setupFullChat();
       const model = useAppStore.getState().downloadedModels[0];
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(model.filePath);
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
@@ -1222,7 +1216,7 @@ describe('ChatScreen', () => {
     });
 
     it('assigns project to conversation when selected', () => {
-      const { modelId, conversationId } = setupFullChat();
+      const { conversationId } = setupFullChat();
       const project = createProject({ name: 'Test Project' });
       useProjectStore.setState({ projects: [project] });
       mockRoute.params = { conversationId };
@@ -1230,7 +1224,6 @@ describe('ChatScreen', () => {
       const { getByTestId } = renderChatScreen();
 
       // Open project selector via empty chat hint
-      const { TouchableOpacity } = require('react-native');
       // Open from settings
       fireEvent.press(getByTestId('chat-settings-icon'));
       fireEvent.press(getByTestId('open-project-btn'));
@@ -1446,7 +1439,7 @@ describe('ChatScreen', () => {
 
       await act(async () => {
         fireEvent.press(unloadBtn);
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise<void>(r => setTimeout(() => r(), 10));
       });
       // The async unload flow involves requestAnimationFrame which may not fully resolve
     });
@@ -1645,7 +1638,7 @@ describe('ChatScreen', () => {
 
       await act(async () => {
         fireEvent.press(getByTestId(`retry-${userMsg.id}`));
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise<void>(r => setTimeout(() => r(), 10));
       });
 
       // The assistant message should be deleted (messages after user msg removed)
@@ -1676,7 +1669,7 @@ describe('ChatScreen', () => {
 
       await act(async () => {
         fireEvent.press(getByTestId(`retry-${assistantMsg.id}`));
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise<void>(r => setTimeout(() => r(), 10));
       });
 
       // When retrying assistant message, it should delete the assistant message
@@ -1709,7 +1702,7 @@ describe('ChatScreen', () => {
 
       await act(async () => {
         fireEvent.press(getByTestId(`edit-${userMsg.id}`));
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise<void>(r => setTimeout(() => r(), 10));
       });
 
       // Message content should be updated
@@ -2218,7 +2211,7 @@ describe('ChatScreen', () => {
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
       mockRoute.params = { conversationId };
 
-      const { rerender } = renderChatScreen();
+      renderChatScreen();
 
       // Create a second conversation and switch to it
       const conv2 = createConversation({ modelId, title: 'Second Chat' });
@@ -2232,7 +2225,7 @@ describe('ChatScreen', () => {
 
       await act(async () => {
         // Wait for InteractionManager to run
-        jest.runAllTimers?.() || await new Promise(r => setTimeout(r, 50));
+        if (jest.runAllTimers) { jest.runAllTimers(); } else { await new Promise<void>(r => setTimeout(() => r(), 50)); }
       });
 
       // clearKVCache should have been called
@@ -2250,7 +2243,7 @@ describe('ChatScreen', () => {
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue('/mock/models/test-model.gguf');
 
-      const { queryByTestId } = renderChatScreen();
+      renderChatScreen();
       await act(async () => {});
       // Component renders FlatList with scroll handlers - testing via render is sufficient
       // The scroll handler updates internal state (isNearBottomRef, showScrollToBottom)
@@ -2421,7 +2414,7 @@ describe('ChatScreen', () => {
       await act(async () => { fireEvent.press(getByTestId('model-selector')); });
       await act(async () => { fireEvent.press(getByTestId('select-model-model-2')); });
       // Wait for requestAnimationFrame chain + setTimeout(200) in proceedWithModelLoad
-      await act(async () => { await new Promise(r => setTimeout(r, 500)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
       // Memory check should have been called for the new model
       expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith('model-2', 'text');
@@ -2449,7 +2442,7 @@ describe('ChatScreen', () => {
       await act(async () => {});
 
       // The handleUnloadModel flow is triggered — exercises lines 507-531
-      await act(async () => { await new Promise(r => setTimeout(r, 500)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
     });
   });
 
@@ -2483,7 +2476,7 @@ describe('ChatScreen', () => {
       await act(async () => {});
 
       // Wait for async handleSend -> shouldRouteToImageGeneration -> handleImageGeneration
-      await act(async () => { await new Promise(r => setTimeout(r, 500)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
       // The code exercises the manual mode branch (line 543: return forceImageMode === true)
       // and flows through handleImageGeneration. The mock may not register due to async timing.
@@ -2523,7 +2516,7 @@ describe('ChatScreen', () => {
         fireEvent.press(getByTestId('send-button'));
       });
 
-      await act(async () => { await new Promise(r => setTimeout(r, 500)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
       // The code exercises intent classification branch (lines 556-584)
     });
 
@@ -2635,8 +2628,8 @@ describe('ChatScreen', () => {
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(null);
       mockLoadModel.mockRejectedValue(new Error('Load failed'));
 
-      const { getByTestId } = renderChatScreen();
-      await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+      renderChatScreen();
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 300)); });
 
       // The ensureModelLoaded should have been called and failed
       // This covers the error branch at line 411
@@ -2671,7 +2664,7 @@ describe('ChatScreen', () => {
       await act(async () => {
         fireEvent.press(getByTestId('send-button'));
       });
-      await act(async () => { await new Promise(r => setTimeout(r, 100)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 100)); });
 
       // processQueuedMessage should eventually call clearKVCache
       // if truncatedCount > 0 or contextUsagePercent > 70
@@ -2742,7 +2735,7 @@ describe('ChatScreen', () => {
       await act(async () => { fireEvent.press(getByTestId(`retry-${assistantMsg.id}`)); });
       await act(async () => {});
 
-      await act(async () => { await new Promise(r => setTimeout(r, 500)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
       // The code exercises regenerateResponse with image routing (lines 884-886)
     });
   });
@@ -2770,9 +2763,9 @@ describe('ChatScreen', () => {
       mockGenerateResponse.mockRejectedValue(new Error('Generation failed'));
 
       // Need to capture the queue processor to trigger generation
-      let queueProcessor: any = null;
+      let _queueProcessor: any = null;
       (generationService.setQueueProcessor as jest.Mock).mockImplementation((fn: any) => {
-        queueProcessor = fn;
+        _queueProcessor = fn;
       });
 
       const { getByTestId } = renderChatScreen();
@@ -2882,7 +2875,7 @@ describe('ChatScreen', () => {
       mockLoadModel.mockImplementation(() => new Promise(() => {}));
 
       const { getByText } = renderChatScreen();
-      await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 300)); });
 
       // Should show model name in loading state
       expect(getByText(model.name)).toBeTruthy();
@@ -2915,7 +2908,7 @@ describe('ChatScreen', () => {
       });
 
       const { getByTestId } = renderChatScreen();
-      await act(async () => { await new Promise(r => setTimeout(r, 300)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 300)); });
 
       // Should show insufficient memory alert
       expect(getByTestId('custom-alert')).toBeTruthy();
@@ -2941,7 +2934,7 @@ describe('ChatScreen', () => {
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue('/mock/models/test-model.gguf');
 
       // Make generateImage return null (failure) and set error state
-      mockGenerateImage.mockResolvedValue(null);
+      mockGenerateImage.mockResolvedValue(null as any);
       const errorState = { ...mockImageGenState, error: 'Generation failed due to memory' };
       (imageGenerationService.getState as jest.Mock).mockReturnValue(errorState);
 
@@ -3026,7 +3019,6 @@ describe('ChatScreen', () => {
       });
       useProjectStore.setState({
         projects: [project],
-        activeProjectId: project.id,
       });
       const conv = createConversation({ modelId: model.id, projectId: project.id });
       useChatStore.setState({

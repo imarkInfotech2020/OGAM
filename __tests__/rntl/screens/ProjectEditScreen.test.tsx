@@ -114,7 +114,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
@@ -198,14 +198,14 @@ describe('ProjectEditScreen', () => {
   describe('new project mode rendering', () => {
     it('renders "New Project" title when no projectId', () => {
       mockRouteParams = {};
-      mockGetProject.mockReturnValue(null);
+      mockGetProject.mockReturnValue(null as any);
       const { getByText } = render(<ProjectEditScreen />);
       expect(getByText('New Project')).toBeTruthy();
     });
 
     it('shows empty inputs when creating new project', () => {
       mockRouteParams = {};
-      mockGetProject.mockReturnValue(null);
+      mockGetProject.mockReturnValue(null as any);
       const { queryByDisplayValue } = render(<ProjectEditScreen />);
       expect(queryByDisplayValue('Test Project')).toBeNull();
       expect(queryByDisplayValue('Test desc')).toBeNull();
@@ -256,13 +256,12 @@ describe('ProjectEditScreen', () => {
 
     it('calls createProject and goBack when saving new project', () => {
       mockRouteParams = {};
-      mockGetProject.mockReturnValue(null);
-      const { getByDisplayValue, getByText } = render(<ProjectEditScreen />);
+      mockGetProject.mockReturnValue(null as any);
+      const { getByText } = render(<ProjectEditScreen />);
 
       // Fill in form fields since they start empty
       const { TextInput } = require('react-native');
       // We need to find the inputs by placeholder
-      const inputs = getByText('Save'); // just to ensure render
       // Use UNSAFE to find all TextInputs
       const { UNSAFE_getAllByType } = render(<ProjectEditScreen />);
       const textInputs = UNSAFE_getAllByType(TextInput);
@@ -277,7 +276,7 @@ describe('ProjectEditScreen', () => {
 
     it('creates new project with filled form data', () => {
       mockRouteParams = {};
-      mockGetProject.mockReturnValue(null);
+      mockGetProject.mockReturnValue(null as any);
       const { TextInput } = require('react-native');
       const { UNSAFE_getAllByType, getByText } = render(<ProjectEditScreen />);
       const textInputs = UNSAFE_getAllByType(TextInput);

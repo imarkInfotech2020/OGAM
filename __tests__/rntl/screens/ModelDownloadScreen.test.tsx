@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 
 const mockNavigate = jest.fn();
 const mockReplace = jest.fn();
@@ -55,7 +55,7 @@ jest.mock('../../../src/stores', () => ({
   }),
 }));
 
-const mockGetModelFiles = jest.fn(() => Promise.resolve([]));
+const mockGetModelFiles = jest.fn<Promise<any[]>, any[]>(() => Promise.resolve([]));
 const mockDownloadModel = jest.fn();
 const mockDownloadModelBackground = jest.fn();
 
@@ -67,7 +67,7 @@ jest.mock('../../../src/services', () => ({
     formatBytes: jest.fn((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`),
   },
   huggingFaceService: {
-    getModelFiles: jest.fn((...args: any[]) => mockGetModelFiles(...args)),
+    getModelFiles: jest.fn((...args: any[]) => (mockGetModelFiles as any)(...args)),
   },
   modelManager: {
     isBackgroundDownloadSupported: jest.fn(() => false),
@@ -98,7 +98,7 @@ jest.mock('../../../src/components', () => ({
       </TouchableOpacity>
     );
   },
-  ModelCard: ({ model, onPress, onDownload, testID, file, isDownloading }: any) => {
+  ModelCard: ({ model, onPress, onDownload, testID, _file, isDownloading }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
     return (
       <View testID={testID}>
@@ -149,7 +149,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
@@ -192,9 +192,9 @@ describe('ModelDownloadScreen', () => {
     mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
     mockHardwareService.formatBytes.mockImplementation((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(false);
-    mockModelManager.downloadModel.mockImplementation((...args: any[]) => mockDownloadModel(...args));
-    mockModelManager.downloadModelBackground.mockImplementation((...args: any[]) => mockDownloadModelBackground(...args));
-    mockHuggingFaceService.getModelFiles.mockImplementation((...args: any[]) => mockGetModelFiles(...args));
+    mockModelManager.downloadModel.mockImplementation((...args: any[]) => (mockDownloadModel as any)(...args));
+    mockModelManager.downloadModelBackground.mockImplementation((...args: any[]) => (mockDownloadModelBackground as any)(...args));
+    mockHuggingFaceService.getModelFiles.mockImplementation((...args: any[]) => (mockGetModelFiles as any)(...args));
   });
 
   it('renders the loading state initially', () => {

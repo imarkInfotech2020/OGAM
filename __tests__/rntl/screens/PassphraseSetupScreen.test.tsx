@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 
 jest.mock('../../../src/components', () => ({
   Card: ({ children, style }: any) => {
@@ -59,7 +59,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
@@ -73,8 +73,8 @@ const mockChangePassphrase = jest.fn(() => Promise.resolve(true));
 
 jest.mock('../../../src/services/authService', () => ({
   authService: {
-    setPassphrase: (...args: any[]) => mockSetPassphrase(...args),
-    changePassphrase: (...args: any[]) => mockChangePassphrase(...args),
+    setPassphrase: (...args: any[]) => (mockSetPassphrase as any)(...args),
+    changePassphrase: (...args: any[]) => (mockChangePassphrase as any)(...args),
   },
 }));
 

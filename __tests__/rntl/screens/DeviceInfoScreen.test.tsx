@@ -109,7 +109,6 @@ describe('DeviceInfoScreen', () => {
   });
 
   it('back button calls goBack', () => {
-    const { getByText } = render(<DeviceInfoScreen />);
     // The back button is a TouchableOpacity wrapping an Icon.
     // Since Icon is mocked as a string component, we find the parent via the title.
     // Instead, use UNSAFE query on the tree - find the touchable before the title.

@@ -812,7 +812,7 @@ describe('Image Generation Flow Integration', () => {
       mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
       mockLlmService.generateResponse.mockRejectedValue(new Error('Enhancement failed'));
 
-      const result = await imageGenerationService.generateImage({
+      await imageGenerationService.generateImage({
         prompt: 'Original prompt',
       });
 
@@ -843,7 +843,7 @@ describe('Image Generation Flow Integration', () => {
       });
       mockLlmService.isModelLoaded.mockReturnValue(false);
 
-      const result = await imageGenerationService.generateImage({
+      await imageGenerationService.generateImage({
         prompt: 'No enhancement',
       });
 

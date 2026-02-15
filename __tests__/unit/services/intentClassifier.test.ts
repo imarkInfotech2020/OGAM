@@ -967,7 +967,7 @@ describe('IntentClassifier', () => {
         }
       );
       mockActiveModelService.getActiveModels.mockReturnValue({
-        text: { model: { id: 'original-model' }, isLoaded: true, isLoading: false },
+        text: { model: { id: 'original-model' } as any, isLoaded: true, isLoading: false },
         image: { model: null, isLoaded: false, isLoading: false },
       });
       mockActiveModelService.loadTextModel.mockResolvedValue(undefined);
@@ -1015,7 +1015,7 @@ describe('IntentClassifier', () => {
         }
       );
       mockActiveModelService.getActiveModels.mockReturnValue({
-        text: { model: { id: 'original-model' }, isLoaded: true, isLoading: false },
+        text: { model: { id: 'original-model' } as any, isLoaded: true, isLoading: false },
         image: { model: null, isLoaded: false, isLoading: false },
       });
       mockActiveModelService.loadTextModel.mockResolvedValue(undefined);

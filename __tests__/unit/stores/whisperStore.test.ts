@@ -82,8 +82,8 @@ describe('whisperStore', () => {
       let resolveDownload!: () => void;
       mockWhisperService.downloadModel.mockImplementation(
         () =>
-          new Promise<void>((resolve) => {
-            resolveDownload = resolve;
+          new Promise<string>((resolve) => {
+            resolveDownload = () => resolve('/path/to/model');
           }),
       );
       mockWhisperService.getModelPath.mockReturnValue('/path/to/model');
@@ -105,9 +105,10 @@ describe('whisperStore', () => {
 
     it('calls whisperService.downloadModel with modelId and progress callback', async () => {
       mockWhisperService.downloadModel.mockImplementation(
-        async (_id: string, onProgress: (p: number) => void) => {
-          onProgress(0.5);
-          onProgress(1.0);
+        async (_id: string, onProgress?: (p: number) => void) => {
+          onProgress?.(0.5);
+          onProgress?.(1.0);
+          return '/path/to/model';
         },
       );
       mockWhisperService.getModelPath.mockReturnValue('/path/to/model');
@@ -125,11 +126,12 @@ describe('whisperStore', () => {
       const progressValues: number[] = [];
 
       mockWhisperService.downloadModel.mockImplementation(
-        async (_id: string, onProgress: (p: number) => void) => {
-          onProgress(0.25);
+        async (_id: string, onProgress?: (p: number) => void) => {
+          onProgress?.(0.25);
           progressValues.push(getState().downloadProgress);
-          onProgress(0.75);
+          onProgress?.(0.75);
           progressValues.push(getState().downloadProgress);
+          return '/path/to/model';
         },
       );
       mockWhisperService.getModelPath.mockReturnValue('/path/to/model');
@@ -141,7 +143,7 @@ describe('whisperStore', () => {
     });
 
     it('sets downloadedModelId and progress to 1 on success', async () => {
-      mockWhisperService.downloadModel.mockResolvedValue(undefined);
+      mockWhisperService.downloadModel.mockResolvedValue('/path/to/model');
       mockWhisperService.getModelPath.mockReturnValue('/path/to/model');
       mockWhisperService.loadModel.mockResolvedValue(undefined);
 
@@ -153,7 +155,7 @@ describe('whisperStore', () => {
     });
 
     it('auto-loads the model after successful download', async () => {
-      mockWhisperService.downloadModel.mockResolvedValue(undefined);
+      mockWhisperService.downloadModel.mockResolvedValue('/path/to/model');
       mockWhisperService.getModelPath.mockReturnValue('/models/ggml-tiny');
       mockWhisperService.loadModel.mockResolvedValue(undefined);
 

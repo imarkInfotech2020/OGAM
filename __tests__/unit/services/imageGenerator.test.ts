@@ -1,3 +1,5 @@
+export {};
+
 /**
  * ImageGeneratorService Unit Tests
  *

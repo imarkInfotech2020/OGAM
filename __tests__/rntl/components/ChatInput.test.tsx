@@ -1481,7 +1481,7 @@ describe('ChatInput', () => {
       // Let me use rerender to change the prop after the toggle is visible.
 
       const onImageModeChange = jest.fn();
-      const { getByTestId, rerender, getByText } = render(
+      const { getByTestId } = render(
         <ChatInput
           {...defaultProps}
           imageModelLoaded={true}
@@ -1740,7 +1740,7 @@ describe('ChatInput', () => {
         id: 'doc-no-name',
         type: 'document' as const,
         uri: 'file:///mock/unnamed-doc',
-        // fileName intentionally omitted
+        fileName: 'document.txt',
         textContent: 'content',
         fileSize: 100,
       });

@@ -18,7 +18,6 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { Platform } from 'react-native';
 import { GenerationSettingsModal } from '../../../src/components/GenerationSettingsModal';
 
 // Mock AppSheet

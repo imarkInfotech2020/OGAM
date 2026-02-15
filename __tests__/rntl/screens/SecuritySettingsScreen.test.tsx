@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 
 // Navigation is globally mocked in jest.setup.ts
 const mockGoBack = jest.fn();

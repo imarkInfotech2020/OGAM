@@ -74,8 +74,8 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
-  hideAlert: (...args: any[]) => mockHideAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
+  hideAlert: (...args: any[]) => (mockHideAlert as any)(...args),
   initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
 
@@ -140,12 +140,12 @@ let mockImageGenState = {
   previewPath: null as string | null,
   progress: null as any,
 };
-let mockSubscribeCallback: any = null;
+let _mockSubscribeCallback: any = null;
 
 jest.mock('../../../src/services', () => ({
   imageGenerationService: {
     subscribe: jest.fn((cb: any) => {
-      mockSubscribeCallback = cb;
+      _mockSubscribeCallback = cb;
       return jest.fn();
     }),
     getState: jest.fn(() => mockImageGenState),
@@ -154,7 +154,7 @@ jest.mock('../../../src/services', () => ({
   onnxImageGeneratorService: {
     subscribe: jest.fn(() => jest.fn()),
     getGeneratedImages: jest.fn(() => mockGetGeneratedImages()),
-    deleteGeneratedImage: jest.fn((...args: any[]) => mockDeleteGeneratedImage(...args)),
+    deleteGeneratedImage: jest.fn((...args: any[]) => (mockDeleteGeneratedImage as any)(...args)),
   },
 }));
 
@@ -214,7 +214,7 @@ describe('GalleryScreen', () => {
       previewPath: null,
       progress: null,
     };
-    mockSubscribeCallback = null;
+    _mockSubscribeCallback = null;
     mockGetGeneratedImages.mockResolvedValue([]);
   });
 
@@ -511,7 +511,7 @@ describe('GalleryScreen', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     ];
-    mockGetGeneratedImages.mockResolvedValue(diskImages);
+    mockGetGeneratedImages.mockResolvedValue(diskImages as any);
 
     render(<GalleryScreen />);
 
@@ -609,7 +609,7 @@ describe('GalleryScreen', () => {
     expect(result.getByText('Info')).toBeTruthy();
 
     // Find the Modal and trigger onRequestClose
-    const modal = result.UNSAFE_root.findAll((node: any) =>
+    result.UNSAFE_root.findAll((node: any) =>
       node.type && (node.type.name === 'Modal' || node.type === 'Modal' ||
         (typeof node.type === 'string' && node.type.toLowerCase() === 'modal'))
     );

@@ -1364,7 +1364,7 @@ describe('ChatMessage', () => {
     it('closes action menu when Done button is pressed', () => {
       const message = createAssistantMessage('Test message');
 
-      const { getByTestId, getByText, queryByTestId } = render(
+      const { getByTestId, getByText } = render(
         <ChatMessage message={message} showActions={true} />
       );
 

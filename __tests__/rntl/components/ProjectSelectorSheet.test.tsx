@@ -36,16 +36,16 @@ const mockProjects: Project[] = [
     name: 'Alpha',
     description: 'First project',
     systemPrompt: 'prompt1',
-    createdAt: 1,
-    updatedAt: 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
   {
     id: '2',
     name: 'Beta',
     description: 'Second project',
     systemPrompt: 'prompt2',
-    createdAt: 2,
-    updatedAt: 2,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   },
 ];
 

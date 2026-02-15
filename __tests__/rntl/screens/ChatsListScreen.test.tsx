@@ -83,7 +83,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
       </View>
     );
   },
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
   hideAlert: jest.fn(() => ({
     visible: false,
     title: '',
@@ -409,7 +409,7 @@ describe('ChatsListScreen', () => {
       });
       useChatStore.setState({ conversations: [conv] });
 
-      const { getByText, queryByText } = render(<ChatsListScreen />);
+      const { getByText } = render(<ChatsListScreen />);
       expect(getByText('No Project Conv')).toBeTruthy();
       // No project badge text should appear
     });
@@ -459,7 +459,7 @@ describe('ChatsListScreen', () => {
         generatedImages: [],
       });
 
-      const { getByText } = render(<ChatsListScreen />);
+      render(<ChatsListScreen />);
       // The Swipeable mock renders renderRightActions inline, which contains
       // a trash button. Find it and press it.
       const { TouchableOpacity } = require('react-native');
