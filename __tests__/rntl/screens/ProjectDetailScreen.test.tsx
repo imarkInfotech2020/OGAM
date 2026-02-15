@@ -1,0 +1,531 @@
+/**
+ * ProjectDetailScreen Tests
+ *
+ * Tests for the project detail screen including:
+ * - Project name and description display
+ * - Empty chats state
+ * - Back button navigation
+ * - Edit project navigation
+ * - Delete project flow
+ * - Conversation list with project chats
+ * - New chat creation
+ * - Delete chat flow
+ */
+
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+
+const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
+const mockParentNavigate = jest.fn();
+
+jest.mock('@react-navigation/native', () => {
+  const actual = jest.requireActual('@react-navigation/native');
+  return {
+    ...actual,
+    useNavigation: () => ({
+      navigate: mockNavigate,
+      goBack: mockGoBack,
+      setOptions: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      getParent: () => ({ navigate: mockParentNavigate }),
+    }),
+    useRoute: () => ({
+      params: { projectId: 'proj1' },
+    }),
+    useFocusEffect: jest.fn(),
+    useIsFocused: () => true,
+  };
+});
+
+const mockDeleteProject = jest.fn();
+const mockDeleteConversation = jest.fn();
+const mockSetActiveConversation = jest.fn();
+const mockCreateConversation = jest.fn(() => 'new-conv-1');
+
+let mockProject: any = {
+  id: 'proj1',
+  name: 'Test Project',
+  description: 'A test project description',
+  systemPrompt: 'Be helpful',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+let mockConversations: any[] = [];
+let mockDownloadedModels: any[] = [{ id: 'model1', name: 'Test Model' }];
+let mockActiveModelId: string | null = 'model1';
+
+jest.mock('../../../src/stores', () => ({
+  useProjectStore: jest.fn(() => ({
+    getProject: jest.fn(() => mockProject),
+    deleteProject: mockDeleteProject,
+  })),
+  useChatStore: jest.fn(() => ({
+    conversations: mockConversations,
+    deleteConversation: mockDeleteConversation,
+    setActiveConversation: mockSetActiveConversation,
+    createConversation: mockCreateConversation,
+  })),
+  useAppStore: jest.fn((selector?: any) => {
+    const state = {
+      downloadedModels: mockDownloadedModels,
+      activeModelId: mockActiveModelId,
+      themeMode: 'system',
+    };
+    return selector ? selector(state) : state;
+  }),
+}));
+
+jest.mock('../../../src/components', () => ({
+  Card: ({ children, style }: any) => {
+    const { View } = require('react-native');
+    return <View style={style}>{children}</View>;
+  },
+  Button: ({ title, onPress, disabled }: any) => {
+    const { TouchableOpacity, Text } = require('react-native');
+    return (
+      <TouchableOpacity onPress={onPress} disabled={disabled} testID={`button-${title}`}>
+        <Text>{title}</Text>
+      </TouchableOpacity>
+    );
+  },
+}));
+
+jest.mock('../../../src/components/Button', () => ({
+  Button: ({ title, onPress, disabled }: any) => {
+    const { TouchableOpacity, Text } = require('react-native');
+    return (
+      <TouchableOpacity onPress={onPress} disabled={disabled} testID={`button-${title}`}>
+        <Text>{title}</Text>
+      </TouchableOpacity>
+    );
+  },
+}));
+
+jest.mock('../../../src/components/CustomAlert', () => {
+  const { View, Text, TouchableOpacity } = require('react-native');
+  return {
+    CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
+      if (!visible) return null;
+      return (
+        <View testID="custom-alert">
+          <Text testID="alert-title">{title}</Text>
+          <Text testID="alert-message">{message}</Text>
+          {buttons && buttons.map((btn: any, i: number) => (
+            <TouchableOpacity
+              key={i}
+              testID={`alert-button-${btn.text}`}
+              onPress={() => {
+                if (btn.onPress) btn.onPress();
+                onClose();
+              }}
+            >
+              <Text>{btn.text}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    },
+    showAlert: (title: string, message: string, buttons?: any[]) => ({
+      visible: true,
+      title,
+      message,
+      buttons: buttons || [{ text: 'OK', style: 'default' }],
+    }),
+    hideAlert: () => ({ visible: false, title: '', message: '', buttons: [] }),
+    initialAlertState: { visible: false, title: '', message: '', buttons: [] },
+  };
+});
+
+jest.mock('../../../src/components/AnimatedEntry', () => ({
+  AnimatedEntry: ({ children }: any) => children,
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: ({ children, ...props }: any) => {
+    const { View } = require('react-native');
+    return <View {...props}>{children}</View>;
+  },
+}));
+
+jest.mock('react-native-vector-icons/Feather', () => {
+  const { Text } = require('react-native');
+  return ({ name }: any) => <Text>{name}</Text>;
+});
+
+jest.mock('react-native-gesture-handler/Swipeable', () => {
+  const { View } = require('react-native');
+  return ({ children, renderRightActions }: any) => (
+    <View>
+      {children}
+      {renderRightActions && renderRightActions()}
+    </View>
+  );
+});
+
+import { ProjectDetailScreen } from '../../../src/screens/ProjectDetailScreen';
+
+describe('ProjectDetailScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockProject = {
+      id: 'proj1',
+      name: 'Test Project',
+      description: 'A test project description',
+      systemPrompt: 'Be helpful',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockConversations = [];
+    mockDownloadedModels = [{ id: 'model1', name: 'Test Model' }];
+    mockActiveModelId = 'model1';
+  });
+
+  // ============================================================================
+  // Basic Rendering
+  // ============================================================================
+  describe('basic rendering', () => {
+    it('renders project name', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Test Project')).toBeTruthy();
+    });
+
+    it('shows project description', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('A test project description')).toBeTruthy();
+    });
+
+    it('shows project initial in icon', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('T')).toBeTruthy();
+    });
+
+    it('shows chat count stat', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('0 chats')).toBeTruthy();
+    });
+
+    it('shows Chats section title', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Chats')).toBeTruthy();
+    });
+
+    it('shows Delete Project button', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Delete Project')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Navigation
+  // ============================================================================
+  describe('navigation', () => {
+    it('back button navigates back', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('arrow-left'));
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('edit button navigates to ProjectEdit', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('edit-2'));
+      expect(mockNavigate).toHaveBeenCalledWith('ProjectEdit', { projectId: 'proj1' });
+    });
+  });
+
+  // ============================================================================
+  // Empty Chats State
+  // ============================================================================
+  describe('empty chats state', () => {
+    it('shows empty chats message', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('No chats in this project yet')).toBeTruthy();
+    });
+
+    it('shows "Start a Chat" button when models available', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Start a Chat')).toBeTruthy();
+    });
+
+    it('hides "Start a Chat" button when no models downloaded', () => {
+      mockDownloadedModels = [];
+      const { queryByText } = render(<ProjectDetailScreen />);
+      expect(queryByText('Start a Chat')).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // Conversation List
+  // ============================================================================
+  describe('conversation list', () => {
+    it('shows conversations for this project', () => {
+      mockConversations = [
+        {
+          id: 'conv1',
+          title: 'Project Chat 1',
+          projectId: 'proj1',
+          modelId: 'model1',
+          messages: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Project Chat 1')).toBeTruthy();
+    });
+
+    it('does not show conversations from other projects', () => {
+      mockConversations = [
+        {
+          id: 'conv1',
+          title: 'Other Project Chat',
+          projectId: 'other-project',
+          modelId: 'model1',
+          messages: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { queryByText, getByText } = render(<ProjectDetailScreen />);
+      expect(queryByText('Other Project Chat')).toBeNull();
+      // Still shows empty state
+      expect(getByText('No chats in this project yet')).toBeTruthy();
+    });
+
+    it('shows last message preview in conversation item', () => {
+      mockConversations = [
+        {
+          id: 'conv1',
+          title: 'Chat With Preview',
+          projectId: 'proj1',
+          modelId: 'model1',
+          messages: [
+            { id: 'm1', role: 'user', content: 'Hello there', timestamp: Date.now() },
+            { id: 'm2', role: 'assistant', content: 'Hi! How can I help?', timestamp: Date.now() },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Hi! How can I help?')).toBeTruthy();
+    });
+
+    it('shows "You: " prefix for user messages in preview', () => {
+      mockConversations = [
+        {
+          id: 'conv1',
+          title: 'Chat With User Preview',
+          projectId: 'proj1',
+          modelId: 'model1',
+          messages: [
+            { id: 'm1', role: 'user', content: 'Last user message', timestamp: Date.now() },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText(/You: Last user message/)).toBeTruthy();
+    });
+
+    it('shows correct chat count in stats', () => {
+      mockConversations = [
+        {
+          id: 'conv1', title: 'Chat 1', projectId: 'proj1', modelId: 'model1',
+          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'conv2', title: 'Chat 2', projectId: 'proj1', modelId: 'model1',
+          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('2 chats')).toBeTruthy();
+    });
+
+    it('navigates to chat when conversation is tapped', () => {
+      mockConversations = [
+        {
+          id: 'conv1', title: 'Tappable Chat', projectId: 'proj1', modelId: 'model1',
+          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Tappable Chat'));
+
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('conv1');
+      expect(mockParentNavigate).toHaveBeenCalledWith('ChatsTab', {
+        screen: 'Chat',
+        params: { conversationId: 'conv1' },
+      });
+    });
+  });
+
+  // ============================================================================
+  // New Chat
+  // ============================================================================
+  describe('new chat', () => {
+    it('creates new conversation and navigates when "New Chat" is pressed', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('New Chat'));
+
+      expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
+      expect(mockParentNavigate).toHaveBeenCalledWith('ChatsTab', {
+        screen: 'Chat',
+        params: { conversationId: 'new-conv-1', projectId: 'proj1' },
+      });
+    });
+
+    it('disables New Chat button when no models available', () => {
+      mockDownloadedModels = [];
+      const { getByTestId } = render(<ProjectDetailScreen />);
+      const newChatButton = getByTestId('button-New Chat');
+      expect(newChatButton.props.accessibilityState?.disabled || newChatButton.props.disabled).toBeTruthy();
+    });
+
+    it('uses active model ID for new conversation', () => {
+      mockActiveModelId = 'model1';
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('New Chat'));
+
+      expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
+    });
+
+    it('falls back to first downloaded model when no active model', () => {
+      mockActiveModelId = null;
+      mockDownloadedModels = [{ id: 'fallback-model', name: 'Fallback' }];
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('New Chat'));
+
+      expect(mockCreateConversation).toHaveBeenCalledWith('fallback-model', undefined, 'proj1');
+    });
+  });
+
+  // ============================================================================
+  // Delete Project
+  // ============================================================================
+  describe('delete project', () => {
+    it('shows confirmation alert when Delete Project is pressed', () => {
+      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Delete Project'));
+
+      expect(queryByTestId('custom-alert')).toBeTruthy();
+      expect(queryByTestId('alert-title')?.props.children).toBe('Delete Project');
+    });
+
+    it('includes project name in confirmation message', () => {
+      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Delete Project'));
+
+      const message = queryByTestId('alert-message')?.props.children;
+      expect(message).toContain('Test Project');
+    });
+
+    it('deletes project and navigates back when confirmed', () => {
+      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Delete Project'));
+
+      // Press "Delete" in the confirmation alert
+      fireEvent.press(getByTestId('alert-button-Delete'));
+
+      expect(mockDeleteProject).toHaveBeenCalledWith('proj1');
+      expect(mockGoBack).toHaveBeenCalled();
+    });
+
+    it('does not delete project when cancelled', () => {
+      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Delete Project'));
+
+      // Press "Cancel" in the confirmation alert
+      fireEvent.press(getByTestId('alert-button-Cancel'));
+
+      expect(mockDeleteProject).not.toHaveBeenCalled();
+      expect(mockGoBack).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Delete Chat
+  // ============================================================================
+  describe('delete chat', () => {
+    it('shows confirmation alert when delete swipe action is pressed', () => {
+      mockConversations = [
+        {
+          id: 'conv1', title: 'Delete Me Chat', projectId: 'proj1', modelId: 'model1',
+          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
+      // The trash icon renders as "trash-2" text from our Icon mock
+      fireEvent.press(getByText('trash-2'));
+
+      expect(queryByTestId('custom-alert')).toBeTruthy();
+      expect(queryByTestId('alert-title')?.props.children).toBe('Delete Chat');
+    });
+
+    it('deletes conversation when confirmed', () => {
+      mockConversations = [
+        {
+          id: 'conv1', title: 'Delete Me', projectId: 'proj1', modelId: 'model1',
+          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('trash-2'));
+      fireEvent.press(getByTestId('alert-button-Delete'));
+
+      expect(mockDeleteConversation).toHaveBeenCalledWith('conv1');
+    });
+  });
+
+  // ============================================================================
+  // Project Not Found
+  // ============================================================================
+  describe('project not found', () => {
+    it('shows error when project is null', () => {
+      mockProject = null;
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Project not found')).toBeTruthy();
+    });
+
+    it('shows "Go back" link when project not found', () => {
+      mockProject = null;
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Go back')).toBeTruthy();
+    });
+
+    it('navigates back when "Go back" link is pressed', () => {
+      mockProject = null;
+      const { getByText } = render(<ProjectDetailScreen />);
+      fireEvent.press(getByText('Go back'));
+      expect(mockGoBack).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Project Without Description
+  // ============================================================================
+  describe('project without description', () => {
+    it('does not render description when empty', () => {
+      mockProject = { ...mockProject, description: '' };
+      const { queryByText } = render(<ProjectDetailScreen />);
+      expect(queryByText('A test project description')).toBeNull();
+    });
+
+    it('does not render description when null', () => {
+      mockProject = { ...mockProject, description: null };
+      const { queryByText } = render(<ProjectDetailScreen />);
+      expect(queryByText('A test project description')).toBeNull();
+    });
+  });
+});

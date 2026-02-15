@@ -1,3 +1,5 @@
+export {};
+
 /**
  * LocalDreamGenerator Unit Tests - Cross-Platform Routing
  *

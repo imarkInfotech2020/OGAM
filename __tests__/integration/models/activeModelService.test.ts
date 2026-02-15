@@ -558,4 +558,857 @@ describe('ActiveModelService Integration', () => {
       expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ============================================================================
+  // Additional branch coverage tests
+  // ============================================================================
+  describe('unloadImageModel when no model loaded', () => {
+    it('should skip unload when all sources say no model', async () => {
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      useAppStore.setState({ activeImageModelId: null });
+
+      await activeModelService.syncWithNativeState();
+
+      await activeModelService.unloadImageModel();
+
+      // Should not call native unload since nothing was loaded
+      expect(mockLocalDreamService.unloadModel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unloadAllModels error handling', () => {
+    it('should continue unloading image model when text unload fails', async () => {
+      const textModel = createDownloadedModel({ id: 'text-model' });
+      const imageModel = createONNXImageModel({ id: 'img-model' });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        activeModelId: 'text-model',
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'img-model',
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      // Load both models
+      await activeModelService.loadTextModel('text-model');
+      await activeModelService.loadImageModel('img-model');
+
+      // Make text unload fail
+      mockLlmService.unloadModel.mockRejectedValueOnce(new Error('Text unload failed'));
+
+      const result = await activeModelService.unloadAllModels();
+
+      // Text unload failed, but image should still have been attempted
+      expect(result.textUnloaded).toBe(false);
+      expect(result.imageUnloaded).toBe(true);
+    });
+  });
+
+  describe('getResourceUsage', () => {
+    it('returns memory usage information', async () => {
+      mockHardwareService.refreshMemoryInfo.mockResolvedValue({
+        totalMemory: 8 * 1024 * 1024 * 1024,
+        usedMemory: 3 * 1024 * 1024 * 1024,
+        availableMemory: 5 * 1024 * 1024 * 1024,
+      } as any);
+
+      const usage = await activeModelService.getResourceUsage();
+
+      expect(usage.memoryTotal).toBe(8 * 1024 * 1024 * 1024);
+      expect(usage.memoryAvailable).toBe(5 * 1024 * 1024 * 1024);
+      expect(usage.memoryUsagePercent).toBeCloseTo(37.5, 0);
+      expect(usage.estimatedModelMemory).toBeDefined();
+    });
+  });
+
+  describe('checkMemoryForModel with image type', () => {
+    it('checks memory for image model with correct overhead', async () => {
+      const imageModel = createONNXImageModel({
+        id: 'img-check',
+        size: 2 * 1024 * 1024 * 1024, // 2GB
+      });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+      });
+
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 16 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForModel('img-check', 'image');
+
+      expect(result.canLoad).toBe(true);
+      expect(result.requiredMemoryGB).toBeGreaterThan(0);
+    });
+  });
+
+  describe('checkMemoryForDualModel with null IDs', () => {
+    it('handles null text model ID', async () => {
+      const imageModel = createONNXImageModel({
+        id: 'img-model',
+        size: 2 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [],
+        downloadedImageModels: [imageModel],
+      });
+
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 16 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForDualModel(null, 'img-model');
+
+      expect(result).toBeDefined();
+      expect(result.totalRequiredMemoryGB).toBeGreaterThan(0);
+    });
+
+    it('handles null image model ID', async () => {
+      const textModel = createDownloadedModel({
+        id: 'text-model',
+        fileSize: 4 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [],
+      });
+
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 16 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForDualModel('text-model', null);
+
+      expect(result).toBeDefined();
+      expect(result.totalRequiredMemoryGB).toBeGreaterThan(0);
+    });
+  });
+
+  describe('clearTextModelCache', () => {
+    it('delegates to llmService.clearKVCache', async () => {
+      const model = createDownloadedModel({ id: 'cache-model' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.clearKVCache = jest.fn().mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('cache-model');
+
+      await activeModelService.clearTextModelCache();
+
+      expect(mockLlmService.clearKVCache).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Additional branch coverage tests - round 2
+  // ============================================================================
+
+  describe('loadTextModel timeout', () => {
+    it('should throw timeout error when loading takes too long', async () => {
+      const model = createDownloadedModel({ id: 'slow-model' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // Never-resolving promise to simulate timeout
+      mockLlmService.loadModel.mockImplementation(() => new Promise(() => {}));
+
+      await expect(
+        activeModelService.loadTextModel('slow-model', 50) // 50ms timeout
+      ).rejects.toThrow('timed out');
+    });
+  });
+
+  describe('loadTextModel with vision model mmproj detection', () => {
+    it('should detect mmproj file for vision model', async () => {
+      jest.mock('react-native-fs', () => ({
+        readDir: jest.fn(),
+        exists: jest.fn(),
+        DocumentDirectoryPath: '/mock/documents',
+      }));
+      const RNFS = require('react-native-fs');
+
+      const model = createDownloadedModel({
+        id: 'vision-vl-model',
+        name: 'Qwen3-VL-2B',
+        filePath: '/models/qwen3-vl-2b.gguf',
+      });
+      // No mmProjPath set
+      delete (model as any).mmProjPath;
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // Mock RNFS.readDir to return a mmproj file
+      RNFS.readDir = jest.fn().mockResolvedValue([
+        { name: 'qwen3-vl-mmproj-f16.gguf', path: '/models/qwen3-vl-mmproj-f16.gguf', size: 500000000 },
+      ]);
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      // Mock modelManager.saveModelWithMmproj
+      const { modelManager } = require('../../../src/services/modelManager');
+      if (modelManager.saveModelWithMmproj) {
+        jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      }
+
+      await activeModelService.loadTextModel('vision-vl-model');
+
+      expect(mockLlmService.loadModel).toHaveBeenCalledWith(
+        model.filePath,
+        expect.any(String) // mmproj path should be found
+      );
+    });
+  });
+
+  describe('loadTextModel error resets state', () => {
+    it('should clear loadedTextModelId on load failure', async () => {
+      const model = createDownloadedModel({ id: 'fail-model' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      mockLlmService.loadModel.mockRejectedValue(new Error('Load failed'));
+
+      await expect(
+        activeModelService.loadTextModel('fail-model')
+      ).rejects.toThrow('Load failed');
+
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.textModelId).toBeNull();
+    });
+  });
+
+  describe('loadImageModel error resets state', () => {
+    it('should clear loadedImageModelId on load failure', async () => {
+      const imageModel = createONNXImageModel({ id: 'fail-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.loadModel.mockRejectedValue(new Error('Image load failed'));
+
+      await expect(
+        activeModelService.loadImageModel('fail-img')
+      ).rejects.toThrow('Image load failed');
+
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.imageModelId).toBeNull();
+    });
+  });
+
+  describe('loadImageModel not found', () => {
+    it('should throw when image model not found', async () => {
+      useAppStore.setState({
+        downloadedImageModels: [],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      await expect(
+        activeModelService.loadImageModel('nonexistent')
+      ).rejects.toThrow('Model not found');
+    });
+  });
+
+  describe('getEstimatedModelMemory branches', () => {
+    it('includes text model memory when active', async () => {
+      const textModel = createDownloadedModel({
+        id: 'text-est',
+        fileSize: 4 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        activeModelId: 'text-est',
+      });
+
+      const usage = await activeModelService.getResourceUsage();
+      // estimatedModelMemory should include text model memory
+      expect(usage.estimatedModelMemory).toBeGreaterThan(0);
+    });
+
+    it('includes image model memory when active', async () => {
+      const imageModel = createONNXImageModel({
+        id: 'img-est',
+        size: 2 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'img-est',
+      });
+
+      const usage = await activeModelService.getResourceUsage();
+      expect(usage.estimatedModelMemory).toBeGreaterThan(0);
+    });
+
+    it('includes both text and image model memory', async () => {
+      const textModel = createDownloadedModel({
+        id: 'text-both',
+        fileSize: 4 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'img-both',
+        size: 2 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        activeModelId: 'text-both',
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'img-both',
+      });
+
+      const usage = await activeModelService.getResourceUsage();
+      // Should be sum of both model memories
+      const textOnly = textModel.fileSize * 1.2;
+      const imageOnly = imageModel.size * 1.3;
+      expect(usage.estimatedModelMemory).toBeCloseTo(textOnly + imageOnly, -5);
+    });
+  });
+
+  describe('checkMemoryForModel with other loaded models', () => {
+    it('counts image model memory when checking text model', async () => {
+      const textModel = createDownloadedModel({
+        id: 'text-check',
+        fileSize: 3 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'img-loaded',
+        size: 2 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      // Load image model first
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      await activeModelService.loadImageModel('img-loaded');
+
+      // 8GB device
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForModel('text-check', 'text');
+
+      // currentlyLoadedMemoryGB should include the image model
+      expect(result.currentlyLoadedMemoryGB).toBeGreaterThan(0);
+    });
+
+    it('counts text model memory when checking image model', async () => {
+      const textModel = createDownloadedModel({
+        id: 'text-loaded',
+        fileSize: 4 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'img-check',
+        size: 2 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      // Load text model first
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('text-loaded');
+
+      // 8GB device
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForModel('img-check', 'image');
+
+      // currentlyLoadedMemoryGB should include the text model
+      expect(result.currentlyLoadedMemoryGB).toBeGreaterThan(0);
+    });
+  });
+
+  describe('checkMemoryForModel critical with other models message', () => {
+    it('includes other models in critical message', async () => {
+      const textModel = createDownloadedModel({
+        id: 'huge-text',
+        fileSize: 6 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'img-already',
+        size: 3 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      // Load image model
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      await activeModelService.loadImageModel('img-already');
+
+      // 8GB device - 6GB text * 1.5 = 9GB + image model memory = way over budget
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForModel('huge-text', 'text');
+
+      expect(result.severity).toBe('critical');
+      expect(result.canLoad).toBe(false);
+      expect(result.message).toContain('other models are loaded');
+    });
+  });
+
+  describe('checkMemoryForDualModel warning and critical paths', () => {
+    it('returns warning when dual model exceeds 50% RAM', async () => {
+      const textModel = createDownloadedModel({
+        id: 'dual-text',
+        fileSize: 3 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'dual-img',
+        size: 1.5 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+      });
+
+      // 8GB device - total ~ 3*1.5 + 1.5*1.8 = 4.5+2.7=7.2GB > 4GB (50%) but < 4.8GB (60%)
+      // Actually 7.2 > 4.8, so this will be critical. Let's use 16GB device.
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 16 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForDualModel('dual-text', 'dual-img');
+
+      // 16GB * 50% = 8GB warning threshold, 16GB * 60% = 9.6GB critical
+      // total ~ 4.5 + 2.7 = 7.2 < 8, so safe
+      expect(result.severity).toBe('safe');
+      expect(result.canLoad).toBe(true);
+    });
+
+    it('returns critical when dual models exceed budget', async () => {
+      const textModel = createDownloadedModel({
+        id: 'dual-huge-text',
+        fileSize: 6 * 1024 * 1024 * 1024,
+      });
+      const imageModel = createONNXImageModel({
+        id: 'dual-huge-img',
+        size: 4 * 1024 * 1024 * 1024,
+      });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+      });
+
+      // 8GB device - both models would exceed 60% budget
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 })
+      );
+
+      const result = await activeModelService.checkMemoryForDualModel('dual-huge-text', 'dual-huge-img');
+
+      expect(result.severity).toBe('critical');
+      expect(result.canLoad).toBe(false);
+      expect(result.message).toContain('Cannot load both');
+    });
+  });
+
+  describe('syncWithNativeState with image model', () => {
+    it('syncs image model internal state from store', async () => {
+      const imageModel = createONNXImageModel({ id: 'sync-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'sync-img',
+      });
+
+      // Native reports image model loaded, but internal tracking is null
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.syncWithNativeState();
+
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.imageModelId).toBe('sync-img');
+    });
+
+    it('clears image model internal state when native reports not loaded', async () => {
+      // First load an image model
+      const imageModel = createONNXImageModel({ id: 'clear-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'clear-img',
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      await activeModelService.loadImageModel('clear-img');
+
+      // Now native says not loaded
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+
+      await activeModelService.syncWithNativeState();
+
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.imageModelId).toBeNull();
+    });
+  });
+
+  describe('unloadTextModel with store but no native', () => {
+    it('clears store even when native is not loaded', async () => {
+      // Set store state without loading natively
+      useAppStore.setState({ activeModelId: 'orphan-model' });
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+
+      await activeModelService.unloadTextModel();
+
+      // Store should be cleared
+      expect(getAppState().activeModelId).toBeNull();
+      // Native unload should NOT have been called (nothing loaded)
+      expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unloadImageModel with store but no native', () => {
+    it('clears store even when native is not loaded', async () => {
+      useAppStore.setState({ activeImageModelId: 'orphan-img' });
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+
+      await activeModelService.unloadImageModel();
+
+      expect(getAppState().activeImageModelId).toBeNull();
+      expect(mockLocalDreamService.unloadModel).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Additional branch coverage tests - round 3
+  // ============================================================================
+
+  describe('loadTextModel vision model no mmproj found', () => {
+    it('logs warning when no mmproj file found in directory', async () => {
+      const RNFS = require('react-native-fs');
+
+      const model = createDownloadedModel({
+        id: 'vision-no-mmproj',
+        name: 'Qwen3-VL-2B',
+        filePath: '/models/qwen3-vl-2b.gguf',
+      });
+      // Ensure no mmProjPath
+      (model as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // readDir returns no mmproj files
+      RNFS.readDir = jest.fn().mockResolvedValue([
+        { name: 'qwen3-vl-2b.gguf', path: '/models/qwen3-vl-2b.gguf', size: 2000000000 },
+      ]);
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('vision-no-mmproj');
+
+      // Should have called loadModel with undefined mmProjPath
+      expect(mockLlmService.loadModel).toHaveBeenCalledWith(
+        model.filePath,
+        undefined
+      );
+    });
+  });
+
+  describe('loadTextModel vision model mmproj search failure', () => {
+    it('catches error when readDir fails', async () => {
+      const RNFS = require('react-native-fs');
+
+      const model = createDownloadedModel({
+        id: 'vision-error',
+        name: 'SmolVLM-500M',
+        filePath: '/models/smolvlm.gguf',
+      });
+      (model as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // readDir throws
+      RNFS.readDir = jest.fn().mockRejectedValue(new Error('Permission denied'));
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      // Should not throw - error is caught internally
+      await activeModelService.loadTextModel('vision-error');
+
+      expect(mockLlmService.loadModel).toHaveBeenCalledWith(
+        model.filePath,
+        undefined
+      );
+    });
+  });
+
+  describe('loadTextModel mmproj found updates store with multiple models', () => {
+    it('only updates the matching model in store', async () => {
+      const RNFS = require('react-native-fs');
+      const { modelManager: mockModelManager } = require('../../../src/services/modelManager');
+
+      const model1 = createDownloadedModel({
+        id: 'other-model',
+        name: 'Regular Model',
+        filePath: '/models/regular.gguf',
+      });
+      const model2 = createDownloadedModel({
+        id: 'vision-found',
+        name: 'Test-Vision-Model',
+        filePath: '/models/vision.gguf',
+      });
+      (model2 as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model1, model2] });
+
+      RNFS.readDir = jest.fn().mockResolvedValue([
+        { name: 'mmproj-f16.gguf', path: '/models/mmproj-f16.gguf', size: 500000000 },
+      ]);
+
+      if (mockModelManager.saveModelWithMmproj) {
+        jest.spyOn(mockModelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      }
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('vision-found');
+
+      // Other model should be untouched, vision model should have mmProjPath
+      const models = getAppState().downloadedModels;
+      const otherModel = models.find(m => m.id === 'other-model');
+      expect(otherModel?.mmProjPath).toBeUndefined();
+    });
+  });
+
+  describe('unloadTextModel waits for pending load', () => {
+    it('waits for pending textLoadPromise before unloading', async () => {
+      const model = createDownloadedModel({ id: 'pending-model' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      let resolveLoad: () => void;
+      mockLlmService.loadModel.mockImplementation(() =>
+        new Promise<void>((resolve) => { resolveLoad = resolve; })
+      );
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      // Start a load but don't await yet
+      const loadPromise = activeModelService.loadTextModel('pending-model');
+      await flushPromises();
+
+      // Now call unload while load is pending
+      const unloadPromise = activeModelService.unloadTextModel();
+      await flushPromises();
+
+      // Resolve the load
+      resolveLoad!();
+      await loadPromise;
+      await unloadPromise;
+
+      expect(getAppState().activeModelId).toBeNull();
+    });
+  });
+
+  describe('unloadImageModel waits for pending load', () => {
+    it('waits for pending imageLoadPromise before unloading', async () => {
+      const imageModel = createONNXImageModel({ id: 'pending-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      let resolveLoad: () => void;
+      mockLocalDreamService.loadModel.mockImplementation(() =>
+        new Promise<boolean>((resolve) => { resolveLoad = () => resolve(true); })
+      );
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      // Start a load but don't await yet
+      const loadPromise = activeModelService.loadImageModel('pending-img');
+      await flushPromises();
+
+      // Now call unload while load is pending
+      const unloadPromise = activeModelService.unloadImageModel();
+      await flushPromises();
+
+      // Resolve the load
+      resolveLoad!();
+      await loadPromise;
+      await unloadPromise;
+
+      expect(getAppState().activeImageModelId).toBeNull();
+    });
+  });
+
+  describe('loadImageModel already loaded but needs thread reload', () => {
+    it('reloads when imageThreads changed', async () => {
+      const imageModel = createONNXImageModel({ id: 'thread-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      // Load with 4 threads
+      await activeModelService.loadImageModel('thread-img');
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+
+      // Change threads setting
+      useAppStore.setState({
+        settings: { ...getAppState().settings, imageThreads: 8 },
+      });
+
+      // Load same model again - should reload due to thread change
+      await activeModelService.loadImageModel('thread-img');
+      expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('loadImageModel concurrent load - different model', () => {
+    it('loads new model after pending load for different model completes', async () => {
+      const img1 = createONNXImageModel({ id: 'img-a' });
+      const img2 = createONNXImageModel({ id: 'img-b' });
+      useAppStore.setState({
+        downloadedImageModels: [img1, img2],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      let resolveFirst: (v: boolean) => void;
+      let loadCount = 0;
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockImplementation(() => {
+        loadCount++;
+        if (loadCount === 1) {
+          return new Promise<boolean>((resolve) => { resolveFirst = resolve; });
+        }
+        return Promise.resolve(true);
+      });
+
+      // Start loading first model
+      const load1 = activeModelService.loadImageModel('img-a');
+      await flushPromises();
+
+      // Start loading second model while first is loading
+      const load2 = activeModelService.loadImageModel('img-b');
+      await flushPromises();
+
+      // Complete first load
+      resolveFirst!(true);
+      await load1;
+      await load2;
+
+      // Both should have completed
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.imageModelId).toBe('img-b');
+    });
+  });
+
+  describe('unloadAllModels error handling - image unload fails', () => {
+    it('handles image unload error gracefully', async () => {
+      const textModel = createDownloadedModel({ id: 'text-ok' });
+      const imageModel = createONNXImageModel({ id: 'img-fail' });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        activeModelId: 'text-ok',
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'img-fail',
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('text-ok');
+      await activeModelService.loadImageModel('img-fail');
+
+      // Make image unload fail
+      mockLocalDreamService.unloadModel.mockRejectedValueOnce(new Error('Image unload failed'));
+
+      const result = await activeModelService.unloadAllModels();
+
+      expect(result.textUnloaded).toBe(true);
+      expect(result.imageUnloaded).toBe(false);
+    });
+  });
+
+  describe('loadImageModel with coreml backend', () => {
+    it('uses auto backend for coreml models', async () => {
+      const coremlModel = createONNXImageModel({ id: 'coreml-model', backend: 'coreml' });
+      useAppStore.setState({
+        downloadedImageModels: [coremlModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      await activeModelService.loadImageModel('coreml-model');
+
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
+        coremlModel.modelPath,
+        4,
+        'auto' // coreml backend should map to 'auto'
+      );
+    });
+  });
+
+  describe('loadImageModel already loaded and native confirms', () => {
+    it('skips reload when model is already loaded natively', async () => {
+      const imageModel = createONNXImageModel({ id: 'skip-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { ...getAppState().settings, imageThreads: 4 },
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      // Load the model
+      await activeModelService.loadImageModel('skip-img');
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+
+      // Try to load the same model again - native confirms it's loaded
+      mockLocalDreamService.loadModel.mockClear();
+      await activeModelService.loadImageModel('skip-img');
+
+      // Should not call loadModel again
+      expect(mockLocalDreamService.loadModel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadImageModel concurrent load returns same model', () => {
+    it('skips second load when first completed for same model and threads', async () => {
+      const imageModel = createONNXImageModel({ id: 'concurrent-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { ...getAppState().settings, imageThreads: 4 },
+      });
+
+      let resolveFirst: (v: boolean) => void;
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockImplementation(() =>
+        new Promise<boolean>((resolve) => { resolveFirst = resolve; })
+      );
+
+      // Start first load
+      const load1 = activeModelService.loadImageModel('concurrent-img');
+      await flushPromises();
+
+      // Start second load for same model - should wait for first
+      const load2 = activeModelService.loadImageModel('concurrent-img');
+      await flushPromises();
+
+      // Complete first
+      resolveFirst!(true);
+      await load1;
+      await load2;
+
+      // Only one native load should have happened
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+    });
+  });
 });

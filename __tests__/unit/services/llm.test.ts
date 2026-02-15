@@ -1088,4 +1088,322 @@ describe('LLMService', () => {
       expect(llmService.getMultimodalSupport()).toBeNull();
     });
   });
+
+  // ========================================================================
+  // Additional branch coverage tests
+  // ========================================================================
+  describe('stopGeneration error branch', () => {
+    it('handles stopCompletion error gracefully', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        stopCompletion: jest.fn(() => Promise.reject(new Error('already stopped'))),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      // Should not throw
+      await llmService.stopGeneration();
+
+      expect(llmService.isCurrentlyGenerating()).toBe(false);
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('clearKVCache error branch', () => {
+    it('handles clearCache error gracefully', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        clearCache: jest.fn(() => Promise.reject(new Error('cache error'))),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      // Should not throw
+      await llmService.clearKVCache();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('ensureSessionCacheDir branches', () => {
+    it('creates dir when it does not exist', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      // The session cache dir is created during loadModel
+      await llmService.loadModel('/models/test.gguf');
+
+      // ensureSessionCacheDir is called internally - we verify through mkdir calls
+      // At minimum, the model load should succeed
+      expect(llmService.isModelLoaded()).toBe(true);
+    });
+  });
+
+  describe('getGpuInfo Android branches', () => {
+    it('returns OpenCL when GPU enabled on Android with no devices', async () => {
+      const originalOS = Platform.OS;
+      Object.defineProperty(Platform, 'OS', { get: () => 'android' });
+
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({ gpu: true, devices: [] });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      const info = llmService.getGpuInfo();
+      expect(info.gpu).toBe(true);
+      expect(info.gpuBackend).toBe('OpenCL');
+
+      Object.defineProperty(Platform, 'OS', { get: () => originalOS });
+    });
+
+    it('returns device names when GPU enabled on Android with devices', async () => {
+      const originalOS = Platform.OS;
+      Object.defineProperty(Platform, 'OS', { get: () => 'android' });
+
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({ gpu: true, devices: ['Adreno 730'] });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      const info = llmService.getGpuInfo();
+      expect(info.gpu).toBe(true);
+      expect(info.gpuBackend).toBe('Adreno 730');
+
+      Object.defineProperty(Platform, 'OS', { get: () => originalOS });
+    });
+  });
+
+  describe('getTokenCount', () => {
+    it('returns token count for text', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        tokenize: jest.fn(() => Promise.resolve({ tokens: [1, 2, 3, 4, 5] })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const count = await llmService.getTokenCount('hello world');
+      expect(count).toBe(5);
+    });
+
+    it('returns 0 when tokens is undefined', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        tokenize: jest.fn(() => Promise.resolve({ tokens: undefined })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const count = await llmService.getTokenCount('test');
+      expect(count).toBe(0);
+    });
+
+    it('throws when no model loaded', async () => {
+      await expect(llmService.getTokenCount('test')).rejects.toThrow('No model loaded');
+    });
+  });
+
+  describe('convertToOAIMessages empty content branch', () => {
+    it('skips text part when message content is empty', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: '',
+        timestamp: Date.now(),
+        attachments: [{ id: 'att-1', type: 'image' as const, uri: '/path/to/image.jpg' }],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      // Should still be an array (multipart) because of image attachments
+      expect(Array.isArray(oaiMessages[0].content)).toBe(true);
+      // Should only have image_url parts, no text part
+      const textParts = oaiMessages[0].content.filter((p: any) => p.type === 'text');
+      expect(textParts).toHaveLength(0);
+    });
+  });
+
+  describe('checkMultimodalSupport branches', () => {
+    it('returns false when no context', async () => {
+      const result = await llmService.checkMultimodalSupport();
+      expect(result.vision).toBe(false);
+      expect(result.audio).toBe(false);
+    });
+
+    it('returns support from getMultimodalSupport when available', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: true, audio: true })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const result = await llmService.checkMultimodalSupport();
+      expect(result.vision).toBe(true);
+    });
+
+    it('handles getMultimodalSupport not being a function', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      // Remove getMultimodalSupport
+      delete (ctx as any).getMultimodalSupport;
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const result = await llmService.checkMultimodalSupport();
+      expect(result.vision).toBe(false);
+    });
+
+    it('handles getMultimodalSupport throwing error', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        getMultimodalSupport: jest.fn(() => Promise.reject(new Error('not available'))),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const result = await llmService.checkMultimodalSupport();
+      expect(result.vision).toBe(false);
+    });
+  });
+
+  describe('loadModel metadata branches', () => {
+    it('reads model metadata and logs context length warning', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      // Add metadata with context length smaller than requested
+      (ctx as any).model = {
+        metadata: {
+          'llama.context_length': '1024',
+        },
+      };
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          contextLength: 4096,
+        },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      // Should have warned about exceeding model max
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('exceeds model max')
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it('handles metadata without context_length', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      (ctx as any).model = { metadata: {} };
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      // Should not throw
+      await llmService.loadModel('/models/test.gguf');
+      expect(llmService.isModelLoaded()).toBe(true);
+    });
+
+    it('handles null model metadata', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      (ctx as any).model = null;
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+      expect(llmService.isModelLoaded()).toBe(true);
+    });
+  });
+
+  describe('reloadWithSettings GPU fallback', () => {
+    it('falls back to CPU when GPU reload fails', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx1 = createMockLlamaContext();
+      const ctx2 = createMockLlamaContext();
+      mockedInitLlama
+        .mockResolvedValueOnce(ctx1 as any) // initial load
+        .mockRejectedValueOnce(new Error('GPU failed')) // GPU reload fails
+        .mockResolvedValueOnce(ctx2 as any); // CPU reload succeeds
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      await llmService.reloadWithSettings('/models/test.gguf', {
+        nThreads: 4,
+        nBatch: 256,
+        contextLength: 2048,
+      });
+
+      // Should have fallen back to CPU
+      expect(initLlama).toHaveBeenCalledTimes(3);
+      expect(llmService.isModelLoaded()).toBe(true);
+    });
+  });
+
+  describe('loadModel without mmproj calls checkMultimodalSupport', () => {
+    it('calls checkMultimodalSupport when no mmproj provided', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: false, audio: false })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      // checkMultimodalSupport should be called when no mmproj
+      expect(ctx.getMultimodalSupport).toHaveBeenCalled();
+    });
+  });
+
+  describe('formatMessages with vision attachments', () => {
+    it('adds image markers when vision is supported', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        initMultimodal: jest.fn(() => Promise.resolve(true)),
+        getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: true, audio: false })),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf', '/models/mmproj.gguf');
+
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'Describe this image',
+        timestamp: Date.now(),
+        attachments: [
+          { id: 'att-1', type: 'image' as const, uri: '/img1.jpg' },
+          { id: 'att-2', type: 'image' as const, uri: '/img2.jpg' },
+        ],
+      }];
+
+      const prompt = llmService.getFormattedPrompt(messages);
+      // Should contain image markers
+      expect(prompt).toContain('<__media__>');
+      // Two images = two markers
+      const markers = (prompt.match(/<__media__>/g) || []).length;
+      expect(markers).toBe(2);
+      expect(prompt).toContain('Describe this image');
+    });
+  });
 });

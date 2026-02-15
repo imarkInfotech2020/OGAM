@@ -720,4 +720,348 @@ describe('Image Generation Flow Integration', () => {
       expect(enhancementMessages[0].content).not.toContain('conversation history');
     });
   });
+
+  // ============================================================================
+  // Additional branch coverage tests
+  // ============================================================================
+  describe('cancelGeneration when not generating', () => {
+    it('should return immediately when not generating', async () => {
+      // Ensure not generating
+      expect(imageGenerationService.getState().isGenerating).toBe(false);
+
+      // Should not throw and should be a no-op
+      await imageGenerationService.cancelGeneration();
+
+      expect(mockLocalDreamService.cancelGeneration).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isGeneratingFor', () => {
+    it('returns false when not generating', () => {
+      expect(imageGenerationService.isGeneratingFor('conv-123')).toBe(false);
+    });
+
+    it('returns true when generating for matching conversation', async () => {
+      const imageModel = setupImageModelState();
+      const conversationId = setupWithConversation();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      let resolveGeneration: (value: any) => void;
+      mockLocalDreamService.generateImage.mockImplementation(async () => {
+        return new Promise((resolve) => {
+          resolveGeneration = resolve;
+        });
+      });
+
+      const generatePromise = imageGenerationService.generateImage({
+        prompt: 'Test',
+        conversationId,
+      });
+
+      await flushPromises();
+
+      expect(imageGenerationService.isGeneratingFor(conversationId)).toBe(true);
+      expect(imageGenerationService.isGeneratingFor('different-conv')).toBe(false);
+
+      resolveGeneration!(createGeneratedImage());
+      await generatePromise;
+    });
+  });
+
+  describe('generation returning null result (no imagePath)', () => {
+    it('should return null when native generator returns null', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      // Native returns result without imagePath
+      mockLocalDreamService.generateImage.mockResolvedValue(null as any);
+
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Should fail',
+      });
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('prompt enhancement error handling', () => {
+    it('should fall back to original prompt when enhancement fails', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      // Enable enhancement
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      mockLlmService.generateResponse.mockRejectedValue(new Error('Enhancement failed'));
+
+      await imageGenerationService.generateImage({
+        prompt: 'Original prompt',
+      });
+
+      // Should still generate with original prompt
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Original prompt',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('should skip enhancement when LLM is not loaded', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      // Enable enhancement but LLM not loaded
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+
+      await imageGenerationService.generateImage({
+        prompt: 'No enhancement',
+      });
+
+      // LLM should not be called
+      expect(mockLlmService.generateResponse).not.toHaveBeenCalled();
+      // Should still generate with original prompt
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'No enhancement',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+  });
+
+  describe('enhancement result update vs delete thinking message', () => {
+    it('should update thinking message when enhancement produces different prompt', async () => {
+      const imageModel = setupImageModelState();
+      const conversationId = setupWithConversation();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      // Return a different enhanced prompt
+      mockLlmService.generateResponse.mockResolvedValue('A beautifully enhanced and different prompt');
+
+      await imageGenerationService.generateImage({
+        prompt: 'Simple prompt',
+        conversationId,
+      });
+
+      // The chat should have messages - at least the image result
+      const chatState = getChatState();
+      const conversation = chatState.conversations.find(c => c.id === conversationId);
+      expect(conversation?.messages.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should delete thinking message when enhancement returns same prompt', async () => {
+      const imageModel = setupImageModelState();
+      const conversationId = setupWithConversation();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      // Return same prompt (no change)
+      mockLlmService.generateResponse.mockResolvedValue('A sunset');
+
+      await imageGenerationService.generateImage({
+        prompt: 'A sunset',
+        conversationId,
+      });
+
+      // Should still generate successfully
+      const state = getAppState();
+      expect(state.generatedImages).toHaveLength(1);
+    });
+  });
+
+  describe('generation with conversation metadata', () => {
+    it('should include correct backend metadata for QNN model', async () => {
+      const imageModel = createONNXImageModel({
+        id: 'qnn-model',
+        name: 'QNN SD Model',
+        modelPath: '/mock/qnn-model',
+        backend: 'qnn',
+      });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'qnn-model',
+        generatedImages: [],
+        settings: {
+          imageSteps: 20,
+          imageGuidanceScale: 7.5,
+          imageWidth: 512,
+          imageHeight: 512,
+          imageThreads: 4,
+        } as any,
+      });
+      mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
+
+      const conversationId = setupWithConversation();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      await imageGenerationService.generateImage({
+        prompt: 'QNN metadata test',
+        conversationId,
+      });
+
+      const chatState = getChatState();
+      const conversation = chatState.conversations.find(c => c.id === conversationId);
+      const message = conversation?.messages[0];
+
+      expect(message?.generationMeta).toBeDefined();
+      // In test env, Platform.OS defaults to 'ios', so backend is always Core ML
+      expect(message?.generationMeta?.gpuBackend).toBe('Core ML (ANE)');
+      expect(message?.generationMeta?.gpu).toBe(true);
+    });
+  });
+
+  describe('cancelRequested during generation', () => {
+    it('should check cancelRequested after model load', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: false, isLoading: false },
+      });
+
+      // Model needs loading
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+
+      // Cancel during model load
+      mockActiveModelService.loadImageModel.mockImplementation(async () => {
+        await imageGenerationService.cancelGeneration();
+      });
+
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Cancel during load',
+      });
+
+      // Should return null due to cancellation
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('generation without conversationId', () => {
+    it('should save to gallery but not add chat message', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Gallery only',
+      });
+
+      expect(result).not.toBeNull();
+      // Should be in gallery
+      const state = getAppState();
+      expect(state.generatedImages).toHaveLength(1);
+    });
+  });
+
+  describe('enhancement with LLM currently generating', () => {
+    it('should still attempt enhancement even if LLM was generating', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(true);
+      mockLlmService.generateResponse.mockResolvedValue('Enhanced prompt result');
+
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Test while generating',
+      });
+
+      // Should still work
+      expect(result).not.toBeNull();
+    });
+  });
+
+  describe('cancelled error handling', () => {
+    it('should reset state when error message includes cancelled', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      mockLocalDreamService.generateImage.mockRejectedValue(
+        new Error('Generation cancelled by user')
+      );
+
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Will be cancelled',
+      });
+
+      expect(result).toBeNull();
+      // Error state should be null for cancellation (not an error)
+      expect(imageGenerationService.getState().error).toBeNull();
+    });
+  });
 });

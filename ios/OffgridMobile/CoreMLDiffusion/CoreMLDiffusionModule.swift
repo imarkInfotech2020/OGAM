@@ -63,6 +63,22 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
         try pipe.loadResources()
 
+        // Validate text encoder outputs before declaring success.
+        // Apple's TextEncoder force-unwraps "last_hidden_state" output,
+        // which crashes the app if the model is incompatible or corrupted.
+        let textEncoderPath = url.appendingPathComponent("TextEncoder.mlmodelc")
+        if FileManager.default.fileExists(atPath: textEncoderPath.path) {
+          let teModel = try MLModel(contentsOf: textEncoderPath, configuration: config)
+          let outputNames = teModel.modelDescription.outputDescriptionsByName.keys
+          if !outputNames.contains("last_hidden_state") {
+            throw NSError(
+              domain: "CoreMLDiffusion",
+              code: -2,
+              userInfo: [NSLocalizedDescriptionKey:
+                "TextEncoder model missing 'last_hidden_state' output (found: \(Array(outputNames))). Model may be corrupted — try re-downloading."])
+          }
+        }
+
         self.pipeline = pipe
         self.loadedModelPath = modelPath
         resolve(true)

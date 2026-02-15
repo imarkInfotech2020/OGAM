@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:e2e": "./scripts/run-tests.sh",
     "test:e2e:all": "./scripts/run-tests.sh",
     "test:e2e:single": "maestro test",
