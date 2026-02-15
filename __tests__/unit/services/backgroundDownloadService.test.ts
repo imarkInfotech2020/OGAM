@@ -468,4 +468,349 @@ describe('BackgroundDownloadService', () => {
       expect(service.isPolling).toBe(false);
     });
   });
+
+  // ========================================================================
+  // startMultiFileDownload
+  // ========================================================================
+  describe('startMultiFileDownload', () => {
+    it('calls native module with correct params', async () => {
+      (mockDownloadManagerModule as any).startMultiFileDownload = jest.fn().mockResolvedValue({
+        downloadId: 55,
+        fileName: 'sd-model.zip',
+        modelId: 'image:sd-model',
+      });
+
+      const result = await service.startMultiFileDownload({
+        files: [
+          { url: 'https://example.com/unet.onnx', relativePath: 'unet/model.onnx', size: 1000 },
+          { url: 'https://example.com/vae.onnx', relativePath: 'vae/model.onnx', size: 500 },
+        ],
+        fileName: 'sd-model.zip',
+        modelId: 'image:sd-model',
+        destinationDir: '/models/image/sd-model',
+        totalBytes: 1500,
+      });
+
+      expect((mockDownloadManagerModule as any).startMultiFileDownload).toHaveBeenCalledWith({
+        files: [
+          { url: 'https://example.com/unet.onnx', relativePath: 'unet/model.onnx', size: 1000 },
+          { url: 'https://example.com/vae.onnx', relativePath: 'vae/model.onnx', size: 500 },
+        ],
+        fileName: 'sd-model.zip',
+        modelId: 'image:sd-model',
+        destinationDir: '/models/image/sd-model',
+        totalBytes: 1500,
+      });
+      expect(result.downloadId).toBe(55);
+      expect(result.status).toBe('pending');
+      expect(result.bytesDownloaded).toBe(0);
+      expect(result.totalBytes).toBe(1500);
+    });
+
+    it('uses 0 for totalBytes when not provided', async () => {
+      (mockDownloadManagerModule as any).startMultiFileDownload = jest.fn().mockResolvedValue({
+        downloadId: 56,
+        fileName: 'sd-model.zip',
+        modelId: 'image:sd-model',
+      });
+
+      const result = await service.startMultiFileDownload({
+        files: [{ url: 'https://example.com/model.onnx', relativePath: 'model.onnx', size: 100 }],
+        fileName: 'sd-model.zip',
+        modelId: 'image:sd-model',
+        destinationDir: '/models/image/sd-model',
+      });
+
+      const callArgs = (mockDownloadManagerModule as any).startMultiFileDownload.mock.calls[0][0];
+      expect(callArgs.totalBytes).toBe(0);
+      expect(result.totalBytes).toBe(0);
+    });
+
+    it('throws when not available', async () => {
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      await expect(
+        unavailableService.startMultiFileDownload({
+          files: [],
+          fileName: 'test.zip',
+          modelId: 'test',
+          destinationDir: '/test',
+        })
+      ).rejects.toThrow('Background downloads not available');
+      NativeModules.DownloadManagerModule = savedModule;
+    });
+  });
+
+  // ========================================================================
+  // getDownloadProgress
+  // ========================================================================
+  describe('getDownloadProgress', () => {
+    it('returns progress from native module', async () => {
+      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
+        bytesDownloaded: 2500,
+        totalBytes: 5000,
+        status: 'running',
+        localUri: '',
+        reason: '',
+      });
+
+      const result = await service.getDownloadProgress(42);
+
+      expect(mockDownloadManagerModule.getDownloadProgress).toHaveBeenCalledWith(42);
+      expect(result.bytesDownloaded).toBe(2500);
+      expect(result.totalBytes).toBe(5000);
+      expect(result.status).toBe('running');
+      // Empty strings should be converted to undefined
+      expect(result.localUri).toBeUndefined();
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('returns localUri and reason when present', async () => {
+      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
+        bytesDownloaded: 5000,
+        totalBytes: 5000,
+        status: 'completed',
+        localUri: '/data/downloads/model.gguf',
+        reason: '',
+      });
+
+      const result = await service.getDownloadProgress(42);
+      expect(result.localUri).toBe('/data/downloads/model.gguf');
+      expect(result.reason).toBeUndefined();
+    });
+
+    it('returns reason when download failed', async () => {
+      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
+        bytesDownloaded: 0,
+        totalBytes: 5000,
+        status: 'failed',
+        localUri: '',
+        reason: 'Network error',
+      });
+
+      const result = await service.getDownloadProgress(42);
+      expect(result.localUri).toBeUndefined();
+      expect(result.reason).toBe('Network error');
+    });
+
+    it('throws when not available', async () => {
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      await expect(unavailableService.getDownloadProgress(42)).rejects.toThrow('not available');
+      NativeModules.DownloadManagerModule = savedModule;
+    });
+  });
+
+  // ========================================================================
+  // Additional polling branches
+  // ========================================================================
+  describe('polling edge cases', () => {
+    it('stopProgressPolling does nothing when not already polling', () => {
+      // service.isPolling is false by default
+      service.stopProgressPolling();
+
+      expect(mockDownloadManagerModule.stopProgressPolling).not.toHaveBeenCalled();
+    });
+
+    it('stopProgressPolling does nothing when not available', () => {
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      unavailableService.stopProgressPolling();
+      expect(mockDownloadManagerModule.stopProgressPolling).not.toHaveBeenCalled();
+      NativeModules.DownloadManagerModule = savedModule;
+    });
+  });
+
+  // ========================================================================
+  // Event dispatch edge cases
+  // ========================================================================
+  describe('event dispatch edge cases', () => {
+    it('dispatches progress only to global when no specific listener', () => {
+      const globalCb = jest.fn();
+      service.onAnyProgress(globalCb);
+
+      const event = { downloadId: 99, bytesDownloaded: 500, totalBytes: 1000, status: 'running', fileName: 'model.gguf', modelId: 'test' };
+      if (eventHandlers.DownloadProgress) {
+        eventHandlers.DownloadProgress(event);
+      }
+
+      expect(globalCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches progress only to specific when no global listener', () => {
+      const specificCb = jest.fn();
+      service.onProgress(42, specificCb);
+
+      const event = { downloadId: 42, bytesDownloaded: 500, totalBytes: 1000, status: 'running', fileName: 'model.gguf', modelId: 'test' };
+      if (eventHandlers.DownloadProgress) {
+        eventHandlers.DownloadProgress(event);
+      }
+
+      expect(specificCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches complete only to global when no specific listener', () => {
+      const globalCb = jest.fn();
+      service.onAnyComplete(globalCb);
+
+      const event = { downloadId: 99, fileName: 'model.gguf', modelId: 'test', bytesDownloaded: 5000, totalBytes: 5000, status: 'completed', localUri: '/path' };
+      if (eventHandlers.DownloadComplete) {
+        eventHandlers.DownloadComplete(event);
+      }
+
+      expect(globalCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches complete only to specific when no global listener', () => {
+      const specificCb = jest.fn();
+      service.onComplete(42, specificCb);
+
+      const event = { downloadId: 42, fileName: 'model.gguf', modelId: 'test', bytesDownloaded: 5000, totalBytes: 5000, status: 'completed', localUri: '/path' };
+      if (eventHandlers.DownloadComplete) {
+        eventHandlers.DownloadComplete(event);
+      }
+
+      expect(specificCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches error only to global when no specific listener', () => {
+      const globalCb = jest.fn();
+      service.onAnyError(globalCb);
+
+      const event = { downloadId: 99, fileName: 'model.gguf', modelId: 'test', status: 'failed', reason: 'Error' };
+      if (eventHandlers.DownloadError) {
+        eventHandlers.DownloadError(event);
+      }
+
+      expect(globalCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches error only to specific when no global listener', () => {
+      const specificCb = jest.fn();
+      service.onError(42, specificCb);
+
+      const event = { downloadId: 42, fileName: 'model.gguf', modelId: 'test', status: 'failed', reason: 'Error' };
+      if (eventHandlers.DownloadError) {
+        eventHandlers.DownloadError(event);
+      }
+
+      expect(specificCb).toHaveBeenCalledWith(event);
+    });
+
+    it('handles complete event with no listeners at all', () => {
+      const event = { downloadId: 99, fileName: 'model.gguf', modelId: 'test', bytesDownloaded: 5000, totalBytes: 5000, status: 'completed', localUri: '/path' };
+      expect(() => {
+        if (eventHandlers.DownloadComplete) {
+          eventHandlers.DownloadComplete(event);
+        }
+      }).not.toThrow();
+    });
+
+    it('handles error event with no listeners at all', () => {
+      const event = { downloadId: 99, fileName: 'model.gguf', modelId: 'test', status: 'failed', reason: 'Error' };
+      expect(() => {
+        if (eventHandlers.DownloadError) {
+          eventHandlers.DownloadError(event);
+        }
+      }).not.toThrow();
+    });
+  });
+
+  // ========================================================================
+  // startDownload default value branches
+  // ========================================================================
+  describe('startDownload default values', () => {
+    it('uses 0 for totalBytes when not provided', async () => {
+      mockDownloadManagerModule.startDownload.mockResolvedValue({
+        downloadId: 1,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+      });
+
+      const result = await service.startDownload({
+        url: 'https://example.com/model.gguf',
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+      });
+
+      const callArgs = mockDownloadManagerModule.startDownload.mock.calls[0][0];
+      expect(callArgs.totalBytes).toBe(0);
+      expect(result.totalBytes).toBe(0);
+    });
+  });
+
+  // ========================================================================
+  // Unsubscribe functions for global listeners
+  // ========================================================================
+  describe('global listener unsubscribe', () => {
+    it('onAnyProgress returns working unsubscribe', () => {
+      const callback = jest.fn();
+      const unsub = service.onAnyProgress(callback);
+      expect(service.progressListeners.has('progress_all')).toBe(true);
+      unsub();
+      expect(service.progressListeners.has('progress_all')).toBe(false);
+    });
+
+    it('onAnyComplete returns working unsubscribe', () => {
+      const callback = jest.fn();
+      const unsub = service.onAnyComplete(callback);
+      expect(service.completeListeners.has('complete_all')).toBe(true);
+      unsub();
+      expect(service.completeListeners.has('complete_all')).toBe(false);
+    });
+
+    it('onAnyError returns working unsubscribe', () => {
+      const callback = jest.fn();
+      const unsub = service.onAnyError(callback);
+      expect(service.errorListeners.has('error_all')).toBe(true);
+      unsub();
+      expect(service.errorListeners.has('error_all')).toBe(false);
+    });
+  });
+
+  // ========================================================================
+  // Constructor branch: not available
+  // ========================================================================
+  describe('constructor when not available', () => {
+    it('does not set up event emitter or listeners when module is null', () => {
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      const addListenerSpy = jest.spyOn(NativeEventEmitter.prototype, 'addListener');
+      addListenerSpy.mockClear();
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      expect(unavailableService.eventEmitter).toBeNull();
+      // addListener should not have been called during construction
+      expect(addListenerSpy).not.toHaveBeenCalled();
+
+      NativeModules.DownloadManagerModule = savedModule;
+    });
+  });
 });

@@ -1082,4 +1082,333 @@ describe('ActiveModelService Integration', () => {
       expect(mockLocalDreamService.unloadModel).not.toHaveBeenCalled();
     });
   });
+
+  // ============================================================================
+  // Additional branch coverage tests - round 3
+  // ============================================================================
+
+  describe('loadTextModel vision model no mmproj found', () => {
+    it('logs warning when no mmproj file found in directory', async () => {
+      const RNFS = require('react-native-fs');
+
+      const model = createDownloadedModel({
+        id: 'vision-no-mmproj',
+        name: 'Qwen3-VL-2B',
+        filePath: '/models/qwen3-vl-2b.gguf',
+      });
+      // Ensure no mmProjPath
+      (model as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // readDir returns no mmproj files
+      RNFS.readDir = jest.fn().mockResolvedValue([
+        { name: 'qwen3-vl-2b.gguf', path: '/models/qwen3-vl-2b.gguf', size: 2000000000 },
+      ]);
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('vision-no-mmproj');
+
+      // Should have called loadModel with undefined mmProjPath
+      expect(mockLlmService.loadModel).toHaveBeenCalledWith(
+        model.filePath,
+        undefined
+      );
+    });
+  });
+
+  describe('loadTextModel vision model mmproj search failure', () => {
+    it('catches error when readDir fails', async () => {
+      const RNFS = require('react-native-fs');
+
+      const model = createDownloadedModel({
+        id: 'vision-error',
+        name: 'SmolVLM-500M',
+        filePath: '/models/smolvlm.gguf',
+      });
+      (model as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model] });
+
+      // readDir throws
+      RNFS.readDir = jest.fn().mockRejectedValue(new Error('Permission denied'));
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      // Should not throw - error is caught internally
+      await activeModelService.loadTextModel('vision-error');
+
+      expect(mockLlmService.loadModel).toHaveBeenCalledWith(
+        model.filePath,
+        undefined
+      );
+    });
+  });
+
+  describe('loadTextModel mmproj found updates store with multiple models', () => {
+    it('only updates the matching model in store', async () => {
+      const RNFS = require('react-native-fs');
+      const { modelManager: mockModelManager } = require('../../../src/services/modelManager');
+
+      const model1 = createDownloadedModel({
+        id: 'other-model',
+        name: 'Regular Model',
+        filePath: '/models/regular.gguf',
+      });
+      const model2 = createDownloadedModel({
+        id: 'vision-found',
+        name: 'Test-Vision-Model',
+        filePath: '/models/vision.gguf',
+      });
+      (model2 as any).mmProjPath = undefined;
+      useAppStore.setState({ downloadedModels: [model1, model2] });
+
+      RNFS.readDir = jest.fn().mockResolvedValue([
+        { name: 'mmproj-f16.gguf', path: '/models/mmproj-f16.gguf', size: 500000000 },
+      ]);
+
+      if (mockModelManager.saveModelWithMmproj) {
+        jest.spyOn(mockModelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      }
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('vision-found');
+
+      // Other model should be untouched, vision model should have mmProjPath
+      const models = getAppState().downloadedModels;
+      const otherModel = models.find(m => m.id === 'other-model');
+      expect(otherModel?.mmProjPath).toBeUndefined();
+    });
+  });
+
+  describe('unloadTextModel waits for pending load', () => {
+    it('waits for pending textLoadPromise before unloading', async () => {
+      const model = createDownloadedModel({ id: 'pending-model' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      let resolveLoad: () => void;
+      mockLlmService.loadModel.mockImplementation(() =>
+        new Promise<void>((resolve) => { resolveLoad = resolve; })
+      );
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      // Start a load but don't await yet
+      const loadPromise = activeModelService.loadTextModel('pending-model');
+      await flushPromises();
+
+      // Now call unload while load is pending
+      const unloadPromise = activeModelService.unloadTextModel();
+      await flushPromises();
+
+      // Resolve the load
+      resolveLoad!();
+      await loadPromise;
+      await unloadPromise;
+
+      expect(getAppState().activeModelId).toBeNull();
+    });
+  });
+
+  describe('unloadImageModel waits for pending load', () => {
+    it('waits for pending imageLoadPromise before unloading', async () => {
+      const imageModel = createONNXImageModel({ id: 'pending-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      let resolveLoad: () => void;
+      mockLocalDreamService.loadModel.mockImplementation(() =>
+        new Promise<boolean>((resolve) => { resolveLoad = () => resolve(true); })
+      );
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      // Start a load but don't await yet
+      const loadPromise = activeModelService.loadImageModel('pending-img');
+      await flushPromises();
+
+      // Now call unload while load is pending
+      const unloadPromise = activeModelService.unloadImageModel();
+      await flushPromises();
+
+      // Resolve the load
+      resolveLoad!();
+      await loadPromise;
+      await unloadPromise;
+
+      expect(getAppState().activeImageModelId).toBeNull();
+    });
+  });
+
+  describe('loadImageModel already loaded but needs thread reload', () => {
+    it('reloads when imageThreads changed', async () => {
+      const imageModel = createONNXImageModel({ id: 'thread-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      // Load with 4 threads
+      await activeModelService.loadImageModel('thread-img');
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+
+      // Change threads setting
+      useAppStore.setState({
+        settings: { ...getAppState().settings, imageThreads: 8 },
+      });
+
+      // Load same model again - should reload due to thread change
+      await activeModelService.loadImageModel('thread-img');
+      expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('loadImageModel concurrent load - different model', () => {
+    it('loads new model after pending load for different model completes', async () => {
+      const img1 = createONNXImageModel({ id: 'img-a' });
+      const img2 = createONNXImageModel({ id: 'img-b' });
+      useAppStore.setState({
+        downloadedImageModels: [img1, img2],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      let resolveFirst: (v: boolean) => void;
+      let loadCount = 0;
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockImplementation(() => {
+        loadCount++;
+        if (loadCount === 1) {
+          return new Promise<boolean>((resolve) => { resolveFirst = resolve; });
+        }
+        return Promise.resolve(true);
+      });
+
+      // Start loading first model
+      const load1 = activeModelService.loadImageModel('img-a');
+      await flushPromises();
+
+      // Start loading second model while first is loading
+      const load2 = activeModelService.loadImageModel('img-b');
+      await flushPromises();
+
+      // Complete first load
+      resolveFirst!(true);
+      await load1;
+      await load2;
+
+      // Both should have completed
+      const ids = activeModelService.getLoadedModelIds();
+      expect(ids.imageModelId).toBe('img-b');
+    });
+  });
+
+  describe('unloadAllModels error handling - image unload fails', () => {
+    it('handles image unload error gracefully', async () => {
+      const textModel = createDownloadedModel({ id: 'text-ok' });
+      const imageModel = createONNXImageModel({ id: 'img-fail' });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        activeModelId: 'text-ok',
+        downloadedImageModels: [imageModel],
+        activeImageModelId: 'img-fail',
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('text-ok');
+      await activeModelService.loadImageModel('img-fail');
+
+      // Make image unload fail
+      mockLocalDreamService.unloadModel.mockRejectedValueOnce(new Error('Image unload failed'));
+
+      const result = await activeModelService.unloadAllModels();
+
+      expect(result.textUnloaded).toBe(true);
+      expect(result.imageUnloaded).toBe(false);
+    });
+  });
+
+  describe('loadImageModel with coreml backend', () => {
+    it('uses auto backend for coreml models', async () => {
+      const coremlModel = createONNXImageModel({ id: 'coreml-model', backend: 'coreml' });
+      useAppStore.setState({
+        downloadedImageModels: [coremlModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      await activeModelService.loadImageModel('coreml-model');
+
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
+        coremlModel.modelPath,
+        4,
+        'auto' // coreml backend should map to 'auto'
+      );
+    });
+  });
+
+  describe('loadImageModel already loaded and native confirms', () => {
+    it('skips reload when model is already loaded natively', async () => {
+      const imageModel = createONNXImageModel({ id: 'skip-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { ...getAppState().settings, imageThreads: 4 },
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      // Load the model
+      await activeModelService.loadImageModel('skip-img');
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+
+      // Try to load the same model again - native confirms it's loaded
+      mockLocalDreamService.loadModel.mockClear();
+      await activeModelService.loadImageModel('skip-img');
+
+      // Should not call loadModel again
+      expect(mockLocalDreamService.loadModel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadImageModel concurrent load returns same model', () => {
+    it('skips second load when first completed for same model and threads', async () => {
+      const imageModel = createONNXImageModel({ id: 'concurrent-img' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { ...getAppState().settings, imageThreads: 4 },
+      });
+
+      let resolveFirst: (v: boolean) => void;
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockImplementation(() =>
+        new Promise<boolean>((resolve) => { resolveFirst = resolve; })
+      );
+
+      // Start first load
+      const load1 = activeModelService.loadImageModel('concurrent-img');
+      await flushPromises();
+
+      // Start second load for same model - should wait for first
+      const load2 = activeModelService.loadImageModel('concurrent-img');
+      await flushPromises();
+
+      // Complete first
+      resolveFirst!(true);
+      await load1;
+      await load2;
+
+      // Only one native load should have happened
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledTimes(1);
+    });
+  });
 });
