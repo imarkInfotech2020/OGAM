@@ -1740,7 +1740,7 @@ describe('ChatInput', () => {
         id: 'doc-no-name',
         type: 'document' as const,
         uri: 'file:///mock/unnamed-doc',
-        fileName: 'document.txt',
+        fileName: '',
         textContent: 'content',
         fileSize: 100,
       });
