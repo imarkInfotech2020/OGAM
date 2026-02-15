@@ -156,4 +156,32 @@ describe('OnboardingScreen', () => {
     const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
     expect(getByTestId('onboarding-next')).toBeTruthy();
   });
+
+  it('completes onboarding when Get Started pressed on last slide', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    const { Dimensions } = require('react-native');
+    const width = Dimensions.get('window').width;
+
+    const { getByTestId, UNSAFE_getAllByType } = render(
+      <OnboardingScreen navigation={navigation} />,
+    );
+
+    // Simulate scrolling to last slide (index 1) via onMomentumScrollEnd
+    const { FlatList } = require('react-native');
+    const flatLists = UNSAFE_getAllByType(FlatList);
+
+    await reactAct(async () => {
+      if (flatLists.length > 0 && flatLists[0].props.onMomentumScrollEnd) {
+        flatLists[0].props.onMomentumScrollEnd({
+          nativeEvent: { contentOffset: { x: width } },
+        });
+      }
+    });
+
+    // Now on last slide, press Get Started to complete onboarding
+    fireEvent.press(getByTestId('onboarding-next'));
+
+    expect(mockSetOnboardingComplete).toHaveBeenCalledWith(true);
+    expect(mockReplace).toHaveBeenCalledWith('ModelDownload');
+  });
 });

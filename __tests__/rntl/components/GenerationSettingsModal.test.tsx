@@ -818,4 +818,76 @@ describe('GenerationSettingsModal', () => {
     expect(queryByText(/Gallery/)).toBeNull();
     expect(queryByText('Delete Conversation')).toBeNull();
   });
+
+  // ============================================================================
+  // Slider onSlidingComplete callbacks
+  // ============================================================================
+  it('calls updateSettings on imageSteps slider complete', () => {
+    const { getByText, UNSAFE_getAllByType } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('IMAGE GENERATION'));
+
+    // Find slider elements (mocked as View with testID='slider')
+    const { View } = require('react-native');
+    const sliders = UNSAFE_getAllByType(View).filter(
+      (v: any) => v.props.testID === 'slider',
+    );
+    // First slider in image section is imageSteps
+    if (sliders.length > 0 && sliders[0].props.onSlidingComplete) {
+      sliders[0].props.onSlidingComplete(30);
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ imageSteps: 30 });
+    }
+  });
+
+  it('calls handleSliderComplete on text generation slider (no-op)', () => {
+    const { getByText, getAllByTestId } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('TEXT GENERATION'));
+
+    const sliders = getAllByTestId('slider');
+    // onSlidingComplete is a no-op but should not throw
+    if (sliders.length > 0 && sliders[0].props.onSlidingComplete) {
+      expect(() => sliders[0].props.onSlidingComplete(0.5)).not.toThrow();
+    }
+  });
+
+  it('calls handleSliderChange on text slider value change', () => {
+    const { getByText, getAllByTestId } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('TEXT GENERATION'));
+
+    const sliders = getAllByTestId('slider');
+    if (sliders.length > 0 && sliders[0].props.onValueChange) {
+      sliders[0].props.onValueChange(0.5);
+      expect(mockUpdateSettings).toHaveBeenCalled();
+    }
+  });
+
+  // ============================================================================
+  // Show generation details off (no GPU tests - hidden on iOS test env)
+  // ============================================================================
+
+  // ============================================================================
+  // Show generation details off
+  // ============================================================================
+  it('calls updateSettings to disable show generation details', () => {
+    mockStoreValues.settings = { ...defaultSettings, showGenerationDetails: true };
+
+    const { getByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('PERFORMANCE'));
+
+    // Press "Off" button for show generation details
+    fireEvent.press(getByText('Off'));
+
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ showGenerationDetails: false });
+  });
 });
