@@ -57,7 +57,7 @@ Builds:
       - node_modules/lottie-react-native/android/build.gradle
     scandelete:
       - node_modules/
-    ndk: r27c
+    ndk: 27.1.12297006
 
 MaintainerNotes: |
   scanignore is used to allow the React Native local Maven repository
