@@ -31,7 +31,7 @@ import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from 
 import { fetchAvailableCoreMLModels } from '../services/coreMLModelBrowser';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
-import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
+import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel, ImageModelRecommendation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
 type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
@@ -182,6 +182,9 @@ export const ModelsScreen: React.FC = () => {
   const [imageSearchQuery, setImageSearchQuery] = useState('');
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
   const [imageFiltersVisible, setImageFiltersVisible] = useState(false);
+  const [imageRec, setImageRec] = useState<ImageModelRecommendation | null>(null);
+  const [userChangedBackendFilter, setUserChangedBackendFilter] = useState(false);
+  const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
 
   // Fetched details for recommended models (real downloads, likes, files from HF API)
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
@@ -197,7 +200,7 @@ export const ModelsScreen: React.FC = () => {
           id: m.id,
           name: m.name,
           displayName: m.displayName,
-          backend: 'mnn' as const, // placeholder — overridden by badge logic
+          backend: 'coreml' as any, // actual backend — HFImageModel type doesn't include 'coreml'
           fileName: m.fileName,
           downloadUrl: m.downloadUrl,
           size: m.size,
@@ -255,6 +258,24 @@ export const ModelsScreen: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Fetch image model recommendation on mount and auto-set backend filter
+  useEffect(() => {
+    let cancelled = false;
+    hardwareService.getImageModelRecommendation().then((rec) => {
+      if (cancelled) return;
+      setImageRec(rec);
+      // Auto-set backend filter to recommended backend (unless user already changed it)
+      if (!userChangedBackendFilter && Platform.OS !== 'ios') {
+        const autoBackend = rec.recommendedBackend === 'qnn' ? 'qnn' as BackendFilter
+          : rec.recommendedBackend === 'mnn' ? 'mnn' as BackendFilter
+          : 'all' as BackendFilter;
+        setBackendFilter(autoBackend);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Restore active image model downloads on mount (after app restart)
   const restoreActiveImageDownloads = async () => {
@@ -363,24 +384,31 @@ export const ModelsScreen: React.FC = () => {
       const file = result[0];
       if (!file) return;
 
-      const fileName = file.name || 'unknown.gguf';
+      const fileName = file.name || 'unknown';
+      const lowerName = fileName.toLowerCase();
 
-      if (!fileName.toLowerCase().endsWith('.gguf')) {
-        setAlertState(showAlert('Invalid File', 'Only .gguf model files can be imported.'));
+      if (!lowerName.endsWith('.gguf') && !lowerName.endsWith('.zip')) {
+        setAlertState(showAlert('Invalid File', 'Supported formats: .gguf (text models) and .zip (image models).'));
         return;
       }
 
       setIsImporting(true);
       setImportProgress({ fraction: 0, fileName });
 
-      const model = await modelManager.importLocalModel(
-        file.uri,
-        fileName,
-        (progress) => setImportProgress(progress)
-      );
+      if (lowerName.endsWith('.zip')) {
+        // Import as image model zip
+        await handleImportImageModelZip(file.uri, fileName);
+      } else {
+        // Import as text model (.gguf)
+        const model = await modelManager.importLocalModel(
+          file.uri,
+          fileName,
+          (progress) => setImportProgress(progress)
+        );
 
-      addDownloadedModel(model);
-      setAlertState(showAlert('Success', `${model.name} imported successfully!`));
+        addDownloadedModel(model);
+        setAlertState(showAlert('Success', `${model.name} imported successfully!`));
+      }
     } catch (error: any) {
       if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
         return; // User cancelled picker, do nothing
@@ -390,6 +418,86 @@ export const ModelsScreen: React.FC = () => {
       setIsImporting(false);
       setImportProgress(null);
     }
+  };
+
+  const handleImportImageModelZip = async (sourceUri: string, fileName: string) => {
+    const imageModelsDir = modelManager.getImageModelsDirectory();
+    const modelId = `local_${fileName.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
+    const modelDir = `${imageModelsDir}/${modelId}`;
+    const zipPath = `${imageModelsDir}/${modelId}.zip`;
+
+    // Ensure image models directory exists
+    if (!(await RNFS.exists(imageModelsDir))) {
+      await RNFS.mkdir(imageModelsDir);
+    }
+
+    // Move on iOS (avoids duplicating large files), copy on Android (content:// URIs can't be moved)
+    setImportProgress({ fraction: 0.1, fileName });
+    if (Platform.OS === 'ios') {
+      await RNFS.moveFile(sourceUri, zipPath);
+    } else {
+      await RNFS.copyFile(sourceUri, zipPath);
+    }
+
+    setImportProgress({ fraction: 0.5, fileName });
+
+    // Create model directory and extract
+    if (!(await RNFS.exists(modelDir))) {
+      await RNFS.mkdir(modelDir);
+    }
+
+    setImportProgress({ fraction: 0.6, fileName });
+    await unzip(zipPath, modelDir);
+
+    setImportProgress({ fraction: 0.85, fileName });
+
+    // Detect backend from directory contents
+    const dirContents = await RNFS.readDir(modelDir);
+    const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
+    const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
+    let resolvedModelDir = modelDir;
+    let backend: 'mnn' | 'qnn' | 'coreml' | undefined;
+
+    if (hasMLModelC || hasNestedMLModelC) {
+      backend = 'coreml';
+      resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+    } else {
+      // Check for MNN or QNN files
+      const hasMNN = dirContents.some(f => f.name.endsWith('.mnn'));
+      const hasQNN = dirContents.some(f => f.name.endsWith('.bin') || f.name.includes('qnn'));
+      if (hasMNN) backend = 'mnn';
+      else if (hasQNN) backend = 'qnn';
+    }
+
+    // Clean up zip
+    await RNFS.unlink(zipPath).catch(() => {});
+
+    // Get total size by summing all files in the directory (stat on a dir returns 0 on Android)
+    const totalSize = await getDirectorySize(resolvedModelDir);
+
+    setImportProgress({ fraction: 0.95, fileName });
+
+    // Register the model
+    const modelName = fileName.replace(/\.zip$/i, '').replace(/[_-]/g, ' ');
+    const imageModel: ONNXImageModel = {
+      id: modelId,
+      name: modelName,
+      description: 'Locally imported image model',
+      modelPath: resolvedModelDir,
+      downloadedAt: new Date().toISOString(),
+      size: totalSize,
+      backend,
+    };
+
+    await modelManager.addDownloadedImageModel(imageModel);
+    addDownloadedImageModel(imageModel);
+
+    if (!activeImageModelId) {
+      setActiveImageModelId(imageModel.id);
+    }
+
+    setImportProgress({ fraction: 1, fileName });
+    setAlertState(showAlert('Success', `${modelName} imported successfully!`));
   };
 
   // Download from HuggingFace (multi-file download)
@@ -910,6 +1018,7 @@ export const ModelsScreen: React.FC = () => {
 
   const clearImageFilters = useCallback(() => {
     setBackendFilter('all');
+    setUserChangedBackendFilter(true);
     setStyleFilter('all');
     setSdVersionFilter('all');
     setImageFilterExpanded(null);
@@ -1114,11 +1223,30 @@ export const ModelsScreen: React.FC = () => {
       });
   }, [deviceRecommendation.maxParameters, downloadedModels, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
 
+  // Check if a model matches the recommended variant
+  const isRecommendedModel = useCallback((model: HFImageModel): boolean => {
+    if (!imageRec) return false;
+    // Match backend
+    if (model.backend !== imageRec.recommendedBackend && imageRec.recommendedBackend !== 'all') return false;
+    // For QNN, match the specific variant
+    if (imageRec.qnnVariant && model.variant) {
+      return model.variant.includes(imageRec.qnnVariant);
+    }
+    // Match against recommended model patterns (check repo, id, and name)
+    if (imageRec.recommendedModels?.length) {
+      const fields = [model.name, model.repo, model.id].map(s => s.toLowerCase());
+      return imageRec.recommendedModels.some(p => fields.some(f => f.includes(p)));
+    }
+    return true;
+  }, [imageRec]);
+
   // Filter HuggingFace image models - must be before any conditional returns
   const filteredHFModels = useMemo(() => {
     const query = imageSearchQuery.toLowerCase().trim();
-    return availableHFModels.filter((m) => {
-      if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
+    const filtered = availableHFModels.filter((m) => {
+      if (showRecommendedOnly && imageRec && !isRecommendedModel(m)) return false;
+      // Skip backend filter when recommended is active (recommendation already handles backend)
+      if (!showRecommendedOnly && backendFilter !== 'all' && m.backend !== backendFilter) return false;
       if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
       // SD version filter (iOS Core ML)
       if (sdVersionFilter !== 'all') {
@@ -1131,7 +1259,16 @@ export const ModelsScreen: React.FC = () => {
       if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery]);
+    // Sort recommended models first when showing all
+    if (!showRecommendedOnly && imageRec) {
+      filtered.sort((a, b) => {
+        const aRec = isRecommendedModel(a) ? 0 : 1;
+        const bRec = isRecommendedModel(b) ? 0 : 1;
+        return aRec - bRec;
+      });
+    }
+    return filtered;
+  }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery, imageRec, isRecommendedModel, showRecommendedOnly]);
 
   const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
     // Check if any file from this model is downloaded
@@ -1172,17 +1309,10 @@ export const ModelsScreen: React.FC = () => {
     repo: hfModel.repo,
   });
 
-  // Image model recommendation based on device RAM
-  const imageRecommendation = useMemo(() => {
-    if (Platform.OS === 'ios') {
-      if (ramGB < 4) return 'SD 1.5 Palettized recommended for your device';
-      if (ramGB < 6) return 'SD 1.5 or SD 2.1 Palettized recommended';
-      return 'All models supported — SDXL for best quality';
-    }
-    if (ramGB < 4) return 'Smallest CPU models recommended';
-    if (ramGB < 6) return 'CPU models recommended for your device';
-    return 'CPU and NPU models supported';
-  }, [ramGB]);
+  // Image model recommendation text from hardware-aware recommendation
+  const imageRecommendation = imageRec?.bannerText ?? (
+    Platform.OS === 'ios' ? 'Loading recommendation...' : 'Loading recommendation...'
+  );
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     if (!selectedModel) return null;
@@ -1323,6 +1453,19 @@ export const ModelsScreen: React.FC = () => {
           returnKeyType="search"
         />
         <TouchableOpacity
+          style={[styles.recToggle, showRecommendedOnly && styles.recToggleActive]}
+          onPress={() => {
+            setShowRecommendedOnly(v => {
+              // When toggling off recommended, reset backend filter so all models show
+              if (v) setBackendFilter('all');
+              return !v;
+            });
+          }}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Icon name="star" size={14} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
           onPress={() => setImageFiltersVisible(v => !v)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
@@ -1337,6 +1480,11 @@ export const ModelsScreen: React.FC = () => {
         <Text style={styles.deviceBannerText}>
           {Math.round(ramGB)}GB RAM — {imageRecommendation}
         </Text>
+        {imageRec?.warning && (
+          <Text style={[styles.deviceBannerText, { color: colors.error, marginTop: 2 }]}>
+            {imageRec.warning}
+          </Text>
+        )}
       </View>
 
       {/* Image filter pill bar — negative margin to cancel parent padding */}
@@ -1403,7 +1551,7 @@ export const ModelsScreen: React.FC = () => {
                 <TouchableOpacity
                   key={option.key}
                   style={[styles.filterChip, backendFilter === option.key && styles.filterChipActive]}
-                  onPress={() => { setBackendFilter(option.key); setImageFilterExpanded(null); }}
+                  onPress={() => { setBackendFilter(option.key); setUserChangedBackendFilter(true); setImageFilterExpanded(null); }}
                 >
                   <Text style={[styles.filterChipText, backendFilter === option.key && styles.filterChipTextActive]}>
                     {option.label}
@@ -1473,26 +1621,35 @@ export const ModelsScreen: React.FC = () => {
         </View>
       )}
 
-      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model, index) => (
-        <ModelCard
-          key={model.id}
-          compact
-          model={{
-            id: model.id,
-            name: model.displayName,
-            author: (model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU',
-            description: `${formatBytes(model.size)}${model.variant ? ' \u00B7 ' + getVariantLabel(model.variant) : ''}`,
-          }}
-          isDownloading={imageModelDownloading.includes(model.id)}
-          downloadProgress={imageModelProgress[model.id] || 0}
-          testID={`image-model-card-${index}`}
-          onDownload={
-            !imageModelDownloading.includes(model.id)
-              ? () => handleDownloadImageModel(hfModelToDescriptor(model))
-              : undefined
-          }
-        />
-      ))}
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model, index) => {
+        const recommended = isRecommendedModel(model);
+        return (
+          <View key={model.id}>
+            {recommended && (
+              <View style={styles.recommendedBadge}>
+                <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
+              </View>
+            )}
+            <ModelCard
+              compact
+              model={{
+                id: model.id,
+                name: model.displayName,
+                author: (model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU',
+                description: `${formatBytes(model.size)}${model.variant ? ' \u00B7 ' + getVariantLabel(model.variant) : ''}`,
+              }}
+              isDownloading={imageModelDownloading.includes(model.id)}
+              downloadProgress={imageModelProgress[model.id] || 0}
+              testID={`image-model-card-${index}`}
+              onDownload={
+                !imageModelDownloading.includes(model.id)
+                  ? () => handleDownloadImageModel(hfModelToDescriptor(model))
+                  : undefined
+              }
+            />
+          </View>
+        );
+      })}
 
       {!hfModelsLoading && !hfModelsError && filteredHFModels.length === 0 && availableHFModels.length > 0 && (
         <Text style={styles.allDownloadedText}>
@@ -1849,6 +2006,20 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
+async function getDirectorySize(dirPath: string): Promise<number> {
+  let total = 0;
+  const items = await RNFS.readDir(dirPath);
+  for (const item of items) {
+    if (item.isDirectory()) {
+      total += await getDirectorySize(item.path);
+    } else {
+      const s = typeof item.size === 'string' ? parseInt(item.size, 10) : (item.size || 0);
+      total += s;
+    }
+  }
+  return total;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(0) + ' MB';
@@ -1934,6 +2105,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 8,
+  },
+  recToggle: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+  },
+  recToggleActive: {
+    backgroundColor: colors.primary + '15',
   },
   filterToggle: {
     padding: 12,
@@ -2114,6 +2293,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   deviceBannerText: {
     ...TYPOGRAPHY.meta,
     color: colors.primary,
+  },
+  recommendedBadge: {
+    backgroundColor: colors.primary,
+    alignSelf: 'flex-start' as const,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    marginLeft: 12,
+    marginBottom: -1,
+  },
+  recommendedBadgeText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.background,
+    fontWeight: '700' as const,
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   recommendedTitle: {
     ...TYPOGRAPHY.meta,

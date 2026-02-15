@@ -176,6 +176,7 @@ jest.mock('react-native-device-info', () => ({
   getSystemVersion: jest.fn(() => '13'),
   isEmulator: jest.fn(() => Promise.resolve(false)),
   getDeviceId: jest.fn(() => 'test-device-id'),
+  getHardware: jest.fn(() => Promise.resolve('unknown')),
 }));
 
 // react-native-image-picker mock
