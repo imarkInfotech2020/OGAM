@@ -341,6 +341,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     <TouchableOpacity
       style={styles.deleteAction}
       onPress={() => handleDeleteConversation(conversation)}
+      testID="delete-conversation-button"
     >
       <Icon name="trash-2" size={16} color={colors.error} />
     </TouchableOpacity>
