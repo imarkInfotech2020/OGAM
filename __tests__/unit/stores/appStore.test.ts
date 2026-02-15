@@ -912,4 +912,190 @@ describe('appStore', () => {
       expect(getAppState().settings.modelLoadingStrategy).toBe('memory');
     });
   });
+
+  // ============================================================================
+  // Additional branch coverage tests
+  // ============================================================================
+  describe('removeDownloadedImageModel branch coverage', () => {
+    it('preserves activeImageModelId when a different model is removed', () => {
+      const { addDownloadedImageModel, setActiveImageModelId, removeDownloadedImageModel } = useAppStore.getState();
+      const model1 = createONNXImageModel({ id: 'img-keep' });
+      const model2 = createONNXImageModel({ id: 'img-remove' });
+
+      addDownloadedImageModel(model1);
+      addDownloadedImageModel(model2);
+      setActiveImageModelId('img-keep');
+
+      removeDownloadedImageModel('img-remove');
+
+      expect(getAppState().activeImageModelId).toBe('img-keep');
+      expect(getAppState().downloadedImageModels).toHaveLength(1);
+    });
+  });
+
+  describe('removeImagesByConversationId branch coverage', () => {
+    it('returns empty array when no images match the conversationId', () => {
+      const { addGeneratedImage, removeImagesByConversationId } = useAppStore.getState();
+      const image = createGeneratedImage({ id: 'img-1', conversationId: 'conv-1' });
+
+      addGeneratedImage(image);
+
+      const removedIds = removeImagesByConversationId('conv-nonexistent');
+
+      expect(removedIds).toEqual([]);
+      expect(getAppState().generatedImages).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // Actual persist merge function tests (exercises real store merge callback)
+  // ============================================================================
+  describe('persist merge function (actual)', () => {
+    // Access the real merge function from the store's persist configuration
+    const getMergeFn = () => {
+      const options = (useAppStore as any).persist?.getOptions?.();
+      return options?.merge as (persistedState: any, currentState: any) => any;
+    };
+
+    it('migrates string imageModelDownloading to single-element array', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        { imageModelDownloading: 'old-model-id' },
+        currentState
+      );
+
+      expect(Array.isArray(result.imageModelDownloading)).toBe(true);
+      expect(result.imageModelDownloading).toEqual(['old-model-id']);
+    });
+
+    it('migrates non-array/non-string imageModelDownloading to empty array', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        { imageModelDownloading: null },
+        currentState
+      );
+
+      expect(result.imageModelDownloading).toEqual([]);
+    });
+
+    it('migrates undefined imageModelDownloading to empty array', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        { imageModelDownloading: undefined },
+        currentState
+      );
+
+      // undefined from persisted merges over currentState's [], but undefined is not array
+      // so the else-if branch fires
+      expect(result.imageModelDownloading).toEqual([]);
+    });
+
+    it('migrates number imageModelDownloadId to Record with downloading model', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        {
+          imageModelDownloading: ['model-a'],
+          imageModelDownloadId: 42,
+        },
+        currentState
+      );
+
+      expect(result.imageModelDownloadIds).toEqual({ 'model-a': 42 });
+      expect(result.imageModelDownloadId).toBeUndefined();
+    });
+
+    it('migrates number imageModelDownloadId to empty Record when no downloading models', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        {
+          imageModelDownloading: [],
+          imageModelDownloadId: 50,
+        },
+        currentState
+      );
+
+      expect(result.imageModelDownloadIds).toEqual({});
+      expect(result.imageModelDownloadId).toBeUndefined();
+    });
+
+    it('sets imageModelDownloadIds to {} when missing and no old number format', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        {
+          imageModelDownloading: ['x'],
+          imageModelDownloadIds: null,
+        },
+        currentState
+      );
+
+      expect(result.imageModelDownloadIds).toEqual({});
+    });
+
+    it('sets imageModelDownloadIds to {} when it is a non-object type', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        {
+          imageModelDownloading: ['x'],
+          imageModelDownloadIds: 'invalid',
+        },
+        currentState
+      );
+
+      expect(result.imageModelDownloadIds).toEqual({});
+    });
+
+    it('preserves valid array imageModelDownloading and valid object imageModelDownloadIds', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        {
+          imageModelDownloading: ['a', 'b'],
+          imageModelDownloadIds: { a: 1, b: 2 },
+        },
+        currentState
+      );
+
+      expect(result.imageModelDownloading).toEqual(['a', 'b']);
+      expect(result.imageModelDownloadIds).toEqual({ a: 1, b: 2 });
+    });
+
+    it('handles persisted state with boolean imageModelDownloading', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        { imageModelDownloading: false },
+        currentState
+      );
+
+      expect(result.imageModelDownloading).toEqual([]);
+    });
+
+    it('handles persisted state with number imageModelDownloading', () => {
+      const merge = getMergeFn();
+      const currentState = useAppStore.getState();
+
+      const result = merge(
+        { imageModelDownloading: 123 },
+        currentState
+      );
+
+      expect(result.imageModelDownloading).toEqual([]);
+    });
+  });
 });

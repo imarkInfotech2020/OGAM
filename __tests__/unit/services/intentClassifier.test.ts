@@ -927,6 +927,164 @@ describe('IntentClassifier', () => {
   });
 
   // ============================================================================
+  // CACHE EVICTION
+  // ============================================================================
+  describe('Cache Eviction', () => {
+    test('should evict old entries when cache exceeds max size', async () => {
+      // Fill cache beyond CACHE_MAX_SIZE (100) by classifying many unique messages
+      for (let i = 0; i < 105; i++) {
+        await intentClassifier.classifyIntent(`draw a unique picture number ${i} of something`, { useLLM: false });
+      }
+
+      // After 105 entries, eviction should have run, cache should still work
+      const result = await intentClassifier.classifyIntent('draw a new test image please', { useLLM: false });
+      expect(result).toBe('image');
+    });
+  });
+
+  // ============================================================================
+  // LLM CLASSIFICATION WITH MODEL SWAP
+  // ============================================================================
+  describe('LLM Classification with Model Swap', () => {
+    test('should swap to classifier model when provided and different from current', async () => {
+      const classifierModel = {
+        id: 'classifier-model',
+        name: 'Classifier',
+        author: 'test',
+        filePath: '/path/to/classifier.gguf',
+        fileName: 'classifier.gguf',
+        fileSize: 1000,
+        quantization: 'Q4',
+        downloadedAt: new Date().toISOString(),
+      };
+
+      mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/different.gguf');
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.generateResponse.mockImplementation(
+        async (_messages, onStream) => {
+          onStream?.('YES');
+          return 'YES';
+        }
+      );
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: { id: 'original-model' }, isLoaded: true, isLoading: false },
+        image: { model: null, isLoaded: false, isLoading: false },
+      });
+      mockActiveModelService.loadTextModel.mockResolvedValue(undefined);
+
+      const onStatusChange = jest.fn();
+
+      const result = await intentClassifier.classifyIntent(
+        'something uncertain without clear patterns',
+        {
+          useLLM: true,
+          classifierModel,
+          onStatusChange,
+          modelLoadingStrategy: 'performance',
+        }
+      );
+
+      expect(result).toBe('image');
+      // Should have loaded the classifier model
+      expect(mockActiveModelService.loadTextModel).toHaveBeenCalledWith('classifier-model');
+      // Should have restored the original model (performance mode)
+      expect(mockActiveModelService.loadTextModel).toHaveBeenCalledWith('original-model');
+      expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining('Loading'));
+      expect(onStatusChange).toHaveBeenCalledWith('Analyzing request...');
+      expect(onStatusChange).toHaveBeenCalledWith('Restoring text model...');
+    });
+
+    test('should not swap back in memory mode', async () => {
+      const classifierModel = {
+        id: 'classifier-model',
+        name: 'Classifier',
+        author: 'test',
+        filePath: '/path/to/classifier.gguf',
+        fileName: 'classifier.gguf',
+        fileSize: 1000,
+        quantization: 'Q4',
+        downloadedAt: new Date().toISOString(),
+      };
+
+      mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/different.gguf');
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.generateResponse.mockImplementation(
+        async (_messages, onStream) => {
+          onStream?.('NO');
+          return 'NO';
+        }
+      );
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: { id: 'original-model' }, isLoaded: true, isLoading: false },
+        image: { model: null, isLoaded: false, isLoading: false },
+      });
+      mockActiveModelService.loadTextModel.mockResolvedValue(undefined);
+
+      const result = await intentClassifier.classifyIntent(
+        'something uncertain without clear patterns',
+        {
+          useLLM: true,
+          classifierModel,
+          modelLoadingStrategy: 'memory',
+        }
+      );
+
+      expect(result).toBe('text');
+      // Should have loaded the classifier model
+      expect(mockActiveModelService.loadTextModel).toHaveBeenCalledWith('classifier-model');
+      // Should NOT have restored original model (memory mode)
+      expect(mockActiveModelService.loadTextModel).not.toHaveBeenCalledWith('original-model');
+    });
+
+    test('should not swap model when classifier model path matches current', async () => {
+      const classifierModel = {
+        id: 'classifier-model',
+        name: 'Classifier',
+        author: 'test',
+        filePath: '/path/to/same.gguf',
+        fileName: 'same.gguf',
+        fileSize: 1000,
+        quantization: 'Q4',
+        downloadedAt: new Date().toISOString(),
+      };
+
+      mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/same.gguf');
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.generateResponse.mockImplementation(
+        async (_messages, onStream) => {
+          onStream?.('NO');
+          return 'NO';
+        }
+      );
+
+      const result = await intentClassifier.classifyIntent(
+        'something uncertain without clear patterns',
+        {
+          useLLM: true,
+          classifierModel,
+        }
+      );
+
+      expect(result).toBe('text');
+      // Should NOT have swapped models
+      expect(mockActiveModelService.loadTextModel).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // LONG MESSAGES (sentence count path)
+  // ============================================================================
+  describe('Long multi-sentence messages without pattern matches', () => {
+    test('multi-sentence message over 100 chars with no pattern match should classify as text', async () => {
+      // Construct a message that doesn't match any image or text patterns
+      // but has 2+ sentences and is >100 chars
+      const longMessage = 'The colorful parrot sat on the branch quietly. The warm breeze rustled through the tall coconut palms gently swaying above the sandy shore below.';
+      const result = await intentClassifier.classifyIntent(longMessage, { useLLM: false });
+      expect(result).toBe('text');
+    });
+  });
+
+  // ============================================================================
   // LEGACY BOOLEAN PARAMETER
   // ============================================================================
   describe('Legacy boolean parameter', () => {

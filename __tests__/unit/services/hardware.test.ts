@@ -5,6 +5,7 @@
  * Priority: P0 (Critical) - Device capability detection drives model selection.
  */
 
+import { Platform } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
 
@@ -15,6 +16,8 @@ describe('HardwareService', () => {
     jest.clearAllMocks();
     // Reset cached device info between tests
     (hardwareService as any).cachedDeviceInfo = null;
+    (hardwareService as any).cachedSoCInfo = null;
+    (hardwareService as any).cachedImageRecommendation = null;
   });
 
   // ========================================================================
@@ -126,6 +129,22 @@ describe('HardwareService', () => {
   });
 
   // ========================================================================
+  // getAppMemoryUsage
+  // ========================================================================
+  describe('getAppMemoryUsage', () => {
+    it('returns used, available, and total memory', async () => {
+      mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getUsedMemory.mockResolvedValue(3 * 1024 * 1024 * 1024);
+
+      const usage = await hardwareService.getAppMemoryUsage();
+
+      expect(usage.total).toBe(8 * 1024 * 1024 * 1024);
+      expect(usage.used).toBe(3 * 1024 * 1024 * 1024);
+      expect(usage.available).toBe(5 * 1024 * 1024 * 1024);
+    });
+  });
+
+  // ========================================================================
   // getTotalMemoryGB
   // ========================================================================
   describe('getTotalMemoryGB', () => {
@@ -183,13 +202,13 @@ describe('HardwareService', () => {
   // getModelRecommendation
   // ========================================================================
   describe('getModelRecommendation', () => {
-    const setupWithMemory = async (totalGB: number) => {
+    const setupWithMemory = async (totalGB: number, isEmulator = false) => {
       mockedDeviceInfo.getTotalMemory.mockResolvedValue(totalGB * 1024 * 1024 * 1024);
       mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
       mockedDeviceInfo.getModel.mockReturnValue('Test');
       mockedDeviceInfo.getSystemName.mockReturnValue('Android');
       mockedDeviceInfo.getSystemVersion.mockReturnValue('13');
-      mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+      mockedDeviceInfo.isEmulator.mockResolvedValue(isEmulator);
       await hardwareService.getDeviceInfo();
     };
 
@@ -223,17 +242,26 @@ describe('HardwareService', () => {
     });
 
     it('adds emulator warning on emulators', async () => {
-      mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
-      mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
-      mockedDeviceInfo.getModel.mockReturnValue('Test');
-      mockedDeviceInfo.getSystemName.mockReturnValue('Android');
-      mockedDeviceInfo.getSystemVersion.mockReturnValue('13');
-      mockedDeviceInfo.isEmulator.mockResolvedValue(true);
-      await hardwareService.getDeviceInfo();
+      await setupWithMemory(8, true);
 
       const rec = hardwareService.getModelRecommendation();
 
       expect(rec.warning).toContain('emulator');
+    });
+
+    it('returns no warning for normal device with sufficient memory', async () => {
+      await setupWithMemory(8);
+      const rec = hardwareService.getModelRecommendation();
+
+      expect(rec.warning).toBeUndefined();
+    });
+
+    it('returns compatible models list', async () => {
+      await setupWithMemory(8);
+      const rec = hardwareService.getModelRecommendation();
+
+      expect(rec.recommendedModels).toBeDefined();
+      expect(Array.isArray(rec.recommendedModels)).toBe(true);
     });
   });
 
@@ -271,8 +299,20 @@ describe('HardwareService', () => {
 
     it('defaults to Q4_K_M when no quantization specified', async () => {
       await setupWithAvailableMemory(16, 4); // 12GB available
-      // 7B Q4_K_M default = 7 * 4.5 / 8 ≈ 3.94GB, * 1.5 ≈ 5.9GB → true
+      // 7B Q4_K_M default = 7 * 4.5 / 8 ~ 3.94GB, * 1.5 ~ 5.9GB -> true
       expect(hardwareService.canRunModel(7)).toBe(true);
+    });
+
+    it('returns false for very large models', async () => {
+      await setupWithAvailableMemory(8, 4); // 4GB available
+      // 70B Q4_K_M = 70 * 4.5 / 8 = 39.375GB, needs 59GB
+      expect(hardwareService.canRunModel(70, 'Q4_K_M')).toBe(false);
+    });
+
+    it('handles small models on low memory', async () => {
+      await setupWithAvailableMemory(4, 2); // 2GB available
+      // 1B Q4_K_M = 1 * 4.5 / 8 = 0.5625GB, needs 0.84GB -> true
+      expect(hardwareService.canRunModel(1, 'Q4_K_M')).toBe(true);
     });
   });
 
@@ -309,6 +349,26 @@ describe('HardwareService', () => {
       // q4_k_m should match Q4_K_M
       expect(hardwareService.estimateModelMemoryGB(7, 'q4_k_m')).toBeCloseTo(3.9375);
     });
+
+    it('estimates Q3_K_S correctly', () => {
+      // 7 * 3.4375 / 8 = 3.0078125
+      expect(hardwareService.estimateModelMemoryGB(7, 'Q3_K_S')).toBeCloseTo(3.0078125);
+    });
+
+    it('estimates Q5_K_S correctly', () => {
+      // 7 * 5.5 / 8 = 4.8125
+      expect(hardwareService.estimateModelMemoryGB(7, 'Q5_K_S')).toBeCloseTo(4.8125);
+    });
+
+    it('estimates Q6_K correctly', () => {
+      // 7 * 6.5 / 8 = 5.6875
+      expect(hardwareService.estimateModelMemoryGB(7, 'Q6_K')).toBeCloseTo(5.6875);
+    });
+
+    it('estimates Q4_0 correctly', () => {
+      // 7 * 4 / 8 = 3.5
+      expect(hardwareService.estimateModelMemoryGB(7, 'Q4_0')).toBe(3.5);
+    });
   });
 
   // ========================================================================
@@ -334,6 +394,10 @@ describe('HardwareService', () => {
     it('formats gigabytes correctly', () => {
       expect(hardwareService.formatBytes(4 * 1024 * 1024 * 1024)).toBe('4.00 GB');
     });
+
+    it('formats terabytes correctly', () => {
+      expect(hardwareService.formatBytes(2 * 1024 * 1024 * 1024 * 1024)).toBe('2.00 TB');
+    });
   });
 
   // ========================================================================
@@ -357,6 +421,79 @@ describe('HardwareService', () => {
 
     it('uses size field as fallback for fileSize', () => {
       expect(hardwareService.getModelTotalSize({ size: 3000000000 })).toBe(3000000000);
+    });
+
+    it('prefers fileSize over size', () => {
+      expect(hardwareService.getModelTotalSize({ fileSize: 4000000000, size: 3000000000 })).toBe(4000000000);
+    });
+  });
+
+  // ========================================================================
+  // formatModelSize
+  // ========================================================================
+  describe('formatModelSize', () => {
+    it('formats model size including mmproj', () => {
+      const result = hardwareService.formatModelSize({
+        fileSize: 4 * 1024 * 1024 * 1024,
+        mmProjFileSize: 500 * 1024 * 1024,
+      });
+      // 4.5 GB
+      expect(result).toContain('GB');
+    });
+
+    it('formats model with only fileSize', () => {
+      const result = hardwareService.formatModelSize({
+        fileSize: 2 * 1024 * 1024 * 1024,
+      });
+      expect(result).toBe('2.00 GB');
+    });
+
+    it('returns "0 B" for empty model', () => {
+      expect(hardwareService.formatModelSize({})).toBe('0 B');
+    });
+  });
+
+  // ========================================================================
+  // estimateModelRam
+  // ========================================================================
+  describe('estimateModelRam', () => {
+    it('returns total size * 1.5 by default', () => {
+      const ram = hardwareService.estimateModelRam({ fileSize: 4000000000 });
+      expect(ram).toBe(6000000000);
+    });
+
+    it('accepts custom multiplier', () => {
+      const ram = hardwareService.estimateModelRam({ fileSize: 4000000000 }, 2.0);
+      expect(ram).toBe(8000000000);
+    });
+
+    it('includes mmproj in ram estimate', () => {
+      const ram = hardwareService.estimateModelRam({
+        fileSize: 4000000000,
+        mmProjFileSize: 500000000,
+      });
+      expect(ram).toBe(4500000000 * 1.5);
+    });
+  });
+
+  // ========================================================================
+  // formatModelRam
+  // ========================================================================
+  describe('formatModelRam', () => {
+    it('formats estimated RAM usage', () => {
+      const result = hardwareService.formatModelRam({
+        fileSize: 4 * 1024 * 1024 * 1024,
+      });
+      // 4GB * 1.5 = 6GB
+      expect(result).toBe('~6.0 GB');
+    });
+
+    it('formats with custom multiplier', () => {
+      const result = hardwareService.formatModelRam({
+        fileSize: 4 * 1024 * 1024 * 1024,
+      }, 2.0);
+      // 4GB * 2.0 = 8GB
+      expect(result).toBe('~8.0 GB');
     });
   });
 
@@ -392,6 +529,280 @@ describe('HardwareService', () => {
     it('returns "flagship" for 8GB+', async () => {
       await setupWithTotalMemory(12);
       expect(hardwareService.getDeviceTier()).toBe('flagship');
+    });
+
+    it('returns "low" for default (no cached info)', () => {
+      // Default getTotalMemoryGB returns 4, which is "medium"
+      expect(hardwareService.getDeviceTier()).toBe('medium');
+    });
+
+    it('returns "flagship" for exactly 8GB', async () => {
+      await setupWithTotalMemory(8);
+      expect(hardwareService.getDeviceTier()).toBe('flagship');
+    });
+
+    it('returns "medium" for exactly 4GB', async () => {
+      await setupWithTotalMemory(4);
+      expect(hardwareService.getDeviceTier()).toBe('medium');
+    });
+
+    it('returns "high" for exactly 6GB', async () => {
+      await setupWithTotalMemory(6);
+      expect(hardwareService.getDeviceTier()).toBe('high');
+    });
+  });
+
+  // ========================================================================
+  // getSoCInfo
+  // ========================================================================
+  describe('getSoCInfo', () => {
+    const setupDevice = async (opts: {
+      totalGB: number;
+      model?: string;
+      hardware?: string;
+      platform?: typeof Platform.OS;
+      deviceId?: string;
+    }) => {
+      if (opts.platform) Platform.OS = opts.platform;
+      mockedDeviceInfo.getTotalMemory.mockResolvedValue(opts.totalGB * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getModel.mockReturnValue(opts.model ?? 'Test');
+      mockedDeviceInfo.getSystemName.mockReturnValue(opts.platform === 'ios' ? 'iOS' : 'Android');
+      mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+      mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+      if (opts.deviceId) {
+        mockedDeviceInfo.getDeviceId.mockReturnValue(opts.deviceId);
+      }
+      if (opts.hardware) {
+        mockedDeviceInfo.getHardware.mockResolvedValue(opts.hardware);
+      }
+      await hardwareService.getDeviceInfo();
+    };
+
+    const originalOS = Platform.OS;
+    afterEach(() => {
+      Platform.OS = originalOS;
+    });
+
+    describe('iOS', () => {
+      it('detects A18 chip for iPhone17,x', async () => {
+        await setupDevice({ totalGB: 8, platform: 'ios', deviceId: 'iPhone17,3' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('apple');
+        expect(soc.hasNPU).toBe(true);
+        expect(soc.appleChip).toBe('A18');
+      });
+
+      it('detects A17Pro chip for iPhone16,x', async () => {
+        await setupDevice({ totalGB: 8, platform: 'ios', deviceId: 'iPhone16,2' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.appleChip).toBe('A17Pro');
+      });
+
+      it('detects A16 chip for iPhone15,x', async () => {
+        await setupDevice({ totalGB: 6, platform: 'ios', deviceId: 'iPhone15,3' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.appleChip).toBe('A16');
+      });
+
+      it('detects A15 chip for iPhone14,x', async () => {
+        await setupDevice({ totalGB: 6, platform: 'ios', deviceId: 'iPhone14,5' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.appleChip).toBe('A15');
+      });
+
+      it('detects A14 chip for iPhone13,x', async () => {
+        await setupDevice({ totalGB: 4, platform: 'ios', deviceId: 'iPhone13,1' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.appleChip).toBe('A14');
+      });
+
+      it('falls back to RAM-based chip estimate for unknown device ID', async () => {
+        await setupDevice({ totalGB: 8, platform: 'ios', deviceId: 'iPad14,1' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('apple');
+        expect(soc.appleChip).toBe('A15'); // 8GB >= 6 → A15 fallback
+      });
+
+      it('falls back to A14 for low-RAM unknown device', async () => {
+        await setupDevice({ totalGB: 3, platform: 'ios', deviceId: 'iPad10,1' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.appleChip).toBe('A14'); // 3GB < 6 → A14 fallback
+      });
+    });
+
+    describe('Android', () => {
+      it('detects Qualcomm from hardware string', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Samsung Galaxy S24' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('qualcomm');
+        expect(soc.hasNPU).toBe(true);
+      });
+
+      it('assigns qnnVariant 8gen2 for 12GB+ Qualcomm', async () => {
+        await setupDevice({ totalGB: 12, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('assigns qnnVariant 8gen1 for 8-12GB Qualcomm', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen1');
+      });
+
+      it('assigns qnnVariant min for <8GB Qualcomm', async () => {
+        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('min');
+      });
+
+      it('detects Tensor for Pixel devices', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'unknown-hw', model: 'Pixel 8 Pro' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('tensor');
+        expect(soc.hasNPU).toBe(false);
+      });
+
+      it('detects MediaTek from hardware string', async () => {
+        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'mt6789', model: 'Test' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('mediatek');
+      });
+
+      it('detects Exynos from hardware string', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'samsungexynos2200', model: 'Test' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('exynos');
+      });
+
+      it('returns unknown vendor for unrecognized hardware', async () => {
+        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'something-else', model: 'Generic Phone' });
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.vendor).toBe('unknown');
+        expect(soc.hasNPU).toBe(false);
+      });
+    });
+
+    it('caches SoC info after first call', async () => {
+      await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Test' });
+      const first = await hardwareService.getSoCInfo();
+      const second = await hardwareService.getSoCInfo();
+      expect(first).toBe(second); // same reference
+      expect(mockedDeviceInfo.getHardware).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ========================================================================
+  // getImageModelRecommendation
+  // ========================================================================
+  describe('getImageModelRecommendation', () => {
+    const setupDevice = async (opts: {
+      totalGB: number;
+      platform: typeof Platform.OS;
+      hardware?: string;
+      model?: string;
+      deviceId?: string;
+    }) => {
+      Platform.OS = opts.platform;
+      mockedDeviceInfo.getTotalMemory.mockResolvedValue(opts.totalGB * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getModel.mockReturnValue(opts.model ?? 'Test');
+      mockedDeviceInfo.getSystemName.mockReturnValue(opts.platform === 'ios' ? 'iOS' : 'Android');
+      mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+      mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+      if (opts.deviceId) mockedDeviceInfo.getDeviceId.mockReturnValue(opts.deviceId);
+      if (opts.hardware) mockedDeviceInfo.getHardware.mockResolvedValue(opts.hardware);
+      await hardwareService.getDeviceInfo();
+    };
+
+    const originalOS = Platform.OS;
+    afterEach(() => {
+      Platform.OS = originalOS;
+    });
+
+    describe('iOS recommendations', () => {
+      it('recommends SDXL for high-end devices (A17Pro+, 6GB+)', async () => {
+        await setupDevice({ totalGB: 8, platform: 'ios', deviceId: 'iPhone16,2' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('coreml');
+        expect(rec.recommendedModels).toEqual(expect.arrayContaining(['sdxl', 'xl-base']));
+        expect(rec.bannerText).toContain('SDXL');
+      });
+
+      it('recommends SD 1.5/2.1 palettized for mid-range (A15/A16, 6GB+)', async () => {
+        await setupDevice({ totalGB: 6, platform: 'ios', deviceId: 'iPhone15,2' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('coreml');
+        expect(rec.recommendedModels).toEqual(expect.arrayContaining(['v1-5-palettized', '2-1-base-palettized']));
+        expect(rec.bannerText).toContain('Palettized');
+      });
+
+      it('recommends SD 1.5 palettized only for low-end', async () => {
+        await setupDevice({ totalGB: 4, platform: 'ios', deviceId: 'iPhone13,1' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('coreml');
+        expect(rec.recommendedModels).toEqual(['v1-5-palettized']);
+      });
+
+      it('always includes coreml in compatible backends on iOS', async () => {
+        await setupDevice({ totalGB: 6, platform: 'ios', deviceId: 'iPhone15,2' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.compatibleBackends).toContain('coreml');
+      });
+    });
+
+    describe('Android Qualcomm recommendations', () => {
+      it('recommends QNN for Qualcomm devices', async () => {
+        await setupDevice({ totalGB: 12, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('qnn');
+        expect(rec.qnnVariant).toBe('8gen2');
+        expect(rec.compatibleBackends).toEqual(expect.arrayContaining(['qnn', 'mnn']));
+      });
+
+      it('sets qnnVariant based on RAM tier', async () => {
+        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.qnnVariant).toBe('min');
+      });
+    });
+
+    describe('Android non-Qualcomm recommendations', () => {
+      it('recommends MNN for non-Qualcomm Android', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'mt6789', model: 'Test' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('mnn');
+        expect(rec.bannerText).toContain('CPU');
+        expect(rec.compatibleBackends).toEqual(['mnn']);
+      });
+
+      it('recommends MNN for Tensor (Pixel) devices', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'unknown-hw', model: 'Pixel 8 Pro' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('mnn');
+      });
+    });
+
+    describe('low RAM warning', () => {
+      it('adds warning for devices under 4GB', async () => {
+        await setupDevice({ totalGB: 3, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.warning).toContain('Low RAM');
+      });
+
+      it('has no warning for devices with 4GB+', async () => {
+        await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Test' });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.warning).toBeUndefined();
+      });
+    });
+
+    it('caches recommendation after first call', async () => {
+      await setupDevice({ totalGB: 8, platform: 'ios', deviceId: 'iPhone16,2' });
+      const first = await hardwareService.getImageModelRecommendation();
+      const second = await hardwareService.getImageModelRecommendation();
+      expect(first).toBe(second);
     });
   });
 });

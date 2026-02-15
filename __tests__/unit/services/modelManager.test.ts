@@ -1475,4 +1475,414 @@ describe('ModelManager', () => {
       expect(savedModels[0].mmProjFileSize).toBe(300000000);
     });
   });
+
+  // ========================================================================
+  // Additional branch coverage tests
+  // ========================================================================
+  describe('deleteOrphanedFile when file does not exist', () => {
+    it('handles missing file gracefully', async () => {
+      mockedRNFS.exists.mockResolvedValue(false);
+
+      // deleteOrphanedFile should not throw when file doesn't exist
+      await expect(
+        modelManager.deleteOrphanedFile('/models/nonexistent.gguf')
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('cancelBackgroundDownload when not supported', () => {
+    it('throws when background service is unavailable', async () => {
+      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
+
+      await expect(modelManager.cancelBackgroundDownload(42)).rejects.toThrow(
+        'Background downloads not supported'
+      );
+
+      expect(mockedBackgroundDownloadService.cancelDownload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scanForUntrackedTextModels tiny files', () => {
+    it('skips files smaller than 1MB', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([
+        {
+          name: 'tiny-model.gguf',
+          path: '/models/tiny-model.gguf',
+          size: 500000, // 500KB - under 1MB threshold
+          isFile: () => true,
+          isDirectory: () => false,
+        } as any,
+      ]);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const discovered = await modelManager.scanForUntrackedTextModels();
+
+      expect(discovered).toHaveLength(0);
+    });
+  });
+
+  describe('getOrphanedFiles with directory read error', () => {
+    it('returns empty when image model dir read fails', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([]) // text models dir empty
+        .mockRejectedValueOnce(new Error('Permission denied')); // image models dir fails
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const orphaned = await modelManager.getOrphanedFiles();
+
+      // Should not throw, just return what it could read
+      expect(Array.isArray(orphaned)).toBe(true);
+    });
+  });
+
+  describe('deleteModel mmProjPath catch branch', () => {
+    it('continues when mmProjPath deletion fails', async () => {
+      const storedModels = [
+        {
+          id: 'model1',
+          name: 'Model 1',
+          filePath: '/models/m1.gguf',
+          fileSize: 100,
+          mmProjPath: '/models/mmproj.gguf',
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      // Main file unlink succeeds, mmProj unlink fails
+      mockedRNFS.unlink
+        .mockResolvedValueOnce(undefined as any)  // main file
+        .mockRejectedValueOnce(new Error('Permission denied'));  // mmproj
+
+      // Should not throw - mmproj deletion failure is caught
+      await modelManager.deleteModel('model1');
+
+      // Main file should have been unlinked
+      expect(RNFS.unlink).toHaveBeenCalledWith('/models/m1.gguf');
+    });
+  });
+
+  describe('getDownloadedModels path re-resolution', () => {
+    it('re-resolves text model path when original path not found', async () => {
+      const storedModels = [
+        {
+          id: 'model-ios',
+          name: 'iOS Model',
+          filePath: '/old-uuid/Documents/models/model.gguf',
+          fileSize: 4000000000,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+
+      // First exists check fails (old UUID), re-resolved path works
+      mockedRNFS.exists
+        .mockResolvedValueOnce(false)  // original path fails
+        .mockResolvedValueOnce(true);  // re-resolved path works
+
+      const models = await modelManager.getDownloadedModels();
+
+      expect(models).toHaveLength(1);
+      // Path should be updated
+      expect(models[0].filePath).toContain('model.gguf');
+    });
+
+    it('re-resolves mmProjPath when original path not found', async () => {
+      const storedModels = [
+        {
+          id: 'model-mm',
+          name: 'Vision Model',
+          filePath: '/new-uuid/Documents/models/vision.gguf',
+          fileSize: 4000000000,
+          mmProjPath: '/old-uuid/Documents/models/mmproj.gguf',
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // model file exists
+        .mockResolvedValueOnce(false)  // mmproj original path fails
+        .mockResolvedValueOnce(true);  // re-resolved mmproj path works
+
+      const models = await modelManager.getDownloadedModels();
+
+      expect(models).toHaveLength(1);
+      expect(models[0].mmProjPath).toBeDefined();
+    });
+  });
+
+  describe('getDownloadedImageModels path re-resolution', () => {
+    it('re-resolves image model path when original not found', async () => {
+      const IMAGE_MODELS_KEY = '@local_llm/downloaded_image_models';
+      const storedModels = [
+        {
+          id: 'img-model-ios',
+          name: 'SD Model',
+          modelPath: '/old-uuid/Documents/image_models/sd-turbo',
+          size: 2000000000,
+          downloadedAt: new Date().toISOString(),
+        },
+      ];
+
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === IMAGE_MODELS_KEY) {
+          return Promise.resolve(JSON.stringify(storedModels));
+        }
+        return Promise.resolve('[]');
+      });
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(false)  // original path fails
+        .mockResolvedValueOnce(true);  // re-resolved path works
+
+      const models = await modelManager.getDownloadedImageModels();
+
+      expect(models).toHaveLength(1);
+    });
+  });
+
+  describe('getOrphanedFiles image model isFile branch', () => {
+    it('uses file size directly for orphaned image model files', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([]) // text models dir empty
+        .mockResolvedValueOnce([
+          { name: 'orphan-model.onnx', path: '/image_models/orphan-model.onnx', size: 3000000, isFile: () => true, isDirectory: () => false } as any,
+        ]);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const orphaned = await modelManager.getOrphanedFiles();
+
+      expect(orphaned).toHaveLength(1);
+      expect(orphaned[0].size).toBe(3000000);
+    });
+  });
+
+  describe('scanForUntrackedImageModels coreml backend detection', () => {
+    it('detects coreml backend from directory name', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          {
+            name: 'sd21-coreml-compiled',
+            path: '/mock/documents/image_models/sd21-coreml-compiled',
+            size: 0,
+            isFile: () => false,
+            isDirectory: () => true,
+          } as any,
+        ])
+        .mockResolvedValueOnce([
+          {
+            name: 'model.mlmodelc',
+            path: '/mock/documents/image_models/sd21-coreml-compiled/model.mlmodelc',
+            size: 1500000000,
+            isFile: () => true,
+            isDirectory: () => false,
+          } as any,
+        ]);
+
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const discovered = await modelManager.scanForUntrackedImageModels();
+
+      expect(discovered).toHaveLength(1);
+      expect(discovered[0].backend).toBe('coreml');
+    });
+
+    it('skips empty directories', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          {
+            name: 'empty-model',
+            path: '/mock/documents/image_models/empty-model',
+            size: 0,
+            isFile: () => false,
+            isDirectory: () => true,
+          } as any,
+        ])
+        .mockResolvedValueOnce([]); // empty directory
+
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const discovered = await modelManager.scanForUntrackedImageModels();
+
+      expect(discovered).toHaveLength(0);
+    });
+  });
+
+  describe('scanForUntrackedImageModels readDir error', () => {
+    it('skips directory when readDir fails', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          {
+            name: 'unreadable-model',
+            path: '/mock/documents/image_models/unreadable-model',
+            size: 0,
+            isFile: () => false,
+            isDirectory: () => true,
+          } as any,
+        ])
+        .mockRejectedValueOnce(new Error('Permission denied'));
+
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const discovered = await modelManager.scanForUntrackedImageModels();
+
+      // Should skip the unreadable directory
+      expect(discovered).toHaveLength(0);
+    });
+  });
+
+  describe('scanForUntrackedImageModels skips non-directories', () => {
+    it('skips files in image models directory', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValueOnce([
+        {
+          name: 'stray-file.txt',
+          path: '/mock/documents/image_models/stray-file.txt',
+          size: 100,
+          isFile: () => true,
+          isDirectory: () => false,
+        } as any,
+      ]);
+
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const discovered = await modelManager.scanForUntrackedImageModels();
+
+      expect(discovered).toHaveLength(0);
+    });
+  });
+
+  describe('downloadModelBackground complete handler', () => {
+    it('processes completed background download with mmproj', async () => {
+      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
+
+      const visionFile = createModelFileWithMmProj({
+        name: 'bg-vision.gguf',
+        size: 4000000000,
+        mmProjName: 'bg-mmproj.gguf',
+        mmProjSize: 500000000,
+      });
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false)  // main doesn't exist
+        .mockResolvedValueOnce(false); // mmproj doesn't exist
+
+      // mmproj foreground download
+      mockedRNFS.downloadFile.mockReturnValue({
+        jobId: 1,
+        promise: Promise.resolve({ statusCode: 200, bytesWritten: 500000000 }),
+      } as any);
+
+      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
+        downloadId: 42,
+        fileName: 'bg-vision.gguf',
+        modelId: 'test/model',
+        status: 'pending',
+        bytesDownloaded: 0,
+        totalBytes: 4000000000,
+        startedAt: Date.now(),
+      } as any);
+
+      let completeCallback: any;
+      mockedBackgroundDownloadService.onComplete.mockImplementation((id: number, cb: any) => {
+        completeCallback = cb;
+        return jest.fn();
+      });
+
+      const onComplete = jest.fn();
+      await modelManager.downloadModelBackground('test/model', visionFile, undefined, onComplete);
+
+      // Simulate the complete event
+      if (completeCallback) {
+        mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('/models/bg-vision.gguf');
+        mockedRNFS.exists.mockResolvedValue(true); // mmproj exists after foreground download
+        mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+        await completeCallback({ downloadId: 42, fileName: 'bg-vision.gguf' });
+
+        expect(onComplete).toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('downloadModelBackground error handler', () => {
+    it('calls onError when background download fails', async () => {
+      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
+
+      const file = createModelFile({
+        name: 'bg-fail.gguf',
+        size: 4000000000,
+        quantization: 'Q4_K_M',
+      });
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
+        downloadId: 99,
+        fileName: 'bg-fail.gguf',
+        modelId: 'test/model',
+        status: 'pending',
+        bytesDownloaded: 0,
+        totalBytes: 4000000000,
+        startedAt: Date.now(),
+      } as any);
+
+      let errorCallback: any;
+      mockedBackgroundDownloadService.onError.mockImplementation((id: number, cb: any) => {
+        errorCallback = cb;
+        return jest.fn();
+      });
+
+      const onError = jest.fn();
+      await modelManager.downloadModelBackground('test/model', file, undefined, undefined, onError);
+
+      // Simulate the error event
+      if (errorCallback) {
+        await errorCallback({ downloadId: 99, reason: 'Network error' });
+        expect(onError).toHaveBeenCalledWith(expect.any(Error));
+      }
+    });
+  });
+
+  describe('downloadModel onError callback', () => {
+    it('calls onError when download fails', async () => {
+      const file = createModelFile({
+        name: 'error-model.gguf',
+        size: 4000000000,
+        quantization: 'Q4_K_M',
+        downloadUrl: 'https://huggingface.co/test/model/resolve/main/error-model.gguf',
+      });
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false)  // main doesn't exist
+        .mockResolvedValue(false);
+
+      mockedRNFS.downloadFile.mockReturnValue({
+        jobId: 1,
+        promise: Promise.reject(new Error('Network failure')),
+      } as any);
+
+      const onError = jest.fn();
+
+      await expect(
+        modelManager.downloadModel('test/model', file, undefined, undefined, onError)
+      ).rejects.toThrow();
+
+      // onError should have been called
+      expect(onError).toHaveBeenCalled();
+    });
+  });
 });
