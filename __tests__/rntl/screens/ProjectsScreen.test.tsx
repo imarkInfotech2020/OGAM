@@ -2,15 +2,15 @@
  * ProjectsScreen Tests
  *
  * Tests for the projects management screen including:
+ * - Title and subtitle rendering
+ * - Empty state
  * - Project list rendering
  * - Chat count badges
- * - Project CRUD operations
- * - Empty state
  * - Navigation
- *
- * Priority: P2 (Medium)
  */
 
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
@@ -31,8 +31,54 @@ jest.mock('@react-navigation/native', () => {
       setOptions: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
     }),
+    useRoute: () => ({ params: {} }),
+    useFocusEffect: jest.fn(),
+    useIsFocused: () => true,
   };
 });
+
+jest.mock('../../../src/hooks/useFocusTrigger', () => ({
+  useFocusTrigger: () => 0,
+}));
+
+jest.mock('../../../src/components/AnimatedEntry', () => ({
+  AnimatedEntry: ({ children }: any) => children,
+}));
+
+jest.mock('../../../src/components/AnimatedListItem', () => ({
+  AnimatedListItem: ({ children, onPress, style, testID }: any) => {
+    const { TouchableOpacity } = require('react-native');
+    return (
+      <TouchableOpacity style={style} onPress={onPress} testID={testID}>
+        {children}
+      </TouchableOpacity>
+    );
+  },
+}));
+
+jest.mock('../../../src/components/CustomAlert', () => ({
+  CustomAlert: () => null,
+  showAlert: (title: string, message: string, buttons?: any[]) => ({
+    visible: true,
+    title,
+    message,
+    buttons: buttons || [{ text: 'OK', style: 'default' }],
+  }),
+  hideAlert: () => ({
+    visible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  }),
+  initialAlertState: {
+    visible: false,
+    title: '',
+    message: '',
+    buttons: [],
+  },
+}));
+
+import { ProjectsScreen } from '../../../src/screens/ProjectsScreen';
 
 describe('ProjectsScreen', () => {
   beforeEach(() => {
@@ -40,204 +86,140 @@ describe('ProjectsScreen', () => {
     jest.clearAllMocks();
   });
 
-  // ============================================================================
+  // ==========================================================================
+  // Basic Rendering
+  // ==========================================================================
+  describe('basic rendering', () => {
+    it('renders "Projects" title', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('Projects')).toBeTruthy();
+    });
+
+    it('renders the subtitle description', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(
+        getByText(
+          'Projects group related chats with shared context and instructions.',
+        ),
+      ).toBeTruthy();
+    });
+
+    it('renders the New button', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('New')).toBeTruthy();
+    });
+  });
+
+  // ==========================================================================
+  // Empty State
+  // ==========================================================================
+  describe('empty state', () => {
+    it('shows "No Projects Yet" when there are no projects', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('No Projects Yet')).toBeTruthy();
+    });
+
+    it('shows empty state description text', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(
+        getByText(/Create a project to organize your chats by topic/),
+      ).toBeTruthy();
+    });
+
+    it('shows "Create Project" button in empty state', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('Create Project')).toBeTruthy();
+    });
+
+    it('navigates to ProjectEdit when "Create Project" is pressed', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      fireEvent.press(getByText('Create Project'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('ProjectEdit', {});
+    });
+  });
+
+  // ==========================================================================
   // Project List Rendering
-  // ============================================================================
+  // ==========================================================================
   describe('project list', () => {
-    it('renders project list from store', () => {
+    it('renders project names', () => {
       const project = createProject({ name: 'Code Review' });
       useProjectStore.setState({ projects: [project] });
 
-      const { projects } = useProjectStore.getState();
-      expect(projects).toHaveLength(1);
-      expect(projects[0].name).toBe('Code Review');
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('Code Review')).toBeTruthy();
     });
 
     it('renders multiple projects', () => {
       const projects = [
-        createProject({ name: 'Project A' }),
-        createProject({ name: 'Project B' }),
-        createProject({ name: 'Project C' }),
+        createProject({ name: 'Project Alpha' }),
+        createProject({ name: 'Project Beta' }),
       ];
       useProjectStore.setState({ projects });
 
-      expect(useProjectStore.getState().projects).toHaveLength(3);
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('Project Alpha')).toBeTruthy();
+      expect(getByText('Project Beta')).toBeTruthy();
     });
 
-    it('projects have name, description, and systemPrompt', () => {
+    it('does not show empty state when projects exist', () => {
+      const project = createProject({ name: 'Exists' });
+      useProjectStore.setState({ projects: [project] });
+
+      const { queryByText } = render(<ProjectsScreen />);
+      expect(queryByText('No Projects Yet')).toBeNull();
+    });
+
+    it('shows project description when available', () => {
       const project = createProject({
-        name: 'Spanish Learning',
-        description: 'Practice conversation',
-        systemPrompt: 'You are a Spanish tutor.',
+        name: 'My Project',
+        description: 'A detailed project description',
       });
+      useProjectStore.setState({ projects: [project] });
 
-      expect(project.name).toBe('Spanish Learning');
-      expect(project.description).toBe('Practice conversation');
-      expect(project.systemPrompt).toBe('You are a Spanish tutor.');
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('A detailed project description')).toBeTruthy();
     });
-  });
 
-  // ============================================================================
-  // Chat Count Badges
-  // ============================================================================
-  describe('chat count badges', () => {
-    it('counts chats per project', () => {
+    it('shows the first letter icon for each project', () => {
+      const project = createProject({ name: 'Spanish Learning' });
+      useProjectStore.setState({ projects: [project] });
+
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('S')).toBeTruthy();
+    });
+
+    it('shows chat count for each project', () => {
       const project = createProject({ name: 'Test Project' });
       useProjectStore.setState({ projects: [project] });
 
       const conv1 = createConversation({ projectId: project.id });
       const conv2 = createConversation({ projectId: project.id });
-      const conv3 = createConversation(); // No project
-      useChatStore.setState({ conversations: [conv1, conv2, conv3] });
+      useChatStore.setState({ conversations: [conv1, conv2] });
 
-      const { conversations } = useChatStore.getState();
-      const chatCount = conversations.filter(c => c.projectId === project.id).length;
-      expect(chatCount).toBe(2);
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('2')).toBeTruthy();
     });
 
-    it('returns 0 for project with no chats', () => {
-      const project = createProject();
+    it('shows 0 chat count for project with no chats', () => {
+      const project = createProject({ name: 'Empty Project' });
       useProjectStore.setState({ projects: [project] });
 
-      const { conversations } = useChatStore.getState();
-      const chatCount = conversations.filter(c => c.projectId === project.id).length;
-      expect(chatCount).toBe(0);
+      const { getByText } = render(<ProjectsScreen />);
+      expect(getByText('0')).toBeTruthy();
     });
   });
 
-  // ============================================================================
-  // Empty State
-  // ============================================================================
-  describe('empty state', () => {
-    it('shows empty project list initially (after reset)', () => {
-      // resetStores sets projects to []
-      const { projects } = useProjectStore.getState();
-      expect(projects).toHaveLength(0);
-    });
-  });
+  // ==========================================================================
+  // Navigation
+  // ==========================================================================
+  describe('navigation', () => {
+    it('navigates to ProjectEdit when New button is pressed', () => {
+      const { getByText } = render(<ProjectsScreen />);
+      fireEvent.press(getByText('New'));
 
-  // ============================================================================
-  // Project CRUD
-  // ============================================================================
-  describe('project operations', () => {
-    it('creates new project', () => {
-      const project = useProjectStore.getState().createProject({
-        name: 'New Project',
-        description: 'Test description',
-        systemPrompt: 'Be helpful',
-        icon: '🚀',
-      });
-
-      expect(project.id).toBeTruthy();
-      expect(project.name).toBe('New Project');
-      expect(useProjectStore.getState().projects).toHaveLength(1);
-    });
-
-    it('deletes project', () => {
-      const project = createProject();
-      useProjectStore.setState({ projects: [project] });
-
-      useProjectStore.getState().deleteProject(project.id);
-
-      expect(useProjectStore.getState().projects).toHaveLength(0);
-    });
-
-    it('updates project', () => {
-      const project = createProject({ name: 'Original Name' });
-      useProjectStore.setState({ projects: [project] });
-
-      useProjectStore.getState().updateProject(project.id, { name: 'Updated Name' });
-
-      const updated = useProjectStore.getState().getProject(project.id);
-      expect(updated!.name).toBe('Updated Name');
-    });
-
-    it('deleting project does not delete associated chats', () => {
-      const project = createProject();
-      useProjectStore.setState({ projects: [project] });
-
-      const conv = createConversation({ projectId: project.id });
-      useChatStore.setState({ conversations: [conv] });
-
-      useProjectStore.getState().deleteProject(project.id);
-
-      // Project gone, but chat remains
-      expect(useProjectStore.getState().projects).toHaveLength(0);
-      expect(useChatStore.getState().conversations).toHaveLength(1);
-    });
-
-    it('duplicates project', () => {
-      const project = createProject({ name: 'Original' });
-      useProjectStore.setState({ projects: [project] });
-
-      const duplicate = useProjectStore.getState().duplicateProject(project.id);
-
-      expect(duplicate).not.toBeNull();
-      expect(duplicate!.name).toBe('Original (Copy)');
-      expect(useProjectStore.getState().projects).toHaveLength(2);
-    });
-
-    it('duplicate returns null for non-existent project', () => {
-      const result = useProjectStore.getState().duplicateProject('nonexistent');
-      expect(result).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // Project Detail Fields
-  // ============================================================================
-  describe('project detail fields', () => {
-    it('project has icon field', () => {
-      const project = createProject({ icon: '📁' });
-      expect(project.icon).toBe('📁');
-    });
-
-    it('project has createdAt and updatedAt', () => {
-      const project = createProject();
-      expect(project.createdAt).toBeTruthy();
-      expect(project.updatedAt).toBeTruthy();
-    });
-
-    it('updatedAt changes on update', () => {
-      const project = createProject();
-      useProjectStore.setState({ projects: [project] });
-
-      // Small delay to ensure different timestamp
-      useProjectStore.getState().updateProject(project.id, { name: 'Changed' });
-
-      const updated = useProjectStore.getState().getProject(project.id);
-      expect(updated!.updatedAt).toBeTruthy();
-    });
-  });
-
-  // ============================================================================
-  // Conversation-Project Association
-  // ============================================================================
-  describe('conversation-project association', () => {
-    it('sets conversation project', () => {
-      const project = createProject();
-      useProjectStore.setState({ projects: [project] });
-
-      const conv = createConversation();
-      useChatStore.setState({ conversations: [conv] });
-
-      useChatStore.getState().setConversationProject(conv.id, project.id);
-
-      const { conversations } = useChatStore.getState();
-      expect(conversations[0].projectId).toBe(project.id);
-    });
-
-    it('clears conversation project', () => {
-      const project = createProject();
-      useProjectStore.setState({ projects: [project] });
-
-      const conv = createConversation({ projectId: project.id });
-      useChatStore.setState({ conversations: [conv] });
-
-      useChatStore.getState().setConversationProject(conv.id, null);
-
-      const { conversations } = useChatStore.getState();
-      expect(conversations[0].projectId).toBeUndefined();
+      expect(mockNavigate).toHaveBeenCalledWith('ProjectEdit', {});
     });
   });
 });
