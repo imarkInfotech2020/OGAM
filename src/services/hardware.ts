@@ -1,9 +1,12 @@
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
-import { DeviceInfo as DeviceInfoType, ModelRecommendation } from '../types';
+import { DeviceInfo as DeviceInfoType, ModelRecommendation, SoCInfo, SoCVendor, ImageModelRecommendation } from '../types';
 import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
 
 class HardwareService {
   private cachedDeviceInfo: DeviceInfoType | null = null;
+  private cachedSoCInfo: SoCInfo | null = null;
+  private cachedImageRecommendation: ImageModelRecommendation | null = null;
 
   async getDeviceInfo(): Promise<DeviceInfoType> {
     if (this.cachedDeviceInfo) {
@@ -200,6 +203,139 @@ class HardwareService {
     const ramBytes = this.estimateModelRam(model, multiplier);
     const ramGB = ramBytes / (1024 * 1024 * 1024);
     return `~${ramGB.toFixed(1)} GB`;
+  }
+
+  async getSoCInfo(): Promise<SoCInfo> {
+    if (this.cachedSoCInfo) {
+      return this.cachedSoCInfo;
+    }
+
+    if (Platform.OS === 'ios') {
+      const deviceId = DeviceInfo.getDeviceId(); // e.g. "iPhone15,2"
+      const ramGB = this.getTotalMemoryGB();
+      let appleChip: SoCInfo['appleChip'];
+
+      // Map device identifiers to chip families
+      // iPhone 12 = iPhone13,x → A14, iPhone 13 = iPhone14,x → A15,
+      // iPhone 14 = iPhone15,x → A16, iPhone 15 Pro = iPhone16,1/2 → A17Pro,
+      // iPhone 16 = iPhone17,x → A18
+      const majorMatch = deviceId.match(/iPhone(\d+)/);
+      if (majorMatch) {
+        const major = parseInt(majorMatch[1], 10);
+        if (major >= 17) appleChip = 'A18';
+        else if (major >= 16) appleChip = 'A17Pro';
+        else if (major >= 15) appleChip = 'A16';
+        else if (major >= 14) appleChip = 'A15';
+        else if (major >= 13) appleChip = 'A14';
+      }
+
+      this.cachedSoCInfo = {
+        vendor: 'apple',
+        hasNPU: true,
+        appleChip: appleChip || (ramGB >= 6 ? 'A15' : 'A14'),
+      };
+      return this.cachedSoCInfo;
+    }
+
+    // Android: detect SoC vendor from hardware string
+    const hardware = await DeviceInfo.getHardware();
+    const model = DeviceInfo.getModel();
+    const hardwareLower = hardware.toLowerCase();
+    const ramGB = this.getTotalMemoryGB();
+
+    let vendor: SoCVendor = 'unknown';
+    if (hardwareLower.includes('qcom')) {
+      vendor = 'qualcomm';
+    } else if (model.startsWith('Pixel')) {
+      vendor = 'tensor';
+    } else if (hardwareLower.includes('mt') || hardwareLower.includes('mediatek')) {
+      vendor = 'mediatek';
+    } else if (hardwareLower.includes('exynos') || hardwareLower.includes('samsungexynos')) {
+      vendor = 'exynos';
+    }
+
+    let qnnVariant: SoCInfo['qnnVariant'];
+    if (vendor === 'qualcomm') {
+      if (ramGB >= 12) qnnVariant = '8gen2';
+      else if (ramGB >= 8) qnnVariant = '8gen1';
+      else qnnVariant = 'min';
+    }
+
+    this.cachedSoCInfo = {
+      vendor,
+      hasNPU: vendor === 'qualcomm',
+      qnnVariant,
+    };
+    return this.cachedSoCInfo;
+  }
+
+  async getImageModelRecommendation(): Promise<ImageModelRecommendation> {
+    if (this.cachedImageRecommendation) {
+      return this.cachedImageRecommendation;
+    }
+
+    const socInfo = await this.getSoCInfo();
+    const ramGB = this.getTotalMemoryGB();
+    let rec: ImageModelRecommendation;
+
+    if (Platform.OS === 'ios') {
+      const chip = socInfo.appleChip;
+      const isHighEnd = (chip === 'A17Pro' || chip === 'A18') && ramGB >= 6;
+      const isMidRange = (chip === 'A15' || chip === 'A16') && ramGB >= 6;
+
+      if (isHighEnd) {
+        rec = {
+          recommendedBackend: 'coreml',
+          recommendedModels: ['sdxl', 'xl-base'],
+          bannerText: 'All models supported \u2014 SDXL for best quality',
+          compatibleBackends: ['coreml'],
+        };
+      } else if (isMidRange) {
+        rec = {
+          recommendedBackend: 'coreml',
+          recommendedModels: ['v1-5-palettized', '2-1-base-palettized'],
+          bannerText: 'SD 1.5 or SD 2.1 Palettized recommended',
+          compatibleBackends: ['coreml'],
+        };
+      } else {
+        rec = {
+          recommendedBackend: 'coreml',
+          recommendedModels: ['v1-5-palettized'],
+          bannerText: 'SD 1.5 Palettized recommended for your device',
+          compatibleBackends: ['coreml'],
+        };
+      }
+    } else if (socInfo.vendor === 'qualcomm') {
+      const variantLabel = socInfo.qnnVariant === '8gen2'
+        ? 'flagship' : socInfo.qnnVariant === '8gen1'
+        ? '' : 'lightweight ';
+
+      const bannerSuffix = socInfo.qnnVariant === '8gen2'
+        ? 'NPU models for fastest inference'
+        : socInfo.qnnVariant === '8gen1'
+        ? 'NPU models supported'
+        : 'lightweight NPU models recommended';
+
+      rec = {
+        recommendedBackend: 'qnn',
+        qnnVariant: socInfo.qnnVariant,
+        bannerText: `Snapdragon ${variantLabel}\u2014 ${bannerSuffix}`,
+        compatibleBackends: ['qnn', 'mnn'],
+      };
+    } else {
+      rec = {
+        recommendedBackend: 'mnn',
+        bannerText: 'CPU models recommended \u2014 NPU requires Snapdragon',
+        compatibleBackends: ['mnn'],
+      };
+    }
+
+    if (ramGB < 4) {
+      rec.warning = 'Low RAM \u2014 expect slower performance';
+    }
+
+    this.cachedImageRecommendation = rec;
+    return rec;
   }
 
   getDeviceTier(): 'low' | 'medium' | 'high' | 'flagship' {

@@ -66,6 +66,26 @@ export interface DownloadProgress {
   progress: number;
 }
 
+// SoC detection types
+export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
+
+export interface SoCInfo {
+  vendor: SoCVendor;
+  hasNPU: boolean;
+  qnnVariant?: '8gen2' | '8gen1' | 'min';
+  appleChip?: 'A14' | 'A15' | 'A16' | 'A17Pro' | 'A18';
+}
+
+export interface ImageModelRecommendation {
+  recommendedBackend: 'qnn' | 'mnn' | 'coreml' | 'all';
+  qnnVariant?: '8gen2' | '8gen1' | 'min';
+  /** Substrings matched against model name to identify recommended models */
+  recommendedModels?: string[];
+  bannerText: string;
+  warning?: string;
+  compatibleBackends: Array<'mnn' | 'qnn' | 'coreml'>;
+}
+
 // Hardware-related types
 export interface DeviceInfo {
   totalMemory: number;
