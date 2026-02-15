@@ -7,7 +7,7 @@
  * - Does not increment when unfocused
  */
 
-import { renderHook, act } from '@testing-library/react-native';
+import { renderHook } from '@testing-library/react-native';
 
 let mockIsFocused = true;
 jest.mock('@react-navigation/native', () => ({

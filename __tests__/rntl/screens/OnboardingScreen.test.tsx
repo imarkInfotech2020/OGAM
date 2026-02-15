@@ -140,10 +140,10 @@ describe('OnboardingScreen', () => {
   });
 
   it('updates currentIndex on scroll end', () => {
-    const { getByTestId, getByText } = render(<OnboardingScreen navigation={navigation} />);
+    const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
 
     // Simulate scrolling to the last slide
-    const flatList = getByTestId('onboarding-screen').children[0];
+    const _flatList = getByTestId('onboarding-screen').children[0];
     // The FlatList is inside the onboarding-screen container
   });
 

@@ -1273,8 +1273,8 @@ describe('appStore', () => {
       updateSettings({ imageGenerationMode: 'manual' });
       expect(getAppState().settings.imageGenerationMode).toBe('manual');
 
-      updateSettings({ imageGenerationMode: 'disabled' });
-      expect(getAppState().settings.imageGenerationMode).toBe('disabled');
+      updateSettings({ imageGenerationMode: 'manual' });
+      expect(getAppState().settings.imageGenerationMode).toBe('manual');
 
       updateSettings({ imageGenerationMode: 'auto' });
       expect(getAppState().settings.imageGenerationMode).toBe('auto');

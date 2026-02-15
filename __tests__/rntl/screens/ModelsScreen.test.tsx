@@ -183,7 +183,7 @@ jest.mock('../../../src/components/AnimatedEntry', () => {
 jest.mock('../../../src/components/CustomAlert', () => {
   const { View } = require('react-native');
   return {
-    CustomAlert: (props: any) => <View testID="custom-alert" />,
+    CustomAlert: (_props: any) => <View testID="custom-alert" />,
     showAlert: jest.fn((opts: any) => ({ visible: true, ...opts })),
     hideAlert: jest.fn(() => ({ visible: false })),
     initialAlertState: { visible: false },
@@ -410,7 +410,7 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('tab switching', () => {
     it('switches to image models tab', async () => {
-      const { getByText, queryByTestId } = renderModelsScreen();
+      const { getByText } = renderModelsScreen();
 
       await act(async () => {
         fireEvent.press(getByText('Image Models'));
@@ -566,8 +566,8 @@ describe('ModelsScreen', () => {
       });
 
       expect(file.mmProjFile).toBeDefined();
-      expect(file.mmProjFile.name).toBe('mmproj.gguf');
-      expect(file.mmProjFile.size).toBe(500 * 1024 * 1024);
+      expect(file.mmProjFile!.name).toBe('mmproj.gguf');
+      expect(file.mmProjFile!.size).toBe(500 * 1024 * 1024);
     });
 
     it('calculates combined size for vision model files', () => {
@@ -825,7 +825,7 @@ describe('ModelsScreen', () => {
     });
 
     it('hides filter bar when toggle pressed again', async () => {
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -1038,7 +1038,7 @@ describe('ModelsScreen', () => {
           id: 'org/official-model',
           name: 'Official Model',
           author: 'org',
-          credibility: { source: 'official', reason: 'Official release' },
+          credibility: { source: 'official', isOfficial: true, isVerifiedQuantizer: false },
         }),
       ];
       mockSearchModels.mockResolvedValue(searchResults);
@@ -1073,7 +1073,7 @@ describe('ModelsScreen', () => {
           id: 'org/lmstudio-model',
           name: 'LMStudio Model',
           author: 'org',
-          credibility: { source: 'lmstudio', reason: 'LMStudio curated' },
+          credibility: { source: 'lmstudio', isOfficial: false, isVerifiedQuantizer: true },
         }),
       ];
       mockSearchModels.mockResolvedValue(searchResults);
@@ -1108,7 +1108,7 @@ describe('ModelsScreen', () => {
           id: 'org/verified-model',
           name: 'Verified Model',
           author: 'org',
-          credibility: { source: 'verified-quantizer', reason: 'Verified' },
+          credibility: { source: 'verified-quantizer', isOfficial: false, isVerifiedQuantizer: true },
         }),
       ];
       mockSearchModels.mockResolvedValue(searchResults);
@@ -1152,7 +1152,7 @@ describe('ModelsScreen', () => {
         createModelFile({ name: 'model-large.gguf', size: 6 * 1024 * 1024 * 1024 }),
       ]);
 
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
 
@@ -1282,11 +1282,11 @@ describe('ModelsScreen', () => {
       ];
       mockFetchAvailableModels.mockResolvedValue(imageModels);
 
-      const { getByText, getByTestId, queryByTestId } = renderModelsScreen();
+      const { getByText, queryByTestId } = renderModelsScreen();
 
       // Wait for initial mount effects to complete (imageRec loading)
       await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
       });
 
       // Switch to image tab
@@ -1296,7 +1296,7 @@ describe('ModelsScreen', () => {
 
       // Wait for models to load
       await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
       });
 
       // Check if image model card rendered
@@ -1420,7 +1420,7 @@ describe('ModelsScreen', () => {
         createModelInfo({ name: 'Search Result' }),
       ]);
 
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
 
@@ -1630,14 +1630,14 @@ describe('ModelsScreen', () => {
           id: 'official/model-3B',
           name: 'Official 3B',
           author: 'meta-llama',
-          credibility: { source: 'official', reason: 'Official' },
+          credibility: { source: 'official', isOfficial: true, isVerifiedQuantizer: false },
           files: [createModelFile({ size: 2000000000 })],
         }),
         createModelInfo({
           id: 'community/model-3B',
           name: 'Community 3B',
           author: 'random',
-          credibility: { source: 'community', reason: 'Community' },
+          credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
           files: [createModelFile({ size: 2000000000 })],
         }),
       ]);
@@ -1909,7 +1909,7 @@ describe('ModelsScreen', () => {
       ]);
       mockGetModelFiles.mockResolvedValue(files);
 
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -2049,7 +2049,7 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('tab switching resets state', () => {
     it('resets text filters when switching to image tab', async () => {
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -2454,7 +2454,7 @@ describe('ModelsScreen', () => {
     it('shows image filter bar when filter toggle pressed on image tab', async () => {
       mockFetchAvailableModels.mockResolvedValue(mockImageModels);
 
-      const { getByText, queryByText } = renderModelsScreen();
+      const { getByText } = renderModelsScreen();
 
       await act(async () => {
         fireEvent.press(getByText('Image Models'));
@@ -2483,7 +2483,7 @@ describe('ModelsScreen', () => {
     it('filters image models by search query text', async () => {
       mockFetchAvailableModels.mockResolvedValue(mockImageModels);
 
-      const { getByText, getByPlaceholderText } = renderModelsScreen();
+      const { getByText } = renderModelsScreen();
 
       await act(async () => {
         fireEvent.press(getByText('Image Models'));

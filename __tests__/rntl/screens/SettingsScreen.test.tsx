@@ -137,7 +137,7 @@ describe('SettingsScreen', () => {
   });
 
   it('calls setThemeMode when theme option is pressed', () => {
-    const { getAllByRole } = render(<SettingsScreen />);
+    render(<SettingsScreen />);
     // The theme options are the first three TouchableOpacity elements in the theme selector
     // We can't easily target them by text since they use icons, but pressing them calls setThemeMode
     // The three theme options are rendered - pressing one calls setThemeMode

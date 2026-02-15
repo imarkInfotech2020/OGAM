@@ -243,7 +243,7 @@ describe('ProjectsScreen', () => {
       delete (project as any).description;
       useProjectStore.setState({ projects: [project] });
 
-      const { getByText, queryByText } = render(<ProjectsScreen />);
+      const { getByText } = render(<ProjectsScreen />);
       expect(getByText('No Desc')).toBeTruthy();
       // There should be no description text rendered
     });
