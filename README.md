@@ -11,6 +11,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/alichherawalla/off-grid-mobile?style=social)](https://github.com/alichherawalla/off-grid-mobile)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green.svg)](#install)
+[![Coverage](https://img.shields.io/badge/Coverage-80%25-brightgreen.svg)](#testing)
 
 </div>
 
