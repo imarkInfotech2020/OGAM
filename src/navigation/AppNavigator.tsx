@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -170,6 +171,8 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
 // Main Tab Navigator
 const MainTabs: React.FC = () => {
   const { colors, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 20);
 
   return (
     <Tab.Navigator
@@ -181,8 +184,8 @@ const MainTabs: React.FC = () => {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 80,
-          paddingBottom: 20,
+          height: 60 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 10,
           ...shadows.medium,
         },
