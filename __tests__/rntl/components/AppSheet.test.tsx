@@ -16,8 +16,8 @@
  */
 
 import React from 'react';
-import { Text } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { Text, Keyboard } from 'react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { AppSheet } from '../../../src/components/AppSheet';
 
 describe('AppSheet', () => {
@@ -272,6 +272,193 @@ describe('AppSheet', () => {
         <AppSheet {...defaultProps} visible={true} title="Level 4" elevation="level4" />
       );
       expect(toJSON()).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Keyboard Dismiss Before Open
+  // ============================================================================
+  describe('keyboard dismiss before open', () => {
+    let mockRemove: jest.Mock;
+    let mockAddListener: jest.SpyInstance;
+    let mockDismiss: jest.SpyInstance;
+    let mockIsVisible: jest.SpyInstance;
+
+    beforeEach(() => {
+      mockRemove = jest.fn();
+      mockAddListener = jest.spyOn(Keyboard, 'addListener').mockReturnValue({
+        remove: mockRemove,
+      } as any);
+      mockDismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+      mockIsVisible = jest.spyOn(Keyboard, 'isVisible' as any);
+    });
+
+    afterEach(() => {
+      mockAddListener.mockRestore();
+      mockDismiss.mockRestore();
+      mockIsVisible.mockRestore();
+    });
+
+    it('opens modal immediately when keyboard is not visible', () => {
+      mockIsVisible.mockReturnValue(false);
+
+      const { toJSON } = render(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      expect(Keyboard.dismiss).not.toHaveBeenCalled();
+      // addListener may be called by KeyboardAvoidingView internally,
+      // but should NOT be called with 'keyboardDidHide' by our code
+      const didHideCalls = mockAddListener.mock.calls.filter(
+        (call: any[]) => call[0] === 'keyboardDidHide',
+      );
+      expect(didHideCalls).toHaveLength(0);
+      expect(toJSON()).toBeTruthy();
+    });
+
+    it('dismisses keyboard and defers modal when keyboard is visible', () => {
+      mockIsVisible.mockReturnValue(true);
+
+      const { toJSON } = render(
+        <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      // Initially not visible
+      expect(toJSON()).toBeNull();
+
+      // Now set visible — keyboard is open
+      const { rerender, toJSON: toJSON2 } = render(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      expect(Keyboard.dismiss).toHaveBeenCalled();
+      expect(Keyboard.addListener).toHaveBeenCalledWith(
+        'keyboardDidHide',
+        expect.any(Function),
+      );
+    });
+
+    it('opens modal after keyboardDidHide event fires', async () => {
+      mockIsVisible.mockReturnValue(true);
+      let keyboardHideCallback: (() => void) | null = null;
+      mockAddListener.mockImplementation((_event: string, cb: () => void) => {
+        keyboardHideCallback = cb;
+        return { remove: mockRemove };
+      });
+
+      const { rerender, getByText, queryByText } = render(
+        <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      // Open the sheet — keyboard is visible, so modal deferred
+      rerender(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      expect(Keyboard.dismiss).toHaveBeenCalled();
+
+      // Simulate keyboard finishing its dismiss
+      await act(() => {
+        keyboardHideCallback!();
+      });
+
+      // Modal should now be visible with content
+      expect(getByText('Sheet')).toBeTruthy();
+      expect(mockRemove).toHaveBeenCalled();
+    });
+
+    it('opens modal via safety timeout if keyboardDidHide never fires', async () => {
+      jest.useFakeTimers();
+      mockIsVisible.mockReturnValue(true);
+
+      const { rerender, getByText } = render(
+        <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      rerender(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      expect(Keyboard.dismiss).toHaveBeenCalled();
+
+      // Fast-forward past the 400ms safety timeout
+      await act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      expect(getByText('Sheet')).toBeTruthy();
+      expect(mockRemove).toHaveBeenCalled();
+
+      jest.useRealTimers();
+    });
+
+    it('does not open modal twice if both listener and timeout fire', async () => {
+      jest.useFakeTimers();
+      mockIsVisible.mockReturnValue(true);
+      let keyboardHideCallback: (() => void) | null = null;
+      mockAddListener.mockImplementation((_event: string, cb: () => void) => {
+        keyboardHideCallback = cb;
+        return { remove: mockRemove };
+      });
+
+      const { rerender } = render(
+        <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      rerender(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      // Fire the keyboard hide callback
+      await act(() => {
+        keyboardHideCallback!();
+      });
+
+      // Also fire the timeout — should be a no-op
+      await act(() => {
+        jest.advanceTimersByTime(400);
+      });
+
+      // No errors — the guard prevents double setState
+      jest.useRealTimers();
+    });
+
+    it('cleans up listener and timeout on unmount during keyboard dismiss', () => {
+      jest.useFakeTimers();
+      mockIsVisible.mockReturnValue(true);
+
+      const { unmount } = render(
+        <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      expect(Keyboard.addListener).toHaveBeenCalled();
+
+      unmount();
+
+      // Cleanup should have removed the listener
+      expect(mockRemove).toHaveBeenCalled();
+
+      jest.useRealTimers();
     });
   });
 
