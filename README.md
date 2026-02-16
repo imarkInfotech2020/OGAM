@@ -12,6 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green.svg)](#install)
 [![Coverage](https://img.shields.io/badge/Coverage-80%25-brightgreen.svg)](#testing)
+[![Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack)](http://off-grid-mobile.slack.com/)
 
 </div>
 
@@ -107,6 +108,12 @@ npm run ios
 
 ---
 
+## Community
+
+Join the conversation on [**Slack**](http://off-grid-mobile.slack.com/) — ask questions, share feedback, and connect with other Off Grid users and contributors.
+
+---
+
 ## Contributing
 
 Contributions welcome! Fork, branch, PR. See [development guidelines](docs/ARCHITECTURE.md#contributing) for code style and the [codebase guide](docs/standards/CODEBASE_GUIDE.md) for patterns.
@@ -125,5 +132,7 @@ Built on the shoulders of giants:
 **Off Grid** — Your AI, your device, your data.
 
 *No cloud. No subscription. No data harvesting. Just AI that works anywhere.*
+
+[Join the Community on Slack](http://off-grid-mobile.slack.com/)
 
 </div>
