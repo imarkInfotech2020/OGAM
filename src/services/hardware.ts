@@ -243,7 +243,6 @@ class HardwareService {
     const hardware = await DeviceInfo.getHardware();
     const model = DeviceInfo.getModel();
     const hardwareLower = hardware.toLowerCase();
-    const ramGB = this.getTotalMemoryGB();
 
     let vendor: SoCVendor = 'unknown';
     if (hardwareLower.includes('qcom')) {
@@ -350,13 +349,13 @@ class HardwareService {
     } else if (socInfo.vendor === 'qualcomm') {
       const variantLabel = socInfo.qnnVariant === '8gen2'
         ? 'flagship' : socInfo.qnnVariant === '8gen1'
-        ? '' : 'lightweight ';
+          ? '' : 'lightweight ';
 
       const bannerSuffix = socInfo.qnnVariant === '8gen2'
         ? 'NPU models for fastest inference'
         : socInfo.qnnVariant === '8gen1'
-        ? 'NPU models supported'
-        : 'lightweight NPU models recommended';
+          ? 'NPU models supported'
+          : 'lightweight NPU models recommended';
 
       rec = {
         recommendedBackend: 'qnn',
