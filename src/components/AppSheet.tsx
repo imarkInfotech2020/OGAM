@@ -9,6 +9,7 @@ import {
   PanResponder,
   Dimensions,
   Platform,
+  Keyboard,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useTheme, useThemedStyles } from '../theme';
@@ -113,7 +114,32 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   useEffect(() => {
     if (visible) {
       pendingAnimateIn.current = true;
-      setModalVisible(true);
+      // Dismiss keyboard first, then open — prevents animation conflict
+      const keyboardVisible = Keyboard.isVisible?.() ?? false;
+      if (keyboardVisible) {
+        Keyboard.dismiss();
+        let opened = false;
+        const openOnce = () => {
+          if (opened) return;
+          opened = true;
+          setModalVisible(true);
+        };
+        const sub = Keyboard.addListener('keyboardDidHide', () => {
+          sub.remove();
+          openOnce();
+        });
+        // Safety timeout in case the event never fires
+        const timeout = setTimeout(() => {
+          sub.remove();
+          openOnce();
+        }, 400);
+        return () => {
+          clearTimeout(timeout);
+          sub.remove();
+        };
+      } else {
+        setModalVisible(true);
+      }
     } else if (modalVisible) {
       animateOut(() => setModalVisible(false));
     }
