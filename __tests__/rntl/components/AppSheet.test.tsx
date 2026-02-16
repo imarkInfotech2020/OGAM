@@ -289,7 +289,7 @@ describe('AppSheet', () => {
       mockAddListener = jest.spyOn(Keyboard, 'addListener').mockReturnValue({
         remove: mockRemove,
       } as any);
-      mockDismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => {});
+      mockDismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => { });
       mockIsVisible = jest.spyOn(Keyboard, 'isVisible' as any);
     });
 
@@ -331,7 +331,7 @@ describe('AppSheet', () => {
       expect(toJSON()).toBeNull();
 
       // Now set visible — keyboard is open
-      const { rerender, toJSON: toJSON2 } = render(
+      render(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
         </AppSheet>
@@ -352,7 +352,7 @@ describe('AppSheet', () => {
         return { remove: mockRemove };
       });
 
-      const { rerender, getByText, queryByText } = render(
+      const { rerender, getByText } = render(
         <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
         </AppSheet>
