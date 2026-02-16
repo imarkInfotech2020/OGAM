@@ -19,19 +19,21 @@ Builds:
     commit: v0.0.48
     subdir: android/app
     sudo:
-      - sysctl fs.inotify.max_user_watches=524288
-      - curl -Lo node.tar.gz https://nodejs.org/dist/v20.19.5/node-v20.19.5-linux-x64.tar.gz
-      - tar xzf node.tar.gz
-      - cp -a node-v20.19.5-linux-x64/. /usr/local/
+      - apt-get update
+      - apt-get install -y npm
     init: npm install
     gradle:
-      - yes
+      - fdroid
     rm:
       - ios
     scanignore:
       - android/app/src/main/jniLibs/arm64-v8a/libstable_diffusion_core.so
       - android/app/src/main/assets/ggml-hexagon/*.so
       - android/app/src/main/assets/qnnlibs/*.so
+      - node_modules/llama.rn/android/src/main/jniLibs/*/*.so
+      - node_modules/llama.rn/bin/arm64-v8a/*.so
+      - node_modules/whisper.rn/android/src/main/jniLibs/*/*.so
+      - node_modules/hermes-compiler/hermesc/linux64-bin/hermesc
       - node_modules/react-native-safe-area-context/android/build.gradle
       - node_modules/react-native-screens/android/build.gradle
       - node_modules/react-native-vector-icons/android/build.gradle
@@ -49,8 +51,9 @@ Builds:
 MaintainerNotes: |
   scanignore is used to allow the React Native local Maven repository
   and native Android build.gradle files from React Native dependencies.
-  Pre-built .so files are Qualcomm QNN/Hexagon NPU acceleration libraries
-  and Stable Diffusion core — required for on-device AI inference.
+  Pre-built .so files include Qualcomm QNN/Hexagon NPU acceleration
+  libraries, llama.rn and whisper.rn inference engines, and Stable
+  Diffusion core — all required for on-device AI inference.
   All other dependencies are FOSS. No Google Play Services, Firebase,
   analytics, or tracking.
 

@@ -3,7 +3,8 @@
   "version": "0.0.47",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "react-native run-android --mode=standardDebug",
+    "android:fdroid": "react-native run-android --mode=fdroidDebug",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
