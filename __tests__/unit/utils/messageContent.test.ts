@@ -1,0 +1,187 @@
+/**
+ * messageContent Utility Unit Tests
+ *
+ * Tests for stripControlTokens - the utility that removes LLM control tokens
+ * from streamed content before displaying to users.
+ * Priority: P0 (Critical) - Prevents raw control tokens from appearing in chat.
+ */
+
+import { stripControlTokens } from '../../../src/utils/messageContent';
+
+describe('stripControlTokens', () => {
+  // ==========================================================================
+  // Basic control token removal
+  // ==========================================================================
+  describe('individual token patterns', () => {
+    it('strips <|im_start|>', () => {
+      expect(stripControlTokens('Hello<|im_start|>World')).toBe('HelloWorld');
+    });
+
+    it('strips <|im_start|> with role (assistant)', () => {
+      expect(stripControlTokens('<|im_start|>assistant\nHello')).toBe('Hello');
+    });
+
+    it('strips <|im_start|> with role (user)', () => {
+      expect(stripControlTokens('<|im_start|>user\nHello')).toBe('Hello');
+    });
+
+    it('strips <|im_start|> with role (system)', () => {
+      expect(stripControlTokens('<|im_start|>system\nYou are helpful')).toBe('You are helpful');
+    });
+
+    it('strips <|im_start|> with role (tool)', () => {
+      expect(stripControlTokens('<|im_start|>tool\nresult')).toBe('result');
+    });
+
+    it('strips <|im_end|>', () => {
+      expect(stripControlTokens('Hello world<|im_end|>')).toBe('Hello world');
+    });
+
+    it('strips <|im_end|> with trailing newline', () => {
+      expect(stripControlTokens('Hello<|im_end|>\n')).toBe('Hello');
+    });
+
+    it('strips <|end|>', () => {
+      expect(stripControlTokens('Response text<|end|>')).toBe('Response text');
+    });
+
+    it('strips <|eot_id|>', () => {
+      expect(stripControlTokens('Llama response<|eot_id|>')).toBe('Llama response');
+    });
+
+    it('strips </s>', () => {
+      expect(stripControlTokens('Generated text</s>')).toBe('Generated text');
+    });
+  });
+
+  // ==========================================================================
+  // Multiple tokens
+  // ==========================================================================
+  describe('multiple tokens', () => {
+    it('strips multiple different control tokens', () => {
+      const input = '<|im_start|>assistant\nHello world<|im_end|></s>';
+      expect(stripControlTokens(input)).toBe('Hello world');
+    });
+
+    it('strips repeated same tokens', () => {
+      const input = 'A<|im_end|>B<|im_end|>C';
+      expect(stripControlTokens(input)).toBe('ABC');
+    });
+
+    it('strips all token types in one string', () => {
+      const input = '<|im_start|>user\nQ<|im_end|><|end|><|eot_id|></s>';
+      expect(stripControlTokens(input)).toBe('Q');
+    });
+
+    it('strips tokens scattered throughout content', () => {
+      // Note: <|im_end|>\s* pattern consumes optional trailing whitespace
+      const input = 'Hello<|im_end|> there<|eot_id|> friend</s>';
+      expect(stripControlTokens(input)).toBe('Hellothere friend');
+    });
+  });
+
+  // ==========================================================================
+  // Case insensitivity
+  // ==========================================================================
+  describe('case insensitivity', () => {
+    it('strips <|IM_START|> (uppercase)', () => {
+      expect(stripControlTokens('<|IM_START|>Hello')).toBe('Hello');
+    });
+
+    it('strips <|Im_End|> (mixed case)', () => {
+      expect(stripControlTokens('Hello<|Im_End|>')).toBe('Hello');
+    });
+
+    it('strips </S> (uppercase)', () => {
+      expect(stripControlTokens('Text</S>')).toBe('Text');
+    });
+
+    it('strips <|EOT_ID|> (uppercase)', () => {
+      expect(stripControlTokens('Text<|EOT_ID|>')).toBe('Text');
+    });
+  });
+
+  // ==========================================================================
+  // Edge cases
+  // ==========================================================================
+  describe('edge cases', () => {
+    it('returns empty string for empty input', () => {
+      expect(stripControlTokens('')).toBe('');
+    });
+
+    it('returns content unchanged when no control tokens present', () => {
+      const content = 'This is a normal response with no special tokens.';
+      expect(stripControlTokens(content)).toBe(content);
+    });
+
+    it('returns empty string when input is only control tokens', () => {
+      expect(stripControlTokens('<|im_start|>assistant\n<|im_end|>')).toBe('');
+    });
+
+    it('preserves whitespace in content', () => {
+      expect(stripControlTokens('  Hello  World  ')).toBe('  Hello  World  ');
+    });
+
+    it('preserves HTML-like tags that are not control tokens', () => {
+      expect(stripControlTokens('<b>bold</b> <i>italic</i>')).toBe('<b>bold</b> <i>italic</i>');
+    });
+
+    it('preserves markdown formatting', () => {
+      const markdown = '# Title\n\n- Item 1\n- Item 2\n\n```code```';
+      expect(stripControlTokens(markdown)).toBe(markdown);
+    });
+
+    it('handles content with unicode characters', () => {
+      expect(stripControlTokens('Hello 🌍<|im_end|>')).toBe('Hello 🌍');
+    });
+
+    it('handles content with newlines and tabs', () => {
+      expect(stripControlTokens('Line 1\nLine 2\tTabbed<|im_end|>')).toBe('Line 1\nLine 2\tTabbed');
+    });
+
+    it('strips <|im_start|> with extra whitespace before role', () => {
+      expect(stripControlTokens('<|im_start|>  assistant\nHello')).toBe('Hello');
+    });
+
+    it('strips <|im_start|> without role', () => {
+      expect(stripControlTokens('<|im_start|>Hello')).toBe('Hello');
+    });
+
+    it('handles content with angle brackets that look similar', () => {
+      expect(stripControlTokens('Use <div> and </div> tags')).toBe('Use <div> and </div> tags');
+    });
+
+    it('handles very long content efficiently', () => {
+      const longContent = 'word '.repeat(10000) + '<|im_end|>';
+      const result = stripControlTokens(longContent);
+      expect(result).not.toContain('<|im_end|>');
+      expect(result.trim().split(' ')).toHaveLength(10000);
+    });
+  });
+
+  // ==========================================================================
+  // Streaming simulation
+  // ==========================================================================
+  describe('streaming token accumulation', () => {
+    it('handles incremental stripping (simulating streaming)', () => {
+      let accumulated = '';
+
+      accumulated = stripControlTokens(accumulated + 'Hello');
+      expect(accumulated).toBe('Hello');
+
+      accumulated = stripControlTokens(accumulated + ' world');
+      expect(accumulated).toBe('Hello world');
+
+      accumulated = stripControlTokens(accumulated + '<|im_end|>');
+      expect(accumulated).toBe('Hello world');
+    });
+
+    it('handles control token split across two chunks', () => {
+      // In real streaming, a token like <|im_end|> arrives as a single token
+      // but the accumulated string is re-stripped each time
+      let accumulated = 'Response text';
+      accumulated = stripControlTokens(accumulated + '<|im_end|>');
+      expect(accumulated).toBe('Response text');
+    });
+  });
+});

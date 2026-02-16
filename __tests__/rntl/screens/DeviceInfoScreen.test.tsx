@@ -109,14 +109,31 @@ describe('DeviceInfoScreen', () => {
   });
 
   it('back button calls goBack', () => {
-    // The back button is a TouchableOpacity wrapping an Icon.
-    // Since Icon is mocked as a string component, we find the parent via the title.
-    // Instead, use UNSAFE query on the tree - find the touchable before the title.
     const { UNSAFE_getAllByType } = render(<DeviceInfoScreen />);
     const { TouchableOpacity } = require('react-native');
     const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    // The first TouchableOpacity is the back button
     fireEvent.press(touchables[0]);
     expect(mockGoBack).toHaveBeenCalled();
+  });
+
+  it('highlights "Low" tier when device tier is low', () => {
+    const { hardwareService } = require('../../../src/services');
+    (hardwareService.getDeviceTier as jest.Mock).mockReturnValue('low');
+    (hardwareService.getTotalMemoryGB as jest.Mock).mockReturnValue(3.0);
+
+    const { getAllByText } = render(<DeviceInfoScreen />);
+    // "Low" should appear in the compatibility section
+    const lowTexts = getAllByText('Low');
+    expect(lowTexts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('highlights "Medium" tier when device tier is medium', () => {
+    const { hardwareService } = require('../../../src/services');
+    (hardwareService.getDeviceTier as jest.Mock).mockReturnValue('medium');
+    (hardwareService.getTotalMemoryGB as jest.Mock).mockReturnValue(5.0);
+
+    const { getAllByText } = render(<DeviceInfoScreen />);
+    const mediumTexts = getAllByText('Medium');
+    expect(mediumTexts.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1755,6 +1755,7 @@ export const ModelsScreen: React.FC = () => {
                 style={[styles.filterToggle, (textFiltersVisible || hasActiveFilters) && styles.filterToggleActive]}
                 onPress={() => setTextFiltersVisible(v => !v)}
                 hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                testID="text-filter-toggle"
               >
                 <Icon name="sliders" size={14} color={(textFiltersVisible || hasActiveFilters) ? colors.primary : colors.textMuted} />
                 {hasActiveFilters && <View style={styles.filterDot} />}

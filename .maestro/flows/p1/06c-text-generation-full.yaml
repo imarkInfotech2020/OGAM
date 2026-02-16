@@ -9,7 +9,7 @@
 #
 # Prerequisites: Text model must be loaded
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Text Generation Full"
 tags:
   - p0

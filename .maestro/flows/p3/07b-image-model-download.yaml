@@ -2,7 +2,7 @@
 # Tests downloading an image model from the Models screen
 # Assumes no image model is currently downloaded
 
-appId: ai.offgridmobile
+appId: ai.offgridmobile.dev
 name: "P0: Image Model Download"
 tags:
   - p0
