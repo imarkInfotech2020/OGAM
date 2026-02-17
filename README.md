@@ -24,6 +24,12 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 
 ---
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=alichherawalla/off-grid-mobile&type=date&legend=top-left)](https://www.star-history.com/#alichherawalla/off-grid-mobile&type=date&legend=top-left)
+
+---
+
 ## What can it do?
 
 <div align="center">
