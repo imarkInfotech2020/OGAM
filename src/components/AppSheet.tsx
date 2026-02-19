@@ -284,7 +284,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
           {/* Bottom safe area spacer for edge-to-edge displays */}
           {bottomInset > 0 && (
-            <View style={{ height: bottomInset }} />
+            <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
           )}
         </Animated.View>
       </KeyboardAvoidingView>

@@ -477,14 +477,10 @@ describe('AppSheet', () => {
 
     it('does not render bottom spacer when bottom inset is 0', () => {
       // Default mock returns bottom: 0
-      const { toJSON } = render(
+      const { queryByTestId } = render(
         <AppSheet {...defaultProps} visible={true} title="No Spacer" />,
       );
-      const tree = JSON.stringify(toJSON());
-      // No spacer View should have a height matching a typical inset value
-      // The conditional `bottomInset > 0` prevents rendering
-      expect(tree).not.toContain('"height":34');
-      expect(tree).not.toContain('"height":48');
+      expect(queryByTestId('bottom-safe-area-spacer')).toBeNull();
     });
 
     it('renders bottom spacer when bottom inset is greater than 0', () => {
@@ -496,11 +492,12 @@ describe('AppSheet', () => {
         left: 0,
       });
 
-      const { toJSON } = render(
+      const { getByTestId } = render(
         <AppSheet {...defaultProps} visible={true} title="With Spacer" />,
       );
-      const tree = JSON.stringify(toJSON());
-      expect(tree).toContain('"height":34');
+      const spacer = getByTestId('bottom-safe-area-spacer');
+      expect(spacer).toBeDefined();
+      expect(spacer.props.style.height).toBe(34);
     });
 
     it('spacer height matches the actual bottom inset value', () => {
@@ -511,13 +508,11 @@ describe('AppSheet', () => {
         left: 0,
       });
 
-      const { toJSON } = render(
+      const { getByTestId } = render(
         <AppSheet {...defaultProps} visible={true} title="Inset 48" />,
       );
-      const tree = JSON.stringify(toJSON());
-      expect(tree).toContain('"height":48');
-      // Should not contain the wrong value
-      expect(tree).not.toContain('"height":34');
+      const spacer = getByTestId('bottom-safe-area-spacer');
+      expect(spacer.props.style.height).toBe(48);
     });
   });
 
