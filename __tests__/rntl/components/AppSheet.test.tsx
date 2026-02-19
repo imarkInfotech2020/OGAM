@@ -463,6 +463,60 @@ describe('AppSheet', () => {
   });
 
   // ============================================================================
+  // Bottom Safe Area Inset Spacer (Edge-to-Edge)
+  // ============================================================================
+  describe('bottom safe area inset spacer', () => {
+    // Access the mocked module so we can swap the return value per test
+    let mockUseSafeAreaInsets: jest.Mock;
+
+    beforeEach(() => {
+      // Get a handle on the mocked function
+      mockUseSafeAreaInsets =
+        require('react-native-safe-area-context').useSafeAreaInsets;
+    });
+
+    it('does not render bottom spacer when bottom inset is 0', () => {
+      // Default mock returns bottom: 0
+      const { queryByTestId } = render(
+        <AppSheet {...defaultProps} visible={true} title="No Spacer" />,
+      );
+      expect(queryByTestId('bottom-safe-area-spacer')).toBeNull();
+    });
+
+    it('renders bottom spacer when bottom inset is greater than 0', () => {
+      // Override mock to simulate edge-to-edge device
+      mockUseSafeAreaInsets.mockReturnValue({
+        top: 0,
+        right: 0,
+        bottom: 34,
+        left: 0,
+      });
+
+      const { getByTestId } = render(
+        <AppSheet {...defaultProps} visible={true} title="With Spacer" />,
+      );
+      const spacer = getByTestId('bottom-safe-area-spacer');
+      expect(spacer).toBeDefined();
+      expect(spacer.props.style.height).toBe(34);
+    });
+
+    it('spacer height matches the actual bottom inset value', () => {
+      mockUseSafeAreaInsets.mockReturnValue({
+        top: 0,
+        right: 0,
+        bottom: 48,
+        left: 0,
+      });
+
+      const { getByTestId } = render(
+        <AppSheet {...defaultProps} visible={true} title="Inset 48" />,
+      );
+      const spacer = getByTestId('bottom-safe-area-spacer');
+      expect(spacer.props.style.height).toBe(48);
+    });
+  });
+
+  // ============================================================================
   // Visibility Transitions
   // ============================================================================
   describe('visibility transitions', () => {

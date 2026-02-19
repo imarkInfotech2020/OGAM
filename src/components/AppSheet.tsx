@@ -12,6 +12,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
@@ -53,6 +54,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 }) => {
   const { elevation: elevationTokens } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { bottom: bottomInset } = useSafeAreaInsets();
 
   const [modalVisible, setModalVisible] = useState(false);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -279,6 +281,11 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
           {/* Content */}
           {children}
+
+          {/* Bottom safe area spacer for edge-to-edge displays */}
+          {bottomInset > 0 && (
+            <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
+          )}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
