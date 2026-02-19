@@ -127,6 +127,11 @@ Built on the shoulders of giants:
 
 ---
 
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=alichherawalla/off-grid-mobile&type=date&legend=top-left)](https://www.star-history.com/#alichherawalla/off-grid-mobile&type=date&legend=top-left)
+
 <div align="center">
 
 **Off Grid** — Your AI, your device, your data.
