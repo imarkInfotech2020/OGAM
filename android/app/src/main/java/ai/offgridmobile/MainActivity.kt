@@ -1,6 +1,7 @@
 package ai.offgridmobile
 
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -24,6 +25,8 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     // Switch from SplashTheme back to AppTheme once React Native loads
     setTheme(R.style.AppTheme)
+    // Enable edge-to-edge display (required for API 35+)
+    enableEdgeToEdge()
     // Prevent restoring screen fragments for react-native-screens
     super.onCreate(null)
   }
