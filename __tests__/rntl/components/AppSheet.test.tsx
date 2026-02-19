@@ -463,6 +463,65 @@ describe('AppSheet', () => {
   });
 
   // ============================================================================
+  // Bottom Safe Area Inset Spacer (Edge-to-Edge)
+  // ============================================================================
+  describe('bottom safe area inset spacer', () => {
+    // Access the mocked module so we can swap the return value per test
+    let mockUseSafeAreaInsets: jest.Mock;
+
+    beforeEach(() => {
+      // Get a handle on the mocked function
+      mockUseSafeAreaInsets =
+        require('react-native-safe-area-context').useSafeAreaInsets;
+    });
+
+    it('does not render bottom spacer when bottom inset is 0', () => {
+      // Default mock returns bottom: 0
+      const { toJSON } = render(
+        <AppSheet {...defaultProps} visible={true} title="No Spacer" />,
+      );
+      const tree = JSON.stringify(toJSON());
+      // No spacer View should have a height matching a typical inset value
+      // The conditional `bottomInset > 0` prevents rendering
+      expect(tree).not.toContain('"height":34');
+      expect(tree).not.toContain('"height":48');
+    });
+
+    it('renders bottom spacer when bottom inset is greater than 0', () => {
+      // Override mock to simulate edge-to-edge device
+      mockUseSafeAreaInsets.mockReturnValue({
+        top: 0,
+        right: 0,
+        bottom: 34,
+        left: 0,
+      });
+
+      const { toJSON } = render(
+        <AppSheet {...defaultProps} visible={true} title="With Spacer" />,
+      );
+      const tree = JSON.stringify(toJSON());
+      expect(tree).toContain('"height":34');
+    });
+
+    it('spacer height matches the actual bottom inset value', () => {
+      mockUseSafeAreaInsets.mockReturnValue({
+        top: 0,
+        right: 0,
+        bottom: 48,
+        left: 0,
+      });
+
+      const { toJSON } = render(
+        <AppSheet {...defaultProps} visible={true} title="Inset 48" />,
+      );
+      const tree = JSON.stringify(toJSON());
+      expect(tree).toContain('"height":48');
+      // Should not contain the wrong value
+      expect(tree).not.toContain('"height":34');
+    });
+  });
+
+  // ============================================================================
   // Visibility Transitions
   // ============================================================================
   describe('visibility transitions', () => {
