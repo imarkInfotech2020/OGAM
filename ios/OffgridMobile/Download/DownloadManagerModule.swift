@@ -898,4 +898,14 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
       NSLog("[DownloadManager] Delegate: didCompleteWithError for task#%d: NO error (success)", task.taskIdentifier)
     }
   }
+
+  func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    DispatchQueue.main.async {
+      guard let identifier = session.configuration.identifier,
+            let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+            let handler = appDelegate.backgroundSessionCompletionHandlers[identifier] else { return }
+      appDelegate.backgroundSessionCompletionHandlers.removeValue(forKey: identifier)
+      handler()
+    }
+  }
 }
