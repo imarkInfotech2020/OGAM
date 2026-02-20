@@ -233,9 +233,9 @@ jest.mock('../../../src/components', () => ({
     );
   },
   ChatInput: ({ onSend, onStop, disabled, placeholder, isGenerating, imageModelLoaded, queueCount, onClearQueue, onOpenSettings }: any) => {
-    const React = require('react');
+    const { useState } = require('react');
     const { View, TextInput, TouchableOpacity, Text } = require('react-native');
-    const [text, setText] = React.useState('');
+    const [text, setText] = useState('');
     return (
       <View testID="chat-input">
         <TextInput
@@ -289,8 +289,8 @@ jest.mock('../../../src/components', () => ({
   ModelSelectorModal: ({ visible, onClose, onSelectModel, onUnloadModel }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
     if (!visible) return null;
-    const { useAppStore } = require('../../../src/stores/appStore');
-    const models = useAppStore.getState().downloadedModels;
+    const { useAppStore: useAppStoreMock } = require('../../../src/stores/appStore');
+    const models = useAppStoreMock.getState().downloadedModels;
     return (
       <View testID="model-selector-modal">
         <Text>Select Model</Text>
@@ -3568,7 +3568,7 @@ describe('ChatScreen', () => {
             attachments: undefined,
             messageText: 'test',
           });
-        } catch (_e) {}
+        } catch (_e) { /* expected: error from send */ }
       });
       await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
