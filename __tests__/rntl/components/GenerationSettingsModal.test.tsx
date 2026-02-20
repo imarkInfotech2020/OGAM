@@ -85,6 +85,7 @@ const defaultSettings = {
   nBatch: 256,
   enableGpu: false,
   gpuLayers: 6,
+  flashAttn: false,
   modelLoadingStrategy: 'memory',
   showGenerationDetails: false,
   classifierModelId: null,
@@ -874,19 +875,181 @@ describe('GenerationSettingsModal', () => {
   // ============================================================================
 
   // ============================================================================
+  // Flash Attention toggle
+  // ============================================================================
+  describe('flash attention toggle', () => {
+    it('renders Flash Attention label inside PERFORMANCE section', () => {
+      const { getByText } = render(
+        <GenerationSettingsModal {...defaultProps} />,
+      );
+
+      fireEvent.press(getByText('PERFORMANCE'));
+      expect(getByText('Flash Attention')).toBeTruthy();
+    });
+
+    it('calls updateSettings with flashAttn: false when Off is pressed', () => {
+      mockStoreValues.settings = { ...defaultSettings, flashAttn: true };
+
+      const { getByText, getByTestId } = render(
+        <GenerationSettingsModal {...defaultProps} />,
+      );
+
+      fireEvent.press(getByText('PERFORMANCE'));
+      mockUpdateSettings.mockClear();
+
+      fireEvent.press(getByTestId('flash-attn-off-button'));
+
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ flashAttn: false })
+      );
+    });
+
+    it('calls updateSettings with flashAttn: true when On is pressed', () => {
+      mockStoreValues.settings = { ...defaultSettings, flashAttn: false };
+
+      const { getByText, getByTestId } = render(
+        <GenerationSettingsModal {...defaultProps} />,
+      );
+
+      fireEvent.press(getByText('PERFORMANCE'));
+      mockUpdateSettings.mockClear();
+
+      fireEvent.press(getByTestId('flash-attn-on-button'));
+
+      expect(mockUpdateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ flashAttn: true })
+      );
+    });
+
+    it('defaults flash attention On when flashAttn setting is undefined (iOS → platform default true)', () => {
+      // flashAttn: undefined → falls back to Platform.OS !== 'android' = true on iOS
+      mockStoreValues.settings = { ...defaultSettings, flashAttn: undefined as any };
+
+      const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+      fireEvent.press(getByText('PERFORMANCE'));
+      mockUpdateSettings.mockClear();
+
+      // The Off button should be pressable (flash attn is currently ON via fallback)
+      fireEvent.press(getByTestId('flash-attn-off-button'));
+      expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ flashAttn: false }));
+    });
+
+    // Android-specific tests: mock Platform.OS before each, restore after
+    describe('on Android platform', () => {
+      let originalOS: string;
+      const { Platform } = require('react-native');
+
+      beforeEach(() => {
+        originalOS = Platform.OS;
+        Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true });
+      });
+
+      afterEach(() => {
+        Object.defineProperty(Platform, 'OS', { get: () => originalOS, configurable: true });
+      });
+
+      it('renders GPU layers slider with gpuLayersEffective when GPU enabled', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 8, flashAttn: false };
+        const { getByText } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        expect(getByText('8')).toBeTruthy();
+      });
+
+      it('shows warning text and caps GPU layers to 1 when flash attention is On', () => {
+        // flashAttn: true + android → isFlashAttnOn=true → gpuLayersMax=1 → warning shown
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 8, flashAttn: true };
+        const { getByText } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        expect(getByText('Flash Attention limits GPU layers to 1 on Android')).toBeTruthy();
+        // gpuLayersEffective = Math.min(8, 1) = 1
+        expect(getByText('1')).toBeTruthy();
+      });
+
+      it('uses default gpuLayers value of 6 when gpuLayers is undefined (covers ?? fallback)', () => {
+        mockStoreValues.settings = {
+          ...defaultSettings,
+          enableGpu: true,
+          gpuLayers: undefined as any,
+          flashAttn: false,
+        };
+        const { getByText } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        // gpuLayersEffective = Math.min(undefined ?? 6, 99) = 6
+        expect(getByText('6')).toBeTruthy();
+      });
+
+      it('clamps to 1 when gpuLayers is undefined (defaults to 6, which is > 1)', () => {
+        mockStoreValues.settings = { ...defaultSettings, flashAttn: false, gpuLayers: undefined as any };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+        fireEvent.press(getByTestId('flash-attn-on-button'));
+        expect(mockUpdateSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ flashAttn: true, gpuLayers: 1 })
+        );
+      });
+
+      it('clamps gpuLayers to 1 when turning flash attn On with layers > 1', () => {
+        mockStoreValues.settings = { ...defaultSettings, flashAttn: false, gpuLayers: 8 };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+        fireEvent.press(getByTestId('flash-attn-on-button'));
+        expect(mockUpdateSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ flashAttn: true, gpuLayers: 1 })
+        );
+      });
+
+      it('does not clamp gpuLayers when turning flash attn On with layers = 1', () => {
+        mockStoreValues.settings = { ...defaultSettings, flashAttn: false, gpuLayers: 1 };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+        fireEvent.press(getByTestId('flash-attn-on-button'));
+        expect(mockUpdateSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ flashAttn: true })
+        );
+        expect(mockUpdateSettings).not.toHaveBeenCalledWith(
+          expect.objectContaining({ gpuLayers: expect.any(Number) })
+        );
+      });
+    });
+  });
+
+  // ============================================================================
   // Show generation details off
   // ============================================================================
   it('calls updateSettings to disable show generation details', () => {
-    mockStoreValues.settings = { ...defaultSettings, showGenerationDetails: true };
+    // When showGenerationDetails is ON and flash attn is also ON, both have an
+    // "Off" button in the Performance section. Start with flash attn OFF so the
+    // only "Off" button that matches { showGenerationDetails: false } is the one
+    // we want, avoiding ambiguity.
+    mockStoreValues.settings = {
+      ...defaultSettings,
+      showGenerationDetails: true,
+      flashAttn: true, // flash attn already on → its Off button calls updateSettings({flashAttn:false})
+    };
 
-    const { getByText } = render(
+    const { getByText, getAllByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     fireEvent.press(getByText('PERFORMANCE'));
+    mockUpdateSettings.mockClear();
 
-    // Press "Off" button for show generation details
-    fireEvent.press(getByText('Off'));
+    // Find and press the Off button that sets showGenerationDetails
+    const offButtons = getAllByText('Off');
+    for (const btn of offButtons) {
+      fireEvent.press(btn);
+      if (
+        mockUpdateSettings.mock.calls.some(
+          (args: any[]) => 'showGenerationDetails' in args[0],
+        )
+      ) {
+        break;
+      }
+      mockUpdateSettings.mockClear();
+    }
 
     expect(mockUpdateSettings).toHaveBeenCalledWith({ showGenerationDetails: false });
   });
