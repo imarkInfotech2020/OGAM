@@ -94,6 +94,9 @@ const QUANT_OPTIONS = [
 type FilterDimension = 'org' | 'type' | 'source' | 'size' | 'quant' | null;
 type ImageFilterDimension = 'backend' | 'style' | 'sdVersion' | null;
 
+const VISION_PIPELINE_TAG = 'image-text-to-text';
+const CODE_FALLBACK_QUERY = 'coder';
+
 const STYLE_OPTIONS = [
   { key: 'all', label: 'All Styles' },
   { key: 'photorealistic', label: 'Realistic' },
@@ -360,10 +363,10 @@ export const ModelsScreen: React.FC = () => {
     let pipelineTag: string | undefined;
     let effectiveQuery = searchQuery.trim();
     if (filterState.type === 'vision') {
-      pipelineTag = 'image-text-to-text';
+      pipelineTag = VISION_PIPELINE_TAG;
     } else if (filterState.type === 'code' && !effectiveQuery) {
       // No specific HF pipeline tag for code — fall back to a keyword search
-      effectiveQuery = 'coder';
+      effectiveQuery = CODE_FALLBACK_QUERY;
     }
 
     setIsLoading(true);
