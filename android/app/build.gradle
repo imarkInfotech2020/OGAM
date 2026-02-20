@@ -111,6 +111,9 @@ android {
             dimension "store"
         }
     }
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
     testOptions {
         unitTests {
             includeAndroidResources = true

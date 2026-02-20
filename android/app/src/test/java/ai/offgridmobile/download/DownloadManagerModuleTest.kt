@@ -1,16 +1,22 @@
 package ai.offgridmobile.download
 
+import android.app.Application
 import android.app.DownloadManager
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
- * Tests for the pure status/reason mapping functions in DownloadManagerModule.
+ * Tests for the pure helper functions in DownloadManagerModule.
  * These functions contain complex branching logic and all branches must be covered.
  */
-@RunWith(JUnit4::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], application = Application::class)
 class DownloadManagerModuleTest {
 
     // ── statusToString ────────────────────────────────────────────────────────
@@ -205,5 +211,65 @@ class DownloadManagerModuleTest {
         assertEquals("", DownloadManagerModule.reasonToString(DownloadManager.STATUS_PENDING, 0))
         assertEquals("", DownloadManagerModule.reasonToString(DownloadManager.STATUS_RUNNING, 0))
         assertEquals("", DownloadManagerModule.reasonToString(DownloadManager.STATUS_SUCCESSFUL, 0))
+    }
+
+    // ── shouldRemoveDownload ──────────────────────────────────────────────────
+
+    private fun download(
+        storedStatus: String = "pending",
+        completedAt: Long = 0L,
+        completedEventSent: Boolean = false,
+    ) = JSONObject()
+        .put("downloadId", 42L)
+        .put("status", storedStatus)
+        .put("completedAt", completedAt)
+        .put("completedEventSent", completedEventSent)
+
+    @Test
+    fun `shouldRemoveDownload returns true when live status is unknown`() {
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("running"), liveStatus = "unknown"))
+    }
+
+    @Test
+    fun `shouldRemoveDownload returns false for active downloads`() {
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(download("running"), liveStatus = "running"))
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(download("pending"), liveStatus = "pending"))
+    }
+
+    @Test
+    fun `shouldRemoveDownload removes completed download when event sent and entry is older than 5 seconds`() {
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 6_000L, completedEventSent = true)
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload keeps completed download when event sent but not yet 5 seconds old`() {
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 1_000L, completedEventSent = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload keeps completed download when event has not been sent yet`() {
+        // This is the race-condition guard: even if old enough, don't remove until event is sent
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 10_000L, completedEventSent = false)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload keeps completed download when completedAt is zero`() {
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = 0L, completedEventSent = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload returns false for non-completed stored status regardless of live status`() {
+        val now = System.currentTimeMillis()
+        // stored status is "running" — the completed branch never fires
+        val dl = download("running", completedAt = now - 10_000L, completedEventSent = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "running", currentTimeMs = now))
     }
 }
