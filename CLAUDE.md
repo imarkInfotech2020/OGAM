@@ -2,7 +2,7 @@
 
 ## Pre-Commit Quality Gates
 
-Before EVERY commit, you MUST run all of the following checks and ensure they pass. Do NOT commit until all three are green:
+Before EVERY commit, you MUST first check if you have added tests for whatever you are trying to commit. If not add tests. Then run all of the following checks and ensure they pass. Do NOT commit until all three are green:
 
 1. **Tests**: `npm test` — if you wrote or modified code, first ensure tests exist for the changes. Write missing tests before running.
 2. **Linting**: `npm run lint`
@@ -19,6 +19,6 @@ When asked to push code, follow this full workflow:
 2. Create a PR using `gh pr create`. Ensure that you are adhering to the PR template
 3. Wait for Gemini to review the PR (poll with `gh pr checks` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews` until a review appears)
 4. Once a review exists, pull down the review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews`
-5. Address every review comment — fix the code, re-run the quality gates (tests, lint, tsc)
+5. Address every review comment — fix the code, re-run the quality gates (tests, lint, tsc). Resole the comment appropriately post that on the PR directly.
 6. Push the fixes
 7. Report what was changed in response to the review

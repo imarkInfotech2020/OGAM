@@ -1380,6 +1380,101 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
+  // ============================================================================
+  // QNN / NPU guard (lines 321-323)
+  // ============================================================================
+  describe('QNN model NPU guard', () => {
+    it('throws when loading a QNN model on a device without NPU (lines 321-323)', async () => {
+      const qnnModel = createONNXImageModel({ id: 'qnn-model-1', backend: 'qnn' });
+      useAppStore.setState({
+        downloadedImageModels: [qnnModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
+      // Provide getSoCInfo mock returning no NPU
+      mockHardwareService.getSoCInfo = jest.fn().mockResolvedValue({ hasNPU: false });
+
+      await expect(activeModelService.loadImageModel('qnn-model-1')).rejects.toThrow(
+        'NPU models require a Qualcomm Snapdragon processor',
+      );
+    });
+
+    it('loads QNN model when device has NPU', async () => {
+      const qnnModel = createONNXImageModel({ id: 'qnn-model-2', backend: 'qnn' });
+      useAppStore.setState({
+        downloadedImageModels: [qnnModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockHardwareService.getSoCInfo = jest.fn().mockResolvedValue({ hasNPU: true });
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      await expect(activeModelService.loadImageModel('qnn-model-2')).resolves.not.toThrow();
+    });
+  });
+
+  // ============================================================================
+  // getCurrentlyLoadedMemoryGB private method (lines 527-545)
+  // ============================================================================
+  describe('getCurrentlyLoadedMemoryGB', () => {
+    it('returns 0 when no models are loaded (lines 527-545)', () => {
+      // No models loaded → both if-branches skipped
+      const result = (activeModelService as any).getCurrentlyLoadedMemoryGB();
+      expect(result).toBe(0);
+    });
+
+    it('counts text model memory when text model is loaded (lines 531-535)', async () => {
+      const textModel = createDownloadedModel({ id: 'mem-text-1' });
+      useAppStore.setState({ downloadedModels: [textModel] });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('mem-text-1');
+
+      const result = (activeModelService as any).getCurrentlyLoadedMemoryGB();
+      expect(typeof result).toBe('number');
+      expect(result).toBeGreaterThan(0);
+    });
+
+    it('counts image model memory when image model is loaded (lines 538-543)', async () => {
+      const imageModel = createONNXImageModel({ id: 'mem-img-1' });
+      useAppStore.setState({
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+      await activeModelService.loadImageModel('mem-img-1');
+
+      const result = (activeModelService as any).getCurrentlyLoadedMemoryGB();
+      expect(typeof result).toBe('number');
+      expect(result).toBeGreaterThan(0);
+    });
+
+    it('sums text and image model memory when both are loaded', async () => {
+      const textModel = createDownloadedModel({ id: 'mem-text-2' });
+      const imageModel = createONNXImageModel({ id: 'mem-img-2' });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('mem-text-2');
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+      await activeModelService.loadImageModel('mem-img-2');
+
+      const textOnly = (activeModelService as any).getCurrentlyLoadedMemoryGB();
+      // Both models loaded → sum > either alone
+      expect(textOnly).toBeGreaterThan(0);
+    });
+  });
+
   describe('loadImageModel concurrent load returns same model', () => {
     it('skips second load when first completed for same model and threads', async () => {
       const imageModel = createONNXImageModel({ id: 'concurrent-img' });

@@ -1343,6 +1343,8 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(queryByText('Loading Text Model')).toBeTruthy();
       });
+      // Drain any pending RAF-chain timers to prevent leaking into next test
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
     });
 
     it('renders loading overlay when loading image model', async () => {
@@ -1366,6 +1368,8 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(queryByText('Loading Image Model')).toBeTruthy();
       });
+      // Drain any pending RAF-chain timers (RAF→RAF→setTimeout200ms) to prevent leaking into next test
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
     });
 
     it('shows "Unloading..." text in card when unloading without model name', async () => {
@@ -1472,6 +1476,8 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(queryByText('Loading...')).toBeTruthy();
       });
+      // Drain pending RAF-chain timers to prevent leaking into the image model memory check tests
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
     });
   });
 

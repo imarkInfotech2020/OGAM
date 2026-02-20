@@ -36,7 +36,20 @@ jest.mock('../../../src/components', () => ({
       </TouchableOpacity>
     );
   },
-  CustomAlert: () => null,
+  // Use a functional mock so onClose can be exercised (line 181)
+  CustomAlert: ({ visible, title, message, onClose }: any) => {
+    if (!visible) return null;
+    const { View, Text, TouchableOpacity } = require('react-native');
+    return (
+      <View testID="custom-alert">
+        <Text testID="alert-title">{title}</Text>
+        <Text testID="alert-message">{message}</Text>
+        <TouchableOpacity testID="alert-close-button" onPress={onClose}>
+          <Text>Close</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  },
 }));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
@@ -51,13 +64,16 @@ const mockShowAlert = jest.fn((_t: string, _m: string, _b?: any) => ({
 }));
 
 jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: ({ visible, title, message }: any) => {
+  CustomAlert: ({ visible, title, message, onClose }: any) => {
     if (!visible) return null;
-    const { View, Text } = require('react-native');
+    const { View, Text, TouchableOpacity } = require('react-native');
     return (
       <View testID="custom-alert">
         <Text testID="alert-title">{title}</Text>
         <Text testID="alert-message">{message}</Text>
+        <TouchableOpacity testID="alert-close-button" onPress={onClose}>
+          <Text>Close</Text>
+        </TouchableOpacity>
       </View>
     );
   },
@@ -409,5 +425,70 @@ describe('LockScreen', () => {
     // After failed attempt, the input should be cleared
     // The button should be disabled again (empty input)
     expect(mockRecordFailedAttempt).toHaveBeenCalled();
+  });
+
+  // ---- Uncovered branch coverage ----
+
+  it('shows error when passphrase is empty via onSubmitEditing (lines 61-62)', async () => {
+    // The button is disabled when input is empty, but onSubmitEditing still fires
+    const { getByPlaceholderText } = render(<LockScreen {...defaultProps} />);
+
+    const input = getByPlaceholderText('Enter passphrase');
+    // Passphrase is empty — fire keyboard return key
+    await act(async () => {
+      fireEvent(input, 'onSubmitEditing');
+    });
+
+    // handleUnlock ran the empty-passphrase guard and showed an alert
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      'Error',
+      'Please enter your passphrase',
+    );
+    expect(mockVerifyPassphrase).not.toHaveBeenCalled();
+  });
+
+  it('skips verification when already locked out during handleUnlock (line 66)', async () => {
+    // checkLockout returns false on first call (useEffect → shows input),
+    // then true on the second call (inside handleUnlock → early return).
+    mockCheckLockout
+      .mockReturnValueOnce(false) // initial useEffect call → show input
+      .mockReturnValue(true);     // handleUnlock guard → skip verification
+
+    const { getByPlaceholderText } = render(<LockScreen {...defaultProps} />);
+
+    const input = getByPlaceholderText('Enter passphrase');
+    fireEvent.changeText(input, 'some-pass');
+
+    await act(async () => {
+      fireEvent(input, 'onSubmitEditing');
+    });
+
+    // handleUnlock returned early without calling verify
+    expect(mockVerifyPassphrase).not.toHaveBeenCalled();
+  });
+
+  it('closes alert via onClose callback (line 181)', async () => {
+    mockVerifyPassphrase.mockResolvedValue(false);
+    mockRecordFailedAttempt.mockReturnValue(false);
+
+    const { getByPlaceholderText, getByText, queryByTestId } = render(
+      <LockScreen {...defaultProps} />,
+    );
+
+    fireEvent.changeText(getByPlaceholderText('Enter passphrase'), 'wrong');
+
+    await act(async () => {
+      fireEvent.press(getByText('Unlock'));
+    });
+
+    // Alert is now visible
+    expect(queryByTestId('custom-alert')).toBeTruthy();
+
+    // Press the close button rendered by our mock — triggers onClose
+    fireEvent.press(getByText('Close'));
+
+    // Alert should be dismissed (hideAlert was called)
+    const { hideAlert } = require('../../../src/components/CustomAlert');
+    expect(hideAlert).toHaveBeenCalled();
   });
 });
