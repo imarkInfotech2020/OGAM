@@ -278,7 +278,7 @@ export const ChatScreen: React.FC = () => {
         settings.modelLoadingStrategy === 'performance'
       ) {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
-        if (classifierModel && classifierModel.filePath) {
+        if (classifierModel?.filePath) {
           const currentPath = llmService.getLoadedModelPath();
           // Don't preload if the main model is different and already loaded
           // (we don't want to replace the user's selected model)
