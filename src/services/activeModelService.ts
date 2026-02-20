@@ -187,7 +187,7 @@ class ActiveModelService {
                       ...m,
                       mmProjPath: mmProjFile.path,
                       mmProjFileName: mmProjFile.name,
-                      mmProjFileSize: typeof mmProjFile.size === 'string' ? parseInt(mmProjFile.size, 10) : mmProjFile.size,
+                      mmProjFileSize: typeof mmProjFile.size === 'string' ? Number.parseInt(mmProjFile.size, 10) : mmProjFile.size,
                       isVisionModel: true,
                     };
                   }
