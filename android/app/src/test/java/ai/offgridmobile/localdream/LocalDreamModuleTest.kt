@@ -1,12 +1,15 @@
 package ai.offgridmobile.localdream
 
 import android.app.Application
+import android.graphics.BitmapFactory
 import android.os.Build
+import android.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -14,6 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
+import java.io.File
 
 /**
  * Tests for pure helper functions in LocalDreamModule.
@@ -308,5 +312,81 @@ class LocalDreamModuleTest {
         assertTrue(ldPath.contains("/system/lib64"))
         assertTrue(ldPath.contains("/vendor/lib64"))
         assertTrue(ldPath.contains("/vendor/lib64/egl"))
+    }
+
+    // ── saveRgbToPng ──────────────────────────────────────────────────────────
+
+    private fun rgbBase64(vararg bytes: Int): String =
+        Base64.encodeToString(ByteArray(bytes.size) { bytes[it].toByte() }, Base64.DEFAULT)
+
+    @Test
+    fun `saveRgbToPng throws when byte count does not match dimensions`() {
+        val base64 = Base64.encodeToString(ByteArray(6), Base64.DEFAULT) // 6 bytes but 2x2 needs 12
+        try {
+            LocalDreamModule.saveRgbToPng(base64, 2, 2, tmp.newFile("out.png").absolutePath)
+            fail("Expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("doesn't match expected"))
+            assertTrue(e.message!!.contains("12"))
+        }
+    }
+
+    @Test
+    fun `saveRgbToPng creates a PNG file at the given path`() {
+        val base64 = rgbBase64(0xFF, 0x00, 0x00) // 1x1 red
+        val out = tmp.newFile("out.png")
+        LocalDreamModule.saveRgbToPng(base64, 1, 1, out.absolutePath)
+        assertTrue(out.exists())
+        assertTrue("file should not be empty", out.length() > 0)
+    }
+
+    @Test
+    fun `saveRgbToPng creates parent directories when they do not exist`() {
+        val out = File(tmp.root, "a/b/c/out.png")
+        assertFalse(out.parentFile!!.exists())
+        LocalDreamModule.saveRgbToPng(rgbBase64(0, 0, 0), 1, 1, out.absolutePath)
+        assertTrue(out.exists())
+    }
+
+    @Test
+    fun `saveRgbToPng encodes red channel correctly`() {
+        // 1x1 pure red: R=255, G=0, B=0  →  ARGB = 0xFFFF0000
+        val base64 = rgbBase64(0xFF, 0x00, 0x00)
+        val out = tmp.newFile("red.png")
+        LocalDreamModule.saveRgbToPng(base64, 1, 1, out.absolutePath)
+        val pixel = BitmapFactory.decodeFile(out.absolutePath).getPixel(0, 0)
+        assertEquals(0xFFFF0000.toInt(), pixel)
+    }
+
+    @Test
+    fun `saveRgbToPng encodes blue channel correctly`() {
+        // 1x1 pure blue: R=0, G=0, B=255  →  ARGB = 0xFF0000FF
+        val base64 = rgbBase64(0x00, 0x00, 0xFF)
+        val out = tmp.newFile("blue.png")
+        LocalDreamModule.saveRgbToPng(base64, 1, 1, out.absolutePath)
+        val pixel = BitmapFactory.decodeFile(out.absolutePath).getPixel(0, 0)
+        assertEquals(0xFF0000FF.toInt(), pixel)
+    }
+
+    @Test
+    fun `saveRgbToPng encodes all pixels for a multi-pixel image`() {
+        // 2x1 image: [red | blue]
+        val base64 = rgbBase64(0xFF, 0x00, 0x00,  0x00, 0x00, 0xFF)
+        val out = tmp.newFile("2x1.png")
+        LocalDreamModule.saveRgbToPng(base64, 2, 1, out.absolutePath)
+        val bmp = BitmapFactory.decodeFile(out.absolutePath)
+        assertEquals(0xFFFF0000.toInt(), bmp.getPixel(0, 0))
+        assertEquals(0xFF0000FF.toInt(), bmp.getPixel(1, 0))
+    }
+
+    @Test
+    fun `saveRgbToPng preserves alpha as fully opaque`() {
+        // Any RGB pixel should decode to alpha=0xFF
+        val base64 = rgbBase64(0x12, 0x34, 0x56)
+        val out = tmp.newFile("alpha.png")
+        LocalDreamModule.saveRgbToPng(base64, 1, 1, out.absolutePath)
+        val pixel = BitmapFactory.decodeFile(out.absolutePath).getPixel(0, 0)
+        val alpha = (pixel ushr 24) and 0xFF
+        assertEquals(0xFF, alpha)
     }
 }
