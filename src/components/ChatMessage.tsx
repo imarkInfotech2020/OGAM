@@ -551,52 +551,52 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         title="Actions"
       >
         <View testID="action-menu" style={styles.actionSheetContent}>
-          <AnimatedPressable
+          <TouchableOpacity
             testID="action-copy"
-            hapticType="selection"
             style={styles.actionSheetItem}
             onPress={handleCopy}
+            activeOpacity={0.6}
           >
             <Icon name="copy" size={18} color={colors.textSecondary} />
             <Text style={styles.actionSheetText}>Copy</Text>
-          </AnimatedPressable>
+          </TouchableOpacity>
 
           {isUser && onEdit && (
-            <AnimatedPressable
+            <TouchableOpacity
               testID="action-edit"
-              hapticType="selection"
               style={styles.actionSheetItem}
               onPress={handleEdit}
+              activeOpacity={0.6}
             >
               <Icon name="edit-2" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>Edit</Text>
-            </AnimatedPressable>
+            </TouchableOpacity>
           )}
 
           {onRetry && (
-            <AnimatedPressable
+            <TouchableOpacity
               testID="action-retry"
-              hapticType="selection"
               style={styles.actionSheetItem}
               onPress={handleRetry}
+              activeOpacity={0.6}
             >
               <Icon name="refresh-cw" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>
                 {isUser ? 'Resend' : 'Regenerate'}
               </Text>
-            </AnimatedPressable>
+            </TouchableOpacity>
           )}
 
           {canGenerateImage && onGenerateImage && (
-            <AnimatedPressable
+            <TouchableOpacity
               testID="action-generate-image"
-              hapticType="selection"
               style={styles.actionSheetItem}
               onPress={handleGenerateImage}
+              activeOpacity={0.6}
             >
               <Icon name="image" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>Generate Image</Text>
-            </AnimatedPressable>
+            </TouchableOpacity>
           )}
         </View>
       </AppSheet>
