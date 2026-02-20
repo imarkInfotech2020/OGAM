@@ -664,7 +664,7 @@ export const ChatScreen: React.FC = () => {
     // If currently generating, enqueue (message added to chat later when processed)
     if (generationService.getState().isGenerating) {
       generationService.enqueueMessage({
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         conversationId: targetConversationId,
         text,
         attachments,
