@@ -14,6 +14,10 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
+
+// Mirror constants from ModelsScreen so test assertions stay in sync with the source
+const VISION_PIPELINE_TAG = 'image-text-to-text';
+const CODE_FALLBACK_QUERY = 'coder';
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -2679,7 +2683,7 @@ describe('ModelsScreen', () => {
       await waitFor(() => {
         expect(mockSearchModels).toHaveBeenCalledWith(
           '', // empty query
-          expect.objectContaining({ pipelineTag: 'image-text-to-text' }),
+          expect.objectContaining({ pipelineTag: VISION_PIPELINE_TAG }),
         );
       });
     });
@@ -2732,7 +2736,7 @@ describe('ModelsScreen', () => {
 
       await waitFor(() => {
         expect(mockSearchModels).toHaveBeenCalledWith(
-          'coder',
+          CODE_FALLBACK_QUERY,
           expect.objectContaining({ limit: 30 }),
         );
       });
