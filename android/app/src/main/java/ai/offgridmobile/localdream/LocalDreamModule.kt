@@ -135,6 +135,34 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             }
         }
 
+        internal fun saveRgbToPng(base64Rgb: String, width: Int, height: Int, outputPath: String) {
+            val rgbBytes = Base64.decode(base64Rgb, Base64.DEFAULT)
+            val expectedSize = width * height * 3
+            if (rgbBytes.size != expectedSize) {
+                throw IllegalArgumentException(
+                    "RGB data size ${rgbBytes.size} doesn't match expected $expectedSize (${width}x${height}x3)"
+                )
+            }
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val pixels = IntArray(width * height)
+
+            for (i in 0 until width * height) {
+                val idx = i * 3
+                val r = rgbBytes[idx].toInt() and 0xFF
+                val g = rgbBytes[idx + 1].toInt() and 0xFF
+                val b = rgbBytes[idx + 2].toInt() and 0xFF
+                pixels[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+            }
+
+            bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+
+            File(outputPath).parentFile?.mkdirs()
+            FileOutputStream(outputPath).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            bitmap.recycle()
+        }
+
         internal fun buildEnvironment(runtimeDir: File): Map<String, String> {
             val env = mutableMapOf<String, String>()
 
@@ -789,34 +817,6 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 connection?.disconnect()
             }
         }
-    }
-
-    private fun saveRgbToPng(base64Rgb: String, width: Int, height: Int, outputPath: String) {
-        val rgbBytes = Base64.decode(base64Rgb, Base64.DEFAULT)
-        val expectedSize = width * height * 3
-        if (rgbBytes.size != expectedSize) {
-            throw IllegalArgumentException(
-                "RGB data size ${rgbBytes.size} doesn't match expected $expectedSize (${width}x${height}x3)"
-            )
-        }
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val pixels = IntArray(width * height)
-
-        for (i in 0 until width * height) {
-            val idx = i * 3
-            val r = rgbBytes[idx].toInt() and 0xFF
-            val g = rgbBytes[idx + 1].toInt() and 0xFF
-            val b = rgbBytes[idx + 2].toInt() and 0xFF
-            pixels[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-        }
-
-        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
-
-        File(outputPath).parentFile?.mkdirs()
-        FileOutputStream(outputPath).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        }
-        bitmap.recycle()
     }
 
     // =====================================================================

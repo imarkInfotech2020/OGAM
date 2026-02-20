@@ -57,6 +57,31 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
             return ""
         }
+
+        /**
+         * Returns true if the given download entry should be pruned from the persisted list.
+         *
+         * A download is removed when:
+         * - [liveStatus] is "unknown" (DownloadManager no longer tracks it), OR
+         * - its stored status is "completed", the completion event has been sent, the
+         *   completedAt timestamp is set, and the entry is older than 5 seconds.
+         *
+         * The [currentTimeMs] parameter is injectable so tests can control the clock.
+         */
+        internal fun shouldRemoveDownload(
+            download: JSONObject,
+            liveStatus: String,
+            currentTimeMs: Long = System.currentTimeMillis(),
+        ): Boolean {
+            if (liveStatus == "unknown") return true
+            if (download.optString("status", "pending") == "completed") {
+                val completedAt = download.optLong("completedAt", 0L)
+                val eventSent = download.optBoolean("completedEventSent", false)
+                val ageMs = currentTimeMs - completedAt
+                return completedAt > 0 && eventSent && ageMs > 5_000
+            }
+            return false
+        }
     }
 
     private val downloadManager: DownloadManager by lazy {
@@ -532,26 +557,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val status = statusInfo.getString("status")
             val previousStatus = download.optString("status", "pending")
 
-            // Remove if DownloadManager doesn't know about it anymore
-            if (status == "unknown") {
-                android.util.Log.d("DownloadManager", "Cleanup: removing unknown download $downloadId")
+            if (shouldRemoveDownload(download, status ?: "unknown")) {
+                android.util.Log.d("DownloadManager", "Cleanup: removing download $downloadId (liveStatus=$status, storedStatus=$previousStatus)")
                 removedCount++
                 continue
             }
 
-            // Remove completed entries that are stale (older than 5s) AND have sent the event
-            if (previousStatus == "completed") {
-                val completedAt = download.optLong("completedAt", 0L)
-                val eventSent = download.optBoolean("completedEventSent", false)
-                val ageMs = System.currentTimeMillis() - completedAt
-                // Only remove if event was sent and it's been long enough
-                if (completedAt > 0 && eventSent && ageMs > 5_000) {
-                    android.util.Log.d("DownloadManager", "Cleanup: removing stale completed download $downloadId (${ageMs/1000}s old)")
-                    removedCount++
-                    continue
-                } else if (completedAt > 0 && !eventSent) {
-                    android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
-                }
+            if (previousStatus == "completed" && download.optLong("completedAt", 0L) > 0 && !download.optBoolean("completedEventSent", false)) {
+                android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
             }
 
             cleanedDownloads.put(download)
