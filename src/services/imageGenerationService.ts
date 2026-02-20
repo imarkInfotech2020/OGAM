@@ -233,6 +233,9 @@ class ImageGenerationService {
           // Clean up the response - remove quotes, extra whitespace
           enhancedPrompt = enhancedPrompt.trim().replace(/^["']|["']$/g, '');
 
+          // Strip <think> blocks from thinking models (e.g. Qwen3) before wrapping
+          enhancedPrompt = enhancedPrompt.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
           console.log('[ImageGen] ✅ Original prompt:', params.prompt);
           console.log('[ImageGen] ✅ Enhanced prompt:', enhancedPrompt);
 
@@ -249,6 +252,11 @@ class ImageGenerationService {
             console.log('[ImageGen] ✅ LLM service reset complete - generating:', llmService.isCurrentlyGenerating());
           } catch (resetError) {
             console.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
+          }
+
+          // Fall back to original prompt if enhancement produced empty result
+          if (!enhancedPrompt) {
+            enhancedPrompt = params.prompt;
           }
 
           // Update thinking message with enhanced prompt as a collapsible block

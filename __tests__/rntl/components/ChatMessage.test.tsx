@@ -874,7 +874,10 @@ describe('ChatMessage', () => {
 
       const { getByText } = render(<ChatMessage message={message} />);
 
-      expect(getByText(/Line 1.*Line 2.*Line 3/s)).toBeTruthy();
+      // With markdown rendering, each paragraph is a separate Text node
+      expect(getByText(/Line 1/)).toBeTruthy();
+      expect(getByText(/Line 2/)).toBeTruthy();
+      expect(getByText(/Line 3/)).toBeTruthy();
     });
   });
 
@@ -1441,6 +1444,111 @@ describe('ChatMessage', () => {
       );
 
       expect(getByText('GPU')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Markdown rendering for assistant messages
+  // ============================================================================
+  describe('markdown rendering', () => {
+    it('renders bold text in finalized assistant messages', () => {
+      const message = createAssistantMessage('This is **bold** text');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/bold/)).toBeTruthy();
+    });
+
+    it('renders italic text in finalized assistant messages', () => {
+      const message = createAssistantMessage('This is *italic* text');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/italic/)).toBeTruthy();
+    });
+
+    it('renders inline code in finalized assistant messages', () => {
+      const message = createAssistantMessage('Use `console.log()` for debugging');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/console\.log/)).toBeTruthy();
+    });
+
+    it('renders code blocks in finalized assistant messages', () => {
+      const message = createAssistantMessage(
+        '```\nfunction hello() {\n  return "world";\n}\n```'
+      );
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/function hello/)).toBeTruthy();
+    });
+
+    it('renders headers in finalized assistant messages', () => {
+      const message = createAssistantMessage('# Main Title\n\nSome content');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/Main Title/)).toBeTruthy();
+      expect(getByText(/Some content/)).toBeTruthy();
+    });
+
+    it('renders lists in finalized assistant messages', () => {
+      const message = createAssistantMessage('- Item one\n- Item two\n- Item three');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/Item one/)).toBeTruthy();
+      expect(getByText(/Item two/)).toBeTruthy();
+      expect(getByText(/Item three/)).toBeTruthy();
+    });
+
+    it('renders markdown during streaming', () => {
+      const message = createAssistantMessage('This is **bold** and *italic*');
+
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} isStreaming={true} />
+      );
+
+      // During streaming, markdown is still rendered
+      expect(getByTestId('message-text')).toBeTruthy();
+      expect(getByText(/bold/)).toBeTruthy();
+      // The streaming cursor should also be present
+      expect(getByTestId('streaming-cursor')).toBeTruthy();
+    });
+
+    it('does not apply markdown to user messages', () => {
+      const message = createUserMessage('This is **not bold** in user bubble');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      // User messages should render as plain text including the ** markers
+      expect(getByText(/\*\*not bold\*\*/)).toBeTruthy();
+    });
+
+    it('renders markdown in thinking block content when expanded', () => {
+      const message = createAssistantMessage(
+        '<think>Step 1: Check the `input` value\nStep 2: **Process** it</think>Done!'
+      );
+
+      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+
+      // Expand thinking block
+      fireEvent.press(getByTestId('thinking-block-toggle'));
+
+      expect(getByTestId('thinking-block-content')).toBeTruthy();
+      expect(getByText(/input/)).toBeTruthy();
+      expect(getByText(/Process/)).toBeTruthy();
+    });
+
+    it('renders blockquotes in finalized assistant messages', () => {
+      const message = createAssistantMessage('> This is a quote\n\nAfter the quote');
+
+      const { getByText } = render(<ChatMessage message={message} />);
+
+      expect(getByText(/This is a quote/)).toBeTruthy();
+      expect(getByText(/After the quote/)).toBeTruthy();
     });
   });
 

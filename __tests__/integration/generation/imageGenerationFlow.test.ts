@@ -1042,6 +1042,86 @@ describe('Image Generation Flow Integration', () => {
     });
   });
 
+  describe('prompt enhancement strips thinking model tags', () => {
+    const setupThinkingModelEnhancement = () => {
+      const imageModel = setupImageModelState();
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+    };
+
+    it('should strip <think> tags from thinking model responses', async () => {
+      setupThinkingModelEnhancement();
+      // Simulate a thinking model that wraps reasoning in <think> tags
+      mockLlmService.generateResponse.mockResolvedValue(
+        '<think>Let me enhance this prompt by adding artistic details...</think>A majestic sunset over mountains, golden hour lighting, oil painting style'
+      );
+
+      await imageGenerationService.generateImage({
+        prompt: 'sunset over mountains',
+      });
+
+      // The prompt passed to image generation should NOT contain <think> tags
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'A majestic sunset over mountains, golden hour lighting, oil painting style',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('should handle thinking model response that is only a think block', async () => {
+      setupThinkingModelEnhancement();
+      // Simulate a model that only outputs thinking with no actual response
+      mockLlmService.generateResponse.mockResolvedValue(
+        '<think>I need to think about how to enhance this prompt...</think>'
+      );
+
+      await imageGenerationService.generateImage({
+        prompt: 'a cat',
+      });
+
+      // When stripping produces empty string, should fall back to original prompt
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'a cat',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('should handle response without think tags normally', async () => {
+      setupThinkingModelEnhancement();
+      // Non-thinking model returns plain enhanced prompt
+      mockLlmService.generateResponse.mockResolvedValue(
+        'A beautiful enhanced prompt with details'
+      );
+
+      await imageGenerationService.generateImage({
+        prompt: 'simple prompt',
+      });
+
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'A beautiful enhanced prompt with details',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+  });
+
   describe('cancelled error handling', () => {
     it('should reset state when error message includes cancelled', async () => {
       const imageModel = setupImageModelState();

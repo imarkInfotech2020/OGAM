@@ -25,6 +25,7 @@ import { Message } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { MarkdownText } from './MarkdownText';
 import { triggerHaptic } from '../utils/haptics';
 import { AnimatedEntry } from './AnimatedEntry';
 import { AnimatedPressable } from './AnimatedPressable';
@@ -405,23 +406,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     </Text>
                   </TouchableOpacity>
                   {showThinking && (
-                    <Text testID="thinking-block-content" style={styles.thinkingBlockText} selectable>
-                      {parsedContent.thinking}
-                    </Text>
+                    <View testID="thinking-block-content" style={styles.thinkingBlockContent}>
+                      <MarkdownText dimmed>{parsedContent.thinking}</MarkdownText>
+                    </View>
                   )}
                 </View>
               )}
 
               {/* Main response */}
               {parsedContent.response ? (
-                <Text
-                  testID="message-text"
-                  style={[styles.text, isUser ? styles.userText : styles.assistantText]}
-                  selectable
-                >
-                  {parsedContent.response}
-                  {isStreaming && <BlinkingCursor />}
-                </Text>
+                !isUser ? (
+                  <View testID="message-text">
+                    <MarkdownText>{parsedContent.response}</MarkdownText>
+                    {isStreaming && <BlinkingCursor />}
+                  </View>
+                ) : (
+                  <Text
+                    testID="message-text"
+                    style={[styles.text, styles.userText]}
+                    selectable
+                  >
+                    {parsedContent.response}
+                  </Text>
+                )
               ) : isStreaming && !parsedContent.isThinkingComplete ? (
                 /* Still in thinking phase, show indicator */
                 <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
@@ -850,6 +857,10 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     padding: SPACING.sm,
     paddingTop: 0,
     fontStyle: 'italic' as const,
+  },
+  thinkingBlockContent: {
+    padding: SPACING.sm,
+    paddingTop: 0,
   },
   streamingThinkingHint: {
     marginTop: 8,

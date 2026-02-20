@@ -19,7 +19,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor, cleanup } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
@@ -439,6 +439,10 @@ const renderChatScreen = () => {
 };
 
 describe('ChatScreen', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     resetStores();
     jest.clearAllMocks();
