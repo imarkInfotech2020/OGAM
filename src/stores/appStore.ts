@@ -336,6 +336,12 @@ export const useAppStore = create<AppState>()(
         } else if (!Array.isArray(merged.imageModelDownloading)) {
           merged.imageModelDownloading = [];
         }
+        // Migrate default modelLoadingStrategy from 'memory' → 'performance'
+        // Only migrate if the settings object itself was persisted (i.e. came from storage)
+        // and the value matches the old default exactly, indicating the user never changed it.
+        if (persistedState && (persistedState as any).settings?.modelLoadingStrategy === 'memory') {
+          merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+        }
         // Migrate old number|null → Record
         if (typeof merged.imageModelDownloadId === 'number') {
           const ids: Record<string, number> = {};
