@@ -106,7 +106,7 @@ async function enumerateFiles(
 
   for (const entry of entries) {
     if (entry.type === 'file') {
-      const relativePath = entry.path.startsWith(basePath + '/')
+      const relativePath = entry.path.startsWith(`${basePath  }/`)
         ? entry.path.slice(basePath.length + 1)
         : entry.path;
       files.push({

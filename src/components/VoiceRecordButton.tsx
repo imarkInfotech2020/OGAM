@@ -102,9 +102,9 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
       );
       spin.start();
       return () => spin.stop();
-    } else {
+    } 
       loadingAnim.setValue(0);
-    }
+    
   }, [isModelLoading, isTranscribing, isRecording, loadingAnim]);
 
   // Use refs to avoid stale closures in PanResponder
@@ -130,9 +130,9 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
       );
       pulse.start();
       return () => pulse.stop();
-    } else {
+    } 
       pulseAnim.setValue(1);
-    }
+    
   }, [isRecording, pulseAnim]);
 
   const panResponder = useRef(
@@ -520,7 +520,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     left: -100,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.primary + '40',
+    backgroundColor: `${colors.primary  }40`,
     borderRadius: 12,
   },
   cancelHintText: {

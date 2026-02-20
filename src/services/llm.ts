@@ -233,7 +233,7 @@ class LLMService {
       if (this.gpuEnabled) {
         console.log(`[LLM] GPU active: ${this.gpuDevices.join(', ') || 'yes'}, layers=${this.activeGpuLayers}`);
       } else {
-        console.log(`[LLM] Running on CPU only${nativeGpuAvailable ? ' (GPU available but not used)' : ''}${this.gpuReason ? ': ' + this.gpuReason : ''}`);
+        console.log(`[LLM] Running on CPU only${nativeGpuAvailable ? ' (GPU available but not used)' : ''}${this.gpuReason ? `: ${  this.gpuReason}` : ''}`);
       }
 
       this.currentModelPath = modelPath;
@@ -312,12 +312,12 @@ class LLMService {
         }
         console.log('[LLM] Multimodal initialized successfully, vision:', this.multimodalSupport?.vision);
         return true;
-      } else {
+      } 
         console.warn('[LLM] context.initMultimodal returned false - mmproj may be incompatible with model');
         this.multimodalInitialized = false;
         this.multimodalSupport = { vision: false, audio: false };
         return false;
-      }
+      
     } catch (error: any) {
       console.error('[LLM] Multimodal init exception:', error?.message || error);
       this.multimodalInitialized = false;

@@ -157,9 +157,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           clearTimeout(timeout);
           sub.remove();
         };
-      } else {
+      } 
         setModalVisible(true);
-      }
+      
     } else if (modalVisible) {
       animateOut(() => setModalVisible(false));
     }

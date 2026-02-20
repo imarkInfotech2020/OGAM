@@ -1445,7 +1445,7 @@ export const ModelsScreen: React.FC = () => {
               {selectedModel.credibility && (
                 <View style={[
                   styles.credibilityBadge,
-                  { backgroundColor: CREDIBILITY_LABELS[selectedModel.credibility.source].color + '25' }
+                  { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color  }25` }
                 ]}>
                   {selectedModel.credibility.source === 'lmstudio' && (
                     <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>
@@ -1737,7 +1737,7 @@ export const ModelsScreen: React.FC = () => {
                 id: model.id,
                 name: model.displayName,
                 author: (model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU',
-                description: `${formatBytes(model.size)}${model.variant ? ' \u00B7 ' + getVariantLabel(model.variant) : ''}`,
+                description: `${formatBytes(model.size)}${model.variant ? ` \u00B7 ${  getVariantLabel(model.variant)}` : ''}`,
               }}
               isDownloading={imageModelDownloading.includes(model.id)}
               downloadProgress={imageModelProgress[model.id] || 0}
@@ -1984,7 +1984,7 @@ export const ModelsScreen: React.FC = () => {
                           styles.filterChip,
                           filterState.source === option.key && styles.filterChipActive,
                           filterState.source === option.key && option.color && {
-                            backgroundColor: option.color + '25',
+                            backgroundColor: `${option.color  }25`,
                             borderColor: option.color,
                           },
                         ]}
@@ -2106,8 +2106,8 @@ export const ModelsScreen: React.FC = () => {
 };
 
 function formatNumber(num: number): string {
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)  }M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)  }K`;
   return num.toString();
 }
 
@@ -2126,10 +2126,10 @@ async function getDirectorySize(dirPath: string): Promise<number> {
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(0) + ' MB';
-  if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
-  return bytes + ' B';
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)  } GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)  } MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)  } KB`;
+  return `${bytes  } B`;
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
@@ -2217,7 +2217,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
   },
   recToggleActive: {
-    backgroundColor: colors.primary + '15',
+    backgroundColor: `${colors.primary  }15`,
   },
   recHint: {
     flexDirection: 'row' as const,
@@ -2226,10 +2226,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginBottom: 8,
-    backgroundColor: colors.primary + '10',
+    backgroundColor: `${colors.primary  }10`,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: `${colors.primary  }30`,
   },
   recHintText: {
     ...TYPOGRAPHY.meta,
@@ -2242,7 +2242,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
   },
   filterToggleActive: {
-    backgroundColor: colors.primary + '15',
+    backgroundColor: `${colors.primary  }15`,
   },
   filterDot: {
     position: 'absolute' as const,
@@ -2273,9 +2273,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingVertical: 12,
     borderWidth: 2,
     borderStyle: 'dashed' as const,
-    borderColor: colors.primary + '60',
+    borderColor: `${colors.primary  }60`,
     borderRadius: 12,
-    backgroundColor: colors.primary + '08',
+    backgroundColor: `${colors.primary  }08`,
   },
   importButtonText: {
     ...TYPOGRAPHY.body,
@@ -2328,7 +2328,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: 4,
   },
   filterPillActive: {
-    backgroundColor: colors.primary + '25',
+    backgroundColor: `${colors.primary  }25`,
     borderColor: colors.primary,
   },
   filterPillText: {
@@ -2379,7 +2379,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: colors.primary + '25',
+    backgroundColor: `${colors.primary  }25`,
     borderColor: colors.primary,
   },
   filterChipText: {
@@ -2404,13 +2404,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingBottom: 32,
   },
   deviceBanner: {
-    backgroundColor: colors.primary + '12',
+    backgroundColor: `${colors.primary  }12`,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.lg,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: `${colors.primary  }30`,
   },
   deviceBannerText: {
     ...TYPOGRAPHY.meta,
@@ -2548,7 +2548,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
   },
   activeBadge: {
-    backgroundColor: colors.info + '25',
+    backgroundColor: `${colors.info  }25`,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -2564,7 +2564,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: 12,
   },
   setActiveButton: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -2603,7 +2603,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
   },
   activeBadgeCompact: {
-    backgroundColor: colors.info + '25',
+    backgroundColor: `${colors.info  }25`,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
@@ -2614,7 +2614,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontWeight: '600' as const,
   },
   setActiveButtonCompact: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -2719,7 +2719,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 6,
   },
   cpuBadge: {
-    backgroundColor: colors.primary + '25',
+    backgroundColor: `${colors.primary  }25`,
   },
   npuBadge: {
     backgroundColor: '#FF990025',
@@ -2761,7 +2761,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textAlign: 'center' as const,
   },
   retryButton: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,

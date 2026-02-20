@@ -152,7 +152,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             Image
           </Text>
           {hasLoadedImageModel && (
-            <View style={[styles.tabBadge, { backgroundColor: colors.info + '30' }]}>
+            <View style={[styles.tabBadge, { backgroundColor: `${colors.info  }30` }]}>
               <View style={[styles.tabBadgeDot, { backgroundColor: colors.info }]} />
             </View>
           )}
@@ -267,7 +267,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
           <>
             {/* Currently Loaded Image Model */}
             {hasLoadedImageModel && (
-              <View style={[styles.loadedSection, { borderColor: colors.info + '40' }]}>
+              <View style={[styles.loadedSection, { borderColor: `${colors.info  }40` }]}>
                 <View style={styles.loadedHeader}>
                   <Icon name="check-circle" size={14} color={colors.success} />
                   <Text style={styles.loadedLabel}>Currently Loaded</Text>
@@ -381,7 +381,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: 8,
   },
   tabActive: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
   },
   tabText: {
     ...TYPOGRAPHY.body,
@@ -394,7 +394,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.primary + '30',
+    backgroundColor: `${colors.primary  }30`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -408,7 +408,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingVertical: 10,
     gap: 10,
   },
@@ -428,7 +428,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: colors.primary + '40',
+    borderColor: `${colors.primary  }40`,
   },
   loadedHeader: {
     flexDirection: 'row' as const,
@@ -463,7 +463,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: colors.error + '15',
+    backgroundColor: `${colors.error  }15`,
     gap: 6,
   },
   unloadButtonText: {
@@ -499,12 +499,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
   },
   modelItemSelected: {
-    backgroundColor: colors.primary + '15',
+    backgroundColor: `${colors.primary  }15`,
     borderWidth: 1,
     borderColor: colors.primary,
   },
   modelItemSelectedImage: {
-    backgroundColor: colors.info + '15',
+    backgroundColor: `${colors.info  }15`,
     borderWidth: 1,
     borderColor: colors.info,
   },
@@ -543,7 +543,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   visionBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: colors.info + '20',
+    backgroundColor: `${colors.info  }20`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

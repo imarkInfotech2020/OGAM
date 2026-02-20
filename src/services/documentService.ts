@@ -36,7 +36,7 @@ class DocumentService {
    * Check if a file extension is supported
    */
   isSupported(fileName: string): boolean {
-    const extension = '.' + fileName.split('.').pop()?.toLowerCase();
+    const extension = `.${  fileName.split('.').pop()?.toLowerCase()}`;
     if (extension === PDF_EXTENSION && pdfExtractor.isAvailable()) {
       return true;
     }
@@ -63,7 +63,7 @@ class DocumentService {
   async processDocumentFromPath(filePath: string, fileName?: string): Promise<MediaAttachment | null> {
     try {
       const name = fileName || filePath.split('/').pop() || 'document';
-      const extension = '.' + name.split('.').pop()?.toLowerCase();
+      const extension = `.${  name.split('.').pop()?.toLowerCase()}`;
 
       // Check if we can handle this file type
       const isPdf = extension === PDF_EXTENSION;
@@ -127,7 +127,7 @@ class DocumentService {
 
       // Truncate if too long (safety net — native should already limit)
       if (textContent.length > maxChars) {
-        textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';
+        textContent = `${textContent.substring(0, maxChars)  }\n\n... [Content truncated due to length]`;
       }
 
       const storedUri = persistentCopyOk ? persistentPath : resolvedPath;
@@ -155,7 +155,7 @@ class DocumentService {
     const maxChars = Math.floor(contextLength * 4 * 0.5);
     let textContent = text;
     if (textContent.length > maxChars) {
-      textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';
+      textContent = `${textContent.substring(0, maxChars)  }\n\n... [Content truncated due to length]`;
     }
 
     const id = Date.now().toString();
@@ -202,7 +202,7 @@ class DocumentService {
     }
 
     const preview = attachment.textContent.substring(0, maxLength).replace(/\n/g, ' ');
-    return preview.length < attachment.textContent.length ? preview + '...' : preview;
+    return preview.length < attachment.textContent.length ? `${preview  }...` : preview;
   }
 
   /**

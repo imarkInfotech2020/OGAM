@@ -84,9 +84,9 @@ export const ChatsListScreen: React.FC = () => {
       return 'Yesterday';
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
+    } 
       return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+    
   };
 
   const renderRightActions = (conversation: Conversation) => (

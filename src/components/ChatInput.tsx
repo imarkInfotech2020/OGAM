@@ -103,7 +103,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       // Only apply if we're still in the same conversation where recording started
       if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
         setMessage(prev => {
-          const prefix = prev.trim() ? prev.trim() + ' ' : '';
+          const prefix = prev.trim() ? `${prev.trim()  } ` : '';
           return prefix + finalResult;
         });
       }
@@ -377,7 +377,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               {queuedTexts.length > 0 && (
                 <Text style={styles.queuePreview} numberOfLines={1}>
                   {queuedTexts[0].length > 30
-                    ? queuedTexts[0].substring(0, 30) + '...'
+                    ? `${queuedTexts[0].substring(0, 30)  }...`
                     : queuedTexts[0]}
                 </Text>
               )}
@@ -588,7 +588,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   queueBadge: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -623,7 +623,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.background,
   },
   visionBadge: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,

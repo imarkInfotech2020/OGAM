@@ -701,7 +701,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: SPACING.md,
   },
   quantBadge: {
-    backgroundColor: colors.primary + '25',
+    backgroundColor: `${colors.primary  }25`,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
@@ -711,7 +711,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.primary,
   },
   imageBadge: {
-    backgroundColor: colors.info + '25',
+    backgroundColor: `${colors.info  }25`,
   },
   imageQuantText: {
     color: colors.info,

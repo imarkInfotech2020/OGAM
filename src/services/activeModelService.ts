@@ -512,12 +512,12 @@ class ActiveModelService {
       // Text models: file size * overhead for KV cache, activations, etc.
       const sizeGB = (textModel.fileSize || 0) / (1024 * 1024 * 1024);
       return sizeGB * TEXT_MODEL_OVERHEAD_MULTIPLIER;
-    } else {
+    } 
       const imageModel = model as ONNXImageModel;
       // Image models: file size * overhead for ONNX runtime, intermediate tensors
       const sizeGB = (imageModel.size || 0) / (1024 * 1024 * 1024);
       return sizeGB * IMAGE_MODEL_OVERHEAD_MULTIPLIER;
-    }
+    
   }
 
   /**

@@ -821,7 +821,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: colors.primary + '30',
+    backgroundColor: `${colors.primary  }30`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

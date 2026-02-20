@@ -1,3 +1,6 @@
+/* eslint-disable max-lines */
+/* eslint-disable max-lines-per-function */
+/* eslint-disable react-native/split-platform-components */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -52,6 +55,33 @@ function waitForRenderFrame(): Promise<void> {
   return new Promise<void>(resolve => {
     requestAnimationFrame(() => { requestAnimationFrame(() => { setTimeout(resolve, 200); }); });
   });
+}
+
+type ChatMessage = { id: string; role: 'assistant'; content: string; timestamp: number; isThinking?: boolean; isStreaming?: boolean };
+type StreamingState = { isThinking: boolean; streamingMessage: string; isStreamingForThisConversation: boolean };
+function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
+  const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
+  const conversationMessages = conversation?.messages || [];
+  const lastUserMsg = conversationMessages.at(-1);
+  const userMessageForContext = (lastUserMsg?.role === 'user'
+    ? { ...lastUserMsg, content: messageText }
+    : lastUserMsg) as Message;
+  return [
+    { id: 'system', role: 'system', content: systemPrompt, timestamp: 0 },
+    ...conversationMessages.slice(0, -1),
+    userMessageForContext,
+  ];
+}
+
+function getDisplayMessages(allMessages: Message[], streaming: StreamingState): (Message | ChatMessage)[] {
+  const { isThinking, streamingMessage, isStreamingForThisConversation } = streaming;
+  if (isThinking && isStreamingForThisConversation) {
+    return [...allMessages, { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true }];
+  }
+  if (streamingMessage && isStreamingForThisConversation) {
+    return [...allMessages, { id: 'streaming', role: 'assistant' as const, content: streamingMessage, timestamp: Date.now(), isStreaming: true }];
+  }
+  return allMessages;
 }
 
 export const ChatScreen: React.FC = () => {
@@ -709,33 +739,11 @@ export const ChatScreen: React.FC = () => {
 
     // Rebuild context from current conversation state (messages may have changed since enqueue)
     const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
-    const conversationMessages = conversation?.messages || [];
-
-    // Use project system prompt if available, otherwise use default
     const project = conversation?.projectId
       ? useProjectStore.getState().getProject(conversation.projectId)
       : null;
-    const systemPrompt = project?.systemPrompt
-      || settings.systemPrompt
-      || APP_CONFIG.defaultSystemPrompt;
-
-    // Find the last user message to create context version with document content
-    const lastUserMsg = conversationMessages.at(-1);
-    const userMessageForContext = (lastUserMsg?.role === 'user'
-      ? { ...lastUserMsg, content: messageText }
-      : lastUserMsg) as Message;
-
-    const messagesForContext: Message[] = [
-      {
-        id: 'system',
-        role: 'system',
-        content: systemPrompt,
-        timestamp: 0,
-      },
-      // All messages except the last (which we replace with the context version)
-      ...conversationMessages.slice(0, -1),
-      userMessageForContext,
-    ];
+    const systemPrompt = project?.systemPrompt || settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+    const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
 
     // Update debug info and check if truncation occurred
     let shouldClearCache = false;
@@ -1033,14 +1041,7 @@ export const ChatScreen: React.FC = () => {
   // Only show if the streaming is for the current conversation
   const allMessages = activeConversation?.messages || [];
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
-  let displayMessages: typeof allMessages;
-  if (isThinking && isStreamingForThisConversation) {
-    displayMessages = [...allMessages, { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true }];
-  } else if (streamingMessage && isStreamingForThisConversation) {
-    displayMessages = [...allMessages, { id: 'streaming', role: 'assistant' as const, content: streamingMessage, timestamp: Date.now(), isStreaming: true }];
-  } else {
-    displayMessages = allMessages;
-  }
+  const displayMessages = getDisplayMessages(allMessages, { isThinking, streamingMessage, isStreamingForThisConversation });
 
   // Track new messages for entry animation
   useEffect(() => {
@@ -1058,43 +1059,41 @@ export const ChatScreen: React.FC = () => {
     setAnimateLastN(0);
   }, [activeConversationId]);
 
-  if (!activeModelId || !activeModel) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.noModelContainer}>
-          <View style={styles.noModelIconContainer}>
-            <Icon name="cpu" size={32} color={colors.textMuted} />
-          </View>
-          <Text style={styles.noModelTitle}>No Model Selected</Text>
-          <Text style={styles.noModelText}>
-            {downloadedModels.length > 0
-              ? 'Select a model to start chatting.'
-              : 'Download a model from the Models tab to start chatting.'}
-          </Text>
-          {downloadedModels.length > 0 && (
-            <TouchableOpacity
-              style={styles.selectModelButton}
-              onPress={() => setShowModelSelector(true)}
-            >
-              <Text style={styles.selectModelButtonText}>Select Model</Text>
-            </TouchableOpacity>
-          )}
+  const renderNoModelScreen = () => (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.noModelContainer}>
+        <View style={styles.noModelIconContainer}>
+          <Icon name="cpu" size={32} color={colors.textMuted} />
         </View>
+        <Text style={styles.noModelTitle}>No Model Selected</Text>
+        <Text style={styles.noModelText}>
+          {downloadedModels.length > 0
+            ? 'Select a model to start chatting.'
+            : 'Download a model from the Models tab to start chatting.'}
+        </Text>
+        {downloadedModels.length > 0 && (
+          <TouchableOpacity
+            style={styles.selectModelButton}
+            onPress={() => setShowModelSelector(true)}
+          >
+            <Text style={styles.selectModelButtonText}>Select Model</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-        {/* Model Selector Modal - available even when no model selected */}
-        <ModelSelectorModal
-          visible={showModelSelector}
-          onClose={() => setShowModelSelector(false)}
-          onSelectModel={handleModelSelect}
-          onUnloadModel={handleUnloadModel}
-          isLoading={isModelLoading}
-          currentModelPath={llmService.getLoadedModelPath()}
-        />
-      </SafeAreaView>
-    );
-  }
+      {/* Model Selector Modal - available even when no model selected */}
+      <ModelSelectorModal
+        visible={showModelSelector}
+        onClose={() => setShowModelSelector(false)}
+        onSelectModel={handleModelSelect}
+        onUnloadModel={handleUnloadModel}
+        isLoading={isModelLoading}
+        currentModelPath={llmService.getLoadedModelPath()}
+      />
+    </SafeAreaView>
+  );
 
-  if (isModelLoading) {
+  const renderLoadingScreen = () => {
     const loadingModelName = loadingModel?.name || activeModel?.name || 'model';
     const sizeSource = loadingModel ?? activeModel;
     const modelSize = sizeSource ? hardwareService.formatModelSize(sizeSource) : '';
@@ -1117,9 +1116,12 @@ export const ChatScreen: React.FC = () => {
         </View>
       </SafeAreaView>
     );
-  }
+  };
 
-  return (
+  if (!activeModelId || !activeModel) return renderNoModelScreen();
+  if (isModelLoading) return renderLoadingScreen();
+
+  const renderMainContent = () => (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         testID="chat-screen"
@@ -1417,6 +1419,8 @@ export const ChatScreen: React.FC = () => {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+
+  return renderMainContent();
 };
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({

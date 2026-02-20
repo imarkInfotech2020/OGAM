@@ -114,7 +114,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                     <Text style={styles.authorTagText}>{model.author}</Text>
                   </View>
                   {credibilityInfo && (
-                    <View style={[styles.credibilityBadge, { backgroundColor: credibilityInfo.color + '25' }]}>
+                    <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color  }25` }]}>
                       {credibility?.source === 'lmstudio' && (
                         <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
                       )}
@@ -165,7 +165,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                   <Text style={styles.authorTagText}>{model.author}</Text>
                 </View>
                 {credibilityInfo && (
-                  <View style={[styles.credibilityBadge, { backgroundColor: credibilityInfo.color + '25' }]}>
+                  <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color  }25` }]}>
                     {credibility?.source === 'lmstudio' && (
                       <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
                     )}
@@ -315,10 +315,10 @@ export const ModelCard: React.FC<ModelCardProps> = ({
 
 function formatNumber(num: number): string {
   if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
+    return `${(num / 1000000).toFixed(1)  }M`;
   }
   if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
+    return `${(num / 1000).toFixed(1)  }K`;
   }
   return num.toString();
 }
@@ -451,20 +451,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 8,
   },
   sizeBadge: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
   },
   infoText: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
   },
   recommendedBadge: {
-    backgroundColor: colors.info + '30',
+    backgroundColor: `${colors.info  }30`,
   },
   recommendedText: {
     color: colors.info,
   },
   warningBadge: {
-    backgroundColor: colors.warning + '30',
+    backgroundColor: `${colors.warning  }30`,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -474,7 +474,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.warning,
   },
   visionBadge: {
-    backgroundColor: colors.info + '30',
+    backgroundColor: `${colors.info  }30`,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -484,7 +484,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.info,
   },
   codeBadge: {
-    backgroundColor: colors.warning + '30',
+    backgroundColor: `${colors.warning  }30`,
   },
   codeText: {
     ...TYPOGRAPHY.meta,

@@ -323,7 +323,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     marginBottom: 16,
   },
   warningCard: {
-    backgroundColor: colors.warning + '20',
+    backgroundColor: `${colors.warning  }20`,
     borderWidth: 1,
     borderColor: colors.warning,
   },

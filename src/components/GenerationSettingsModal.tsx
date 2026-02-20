@@ -1031,7 +1031,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderBottomColor: colors.border,
   },
   modelPickerItemActive: {
-    backgroundColor: colors.primary + '25',
+    backgroundColor: `${colors.primary  }25`,
   },
   modelPickerItemText: {
     ...TYPOGRAPHY.bodySmall,

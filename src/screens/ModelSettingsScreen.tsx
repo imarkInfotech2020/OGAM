@@ -77,7 +77,7 @@ export const ModelSettingsScreen: React.FC = () => {
               onValueChange={(value) =>
                 updateSettings({ imageGenerationMode: value ? 'auto' : 'manual' })
               }
-              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
               thumbColor={rawSettings?.imageGenerationMode === 'auto' ? colors.primary : colors.textMuted}
             />
           </View>
@@ -208,7 +208,7 @@ export const ModelSettingsScreen: React.FC = () => {
             <Switch
               value={rawSettings?.enhanceImagePrompts ?? false}
               onValueChange={(value) => updateSettings({ enhanceImagePrompts: value })}
-              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
               thumbColor={rawSettings?.enhanceImagePrompts ? colors.primary : colors.textMuted}
             />
           </View>
@@ -311,7 +311,7 @@ export const ModelSettingsScreen: React.FC = () => {
             <Switch
               value={rawSettings?.showGenerationDetails ?? false}
               onValueChange={(value) => updateSettings({ showGenerationDetails: value })}
-              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
               thumbColor={rawSettings?.showGenerationDetails ? colors.primary : colors.textMuted}
             />
           </View>
@@ -397,7 +397,7 @@ export const ModelSettingsScreen: React.FC = () => {
                 <Switch
                   value={rawSettings?.enableGpu !== false}
                   onValueChange={(value) => updateSettings({ enableGpu: value })}
-                  trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+                  trackColor={{ false: colors.surfaceLight, true: `${colors.primary  }80` }}
                   thumbColor={rawSettings?.enableGpu !== false ? colors.primary : colors.textMuted}
                 />
               </View>

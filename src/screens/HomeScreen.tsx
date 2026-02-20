@@ -780,9 +780,9 @@ function formatDate(dateStr: string): string {
     return 'Yesterday';
   } else if (diffDays < 7) {
     return date.toLocaleDateString([], { weekday: 'short' });
-  } else {
+  } 
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  }
+  
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
