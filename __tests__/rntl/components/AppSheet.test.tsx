@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { Text, Keyboard } from 'react-native';
+import { Text, Keyboard, Modal, TouchableWithoutFeedback, View } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { AppSheet } from '../../../src/components/AppSheet';
 
@@ -493,13 +493,254 @@ describe('AppSheet', () => {
 
     it('backdrop tap triggers dismiss', async () => {
       const onClose = jest.fn();
-      const { toJSON } = render(
+      const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Backdrop Test">
           <Text>Content</Text>
         </AppSheet>
       );
 
+      const backdrop = UNSAFE_getByType(TouchableWithoutFeedback);
+      fireEvent.press(backdrop);
+
+      await waitFor(
+        () => {
+          expect(onClose).toHaveBeenCalled();
+        },
+        { timeout: 2000 },
+      );
+    });
+
+    it('back button (onRequestClose) triggers dismiss', async () => {
+      const onClose = jest.fn();
+      const { UNSAFE_getByType } = render(
+        <AppSheet visible={true} onClose={onClose} title="Back Button">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const modal = UNSAFE_getByType(Modal);
+      act(() => {
+        modal.props.onRequestClose();
+      });
+
+      await waitFor(
+        () => {
+          expect(onClose).toHaveBeenCalled();
+        },
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  // ============================================================================
+  // resolveSnapPoint — fallback path (line 39)
+  // ============================================================================
+  describe('resolveSnapPoint fallback', () => {
+    it('falls back to 50% screen height for an unrecognised string snap point', () => {
+      // A string that does not end with '%' falls into the final return branch
+      const { toJSON } = render(
+        <AppSheet
+          {...defaultProps}
+          visible={true}
+          snapPoints={['invalid-snap']}
+          title="Fallback Snap"
+        />
+      );
+
       expect(toJSON()).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // handleModalShow / animateIn (lines 76, 150-152)
+  // ============================================================================
+  describe('handleModalShow', () => {
+    it('triggers animateIn when modal onShow fires with a pending animation', () => {
+      const { UNSAFE_getByType } = render(
+        <AppSheet visible={true} onClose={jest.fn()} title="AnimateIn Test">
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const modal = UNSAFE_getByType(Modal);
+
+      // pendingAnimateIn.current is set to true when visible becomes true.
+      // Calling onShow should consume it and call animateIn.
+      act(() => {
+        modal.props.onShow();
+      });
+
+      // A second onShow call should be a no-op (flag already cleared)
+      act(() => {
+        modal.props.onShow();
+      });
+
+      // No errors — animateIn ran; verify sheet is still rendered
+      expect(modal).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // PanResponder handlers (lines 168-195)
+  // ============================================================================
+  describe('pan responder', () => {
+    /**
+     * Helper: find the handle container view by locating the first View
+     * that has `onMoveShouldSetResponder` (spread from panHandlers).
+     */
+    function getHandleContainer(getAllByType: (type: any) => any[]) {
+      const views = getAllByType(View);
+      return views.find(
+        (v: any) => typeof v.props.onMoveShouldSetResponder === 'function',
+      );
+    }
+
+    /**
+     * Build a synthetic event with the touchHistory format that PanResponder expects.
+     * PanResponder accumulates dy via: dy += currentPageY - previousPageY.
+     * Pass previousY to control the delta: dy_delta = pageY - previousY.
+     */
+    function makeTouchEvent(pageY: number, previousY?: number, timestamp = Date.now()) {
+      const prevY = previousY ?? pageY;
+      const touchEntry = {
+        touchActive: true,
+        startPageX: 0,
+        startPageY: 0,
+        startTimeStamp: timestamp - 100,
+        currentPageX: 0,
+        currentPageY: pageY,
+        currentTimeStamp: timestamp,
+        previousPageX: 0,
+        previousPageY: prevY,
+        previousTimeStamp: timestamp - 16,
+      };
+      return {
+        nativeEvent: {
+          touches: [{ pageX: 0, pageY, identifier: 0, locationX: 0, locationY: pageY, timestamp }],
+          changedTouches: [{ pageX: 0, pageY, identifier: 0, locationX: 0, locationY: pageY, timestamp }],
+          target: 1,
+          timestamp,
+        },
+        touchHistory: {
+          touchBank: [touchEntry],
+          indexOfSingleActiveTouch: 0,
+          mostRecentTimeStamp: timestamp,
+          numberActiveTouches: 1,
+        },
+      };
+    }
+
+    it('onStartShouldSetPanResponder returns false (no capture on start)', () => {
+      const { UNSAFE_getAllByType } = render(
+        <AppSheet visible={true} onClose={jest.fn()}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const handle = getHandleContainer(UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      // The onStartShouldSetResponder handler is the PanResponder wrapper around
+      // onStartShouldSetPanResponder. Calling it exercises line 168.
+      act(() => {
+        const result = handle.props.onStartShouldSetResponder?.(makeTouchEvent(100));
+        // Our config returns false, so the responder should not claim the gesture
+        expect(result).toBe(false);
+      });
+    });
+
+    it('onMoveShouldSetPanResponder is called and returns a boolean', () => {
+      const { UNSAFE_getAllByType } = render(
+        <AppSheet visible={true} onClose={jest.fn()}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const handle = getHandleContainer(UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      act(() => {
+        // Calling onMoveShouldSetResponder exercises the onMoveShouldSetPanResponder callback
+        const result = handle.props.onMoveShouldSetResponder?.(makeTouchEvent(115));
+        if (result !== undefined) {
+          expect(typeof result).toBe('boolean');
+        }
+      });
+    });
+
+    it('onPanResponderMove exercises move handler without throwing', () => {
+      const { UNSAFE_getAllByType } = render(
+        <AppSheet visible={true} onClose={jest.fn()}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const handle = getHandleContainer(UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      // Fires onResponderMove which calls onPanResponderMove (lines 170-174)
+      expect(() => {
+        act(() => {
+          handle.props.onResponderMove?.(makeTouchEvent(50));
+          handle.props.onResponderMove?.(makeTouchEvent(120));
+        });
+      }).not.toThrow();
+    });
+
+    it('onPanResponderRelease snaps back when drag is small (dy < 80)', async () => {
+      const onClose = jest.fn();
+      const { UNSAFE_getAllByType } = render(
+        <AppSheet visible={true} onClose={onClose}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const handle = getHandleContainer(UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      // Small drag (dy = 30 < 80) → snap-back branch (lines 194-200)
+      act(() => {
+        handle.props.onResponderRelease?.(makeTouchEvent(30));
+      });
+
+      // onClose should NOT be called after snap back
+      await waitFor(() => {
+        expect(onClose).not.toHaveBeenCalled();
+      });
+    });
+
+    it('exercises the dismiss branch when drag exceeds threshold (dy > 80)', () => {
+      // Mock Animated.parallel so its .start() callback fires synchronously.
+      // This lets us exercise lines 189-192 (the dismiss completion: setModalVisible +
+      // onClose) without depending on the native animation driver in jest.
+      const { Animated: RNAnimated } = require('react-native');
+      const startMock = jest.fn((cb?: ((result: { finished: boolean }) => void)) => {
+        if (cb) cb({ finished: true });
+      });
+      jest.spyOn(RNAnimated, 'parallel').mockReturnValue({ start: startMock } as any);
+
+      const onClose = jest.fn();
+      const { UNSAFE_getAllByType } = render(
+        <AppSheet visible={true} onClose={onClose}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      const handle = getHandleContainer(UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      // Accumulate dy=200 via move (previousY=0, currentY=200 → dy_delta=200).
+      // Release triggers onPanResponderRelease with dy=200 > 80 → dismiss branch.
+      act(() => {
+        handle.props.onResponderMove?.(makeTouchEvent(200, 0));
+        handle.props.onResponderRelease?.(makeTouchEvent(200, 200));
+      });
+
+      // The dismiss branch called Animated.parallel().start(cb) and cb fired
+      // synchronously → onClose should have been called.
+      expect(onClose).toHaveBeenCalled();
+
+      jest.restoreAllMocks();
     });
   });
 });

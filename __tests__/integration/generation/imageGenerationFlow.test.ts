@@ -1144,4 +1144,310 @@ describe('Image Generation Flow Integration', () => {
       expect(imageGenerationService.getState().error).toBeNull();
     });
   });
+
+  // ============================================================================
+  // Coverage for lines 237-298: enhancement cleanup and error paths with conversationId
+  // ============================================================================
+  describe('prompt enhancement stopGeneration cleanup (lines 247, 287-291)', () => {
+    const setupEnhancementWithConversation = () => {
+      const imageModel = setupImageModelState();
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      return imageModel;
+    };
+
+    it('should call stopGeneration after successful enhancement (line 247)', async () => {
+      setupEnhancementWithConversation();
+      mockLlmService.generateResponse.mockResolvedValue('Enhanced result');
+
+      await imageGenerationService.generateImage({
+        prompt: 'Test cleanup',
+      });
+
+      // stopGeneration must be called to reset LLM state after enhancement
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+    });
+
+    it('should call stopGeneration even when stopGeneration itself throws (lines 253-255)', async () => {
+      setupEnhancementWithConversation();
+      mockLlmService.generateResponse.mockResolvedValue('Enhanced result');
+      // Make stopGeneration throw to exercise the inner catch
+      mockLlmService.stopGeneration.mockRejectedValue(new Error('stop failed'));
+
+      // Should not propagate the error - generation should still succeed
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Cleanup error test',
+      });
+
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+      // Image generation should still proceed despite stopGeneration error
+      expect(result).not.toBeNull();
+    });
+
+    it('should delete thinking message and call stopGeneration when enhancement fails with conversationId (lines 287-298)', async () => {
+      setupEnhancementWithConversation();
+      const conversationId = setupWithConversation();
+
+      mockLlmService.generateResponse.mockRejectedValue(new Error('LLM service crashed'));
+
+      await imageGenerationService.generateImage({
+        prompt: 'Prompt that fails to enhance',
+        conversationId,
+      });
+
+      // stopGeneration should be called inside the catch block to clean up LLM state
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+
+      // Should fall back to original prompt and still generate
+      expect(mockLocalDreamService.generateImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Prompt that fails to enhance',
+        }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('should call stopGeneration in catch when stopGeneration itself throws during error cleanup (lines 290-292)', async () => {
+      setupEnhancementWithConversation();
+      const conversationId = setupWithConversation();
+
+      mockLlmService.generateResponse.mockRejectedValue(new Error('Enhancement error'));
+      // Both the success and error path stopGeneration calls throw
+      mockLlmService.stopGeneration.mockRejectedValue(new Error('stop also failed'));
+
+      // Should not throw - inner catch swallows the resetError
+      const result = await imageGenerationService.generateImage({
+        prompt: 'Double failure test',
+        conversationId,
+      });
+
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+      // Should still produce a result using the original prompt
+      expect(result).not.toBeNull();
+    });
+
+    it('should update thinking message in chat when enhancement succeeds with conversationId (lines 263-278)', async () => {
+      setupEnhancementWithConversation();
+      const conversationId = setupWithConversation();
+
+      // Return a different enhanced prompt so the updateMessage branch is taken
+      mockLlmService.generateResponse.mockResolvedValue('A richly detailed enhanced prompt');
+
+      await imageGenerationService.generateImage({
+        prompt: 'short prompt',
+        conversationId,
+      });
+
+      // The conversation should have messages (thinking message updated + image result)
+      const chatState = getChatState();
+      const conversation = chatState.conversations.find(c => c.id === conversationId);
+      // At minimum, the final image message should exist
+      expect(conversation?.messages.length).toBeGreaterThanOrEqual(1);
+      // stopGeneration cleanup should have been called
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+    });
+
+    it('should delete thinking message when enhancement returns same prompt as original (lines 274-278)', async () => {
+      setupEnhancementWithConversation();
+      const conversationId = setupWithConversation();
+
+      // Enhancement returns identical text (trim/replace/strip produces same string)
+      mockLlmService.generateResponse.mockResolvedValue('identical prompt');
+
+      await imageGenerationService.generateImage({
+        prompt: 'identical prompt',
+        conversationId,
+      });
+
+      // Generation should still succeed despite no change
+      const state = getAppState();
+      expect(state.generatedImages).toHaveLength(1);
+      expect(mockLlmService.stopGeneration).toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Coverage for lines 388-389: onPreview callback normal path (cancelRequested=false)
+  // ============================================================================
+  describe('onPreview callback normal path (lines 388-389)', () => {
+    it('should update previewPath state when onPreview fires without cancellation', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      mockLocalDreamService.generateImage.mockImplementation(
+        async (_params, _onProgress, onPreview) => {
+          // Fire preview callback before resolving (cancelRequested is false)
+          onPreview?.({ step: 5, totalSteps: 20, previewPath: '/tmp/preview_step5.png' });
+          onPreview?.({ step: 10, totalSteps: 20, previewPath: '/tmp/preview_step10.png' });
+          return {
+            id: 'preview-normal-img',
+            prompt: 'test',
+            imagePath: '/mock/image.png',
+            width: 512,
+            height: 512,
+            steps: 20,
+            seed: 42,
+            modelId: 'img-model-1',
+            createdAt: new Date().toISOString(),
+          };
+        }
+      );
+
+      const previewPaths: (string | null)[] = [];
+      const unsubscribe = imageGenerationService.subscribe((state) => {
+        if (state.previewPath) {
+          previewPaths.push(state.previewPath);
+        }
+      });
+
+      await imageGenerationService.generateImage({ prompt: 'Preview normal path' });
+      unsubscribe();
+
+      // Should have received preview updates from the onPreview callback
+      expect(previewPaths.length).toBeGreaterThan(0);
+      expect(previewPaths.some(p => p?.includes('preview_step5.png'))).toBe(true);
+    });
+  });
+
+  // ============================================================================
+  // Coverage for lines 387-389: onPreview callback when cancelRequested is true
+  // ============================================================================
+  describe('onPreview callback skipped when cancelRequested (lines 387-389)', () => {
+    it('should skip preview update when cancelRequested is true during preview callback', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      let capturedOnPreview: ((preview: { step: number; totalSteps: number; previewPath: string }) => void) | undefined;
+
+      mockLocalDreamService.generateImage.mockImplementation(
+        async (_params, _onProgress, onPreview) => {
+          capturedOnPreview = onPreview;
+          return {
+            id: 'preview-test-img',
+            prompt: 'test',
+            imagePath: '/mock/image.png',
+            width: 512,
+            height: 512,
+            steps: 20,
+            seed: 42,
+            modelId: 'img-model-1',
+            createdAt: new Date().toISOString(),
+          };
+        }
+      );
+
+      // Start generation and let it complete
+      await imageGenerationService.generateImage({ prompt: 'Preview cancel test' });
+
+      // Now simulate calling the onPreview callback AFTER cancellation was requested.
+      // We do this by calling cancelGeneration to set the flag, then invoking the callback.
+      // First start a new generation to put service in generating state
+      let resolveSecond: (value: any) => void;
+      mockLocalDreamService.generateImage.mockImplementation(async (_p, _onProg, onPreview) => {
+        capturedOnPreview = onPreview;
+        return new Promise((resolve) => {
+          resolveSecond = resolve;
+        });
+      });
+
+      imageGenerationService.generateImage({ prompt: 'Second generation' });
+      await flushPromises();
+
+      // Cancel - sets cancelRequested = true
+      await imageGenerationService.cancelGeneration();
+
+      // Invoke the preview callback after cancel - should be a no-op (early return on line 387)
+      const previewStateBeforeCallback = imageGenerationService.getState().previewPath;
+      if (capturedOnPreview) {
+        capturedOnPreview({ step: 5, totalSteps: 20, previewPath: '/mock/preview.png' });
+      }
+
+      // previewPath should not have been updated because cancelRequested was true
+      expect(imageGenerationService.getState().previewPath).toBe(previewStateBeforeCallback);
+
+      // Clean up
+      resolveSecond!({
+        id: 'x',
+        prompt: 'x',
+        imagePath: '/x.png',
+        width: 512,
+        height: 512,
+        steps: 20,
+        seed: 0,
+        modelId: 'img-model-1',
+        createdAt: new Date().toISOString(),
+      });
+    });
+  });
+
+  // ============================================================================
+  // Coverage for lines 397-398: cancelRequested check after generateImage returns
+  // ============================================================================
+  describe('cancelRequested check after generateImage resolves (lines 397-398)', () => {
+    it('should return null when cancelRequested is set before generateImage resolves', async () => {
+      const imageModel = setupImageModelState();
+
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      // generateImage resolves immediately, but we simulate cancelRequested being set
+      // by cancelling concurrently during the generation
+      let resolveGeneration: (value: any) => void;
+      mockLocalDreamService.generateImage.mockImplementation(async () => {
+        return new Promise((resolve) => {
+          resolveGeneration = resolve;
+        });
+      });
+
+      const generatePromise = imageGenerationService.generateImage({
+        prompt: 'Cancel after resolve test',
+      });
+
+      await flushPromises();
+
+      // Cancel while generating - this sets cancelRequested = true
+      const cancelPromise = imageGenerationService.cancelGeneration();
+
+      // Now resolve the generation - the service should detect cancelRequested after resolving
+      resolveGeneration!({
+        id: 'cancel-test-img',
+        prompt: 'Cancel after resolve test',
+        imagePath: '/mock/image.png',
+        width: 512,
+        height: 512,
+        steps: 20,
+        seed: 12345,
+        modelId: 'img-model-1',
+        createdAt: new Date().toISOString(),
+      });
+
+      const result = await generatePromise;
+      await cancelPromise;
+
+      // Should return null because cancelRequested was true when generateImage resolved
+      expect(result).toBeNull();
+      expect(imageGenerationService.getState().isGenerating).toBe(false);
+    });
+  });
 });

@@ -372,6 +372,60 @@ describe('CoreMLModelBrowser', () => {
     });
   });
 
+  // ============================================================================
+  // Strategy 1: zip archive path (lines 141-142)
+  // ============================================================================
+  describe('zip archive (Strategy 1)', () => {
+    it('returns a model with downloadUrl and no files when a compiled zip is found (lines 141-142)', async () => {
+      // A top-level tree that contains a zip matching findCompiledZip criteria
+      const zipTree = [
+        makeTreeEntry('README.md', 'file', 5000),
+        makeTreeEntry(
+          'coreml-sd-v1-5-palettized_split_einsum_v2_compiled.zip',
+          'file',
+          0,
+          1_800_000_000, // LFS size
+        ),
+      ];
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(zipTree),
+      });
+
+      const models = await fetchCoreMLModels(true);
+
+      // At least one model should have been created via the zip path
+      expect(models.length).toBeGreaterThan(0);
+      const zipModel = models[0]!;
+      // Zip-path models have a downloadUrl but no individual files array
+      expect(zipModel.downloadUrl).toContain('resolve/main/');
+      expect(zipModel.downloadUrl).toContain('.zip');
+      // Size comes from LFS size in the zip entry
+      expect(zipModel.size).toBeGreaterThan(0);
+    });
+
+    it('uses zipEntry.size as fallback when lfs size is absent (lines 141-142)', async () => {
+      const zipTree = [
+        makeTreeEntry(
+          'model_split_einsum_compiled.zip',
+          'file',
+          500_000_000, // plain size (no LFS)
+        ),
+      ];
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(zipTree),
+      });
+
+      const models = await fetchCoreMLModels(true);
+
+      expect(models.length).toBeGreaterThan(0);
+      expect(models[0]!.size).toBe(500_000_000);
+    });
+  });
+
   describe('model ID generation', () => {
     it('generates unique IDs from repo name', async () => {
       setupSuccessfulFetch('apple/coreml-stable-diffusion-2-1-base');
