@@ -344,6 +344,58 @@ export const ChatScreen: React.FC = () => {
     });
   };
 
+  const initiateModelLoadSequence = async (alreadyLoading: boolean) => {
+    if (!activeModel || !activeModelId) return;
+
+    // Check memory before loading (only if we're initiating the load)
+    if (!alreadyLoading) {
+      const memoryCheck = await activeModelService.checkMemoryForModel(activeModelId, 'text');
+      if (!memoryCheck.canLoad) {
+        setAlertState(showAlert(
+          'Insufficient Memory',
+          `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`
+        ));
+        return;
+      }
+    }
+
+    // Only show our own loading indicator if we're the one starting the load
+    if (!alreadyLoading) {
+      setIsModelLoading(true);
+      setLoadingModel(activeModel);
+      modelLoadStartTimeRef.current = Date.now();
+
+      // Give UI time to render the full-screen loading state before heavy native operation
+      await new Promise<void>(resolve => requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(resolve, 200); // Increased from 50ms to allow full render
+        });
+      }));
+    }
+
+    try {
+      // Use activeModelService singleton - prevents duplicate loads
+      await activeModelService.loadTextModel(activeModelId);
+      const multimodalSupport = llmService.getMultimodalSupport();
+      setSupportsVision(multimodalSupport?.vision || false);
+
+      if (!alreadyLoading && modelLoadStartTimeRef.current && settings.showGenerationDetails) {
+        const loadTime = ((Date.now() - modelLoadStartTimeRef.current) / 1000).toFixed(1);
+        addSystemMessage(`Model loaded: ${activeModel.name} (${loadTime}s)`);
+      }
+    } catch (error: any) {
+      if (!alreadyLoading) {
+        setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
+      }
+    } finally {
+      if (!alreadyLoading) {
+        setIsModelLoading(false);
+        setLoadingModel(null);
+        modelLoadStartTimeRef.current = null;
+      }
+    }
+  };
+
   const ensureModelLoaded = async () => {
     if (!activeModel || !activeModelId) return;
 
@@ -361,67 +413,8 @@ export const ChatScreen: React.FC = () => {
     }
 
     // Check if model is already being loaded by activeModelService (e.g., from HomeScreen)
-    const modelInfo = activeModelService.getActiveModels();
-    const alreadyLoading = modelInfo.text.isLoading;
-
-    // Check memory before loading (only if we're initiating the load)
-    if (!alreadyLoading) {
-      const memoryCheck = await activeModelService.checkMemoryForModel(activeModelId, 'text');
-
-      if (!memoryCheck.canLoad) {
-        // Critical: Not enough memory
-        setAlertState(showAlert(
-          'Insufficient Memory',
-          `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`
-        ));
-        return;
-      }
-
-      // For warnings, add a system message but proceed with loading
-      if (memoryCheck.severity === 'warning' && settings.showGenerationDetails) {
-        // Will add warning message after load attempt
-      }
-    }
-
-    // Only show our own loading indicator if we're the one starting the load
-    if (!alreadyLoading) {
-      setIsModelLoading(true);
-      setLoadingModel(activeModel);
-      modelLoadStartTimeRef.current = Date.now();
-
-      // Give UI time to render the full-screen loading state before heavy native operation
-      // Use a longer delay to ensure React has time to complete the re-render
-      await new Promise<void>(resolve => requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setTimeout(resolve, 200); // Increased from 50ms to allow full render
-        });
-      }));
-    }
-
-    try {
-      // Use activeModelService singleton - prevents duplicate loads
-      // If already loading, this will wait for the existing load to complete
-      await activeModelService.loadTextModel(activeModelId);
-      const multimodalSupport = llmService.getMultimodalSupport();
-      setSupportsVision(multimodalSupport?.vision || false);
-
-      // Add system message about model loading (if we did the load and details are enabled)
-      if (!alreadyLoading && modelLoadStartTimeRef.current && settings.showGenerationDetails) {
-        const loadTime = ((Date.now() - modelLoadStartTimeRef.current) / 1000).toFixed(1);
-        addSystemMessage(`Model loaded: ${activeModel.name} (${loadTime}s)`);
-      }
-    } catch (error: any) {
-      // Only show error if we were the one doing the load
-      if (!alreadyLoading) {
-        setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
-      }
-    } finally {
-      if (!alreadyLoading) {
-        setIsModelLoading(false);
-        setLoadingModel(null);
-        modelLoadStartTimeRef.current = null;
-      }
-    }
+    const alreadyLoading = activeModelService.getActiveModels().text.isLoading;
+    await initiateModelLoadSequence(alreadyLoading);
   };
 
   const handleModelSelect = async (model: DownloadedModel) => {
