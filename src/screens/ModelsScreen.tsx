@@ -1534,6 +1534,7 @@ export const ModelsScreen: React.FC = () => {
             });
           }}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          testID="rec-toggle"
         >
           <MaterialIcon name={showRecommendedOnly ? 'star' : 'star-border'} size={16} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
         </TouchableOpacity>
