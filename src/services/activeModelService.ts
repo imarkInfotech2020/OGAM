@@ -72,8 +72,8 @@ export interface ResourceUsage {
 type ModelChangeListener = (info: ActiveModelInfo) => void;
 
 class ActiveModelService {
-  private listeners: Set<ModelChangeListener> = new Set();
-  private loadingState = {
+  private readonly listeners: Set<ModelChangeListener> = new Set();
+  private readonly loadingState = {
     text: false,
     image: false,
   };
