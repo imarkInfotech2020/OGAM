@@ -473,8 +473,8 @@ export const DownloadManagerScreen: React.FC = () => {
               </View>
 
               {activeItems.length > 0 ? (
-                activeItems.map((item, index) => (
-                  <View key={`active-${index}`}>
+                activeItems.map((item) => (
+                  <View key={`active-${item.modelId}-${item.fileName}`}>
                     {renderActiveItem({ item })}
                   </View>
                 ))
@@ -497,8 +497,8 @@ export const DownloadManagerScreen: React.FC = () => {
               </View>
 
               {completedItems.length > 0 ? (
-                completedItems.map((item, index) => (
-                  <View key={`completed-${index}`}>
+                completedItems.map((item) => (
+                  <View key={`completed-${item.modelId}-${item.fileName}`}>
                     {renderCompletedItem({ item })}
                   </View>
                 ))
