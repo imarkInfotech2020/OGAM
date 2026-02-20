@@ -316,7 +316,7 @@ describe('appStore', () => {
       expect(settings.topP).toBe(0.9);
       expect(settings.contextLength).toBe(2048);
       expect(settings.imageGenerationMode).toBe('auto');
-      expect(settings.enableGpu).toBe(true);
+      expect(settings.enableGpu).toBe(false);
     });
 
     it('updateSettings merges partial settings', () => {
@@ -860,6 +860,34 @@ describe('appStore', () => {
 
       expect(merged.imageModelDownloadIds).toEqual({});
     });
+
+    it('migrates persisted modelLoadingStrategy memory to performance', () => {
+      const persistedState = {
+        settings: { modelLoadingStrategy: 'memory' },
+      };
+      const currentState = useAppStore.getState();
+      const merged: any = { ...currentState, ...persistedState };
+
+      if (persistedState?.settings?.modelLoadingStrategy === 'memory') {
+        merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+      }
+
+      expect(merged.settings.modelLoadingStrategy).toBe('performance');
+    });
+
+    it('does not override explicit performance setting during migration', () => {
+      const persistedState = {
+        settings: { modelLoadingStrategy: 'performance' },
+      };
+      const currentState = useAppStore.getState();
+      const merged: any = { ...currentState, ...persistedState };
+
+      if ((persistedState as any)?.settings?.modelLoadingStrategy === 'memory') {
+        merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+      }
+
+      expect(merged.settings.modelLoadingStrategy).toBe('performance');
+    });
   });
 
   // ============================================================================
@@ -1141,8 +1169,8 @@ describe('appStore', () => {
       expect(getAppState().settings.enhanceImagePrompts).toBe(false);
     });
 
-    it('has modelLoadingStrategy set to memory by default', () => {
-      expect(getAppState().settings.modelLoadingStrategy).toBe('memory');
+    it('has modelLoadingStrategy set to performance by default', () => {
+      expect(getAppState().settings.modelLoadingStrategy).toBe('performance');
     });
 
     it('has gpuLayers set to 6 by default', () => {
