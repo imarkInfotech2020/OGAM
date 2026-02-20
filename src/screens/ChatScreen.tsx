@@ -1,6 +1,3 @@
-/* eslint-disable max-lines */
-/* eslint-disable max-lines-per-function */
-/* eslint-disable react-native/split-platform-components */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
