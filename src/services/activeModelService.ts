@@ -545,6 +545,41 @@ class ActiveModelService {
     return totalGB;
   }
 
+  /** Memory used by OTHER models already loaded (not the one being replaced) */
+  private getOtherLoadedMemoryGB(
+    modelType: ModelType,
+    downloadedModels: DownloadedModel[],
+    downloadedImageModels: ONNXImageModel[],
+  ): number {
+    let totalGB = 0;
+    if (modelType === 'text' && this.loadedImageModelId) {
+      const imageModel = downloadedImageModels.find(m => m.id === this.loadedImageModelId);
+      if (imageModel) totalGB += this.estimateModelMemoryGB(imageModel, 'image');
+    }
+    if (modelType === 'image' && this.loadedTextModelId && llmService.isModelLoaded()) {
+      const textModel = downloadedModels.find(m => m.id === this.loadedTextModelId);
+      if (textModel) totalGB += this.estimateModelMemoryGB(textModel, 'text');
+    }
+    return totalGB;
+  }
+
+  /** Build the user-facing message for a critical (over-budget) memory check */
+  private buildCriticalMemoryMessage(
+    modelName: string,
+    requiredStr: string,
+    totalStr: string,
+    budgetStr: string,
+    currentlyLoadedMemoryGB: number,
+  ): string {
+    if (currentlyLoadedMemoryGB > 0) {
+      return `Cannot load ${modelName} (~${requiredStr} GB) while other models are loaded. ` +
+        `Total would be ~${totalStr} GB, exceeding your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
+        `Unload the other model first, or choose a smaller model.`;
+    }
+    return `${modelName} requires ~${requiredStr} GB which exceeds your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
+      `This model is too large for your device. Choose a smaller model.`;
+  }
+
   /**
    * Check if there's enough memory to load a model
    * Uses a dynamic memory budget (60% of device RAM) since system "available" memory is misleading
@@ -560,13 +595,9 @@ class ActiveModelService {
     const warningThresholdGB = await getMemoryWarningThresholdGB();
 
     // Find the model
-    let model: DownloadedModel | ONNXImageModel | undefined;
-
-    if (modelType === 'text') {
-      model = store.downloadedModels.find(m => m.id === modelId);
-    } else {
-      model = store.downloadedImageModels.find(m => m.id === modelId);
-    }
+    const model = modelType === 'text'
+      ? store.downloadedModels.find(m => m.id === modelId)
+      : store.downloadedImageModels.find(m => m.id === modelId);
 
     if (!model) {
       return {
@@ -581,65 +612,37 @@ class ActiveModelService {
       };
     }
 
-    // Calculate memory requirements for the new model
+    // Calculate memory requirements
     const requiredMemoryGB = this.estimateModelMemoryGB(model, modelType);
-
-    // Get memory currently used by OTHER loaded models (not the one being replaced)
-    let currentlyLoadedMemoryGB = 0;
-
-    // If loading a text model, count image model memory (if any)
-    if (modelType === 'text' && this.loadedImageModelId) {
-      const imageModel = store.downloadedImageModels.find(m => m.id === this.loadedImageModelId);
-      if (imageModel) {
-        currentlyLoadedMemoryGB += this.estimateModelMemoryGB(imageModel, 'image');
-      }
-    }
-
-    // If loading an image model, count text model memory (if any)
-    if (modelType === 'image' && this.loadedTextModelId && llmService.isModelLoaded()) {
-      const textModel = store.downloadedModels.find(m => m.id === this.loadedTextModelId);
-      if (textModel) {
-        currentlyLoadedMemoryGB += this.estimateModelMemoryGB(textModel, 'text');
-      }
-    }
-
-    // Total memory needed: new model + other loaded models
+    const currentlyLoadedMemoryGB = this.getOtherLoadedMemoryGB(
+      modelType,
+      store.downloadedModels,
+      store.downloadedImageModels,
+    );
     const totalRequiredMemoryGB = requiredMemoryGB + currentlyLoadedMemoryGB;
-
-    // How much budget remains after loading
     const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
-
-    // Determine severity based on dynamic budget
-    let severity: MemoryCheckSeverity;
-    let canLoad: boolean;
-    let message: string;
 
     const modelName = 'name' in model ? model.name : modelId;
     const requiredStr = requiredMemoryGB.toFixed(1);
     const totalStr = totalRequiredMemoryGB.toFixed(1);
     const budgetStr = memoryBudgetGB.toFixed(1);
 
+    // Determine severity based on dynamic budget
+    let severity: MemoryCheckSeverity;
+    let canLoad: boolean;
+    let message: string;
+
     if (totalRequiredMemoryGB > memoryBudgetGB) {
-      // Critical: would exceed memory budget (60% of device RAM)
       severity = 'critical';
       canLoad = false;
-      if (currentlyLoadedMemoryGB > 0) {
-        message = `Cannot load ${modelName} (~${requiredStr} GB) while other models are loaded. ` +
-          `Total would be ~${totalStr} GB, exceeding your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
-          `Unload the other model first, or choose a smaller model.`;
-      } else {
-        message = `${modelName} requires ~${requiredStr} GB which exceeds your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
-          `This model is too large for your device. Choose a smaller model.`;
-      }
+      message = this.buildCriticalMemoryMessage(modelName, requiredStr, totalStr, budgetStr, currentlyLoadedMemoryGB);
     } else if (totalRequiredMemoryGB > warningThresholdGB) {
-      // Warning: exceeding 50% of RAM
       severity = 'warning';
       canLoad = true;
       message = `Loading ${modelName} will use ~${requiredStr} GB. ` +
         `Total model memory will be ~${totalStr} GB (over 50% of your RAM). ` +
         `The app may become slow. Continue anyway?`;
     } else {
-      // Safe to load
       severity = 'safe';
       canLoad = true;
       message = `${modelName} requires ~${requiredStr} GB. Safe to load.`;
