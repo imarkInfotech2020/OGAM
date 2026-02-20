@@ -133,6 +133,12 @@ jobs:
           gem install cocoapods
           cd ios && pod install
 
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Lint Swift
+        run: swiftlint lint --quiet --reporter github-actions-logging
+
       - name: Run iOS unit tests
         run: |
           xcodebuild test \
