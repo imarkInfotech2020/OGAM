@@ -174,7 +174,7 @@ export const ChatScreen: React.FC = () => {
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
 
   // Track image mode state
-  const [_currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
+  const [, setCurrentImageMode] = useState<ImageModeState>('auto');
 
   // Fullscreen image viewer state
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
