@@ -39,7 +39,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService, QueuedMessage } from '../services';
-import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, DebugInfo } from '../types';
+import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
 type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
@@ -176,9 +176,6 @@ export const ChatScreen: React.FC = () => {
   // Queue state from generation service
   const [queueCount, setQueueCount] = useState(0);
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
-
-  // Track image mode state
-  const [, setCurrentImageMode] = useState<ImageModeState>('auto');
 
   // Fullscreen image viewer state
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
@@ -614,9 +611,6 @@ export const ChatScreen: React.FC = () => {
       guidanceScale: settings.imageGuidanceScale || 2,
       previewInterval: 2,
     });
-
-    // Reset image mode after completion
-    setCurrentImageMode('auto');
 
     // Show error if generation failed (and wasn't cancelled)
     if (!result && imageGenState.error && !imageGenState.error.includes('cancelled')) {
@@ -1317,7 +1311,6 @@ export const ChatScreen: React.FC = () => {
           supportsVision={supportsVision}
           conversationId={activeConversationId}
           imageModelLoaded={imageModelLoaded}
-          onImageModeChange={setCurrentImageMode}
           onOpenSettings={() => setShowSettingsPanel(true)}
           queueCount={queueCount}
           queuedTexts={queuedTexts}
