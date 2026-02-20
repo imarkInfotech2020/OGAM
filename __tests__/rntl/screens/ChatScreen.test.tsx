@@ -2211,6 +2211,7 @@ describe('ChatScreen', () => {
   // ============================================================================
   describe('conversation switch behavior', () => {
     it('clears KV cache when conversation changes', async () => {
+      jest.useFakeTimers();
       const { modelId, conversationId } = setupFullChat();
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
       mockRoute.params = { conversationId };
@@ -2219,21 +2220,23 @@ describe('ChatScreen', () => {
 
       // Create a second conversation and switch to it
       const conv2 = createConversation({ modelId, title: 'Second Chat' });
-      useChatStore.setState({
-        conversations: [
-          ...useChatStore.getState().conversations,
-          conv2,
-        ],
-        activeConversationId: conv2.id,
+      act(() => {
+        useChatStore.setState({
+          conversations: [
+            ...useChatStore.getState().conversations,
+            conv2,
+          ],
+          activeConversationId: conv2.id,
+        });
       });
 
       await act(async () => {
-        // Wait for InteractionManager to run
-        if (jest.runAllTimers) { jest.runAllTimers(); } else { await new Promise<void>(r => setTimeout(() => r(), 50)); }
+        jest.runAllTimers();
       });
 
       // clearKVCache should have been called
       expect(llmService.clearKVCache).toHaveBeenCalled();
+      jest.useRealTimers();
     });
   });
 
