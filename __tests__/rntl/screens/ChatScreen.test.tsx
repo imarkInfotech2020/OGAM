@@ -3117,7 +3117,8 @@ describe('ChatScreen', () => {
         await new Promise<void>(r => setTimeout(() => r(), 50));
       });
 
-      // The generatingForConversationRef should be cleared - no crash expected
+      // generatingForConversationRef is cleared — verify the model was not reloaded for the old conversation
+      expect(mockLoadModel).not.toHaveBeenCalledWith(expect.stringContaining('conv1'));
     });
   });
 
@@ -3156,13 +3157,11 @@ describe('ChatScreen', () => {
 
       renderChatScreen();
 
-      // Wait for effects to run
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
-
       // The preload/ensureModelLoaded flow exercises lines 280-292.
       // checkMemoryForModel is called from ensureModelLoaded (before loadTextModel).
-      // We verify the preload path is exercised without crashing.
-      expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith('classifier-model', 'text');
+      await waitFor(() => {
+        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith('classifier-model', 'text');
+      });
     });
 
     it('does not preload classifier when model is already loaded', async () => {
@@ -3190,13 +3189,10 @@ describe('ChatScreen', () => {
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
 
       renderChatScreen();
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 100)); });
+      await act(async () => {});
 
-      // mockLoadModel (= loadTextModel) should NOT have been called for preload
-      // (model is already at the correct path)
-      // Note: ensureModelLoaded may also call loadTextModel; we just verify no crash
-      // and the branch for currentPath !== null is exercised
-      expect(true).toBe(true); // branch exercised
+      // Model is already loaded at the correct path — loadTextModel should NOT be called for preload
+      expect(mockLoadModel).not.toHaveBeenCalled();
     });
   });
 
@@ -3269,13 +3265,12 @@ describe('ChatScreen', () => {
       mockLoadModel.mockResolvedValue(undefined);
 
       renderChatScreen();
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
-      // With showGenerationDetails, a system message about model loading should be added
-      const updatedConv = useChatStore.getState().conversations.find(c => c.id === conv.id);
-      const systemMessages = updatedConv?.messages.filter(m => m.isSystemInfo) || [];
-      // System message added indicates the branch was hit
-      expect(systemMessages.length).toBeGreaterThanOrEqual(0); // branch exercised
+      // Verify ensureModelLoaded ran and triggered the memory check (step before RAF chain + load)
+      // The memory check is the reliable observable signal that the showGenerationDetails code path ran
+      await waitFor(() => {
+        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith(model.id, 'text');
+      });
     });
   });
 
@@ -3898,22 +3893,16 @@ describe('ChatScreen', () => {
         message: null,
       });
 
-      // Make model load hang so loading screen persists
+      // Make model load hang so the loading screen persists
       mockLoadModel.mockImplementation(() => new Promise(() => {}));
 
-      const { queryByText } = renderChatScreen();
+      renderChatScreen();
 
-      // Wait for the full RAF chain (RAF + RAF + 200ms setTimeout) to complete
-      // This allows setIsModelLoading(true) to be called and render the loading screen
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 600)); });
-
-      // Check for loading screen elements
-      const visionHint = queryByText('Vision capabilities will be enabled.');
-      const loadingHint = queryByText('Preparing model for inference. This may take a moment for larger models.');
-
-      // Either the loading screen appeared (with vision hint) OR the model loaded quickly
-      // The important thing is the branch was exercised
-      expect(visionHint || loadingHint || true).toBeTruthy();
+      // Verify the vision model loading path was triggered — memory check confirms
+      // the code reached the load flow (activeModel found, needsReload=true, memory checked)
+      await waitFor(() => {
+        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith(visionModel.id, 'text');
+      });
     });
   });
 
