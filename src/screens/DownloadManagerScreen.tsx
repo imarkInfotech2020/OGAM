@@ -159,7 +159,7 @@ export const DownloadManagerScreen: React.FC = () => {
               if (!downloadId) {
                 const match = activeDownloads.find(d => {
                   const meta = activeBackgroundDownloads[d.downloadId];
-                  return meta && meta.fileName === item.fileName;
+                  return meta?.fileName === item.fileName;
                 });
                 if (match) downloadId = match.downloadId;
               }
