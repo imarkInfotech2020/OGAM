@@ -135,7 +135,54 @@ export const DownloadManagerScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleRemoveDownload = async (item: DownloadItem) => {
+  const executeRemoveDownload = async (item: DownloadItem) => {
+    setAlertState(hideAlert());
+    try {
+      // Mark as cancelled so polling events don't re-add it
+      const key = `${item.modelId}/${item.fileName}`;
+      cancelledKeysRef.current.add(key);
+
+      // Clear from progress tracking immediately (optimistic update)
+      setDownloadProgress(key, null);
+
+      // Find downloadId - either from the item or by cross-referencing active downloads
+      let downloadId = item.downloadId;
+      if (!downloadId) {
+        const match = activeDownloads.find(d => {
+          const meta = activeBackgroundDownloads[d.downloadId];
+          return meta?.fileName === item.fileName;
+        });
+        if (match) downloadId = match.downloadId;
+      }
+
+      // Remove from local activeDownloads state immediately
+      if (downloadId) {
+        setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
+        setBackgroundDownload(downloadId, null);
+        await modelManager.cancelBackgroundDownload(downloadId);
+      }
+
+      // Clear image model download state so ModelsScreen unblocks
+      if (item.modelId.startsWith('image:')) {
+        const actualModelId = item.modelId.replace('image:', '');
+        removeImageModelDownloading(actualModelId);
+      }
+
+      // Wait a bit for native cancellation to complete, then reload
+      const dlId = downloadId;
+      const capturedKey = key;
+      setTimeout(() => {
+        void loadActiveDownloads().then(() => {
+          if (dlId) cancelledKeysRef.current.delete(capturedKey);
+        });
+      }, 1000);
+    } catch (error) {
+      console.error('[DownloadManager] Failed to remove download:', error);
+      setAlertState(showAlert('Error', 'Failed to remove download'));
+    }
+  };
+
+  const handleRemoveDownload = (item: DownloadItem) => {
     setAlertState(showAlert(
       'Remove Download',
       'Are you sure you want to remove this download?',
@@ -144,58 +191,24 @@ export const DownloadManagerScreen: React.FC = () => {
         {
           text: 'Yes',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            try {
-              // Mark as cancelled so polling events don't re-add it
-              const key = `${item.modelId}/${item.fileName}`;
-              cancelledKeysRef.current.add(key);
-
-              // Clear from progress tracking immediately (optimistic update)
-              setDownloadProgress(key, null);
-
-              // Find downloadId - either from the item or by cross-referencing active downloads
-              let downloadId = item.downloadId;
-              if (!downloadId) {
-                const match = activeDownloads.find(d => {
-                  const meta = activeBackgroundDownloads[d.downloadId];
-                  return meta?.fileName === item.fileName;
-                });
-                if (match) downloadId = match.downloadId;
-              }
-
-              // Remove from local activeDownloads state immediately
-              if (downloadId) {
-                setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
-                setBackgroundDownload(downloadId, null);
-                await modelManager.cancelBackgroundDownload(downloadId);
-              }
-
-              // Clear image model download state so ModelsScreen unblocks
-              if (item.modelId.startsWith('image:')) {
-                const actualModelId = item.modelId.replace('image:', '');
-                removeImageModelDownloading(actualModelId);
-              }
-
-              // Wait a bit for native cancellation to complete, then reload
-              setTimeout(async () => {
-                await loadActiveDownloads();
-                // Only clear cancelled key if native cancel succeeded
-                if (downloadId) {
-                  cancelledKeysRef.current.delete(key);
-                }
-              }, 1000);
-            } catch (error) {
-              console.error('[DownloadManager] Failed to remove download:', error);
-              setAlertState(showAlert('Error', 'Failed to remove download'));
-            }
-          },
+          onPress: () => { void executeRemoveDownload(item); },
         },
       ]
     ));
   };
 
-  const handleDeleteModel = async (model: DownloadedModel) => {
+  const executeDeleteModel = async (model: DownloadedModel) => {
+    setAlertState(hideAlert());
+    try {
+      await modelManager.deleteModel(model.id);
+      removeDownloadedModel(model.id);
+    } catch (error) {
+      console.error('[DownloadManager] Failed to delete model:', error);
+      setAlertState(showAlert('Error', 'Failed to delete model'));
+    }
+  };
+
+  const handleDeleteModel = (model: DownloadedModel) => {
     const totalSize = hardwareService.getModelTotalSize(model);
     setAlertState(showAlert(
       'Delete Model',
@@ -205,22 +218,26 @@ export const DownloadManagerScreen: React.FC = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            try {
-              await modelManager.deleteModel(model.id);
-              removeDownloadedModel(model.id);
-            } catch (error) {
-              console.error('[DownloadManager] Failed to delete model:', error);
-              setAlertState(showAlert('Error', 'Failed to delete model'));
-            }
-          },
+          onPress: () => { void executeDeleteModel(model); },
         },
       ]
     ));
   };
 
-  const handleDeleteImageModel = async (model: ONNXImageModel) => {
+  const executeDeleteImageModel = async (model: ONNXImageModel) => {
+    setAlertState(hideAlert());
+    try {
+      // Unload if this is the active model
+      await activeModelService.unloadImageModel();
+      await modelManager.deleteImageModel(model.id);
+      removeDownloadedImageModel(model.id);
+    } catch (error) {
+      console.error('[DownloadManager] Failed to delete image model:', error);
+      setAlertState(showAlert('Error', 'Failed to delete image model'));
+    }
+  };
+
+  const handleDeleteImageModel = (model: ONNXImageModel) => {
     setAlertState(showAlert(
       'Delete Image Model',
       `Are you sure you want to delete "${model.name}"? This will free up ${formatBytes(model.size)}.`,
@@ -229,18 +246,7 @@ export const DownloadManagerScreen: React.FC = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            try {
-              // Unload if this is the active model
-              await activeModelService.unloadImageModel();
-              await modelManager.deleteImageModel(model.id);
-              removeDownloadedImageModel(model.id);
-            } catch (error) {
-              console.error('[DownloadManager] Failed to delete image model:', error);
-              setAlertState(showAlert('Error', 'Failed to delete image model'));
-            }
-          },
+          onPress: () => { void executeDeleteImageModel(model); },
         },
       ]
     ));
