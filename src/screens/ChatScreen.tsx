@@ -45,6 +45,11 @@ import { ChatsStackParamList } from '../navigation/types';
 
 type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
 
+function getPlaceholderText(isModelLoaded: boolean, supportsVision: boolean): string {
+  if (!isModelLoaded) return 'Loading model...';
+  return supportsVision ? 'Type a message or add an image...' : 'Type a message...';
+}
+
 export const ChatScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const isNearBottomRef = useRef(true);
@@ -1035,29 +1040,14 @@ export const ChatScreen: React.FC = () => {
   // Only show if the streaming is for the current conversation
   const allMessages = activeConversation?.messages || [];
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
-  const displayMessages = isThinking && isStreamingForThisConversation
-    ? [
-      ...allMessages,
-      {
-        id: 'thinking',
-        role: 'assistant' as const,
-        content: '',
-        timestamp: Date.now(),
-        isThinking: true,
-      },
-    ]
-    : streamingMessage && isStreamingForThisConversation
-      ? [
-        ...allMessages,
-        {
-          id: 'streaming',
-          role: 'assistant' as const,
-          content: streamingMessage,
-          timestamp: Date.now(),
-          isStreaming: true,
-        },
-      ]
-      : allMessages;
+  let displayMessages: typeof allMessages;
+  if (isThinking && isStreamingForThisConversation) {
+    displayMessages = [...allMessages, { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true }];
+  } else if (streamingMessage && isStreamingForThisConversation) {
+    displayMessages = [...allMessages, { id: 'streaming', role: 'assistant' as const, content: streamingMessage, timestamp: Date.now(), isStreaming: true }];
+  } else {
+    displayMessages = allMessages;
+  }
 
   // Track new messages for entry animation
   useEffect(() => {
@@ -1113,7 +1103,8 @@ export const ChatScreen: React.FC = () => {
 
   if (isModelLoading) {
     const loadingModelName = loadingModel?.name || activeModel?.name || 'model';
-    const modelSize = loadingModel ? hardwareService.formatModelSize(loadingModel) : activeModel ? hardwareService.formatModelSize(activeModel) : '';
+    const sizeSource = loadingModel ?? activeModel;
+    const modelSize = sizeSource ? hardwareService.formatModelSize(sizeSource) : '';
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
@@ -1339,13 +1330,7 @@ export const ChatScreen: React.FC = () => {
           queueCount={queueCount}
           queuedTexts={queuedTexts}
           onClearQueue={() => generationService.clearQueue()}
-          placeholder={
-            llmService.isModelLoaded()
-              ? supportsVision
-                ? 'Type a message or add an image...'
-                : 'Type a message...'
-              : 'Loading model...'
-          }
+          placeholder={getPlaceholderText(llmService.isModelLoaded(), supportsVision)}
         />
 
         {/* Project Selector Sheet */}
@@ -1493,7 +1478,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginLeft: 6,
@@ -1573,7 +1558,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: colors.primary + '30',
+    backgroundColor: `${colors.primary  }30`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -1685,7 +1670,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: `${colors.primary  }30`,
   },
   imageProgressRow: {
     flexDirection: 'row' as const,
@@ -1702,7 +1687,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: colors.primary + '20',
+    backgroundColor: `${colors.primary  }20`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginRight: 10,
@@ -1751,7 +1736,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.error + '20',
+    backgroundColor: `${colors.error  }20`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
