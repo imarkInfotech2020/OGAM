@@ -2,13 +2,15 @@
 
 ## Pre-Commit Quality Gates
 
-Before EVERY commit, you MUST first check if you have added tests for whatever you are trying to commit. If not add tests. Then run all of the following checks and ensure they pass. Do NOT commit until all three are green:
+Before EVERY commit, you MUST first check if you have added tests for whatever you are trying to commit. If not add tests. Then run all of the following checks and ensure they pass. Do NOT commit until all are green:
 
-1. **Tests**: `npm test` — if you wrote or modified code, first ensure tests exist for the changes. Write missing tests before running.
-2. **Linting**: `npm run lint`
-3. **TypeScript**: `npx tsc --noEmit`
+1. **Tests (JS/TS)**: `npm test` — if you wrote or modified JS/TS code, first ensure tests exist for the changes. Write missing tests before running.
+2. **Tests (Android)**: `npm run test:android` — if you wrote or modified Kotlin/Android code, run this. Write missing tests first.
+3. **Tests (iOS)**: `npm run test:ios` — if you wrote or modified Swift/ObjC/iOS code, run this. Write missing tests first.
+4. **Linting**: `npm run lint`
+5. **TypeScript**: `npx tsc --noEmit`
 
-Run all three in parallel. If any fail, fix the issues and re-run until they all pass. Never skip these checks.
+Run all applicable checks in parallel. If any fail, fix the issues and re-run until they all pass. Never skip these checks.
 
 ## Push = Create PR + Address Review
 
