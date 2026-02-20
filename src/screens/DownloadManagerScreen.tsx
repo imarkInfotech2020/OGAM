@@ -428,7 +428,7 @@ export const DownloadManagerScreen: React.FC = () => {
       </View>
 
       <View style={styles.downloadMeta}>
-        {item.quantization && (
+        {!!item.quantization && (
           <View style={[styles.quantBadge, item.modelType === 'image' && styles.imageBadge]}>
             <Text style={[styles.quantText, item.modelType === 'image' && styles.imageQuantText]}>
               {item.quantization}
