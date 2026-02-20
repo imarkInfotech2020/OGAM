@@ -797,6 +797,24 @@ export const ChatScreen: React.FC = () => {
     }
   };
 
+  const executeDeleteConversation = async () => {
+    if (!activeConversationId) return;
+    setAlertState(hideAlert());
+    // Stop any ongoing generation first
+    if (isStreaming) {
+      await llmService.stopGeneration();
+      clearStreamingMessage();
+    }
+    // Delete associated images from disk and store
+    const imageIds = removeImagesByConversationId(activeConversationId);
+    for (const imageId of imageIds) {
+      await onnxImageGeneratorService.deleteGeneratedImage(imageId);
+    }
+    deleteConversation(activeConversationId);
+    setActiveConversation(null);
+    navigation.goBack();
+  };
+
   const handleDeleteConversation = () => {
     if (!activeConversationId || !activeConversation) return;
 
@@ -808,22 +826,7 @@ export const ChatScreen: React.FC = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            // Stop any ongoing generation first
-            if (isStreaming) {
-              await llmService.stopGeneration();
-              clearStreamingMessage();
-            }
-            // Delete associated images from disk and store
-            const imageIds = removeImagesByConversationId(activeConversationId);
-            for (const imageId of imageIds) {
-              await onnxImageGeneratorService.deleteGeneratedImage(imageId);
-            }
-            deleteConversation(activeConversationId);
-            setActiveConversation(null);
-            navigation.goBack();
-          },
+          onPress: () => { void executeDeleteConversation(); },
         },
       ]
     ));
