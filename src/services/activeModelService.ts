@@ -17,8 +17,8 @@ export type ModelType = 'text' | 'image';
 
 // Memory safety thresholds
 // Dynamic budget based on device total RAM
-const MEMORY_BUDGET_PERCENT = 0.60; // Use up to 60% of device RAM for models
-const MEMORY_WARNING_PERCENT = 0.50; // Warn when exceeding 50% of device RAM
+const MEMORY_BUDGET_PERCENT = 0.6; // Use up to 60% of device RAM for models
+const MEMORY_WARNING_PERCENT = 0.5; // Warn when exceeding 50% of device RAM
 const TEXT_MODEL_OVERHEAD_MULTIPLIER = 1.5; // KV cache, activations, etc.
 const IMAGE_MODEL_OVERHEAD_MULTIPLIER = Platform.OS === 'ios' ? 1.5 : 1.8; // Core ML is more efficient than ONNX runtime
 
