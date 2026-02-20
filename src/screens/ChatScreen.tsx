@@ -49,6 +49,12 @@ function getPlaceholderText(isModelLoaded: boolean, supportsVision: boolean): st
   return supportsVision ? 'Type a message or add an image...' : 'Type a message...';
 }
 
+function waitForRenderFrame(): Promise<void> {
+  return new Promise<void>(resolve => {
+    requestAnimationFrame(() => { requestAnimationFrame(() => { setTimeout(resolve, 200); }); });
+  });
+}
+
 export const ChatScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const isNearBottomRef = useRef(true);
@@ -362,11 +368,7 @@ export const ChatScreen: React.FC = () => {
       modelLoadStartTimeRef.current = Date.now();
 
       // Give UI time to render the full-screen loading state before heavy native operation
-      await new Promise<void>(resolve => requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setTimeout(resolve, 200); // Increased from 50ms to allow full render
-        });
-      }));
+      await waitForRenderFrame();
     }
 
     try {
@@ -459,11 +461,7 @@ export const ChatScreen: React.FC = () => {
     modelLoadStartTimeRef.current = Date.now();
 
     // Give UI time to render the full-screen loading state before heavy native operation
-    await new Promise<void>(resolve => requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(resolve, 200);
-      });
-    }));
+    await waitForRenderFrame();
 
     try {
       // Use activeModelService singleton - prevents duplicate loads
