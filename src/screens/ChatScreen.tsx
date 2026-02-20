@@ -1138,7 +1138,7 @@ export const ChatScreen: React.FC = () => {
         testID="chat-screen"
         style={styles.keyboardView}
         behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
         {/* Header */}
         <View style={styles.header}>
