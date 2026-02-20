@@ -22,6 +22,41 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         const val PREFS_NAME = "OffgridMobileDownloads"
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
+
+        internal fun statusToString(status: Int): String = when (status) {
+            DownloadManager.STATUS_PENDING -> "pending"
+            DownloadManager.STATUS_RUNNING -> "running"
+            DownloadManager.STATUS_PAUSED -> "paused"
+            DownloadManager.STATUS_SUCCESSFUL -> "completed"
+            DownloadManager.STATUS_FAILED -> "failed"
+            else -> "unknown"
+        }
+
+        internal fun reasonToString(status: Int, reason: Int): String {
+            if (status == DownloadManager.STATUS_PAUSED) {
+                return when (reason) {
+                    DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for WiFi"
+                    DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for network"
+                    DownloadManager.PAUSED_WAITING_TO_RETRY -> "Waiting to retry"
+                    else -> "Paused"
+                }
+            }
+            if (status == DownloadManager.STATUS_FAILED) {
+                return when (reason) {
+                    DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume"
+                    DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Device not found"
+                    DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File already exists"
+                    DownloadManager.ERROR_FILE_ERROR -> "File error"
+                    DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
+                    DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient space"
+                    DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
+                    DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unhandled HTTP code"
+                    DownloadManager.ERROR_UNKNOWN -> "Unknown error"
+                    else -> "Error: $reason"
+                }
+            }
+            return ""
+        }
     }
 
     private val downloadManager: DownloadManager by lazy {
@@ -412,41 +447,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
 
         return result
-    }
-
-    private fun statusToString(status: Int): String = when (status) {
-        DownloadManager.STATUS_PENDING -> "pending"
-        DownloadManager.STATUS_RUNNING -> "running"
-        DownloadManager.STATUS_PAUSED -> "paused"
-        DownloadManager.STATUS_SUCCESSFUL -> "completed"
-        DownloadManager.STATUS_FAILED -> "failed"
-        else -> "unknown"
-    }
-
-    private fun reasonToString(status: Int, reason: Int): String {
-        if (status == DownloadManager.STATUS_PAUSED) {
-            return when (reason) {
-                DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for WiFi"
-                DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for network"
-                DownloadManager.PAUSED_WAITING_TO_RETRY -> "Waiting to retry"
-                else -> "Paused"
-            }
-        }
-        if (status == DownloadManager.STATUS_FAILED) {
-            return when (reason) {
-                DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume"
-                DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Device not found"
-                DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File already exists"
-                DownloadManager.ERROR_FILE_ERROR -> "File error"
-                DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
-                DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient space"
-                DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
-                DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unhandled HTTP code"
-                DownloadManager.ERROR_UNKNOWN -> "Unknown error"
-                else -> "Error: $reason"
-            }
-        }
-        return ""
     }
 
     private fun sendEvent(eventName: String, params: WritableMap) {
