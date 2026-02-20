@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { Platform } from 'react-native';
 import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
@@ -84,8 +83,6 @@ function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean) {
       padding: SPACING.md,
       marginVertical: SPACING.sm,
       borderWidth: 0,
-      // Ensure wrapping on long lines
-      ...(Platform.OS === 'ios' ? {} : {}),
     },
     code_block: {
       fontFamily: FONTS.mono,

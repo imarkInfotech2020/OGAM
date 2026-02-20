@@ -415,18 +415,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
               {/* Main response */}
               {parsedContent.response ? (
-                isStreaming ? (
-                  <Text
-                    testID="message-text"
-                    style={[styles.text, styles.assistantText]}
-                    selectable
-                  >
-                    {parsedContent.response}
-                    <BlinkingCursor />
-                  </Text>
-                ) : !isUser ? (
+                !isUser ? (
                   <View testID="message-text">
                     <MarkdownText>{parsedContent.response}</MarkdownText>
+                    {isStreaming && <BlinkingCursor />}
                   </View>
                 ) : (
                   <Text

@@ -1504,16 +1504,16 @@ describe('ChatMessage', () => {
       expect(getByText(/Item three/)).toBeTruthy();
     });
 
-    it('renders plain text during streaming (no markdown)', () => {
+    it('renders markdown during streaming', () => {
       const message = createAssistantMessage('This is **bold** and *italic*');
 
-      const { getByTestId } = render(
+      const { getByTestId, getByText } = render(
         <ChatMessage message={message} isStreaming={true} />
       );
 
-      // During streaming, message-text should be a plain Text element with raw markdown syntax
-      const textElement = getByTestId('message-text');
-      expect(textElement).toBeTruthy();
+      // During streaming, markdown is still rendered
+      expect(getByTestId('message-text')).toBeTruthy();
+      expect(getByText(/bold/)).toBeTruthy();
       // The streaming cursor should also be present
       expect(getByTestId('streaming-cursor')).toBeTruthy();
     });

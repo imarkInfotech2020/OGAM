@@ -1043,14 +1043,12 @@ describe('Image Generation Flow Integration', () => {
   });
 
   describe('prompt enhancement strips thinking model tags', () => {
-    it('should strip <think> tags from thinking model responses', async () => {
+    const setupThinkingModelEnhancement = () => {
       const imageModel = setupImageModelState();
-
       mockActiveModelService.getActiveModels.mockReturnValue({
         text: { model: null, isLoaded: false, isLoading: false },
         image: { model: imageModel, isLoaded: true, isLoading: false },
       });
-
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
@@ -1059,6 +1057,10 @@ describe('Image Generation Flow Integration', () => {
       });
       mockLlmService.isModelLoaded.mockReturnValue(true);
       mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+    };
+
+    it('should strip <think> tags from thinking model responses', async () => {
+      setupThinkingModelEnhancement();
       // Simulate a thinking model that wraps reasoning in <think> tags
       mockLlmService.generateResponse.mockResolvedValue(
         '<think>Let me enhance this prompt by adding artistic details...</think>A majestic sunset over mountains, golden hour lighting, oil painting style'
@@ -1079,21 +1081,7 @@ describe('Image Generation Flow Integration', () => {
     });
 
     it('should handle thinking model response that is only a think block', async () => {
-      const imageModel = setupImageModelState();
-
-      mockActiveModelService.getActiveModels.mockReturnValue({
-        text: { model: null, isLoaded: false, isLoading: false },
-        image: { model: imageModel, isLoaded: true, isLoading: false },
-      });
-
-      useAppStore.setState({
-        settings: {
-          ...useAppStore.getState().settings,
-          enhanceImagePrompts: true,
-        },
-      });
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      setupThinkingModelEnhancement();
       // Simulate a model that only outputs thinking with no actual response
       mockLlmService.generateResponse.mockResolvedValue(
         '<think>I need to think about how to enhance this prompt...</think>'
@@ -1114,21 +1102,7 @@ describe('Image Generation Flow Integration', () => {
     });
 
     it('should handle response without think tags normally', async () => {
-      const imageModel = setupImageModelState();
-
-      mockActiveModelService.getActiveModels.mockReturnValue({
-        text: { model: null, isLoaded: false, isLoading: false },
-        image: { model: imageModel, isLoaded: true, isLoading: false },
-      });
-
-      useAppStore.setState({
-        settings: {
-          ...useAppStore.getState().settings,
-          enhanceImagePrompts: true,
-        },
-      });
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      setupThinkingModelEnhancement();
       // Non-thinking model returns plain enhanced prompt
       mockLlmService.generateResponse.mockResolvedValue(
         'A beautiful enhanced prompt with details'
