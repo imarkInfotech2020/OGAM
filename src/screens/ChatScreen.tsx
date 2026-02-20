@@ -388,7 +388,7 @@ export const ChatScreen: React.FC = () => {
       // Use a longer delay to ensure React has time to complete the re-render
       await new Promise<void>(resolve => requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setTimeout(() => resolve(), 200); // Increased from 50ms to allow full render
+          setTimeout(resolve, 200); // Increased from 50ms to allow full render
         });
       }));
     }
@@ -467,7 +467,7 @@ export const ChatScreen: React.FC = () => {
     // Give UI time to render the full-screen loading state before heavy native operation
     await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(() => resolve(), 200);
+        setTimeout(resolve, 200);
       });
     }));
 
