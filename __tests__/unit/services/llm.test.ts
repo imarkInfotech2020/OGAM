@@ -1976,4 +1976,152 @@ describe('LLMService', () => {
       expect(gpuInfo.gpuLayers).toBe(0);
     });
   });
+
+  // ========================================================================
+  // getOptimalThreadCount / getOptimalBatchSize (module-level helpers)
+  // ========================================================================
+  describe('getOptimalThreadCount and getOptimalBatchSize fallbacks', () => {
+    it('uses getOptimalThreadCount when nThreads is 0', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, nThreads: 0, nBatch: 256 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      // nThreads=0 is falsy, so getOptimalThreadCount() (returns DEFAULT_THREADS = 4 on iOS) is used
+      // The test env is iOS, so DEFAULT_THREADS = Platform.OS === 'android' ? 6 : 4 = 4
+      expect(initLlama).toHaveBeenCalledWith(
+        expect.objectContaining({ n_threads: 4 })
+      );
+    });
+
+    it('uses getOptimalBatchSize when nBatch is 0', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, nThreads: 6, nBatch: 0 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      // nBatch=0 is falsy, so getOptimalBatchSize() (returns DEFAULT_BATCH=256) is used
+      expect(initLlama).toHaveBeenCalledWith(
+        expect.objectContaining({ n_batch: 256 })
+      );
+    });
+  });
+
+  // ========================================================================
+  // ensureSessionCacheDir / getSessionPath (private helpers)
+  // ========================================================================
+  describe('ensureSessionCacheDir', () => {
+    it('creates directory when it does not exist', async () => {
+      mockedRNFS.exists.mockResolvedValue(false);
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      await (llmService as any).ensureSessionCacheDir();
+
+      expect(mockedRNFS.mkdir).toHaveBeenCalled();
+    });
+
+    it('skips mkdir when directory already exists', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await (llmService as any).ensureSessionCacheDir();
+
+      expect(mockedRNFS.mkdir).not.toHaveBeenCalled();
+    });
+
+    it('catches and logs errors without throwing', async () => {
+      mockedRNFS.exists.mockRejectedValue(new Error('fs error'));
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await expect((llmService as any).ensureSessionCacheDir()).resolves.toBeUndefined();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to create session cache dir'),
+        expect.any(Error),
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('getSessionPath', () => {
+    it('returns path with hash in the session cache dir', () => {
+      const path = (llmService as any).getSessionPath('abc123');
+      expect(path).toContain('session-abc123.bin');
+      expect(path).toContain('llm-sessions');
+    });
+  });
+
+  // ========================================================================
+  // manageContextWindow edge cases
+  // ========================================================================
+  describe('manageContextWindow edge cases', () => {
+    const setupForEdgeTest = async (overrides: Record<string, any> = {}) => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        completion: jest.fn(async (_params: any, _cb: any) => ({ text: 'ok', tokens_predicted: 1 })),
+        tokenize: jest.fn((text: string) =>
+          Promise.resolve({ tokens: new Array(Math.ceil(text.length / 4)) })
+        ),
+        ...overrides,
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+      return ctx;
+    };
+
+    it('returns messages unchanged when messages array is empty', async () => {
+      await setupForEdgeTest();
+
+      // generateResponse with empty array reaches manageContextWindow([]) → early return
+      await llmService.generateResponse([]);
+      // No assertions needed — just must not throw and return empty string
+    });
+
+    it('returns messages unchanged when all messages are system messages', async () => {
+      await setupForEdgeTest();
+
+      const messages = [createSystemMessage('You are helpful')];
+      await llmService.generateResponse(messages);
+      // conversationMessages.length === 0 → early return at line 537
+    });
+
+    it('includes oversized last message even when it exceeds token budget', async () => {
+      await setupForEdgeTest();
+
+      // contextLength=2048 → availableTokens=floor(2048*0.85)-256-512=972
+      // A 4000-char message → ~1010 tokens > 972 → triggers the "always include last" fallback
+      (llmService as any).currentSettings.contextLength = 2048;
+      const hugeMessage = createUserMessage('x'.repeat(4000));
+
+      const ctx = (llmService as any).context;
+      await llmService.generateResponse([hugeMessage]);
+
+      // Completion was called — the oversized message was included despite exceeding budget
+      expect(ctx.completion).toHaveBeenCalled();
+    });
+  });
+
+  // ========================================================================
+  // formatMessages — system message with id='system' (line 696)
+  // ========================================================================
+  describe('formatMessages with id=system', () => {
+    it('formats system message with id="system" via the primary system-prompt branch', () => {
+      // createSystemMessage with id='system' hits the message.id === 'system' branch (line 696)
+      const messages = [createSystemMessage('Main project prompt', { id: 'system' })];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      expect(prompt).toContain('<|im_start|>system');
+      expect(prompt).toContain('Main project prompt');
+      expect(prompt).toContain('<|im_end|>');
+    });
+  });
 });

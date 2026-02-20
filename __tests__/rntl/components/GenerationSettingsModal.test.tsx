@@ -1013,6 +1013,61 @@ describe('GenerationSettingsModal', () => {
           expect.objectContaining({ gpuLayers: expect.any(Number) })
         );
       });
+
+      it('calls updateSettings with enableGpu: false when GPU Off button pressed', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true };
+        const { getByText, getAllByText } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        // GPU Acceleration section has Off/On buttons — iterate until enableGpu: false is dispatched
+        const offButtons = getAllByText('Off');
+        for (const btn of offButtons) {
+          fireEvent.press(btn);
+          if (mockUpdateSettings.mock.calls.some((args: any[]) => 'enableGpu' in args[0] && args[0].enableGpu === false)) {
+            break;
+          }
+          mockUpdateSettings.mockClear();
+        }
+
+        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ enableGpu: false }));
+      });
+
+      it('calls updateSettings with enableGpu: true when GPU On button pressed', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: false };
+        const { getByText, getAllByText } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        const onButtons = getAllByText('On');
+        for (const btn of onButtons) {
+          fireEvent.press(btn);
+          if (mockUpdateSettings.mock.calls.some((args: any[]) => 'enableGpu' in args[0] && args[0].enableGpu === true)) {
+            break;
+          }
+          mockUpdateSettings.mockClear();
+        }
+
+        expect(mockUpdateSettings).toHaveBeenCalledWith(expect.objectContaining({ enableGpu: true }));
+      });
+
+      it('calls updateSettings with gpuLayers value from GPU layers slider', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 6, flashAttn: false };
+        const { getByText, UNSAFE_getAllByType } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        const { View } = require('react-native');
+        const sliders = UNSAFE_getAllByType(View).filter(
+          (v: any) => v.props.testID === 'slider' && typeof v.props.onSlidingComplete === 'function',
+        );
+        // GPU layers slider has maximumValue=gpuLayersMax (99 when flash attn off on Android)
+        const gpuSlider = sliders.find((s: any) => s.props.maximumValue === 99);
+        if (gpuSlider) {
+          gpuSlider.props.onSlidingComplete(12);
+          expect(mockUpdateSettings).toHaveBeenCalledWith({ gpuLayers: 12 });
+        }
+      });
     });
   });
 

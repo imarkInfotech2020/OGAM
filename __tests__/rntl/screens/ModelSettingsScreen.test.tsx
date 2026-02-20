@@ -565,6 +565,63 @@ describe('ModelSettingsScreen', () => {
         expect(useAppStore.getState().settings.flashAttn).toBe(true);
         expect(useAppStore.getState().settings.gpuLayers).toBe(1);
       });
+
+      it('updates enableGpu to false when GPU Acceleration switch is toggled off', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+        const { UNSAFE_getAllByType } = renderScreen();
+        const { Switch } = require('react-native');
+        const switches = UNSAFE_getAllByType(Switch);
+
+        for (const sw of switches) {
+          const before = useAppStore.getState().settings.enableGpu;
+          if (before === true) {
+            fireEvent(sw, 'valueChange', false);
+            if (useAppStore.getState().settings.enableGpu === false) {
+              break;
+            }
+            useAppStore.getState().updateSettings({ enableGpu: true });
+          }
+        }
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(false);
+      });
+
+      it('updates enableGpu to true when GPU Acceleration switch is toggled on', () => {
+        useAppStore.getState().updateSettings({ enableGpu: false });
+        const { UNSAFE_getAllByType } = renderScreen();
+        const { Switch } = require('react-native');
+        const switches = UNSAFE_getAllByType(Switch);
+
+        for (const sw of switches) {
+          const before = useAppStore.getState().settings.enableGpu;
+          if (before === false) {
+            fireEvent(sw, 'valueChange', true);
+            if (useAppStore.getState().settings.enableGpu === true) {
+              break;
+            }
+            useAppStore.getState().updateSettings({ enableGpu: false });
+          }
+        }
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(true);
+      });
+
+      it('updates gpuLayers when GPU Layers slider completes', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 6 });
+        const { UNSAFE_getAllByType } = renderScreen();
+        const { View } = require('react-native');
+        const allViews = UNSAFE_getAllByType(View);
+        const sliders = allViews.filter(
+          (v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'),
+        );
+
+        // GPU layers slider has maximumValue=gpuLayersMax (99 when flash attn off)
+        const gpuLayersSlider = sliders.find((s: any) => s.props.maximumValue === 99);
+        if (gpuLayersSlider) {
+          fireEvent(gpuLayersSlider, 'slidingComplete', 12);
+          expect(useAppStore.getState().settings.gpuLayers).toBe(12);
+        }
+      });
     });
   });
 

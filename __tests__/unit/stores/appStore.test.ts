@@ -888,6 +888,27 @@ describe('appStore', () => {
 
       expect(merged.settings.modelLoadingStrategy).toBe('performance');
     });
+
+    it('actual store merge function migrates modelLoadingStrategy memory→performance', async () => {
+      const AsyncStorage = require('@react-native-async-storage/async-storage');
+
+      // Write persisted state with old 'memory' default into AsyncStorage (as Zustand persist would)
+      const persistedPayload = JSON.stringify({
+        state: {
+          settings: { modelLoadingStrategy: 'memory' },
+        },
+        version: 0,
+      });
+      await AsyncStorage.setItem('local-llm-app-storage', persistedPayload);
+
+      // Trigger Zustand persist to rehydrate from storage — this calls the actual merge function
+      await (useAppStore as any).persist.rehydrate();
+
+      expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('performance');
+
+      // Clean up storage mock
+      await AsyncStorage.removeItem('local-llm-app-storage');
+    });
   });
 
   // ============================================================================
