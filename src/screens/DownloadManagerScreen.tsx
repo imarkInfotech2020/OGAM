@@ -257,7 +257,7 @@ export const DownloadManagerScreen: React.FC = () => {
 
       // Skip invalid entries (undefined, null, or malformed keys)
       if (!fileName || !fullModelId || fileName === 'undefined' || fullModelId === 'undefined' ||
-          isNaN(progress.totalBytes) || isNaN(progress.bytesDownloaded)) {
+          Number.isNaN(progress.totalBytes) || Number.isNaN(progress.bytesDownloaded)) {
         console.warn('[DownloadManager] Skipping invalid download entry:', key, progress);
         return;
       }
@@ -288,7 +288,7 @@ export const DownloadManagerScreen: React.FC = () => {
       // Skip invalid entries
       if (!metadata.fileName || !metadata.modelId ||
           metadata.fileName === 'undefined' || metadata.modelId === 'undefined' ||
-          isNaN(metadata.totalBytes) || isNaN(download.bytesDownloaded)) {
+          Number.isNaN(metadata.totalBytes) || Number.isNaN(download.bytesDownloaded)) {
         console.warn('[DownloadManager] Skipping invalid background download:', metadata);
         return;
       }
