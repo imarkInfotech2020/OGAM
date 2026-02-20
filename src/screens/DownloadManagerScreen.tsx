@@ -566,7 +566,7 @@ function extractQuantization(fileName: string): string {
     if (upperName.includes(pattern.replace('_', ''))) return pattern;
     if (upperName.includes(pattern)) return pattern;
   }
-  const match = fileName.match(/[QqFf]\d+[_]?[KkMmSs]*/);
+  const match = /[QqFf]\d+_?[KkMmSs]*/.exec(fileName);
   return match ? match[0].toUpperCase() : 'Unknown';
 }
 
