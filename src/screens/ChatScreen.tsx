@@ -614,7 +614,7 @@ export const ChatScreen: React.FC = () => {
       prompt,
       conversationId,
       steps: settings.imageSteps || 8,
-      guidanceScale: settings.imageGuidanceScale || 2.0,
+      guidanceScale: settings.imageGuidanceScale || 2,
       previewInterval: 2,
     });
 
