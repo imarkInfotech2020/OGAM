@@ -12,7 +12,6 @@ import {
   Image,
   Dimensions,
   PermissionsAndroid,
-  InteractionManager,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
@@ -226,15 +225,19 @@ export const ChatScreen: React.FC = () => {
 
     // Defer KV cache clear until after animations complete to prevent UI lag
     // This helps prevent the slowdown after many messages issue
-    const task = InteractionManager.runAfterInteractions(() => {
-      if (llmService.isModelLoaded()) {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (!cancelled && llmService.isModelLoaded()) {
         llmService.clearKVCache(false).catch(() => {
           // Ignore errors - cache clear is best effort
         });
       }
-    });
+    }, 0);
 
-    return () => task.cancel();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -261,11 +264,17 @@ export const ChatScreen: React.FC = () => {
 
   // Load image models on mount - defer to avoid blocking navigation
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(async () => {
-      const models = await modelManager.getDownloadedImageModels();
-      setDownloadedImageModels(models);
-    });
-    return () => task.cancel();
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (!cancelled) {
+        const models = await modelManager.getDownloadedImageModels();
+        if (!cancelled) { setDownloadedImageModels(models); }
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
