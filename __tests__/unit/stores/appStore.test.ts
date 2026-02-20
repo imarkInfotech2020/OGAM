@@ -1141,8 +1141,8 @@ describe('appStore', () => {
       expect(getAppState().settings.enhanceImagePrompts).toBe(false);
     });
 
-    it('has modelLoadingStrategy set to memory by default', () => {
-      expect(getAppState().settings.modelLoadingStrategy).toBe('memory');
+    it('has modelLoadingStrategy set to performance by default', () => {
+      expect(getAppState().settings.modelLoadingStrategy).toBe('performance');
     });
 
     it('has gpuLayers set to 6 by default', () => {

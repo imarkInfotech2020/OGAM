@@ -233,7 +233,7 @@ export const useAppStore = create<AppState>()(
         // Use text LLM to enhance image prompts (disabled by default for speed)
         enhanceImagePrompts: false,
         // Model loading strategy: 'performance' = keep loaded, 'memory' = load on demand
-        modelLoadingStrategy: 'memory' as ModelLoadingStrategy,
+        modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
         // GPU acceleration for text inference (try GPU offloading when available)
         enableGpu: false,
         // Number of model layers to offload to GPU (iOS Metal can handle more; Android OpenCL needs conservative values)
