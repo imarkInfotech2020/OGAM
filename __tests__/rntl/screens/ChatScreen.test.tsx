@@ -2211,7 +2211,6 @@ describe('ChatScreen', () => {
   // ============================================================================
   describe('conversation switch behavior', () => {
     it('clears KV cache when conversation changes', async () => {
-      jest.useFakeTimers();
       const { modelId, conversationId } = setupFullChat();
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
       mockRoute.params = { conversationId };
@@ -2220,7 +2219,7 @@ describe('ChatScreen', () => {
 
       // Create a second conversation and switch to it
       const conv2 = createConversation({ modelId, title: 'Second Chat' });
-      act(() => {
+      await act(async () => {
         useChatStore.setState({
           conversations: [
             ...useChatStore.getState().conversations,
@@ -2230,13 +2229,13 @@ describe('ChatScreen', () => {
         });
       });
 
+      // Wait for the deferred setTimeout(fn, 0) to fire
       await act(async () => {
-        jest.runAllTimers();
+        await new Promise<void>(r => setTimeout(r, 50));
       });
 
       // clearKVCache should have been called
       expect(llmService.clearKVCache).toHaveBeenCalled();
-      jest.useRealTimers();
     });
   });
 
