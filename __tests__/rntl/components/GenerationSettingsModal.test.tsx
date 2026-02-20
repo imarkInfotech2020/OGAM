@@ -1013,6 +1013,40 @@ describe('GenerationSettingsModal', () => {
           expect.objectContaining({ gpuLayers: expect.any(Number) })
         );
       });
+
+      it('calls updateSettings with enableGpu: false when GPU Off button pressed', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        fireEvent.press(getByTestId('gpu-off-button'));
+
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: false });
+      });
+
+      it('calls updateSettings with enableGpu: true when GPU On button pressed', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: false };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        fireEvent.press(getByTestId('gpu-on-button'));
+
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: true });
+      });
+
+      it('calls updateSettings with gpuLayers value from GPU layers slider', () => {
+        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 6, flashAttn: false };
+        const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
+        fireEvent.press(getByText('PERFORMANCE'));
+        mockUpdateSettings.mockClear();
+
+        const slider = getByTestId('gpu-layers-slider');
+        slider.props.onSlidingComplete(12);
+
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ gpuLayers: 12 });
+      });
     });
   });
 

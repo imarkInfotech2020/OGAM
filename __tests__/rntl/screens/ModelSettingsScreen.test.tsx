@@ -565,6 +565,34 @@ describe('ModelSettingsScreen', () => {
         expect(useAppStore.getState().settings.flashAttn).toBe(true);
         expect(useAppStore.getState().settings.gpuLayers).toBe(1);
       });
+
+      it('updates enableGpu to false when GPU Acceleration switch is toggled off', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+        const { getByTestId } = renderScreen();
+
+        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', false);
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(false);
+      });
+
+      it('updates enableGpu to true when GPU Acceleration switch is toggled on', () => {
+        useAppStore.getState().updateSettings({ enableGpu: false });
+        const { getByTestId } = renderScreen();
+
+        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', true);
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(true);
+      });
+
+      it('updates gpuLayers when GPU Layers slider completes', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 6 });
+        const { getByTestId } = renderScreen();
+
+        const slider = getByTestId('gpu-layers-slider');
+        fireEvent(slider, 'slidingComplete', 12);
+
+        expect(useAppStore.getState().settings.gpuLayers).toBe(12);
+      });
     });
   });
 

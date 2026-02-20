@@ -400,6 +400,7 @@ export const ModelSettingsScreen: React.FC = () => {
                   </Text>
                 </View>
                 <Switch
+                  testID="gpu-acceleration-switch"
                   value={rawSettings?.enableGpu !== false}
                   onValueChange={(value) => updateSettings({ enableGpu: value })}
                   trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
@@ -417,6 +418,7 @@ export const ModelSettingsScreen: React.FC = () => {
                     Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices.
                   </Text>
                   <Slider
+                    testID="gpu-layers-slider"
                     style={styles.slider}
                     minimumValue={1}
                     maximumValue={gpuLayersMax}

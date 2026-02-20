@@ -707,6 +707,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             </View>
             <View style={styles.modeToggleButtons}>
               <TouchableOpacity
+                testID="gpu-off-button"
                 style={[
                   styles.modeButton,
                   !settings.enableGpu && styles.modeButtonActive,
@@ -723,6 +724,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
+                testID="gpu-on-button"
                 style={[
                   styles.modeButton,
                   settings.enableGpu && styles.modeButtonActive,
@@ -751,6 +753,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
                 </Text>
                 <Slider
+                  testID="gpu-layers-slider"
                   style={styles.slider}
                   minimumValue={1}
                   maximumValue={gpuLayersMax}
