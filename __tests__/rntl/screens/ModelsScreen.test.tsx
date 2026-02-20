@@ -14,6 +14,10 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
+
+// Mirror constants from ModelsScreen so test assertions stay in sync with the source
+const VISION_PIPELINE_TAG = 'image-text-to-text';
+const CODE_FALLBACK_QUERY = 'coder';
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -2571,6 +2575,170 @@ describe('ModelsScreen', () => {
 
       await waitFor(() => {
         expect(getByText(/RAM/)).toBeTruthy();
+      });
+    });
+  });
+
+  // ============================================================================
+  // recommended toggle and backend filter behaviour
+  // ============================================================================
+  describe('image model recommended toggle and backend filter', () => {
+    const mnnModel = {
+      id: 'cpu-model',
+      name: 'cpu-model',
+      displayName: 'CPU Model',
+      backend: 'mnn' as const,
+      fileName: 'cpu.zip',
+      downloadUrl: 'https://example.com/cpu.zip',
+      size: 500000000,
+      repo: 'test/cpu-model',
+    };
+    const qnnModel = {
+      id: 'npu-model',
+      name: 'npu-model',
+      displayName: 'NPU Model',
+      backend: 'qnn' as const,
+      fileName: 'npu.zip',
+      downloadUrl: 'https://example.com/npu.zip',
+      size: 500000000,
+      repo: 'test/npu-model',
+    };
+
+    it('hides qnn model when showRecommendedOnly is on and recommendedBackend is mnn', async () => {
+      mockFetchAvailableModels.mockResolvedValue([mnnModel, qnnModel]);
+
+      const { queryByText, getByText } = renderModelsScreen();
+
+      await act(async () => {
+        fireEvent.press(getByText('Image Models'));
+      });
+
+      // Allow async state (imageRec + models) to fully settle
+      await act(async () => {
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+      });
+
+      // CPU Model (mnn) matches recommendedBackend='mnn' → visible
+      // NPU Model (qnn) does not match → filtered out by showRecommendedOnly
+      expect(queryByText('NPU Model')).toBeNull();
+    });
+
+    it('dismisses first-time hint when rec-toggle is pressed', async () => {
+      mockFetchAvailableModels.mockResolvedValue([mnnModel]);
+
+      const { getByText, getByTestId, queryByText } = renderModelsScreen();
+
+      await act(async () => {
+        fireEvent.press(getByText('Image Models'));
+      });
+
+      await waitFor(() => {
+        expect(getByText(/RAM/)).toBeTruthy();
+      });
+
+      // Hint should be visible on first open (showRecHint=true, showRecommendedOnly=true)
+      expect(queryByText(/Showing recommended models only/)).toBeTruthy();
+
+      // Pressing the toggle dismisses the hint and turns off recommended mode
+      await act(async () => {
+        fireEvent.press(getByTestId('rec-toggle'));
+      });
+
+      await waitFor(() => {
+        expect(queryByText(/Showing recommended models only/)).toBeNull();
+      });
+    });
+  });
+
+  // ============================================================================
+  // handleSearch with filters
+  // ============================================================================
+  describe('handleSearch with active filters', () => {
+    it('triggers HuggingFace search when vision type filter is set and query is empty', async () => {
+      const { getByText, getByTestId } = renderModelsScreen();
+
+      await waitFor(() => {
+        expect(getByText(/Recommended for your device/)).toBeTruthy();
+      });
+
+      // Open filter bar
+      await act(async () => {
+        fireEvent.press(getByTestId('text-filter-toggle'));
+      });
+
+      // Select Vision type filter
+      await act(async () => {
+        fireEvent.press(getByText(/^Type/));
+      });
+
+      await act(async () => {
+        fireEvent.press(getByText('Vision'));
+      });
+
+      // Hit search with empty query but vision filter active
+      await act(async () => {
+        fireEvent.press(getByTestId('search-button'));
+      });
+
+      await waitFor(() => {
+        expect(mockSearchModels).toHaveBeenCalledWith(
+          '', // empty query
+          expect.objectContaining({ pipelineTag: VISION_PIPELINE_TAG }),
+        );
+      });
+    });
+
+    it('does not trigger HuggingFace search when query is empty and no filters are active', async () => {
+      const { getByText, getByTestId } = renderModelsScreen();
+
+      await waitFor(() => {
+        expect(getByText(/Recommended for your device/)).toBeTruthy();
+      });
+
+      mockSearchModels.mockClear();
+
+      // Hit search with empty query and no filters
+      await act(async () => {
+        fireEvent.press(getByTestId('search-button'));
+      });
+
+      expect(mockSearchModels).not.toHaveBeenCalled();
+      // Should still show recommended section
+      await waitFor(() => {
+        expect(getByText(/Recommended for your device/)).toBeTruthy();
+      });
+    });
+
+    it('triggers HuggingFace search with "coder" keyword when code filter is set and query is empty', async () => {
+      const { getByText, getByTestId } = renderModelsScreen();
+
+      await waitFor(() => {
+        expect(getByText(/Recommended for your device/)).toBeTruthy();
+      });
+
+      // Open filter bar
+      await act(async () => {
+        fireEvent.press(getByTestId('text-filter-toggle'));
+      });
+
+      // Select Code type filter
+      await act(async () => {
+        fireEvent.press(getByText(/^Type/));
+      });
+
+      await act(async () => {
+        fireEvent.press(getByText('Code'));
+      });
+
+      await act(async () => {
+        fireEvent.press(getByTestId('search-button'));
+      });
+
+      await waitFor(() => {
+        expect(mockSearchModels).toHaveBeenCalledWith(
+          CODE_FALLBACK_QUERY,
+          expect.objectContaining({ limit: 30 }),
+        );
       });
     });
   });

@@ -11,9 +11,10 @@ class HuggingFaceService {
       limit?: number;
       sort?: string;
       direction?: string;
+      pipelineTag?: string;
     } = {}
   ): Promise<ModelInfo[]> {
-    const { limit = 30, sort = 'downloads', direction = '-1' } = options;
+    const { limit = 30, sort = 'downloads', direction = '-1', pipelineTag } = options;
 
     try {
       const params = new URLSearchParams({
@@ -25,6 +26,10 @@ class HuggingFaceService {
 
       if (query) {
         params.append('search', query);
+      }
+
+      if (pipelineTag) {
+        params.append('pipeline_tag', pipelineTag);
       }
 
       const response = await fetch(

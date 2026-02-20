@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { Card, ModelCard, Button } from '../components';
@@ -92,6 +93,9 @@ const QUANT_OPTIONS = [
 
 type FilterDimension = 'org' | 'type' | 'source' | 'size' | 'quant' | null;
 type ImageFilterDimension = 'backend' | 'style' | 'sdVersion' | null;
+
+const VISION_PIPELINE_TAG = 'image-text-to-text';
+const CODE_FALLBACK_QUERY = 'coder';
 
 const STYLE_OPTIONS = [
   { key: 'all', label: 'All Styles' },
@@ -186,6 +190,7 @@ export const ModelsScreen: React.FC = () => {
   const [imageRec, setImageRec] = useState<ImageModelRecommendation | null>(null);
   const [userChangedBackendFilter, setUserChangedBackendFilter] = useState(false);
   const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
+  const [showRecHint, setShowRecHint] = useState(true);
 
   // Fetched details for recommended models (real downloads, likes, files from HF API)
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
@@ -341,17 +346,35 @@ export const ModelsScreen: React.FC = () => {
   const handleSearch = async () => {
     Keyboard.dismiss();
     setFilterState(prev => ({ ...prev, expandedDimension: null }));
-    if (!searchQuery.trim()) {
+
+    const hasQuery = searchQuery.trim().length > 0;
+    const hasTypeFilter = filterState.type !== 'all';
+    const hasOrgFilter = filterState.orgs.length > 0;
+    const hasSizeFilter = filterState.size !== 'all';
+
+    // No query and no meaningful filters → go back to recommended view
+    if (!hasQuery && !hasTypeFilter && !hasOrgFilter && !hasSizeFilter) {
       setHasSearched(false);
       setSearchResults([]);
       return;
     }
 
+    // Map type filter to HF pipeline_tag for server-side filtering
+    let pipelineTag: string | undefined;
+    let effectiveQuery = searchQuery.trim();
+    if (filterState.type === 'vision') {
+      pipelineTag = VISION_PIPELINE_TAG;
+    } else if (filterState.type === 'code' && !effectiveQuery) {
+      // No specific HF pipeline tag for code — fall back to a keyword search
+      effectiveQuery = CODE_FALLBACK_QUERY;
+    }
+
     setIsLoading(true);
     setHasSearched(true);
     try {
-      const results = await huggingFaceService.searchModels(searchQuery, {
+      const results = await huggingFaceService.searchModels(effectiveQuery, {
         limit: 30,
+        pipelineTag,
       });
       setSearchResults(results);
     } catch (_error) {
@@ -1296,8 +1319,8 @@ export const ModelsScreen: React.FC = () => {
     const query = imageSearchQuery.toLowerCase().trim();
     const filtered = availableHFModels.filter((m) => {
       if (showRecommendedOnly && imageRec && !isRecommendedModel(m)) return false;
-      // Skip backend filter when recommended is active (recommendation already handles backend)
-      if (!showRecommendedOnly && backendFilter !== 'all' && m.backend !== backendFilter) return false;
+      // Always apply backend filter so user-selected CPU/NPU overrides recommendations
+      if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
       if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
       // SD version filter (iOS Core ML)
       if (sdVersionFilter !== 'all') {
@@ -1310,13 +1333,9 @@ export const ModelsScreen: React.FC = () => {
       if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
       return true;
     });
-    // Sort recommended models first when showing all
-    if (!showRecommendedOnly && imageRec) {
-      filtered.sort((a, b) => {
-        const aRec = isRecommendedModel(a) ? 0 : 1;
-        const bRec = isRecommendedModel(b) ? 0 : 1;
-        return aRec - bRec;
-      });
+    // When showing all models, sort alphabetically so the toggle has a clear visible effect
+    if (!showRecommendedOnly) {
+      filtered.sort((a, b) => a.displayName.localeCompare(b.displayName));
     }
     return filtered;
   }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery, imageRec, isRecommendedModel, showRecommendedOnly]);
@@ -1491,8 +1510,8 @@ export const ModelsScreen: React.FC = () => {
     );
   }
 
-  // Render image models section
-  const renderImageModelsSection = () => (
+  // Render sticky header for image models (search, device banner, filter bar)
+  const renderImageModelsHeader = () => (
     <View style={styles.imageModelsSection}>
       {/* Search */}
       <View style={[styles.searchContainer, { paddingHorizontal: 0 }]}>
@@ -1507,6 +1526,7 @@ export const ModelsScreen: React.FC = () => {
         <TouchableOpacity
           style={[styles.recToggle, showRecommendedOnly && styles.recToggleActive]}
           onPress={() => {
+            setShowRecHint(false);
             setShowRecommendedOnly(v => {
               // When toggling off recommended, reset backend filter so all models show
               if (v) setBackendFilter('all');
@@ -1514,8 +1534,9 @@ export const ModelsScreen: React.FC = () => {
             });
           }}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          testID="rec-toggle"
         >
-          <Icon name="star" size={14} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
+          <MaterialIcon name={showRecommendedOnly ? 'star' : 'star-border'} size={16} color={showRecommendedOnly ? colors.primary : colors.textMuted} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
@@ -1526,6 +1547,20 @@ export const ModelsScreen: React.FC = () => {
           {hasActiveImageFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
       </View>
+
+    </View>
+  );
+
+  // Render scrollable list of image models (includes banner, filters, and cards)
+  const renderImageModelsList = () => (
+    <View style={styles.imageModelsList}>
+      {/* First-time hint for the star/recommended toggle */}
+      {showRecHint && showRecommendedOnly && (
+        <TouchableOpacity style={styles.recHint} onPress={() => setShowRecHint(false)} activeOpacity={0.7}>
+          <Icon name="info" size={11} color={colors.primary} />
+          <Text style={styles.recHintText}>Showing recommended models only. Tap <MaterialIcon name="star" size={11} color={colors.primary} /> to see all.</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Device recommendation */}
       <View style={styles.deviceBanner}>
@@ -1652,7 +1687,6 @@ export const ModelsScreen: React.FC = () => {
           </View>
         )}
       </View>}
-
       {/* Loading / Error / List */}
       {hfModelsLoading && (
         <View style={styles.hfLoadingContainer}>
@@ -2058,13 +2092,14 @@ export const ModelsScreen: React.FC = () => {
         )}
 
         {/* Image Models Tab */}
-        {
-          activeTab === 'image' && (
-            <ScrollView style={styles.imageTabContent}>
-              {renderImageModelsSection()}
+        {activeTab === 'image' && (
+          <View style={styles.imageTabContent}>
+            {renderImageModelsHeader()}
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {renderImageModelsList()}
             </ScrollView>
-          )
-        }
+          </View>
+        )}
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );
@@ -2183,6 +2218,23 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   recToggleActive: {
     backgroundColor: colors.primary + '15',
+  },
+  recHint: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    backgroundColor: colors.primary + '10',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  recHintText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+    flex: 1,
   },
   filterToggle: {
     padding: 12,
@@ -2450,8 +2502,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   // Image models section styles
   imageModelsSection: {
-    marginBottom: 24,
     paddingHorizontal: 16,
+  },
+  imageModelsList: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   imageSectionTitle: {
     ...TYPOGRAPHY.h1,

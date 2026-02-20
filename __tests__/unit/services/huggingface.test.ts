@@ -414,6 +414,46 @@ describe('HuggingFaceService', () => {
       const url = mockFetch.mock.calls[0][0];
       expect(url).toContain('limit=10');
     });
+
+    it('appends pipeline_tag when pipelineTag option is provided', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      (global as any).fetch = mockFetch;
+
+      await huggingFaceService.searchModels('', { pipelineTag: 'image-text-to-text' });
+
+      const url = mockFetch.mock.calls[0][0];
+      expect(url).toContain('pipeline_tag=image-text-to-text');
+    });
+
+    it('does not append pipeline_tag when option is not provided', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      (global as any).fetch = mockFetch;
+
+      await huggingFaceService.searchModels('test');
+
+      const url = mockFetch.mock.calls[0][0];
+      expect(url).not.toContain('pipeline_tag');
+    });
+
+    it('combines query and pipeline_tag in the same request', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+      (global as any).fetch = mockFetch;
+
+      await huggingFaceService.searchModels('qwen', { pipelineTag: 'image-text-to-text' });
+
+      const url = mockFetch.mock.calls[0][0];
+      expect(url).toContain('search=qwen');
+      expect(url).toContain('pipeline_tag=image-text-to-text');
+    });
   });
 
   // ============================================================================
