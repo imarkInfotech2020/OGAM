@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -1741,7 +1740,11 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
   },
   imageViewerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute' as const,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   },
   imageViewerContent: {
     width: '100%' as const,
