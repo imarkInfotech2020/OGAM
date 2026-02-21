@@ -98,14 +98,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
-      setActiveDownloads(
-        downloads.filter(
-          d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
-        ),
-      );
+      setActiveDownloads(downloads.filter(
+        d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
+      ));
     }
   };
-
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadActiveDownloads();
@@ -194,7 +191,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Error', 'Failed to delete model'));
     }
   };
-
   const handleDeleteModel = (model: DownloadedModel) => {
     const totalSize = hardwareService.getModelTotalSize(model);
     setAlertState(

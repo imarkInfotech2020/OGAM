@@ -55,21 +55,21 @@ export async function downloadHuggingFaceModel(
         // Use a flattened temp filename to avoid path issues in the Downloads dir.
         const tempFileName = `${modelInfo.id}_${file.path.replace(/\//g, '_')}`;
         const capturedDownloadedSize = downloadedSize;
-        await backgroundDownloadService.downloadFileTo(
-          {
+        await backgroundDownloadService.downloadFileTo({
+          params: {
             url: fileUrl,
             fileName: tempFileName,
             modelId: `image:${modelInfo.id}`,
             totalBytes: file.size,
           },
-          filePath,
-          (bytesDownloaded) => {
+          destPath: filePath,
+          onProgress: (bytesDownloaded) => {
             deps.updateModelProgress(
               modelInfo.id,
               ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95,
             );
           },
-        );
+        });
       } else {
         const result = await RNFS.downloadFile({
           fromUrl: fileUrl, toFile: filePath, background: true, discretionary: false, progressInterval: 500,

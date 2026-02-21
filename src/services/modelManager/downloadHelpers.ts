@@ -196,7 +196,7 @@ export async function getOrphanedImageDirs(
     // compiled subdirectory as modelPath while the parent dir also contains
     // tokenizer files — the parent should not be flagged as an orphan).
     const isTracked = trackedImagePaths.some(
-      p => p === item.path || p.startsWith(item.path + '/'),
+      p => p === item.path || p.startsWith(`${item.path}/`),
     );
     if (isTracked) continue;
 

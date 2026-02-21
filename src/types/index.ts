@@ -58,6 +58,16 @@ export interface DownloadedModel {
   mmProjFileSize?: number;
 }
 
+export interface PersistedDownloadInfo {
+  modelId: string;
+  fileName: string;
+  quantization: string;
+  author: string;
+  totalBytes: number;
+  mmProjFileName?: string;
+  mmProjLocalPath?: string | null;
+}
+
 export interface DownloadProgress {
   modelId: string;
   fileName: string;

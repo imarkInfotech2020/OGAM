@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
-import { DownloadedModel, ModelFile, BackgroundDownloadInfo } from '../../types';
+import { DownloadedModel, ModelFile, BackgroundDownloadInfo, PersistedDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import {
@@ -112,15 +112,15 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
       if (Platform.OS === 'android') {
         // Use Android DownloadManager so mmproj survives app backgrounding.
         // Pass silent=true so no separate notification appears for this dependency file.
-        await backgroundDownloadService.downloadFileTo(
-          {
+        await backgroundDownloadService.downloadFileTo({
+          params: {
             url: file.mmProjFile.downloadUrl,
             fileName: file.mmProjFile.name,
             modelId,
             totalBytes: file.mmProjFile.size,
           },
-          mmProjLocalPath,
-          (bytesDownloaded) => {
+          destPath: mmProjLocalPath,
+          onProgress: (bytesDownloaded) => {
             onProgress?.({
               modelId,
               fileName: `${file.mmProjFile!.name} (vision)`,
@@ -129,8 +129,8 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
               progress: combinedTotalBytes > 0 ? bytesDownloaded / combinedTotalBytes : 0,
             });
           },
-          true, // silent — suppress notification for dependency file
-        );
+          silent: true,
+        });
         mmProjDownloaded = file.mmProjFile.size;
       } else {
         mmProjDownloaded = await downloadMmProjBackground({ file, mmProjLocalPath, modelId, combinedTotalBytes, onProgress });
@@ -294,13 +294,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 }
 
 export interface SyncDownloadsOpts {
-  persistedDownloads: Record<number, {
-    modelId: string;
-    fileName: string;
-    quantization: string;
-    author: string;
-    totalBytes: number;
-  }>;
+  persistedDownloads: Record<number, PersistedDownloadInfo>;
   modelsDir: string;
   clearDownloadCallback: (downloadId: number) => void;
 }
@@ -339,90 +333,6 @@ export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts):
   }
 
   return completedModels;
-}
-
-export interface RestoreDownloadsOpts {
-  persistedDownloads: Record<number, {
-    modelId: string;
-    fileName: string;
-    quantization: string;
-    author: string;
-    totalBytes: number;
-    mmProjFileName?: string;
-    mmProjLocalPath?: string | null;
-  }>;
-  modelsDir: string;
-  backgroundDownloadContext: Map<number, BackgroundDownloadContext>;
-  backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
-  onProgress?: DownloadProgressCallback;
-}
-
-/**
- * Re-wires backgroundDownloadContext for downloads that were running when the
- * app was killed. Called on app startup after syncCompletedBackgroundDownloads
- * so that any still-running download fires onComplete/onError correctly.
- */
-export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Promise<void> {
-  const { persistedDownloads, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
-
-  if (!backgroundDownloadService.isAvailable()) return;
-
-  const activeDownloads = await backgroundDownloadService.getActiveDownloads();
-
-  for (const download of activeDownloads) {
-    if (download.status !== 'running' && download.status !== 'pending' && download.status !== 'paused') continue;
-
-    const metadata = persistedDownloads[download.downloadId];
-    if (!metadata) continue;
-
-    // Skip if context is already set (e.g., this download was started in the same session)
-    if (backgroundDownloadContext.has(download.downloadId)) continue;
-
-    const localPath = `${modelsDir}/${metadata.fileName}`;
-    const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
-    const combinedTotalBytes = metadata.totalBytes;
-
-    const fileInfo: ModelFile = {
-      name: metadata.fileName,
-      size: metadata.totalBytes,
-      quantization: metadata.quantization,
-      downloadUrl: '',
-      mmProjFile: metadata.mmProjFileName
-        ? { name: metadata.mmProjFileName, downloadUrl: '', size: 0 }
-        : undefined,
-    };
-
-    const removeProgressListener = backgroundDownloadService.onProgress(
-      download.downloadId,
-      (event) => {
-        onProgress?.({
-          modelId: metadata.modelId,
-          fileName: metadata.fileName,
-          bytesDownloaded: event.bytesDownloaded,
-          totalBytes: combinedTotalBytes,
-          progress: combinedTotalBytes > 0 ? event.bytesDownloaded / combinedTotalBytes : 0,
-        });
-      },
-    );
-
-    backgroundDownloadContext.set(download.downloadId, {
-      modelId: metadata.modelId,
-      file: fileInfo,
-      localPath,
-      mmProjLocalPath,
-      removeProgressListener,
-    });
-
-    backgroundDownloadMetadataCallback?.(download.downloadId, {
-      modelId: metadata.modelId,
-      fileName: metadata.fileName,
-      quantization: metadata.quantization,
-      author: metadata.author,
-      totalBytes: combinedTotalBytes,
-      mmProjFileName: metadata.mmProjFileName,
-      mmProjLocalPath,
-    });
-  }
 }
 
 export { loadDownloadedModels, saveModelsList };

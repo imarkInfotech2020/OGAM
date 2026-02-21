@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
+import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import {
@@ -22,10 +22,10 @@ import {
   performBackgroundDownload,
   watchBackgroundDownload,
   syncCompletedBackgroundDownloads,
-  restoreInProgressDownloads,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from './download';
+import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
   cleanupMMProjEntries as scanCleanupMMProjEntries,
@@ -116,17 +116,14 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-
     if (!model.filePath.startsWith(this.modelsDir)) {
       throw new Error('Invalid model path: outside app directory');
     }
     if (model.mmProjPath && !model.mmProjPath.startsWith(this.modelsDir)) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-
     await RNFS.unlink(model.filePath);
     if (model.mmProjPath) await RNFS.unlink(model.mmProjPath).catch(() => {});
-
     await saveModelsList(models.filter(m => m.id !== modelId));
   }
 
@@ -218,13 +215,7 @@ class ModelManager {
   }
 
   async syncBackgroundDownloads(
-    persistedDownloads: Record<number, {
-      modelId: string;
-      fileName: string;
-      quantization: string;
-      author: string;
-      totalBytes: number;
-    }>,
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
     clearDownloadCallback: (downloadId: number) => void,
   ): Promise<DownloadedModel[]> {
     if (!this.isBackgroundDownloadSupported()) return [];
@@ -233,15 +224,7 @@ class ModelManager {
   }
 
   async restoreInProgressDownloads(
-    persistedDownloads: Record<number, {
-      modelId: string;
-      fileName: string;
-      quantization: string;
-      author: string;
-      totalBytes: number;
-      mmProjFileName?: string;
-      mmProjLocalPath?: string | null;
-    }>,
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
     onProgress?: DownloadProgressCallback,
   ): Promise<void> {
     if (!this.isBackgroundDownloadSupported()) return;
@@ -314,15 +297,12 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Image model not found');
-
-    // Always remove the top-level directory for this model under imageModelsDir.
-    // For CoreML models, model.modelPath points to a compiled subdirectory;
-    // deleting only that subdir leaves the parent with tokenizer files on disk.
+    // Always remove the top-level directory: for CoreML models, model.modelPath
+    // is a compiled subdirectory so unlinking it leaves tokenizer files behind.
     const topLevelDir = `${this.imageModelsDir}/${modelId}`;
-    if (!topLevelDir.startsWith(this.imageModelsDir + '/')) {
+    if (!topLevelDir.startsWith(`${this.imageModelsDir}/`)) {
       throw new Error('Invalid image model path: outside app directory');
     }
-
     if (await RNFS.exists(topLevelDir)) await RNFS.unlink(topLevelDir);
     await saveImageModelsList(models.filter(m => m.id !== modelId));
   }
