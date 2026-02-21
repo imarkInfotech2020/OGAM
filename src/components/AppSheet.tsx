@@ -15,8 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../theme';
-import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, SPACING } from '../constants';
+import { createStyles } from './AppSheet.styles';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,6 +38,54 @@ function resolveSnapPoint(snap: string | number): number {
     return (parseFloat(snap) / 100) * SCREEN_HEIGHT;
   }
   return SCREEN_HEIGHT * 0.5;
+}
+
+function createSheetPanResponder({
+  translateY,
+  backdropOpacity,
+  setModalVisible,
+  onCloseRef,
+}: {
+  translateY: Animated.Value;
+  backdropOpacity: Animated.Value;
+  setModalVisible: (v: boolean) => void;
+  onCloseRef: React.MutableRefObject<() => void>;
+}) {
+  return PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 8,
+    onPanResponderMove: (_, { dy }) => {
+      if (dy > 0) {
+        translateY.setValue(dy);
+      }
+    },
+    onPanResponderRelease: (_, { dy, vy }) => {
+      if (dy > 80 || vy > 0.5) {
+        Animated.parallel([
+          Animated.timing(translateY, {
+            toValue: SCREEN_HEIGHT,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+          Animated.timing(backdropOpacity, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setModalVisible(false);
+          onCloseRef.current();
+        });
+      } else {
+        Animated.spring(translateY, {
+          toValue: 0,
+          damping: 28,
+          stiffness: 300,
+          useNativeDriver: true,
+        }).start();
+      }
+    },
+  });
 }
 
 export const AppSheet: React.FC<AppSheetProps> = ({
@@ -191,43 +238,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Swipe-to-dismiss on handle
   const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 8,
-      onPanResponderMove: (_, { dy }) => {
-        if (dy > 0) {
-          translateY.setValue(dy);
-        }
-      },
-      onPanResponderRelease: (_, { dy, vy }) => {
-        if (dy > 80 || vy > 0.5) {
-          // Dismiss
-          Animated.parallel([
-            Animated.timing(translateY, {
-              toValue: SCREEN_HEIGHT,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-            Animated.timing(backdropOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            setModalVisible(false);
-            onCloseRef.current();
-          });
-        } else {
-          // Snap back
-          Animated.spring(translateY, {
-            toValue: 0,
-            damping: 28,
-            stiffness: 300,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-    }),
+    createSheetPanResponder({ translateY, backdropOpacity, setModalVisible, onCloseRef }),
   ).current;
 
   if (!modalVisible && !visible) {
@@ -317,48 +328,3 @@ export const AppSheet: React.FC<AppSheetProps> = ({
     </Modal>
   );
 };
-
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  container: {
-    flex: 1,
-    justifyContent: 'flex-end' as const,
-  },
-  backdrop: {
-    ...({
-      position: 'absolute' as const,
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
-    }),
-    backgroundColor: '#000000',
-  },
-  sheet: {
-    overflow: 'hidden' as const,
-    ...shadows.large,
-  },
-  handleContainer: {
-    alignItems: 'center' as const,
-    paddingVertical: SPACING.sm,
-  },
-  handle: {},
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTitle: {
-    ...TYPOGRAPHY.h3,
-    color: colors.text,
-    flex: 1,
-    marginRight: SPACING.md,
-  },
-  headerClose: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-  },
-});
