@@ -78,7 +78,6 @@ export interface DownloadProgress {
 
 // SoC detection types
 export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
-
 export interface SoCInfo {
   vendor: SoCVendor;
   hasNPU: boolean;
@@ -260,13 +259,10 @@ export interface ImageGenerationState {
 
 // Image generation mode
 export type ImageGenerationMode = 'auto' | 'manual';
-
 // Auto-detection method for image requests
 export type AutoDetectMethod = 'pattern' | 'llm';
-
 // Model loading strategy
 export type ModelLoadingStrategy = 'performance' | 'memory';
-
 // Image mode state for chat input
 export type ImageModeState = 'auto' | 'force';
 
@@ -312,14 +308,7 @@ export interface Project {
 }
 
 // Background download types
-export type BackgroundDownloadStatus =
-  | 'pending'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'unknown';
-
+export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown';
 export interface BackgroundDownloadInfo {
   downloadId: number;
   fileName: string;

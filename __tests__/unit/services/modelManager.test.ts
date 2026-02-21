@@ -1971,7 +1971,9 @@ describe('ModelManager', () => {
 
       await modelManager.deleteImageModel('img-delete');
 
-      expect(mockedRNFS.unlink).toHaveBeenCalledWith(imageModel.modelPath);
+      // deleteImageModel now deletes the top-level model directory, not model.modelPath
+      // (for CoreML models, modelPath is a nested subdir; top-level dir also has tokenizer files)
+      expect(mockedRNFS.unlink).toHaveBeenCalledWith('/mock/documents/image_models/img-delete');
       expect(mockedAsyncStorage.setItem).toHaveBeenCalled();
     });
 

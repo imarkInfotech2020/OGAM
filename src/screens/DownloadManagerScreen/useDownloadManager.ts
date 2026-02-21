@@ -43,6 +43,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
     removeImageModelDownloading,
   } = useAppStore();
 
+  // Ref keeps the onAnyProgress callback (registered once) reading the latest persisted metadata.
+  const activeBackgroundDownloadsRef = useRef(activeBackgroundDownloads);
+  useEffect(() => { activeBackgroundDownloadsRef.current = activeBackgroundDownloads; }, [activeBackgroundDownloads]);
   // Load active background downloads on mount + start/stop polling
   useEffect(() => {
     loadActiveDownloads();
@@ -65,7 +68,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (cancelledKeysRef.current.has(key)) return;
       // Use the stored combined totalBytes (GGUF + mmproj) when available.
       // event.totalBytes only reflects the GGUF file size from Android DownloadManager.
-      const storedMeta = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
+      const storedMeta = activeBackgroundDownloadsRef.current[event.downloadId];
       const totalBytes = storedMeta?.totalBytes ?? event.totalBytes;
       setDownloadProgress(key, {
         progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0,
@@ -220,7 +223,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Error', 'Failed to delete image model'));
     }
   };
-
   const handleDeleteImageModel = (model: ONNXImageModel) => {
     setAlertState(
       showAlert(
@@ -237,7 +239,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       ),
     );
   };
-
   const handleDeleteItem = (item: DownloadItem) => {
     if (item.modelType === 'image') {
       const model = downloadedImageModels.find(m => m.id === item.modelId);
@@ -247,7 +248,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (model) handleDeleteModel(model);
     }
   };
-
   // Build items from store state
   const data: DownloadItemsData = {
     downloadProgress,
