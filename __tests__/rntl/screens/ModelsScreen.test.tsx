@@ -2520,7 +2520,10 @@ describe('ModelsScreen', () => {
     it('calls downloadModel when background download not supported', async () => {
       const { modelManager } = require('../../../src/services/modelManager');
       modelManager.isBackgroundDownloadSupported = jest.fn(() => false);
-      modelManager.downloadModel = jest.fn(() => Promise.resolve());
+      modelManager.downloadModel = jest.fn(() => Promise.resolve(createDownloadedModel({
+        id: 'test-org/test-model-3B/model-Q4_K_M.gguf',
+        name: 'Test Model',
+      })));
 
       const files = [
         createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),

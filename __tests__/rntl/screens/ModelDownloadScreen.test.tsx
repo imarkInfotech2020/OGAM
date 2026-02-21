@@ -73,6 +73,7 @@ jest.mock('../../../src/services', () => ({
     isBackgroundDownloadSupported: jest.fn(() => false),
     downloadModel: jest.fn((...args: any[]) => mockDownloadModel(...args)),
     downloadModelBackground: jest.fn((...args: any[]) => mockDownloadModelBackground(...args)),
+    watchDownload: jest.fn(),
   },
 }));
 
@@ -458,10 +459,7 @@ describe('ModelDownloadScreen', () => {
       downloadedAt: new Date().toISOString(),
     };
 
-    mockDownloadModel.mockImplementation((_modelId: string, _file: any, _onProgress: any, onComplete: any) => {
-      onComplete(completedModel);
-      return Promise.resolve();
-    });
+    mockDownloadModel.mockResolvedValue(completedModel);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
@@ -504,10 +502,7 @@ describe('ModelDownloadScreen', () => {
       downloadedAt: new Date().toISOString(),
     };
 
-    mockDownloadModel.mockImplementation((_modelId: string, _file: any, _onProgress: any, onComplete: any) => {
-      onComplete(completedModel);
-      return Promise.resolve();
-    });
+    mockDownloadModel.mockResolvedValue(completedModel);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
@@ -536,10 +531,7 @@ describe('ModelDownloadScreen', () => {
     };
     mockGetModelFiles.mockResolvedValue([mockFile]);
 
-    mockDownloadModel.mockImplementation((_modelId: string, _file: any, _onProgress: any, _onComplete: any, onError: any) => {
-      onError(new Error('Download failed'));
-      return Promise.resolve();
-    });
+    mockDownloadModel.mockRejectedValue(new Error('Download failed'));
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
