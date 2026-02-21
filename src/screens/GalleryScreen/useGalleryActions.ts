@@ -82,6 +82,12 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   }, [generatedImages, conversationId, chatImageIds]);
 
   const handleDelete = useCallback((image: GeneratedImage) => {
+    const doDelete = async () => {
+      setAlertState(hideAlert());
+      await onnxImageGeneratorService.deleteGeneratedImage(image.id);
+      removeGeneratedImage(image.id);
+      if (selectedImage?.id === image.id) setSelectedImage(null);
+    };
     setAlertState(showAlert(
       'Delete Image',
       'Are you sure you want to delete this image?',
@@ -90,14 +96,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            await onnxImageGeneratorService.deleteGeneratedImage(image.id);
-            removeGeneratedImage(image.id);
-            if (selectedImage?.id === image.id) {
-              setSelectedImage(null);
-            }
-          },
+          onPress: () => { doDelete(); },
         },
       ]
     ));
@@ -133,14 +132,17 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            for (const imageId of selectedIds) {
-              await onnxImageGeneratorService.deleteGeneratedImage(imageId);
-              removeGeneratedImage(imageId);
-            }
-            setSelectedIds(new Set());
-            setIsSelectMode(false);
+          onPress: () => {
+            const doDeleteSelected = async () => {
+              setAlertState(hideAlert());
+              for (const imageId of selectedIds) {
+                await onnxImageGeneratorService.deleteGeneratedImage(imageId);
+                removeGeneratedImage(imageId);
+              }
+              setSelectedIds(new Set());
+              setIsSelectMode(false);
+            };
+            doDeleteSelected();
           },
         },
       ]

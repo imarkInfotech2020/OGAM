@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+
+let _attachmentIdSeq = 0;
+const nextAttachmentId = () => `${Date.now()}-${(++_attachmentIdSeq).toString(36)}`;
 import { View, Text, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
@@ -18,7 +21,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     const newAttachments: MediaAttachment[] = assets
       .filter(asset => asset.uri)
       .map(asset => ({
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: nextAttachmentId(),
         type: 'image' as const,
         uri: asset.uri!,
         mimeType: asset.type,

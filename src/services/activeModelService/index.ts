@@ -59,7 +59,7 @@ class ActiveModelService {
 
   async loadTextModel(modelId: string, timeoutMs: number = 120000): Promise<void> {
     if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) { return; }
-    if (this.textLoadPromise) {
+    if (this.textLoadPromise !== null) {
       await this.textLoadPromise;
       if (this.loadedTextModelId === modelId) { return; }
     }
@@ -81,7 +81,7 @@ class ActiveModelService {
   }
 
   async unloadTextModel(): Promise<void> {
-    if (this.textLoadPromise) { await this.textLoadPromise; }
+    if (this.textLoadPromise !== null) { await this.textLoadPromise; }
     const storeActiveModelId = useAppStore.getState().activeModelId;
     const isNativeLoaded = llmService.isModelLoaded();
     if (!storeActiveModelId && !this.loadedTextModelId && !isNativeLoaded) { return; }
@@ -108,7 +108,7 @@ class ActiveModelService {
       const isLoaded = await onnxImageGeneratorService.isModelLoaded();
       if (isLoaded && !needsThreadReload) { return; }
     }
-    if (this.imageLoadPromise) {
+    if (this.imageLoadPromise !== null) {
       await this.imageLoadPromise;
       if (this.loadedImageModelId === modelId && this.loadedImageModelThreads === imageThreads) { return; }
     }
@@ -139,7 +139,7 @@ class ActiveModelService {
   }
 
   async unloadImageModel(): Promise<void> {
-    if (this.imageLoadPromise) { await this.imageLoadPromise; }
+    if (this.imageLoadPromise !== null) { await this.imageLoadPromise; }
     const store = useAppStore.getState();
     const isNativeLoaded = await onnxImageGeneratorService.isModelLoaded();
     if (!store.activeImageModelId && !this.loadedImageModelId && !isNativeLoaded) { return; }

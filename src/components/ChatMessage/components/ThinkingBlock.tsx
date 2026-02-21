@@ -34,7 +34,7 @@ export function ThinkingBlock({
           <Text testID="thinking-block-title" style={styles.thinkingHeaderText}>
             {parsedContent.thinkingLabel || (parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...')}
           </Text>
-          {!showThinking && parsedContent.thinking && (
+          {!showThinking && !!parsedContent.thinking && (
             <Text style={styles.thinkingPreview} numberOfLines={2} ellipsizeMode="tail">
               {parsedContent.thinking.slice(0, 80)}
               {parsedContent.thinking.length > 80 ? '...' : ''}

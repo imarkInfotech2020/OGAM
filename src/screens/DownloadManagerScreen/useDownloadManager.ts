@@ -172,7 +172,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
           {
             text: 'Yes',
             style: 'destructive',
-            onPress: async () => { await executeRemoveDownload(item); },
+            onPress: () => { executeRemoveDownload(item); },
           },
         ],
       ),
@@ -201,7 +201,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: async () => { await executeDeleteModel(model); },
+            onPress: () => { executeDeleteModel(model); },
           },
         ],
       ),
@@ -230,7 +230,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: async () => { await executeDeleteImageModel(model); },
+            onPress: () => { executeDeleteImageModel(model); },
           },
         ],
       ),

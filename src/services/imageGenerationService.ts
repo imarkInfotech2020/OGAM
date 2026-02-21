@@ -84,7 +84,7 @@ function getConversationContext(conversationId: string): Message[] {
 }
 
 function cleanEnhancedPrompt(raw: string): string {
-  return raw.trim().replace(/^["']|["']$/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  return raw.trim().replace(/(^["'])|(["']$)/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
 function buildImageGenMeta(

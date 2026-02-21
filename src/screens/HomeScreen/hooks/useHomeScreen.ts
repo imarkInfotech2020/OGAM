@@ -111,6 +111,21 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const handleEjectAll = () => {
     const hasModels = activeModelId || activeImageModelId;
     if (!hasModels) { return; }
+    const doEjectAll = async () => {
+      setAlertState(hideAlert());
+      setIsEjecting(true);
+      try {
+        const results = await activeModelService.unloadAllModels();
+        const count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+        if (count > 0) {
+          setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
+        }
+      } catch (_error) {
+        setAlertState(showAlert('Error', 'Failed to unload models'));
+      } finally {
+        setIsEjecting(false);
+      }
+    };
     setAlertState(showAlert(
       'Eject All Models',
       'Unload all active models to free up memory?',
@@ -119,21 +134,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         {
           text: 'Eject All',
           style: 'destructive',
-          onPress: async () => {
-            setAlertState(hideAlert());
-            setIsEjecting(true);
-            try {
-              const results = await activeModelService.unloadAllModels();
-              const count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
-              if (count > 0) {
-                setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
-              }
-            } catch (_error) {
-              setAlertState(showAlert('Error', 'Failed to unload models'));
-            } finally {
-              setIsEjecting(false);
-            }
-          },
+          onPress: () => { doEjectAll(); },
         },
       ]
     ));

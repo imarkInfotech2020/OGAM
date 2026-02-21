@@ -78,20 +78,6 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      - name: Install xcpretty
-        run: gem install xcpretty
-
-      - name: Install CocoaPods
-        run: |
-          gem install cocoapods
-          cd ios && pod install
-
       - name: Test
         run: npm test
 

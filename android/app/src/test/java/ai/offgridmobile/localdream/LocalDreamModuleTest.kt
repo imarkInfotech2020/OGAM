@@ -300,14 +300,14 @@ class LocalDreamModuleTest {
         val runtimeDir = makeRuntimeDir()
         val env = LocalDreamModule.buildEnvironment(runtimeDir)
 
-        val paths = env["LD_LIBRARY_PATH"]!!.split(":")
+        val paths = requireNotNull(env["LD_LIBRARY_PATH"]).split(":")
         assertEquals(runtimeDir.absolutePath, paths.first())
     }
 
     @Test
     fun `buildEnvironment includes standard system library paths`() {
         val env = LocalDreamModule.buildEnvironment(makeRuntimeDir())
-        val ldPath = env["LD_LIBRARY_PATH"]!!
+        val ldPath = requireNotNull(env["LD_LIBRARY_PATH"])
 
         assertTrue(ldPath.contains("/system/lib64"))
         assertTrue(ldPath.contains("/vendor/lib64"))

@@ -1,4 +1,7 @@
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
+
+let _msgIdSeq = 0;
+const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
 import {
   AlertState,
   showAlert,
@@ -219,7 +222,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   }
   if (generationService.getState().isGenerating) {
     generationService.enqueueMessage({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+      id: nextMsgId(),
       conversationId: targetConversationId,
       text,
       attachments,

@@ -48,7 +48,7 @@ export function MessageContent({
 
   return (
     <View>
-      {parsedContent.thinking && (
+      {!!parsedContent.thinking && (
         <ThinkingBlock
           parsedContent={parsedContent}
           showThinking={showThinking}

@@ -157,7 +157,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
 
   const parseParamCount = useCallback((model: ModelInfo): number | null => {
-    const match = model.name.match(/(\d+\.?\d*)\s*[Bb]\b/) || model.id.match(/(\d+\.?\d*)\s*[Bb]\b/);
+    const match = model.name.match(/(\d+(?:\.\d+)?)\s*[Bb]\b/) || model.id.match(/(\d+(?:\.\d+)?)\s*[Bb]\b/);
     return match ? parseFloat(match[1]) : null;
   }, []);
 

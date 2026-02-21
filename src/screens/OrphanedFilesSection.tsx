@@ -59,18 +59,21 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
             {
               text: 'Delete',
               style: 'destructive',
-              onPress: async () => {
-                setAlertState(hideAlert());
-                setIsDeleting(file.path);
-                try {
-                  await modelManager.deleteOrphanedFile(file.path);
-                  setOrphanedFiles(prev => prev.filter(f => f.path !== file.path));
-                  onStorageChange();
-                } catch (_err) {
-                  setAlertState(showAlert('Error', 'Failed to delete file'));
-                } finally {
-                  setIsDeleting(null);
-                }
+              onPress: () => {
+                const doDelete = async () => {
+                  setAlertState(hideAlert());
+                  setIsDeleting(file.path);
+                  try {
+                    await modelManager.deleteOrphanedFile(file.path);
+                    setOrphanedFiles(prev => prev.filter(f => f.path !== file.path));
+                    onStorageChange();
+                  } catch (_err) {
+                    setAlertState(showAlert('Error', 'Failed to delete file'));
+                  } finally {
+                    setIsDeleting(null);
+                  }
+                };
+                doDelete();
               },
             },
           ],
@@ -92,19 +95,22 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
           {
             text: 'Delete All',
             style: 'destructive',
-            onPress: async () => {
-              setAlertState(hideAlert());
-              setIsScanning(true);
-              for (const file of orphanedFiles) {
-                try {
-                  await modelManager.deleteOrphanedFile(file.path);
-                } catch (_err) {
-                  // continue with remaining files
+            onPress: () => {
+              const doDeleteAll = async () => {
+                setAlertState(hideAlert());
+                setIsScanning(true);
+                for (const file of orphanedFiles) {
+                  try {
+                    await modelManager.deleteOrphanedFile(file.path);
+                  } catch (_err) {
+                    // continue with remaining files
+                  }
                 }
-              }
-              setOrphanedFiles([]);
-              onStorageChange();
-              setIsScanning(false);
+                setOrphanedFiles([]);
+                onStorageChange();
+                setIsScanning(false);
+              };
+              doDeleteAll();
             },
           },
         ],
