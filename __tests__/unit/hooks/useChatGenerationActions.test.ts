@@ -141,8 +141,7 @@ function makeRef<T>(value: T): React.MutableRefObject<T> {
 const baseModel = createDownloadedModel({ id: 'model-1', filePath: '/path/model.gguf' });
 const baseImageModel = { id: 'img-1', name: 'SD Model' };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeGenerationDeps(overrides: Partial<any> = {}): any {
+function makeGenerationDeps(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     activeModelId: 'model-1',
     activeModel: baseModel,

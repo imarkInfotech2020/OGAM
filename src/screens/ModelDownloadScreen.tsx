@@ -16,6 +16,7 @@ import { useAppStore } from '../stores';
 import { hardwareService, huggingFaceService, modelManager } from '../services';
 import { ModelFile, DownloadedModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
+import logger from '../utils/logger';
 
 type ModelDownloadScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'>;
@@ -80,14 +81,14 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
             );
             filesMap[model.id] = recommendedFiles.length > 0 ? recommendedFiles : files.slice(0, 2);
           } catch (error) {
-            console.error(`Error fetching files for ${model.id}:`, error);
+            logger.error(`Error fetching files for ${model.id}:`, error);
           }
         })
       );
 
       setModelFiles(filesMap);
     } catch (error) {
-      console.error('Error initializing:', error);
+      logger.error('Error initializing:', error);
       setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
     } finally {
       setIsLoading(false);
@@ -245,7 +246,6 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
           </Card>
         )}
       </ScrollView>
-
       <View style={styles.footer}>
         <Button
           title="Skip for Now"

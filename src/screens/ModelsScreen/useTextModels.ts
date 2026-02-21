@@ -9,6 +9,9 @@ import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
 import { getModelType } from './utils';
+import logger from '../../utils/logger';
+
+const PARAM_COUNT_REGEX = /(\d+(?:\.\d+)?)\s?b\b/i;
 
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,7 +47,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
           const info = await huggingFaceService.getModelDetails(m.id);
           if (!cancelled) details[m.id] = info;
         } catch (e) {
-          console.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e);
+          logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e);
         }
       }));
       if (!cancelled) setRecommendedModelDetails(details);
@@ -157,7 +160,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
 
   const parseParamCount = useCallback((model: ModelInfo): number | null => {
-    const match = model.name.match(/(\d+(?:\.\d+)?)\s*[Bb]\b/) || model.id.match(/(\d+(?:\.\d+)?)\s*[Bb]\b/);
+    const match = PARAM_COUNT_REGEX.exec(model.name) ?? PARAM_COUNT_REGEX.exec(model.id);
     return match ? parseFloat(match[1]) : null;
   }, []);
 
