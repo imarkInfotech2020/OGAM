@@ -150,9 +150,9 @@ class DownloadManagerModule: RCTEventEmitter {
     let activeDownloads = persisted.filter { $0.status == "running" || $0.status == "pending" }
     NSLog("[DownloadManager] Restoring %d active downloads from UserDefaults (of %d total persisted)", activeDownloads.count, persisted.count)
 
-    for p in activeDownloads {
+    for persistedDownload in activeDownloads {
       var fileTasks: [Int: FileTask] = [:]
-      if p.isMultiFile, let entries = p.fileTaskEntries {
+      if persistedDownload.isMultiFile, let entries = persistedDownload.fileTaskEntries {
         // Use negative placeholder keys; will be remapped when reconnecting tasks
         for (index, entry) in entries.enumerated() {
           let placeholderKey = -(index + 1)
@@ -169,29 +169,29 @@ class DownloadManagerModule: RCTEventEmitter {
       }
 
       let info = DownloadInfo(
-        downloadId: p.downloadId,
-        fileName: p.fileName,
-        modelId: p.modelId,
-        totalBytes: p.totalBytes,
-        bytesDownloaded: p.bytesDownloaded,
-        status: p.status,
-        startedAt: p.startedAt,
+        downloadId: persistedDownload.downloadId,
+        fileName: persistedDownload.fileName,
+        modelId: persistedDownload.modelId,
+        totalBytes: persistedDownload.totalBytes,
+        bytesDownloaded: persistedDownload.bytesDownloaded,
+        status: persistedDownload.status,
+        startedAt: persistedDownload.startedAt,
         task: nil,
-        localUri: p.localUri,
-        downloadUrl: p.downloadUrl,
+        localUri: persistedDownload.localUri,
+        downloadUrl: persistedDownload.downloadUrl,
         fileTasks: fileTasks,
-        multiFileDestDir: p.multiFileDestDir,
-        isMultiFile: p.isMultiFile
+        multiFileDestDir: persistedDownload.multiFileDestDir,
+        isMultiFile: persistedDownload.isMultiFile
       )
 
-      downloads[p.downloadId] = info
+      downloads[persistedDownload.downloadId] = info
 
       // Ensure nextDownloadId is higher than any restored ID
-      if p.downloadId >= nextDownloadId {
-        nextDownloadId = p.downloadId + 1
+      if persistedDownload.downloadId >= nextDownloadId {
+        nextDownloadId = persistedDownload.downloadId + 1
       }
 
-      NSLog("[DownloadManager] Restored download #%lld: %@ (%@)", p.downloadId, p.fileName, p.status)
+      NSLog("[DownloadManager] Restored download #%lld: %@ (%@)", persistedDownload.downloadId, persistedDownload.fileName, persistedDownload.status)
     }
 
     // Clean out completed/failed entries from persistence
