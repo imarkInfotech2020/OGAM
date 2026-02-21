@@ -17,6 +17,39 @@ import { GenerationMeta } from './components/GenerationMeta';
 import { ActionMenuSheet, EditSheet } from './components/ActionMenuSheet';
 import { parseThinkingContent, formatTime, formatDuration } from './utils';
 import type { ChatMessageProps } from './types';
+import type { Message } from '../../types';
+
+function buildMessageData(message: Message) {
+  const displayContent = message.role === 'assistant'
+    ? stripControlTokens(message.content)
+    : message.content;
+  const parsedContent = message.role === 'assistant'
+    ? parseThinkingContent(displayContent)
+    : { thinking: null, response: message.content, isThinkingComplete: true };
+  return { displayContent, parsedContent };
+}
+
+type MetaRowProps = {
+  message: Message;
+  styles: ReturnType<typeof createStyles>;
+  isStreaming?: boolean;
+  showActions: boolean;
+  onMenuOpen: () => void;
+};
+
+const MessageMetaRow: React.FC<MetaRowProps> = ({ message, styles, isStreaming, showActions, onMenuOpen }) => (
+  <View style={styles.metaRow}>
+    <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
+    {message.generationTimeMs != null && message.role === 'assistant' && (
+      <Text style={styles.generationTime}>{formatDuration(message.generationTimeMs)}</Text>
+    )}
+    {showActions && !isStreaming && (
+      <TouchableOpacity style={styles.actionHint} onPress={onMenuOpen}>
+        <Text style={styles.actionHintText}>•••</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+);
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
@@ -39,13 +72,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [showThinking, setShowThinking] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const displayContent = message.role === 'assistant'
-    ? stripControlTokens(message.content)
-    : message.content;
-
-  const parsedContent = message.role === 'assistant'
-    ? parseThinkingContent(displayContent)
-    : { thinking: null, response: message.content, isThinkingComplete: true };
+  const { displayContent, parsedContent } = buildMessageData(message);
 
   const isUser = message.role === 'user';
   const hasAttachments = message.attachments && message.attachments.length > 0;
@@ -156,22 +183,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         />
       </View>
 
-      <View style={styles.metaRow}>
-        <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
-        {message.generationTimeMs && message.role === 'assistant' && (
-          <Text style={styles.generationTime}>
-            {formatDuration(message.generationTimeMs)}
-          </Text>
-        )}
-        {showActions && !isStreaming && (
-          <TouchableOpacity
-            style={styles.actionHint}
-            onPress={() => setShowActionMenu(true)}
-          >
-            <Text style={styles.actionHintText}>•••</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <MessageMetaRow
+        message={message}
+        styles={styles}
+        isStreaming={isStreaming}
+        showActions={showActions}
+        onMenuOpen={() => setShowActionMenu(true)}
+      />
 
       {showGenerationDetails && message.generationMeta && message.role === 'assistant' && (
         <GenerationMeta generationMeta={message.generationMeta} styles={styles} />

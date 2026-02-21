@@ -1,7 +1,7 @@
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../../constants';
 
-export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createBubbleStyles = (colors: ThemeColors) => ({
   container: {
     marginVertical: 8,
     paddingHorizontal: 16,
@@ -93,6 +93,9 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     height: 140,
     borderRadius: 12,
   },
+});
+
+const createThinkingStyles = (colors: ThemeColors) => ({
   text: {
     ...TYPOGRAPHY.body,
     lineHeight: 20,
@@ -148,7 +151,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: colors.primary + '30',
+    backgroundColor: `${colors.primary}30`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -234,6 +237,9 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textMuted,
     opacity: 0.5,
   },
+});
+
+const createActionStyles = (colors: ThemeColors) => ({
   actionSheetContent: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
@@ -298,4 +304,10 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.primary,
     fontWeight: '600' as const,
   },
+});
+
+export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  ...createBubbleStyles(colors),
+  ...createThinkingStyles(colors),
+  ...createActionStyles(colors),
 });
