@@ -49,7 +49,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const inputRef = useRef<TextInput>(null);
 
-  const { attachments, removeAttachment, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
+  const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
 
   const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, clearResult } = useVoiceInput({
     conversationId,
@@ -69,6 +69,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const forceImage = imageMode === 'force';
     onSend(message.trim(), attachments.length > 0 ? attachments : undefined, forceImage);
     setMessage('');
+    clearAttachments();
     inputRef.current?.focus();
     if (forceImage) {
       setImageMode('auto');

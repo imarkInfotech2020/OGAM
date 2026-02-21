@@ -503,7 +503,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 key={conv.id}
                 renderRightActions={() => renderRightActions(conv)}
                 overshootRight={false}
-                containerStyle={{ overflow: 'visible' }}
+                containerStyle={styles.swipeableContainer}
               >
                 <AnimatedListItem
                   index={index}
@@ -1119,5 +1119,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginTop: SPACING.lg,
     textAlign: 'center' as const,
     lineHeight: 18,
+  },
+  swipeableContainer: {
+    overflow: 'visible' as const,
   },
 });

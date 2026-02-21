@@ -186,7 +186,7 @@ export const ModelSettingsScreen: React.FC = () => {
                   size="medium"
                   active={rawSettings?.autoDetectMethod === 'pattern'}
                   onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
-                  style={{ flex: 1 }}
+                  style={styles.flex1}
                 />
                 <Button
                   title="LLM"
@@ -194,7 +194,7 @@ export const ModelSettingsScreen: React.FC = () => {
                   size="medium"
                   active={rawSettings?.autoDetectMethod === 'llm'}
                   onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
-                  style={{ flex: 1 }}
+                  style={styles.flex1}
                 />
               </View>
             </View>
@@ -479,7 +479,7 @@ export const ModelSettingsScreen: React.FC = () => {
               size="small"
               active={rawSettings?.modelLoadingStrategy === 'memory'}
               onPress={() => updateSettings({ modelLoadingStrategy: 'memory' })}
-              style={{ flex: 1 }}
+              style={styles.flex1}
             />
             <Button
               title="Fast"
@@ -487,7 +487,7 @@ export const ModelSettingsScreen: React.FC = () => {
               size="small"
               active={rawSettings?.modelLoadingStrategy === 'performance'}
               onPress={() => updateSettings({ modelLoadingStrategy: 'performance' })}
-              style={{ flex: 1 }}
+              style={styles.flex1}
             />
           </View>
         </Card>
@@ -497,6 +497,9 @@ export const ModelSettingsScreen: React.FC = () => {
 };
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  flex1: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

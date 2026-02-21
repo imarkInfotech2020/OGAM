@@ -98,7 +98,9 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     }
   };
 
-  return { attachments, removeAttachment, handlePickImage, handlePickDocument };
+  const clearAttachments = () => setAttachments([]);
+
+  return { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument };
 }
 
 // ─── AttachmentPreview component ─────────────────────────────────────────────
