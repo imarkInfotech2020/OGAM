@@ -139,7 +139,7 @@ describe('downloadMmProjBackground', () => {
 
     const result = await downloadMmProjBackground({
       file: fileWithoutMmProj,
-      mmProjLocalPath: null,
+      mmProjLocalPath: '',
       modelId: 'test/model',
       combinedTotalBytes: 4_000_000_000,
       onProgress: undefined,
@@ -149,10 +149,10 @@ describe('downloadMmProjBackground', () => {
     expect(RNFS.downloadFile).not.toHaveBeenCalled();
   });
 
-  it('returns 0 when mmProjLocalPath is null', async () => {
+  it('returns 0 when mmProjLocalPath is empty string', async () => {
     const result = await downloadMmProjBackground({
       file: makeVisionFile(),
-      mmProjLocalPath: null, // null path — skip
+      mmProjLocalPath: '', // falsy path — guard returns 0
       modelId: 'test/model',
       combinedTotalBytes: 4_000_000_000,
       onProgress: undefined,
