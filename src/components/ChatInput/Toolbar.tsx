@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme, useThemedStyles } from '../theme';
-import { useAppStore } from '../stores';
-import { ImageModeState } from '../types';
-import { createStyles } from './ChatInput.styles';
+import { useTheme, useThemedStyles } from '../../theme';
+import { useAppStore } from '../../stores';
+import { ImageModeState } from '../../types';
+import { createStyles } from './styles';
 
 interface ChatToolbarProps {
   supportsVision: boolean;

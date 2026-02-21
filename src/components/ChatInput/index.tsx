@@ -1,15 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { View, TextInput, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme, useThemedStyles } from '../theme';
-import { ImageModeState, MediaAttachment } from '../types';
-import { VoiceRecordButton } from './VoiceRecordButton';
-import { triggerHaptic } from '../utils/haptics';
-import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
-import { createStyles } from './ChatInput.styles';
-import { ChatToolbar } from './ChatInputToolbar';
-import { AttachmentPreview, useAttachments } from './ChatInputAttachments';
-import { useVoiceInput } from './ChatInputVoice';
+import { useTheme, useThemedStyles } from '../../theme';
+import { ImageModeState, MediaAttachment } from '../../types';
+import { VoiceRecordButton } from '../VoiceRecordButton';
+import { triggerHaptic } from '../../utils/haptics';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
+import { createStyles } from './styles';
+import { ChatToolbar } from './Toolbar';
+import { AttachmentPreview, useAttachments } from './Attachments';
+import { useVoiceInput } from './Voice';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], forceImageMode?: boolean) => void;

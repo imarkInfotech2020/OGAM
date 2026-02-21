@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
-import { useWhisperStore } from '../stores';
+import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
+import { useWhisperStore } from '../../stores';
 
 interface UseVoiceInputParams {
   conversationId?: string | null;

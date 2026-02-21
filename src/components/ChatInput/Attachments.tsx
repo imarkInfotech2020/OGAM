@@ -3,11 +3,11 @@ import { View, Text, Image, ScrollView, TouchableOpacity } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme, useThemedStyles } from '../theme';
-import { MediaAttachment } from '../types';
-import { documentService } from '../services/documentService';
-import { AlertState, showAlert, hideAlert } from './CustomAlert';
-import { createStyles } from './ChatInput.styles';
+import { useTheme, useThemedStyles } from '../../theme';
+import { MediaAttachment } from '../../types';
+import { documentService } from '../../services/documentService';
+import { AlertState, showAlert, hideAlert } from '../CustomAlert';
+import { createStyles } from './styles';
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
