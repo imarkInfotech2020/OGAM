@@ -9,6 +9,8 @@ interface UseVoiceInputParams {
 
 export function useVoiceInput({ conversationId, onTranscript }: UseVoiceInputParams) {
   const recordingConversationIdRef = useRef<string | null>(null);
+  const onTranscriptRef = useRef(onTranscript);
+  onTranscriptRef.current = onTranscript;
   const { downloadedModelId } = useWhisperStore();
 
   const {
@@ -40,12 +42,12 @@ export function useVoiceInput({ conversationId, onTranscript }: UseVoiceInputPar
   useEffect(() => {
     if (finalResult) {
       if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
-        onTranscript(finalResult);
+        onTranscriptRef.current(finalResult);
       }
       clearResult();
       recordingConversationIdRef.current = null;
     }
-  }, [finalResult, clearResult, conversationId, onTranscript]);
+  }, [finalResult, clearResult, conversationId]);
 
   return { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, clearResult };
 }
