@@ -30,7 +30,7 @@ class PDFExtractorModule: NSObject {
 
         if fullText.count >= limit {
           fullText = String(fullText.prefix(limit))
-          fullText += "\n\n... [Extracted \(i + 1) of \(document.pageCount) pages]"
+          fullText += "\n\n... [Extracted \(pageIndex + 1) of \(document.pageCount) pages]"
           break
         }
       }
