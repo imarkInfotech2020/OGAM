@@ -239,7 +239,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
 
         {/* IMAGE GENERATION SETTINGS */}
         <TouchableOpacity
-          style={[styles.accordionHeader, (onOpenProject || onOpenGallery || onDeleteConversation) ? {} : { marginTop: 0 }]}
+          style={[styles.accordionHeader, !(onOpenProject || onOpenGallery || onDeleteConversation) && styles.accordionHeaderNoMargin]}
           onPress={() => setImageSettingsOpen(!imageSettingsOpen)}
           activeOpacity={0.7}
         >
@@ -467,7 +467,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                       setShowClassifierModelPicker(false);
                     }}
                   >
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.flex1}>
                       <Text style={styles.modelPickerItemText}>{model.name}</Text>
                       <Text style={styles.modelPickerItemDesc}>
                         {hardwareService.formatModelSize(model)}
@@ -929,6 +929,12 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
 };
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  flex1: {
+    flex: 1,
+  },
+  accordionHeaderNoMargin: {
+    marginTop: 0,
+  },
   statsBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

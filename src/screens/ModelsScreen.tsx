@@ -1427,16 +1427,16 @@ export const ModelsScreen: React.FC = () => {
   if (selectedModel) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View testID="model-detail-screen" style={{ flex: 1 }}>
+        <View testID="model-detail-screen" style={styles.flex1}>
           <View style={styles.header}>
             <TouchableOpacity
               onPress={() => { setSelectedModel(null); setModelFiles([]); }}
               testID="model-detail-back"
-              style={{ padding: 4, marginRight: 8 }}
+              style={styles.backButton}
             >
               <Icon name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>
+            <Text style={[styles.title, styles.flex1]} numberOfLines={1}>
               {selectedModel.name}
             </Text>
           </View>
@@ -1516,7 +1516,7 @@ export const ModelsScreen: React.FC = () => {
   const renderImageModelsHeader = () => (
     <View style={styles.imageModelsSection}>
       {/* Search */}
-      <View style={[styles.searchContainer, { paddingHorizontal: 0 }]}>
+      <View style={[styles.searchContainer, styles.searchContainerNoPadding]}>
         <TextInput
           style={styles.searchInput}
           placeholder="Search models..."
@@ -1570,7 +1570,7 @@ export const ModelsScreen: React.FC = () => {
           {Math.round(ramGB)}GB RAM — {imageRecommendation}
         </Text>
         {imageRec?.warning && (
-          <Text style={[styles.deviceBannerText, { color: colors.error, marginTop: 2 }]}>
+          <Text style={[styles.deviceBannerText, styles.deviceBannerWarning]}>
             {imageRec.warning}
           </Text>
         )}
@@ -2135,6 +2135,20 @@ function formatBytes(bytes: number): string {
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  flex1: {
+    flex: 1,
+  },
+  backButton: {
+    padding: 4,
+    marginRight: 8,
+  },
+  searchContainerNoPadding: {
+    paddingHorizontal: 0,
+  },
+  deviceBannerWarning: {
+    color: colors.error,
+    marginTop: 2,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
