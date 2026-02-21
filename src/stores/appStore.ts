@@ -52,6 +52,8 @@ interface AppState {
     quantization: string;
     author: string;
     totalBytes: number;
+    mmProjFileName?: string;
+    mmProjLocalPath?: string | null;
   }>;
   setBackgroundDownload: (downloadId: number, info: {
     modelId: string;
@@ -59,6 +61,8 @@ interface AppState {
     quantization: string;
     author: string;
     totalBytes: number;
+    mmProjFileName?: string;
+    mmProjLocalPath?: string | null;
   } | null) => void;
   clearBackgroundDownloads: () => void;
   // Settings

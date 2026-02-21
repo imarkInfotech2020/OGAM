@@ -63,10 +63,14 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
       const key = `${event.modelId}/${event.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
+      // Use the stored combined totalBytes (GGUF + mmproj) when available.
+      // event.totalBytes only reflects the GGUF file size from Android DownloadManager.
+      const storedMeta = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
+      const totalBytes = storedMeta?.totalBytes ?? event.totalBytes;
       setDownloadProgress(key, {
-        progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
+        progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
-        totalBytes: event.totalBytes,
+        totalBytes,
       });
     });
 

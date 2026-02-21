@@ -124,7 +124,8 @@ export async function downloadMmProjBackground(opts: MmProjBackgroundOpts): Prom
   const mmProjDownloadResult = RNFS.downloadFile({
     fromUrl: file.mmProjFile.downloadUrl,
     toFile: mmProjLocalPath,
-    background: false,
+    background: true,
+    discretionary: true,
     cacheable: false,
     progressInterval: 500,
     progress: (res) => {
@@ -139,7 +140,11 @@ export async function downloadMmProjBackground(opts: MmProjBackgroundOpts): Prom
       onProgress?.(progress);
     },
   });
-  await mmProjDownloadResult.promise;
+  const mmProjResult = await mmProjDownloadResult.promise;
+  if (mmProjResult.statusCode !== 200) {
+    await RNFS.unlink(mmProjLocalPath).catch(() => {});
+    throw new Error(`mmproj download failed with status ${mmProjResult.statusCode}`);
+  }
   return mmProjSize;
 }
 
@@ -183,10 +188,17 @@ export async function getOrphanedImageDirs(
 
   const items = await RNFS.readDir(imageModelsDir);
   const imageModels = await imageModelsGetter();
-  const trackedImagePaths = new Set(imageModels.map(m => m.modelPath));
+  const trackedImagePaths = imageModels.map(m => m.modelPath);
 
   for (const item of items) {
-    if (trackedImagePaths.has(item.path)) continue;
+    // An item is tracked if its path matches a stored modelPath exactly OR if
+    // a stored modelPath is nested inside this directory (CoreML models store a
+    // compiled subdirectory as modelPath while the parent dir also contains
+    // tokenizer files — the parent should not be flagged as an orphan).
+    const isTracked = trackedImagePaths.some(
+      p => p === item.path || p.startsWith(item.path + '/'),
+    );
+    if (isTracked) continue;
 
     let totalSize = 0;
     if (item.isDirectory()) {

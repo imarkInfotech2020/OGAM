@@ -10,14 +10,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
 
-  var backgroundSessionCompletionHandlers: [String: () -> Void] = [:]
-
   func application(
     _ application: UIApplication,
     handleEventsForBackgroundURLSession identifier: String,
     completionHandler: @escaping () -> Void
   ) {
-    backgroundSessionCompletionHandlers[identifier] = completionHandler
+    // Pass the completion handler to RNFS so it can finalize the background
+    // URL session and signal iOS that all events have been processed.
+    // Without this, iOS may penalise the app for not calling the handler promptly.
+    RNFSManager.setCompletionHandler(forIdentifier: identifier, completionHandler: completionHandler)
   }
 
   func application(

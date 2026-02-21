@@ -49,11 +49,34 @@ export async function downloadHuggingFaceModel(
       const filePath = `${modelDir}/${file.path}`;
       const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
       if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
-      const result = await RNFS.downloadFile({
-        fromUrl: fileUrl, toFile: filePath, background: true, discretionary: false, progressInterval: 500,
-        progress: (res) => { deps.updateModelProgress(modelInfo.id, ((downloadedSize + res.bytesWritten) / totalSize) * 0.95); },
-      }).promise;
-      if (result.statusCode !== 200) throw new Error(`Failed to download ${file.path}: HTTP ${result.statusCode}`);
+
+      if (Platform.OS === 'android') {
+        // Use Android DownloadManager so downloads survive app backgrounding.
+        // Use a flattened temp filename to avoid path issues in the Downloads dir.
+        const tempFileName = `${modelInfo.id}_${file.path.replace(/\//g, '_')}`;
+        const capturedDownloadedSize = downloadedSize;
+        await backgroundDownloadService.downloadFileTo(
+          {
+            url: fileUrl,
+            fileName: tempFileName,
+            modelId: `image:${modelInfo.id}`,
+            totalBytes: file.size,
+          },
+          filePath,
+          (bytesDownloaded) => {
+            deps.updateModelProgress(
+              modelInfo.id,
+              ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95,
+            );
+          },
+        );
+      } else {
+        const result = await RNFS.downloadFile({
+          fromUrl: fileUrl, toFile: filePath, background: true, discretionary: false, progressInterval: 500,
+          progress: (res) => { deps.updateModelProgress(modelInfo.id, ((downloadedSize + res.bytesWritten) / totalSize) * 0.95); },
+        }).promise;
+        if (result.statusCode !== 200) throw new Error(`Failed to download ${file.path}: HTTP ${result.statusCode}`);
+      }
       downloadedSize += file.size;
       deps.updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
     }

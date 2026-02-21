@@ -22,6 +22,7 @@ import {
   performBackgroundDownload,
   watchBackgroundDownload,
   syncCompletedBackgroundDownloads,
+  restoreInProgressDownloads,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from './download';
@@ -231,6 +232,29 @@ class ModelManager {
     return syncCompletedBackgroundDownloads({ persistedDownloads, modelsDir: this.modelsDir, clearDownloadCallback });
   }
 
+  async restoreInProgressDownloads(
+    persistedDownloads: Record<number, {
+      modelId: string;
+      fileName: string;
+      quantization: string;
+      author: string;
+      totalBytes: number;
+      mmProjFileName?: string;
+      mmProjLocalPath?: string | null;
+    }>,
+    onProgress?: DownloadProgressCallback,
+  ): Promise<void> {
+    if (!this.isBackgroundDownloadSupported()) return;
+    await this.initialize();
+    return restoreInProgressDownloads({
+      persistedDownloads,
+      modelsDir: this.modelsDir,
+      backgroundDownloadContext: this.backgroundDownloadContext,
+      backgroundDownloadMetadataCallback: this.backgroundDownloadMetadataCallback,
+      onProgress,
+    });
+  }
+
   async getActiveBackgroundDownloads(): Promise<BackgroundDownloadInfo[]> {
     if (!this.isBackgroundDownloadSupported()) return [];
     return backgroundDownloadService.getActiveDownloads();
@@ -290,11 +314,16 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Image model not found');
-    if (!model.modelPath.startsWith(this.imageModelsDir)) {
+
+    // Always remove the top-level directory for this model under imageModelsDir.
+    // For CoreML models, model.modelPath points to a compiled subdirectory;
+    // deleting only that subdir leaves the parent with tokenizer files on disk.
+    const topLevelDir = `${this.imageModelsDir}/${modelId}`;
+    if (!topLevelDir.startsWith(this.imageModelsDir + '/')) {
       throw new Error('Invalid image model path: outside app directory');
     }
 
-    if (await RNFS.exists(model.modelPath)) await RNFS.unlink(model.modelPath);
+    if (await RNFS.exists(topLevelDir)) await RNFS.unlink(topLevelDir);
     await saveImageModelsList(models.filter(m => m.id !== modelId));
   }
 

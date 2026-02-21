@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 
 const { DownloadManagerModule } = NativeModules;
@@ -272,6 +272,90 @@ class BackgroundDownloadService {
     }
     this.isPolling = false;
     DownloadManagerModule.stopProgressPolling();
+  }
+
+  /**
+   * Request POST_NOTIFICATIONS permission on Android 13+.
+   * Must be called before starting downloads so system DownloadManager
+   * notifications appear. Safe to call multiple times.
+   */
+  async requestNotificationPermission(): Promise<void> {
+    if (Platform.OS !== 'android' || Platform.Version < 33) return;
+    try {
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        {
+          title: 'Notification Permission',
+          message: 'Allow Off Grid to show download progress notifications.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        },
+      );
+    } catch {
+      // Non-fatal — download still works, just no system notification
+    }
+  }
+
+  /**
+   * Start a background download, wait for it to complete, then move the
+   * finished file to destPath. Intended for sequential dependencies such as
+   * mmproj → GGUF where each file must finish before the next can start.
+   *
+   * @param params  Same params as startDownload
+   * @param destPath  Final destination path for the completed file
+   * @param onProgress  Optional per-byte progress callback
+   * @param silent  If true, suppress the system notification for this download
+   */
+  async downloadFileTo(
+    params: DownloadParams,
+    destPath: string,
+    onProgress?: (bytesDownloaded: number, totalBytes: number) => void,
+    silent?: boolean,
+  ): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Background downloads not available on this platform');
+    }
+
+    const info = await DownloadManagerModule.startDownload({
+      url: params.url,
+      fileName: params.fileName,
+      modelId: params.modelId,
+      title: params.title ?? `Downloading ${params.fileName}`,
+      description: params.description ?? 'Downloading…',
+      totalBytes: params.totalBytes ?? 0,
+      hideNotification: silent === true,
+    });
+
+    this.startProgressPolling();
+
+    const downloadId: number = info.downloadId;
+
+    await new Promise<void>((resolve, reject) => {
+      const removeProgress = onProgress
+        ? this.onProgress(downloadId, (event) => {
+            onProgress(event.bytesDownloaded, event.totalBytes);
+          })
+        : () => {};
+
+      const removeComplete = this.onComplete(downloadId, async () => {
+        removeProgress();
+        removeComplete();
+        removeError();
+        try {
+          await this.moveCompletedDownload(downloadId, destPath);
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      });
+
+      const removeError = this.onError(downloadId, (event) => {
+        removeProgress();
+        removeComplete();
+        removeError();
+        reject(new Error(event.reason ?? 'Download failed'));
+      });
+    });
   }
 
   /**

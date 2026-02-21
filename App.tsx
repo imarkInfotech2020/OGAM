@@ -11,7 +11,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService } from './src/services';
+import { hardwareService, modelManager, authService, backgroundDownloadService } from './src/services';
+import logger from './src/utils/logger';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
@@ -25,6 +26,7 @@ function App() {
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
+  const clearImageModelDownloading = useAppStore((s) => s.clearImageModelDownloading);
 
   const { colors, isDark } = useTheme();
 
@@ -56,6 +58,10 @@ function App() {
 
   const initializeApp = async () => {
     try {
+      // Request POST_NOTIFICATIONS permission on Android 13+ so system
+      // DownloadManager shows progress notifications.
+      backgroundDownloadService.requestNotificationPermission().catch(() => {});
+
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
       const deviceInfo = await hardwareService.getDeviceInfo();
@@ -84,11 +90,23 @@ function App() {
         );
         for (const model of recoveredModels) {
           addDownloadedModel(model);
-          console.log('[App] Recovered background download:', model.name);
+          logger.log('[App] Recovered background download:', model.name);
         }
       } catch (err) {
-        console.error('[App] Failed to sync background downloads:', err);
+        logger.error('[App] Failed to sync background downloads:', err);
       }
+
+      // Re-wire event listeners for downloads that were still running when the
+      // app was killed (running/pending status in Android DownloadManager).
+      try {
+        await modelManager.restoreInProgressDownloads(activeBackgroundDownloads);
+      } catch (err) {
+        logger.error('[App] Failed to restore in-progress downloads:', err);
+      }
+
+      // Clear any stale imageModelDownloading entries — if the app was killed
+      // mid-download these would be persisted as "downloading" forever.
+      clearImageModelDownloading();
 
       // Scan for any models that may have been downloaded externally or
       // when app was killed before JS callback fired
@@ -108,7 +126,7 @@ function App() {
       // Models are loaded on-demand when the user opens a chat,
       // not eagerly on startup, to avoid freezing the UI.
     } catch (error) {
-      console.error('Error initializing app:', error);
+      logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
     }
   };

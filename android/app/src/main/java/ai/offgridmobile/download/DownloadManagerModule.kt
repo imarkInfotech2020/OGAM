@@ -114,6 +114,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val description = params.getString("description") ?: "Downloading model..."
             val modelId = params.getString("modelId") ?: ""
             val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
+            val hideNotification = params.hasKey("hideNotification") && params.getBoolean("hideNotification")
 
             // Clean up any existing file with the same name to prevent DownloadManager
             // from auto-renaming (e.g., file.gguf → file-1.gguf)
@@ -132,7 +133,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val request = DownloadManager.Request(Uri.parse(url))
                 .setTitle(title)
                 .setDescription(description)
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setNotificationVisibility(
+                    if (hideNotification) DownloadManager.Request.VISIBILITY_HIDDEN
+                    else DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
                 .setDestinationInExternalFilesDir(
                     reactApplicationContext,
                     Environment.DIRECTORY_DOWNLOADS,
