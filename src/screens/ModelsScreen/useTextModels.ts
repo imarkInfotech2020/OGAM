@@ -11,7 +11,7 @@ import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QU
 import { getModelType } from './utils';
 import logger from '../../utils/logger';
 
-const PARAM_COUNT_REGEX = /(\d+(?:\.\d+)?)\s?b\b/i;
+const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
 
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
