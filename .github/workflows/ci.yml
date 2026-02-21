@@ -22,11 +22,30 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
+      - name: Lint (JS/TS + Android)
         run: npm run lint
+
+  lint-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Lint Swift
+        run: npm run lint:ios
 
   typecheck:
     runs-on: ubuntu-latest
@@ -128,25 +147,16 @@ jobs:
           ruby-version: '3.2'
           bundler-cache: true
 
+      - name: Install xcpretty
+        run: gem install xcpretty
+
       - name: Install CocoaPods
         run: |
           gem install cocoapods
           cd ios && pod install
 
-      - name: Install SwiftLint
-        run: brew install swiftlint
-
-      - name: Lint Swift
-        run: swiftlint lint --quiet --reporter github-actions-logging
-
       - name: Run iOS unit tests
-        run: |
-          xcodebuild test \
-            -workspace ios/OffgridMobile.xcworkspace \
-            -scheme OffgridMobile \
-            -destination 'platform=iOS Simulator,name=iPhone 16e' \
-            -only-testing:OffgridMobileTests \
-            | xcpretty --color && exit "${PIPESTATUS[0]}"
+        run: npm run test:ios
 
       - name: Upload test results
         if: always()
