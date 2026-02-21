@@ -12,6 +12,7 @@ import {
   ImageDownloadDeps,
   handleDownloadImageModel as downloadImageModel,
 } from './imageDownloadActions';
+import logger from '../../utils/logger';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
@@ -91,7 +92,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         setImageModelDownloadId(modelId, download.downloadId);
         updateModelProgress(modelId, download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0);
       }
-    } catch (e) { console.warn('[ModelsScreen] Failed to restore image downloads:', e); }
+    } catch (e) { logger.warn('[ModelsScreen] Failed to restore image downloads:', e); }
   };
 
   useEffect(() => {

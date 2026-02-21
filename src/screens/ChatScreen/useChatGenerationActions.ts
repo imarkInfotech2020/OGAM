@@ -18,6 +18,7 @@ import {
 } from '../../services';
 import { useChatStore, useProjectStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy } from '../../types';
+import logger from '../../utils/logger';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -104,7 +105,7 @@ export async function shouldRouteToImageGenerationFn(
     }
     return intent === 'image';
   } catch (error) {
-    console.warn('[ChatScreen] Intent classification failed:', error);
+    logger.warn('[ChatScreen] Intent classification failed:', error);
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);
@@ -172,7 +173,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
       shouldClearCache = true;
     }
   } catch (e) {
-    console.log('Debug info error:', e);
+    logger.log('Debug info error:', e);
   }
   if (shouldClearCache) {
     await llmService.clearKVCache(false).catch(() => {});
@@ -181,7 +182,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     await generationService.generateResponse(
       targetConversationId,
       messagesForContext,
-      () => { console.log('[ChatScreen] First token received for conversation:', targetConversationId); },
+      () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
     );
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
@@ -235,7 +236,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
 }
 
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'generatingForConversationRef'>): Promise<void> {
-  console.log('[ChatScreen] handleStop called');
+  logger.log('[ChatScreen] handleStop called');
   deps.generatingForConversationRef.current = null;
   try {
     await Promise.all([
@@ -243,7 +244,7 @@ export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage
       llmService.stopGeneration().catch(() => {}),
     ]);
   } catch (error_) {
-    console.error('Error stopping generation:', error_);
+    logger.error('Error stopping generation:', error_);
   }
   if (deps.isGeneratingImage) {
     imageGenerationService.cancelGeneration().catch(() => {});

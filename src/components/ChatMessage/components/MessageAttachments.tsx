@@ -14,6 +14,7 @@ import Animated, {
 import Icon from 'react-native-vector-icons/Feather';
 import { MediaAttachment } from '../../../types';
 import { viewDocument } from '@react-native-documents/viewer';
+import logger from '../../../utils/logger';
 
 interface FadeInImageProps {
   uri: string;
@@ -107,9 +108,9 @@ export function MessageAttachments({
               } else if (!uri.includes('://')) {
                 uri = `file://${uri}`;
               }
-              console.log('[ChatMessage] Opening document:', uri);
+              logger.log('[ChatMessage] Opening document:', uri);
               viewDocument({ uri, mimeType, grantPermissions: 'read' }).catch((err: any) => {
-                console.warn('[ChatMessage] Failed to open document:', err?.message || err);
+                logger.warn('[ChatMessage] Failed to open document:', err?.message || err);
               });
             }}
             activeOpacity={0.7}

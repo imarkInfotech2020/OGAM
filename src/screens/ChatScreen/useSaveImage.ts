@@ -2,6 +2,7 @@ import { Dispatch, SetStateAction } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import { AlertState, showAlert } from '../../components';
+import logger from '../../utils/logger';
 
 export async function saveImageToGallery(
   viewerImageUri: string | null,
@@ -38,7 +39,7 @@ export async function saveImageToGallery(
         : `Saved to ${fileName}`,
     ));
   } catch (error: any) {
-    console.error('[ChatScreen] Failed to save image:', error);
+    logger.error('[ChatScreen] Failed to save image:', error);
     setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
   }
 }

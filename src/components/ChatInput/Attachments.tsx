@@ -11,6 +11,7 @@ import { MediaAttachment } from '../../types';
 import { documentService } from '../../services/documentService';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
+import logger from '../../utils/logger';
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (pickError) {
-      console.error('Error picking image:', pickError);
+      logger.error('Error picking image:', pickError);
     }
   };
 
@@ -50,7 +51,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (cameraError) {
-      console.error('Error taking photo:', cameraError);
+      logger.error('Error taking photo:', cameraError);
     }
   };
 
@@ -96,7 +97,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       if (attachment) setAttachments(prev => [...prev, attachment]);
     } catch (pickError: any) {
       if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
-      console.error('Error picking document:', pickError);
+      logger.error('Error picking document:', pickError);
       setAlertState(showAlert('Error', pickError.message || 'Failed to read document', [{ text: 'OK' }]));
     }
   };

@@ -20,6 +20,7 @@ import { useThemedStyles } from '../../theme';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { createStyles } from './styles';
 import { LoadingState, TranscribingState, UnavailableButton, ButtonIcon } from './states';
+import logger from '../../utils/logger';
 
 interface VoiceRecordButtonProps {
   isRecording: boolean;
@@ -52,7 +53,7 @@ function buildPanResponder({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
-      console.log('[VoiceButton] Press started');
+      logger.log('[VoiceButton] Press started');
       Vibration.vibrate(50);
       isDraggingToCancel.current = false;
       callbacksRef.current.onStartRecording();
@@ -66,7 +67,7 @@ function buildPanResponder({
       isDraggingToCancel.current = isInCancelZone;
     },
     onPanResponderRelease: () => {
-      console.log('[VoiceButton] Press released, cancel:', isDraggingToCancel.current);
+      logger.log('[VoiceButton] Press released, cancel:', isDraggingToCancel.current);
       Vibration.vibrate(30);
       if (isDraggingToCancel.current) {
         callbacksRef.current.onCancelRecording();
@@ -77,7 +78,7 @@ function buildPanResponder({
       isDraggingToCancel.current = false;
     },
     onPanResponderTerminate: () => {
-      console.log('[VoiceButton] Press terminated');
+      logger.log('[VoiceButton] Press terminated');
       callbacksRef.current.onCancelRecording();
       Animated.spring(cancelOffsetX, { toValue: 0, useNativeDriver: true }).start();
       isDraggingToCancel.current = false;

@@ -8,6 +8,7 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { ChatsStackParamList } from '../../../navigation/types';
 import { useModelLoading } from './useModelLoading';
+import logger from '../../../utils/logger';
 
 type MainTabParamListWithNested = {
   HomeTab: undefined;
@@ -87,7 +88,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       const info = await activeModelService.getResourceUsage();
       setMemoryInfo(info);
     } catch (error) {
-      console.warn('[HomeScreen] Failed to get memory info:', error);
+      logger.warn('[HomeScreen] Failed to get memory info:', error);
     }
   }, []);
 

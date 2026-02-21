@@ -44,7 +44,11 @@ interface ChatState {
   getConversationMessages: (conversationId: string) => Message[];
 }
 
-const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const generateId = () => {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return `${Date.now()}-${array[0].toString(36)}`;
+};
 
 export const useChatStore = create<ChatState>()(
   persist(

@@ -9,6 +9,7 @@ import {
 } from '../../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
 import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
+import logger from '../../utils/logger';
 
 export interface UseDownloadManagerResult {
   isRefreshing: boolean;
@@ -153,11 +154,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
             if (dlId) cancelledKeysRef.current.delete(capturedKey);
           })
           .catch(err => {
-            console.error('[DownloadManager] Failed to reload active downloads:', err);
+            logger.error('[DownloadManager] Failed to reload active downloads:', err);
           });
       }, 1000);
     } catch (error) {
-      console.error('[DownloadManager] Failed to remove download:', error);
+      logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
     }
   };
@@ -185,7 +186,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       await modelManager.deleteModel(model.id);
       removeDownloadedModel(model.id);
     } catch (error) {
-      console.error('[DownloadManager] Failed to delete model:', error);
+      logger.error('[DownloadManager] Failed to delete model:', error);
       setAlertState(showAlert('Error', 'Failed to delete model'));
     }
   };
@@ -215,7 +216,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       await modelManager.deleteImageModel(model.id);
       removeDownloadedImageModel(model.id);
     } catch (error) {
-      console.error('[DownloadManager] Failed to delete image model:', error);
+      logger.error('[DownloadManager] Failed to delete image model:', error);
       setAlertState(showAlert('Error', 'Failed to delete image model'));
     }
   };

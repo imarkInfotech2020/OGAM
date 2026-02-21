@@ -16,6 +16,7 @@ import {
 } from './useChatGenerationActions';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
 import { saveImageToGallery } from './useSaveImage';
+import logger from '../../utils/logger';
 
 export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
@@ -148,7 +149,7 @@ export const useChatScreen = () => {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
         if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
           try { await activeModelService.loadTextModel(settings.classifierModelId!); }
-          catch (error) { console.warn('[ChatScreen] Failed to preload classifier model:', error); }
+          catch (error) { logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
         }
       }
     };

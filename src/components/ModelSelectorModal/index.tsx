@@ -13,6 +13,7 @@ import { useAppStore } from '../../stores';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { activeModelService, hardwareService } from '../../services';
 import { createStyles } from './styles';
+import logger from '../../utils/logger';
 
 type TabType = 'text' | 'image';
 
@@ -252,7 +253,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       await activeModelService.loadImageModel(model.id);
       onSelectImageModel?.(model);
     } catch (error) {
-      console.error('Failed to load image model:', error);
+      logger.error('Failed to load image model:', error);
     } finally {
       setIsLoadingImage(false);
     }
@@ -264,7 +265,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       await activeModelService.unloadImageModel();
       onUnloadImageModel?.();
     } catch (error) {
-      console.error('Failed to unload image model:', error);
+      logger.error('Failed to unload image model:', error);
     } finally {
       setIsLoadingImage(false);
     }
