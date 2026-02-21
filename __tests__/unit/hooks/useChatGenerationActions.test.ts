@@ -141,7 +141,8 @@ function makeRef<T>(value: T): React.MutableRefObject<T> {
 const baseModel = createDownloadedModel({ id: 'model-1', filePath: '/path/model.gguf' });
 const baseImageModel = { id: 'img-1', name: 'SD Model' };
 
-function makeGenerationDeps(overrides: Partial<Record<string, unknown>> = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
   return {
     activeModelId: 'model-1',
     activeModel: baseModel,
@@ -152,7 +153,7 @@ function makeGenerationDeps(overrides: Partial<Record<string, unknown>> = {}) {
     imageModelLoaded: false,
     isStreaming: false,
     isGeneratingImage: false,
-    imageGenState: { isGenerating: false, error: null },
+    imageGenState: { isGenerating: false, progress: null, status: null, previewPath: null, prompt: null, conversationId: null, error: null, result: null },
     settings: {
       showGenerationDetails: false,
       imageGenerationMode: 'auto',
@@ -259,7 +260,7 @@ describe('handleImageGenerationFn', () => {
     mockGenerateImage.mockResolvedValueOnce({ imagePath: '/img.png' });
     const deps = makeGenerationDeps({
       activeImageModel: baseImageModel,
-      imageGenState: { isGenerating: false, error: null },
+      imageGenState: { isGenerating: false, progress: null, status: null, previewPath: null, prompt: null, conversationId: null, error: null, result: null },
     });
     await handleImageGenerationFn(deps, { prompt: 'a dog', conversationId: 'conv-1' });
     expect(deps.addMessage).toHaveBeenCalledWith('conv-1', expect.objectContaining({ role: 'user', content: 'a dog' }));
@@ -343,7 +344,7 @@ describe('regenerateResponseFn', () => {
     const deps = makeGenerationDeps({
       imageModelLoaded: true,
       activeImageModel: baseImageModel,
-      imageGenState: { isGenerating: false, error: null },
+      imageGenState: { isGenerating: false, progress: null, status: null, previewPath: null, prompt: null, conversationId: null, error: null, result: null },
     });
     const msg = { id: 'm1', role: 'user' as const, content: 'draw a fox', timestamp: 0 };
     await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: msg });
