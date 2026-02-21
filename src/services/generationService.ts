@@ -44,24 +44,16 @@ class GenerationService {
   // Token batching — collect tokens and flush to UI at a controlled rate
   private tokenBuffer: string = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly FLUSH_INTERVAL_MS = 50; // Update UI at most ~20 times/sec
+  private static readonly FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
-  /**
-   * Flush buffered tokens to the chat store in a single batched update.
-   * Called on a timer (~50ms) to limit UI re-renders during streaming.
-   */
   private flushTokenBuffer(): void {
     if (this.tokenBuffer) {
-      const chatStore = useChatStore.getState();
-      chatStore.appendToStreamingMessage(this.tokenBuffer);
+      useChatStore.getState().appendToStreamingMessage(this.tokenBuffer);
       this.tokenBuffer = '';
     }
     this.flushTimer = null;
   }
 
-  /**
-   * Force-flush any remaining tokens (used on completion/abort).
-   */
   private forceFlushTokens(): void {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -70,26 +62,16 @@ class GenerationService {
     this.flushTokenBuffer();
   }
 
-  /**
-   * Get current generation state
-   */
   getState(): GenerationState {
     return { ...this.state };
   }
 
-  /**
-   * Check if generation is in progress for a specific conversation
-   */
   isGeneratingFor(conversationId: string): boolean {
     return this.state.isGenerating && this.state.conversationId === conversationId;
   }
 
-  /**
-   * Subscribe to generation state changes
-   */
   subscribe(listener: GenerationListener): () => void {
     this.listeners.add(listener);
-    // Immediately call with current state
     listener(this.getState());
     return () => this.listeners.delete(listener);
   }
@@ -104,22 +86,37 @@ class GenerationService {
     this.notifyListeners();
   }
 
+  private buildGenerationMeta(): GenerationMeta {
+    const gpuInfo = llmService.getGpuInfo();
+    const perfStats = llmService.getPerformanceStats();
+    const { downloadedModels, activeModelId } = useAppStore.getState();
+    const activeModel = downloadedModels.find(m => m.id === activeModelId);
+    return {
+      gpu: gpuInfo.gpu,
+      gpuBackend: gpuInfo.gpuBackend,
+      gpuLayers: gpuInfo.gpuLayers,
+      modelName: activeModel?.name,
+      tokensPerSecond: perfStats.lastTokensPerSecond,
+      decodeTokensPerSecond: perfStats.lastDecodeTokensPerSecond,
+      timeToFirstToken: perfStats.lastTimeToFirstToken,
+      tokenCount: perfStats.lastTokenCount,
+    };
+  }
+
   /**
-   * Generate a response for a conversation
-   * This runs independently of UI - will continue even if user navigates away
+   * Generate a response for a conversation.
+   * Runs independently of UI — continues even if user navigates away.
    */
   async generateResponse(
     conversationId: string,
     messages: Message[],
     onFirstToken?: () => void
   ): Promise<void> {
-    // Don't start if already generating
     if (this.state.isGenerating) {
       console.log('[GenerationService] Already generating, ignoring request');
       return;
     }
 
-    // Ensure model is loaded
     const isModelLoaded = llmService.isModelLoaded();
     const isLlmGenerating = llmService.isCurrentlyGenerating();
     console.log('[GenerationService] 🟢 Starting text generation - Model loaded:', isModelLoaded, 'LLM generating:', isLlmGenerating);
@@ -128,7 +125,6 @@ class GenerationService {
       console.error('[GenerationService] ❌ No model loaded');
       throw new Error('No model loaded');
     }
-
     if (isLlmGenerating) {
       console.error('[GenerationService] ❌ LLM service is currently generating, cannot start');
       throw new Error('LLM service busy - try again in a moment');
@@ -143,7 +139,6 @@ class GenerationService {
       startTime: Date.now(),
     });
 
-    // Initialize streaming state in chat store
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
     this.tokenBuffer = '';
@@ -153,23 +148,14 @@ class GenerationService {
       console.log('[GenerationService] 📤 Calling llmService.generateResponse...');
       await llmService.generateResponse(
         messages,
-        // onStream — tokens are batched to avoid flooding the JS thread
         (token) => {
-          // Check if generation was aborted
-          if (this.abortRequested) {
-            return;
-          }
-
+          if (this.abortRequested) return;
           if (!firstTokenReceived) {
             firstTokenReceived = true;
             this.updateState({ isThinking: false });
             onFirstToken?.();
           }
-
-          // Accumulate in internal state (no listeners fired)
           this.state.streamingContent += token;
-
-          // Buffer tokens and flush to UI on a timer (~20 updates/sec max)
           this.tokenBuffer += token;
           if (!this.flushTimer) {
             this.flushTimer = setTimeout(
@@ -178,44 +164,20 @@ class GenerationService {
             );
           }
         },
-        // onComplete
         () => {
           console.log('[GenerationService] ✅ Text generation completed');
-          // Flush any remaining buffered tokens before finalizing
           this.forceFlushTokens();
-
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
           } else {
-            // Finalize the message in the store
-            const generationTime = this.state.startTime
-              ? Date.now() - this.state.startTime
-              : undefined;
-
-            // Build generation metadata
-            const gpuInfo = llmService.getGpuInfo();
-            const perfStats = llmService.getPerformanceStats();
-            const { downloadedModels, activeModelId } = useAppStore.getState();
-            const activeModel = downloadedModels.find(m => m.id === activeModelId);
-            const meta: GenerationMeta = {
-              gpu: gpuInfo.gpu,
-              gpuBackend: gpuInfo.gpuBackend,
-              gpuLayers: gpuInfo.gpuLayers,
-              modelName: activeModel?.name,
-              tokensPerSecond: perfStats.lastTokensPerSecond,
-              decodeTokensPerSecond: perfStats.lastDecodeTokensPerSecond,
-              timeToFirstToken: perfStats.lastTimeToFirstToken,
-              tokenCount: perfStats.lastTokenCount,
-            };
-
-            chatStore.finalizeStreamingMessage(conversationId, generationTime, meta);
+            const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+            chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
           }
           this.resetState();
         },
       );
     } catch (error) {
       console.error('[GenerationService] ❌ Generation error:', error);
-      // Cancel any pending flush
       if (this.flushTimer) {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;
@@ -228,49 +190,22 @@ class GenerationService {
   }
 
   /**
-   * Stop the current generation
-   * Returns the partial content if any was generated
+   * Stop the current generation.
+   * Returns the partial content if any was generated.
    */
   async stopGeneration(): Promise<string> {
-    // Always try to stop native generation first, regardless of our state
-    // This handles race conditions and state mismatches
     await llmService.stopGeneration().catch(() => {});
+    if (!this.state.isGenerating) return '';
 
-    if (!this.state.isGenerating) {
-      return '';
-    }
-
-    // Flush any remaining buffered tokens so partial content is complete
     this.forceFlushTokens();
 
-    const conversationId = this.state.conversationId;
-    const streamingContent = this.state.streamingContent;
-    const generationTime = this.state.startTime
-      ? Date.now() - this.state.startTime
-      : undefined;
-
-    // Mark as aborted
+    const { conversationId, streamingContent, startTime } = this.state;
+    const generationTime = startTime ? Date.now() - startTime : undefined;
     this.abortRequested = true;
 
-    // If we have content and a conversation, save it
     const chatStore = useChatStore.getState();
     if (conversationId && streamingContent.trim()) {
-      // Build generation metadata
-      const gpuInfo = llmService.getGpuInfo();
-      const perfStats = llmService.getPerformanceStats();
-      const { downloadedModels, activeModelId } = useAppStore.getState();
-      const activeModel = downloadedModels.find(m => m.id === activeModelId);
-      const meta: GenerationMeta = {
-        gpu: gpuInfo.gpu,
-        gpuBackend: gpuInfo.gpuBackend,
-        gpuLayers: gpuInfo.gpuLayers,
-        modelName: activeModel?.name,
-        tokensPerSecond: perfStats.lastTokensPerSecond,
-        decodeTokensPerSecond: perfStats.lastDecodeTokensPerSecond,
-        timeToFirstToken: perfStats.lastTimeToFirstToken,
-        tokenCount: perfStats.lastTokenCount,
-      };
-      chatStore.finalizeStreamingMessage(conversationId, generationTime, meta);
+      chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
     } else {
       chatStore.clearStreamingMessage();
     }
@@ -279,64 +214,39 @@ class GenerationService {
     return streamingContent;
   }
 
-  /**
-   * Add a message to the queue (processed after current generation completes)
-   */
+  /** Add a message to the queue (processed after current generation completes) */
   enqueueMessage(entry: QueuedMessage): void {
-    this.state = {
-      ...this.state,
-      queuedMessages: [...this.state.queuedMessages, entry],
-    };
+    this.state = { ...this.state, queuedMessages: [...this.state.queuedMessages, entry] };
     this.notifyListeners();
   }
 
-  /**
-   * Remove a specific message from the queue
-   */
+  /** Remove a specific message from the queue */
   removeFromQueue(id: string): void {
-    this.state = {
-      ...this.state,
-      queuedMessages: this.state.queuedMessages.filter(m => m.id !== id),
-    };
+    this.state = { ...this.state, queuedMessages: this.state.queuedMessages.filter(m => m.id !== id) };
     this.notifyListeners();
   }
 
-  /**
-   * Clear all queued messages
-   */
+  /** Clear all queued messages */
   clearQueue(): void {
-    this.state = {
-      ...this.state,
-      queuedMessages: [],
-    };
+    this.state = { ...this.state, queuedMessages: [] };
     this.notifyListeners();
   }
 
-  /**
-   * Register a callback that processes queued messages.
-   * ChatScreen sets this on mount and clears on unmount.
-   */
+  /** Register a callback that processes queued messages. ChatScreen sets this on mount/unmount. */
   setQueueProcessor(processor: QueueProcessor | null): void {
     this.queueProcessor = processor;
   }
 
   /**
-   * Drain all queued messages, aggregate into a single combined message,
-   * and call the processor once.
+   * Drain all queued messages, aggregate into a single combined message, and call the processor once.
    */
   private processNextInQueue(): void {
-    if (this.state.queuedMessages.length === 0 || !this.queueProcessor) {
-      return;
-    }
+    if (this.state.queuedMessages.length === 0 || !this.queueProcessor) return;
 
     const all = this.state.queuedMessages;
-    this.state = {
-      ...this.state,
-      queuedMessages: [],
-    };
+    this.state = { ...this.state, queuedMessages: [] };
     this.notifyListeners();
 
-    // Aggregate into a single QueuedMessage
     const combined: QueuedMessage = all.length === 1
       ? all[0]
       : {
@@ -354,14 +264,11 @@ class GenerationService {
 
   private resetState(): void {
     const hasQueuedItems = this.state.queuedMessages.length > 0;
-
-    // Clear any pending token flush
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     this.tokenBuffer = '';
-
     this.updateState({
       isGenerating: false,
       isThinking: false,
@@ -369,7 +276,6 @@ class GenerationService {
       streamingContent: '',
       startTime: null,
     });
-
     if (hasQueuedItems) {
       setTimeout(() => this.processNextInQueue(), 100);
     }
