@@ -15,6 +15,7 @@ import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMe
 
 export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+import logger from '../utils/logger';
 
 type StreamCallback = (token: string) => void;
 type CompleteCallback = (fullResponse: string) => void;
@@ -50,13 +51,13 @@ class LLMService {
     if (this.context && this.currentModelPath === modelPath) return;
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
     if (mmProjPath && !await RNFS.exists(mmProjPath)) {
-      console.warn('[LLM] MMProj file not found, disabling vision support');
+      logger.warn('[LLM] MMProj file not found, disabling vision support');
       mmProjPath = undefined;
     }
     const { settings } = useAppStore.getState();
     const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = buildModelParams(modelPath, settings);
     this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
-    console.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}`);
+    logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}`);
     try {
       const { context, gpuAttemptFailed, actualLength } = await initContextWithFallback(baseParams, ctxLen, nGpuLayers);
       this.context = context;
@@ -64,15 +65,15 @@ class LLMService {
       await logContextMetadata(context, actualLength);
       Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
       const androidLib = (context as any).androidLib || 'unknown';
-      console.log(`[LLM] Native lib: ${androidLib}`);
+      logger.log(`[LLM] Native lib: ${androidLib}`);
       this.currentModelPath = modelPath;
       this.multimodalSupport = null;
       this.multimodalInitialized = false;
-      console.log('[LLM] mmProjPath:', mmProjPath || 'none');
+      logger.log('[LLM] mmProjPath:', mmProjPath || 'none');
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
       const visionSupported = (this.multimodalSupport as MultimodalSupport | null)?.vision ?? false;
-      console.log('[LLM] Model loaded, vision:', visionSupported);
+      logger.log('[LLM] Model loaded, vision:', visionSupported);
     } catch (error: any) {
       this.context = null;
       this.currentModelPath = null;
@@ -84,22 +85,22 @@ class LLMService {
 
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) {
-      console.warn('[LLM] initializeMultimodal: No context available');
+      logger.warn('[LLM] initializeMultimodal: No context available');
       return false;
     }
     try {
       const stat = await RNFS.stat(mmProjPath);
       const sizeMB = (Number(stat.size) / (1024 * 1024)).toFixed(2);
-      console.log(`[LLM] mmproj file size: ${sizeMB} MB`);
+      logger.log(`[LLM] mmproj file size: ${sizeMB} MB`);
       if (Number(stat.size) < 100 * 1024 * 1024) {
-        console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB) - may be incomplete download!`);
+        logger.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB) - may be incomplete download!`);
       }
     } catch (statErr) {
-      console.error('[LLM] Failed to stat mmproj file:', statErr);
+      logger.error('[LLM] Failed to stat mmproj file:', statErr);
     }
     const deviceInfo = useAppStore.getState().deviceInfo;
     const useGpuForClip = Platform.OS === 'ios' && !deviceInfo?.isEmulator;
-    console.log('[LLM] Calling initMultimodal with path:', mmProjPath, 'use_gpu:', useGpuForClip);
+    logger.log('[LLM] Calling initMultimodal with path:', mmProjPath, 'use_gpu:', useGpuForClip);
     const { initialized, support } = await initMultimodal(this.context, mmProjPath, useGpuForClip);
     this.multimodalInitialized = initialized;
     this.multimodalSupport = support;
@@ -148,9 +149,9 @@ class LLMService {
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
       const useMultimodal = hasImages && this.multimodalInitialized;
       if (hasImages && !this.multimodalInitialized) {
-        console.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
+        logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
       }
-      console.log('[LLM] Generation mode:', useMultimodal ? 'VISION' : 'TEXT-ONLY');
+      logger.log('[LLM] Generation mode:', useMultimodal ? 'VISION' : 'TEXT-ONLY');
       const oaiMessages = this.convertToOAIMessages(managed);
       const { settings } = useAppStore.getState();
       const startTime = Date.now();
@@ -209,7 +210,7 @@ class LLMService {
       try {
         await this.context.stopCompletion();
       } catch (e) {
-        console.log('[LLM] Stop completion error (may be already stopped):', e);
+        logger.log('[LLM] Stop completion error (may be already stopped):', e);
       }
     }
     this.isGenerating = false;
@@ -219,9 +220,9 @@ class LLMService {
     if (!this.context || this.isGenerating) return;
     try {
       await (this.context as any).clearCache(clearData);
-      console.log('[LLM] KV cache cleared');
+      logger.log('[LLM] KV cache cleared');
     } catch (e) {
-      console.log('[LLM] Failed to clear KV cache:', e);
+      logger.log('[LLM] Failed to clear KV cache:', e);
     }
   }
 
@@ -306,7 +307,7 @@ class LLMService {
 
   updatePerformanceSettings(settings: Partial<LLMPerformanceSettings>): void {
     this.currentSettings = { ...this.currentSettings, ...settings };
-    console.log('[LLM] Performance settings updated:', this.currentSettings);
+    logger.log('[LLM] Performance settings updated:', this.currentSettings);
   }
 
   getPerformanceSettings(): LLMPerformanceSettings { return { ...this.currentSettings }; }
@@ -317,7 +318,7 @@ class LLMService {
     if (this.context) await this.unloadModel();
     const { settings: appS } = useAppStore.getState();
     const { baseParams, nGpuLayers } = buildModelParams(modelPath, { ...appS, ...settings });
-    console.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
+    logger.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
     try {
       const { context, gpuAttemptFailed } = await initContextWithFallback(baseParams, settings.contextLength, nGpuLayers);
       this.context = context;
@@ -326,9 +327,9 @@ class LLMService {
       this.multimodalSupport = null;
       this.multimodalInitialized = false;
       await this.checkMultimodalSupport();
-      console.log(`[LLM] Model reloaded, GPU: ${this.gpuEnabled ? `active (${this.activeGpuLayers}L)` : 'off'}`);
+      logger.log(`[LLM] Model reloaded, GPU: ${this.gpuEnabled ? `active (${this.activeGpuLayers}L)` : 'off'}`);
     } catch (error) {
-      console.error('[LLM] Error reloading model:', error);
+      logger.error('[LLM] Error reloading model:', error);
       this.context = null;
       this.currentModelPath = null;
       throw error;

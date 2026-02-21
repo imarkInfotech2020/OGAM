@@ -6,6 +6,7 @@
 import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
+import logger from '../utils/logger';
 
 export interface QueuedMessage {
   id: string;
@@ -113,20 +114,20 @@ class GenerationService {
     onFirstToken?: () => void
   ): Promise<void> {
     if (this.state.isGenerating) {
-      console.log('[GenerationService] Already generating, ignoring request');
+      logger.log('[GenerationService] Already generating, ignoring request');
       return;
     }
 
     const isModelLoaded = llmService.isModelLoaded();
     const isLlmGenerating = llmService.isCurrentlyGenerating();
-    console.log('[GenerationService] 🟢 Starting text generation - Model loaded:', isModelLoaded, 'LLM generating:', isLlmGenerating);
+    logger.log('[GenerationService] 🟢 Starting text generation - Model loaded:', isModelLoaded, 'LLM generating:', isLlmGenerating);
 
     if (!isModelLoaded) {
-      console.error('[GenerationService] ❌ No model loaded');
+      logger.error('[GenerationService] ❌ No model loaded');
       throw new Error('No model loaded');
     }
     if (isLlmGenerating) {
-      console.error('[GenerationService] ❌ LLM service is currently generating, cannot start');
+      logger.error('[GenerationService] ❌ LLM service is currently generating, cannot start');
       throw new Error('LLM service busy - try again in a moment');
     }
 
@@ -145,7 +146,7 @@ class GenerationService {
     let firstTokenReceived = false;
 
     try {
-      console.log('[GenerationService] 📤 Calling llmService.generateResponse...');
+      logger.log('[GenerationService] 📤 Calling llmService.generateResponse...');
       await llmService.generateResponse(
         messages,
         (token) => {
@@ -165,7 +166,7 @@ class GenerationService {
           }
         },
         () => {
-          console.log('[GenerationService] ✅ Text generation completed');
+          logger.log('[GenerationService] ✅ Text generation completed');
           this.forceFlushTokens();
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
@@ -177,7 +178,7 @@ class GenerationService {
         },
       );
     } catch (error) {
-      console.error('[GenerationService] ❌ Generation error:', error);
+      logger.error('[GenerationService] ❌ Generation error:', error);
       if (this.flushTimer) {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;
@@ -258,7 +259,7 @@ class GenerationService {
         };
 
     this.queueProcessor(combined).catch(error => {
-      console.error('[GenerationService] Queue processor error:', error);
+      logger.error('[GenerationService] Queue processor error:', error);
     });
   }
 

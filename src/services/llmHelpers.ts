@@ -10,6 +10,7 @@ export const RESPONSE_RESERVE = 512;
 export const CONTEXT_SAFETY_MARGIN = 0.85;
 
 import { Platform } from 'react-native';
+import logger from '../utils/logger';
 
 const DEFAULT_THREADS = Platform.OS === 'android' ? 6 : 4;
 const DEFAULT_BATCH = 256;
@@ -39,7 +40,7 @@ export async function ensureSessionCacheDir(cacheDir: string): Promise<void> {
   try {
     if (!await RNFS.exists(cacheDir)) await RNFS.mkdir(cacheDir);
   } catch (e) {
-    console.log('[LLM] Failed to create session cache dir:', e);
+    logger.log('[LLM] Failed to create session cache dir:', e);
   }
 }
 
@@ -96,14 +97,14 @@ export async function initContextWithFallback(
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
     if (nGpuLayers > 0) {
-      console.warn('[LLM] GPU load failed, falling back to CPU:', gpuError?.message || gpuError);
+      logger.warn('[LLM] GPU load failed, falling back to CPU:', gpuError?.message || gpuError);
       gpuAttemptFailed = true;
     }
     try {
       const context = await initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: 0 } as any);
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
-      console.warn(`[LLM] CPU load failed (ctx=${contextLength}), retrying with ctx=2048:`, cpuError?.message || cpuError);
+      logger.warn(`[LLM] CPU load failed (ctx=${contextLength}), retrying with ctx=2048:`, cpuError?.message || cpuError);
       const context = await initLlama({ ...params, n_ctx: 2048, n_gpu_layers: 0 } as any);
       return { context, gpuAttemptFailed, actualLength: 2048 };
     }
@@ -137,9 +138,9 @@ export async function logContextMetadata(context: LlamaContext, contextLength: n
     const trainCtx = metadata['llama.context_length'] || metadata['general.context_length'] || metadata.context_length;
     if (!trainCtx) return;
     const maxModelCtx = parseInt(trainCtx, 10);
-    console.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
+    logger.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
     if (contextLength > maxModelCtx) {
-      console.warn(`[LLM] Requested context (${contextLength}) exceeds model max (${maxModelCtx})`);
+      logger.warn(`[LLM] Requested context (${contextLength}) exceeds model max (${maxModelCtx})`);
     }
   } catch {
     // Metadata reading is best-effort
@@ -160,7 +161,7 @@ export async function initMultimodal(
   try {
     const success = await context.initMultimodal({ path: mmProjPath, use_gpu: useGpuForClip });
     if (!success) {
-      console.warn('[LLM] initMultimodal returned false - mmproj may be incompatible with model');
+      logger.warn('[LLM] initMultimodal returned false - mmproj may be incompatible with model');
       return noSupport;
     }
     let support: MultimodalSupport = { vision: true, audio: false };
@@ -170,10 +171,10 @@ export async function initMultimodal(
     } catch {
       // getMultimodalSupport not available, keep defaults
     }
-    console.log('[LLM] Multimodal initialized successfully, vision:', support.vision);
+    logger.log('[LLM] Multimodal initialized successfully, vision:', support.vision);
     return { initialized: true, support };
   } catch (error: any) {
-    console.error('[LLM] Multimodal init exception:', error?.message || error);
+    logger.error('[LLM] Multimodal init exception:', error?.message || error);
     return noSupport;
   }
 }
@@ -186,7 +187,7 @@ export async function checkContextMultimodal(context: LlamaContext): Promise<Mul
       return { vision: s?.vision || false, audio: s?.audio || false };
     }
   } catch {
-    console.log('Multimodal support check not available');
+    logger.log('Multimodal support check not available');
   }
   return { vision: false, audio: false };
 }
@@ -237,7 +238,7 @@ export function recordGenerationStats(
   const ttft = firstTokenMs / 1000;
   const decodeTime = elapsed - ttft;
   const decodeTokensPerSec = decodeTime > 0 && tokenCount > 1 ? (tokenCount - 1) / decodeTime : 0;
-  console.log(`[LLM] Generated ${tokenCount} tokens in ${elapsed.toFixed(1)}s (${tokensPerSec.toFixed(1)} tok/s, TTFT ${ttft.toFixed(2)}s)`);
+  logger.log(`[LLM] Generated ${tokenCount} tokens in ${elapsed.toFixed(1)}s (${tokensPerSec.toFixed(1)} tok/s, TTFT ${ttft.toFixed(2)}s)`);
   return {
     lastTokensPerSecond: tokensPerSec,
     lastDecodeTokensPerSecond: decodeTokensPerSec,

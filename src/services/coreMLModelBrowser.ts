@@ -1,3 +1,4 @@
+import logger from '../utils/logger';
 export interface CoreMLModelFile {
   path: string;
   relativePath: string;
@@ -194,7 +195,7 @@ export async function fetchAvailableCoreMLModels(
 
   results.forEach((r, i) => {
     if (r.status === 'rejected') {
-      console.warn(`[CoreMLBrowser] Failed to fetch ${REPOS[i].repo}:`, r.reason);
+      logger.warn(`[CoreMLBrowser] Failed to fetch ${REPOS[i].repo}:`, r.reason);
     }
   });
 

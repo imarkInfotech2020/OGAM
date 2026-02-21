@@ -10,6 +10,7 @@ import { activeModelService } from './activeModelService';
 import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage, GenerationMeta, Message } from '../types';
+import logger from '../utils/logger';
 
 export interface ImageGenerationState {
   isGenerating: boolean;
@@ -144,13 +145,13 @@ class ImageGenerationService {
   }
 
   private async _resetLlmAfterEnhancement(): Promise<void> {
-    console.log('[ImageGen] 🔄 Starting cleanup - generating:', llmService.isCurrentlyGenerating());
+    logger.log('[ImageGen] 🔄 Starting cleanup - generating:', llmService.isCurrentlyGenerating());
     try {
       await llmService.stopGeneration();
-      console.log('[ImageGen] ✓ stopGeneration() called');
-      console.log('[ImageGen] ✅ LLM service reset complete - generating:', llmService.isCurrentlyGenerating());
+      logger.log('[ImageGen] ✓ stopGeneration() called');
+      logger.log('[ImageGen] ✅ LLM service reset complete - generating:', llmService.isCurrentlyGenerating());
     } catch (resetError) {
-      console.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
+      logger.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
     }
   }
 
@@ -162,7 +163,7 @@ class ImageGenerationService {
       chatStore.updateMessageContent(conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${enhancedPrompt}</think>`);
       chatStore.updateMessageThinking(conversationId, tempMessageId, false);
     } else {
-      console.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
+      logger.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
       chatStore.deleteMessage(conversationId, tempMessageId);
     }
   }
@@ -170,14 +171,14 @@ class ImageGenerationService {
   private async _enhancePrompt(params: GenerateImageParams, steps: number): Promise<string> {
     const { settings } = useAppStore.getState();
     if (!settings.enhanceImagePrompts) {
-      console.log('[ImageGen] Enhancement disabled, using original prompt');
+      logger.log('[ImageGen] Enhancement disabled, using original prompt');
       return params.prompt;
     }
     const isTextModelLoaded = llmService.isModelLoaded();
     const isLlmGenerating = llmService.isCurrentlyGenerating();
-    console.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded, 'LLM generating:', isLlmGenerating);
+    logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded, 'LLM generating:', isLlmGenerating);
     if (!isTextModelLoaded) {
-      console.warn('[ImageGen] No text model loaded, skipping enhancement');
+      logger.warn('[ImageGen] No text model loaded, skipping enhancement');
       return params.prompt;
     }
     this.updateState({
@@ -194,20 +195,20 @@ class ImageGenerationService {
       tempMessageId = tempMessage.id;
     }
     try {
-      console.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
+      logger.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
       let raw = await llmService.generateResponse(buildEnhancementMessages(params.prompt, contextMessages), (_token) => {});
-      console.log('[ImageGen] 📥 llmService.generateResponse returned');
-      console.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());
+      logger.log('[ImageGen] 📥 llmService.generateResponse returned');
+      logger.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());
       raw = cleanEnhancedPrompt(raw);
-      console.log('[ImageGen] ✅ Original prompt:', params.prompt);
-      console.log('[ImageGen] ✅ Enhanced prompt:', raw);
+      logger.log('[ImageGen] ✅ Original prompt:', params.prompt);
+      logger.log('[ImageGen] ✅ Enhanced prompt:', raw);
       await this._resetLlmAfterEnhancement();
       const enhancedPrompt = raw || params.prompt;
       await this._updateEnhancementMessage({ conversationId: params.conversationId, tempMessageId, enhancedPrompt, originalPrompt: params.prompt });
       return enhancedPrompt;
     } catch (error: any) {
-      console.error('[ImageGen] ❌ Prompt enhancement failed:', error);
-      console.error('[ImageGen] Error details:', error?.message || 'Unknown error');
+      logger.error('[ImageGen] ❌ Prompt enhancement failed:', error);
+      logger.error('[ImageGen] Error details:', error?.message || 'Unknown error');
       await this._resetLlmAfterEnhancement();
       if (params.conversationId && tempMessageId) {
         useChatStore.getState().deleteMessage(params.conversationId, tempMessageId);
@@ -273,7 +274,7 @@ class ImageGenerationService {
       return result;
     } catch (error: any) {
       if (!error?.message?.includes('cancelled')) {
-        console.error('[ImageGenerationService] Generation error:', error);
+        logger.error('[ImageGenerationService] Generation error:', error);
         this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, error: error?.message || 'Image generation failed' });
       } else {
         this.resetState();
@@ -288,7 +289,7 @@ class ImageGenerationService {
    */
   async generateImage(params: GenerateImageParams): Promise<GeneratedImage | null> {
     if (this.state.isGenerating) {
-      console.log('[ImageGenerationService] Already generating, ignoring request');
+      logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
@@ -301,7 +302,7 @@ class ImageGenerationService {
     const imageHeight = settings.imageHeight || 256;
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
-    console.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
+    logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
     this.cancelRequested = false;
 
     if (!settings.enhanceImagePrompts) {
