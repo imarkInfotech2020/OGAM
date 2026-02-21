@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */ // TODO: split into smaller components
 import React, { useState } from 'react';
 import {
   View,
@@ -137,7 +138,7 @@ export const ProjectDetailScreen: React.FC = () => {
       <Swipeable
         renderRightActions={() => renderChatRightActions(item)}
         overshootRight={false}
-        containerStyle={{ overflow: 'visible' }}
+        containerStyle={styles.swipeableContainer}
       >
         <TouchableOpacity
           style={styles.chatItem}
@@ -267,6 +268,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  swipeableContainer: {
+    overflow: 'visible' as const,
   },
   header: {
     flexDirection: 'row' as const,

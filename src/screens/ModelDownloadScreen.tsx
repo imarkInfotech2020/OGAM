@@ -172,7 +172,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <View testID="model-download-screen" style={{flex: 1}}>
+      <View testID="model-download-screen" style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Download Your First Model</Text>
