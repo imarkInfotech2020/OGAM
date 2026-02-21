@@ -276,9 +276,6 @@ Answer:`;
         (token) => {
           response += token;
         },
-        undefined,
-        undefined,
-        undefined
       );
     } finally {
       // Swap back to original model if we changed it

@@ -220,12 +220,6 @@ class ImageGenerationService {
           (_token) => {
             // Token streaming callback - enhancement tracked via return value
           },
-          (_complete) => {
-            // Complete callback - enhancement tracked via return value
-          },
-          (error) => {
-            console.error('[ImageGen] ❌ Enhancement error callback:', error);
-          }
         );
         console.log('[ImageGen] 📥 llmService.generateResponse returned, checking state...');
         console.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());

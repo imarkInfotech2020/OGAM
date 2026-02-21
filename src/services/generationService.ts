@@ -212,26 +212,15 @@ class GenerationService {
           }
           this.resetState();
         },
-        // onError
-        (error) => {
-          console.error('[GenerationService] ❌ Generation error:', error);
-          console.error('[GenerationService] Error message:', error?.message || 'Unknown');
-          // Cancel any pending flush
-          if (this.flushTimer) {
-            clearTimeout(this.flushTimer);
-            this.flushTimer = null;
-          }
-          this.tokenBuffer = '';
-          chatStore.clearStreamingMessage();
-          this.resetState();
-        },
-        // onThinking
-        () => {
-          this.updateState({ isThinking: true });
-        }
       );
     } catch (error) {
-      console.error('[GenerationService] Generation failed:', error);
+      console.error('[GenerationService] ❌ Generation error:', error);
+      // Cancel any pending flush
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
+      this.tokenBuffer = '';
       chatStore.clearStreamingMessage();
       this.resetState();
       throw error;
