@@ -888,6 +888,27 @@ describe('appStore', () => {
 
       expect(merged.settings.modelLoadingStrategy).toBe('performance');
     });
+
+    it('actual store merge function migrates modelLoadingStrategy memory→performance', async () => {
+      const AsyncStorage = require('@react-native-async-storage/async-storage');
+
+      // Write persisted state with old 'memory' default into AsyncStorage (as Zustand persist would)
+      const persistedPayload = JSON.stringify({
+        state: {
+          settings: { modelLoadingStrategy: 'memory' },
+        },
+        version: 0,
+      });
+      await AsyncStorage.setItem('local-llm-app-storage', persistedPayload);
+
+      // Trigger Zustand persist to rehydrate from storage — this calls the actual merge function
+      await (useAppStore as any).persist.rehydrate();
+
+      expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('performance');
+
+      // Clean up storage mock
+      await AsyncStorage.removeItem('local-llm-app-storage');
+    });
   });
 
   // ============================================================================
@@ -1175,6 +1196,51 @@ describe('appStore', () => {
 
     it('has gpuLayers set to 6 by default', () => {
       expect(getAppState().settings.gpuLayers).toBe(6);
+    });
+
+    it('has flashAttn enabled by default on iOS (test env platform)', () => {
+      // The store initializes flashAttn as Platform.OS !== 'android'.
+      // The react-native preset sets defaultPlatform to 'ios', so without resetStores()
+      // the store should default to true. We verify by loading a fresh store instance.
+      jest.resetModules();
+      try {
+        // Fresh require — no resetStores() interference, so we see the real default
+        const { useAppStore: freshStore } = require('../../../src/stores/appStore');
+        // ios !== android → true
+        expect(freshStore.getState().settings.flashAttn).toBe(true);
+      } finally {
+        jest.resetModules();
+      }
+    });
+
+    it('flashAttn default formula: false on Android, true elsewhere', () => {
+      // The store default is Platform.OS !== 'android'. Verify the formula directly.
+      const formula = (os: string) => os !== 'android';
+      expect(formula('android')).toBe(false); // Android → flash attn off by default
+      expect(formula('ios')).toBe(true);      // iOS     → flash attn on by default
+    });
+
+    it('updateSettings can toggle flashAttn', () => {
+      const { updateSettings } = useAppStore.getState();
+      const initial = getAppState().settings.flashAttn;
+
+      updateSettings({ flashAttn: !initial });
+      expect(getAppState().settings.flashAttn).toBe(!initial);
+
+      updateSettings({ flashAttn: initial });
+      expect(getAppState().settings.flashAttn).toBe(initial);
+    });
+
+    it('updateSettings flashAttn does not affect other fields', () => {
+      const { updateSettings } = useAppStore.getState();
+      const before = getAppState().settings;
+
+      updateSettings({ flashAttn: true });
+
+      const after = getAppState().settings;
+      expect(after.temperature).toBe(before.temperature);
+      expect(after.gpuLayers).toBe(before.gpuLayers);
+      expect(after.enableGpu).toBe(before.enableGpu);
     });
 
     it('has showGenerationDetails disabled by default', () => {

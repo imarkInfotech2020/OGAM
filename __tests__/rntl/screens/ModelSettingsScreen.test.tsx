@@ -173,6 +173,35 @@ describe('ModelSettingsScreen', () => {
   });
 
   // ============================================================================
+  // Flash Attention Toggle
+  // ============================================================================
+  describe('flash attention toggle', () => {
+    it('renders Flash Attention label', () => {
+      const { getByText } = renderScreen();
+      expect(getByText('Flash Attention')).toBeTruthy();
+    });
+
+    it('updates store to true when Flash Attention switch is turned on', () => {
+      useAppStore.getState().updateSettings({ flashAttn: false });
+      const { getByTestId } = renderScreen();
+
+      fireEvent(getByTestId('flash-attn-switch'), 'valueChange', true);
+
+      expect(useAppStore.getState().settings.flashAttn).toBe(true);
+    });
+
+    it('updates store to false when Flash Attention switch is turned off', () => {
+      useAppStore.getState().updateSettings({ flashAttn: true });
+      const { getByTestId } = renderScreen();
+
+      fireEvent(getByTestId('flash-attn-switch'), 'valueChange', false);
+
+      expect(useAppStore.getState().settings.flashAttn).toBe(false);
+    });
+
+  });
+
+  // ============================================================================
   // Image Generation Settings
   // ============================================================================
   describe('image generation settings', () => {
@@ -507,6 +536,64 @@ describe('ModelSettingsScreen', () => {
       const { queryByText } = renderScreen();
       expect(queryByText('GPU Layers')).toBeNull();
     });
+
+    // Android-specific GPU tests: mock Platform.OS before each, restore after
+    describe('on Android platform', () => {
+      let originalOS: string;
+      const { Platform } = require('react-native');
+
+      beforeEach(() => {
+        originalOS = Platform.OS;
+        Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true });
+      });
+
+      afterEach(() => {
+        Object.defineProperty(Platform, 'OS', { get: () => originalOS, configurable: true });
+      });
+
+      it('shows GPU Acceleration and GPU Layers slider when GPU enabled', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+        const { getByText } = renderScreen();
+        expect(getByText('GPU Acceleration')).toBeTruthy();
+        expect(getByText('GPU Layers')).toBeTruthy();
+      });
+
+      it('clamps gpuLayers to 1 via UI when flashAttn turned on with layers > 1', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 8 });
+        const { getByTestId } = renderScreen();
+        fireEvent(getByTestId('flash-attn-switch'), 'valueChange', true);
+        expect(useAppStore.getState().settings.flashAttn).toBe(true);
+        expect(useAppStore.getState().settings.gpuLayers).toBe(1);
+      });
+
+      it('updates enableGpu to false when GPU Acceleration switch is toggled off', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+        const { getByTestId } = renderScreen();
+
+        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', false);
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(false);
+      });
+
+      it('updates enableGpu to true when GPU Acceleration switch is toggled on', () => {
+        useAppStore.getState().updateSettings({ enableGpu: false });
+        const { getByTestId } = renderScreen();
+
+        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', true);
+
+        expect(useAppStore.getState().settings.enableGpu).toBe(true);
+      });
+
+      it('updates gpuLayers when GPU Layers slider completes', () => {
+        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 6 });
+        const { getByTestId } = renderScreen();
+
+        const slider = getByTestId('gpu-layers-slider');
+        fireEvent(slider, 'slidingComplete', 12);
+
+        expect(useAppStore.getState().settings.gpuLayers).toBe(12);
+      });
+    });
   });
 
   // ============================================================================
@@ -673,6 +760,7 @@ describe('ModelSettingsScreen', () => {
           modelLoadingStrategy: undefined as any,
           enableGpu: undefined as any,
           gpuLayers: undefined as any,
+          flashAttn: undefined as any,
           showGenerationDetails: undefined as any,
           enhanceImagePrompts: undefined as any,
         },
