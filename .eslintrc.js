@@ -28,7 +28,6 @@ module.exports = {
     // Code quality (built-in)
     'no-empty': 'error',
     'no-else-return': 'error',
-    'no-console': 'warn',
     'prefer-template': 'error',
     complexity: ['error', 15],
     'max-lines-per-function': ['error', 250],
