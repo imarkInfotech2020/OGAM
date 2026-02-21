@@ -272,4 +272,63 @@ class DownloadManagerModuleTest {
         val dl = download("running", completedAt = now - 10_000L, completedEventSent = true)
         assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "running", currentTimeMs = now))
     }
+
+    // ── shouldRemoveDownload — additional edge cases ─────────────────────────
+
+    @Test
+    fun `shouldRemoveDownload keeps paused download`() {
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(download("paused"), liveStatus = "paused"))
+    }
+
+    @Test
+    fun `shouldRemoveDownload uses exactly 5000ms threshold — not yet expired`() {
+        // t=10000, completedAt=5001 → age=4999ms — below threshold
+        val dl = download("completed", completedAt = 5_001L, completedEventSent = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = 10_000L))
+    }
+
+    @Test
+    fun `shouldRemoveDownload uses exactly 5000ms threshold — just expired`() {
+        // t=10000, completedAt=4999 → age=5001ms — above threshold
+        val dl = download("completed", completedAt = 4_999L, completedEventSent = true)
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = 10_000L))
+    }
+
+    @Test
+    fun `shouldRemoveDownload requires completedEventSent to remove even when very old`() {
+        // completedAt far in the past, but completedEventSent=false — must NOT remove
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 60_000L, completedEventSent = false)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload requires completedAt to be set to remove`() {
+        // completedAt=0 even with eventSent=true — guard against incomplete records
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = 0L, completedEventSent = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload handles multiple downloads independently`() {
+        val now = System.currentTimeMillis()
+        val expiredDl = download("completed", completedAt = now - 10_000L, completedEventSent = true)
+        val freshDl   = download("completed", completedAt = now - 1_000L,  completedEventSent = true)
+        val pendingDl = download("pending")
+
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(expiredDl, liveStatus = "completed", currentTimeMs = now))
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(freshDl, liveStatus = "completed", currentTimeMs = now))
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(pendingDl, liveStatus = "pending", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload with unknown liveStatus removes regardless of stored state`() {
+        // Even a download that has never completed should be removed if DownloadManager
+        // no longer knows about it (race condition / lost state scenario).
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("running"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("pending"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("paused"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("completed"), liveStatus = "unknown"))
+    }
 }

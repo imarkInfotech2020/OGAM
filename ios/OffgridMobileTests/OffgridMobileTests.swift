@@ -552,4 +552,72 @@ final class DownloadManagerModuleTests: XCTestCase {
     )
     waitForExpectations(timeout: 2)
   }
+
+  // MARK: hideNotification parameter handling
+
+  /// hideNotification is a silent-download flag for dependency files (e.g. mmproj).
+  /// The module must not crash or reject INVALID_PARAMS because this key is present.
+  /// We verify by omitting URL (which is always required) — the rejection code must
+  /// be INVALID_PARAMS (missing URL), not an unexpected crash or different code.
+  func testStartDownloadAcceptsHideNotificationParamWithoutCrash() {
+    let exp = expectation(description: "startDownload with hideNotification rejects for missing URL only")
+    module.startDownload(
+      ["fileName": "dep.gguf", "modelId": "test/model", "hideNotification": true],
+      resolver: { _ in
+        XCTFail("should reject because URL is missing, not resolve")
+        exp.fulfill()
+      },
+      rejecter: { code, _, _ in
+        XCTAssertEqual(code, "INVALID_PARAMS", "Expected INVALID_PARAMS for missing URL, not a crash from hideNotification")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  func testStartDownloadWithHideNotificationFalseRejectsMissingUrl() {
+    let exp = expectation(description: "startDownload with hideNotification:false rejects missing url")
+    module.startDownload(
+      ["fileName": "dep.gguf", "modelId": "test/model", "hideNotification": false],
+      resolver: { _ in
+        XCTFail("should reject because URL is missing")
+        exp.fulfill()
+      },
+      rejecter: { code, _, _ in
+        XCTAssertEqual(code, "INVALID_PARAMS")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+}
+
+// MARK: - AppDelegate Background URL Session Tests
+
+/// Verifies that AppDelegate correctly implements the background URL session
+/// delegate method required by RNFS for background downloads to complete.
+/// If the method signature were wrong (e.g., wrong RNFSManager method name),
+/// the build itself would fail — making this test a compile-time guard.
+final class AppDelegateBackgroundSessionTests: XCTestCase {
+
+  func testAppDelegateRespondsToBackgroundURLSessionSelector() {
+    let appDelegate = AppDelegate()
+    let responds = appDelegate.responds(
+      to: #selector(
+        UIApplicationDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)
+      )
+    )
+    XCTAssertTrue(
+      responds,
+      "AppDelegate must implement handleEventsForBackgroundURLSession to properly finalise RNFS background downloads"
+    )
+  }
+
+  func testAppDelegateIsUIApplicationDelegate() {
+    let appDelegate = AppDelegate()
+    XCTAssertTrue(
+      appDelegate is UIApplicationDelegate,
+      "AppDelegate must conform to UIApplicationDelegate"
+    )
+  }
 }
