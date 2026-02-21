@@ -3,10 +3,11 @@ import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
 import { useAppStore, useChatStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../../../services';
-import { Conversation, DownloadedModel, ONNXImageModel } from '../../../types';
+import { Conversation } from '../../../types';
 import { NavigatorScreenParams } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { ChatsStackParamList } from '../../../navigation/types';
+import { useModelLoading } from './useModelLoading';
 
 type MainTabParamListWithNested = {
   HomeTab: undefined;
@@ -57,6 +58,17 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
 
+  const {
+    handleSelectTextModel,
+    handleUnloadTextModel,
+    handleSelectImageModel,
+    handleUnloadImageModel,
+  } = useModelLoading(activeModelId, activeImageModelId, {
+    setLoadingState,
+    setPickerType,
+    setAlertState,
+  });
+
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
@@ -65,9 +77,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         activeModelService.syncWithNativeState();
       }
     });
-
     isFirstMount.current = false;
-
     return () => task.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -83,11 +93,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   useEffect(() => {
     refreshMemoryInfo();
-
-    const unsubscribe = activeModelService.subscribe(() => {
-      refreshMemoryInfo();
-    });
-
+    const unsubscribe = activeModelService.subscribe(() => { refreshMemoryInfo(); });
     return () => unsubscribe();
   }, [refreshMemoryInfo]);
 
@@ -102,139 +108,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setDownloadedImageModels(imageModels);
   };
 
-  const proceedWithTextModelLoad = async (model: DownloadedModel) => {
-    setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
-    setPickerType(null);
-
-    await new Promise<void>(resolve => requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => resolve(), 100);
-      });
-    }));
-
-    try {
-      await activeModelService.loadTextModel(model.id);
-    } catch (error) {
-      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
-    } finally {
-      setLoadingState({ isLoading: false, type: null, modelName: null });
-    }
-  };
-
-  const handleSelectTextModel = async (model: DownloadedModel) => {
-    if (activeModelId === model.id) return;
-
-    const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
-
-    if (!memoryCheck.canLoad) {
-      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
-      return;
-    }
-
-    if (memoryCheck.severity === 'warning') {
-      setAlertState(showAlert(
-        'Low Memory Warning',
-        memoryCheck.message,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Load Anyway',
-            style: 'default',
-            onPress: () => {
-              setAlertState(hideAlert());
-              proceedWithTextModelLoad(model);
-            },
-          },
-        ]
-      ));
-      return;
-    }
-
-    proceedWithTextModelLoad(model);
-  };
-
-  const handleUnloadTextModel = async () => {
-    console.log('[HomeScreen] handleUnloadTextModel called, activeModelId:', activeModelId);
-    setLoadingState({ isLoading: true, type: 'text', modelName: null });
-    setPickerType(null);
-    try {
-      await activeModelService.unloadTextModel();
-      console.log('[HomeScreen] unloadTextModel completed');
-    } catch (error) {
-      console.log('[HomeScreen] unloadTextModel error:', error);
-      setAlertState(showAlert('Error', 'Failed to unload model'));
-    } finally {
-      setLoadingState({ isLoading: false, type: null, modelName: null });
-    }
-  };
-
-  const proceedWithImageModelLoad = async (model: ONNXImageModel) => {
-    setLoadingState({ isLoading: true, type: 'image', modelName: model.name });
-    setPickerType(null);
-
-    await new Promise<void>(resolve => requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => resolve(), 100);
-      });
-    }));
-
-    try {
-      await activeModelService.loadImageModel(model.id);
-    } catch (error) {
-      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
-    } finally {
-      setLoadingState({ isLoading: false, type: null, modelName: null });
-    }
-  };
-
-  const handleSelectImageModel = async (model: ONNXImageModel) => {
-    if (activeImageModelId === model.id) return;
-
-    const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'image');
-
-    if (!memoryCheck.canLoad) {
-      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
-      return;
-    }
-
-    if (memoryCheck.severity === 'warning') {
-      setAlertState(showAlert(
-        'Low Memory Warning',
-        memoryCheck.message,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Load Anyway',
-            style: 'default',
-            onPress: () => {
-              setAlertState(hideAlert());
-              proceedWithImageModelLoad(model);
-            },
-          },
-        ]
-      ));
-      return;
-    }
-
-    proceedWithImageModelLoad(model);
-  };
-
-  const handleUnloadImageModel = async () => {
-    setLoadingState({ isLoading: true, type: 'image', modelName: null });
-    setPickerType(null);
-    try {
-      await activeModelService.unloadImageModel();
-    } catch (_error) {
-      setAlertState(showAlert('Error', 'Failed to unload model'));
-    } finally {
-      setLoadingState({ isLoading: false, type: null, modelName: null });
-    }
-  };
-
   const handleEjectAll = () => {
     const hasModels = activeModelId || activeImageModelId;
-    if (!hasModels) return;
-
+    if (!hasModels) { return; }
     setAlertState(showAlert(
       'Eject All Models',
       'Unload all active models to free up memory?',
@@ -264,7 +140,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    if (!activeModelId) return;
+    if (!activeModelId) { return; }
     const conversationId = createConversation(activeModelId);
     setActiveConversation(conversationId);
     navigation.navigate('ChatsTab', { screen: 'Chat', params: { conversationId } });

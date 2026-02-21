@@ -1,8 +1,45 @@
 import React from 'react';
 import { View, Text, Modal, ActivityIndicator } from 'react-native';
 import { useTheme, useThemedStyles } from '../../../theme';
-import { createStyles } from '../styles';
+import type { ThemeColors, ThemeShadows } from '../../../theme';
+import { TYPOGRAPHY, SPACING } from '../../../constants';
 import { LoadingState } from '../hooks/useHomeScreen';
+
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  loadingCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: SPACING.xxl,
+    alignItems: 'center' as const,
+    marginHorizontal: 40,
+    maxWidth: 300,
+    ...shadows.large,
+  },
+  loadingTitle: {
+    ...TYPOGRAPHY.h2,
+    color: colors.text,
+    marginTop: SPACING.xl,
+  },
+  loadingModelName: {
+    ...TYPOGRAPHY.body,
+    color: colors.primary,
+    marginTop: SPACING.sm,
+    textAlign: 'center' as const,
+  },
+  loadingHint: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textMuted,
+    marginTop: SPACING.lg,
+    textAlign: 'center' as const,
+    lineHeight: 18,
+  },
+});
 
 type Props = {
   loadingState: LoadingState;

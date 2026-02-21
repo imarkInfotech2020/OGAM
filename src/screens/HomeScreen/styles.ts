@@ -1,6 +1,5 @@
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-
 const createLayoutStyles = (colors: ThemeColors) => ({
   container: {
     flex: 1,
@@ -21,7 +20,6 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     color: colors.text,
   },
 });
-
 const createModelCardStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   modelsRow: {
     flexDirection: 'row' as const,
@@ -86,7 +84,6 @@ const createModelCardStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 20,
   },
 });
-
 const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   galleryCard: {
     flexDirection: 'row' as const,
@@ -210,7 +207,6 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     overflow: 'visible' as const,
   },
 });
-
 const createPickerStyles = (colors: ThemeColors) => ({
   modalOverlay: {
     flex: 1,
@@ -313,47 +309,9 @@ const createPickerStyles = (colors: ThemeColors) => ({
     color: colors.textMuted,
   },
 });
-
-const createLoadingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  loadingOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  loadingCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: SPACING.xxl,
-    alignItems: 'center' as const,
-    marginHorizontal: 40,
-    maxWidth: 300,
-    ...shadows.large,
-  },
-  loadingTitle: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    marginTop: SPACING.xl,
-  },
-  loadingModelName: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-    marginTop: SPACING.sm,
-    textAlign: 'center' as const,
-  },
-  loadingHint: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    marginTop: SPACING.lg,
-    textAlign: 'center' as const,
-    lineHeight: 18,
-  },
-});
-
 export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   ...createLayoutStyles(colors),
   ...createModelCardStyles(colors, shadows),
   ...createSectionStyles(colors, shadows),
   ...createPickerStyles(colors),
-  ...createLoadingStyles(colors, shadows),
 });
