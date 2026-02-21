@@ -10,7 +10,7 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -31,21 +31,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint (JS/TS + Android)
-        run: npm run lint
-
-  lint-ios:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      - name: Lint Swift
-        run: npm run lint:ios
+      - name: Lint
+        run: npm run lint
 
   typecheck:
     runs-on: ubuntu-latest
@@ -67,65 +57,6 @@ jobs:
         run: npx tsc --noEmit
 
   test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Test with coverage
-        run: npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          fail_ci_if_error: false
-
-  test-android:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install JS dependencies
-        run: npm ci
-
-      - name: Run Android unit tests
-        run: npm run test:android
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-test-results
-          path: android/app/build/reports/tests/
-          if-no-files-found: ignore
-
-  test-ios:
     runs-on: macos-latest
 
     steps:
@@ -137,6 +68,12 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Install JS dependencies
         run: npm ci
@@ -155,13 +92,28 @@ jobs:
           gem install cocoapods
           cd ios && pod install
 
-      - name: Run iOS unit tests
-        run: npm run test:ios
+      - name: Test
+        run: npm test
 
-      - name: Upload test results
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+      - name: Upload iOS test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-test-results
           path: ~/Library/Developer/Xcode/DerivedData/**/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+
+      - name: Upload Android test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-results
+          path: android/app/build/reports/tests/
           if-no-files-found: ignore
