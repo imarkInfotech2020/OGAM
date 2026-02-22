@@ -1845,9 +1845,9 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
-  // scanForUntrackedTextModels
+  // scanForUntrackedTextModels — edge cases
   // ========================================================================
-  describe('scanForUntrackedTextModels', () => {
+  describe('scanForUntrackedTextModels edge cases', () => {
     it('returns empty when directory does not exist', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
       mockedRNFS.exists.mockResolvedValue(false);
@@ -1991,9 +1991,9 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
-  // scanForUntrackedImageModels
+  // scanForUntrackedImageModels — edge cases
   // ========================================================================
-  describe('scanForUntrackedImageModels', () => {
+  describe('scanForUntrackedImageModels edge cases', () => {
     it('returns empty when directory does not exist', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
       mockedRNFS.exists

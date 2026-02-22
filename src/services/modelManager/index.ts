@@ -49,19 +49,10 @@ class ModelManager {
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
-  // Private helper delegates — kept on the class so existing tests that access
-  // them via (modelManager as any).method() continue to work.
-  private resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
-    return resolveStoredPath(storedPath, currentBaseDir);
-  }
-
-  private determineCredibility(author: string): import('../../types').ModelCredibility {
-    return determineCredibility(author);
-  }
-
-  private isMMProjFile(fileName: string): boolean {
-    return isMMProjFile(fileName);
-  }
+  // Private delegates for test access via (modelManager as any).method()
+  private resolveStoredPath(p: string, d: string) { return resolveStoredPath(p, d); }
+  private determineCredibility(a: string) { return determineCredibility(a); }
+  private isMMProjFile(f: string) { return isMMProjFile(f); }
 
   async initialize(): Promise<void> {
     const exists = await RNFS.exists(this.modelsDir);
