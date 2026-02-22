@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, TextInput, TouchableOpacity, Text, Keyboard } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -50,6 +50,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const inputRef = useRef<TextInput>(null);
+
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
 
@@ -150,62 +158,64 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             blurOnSubmit={false}
             returnKeyType="default"
           />
-          <View style={styles.pillIcons}>
-            {/* Attachment button */}
-            <TouchableOpacity
-              testID="document-picker-button"
-              style={styles.pillIconButton}
-              onPress={handlePickDocument}
-              disabled={disabled}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Icon
-                name="paperclip"
-                size={20}
-                color={disabled ? colors.textMuted : colors.textSecondary}
-              />
-            </TouchableOpacity>
-
-            {/* Vision button — always shown */}
-            <TouchableOpacity
-              testID="camera-button"
-              style={[styles.pillIconButton, supportsVision && styles.pillIconButtonActive]}
-              onPress={handleVisionPress}
-              disabled={disabled}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Icon
-                name="eye"
-                size={20}
-                color={supportsVision ? colors.primary : colors.textMuted}
-              />
-            </TouchableOpacity>
-
-            {/* Image gen toggle — always shown, cycles auto → force → disabled */}
-            <TouchableOpacity
-              testID="image-mode-toggle"
-              style={[
-                styles.pillIconButton,
-                imageMode === 'force' && styles.pillIconButtonActive,
-              ]}
-              onPress={handleImageModeToggle}
-              disabled={disabled}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Icon name="image" size={20} color={imgState.color} />
-              <View
-                testID={`image-mode-${imageMode}-badge`}
-                style={[
-                  styles.iconBadge,
-                  imgState.badgeStyle === 'on' ? styles.iconBadgeOn
-                    : imgState.badgeStyle === 'off' ? styles.iconBadgeOff
-                    : styles.iconBadgeAuto,
-                ]}
+          {!keyboardVisible && (
+            <View style={styles.pillIcons}>
+              {/* Attachment button */}
+              <TouchableOpacity
+                testID="document-picker-button"
+                style={styles.pillIconButton}
+                onPress={handlePickDocument}
+                disabled={disabled}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Text style={styles.iconBadgeText}>{imgState.badge}</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
+                <Icon
+                  name="paperclip"
+                  size={20}
+                  color={disabled ? colors.textMuted : colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              {/* Vision button — always shown */}
+              <TouchableOpacity
+                testID="camera-button"
+                style={[styles.pillIconButton, supportsVision && styles.pillIconButtonActive]}
+                onPress={handleVisionPress}
+                disabled={disabled}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <Icon
+                  name="eye"
+                  size={20}
+                  color={supportsVision ? colors.primary : colors.textMuted}
+                />
+              </TouchableOpacity>
+
+              {/* Image gen toggle — always shown, cycles auto → force → disabled */}
+              <TouchableOpacity
+                testID="image-mode-toggle"
+                style={[
+                  styles.pillIconButton,
+                  imageMode === 'force' && styles.pillIconButtonActive,
+                ]}
+                onPress={handleImageModeToggle}
+                disabled={disabled}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <Icon name="image" size={20} color={imgState.color} />
+                <View
+                  testID={`image-mode-${imageMode}-badge`}
+                  style={[
+                    styles.iconBadge,
+                    imgState.badgeStyle === 'on' ? styles.iconBadgeOn
+                      : imgState.badgeStyle === 'off' ? styles.iconBadgeOff
+                      : styles.iconBadgeAuto,
+                  ]}
+                >
+                  <Text style={styles.iconBadgeText}>{imgState.badge}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Circular action button */}

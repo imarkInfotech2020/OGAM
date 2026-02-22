@@ -183,6 +183,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     backgroundColor: colors.primary,
+    marginBottom: 2,
   },
   circleButtonStop: {
     backgroundColor: colors.error,

@@ -4,6 +4,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    marginBottom: 2,
   },
   rippleRing: {
     position: 'absolute' as const,
