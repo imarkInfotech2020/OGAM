@@ -27,6 +27,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
 
   const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel } = useAppStore();
+  const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
 
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
@@ -104,27 +105,52 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     }
   };
 
+  const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
+    const downloadKey = `${model.id}/${file.name}-mmproj`;
+    const clearRepairState = () => { setDownloadProgress(downloadKey, null); setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; }); };
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile?.size || 0 });
+    try {
+      await modelManager.repairMmProj(model.id, file, {
+        onProgress: (p) => setDownloadProgress(downloadKey, p),
+        onDownloadIdReady: (id) => setDownloadIds(prev => ({ ...prev, [downloadKey]: id })),
+      });
+      clearRepairState();
+      await loadDownloadedModels();
+      setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
+    } catch (e) { clearRepairState(); setAlertState(showAlert('Repair Failed', (e as Error).message)); }
+  };
+
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     const downloadKey = `${model.id}/${file.name}`;
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
     const onProgress = (p: { progress: number; bytesDownloaded: number; totalBytes: number }) =>
       setDownloadProgress(downloadKey, p);
     const onComplete = (dm: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
+      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
       addDownloadedModel(dm);
       setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
     };
     const onError = (err: Error) => {
       setDownloadProgress(downloadKey, null);
+      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
       setAlertState(showAlert('Download Failed', err.message));
     };
     try {
-      if (modelManager.isBackgroundDownloadSupported()) {
-        const info = await modelManager.downloadModelBackground(model.id, file, onProgress);
-        modelManager.watchDownload(info.downloadId, onComplete, onError);
-      } else {
-        onComplete(await modelManager.downloadModel(model.id, file, onProgress));
-      }
+      const info = await modelManager.downloadModelBackground(model.id, file, onProgress);
+      setDownloadIds(prev => ({ ...prev, [downloadKey]: info.downloadId }));
+      modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (e) { onError(e as Error); }
+  };
+
+  const handleCancelDownload = async (downloadKey: string) => {
+    const downloadId = downloadIds[downloadKey];
+    if (downloadId == null) return;
+    try {
+      await modelManager.cancelBackgroundDownload(downloadId);
+    } catch { /* ignore cancel errors */ }
+    setDownloadProgress(downloadKey, null);
+    setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
   };
 
   const isModelDownloaded = (modelId: string, fileName: string) =>
@@ -200,7 +226,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
     return RECOMMENDED_MODELS
       .filter(m => m.params <= deviceRecommendation.maxParameters)
-      .filter(m => !downloadedModels.some(d => d.id.startsWith(m.id)))
       .filter(m => {
         if (filterState.type !== 'all' && m.type !== filterState.type) return false;
         if (filterState.orgs.length > 0 && !filterState.orgs.includes(m.org)) return false;
@@ -216,7 +241,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         if (fetched) return { ...fetched, name: m.name, description: m.description, ...curatedFields };
         return { id: m.id, name: m.name, author: m.id.split('/')[0], description: m.description, downloads: -1, likes: 0, tags: [], lastModified: '', files: [], ...curatedFields };
       });
-  }, [deviceRecommendation.maxParameters, downloadedModels, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
+  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
 
   return {
     searchQuery, setSearchQuery,
@@ -230,9 +255,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     downloadedModels, downloadProgress,
     hasActiveFilters, ramGB, deviceRecommendation,
     filteredResults, recommendedAsModelInfo,
-    handleSearch, handleSelectModel, handleDownload, loadDownloadedModels,
+    handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
     isModelDownloaded, getDownloadedModel,
+    downloadIds,
   };
 }

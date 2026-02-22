@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
+import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import {
@@ -18,13 +18,14 @@ import {
   loadDownloadedImageModels,
 } from './storage';
 import {
-  performDownloadModel,
   performBackgroundDownload,
   watchBackgroundDownload,
   syncCompletedBackgroundDownloads,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from './download';
+import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
+import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
   cleanupMMProjEntries as scanCleanupMMProjEntries,
@@ -41,7 +42,6 @@ export { MODELS_STORAGE_KEY, IMAGE_MODELS_STORAGE_KEY };
 class ModelManager {
   private modelsDir: string;
   private imageModelsDir: string;
-  private downloadJobs: Map<string, { jobId: number; cancel: () => void }> = new Map();
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
   private backgroundDownloadContext: Map<number, BackgroundDownloadContext> = new Map();
 
@@ -50,24 +50,13 @@ class ModelManager {
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
-  // Private helper delegates — kept on the class so existing tests that access
-  // them via (modelManager as any).method() continue to work.
-  private resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
-    return resolveStoredPath(storedPath, currentBaseDir);
-  }
-
-  private determineCredibility(author: string): import('../../types').ModelCredibility {
-    return determineCredibility(author);
-  }
-
-  private isMMProjFile(fileName: string): boolean {
-    return isMMProjFile(fileName);
-  }
+  private resolveStoredPath(p: string, d: string) { return resolveStoredPath(p, d); }
+  private determineCredibility(a: string) { return determineCredibility(a); }
+  private isMMProjFile(f: string) { return isMMProjFile(f); }
 
   async initialize(): Promise<void> {
     const exists = await RNFS.exists(this.modelsDir);
     if (!exists) await RNFS.mkdir(this.modelsDir);
-
     const imageModelsExists = await RNFS.exists(this.imageModelsDir);
     if (!imageModelsExists) await RNFS.mkdir(this.imageModelsDir);
   }
@@ -80,52 +69,19 @@ class ModelManager {
     }
   }
 
-  async downloadModel(
-    modelId: string,
-    file: ModelFile,
-    onProgress?: DownloadProgressCallback,
-  ): Promise<DownloadedModel> {
-    const downloadKey = `${modelId}/${file.name}`;
-    if (this.downloadJobs.has(downloadKey)) {
-      throw new Error('Model is already being downloaded');
-    }
-
-    try {
-      await this.initialize();
-      return await performDownloadModel({ modelId, file, modelsDir: this.modelsDir, downloadJobs: this.downloadJobs, onProgress });
-    } catch (error) {
-      this.downloadJobs.delete(downloadKey);
-      throw error;
-    }
-  }
-
-  async cancelDownload(modelId: string, fileName: string): Promise<void> {
-    const downloadKey = `${modelId}/${fileName}`;
-    const job = this.downloadJobs.get(downloadKey);
-
-    if (job) {
-      job.cancel();
-      this.downloadJobs.delete(downloadKey);
-      await RNFS.unlink(`${this.modelsDir}/${fileName}`).catch(() => {});
-    }
-  }
-
   async deleteModel(modelId: string): Promise<void> {
     const models = await this.getDownloadedModels();
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-
     if (!model.filePath.startsWith(this.modelsDir)) {
       throw new Error('Invalid model path: outside app directory');
     }
     if (model.mmProjPath && !model.mmProjPath.startsWith(this.modelsDir)) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-
     await RNFS.unlink(model.filePath);
     if (model.mmProjPath) await RNFS.unlink(model.mmProjPath).catch(() => {});
-
     await saveModelsList(models.filter(m => m.id !== modelId));
   }
 
@@ -159,10 +115,6 @@ class ModelManager {
     await scanDeleteOrphanedFile(filePath);
   }
 
-  isDownloading(modelId: string, fileName: string): boolean {
-    return this.downloadJobs.has(`${modelId}/${fileName}`);
-  }
-
   setBackgroundDownloadMetadataCallback(callback: BackgroundDownloadMetadataCallback): void {
     this.backgroundDownloadMetadataCallback = callback;
   }
@@ -179,9 +131,7 @@ class ModelManager {
     if (!this.isBackgroundDownloadSupported()) {
       throw new Error('Background downloads not supported on this platform');
     }
-
     await this.initialize();
-
     return performBackgroundDownload({
       modelId,
       file,
@@ -211,37 +161,95 @@ class ModelManager {
     if (!this.isBackgroundDownloadSupported()) {
       throw new Error('Background downloads not supported on this platform');
     }
+    const ctx = this.backgroundDownloadContext.get(downloadId);
+    if (ctx && 'file' in ctx && ctx.mmProjDownloadId) {
+      backgroundDownloadService.unmarkSilent(ctx.mmProjDownloadId);
+      await backgroundDownloadService.cancelDownload(ctx.mmProjDownloadId).catch(() => {});
+    }
 
     await backgroundDownloadService.cancelDownload(downloadId);
     this.backgroundDownloadMetadataCallback?.(downloadId, null);
   }
 
   async syncBackgroundDownloads(
-    persistedDownloads: Record<number, {
-      modelId: string;
-      fileName: string;
-      quantization: string;
-      author: string;
-      totalBytes: number;
-    }>,
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
     clearDownloadCallback: (downloadId: number) => void,
   ): Promise<DownloadedModel[]> {
     if (!this.isBackgroundDownloadSupported()) return [];
     await this.initialize();
     return syncCompletedBackgroundDownloads({ persistedDownloads, modelsDir: this.modelsDir, clearDownloadCallback });
   }
+  async syncCompletedImageDownloads(
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
+    clearDownloadCallback: (downloadId: number) => void,
+  ): Promise<ONNXImageModel[]> {
+    if (!this.isBackgroundDownloadSupported()) return [];
+    await this.initialize();
+    return syncCompletedImageDownloadsHelper({
+      imageModelsDir: this.imageModelsDir,
+      persistedDownloads,
+      clearDownloadCallback,
+      getDownloadedImageModels: () => this.getDownloadedImageModels(),
+      addDownloadedImageModel: (model) => this.addDownloadedImageModel(model),
+    });
+  }
+
+  async restoreInProgressDownloads(
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
+    onProgress?: DownloadProgressCallback,
+  ): Promise<number[]> {
+    if (!this.isBackgroundDownloadSupported()) return [];
+    await this.initialize();
+    return restoreInProgressDownloads({
+      persistedDownloads,
+      modelsDir: this.modelsDir,
+      backgroundDownloadContext: this.backgroundDownloadContext,
+      backgroundDownloadMetadataCallback: this.backgroundDownloadMetadataCallback,
+      onProgress,
+    });
+  }
 
   async getActiveBackgroundDownloads(): Promise<BackgroundDownloadInfo[]> {
     if (!this.isBackgroundDownloadSupported()) return [];
     return backgroundDownloadService.getActiveDownloads();
   }
-
   startBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.startProgressPolling();
   }
 
   stopBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.stopProgressPolling();
+  }
+  async repairMmProj(
+    modelId: string,
+    file: ModelFile,
+    opts?: { onProgress?: DownloadProgressCallback; onDownloadIdReady?: (id: number) => void },
+  ): Promise<void> {
+    if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
+    await this.initialize();
+    const mmProjLocalPath = `${this.modelsDir}/${file.mmProjFile.name}`;
+    const totalBytes = file.mmProjFile.size;
+    if (await RNFS.exists(mmProjLocalPath)) await RNFS.unlink(mmProjLocalPath).catch(() => {});
+
+    const download = backgroundDownloadService.downloadFileTo({
+      params: { url: file.mmProjFile.downloadUrl, fileName: file.mmProjFile.name, modelId, totalBytes },
+      destPath: mmProjLocalPath,
+      onProgress: (bytesDownloaded: number) => {
+        opts?.onProgress?.({ modelId, fileName: file.mmProjFile!.name, bytesDownloaded, totalBytes, progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0 });
+      },
+      silent: true,
+    });
+    const { promise, downloadIdPromise } = download;
+
+    if (opts?.onDownloadIdReady) {
+      downloadIdPromise
+        .then((downloadId) => {
+          if (downloadId !== 0) opts.onDownloadIdReady?.(downloadId);
+        })
+        .catch(() => {});
+    }
+    await promise;
+    await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);
   }
 
   async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {
@@ -288,13 +296,12 @@ class ModelManager {
   async deleteImageModel(modelId: string): Promise<void> {
     const models = await this.getDownloadedImageModels();
     const model = models.find(m => m.id === modelId);
-
     if (!model) throw new Error('Image model not found');
-    if (!model.modelPath.startsWith(this.imageModelsDir)) {
+    const topLevelDir = `${this.imageModelsDir}/${modelId}`;
+    if (!topLevelDir.startsWith(`${this.imageModelsDir}/`)) {
       throw new Error('Invalid image model path: outside app directory');
     }
-
-    if (await RNFS.exists(model.modelPath)) await RNFS.unlink(model.modelPath);
+    if (await RNFS.exists(topLevelDir)) await RNFS.unlink(topLevelDir);
     await saveImageModelsList(models.filter(m => m.id !== modelId));
   }
 

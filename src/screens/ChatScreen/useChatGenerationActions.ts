@@ -193,13 +193,14 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
 export type SendCall = {
   text: string;
   attachments?: MediaAttachment[];
-  forceImageMode?: boolean;
+  imageMode?: 'auto' | 'force' | 'disabled';
   startGeneration: (convId: string, text: string) => Promise<void>;
   setDebugInfo: SetState<any>;
 };
 
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
-  const { text, attachments, forceImageMode, startGeneration } = call;
+  const { text, attachments, imageMode, startGeneration } = call;
+  const forceImageMode = imageMode === 'force';
   if (!deps.activeConversationId || !deps.activeModel) {
     deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
     return;
@@ -213,7 +214,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
       messageText += `\n\n---\n📄 **Attached Document: ${fileName}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`;
     }
   }
-  const shouldGenerateImage = await shouldRouteToImageGenerationFn(deps, messageText, forceImageMode);
+  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, forceImageMode);
   if (shouldGenerateImage && deps.activeImageModel) {
     await handleImageGenerationFn(deps, { prompt: text, conversationId: targetConversationId });
     return;

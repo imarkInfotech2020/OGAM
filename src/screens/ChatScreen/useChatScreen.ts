@@ -205,8 +205,8 @@ export const useChatScreen = () => {
     imagePreviewPath: imageGenState.previewPath,
     isStreaming, isThinking, displayMessages, downloadedModels, projects, settings,
     navigation, hardwareService,
-    handleSend: (text: string, attachments?: MediaAttachment[], forceImageMode?: boolean) =>
-      handleSendFn(genDeps, { text, attachments, forceImageMode, startGeneration, setDebugInfo }),
+    handleSend: (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
+      handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo }),
     handleStop: () => handleStopFn(genDeps),
     handleModelSelect: (model: DownloadedModel) => handleModelSelectFn(modelDeps, model),
     handleUnloadModel: () => handleUnloadModelFn(modelDeps),

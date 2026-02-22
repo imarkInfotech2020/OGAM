@@ -115,6 +115,9 @@ export const ModelsScreen: React.FC = () => {
           handleRefresh={vm.handleRefresh}
           handleSelectModel={vm.handleSelectModel}
           handleDownload={vm.handleDownload}
+          handleRepairMmProj={vm.handleRepairMmProj}
+          handleCancelDownload={vm.handleCancelDownload}
+          downloadIds={vm.downloadIds}
           clearFilters={vm.clearFilters}
           toggleFilterDimension={vm.toggleFilterDimension}
           toggleOrg={vm.toggleOrg}

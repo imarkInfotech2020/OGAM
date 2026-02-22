@@ -38,7 +38,13 @@ export const useModelLoading = (
     if (activeModelId === model.id) { return; }
     const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
     if (!memoryCheck.canLoad) {
-      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+      setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Load Anyway', style: 'destructive', onPress: () => {
+          setAlertState(hideAlert());
+          proceedWithTextModelLoad(model);
+        }},
+      ]));
       return;
     }
     if (memoryCheck.severity === 'warning') {
@@ -83,7 +89,13 @@ export const useModelLoading = (
     if (activeImageModelId === model.id) { return; }
     const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'image');
     if (!memoryCheck.canLoad) {
-      setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+      setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Load Anyway', style: 'destructive', onPress: () => {
+          setAlertState(hideAlert());
+          proceedWithImageModelLoad(model);
+        }},
+      ]));
       return;
     }
     if (memoryCheck.severity === 'warning') {

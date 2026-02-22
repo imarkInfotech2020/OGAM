@@ -3,149 +3,13 @@
  * to keep each file within the max-lines limit.
  */
 import RNFS from 'react-native-fs';
-import { DownloadProgress, ModelFile } from '../../types';
-import { DownloadProgressCallback } from './types';
-
-type DownloadJob = { jobId: number; cancel: () => void };
-
-export interface MainFileDownloadOpts {
-  downloadKey: string;
-  downloadUrl: string;
-  localPath: string;
-  modelId: string;
-  file: ModelFile;
-  totalSize: number;
-  downloadJobs: Map<string, DownloadJob>;
-  onProgress: DownloadProgressCallback | undefined;
-  initialMmProjBytes: number;
-}
-
-export async function downloadMainFile(opts: MainFileDownloadOpts): Promise<void> {
-  const { downloadKey, downloadUrl, localPath, modelId, file, totalSize, downloadJobs, onProgress, initialMmProjBytes } = opts;
-
-  const downloadResult = RNFS.downloadFile({
-    fromUrl: downloadUrl,
-    toFile: localPath,
-    background: true,
-    discretionary: true,
-    cacheable: false,
-    progressInterval: 500,
-    progressDivider: 1,
-    begin: () => {},
-    progress: (res) => {
-      const progress: DownloadProgress = {
-        modelId,
-        fileName: file.name,
-        bytesDownloaded: res.bytesWritten + initialMmProjBytes,
-        totalBytes: totalSize,
-        progress: (res.bytesWritten + initialMmProjBytes) / totalSize,
-      };
-      onProgress?.(progress);
-    },
-  });
-
-  downloadJobs.set(downloadKey, {
-    jobId: downloadResult.jobId,
-    cancel: () => RNFS.stopDownload(downloadResult.jobId),
-  });
-
-  const result = await downloadResult.promise;
-  downloadJobs.delete(downloadKey);
-
-  if (result.statusCode !== 200) {
-    await RNFS.unlink(localPath).catch(() => {});
-    throw new Error(`Main model download failed with status ${result.statusCode}`);
-  }
-}
-
-export interface MmProjFileDownloadOpts {
-  mmProjDownloadKey: string;
-  mmProjFile: NonNullable<ModelFile['mmProjFile']>;
-  mmProjLocalPath: string;
-  modelId: string;
-  totalSize: number;
-  mainBytes: number;
-  downloadJobs: Map<string, DownloadJob>;
-  onProgress: DownloadProgressCallback | undefined;
-}
-
-export async function downloadMmProjFile(opts: MmProjFileDownloadOpts): Promise<void> {
-  const { mmProjDownloadKey, mmProjFile, mmProjLocalPath, modelId, totalSize, mainBytes, downloadJobs, onProgress } = opts;
-
-  const mmProjDownloadResult = RNFS.downloadFile({
-    fromUrl: mmProjFile.downloadUrl,
-    toFile: mmProjLocalPath,
-    background: true,
-    discretionary: true,
-    cacheable: false,
-    progressInterval: 500,
-    progressDivider: 1,
-    begin: () => {},
-    progress: (res) => {
-      const progress: DownloadProgress = {
-        modelId,
-        fileName: mmProjFile.name,
-        bytesDownloaded: mainBytes + res.bytesWritten,
-        totalBytes: totalSize,
-        progress: (mainBytes + res.bytesWritten) / totalSize,
-      };
-      onProgress?.(progress);
-    },
-  });
-
-  downloadJobs.set(mmProjDownloadKey, {
-    jobId: mmProjDownloadResult.jobId,
-    cancel: () => RNFS.stopDownload(mmProjDownloadResult.jobId),
-  });
-
-  const mmProjResult = await mmProjDownloadResult.promise;
-  downloadJobs.delete(mmProjDownloadKey);
-
-  if (mmProjResult.statusCode !== 200) {
-    await RNFS.unlink(mmProjLocalPath).catch(() => {});
-  }
-}
-
-export interface MmProjBackgroundOpts {
-  file: ModelFile;
-  mmProjLocalPath: string;
-  modelId: string;
-  combinedTotalBytes: number;
-  onProgress: DownloadProgressCallback | undefined;
-}
-
-export async function downloadMmProjBackground(opts: MmProjBackgroundOpts): Promise<number> {
-  const { file, mmProjLocalPath, modelId, combinedTotalBytes, onProgress } = opts;
-  if (!file.mmProjFile || !mmProjLocalPath) return 0;
-
-  const mmProjSize = file.mmProjFile.size;
-  let mmProjDownloaded = 0;
-
-  const mmProjDownloadResult = RNFS.downloadFile({
-    fromUrl: file.mmProjFile.downloadUrl,
-    toFile: mmProjLocalPath,
-    background: false,
-    cacheable: false,
-    progressInterval: 500,
-    progress: (res) => {
-      mmProjDownloaded = res.bytesWritten;
-      const progress: DownloadProgress = {
-        modelId,
-        fileName: `${file.mmProjFile!.name} (vision)`,
-        bytesDownloaded: mmProjDownloaded,
-        totalBytes: combinedTotalBytes,
-        progress: mmProjDownloaded / combinedTotalBytes,
-      };
-      onProgress?.(progress);
-    },
-  });
-  await mmProjDownloadResult.promise;
-  return mmProjSize;
-}
+import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../types';
+import { backgroundDownloadService } from '../backgroundDownloadService';
+import { buildDownloadedModel, persistDownloadedModel } from './storage';
 
 export async function getOrphanedTextFiles(
   modelsDir: string,
-  modelsGetter: () => Promise<import('../../types').DownloadedModel[]>,
+  modelsGetter: () => Promise<DownloadedModel[]>,
 ): Promise<Array<{ name: string; path: string; size: number }>> {
   const orphaned: Array<{ name: string; path: string; size: number }> = [];
   const modelsDirExists = await RNFS.exists(modelsDir);
@@ -183,10 +47,13 @@ export async function getOrphanedImageDirs(
 
   const items = await RNFS.readDir(imageModelsDir);
   const imageModels = await imageModelsGetter();
-  const trackedImagePaths = new Set(imageModels.map(m => m.modelPath));
+  const trackedImagePaths = imageModels.map(m => m.modelPath);
 
   for (const item of items) {
-    if (trackedImagePaths.has(item.path)) continue;
+    const isTracked = trackedImagePaths.some(
+      p => p === item.path || p.startsWith(`${item.path}/`),
+    );
+    if (isTracked) continue;
 
     let totalSize = 0;
     if (item.isDirectory()) {
@@ -208,4 +75,79 @@ export async function getOrphanedImageDirs(
   }
 
   return orphaned;
+}
+
+export interface SyncDownloadsOpts {
+  persistedDownloads: Record<number, PersistedDownloadInfo>;
+  modelsDir: string;
+  clearDownloadCallback: (downloadId: number) => void;
+}
+
+/** Resolve the final mmproj path for a completed sync download. */
+async function resolveMmProjPath(metadata: PersistedDownloadInfo): Promise<string | undefined> {
+  const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
+  if (metadata.mmProjDownloadId && mmProjLocalPath) {
+    try {
+      await backgroundDownloadService.moveCompletedDownload(metadata.mmProjDownloadId, mmProjLocalPath);
+      return mmProjLocalPath;
+    } catch {
+      return (await RNFS.exists(mmProjLocalPath)) ? mmProjLocalPath : undefined;
+    }
+  }
+  if (mmProjLocalPath && await RNFS.exists(mmProjLocalPath)) return mmProjLocalPath;
+  return undefined;
+}
+
+/** Check whether a parallel mmproj download is still in progress. */
+function isMmProjStillRunning(
+  metadata: PersistedDownloadInfo,
+  activeDownloads: Array<{ downloadId: number; status: string }>,
+): boolean {
+  if (!metadata.mmProjDownloadId) return false;
+  const mmProjDl = activeDownloads.find(d => d.downloadId === metadata.mmProjDownloadId);
+  return !!mmProjDl && mmProjDl.status !== 'completed' && mmProjDl.status !== 'failed';
+}
+
+export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts): Promise<DownloadedModel[]> {
+  const { persistedDownloads, modelsDir, clearDownloadCallback } = opts;
+  const completedModels: DownloadedModel[] = [];
+  const activeDownloads = await backgroundDownloadService.getActiveDownloads();
+
+  for (const download of activeDownloads) {
+    const metadata = persistedDownloads[download.downloadId];
+    if (!metadata) continue;
+    if (metadata.modelId.startsWith('image:')) continue;
+
+    if (download.status === 'completed') {
+      if (isMmProjStillRunning(metadata, activeDownloads)) continue;
+
+      try {
+        const localPath = `${modelsDir}/${metadata.fileName}`;
+        await backgroundDownloadService.moveCompletedDownload(download.downloadId, localPath);
+        const finalMmProjPath = await resolveMmProjPath(metadata);
+
+        const mainFileSize = metadata.mainFileSize ?? metadata.totalBytes;
+        const mmProjFileSize = metadata.mmProjFileSize ?? 0;
+        const fileInfo: ModelFile = {
+          name: metadata.fileName, size: mainFileSize,
+          quantization: metadata.quantization, downloadUrl: '',
+          mmProjFile: metadata.mmProjFileName
+            ? { name: metadata.mmProjFileName, size: mmProjFileSize, downloadUrl: '' }
+            : undefined,
+        };
+
+        const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });
+        await persistDownloadedModel(model, modelsDir);
+        completedModels.push(model);
+        clearDownloadCallback(download.downloadId);
+      } catch { /* Skip failed syncs */ }
+    } else if (download.status === 'failed') {
+      if (metadata.mmProjDownloadId) {
+        backgroundDownloadService.cancelDownload(metadata.mmProjDownloadId).catch(() => {});
+      }
+      clearDownloadCallback(download.downloadId);
+    }
+  }
+
+  return completedModels;
 }

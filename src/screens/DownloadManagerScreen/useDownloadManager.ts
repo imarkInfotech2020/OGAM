@@ -6,6 +6,7 @@ import {
   backgroundDownloadService,
   activeModelService,
   hardwareService,
+  huggingFaceService,
 } from '../../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
 import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
@@ -20,6 +21,7 @@ export interface UseDownloadManagerResult {
   handleRefresh: () => Promise<void>;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
+  handleRepairVision: (item: DownloadItem) => void;
   totalStorageUsed: number;
 }
 
@@ -28,7 +30,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const cancelledKeysRef = useRef<Set<string>>(new Set());
-
   const {
     downloadedModels,
     setDownloadedModels,
@@ -60,9 +61,16 @@ export function useDownloadManager(): UseDownloadManagerResult {
   useEffect(() => {
     if (!backgroundDownloadService.isAvailable()) return;
 
+    // Broadcast progress for all downloads. Per-download listeners (useTextModels)
+    // compute combined GGUF+mmproj progress and fire first. We skip the update here
+    // if the store already has a higher bytesDownloaded (i.e. combined progress).
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
-      const key = `${event.modelId}/${event.fileName}`;
+      const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
+      if (!metadata) return;
+      const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
+      const existing = useAppStore.getState().downloadProgress[key];
+      if (existing && existing.bytesDownloaded >= event.bytesDownloaded) return;
       setDownloadProgress(key, {
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
@@ -71,16 +79,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
     });
 
     const unsubComplete = backgroundDownloadService.onAnyComplete(async (event) => {
-      setDownloadProgress(`${event.modelId}/${event.fileName}`, null);
+      // Clear progress for image downloads (their per-download callbacks don't use the global store).
+      // Text model cleanup is handled by useTextModels.onComplete.
+      if (event.modelId.startsWith('image:')) {
+        const key = `${event.modelId}/${event.fileName}`;
+        setDownloadProgress(key, null);
+      }
       await loadActiveDownloads();
-      const models = await modelManager.getDownloadedModels();
-      setDownloadedModels(models);
     });
 
-    const unsubError = backgroundDownloadService.onAnyError((event) => {
-      setDownloadProgress(`${event.modelId}/${event.fileName}`, null);
-      setBackgroundDownload(event.downloadId, null);
+    const unsubError = backgroundDownloadService.onAnyError(async (event) => {
       setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
+      await loadActiveDownloads();
     });
 
     return () => {
@@ -94,14 +104,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
-      setActiveDownloads(
-        downloads.filter(
-          d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
-        ),
-      );
+      setActiveDownloads(downloads.filter(
+        d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
+      ));
     }
   };
-
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadActiveDownloads();
@@ -118,44 +125,23 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       const key = `${item.modelId}/${item.fileName}`;
       cancelledKeysRef.current.add(key);
-
-      // Clear from progress tracking immediately (optimistic update)
       setDownloadProgress(key, null);
-
-      // Find downloadId — either from the item or by cross-referencing active downloads
       let downloadId = item.downloadId;
       if (!downloadId) {
-        const match = activeDownloads.find(d => {
-          const meta = activeBackgroundDownloads[d.downloadId];
-          return meta?.fileName === item.fileName;
-        });
+        const match = activeDownloads.find(d => activeBackgroundDownloads[d.downloadId]?.fileName === item.fileName);
         if (match) downloadId = match.downloadId;
       }
-
-      // Remove from local activeDownloads state immediately
       if (downloadId) {
         setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
         setBackgroundDownload(downloadId, null);
         await modelManager.cancelBackgroundDownload(downloadId);
       }
-
-      // Clear image model download state so ModelsScreen unblocks
-      if (item.modelId.startsWith('image:')) {
-        const actualModelId = item.modelId.replace('image:', '');
-        removeImageModelDownloading(actualModelId);
-      }
-
-      // Wait for native cancellation to complete, then reload
+      if (item.modelId.startsWith('image:')) removeImageModelDownloading(item.modelId.replace('image:', ''));
       const dlId = downloadId;
       const capturedKey = key;
       setTimeout(() => {
-        loadActiveDownloads()
-          .then(() => {
-            if (dlId) cancelledKeysRef.current.delete(capturedKey);
-          })
-          .catch(err => {
-            logger.error('[DownloadManager] Failed to reload active downloads:', err);
-          });
+        loadActiveDownloads().then(() => { if (dlId) cancelledKeysRef.current.delete(capturedKey); })
+          .catch(err => logger.error('[DownloadManager] Failed to reload active downloads:', err));
       }, 1000);
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
@@ -190,7 +176,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Error', 'Failed to delete model'));
     }
   };
-
   const handleDeleteModel = (model: DownloadedModel) => {
     const totalSize = hardwareService.getModelTotalSize(model);
     setAlertState(
@@ -220,7 +205,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Error', 'Failed to delete image model'));
     }
   };
-
   const handleDeleteImageModel = (model: ONNXImageModel) => {
     setAlertState(
       showAlert(
@@ -237,7 +221,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       ),
     );
   };
-
   const handleDeleteItem = (item: DownloadItem) => {
     if (item.modelType === 'image') {
       const model = downloadedImageModels.find(m => m.id === item.modelId);
@@ -246,6 +229,24 @@ export function useDownloadManager(): UseDownloadManagerResult {
       const model = downloadedModels.find(m => m.id === item.modelId);
       if (model) handleDeleteModel(model);
     }
+  };
+  const handleRepairVision = (item: DownloadItem): void => {
+    const lastSlash = item.modelId.lastIndexOf('/');
+    if (lastSlash < 0) return;
+    const repoId = item.modelId.substring(0, lastSlash);
+    const fileName = item.modelId.substring(lastSlash + 1);
+    const downloadKey = `${repoId}/${fileName}-mmproj`;
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: 0 });
+    huggingFaceService.getModelFiles(repoId).then(async (files) => {
+      const file = files.find(f => f.name === fileName);
+      if (!file?.mmProjFile) { setDownloadProgress(downloadKey, null); setAlertState(showAlert('Error', 'Could not find vision projection file for this model')); return; }
+      setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile.size });
+      await modelManager.repairMmProj(repoId, file, { onProgress: (p) => setDownloadProgress(downloadKey, p) });
+      setDownloadProgress(downloadKey, null);
+      const models = await modelManager.getDownloadedModels();
+      setDownloadedModels(models);
+      setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
+    }).catch((e: Error) => { setDownloadProgress(downloadKey, null); setAlertState(showAlert('Repair Failed', e.message)); });
   };
 
   // Build items from store state
@@ -270,6 +271,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleRefresh,
     handleRemoveDownload,
     handleDeleteItem,
+    handleRepairVision,
     totalStorageUsed,
   };
 }

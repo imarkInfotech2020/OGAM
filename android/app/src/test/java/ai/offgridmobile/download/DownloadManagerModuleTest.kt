@@ -214,16 +214,22 @@ class DownloadManagerModuleTest {
     }
 
     // ── shouldRemoveDownload ──────────────────────────────────────────────────
+    //
+    // Entries are only pruned after moveCompletedDownload sets moveCompleted=true.
+    // Time-based removal alone caused downloads to vanish while the phone was
+    // sleeping — the JS side couldn't call moveCompletedDownload in time.
 
     private fun download(
         storedStatus: String = "pending",
         completedAt: Long = 0L,
         completedEventSent: Boolean = false,
+        moveCompleted: Boolean = false,
     ) = JSONObject()
         .put("downloadId", 42L)
         .put("status", storedStatus)
         .put("completedAt", completedAt)
         .put("completedEventSent", completedEventSent)
+        .put("moveCompleted", moveCompleted)
 
     @Test
     fun `shouldRemoveDownload returns true when live status is unknown`() {
@@ -237,39 +243,116 @@ class DownloadManagerModuleTest {
     }
 
     @Test
-    fun `shouldRemoveDownload removes completed download when event sent and entry is older than 5 seconds`() {
+    fun `shouldRemoveDownload removes completed download when move confirmed and older than 5 seconds`() {
         val now = System.currentTimeMillis()
-        val dl = download("completed", completedAt = now - 6_000L, completedEventSent = true)
+        val dl = download("completed", completedAt = now - 6_000L, completedEventSent = true, moveCompleted = true)
         assertTrue(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
     }
 
     @Test
-    fun `shouldRemoveDownload keeps completed download when event sent but not yet 5 seconds old`() {
+    fun `shouldRemoveDownload keeps completed download when move confirmed but not yet 5 seconds old`() {
         val now = System.currentTimeMillis()
-        val dl = download("completed", completedAt = now - 1_000L, completedEventSent = true)
+        val dl = download("completed", completedAt = now - 1_000L, completedEventSent = true, moveCompleted = true)
         assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
     }
 
     @Test
-    fun `shouldRemoveDownload keeps completed download when event has not been sent yet`() {
-        // This is the race-condition guard: even if old enough, don't remove until event is sent
+    fun `shouldRemoveDownload keeps completed download when event sent but move not confirmed`() {
+        // Event sent is NOT enough — must wait for moveCompletedDownload to confirm
         val now = System.currentTimeMillis()
-        val dl = download("completed", completedAt = now - 10_000L, completedEventSent = false)
+        val dl = download("completed", completedAt = now - 60_000L, completedEventSent = true, moveCompleted = false)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload keeps completed download indefinitely until move is confirmed`() {
+        // Even after 10 minutes, entry stays if moveCompleted is false
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 600_000L, completedEventSent = true, moveCompleted = false)
         assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
     }
 
     @Test
     fun `shouldRemoveDownload keeps completed download when completedAt is zero`() {
         val now = System.currentTimeMillis()
-        val dl = download("completed", completedAt = 0L, completedEventSent = true)
+        val dl = download("completed", completedAt = 0L, completedEventSent = true, moveCompleted = true)
         assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
     }
 
     @Test
     fun `shouldRemoveDownload returns false for non-completed stored status regardless of live status`() {
         val now = System.currentTimeMillis()
-        // stored status is "running" — the completed branch never fires
-        val dl = download("running", completedAt = now - 10_000L, completedEventSent = true)
+        val dl = download("running", completedAt = now - 10_000L, completedEventSent = true, moveCompleted = true)
         assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "running", currentTimeMs = now))
+    }
+
+    // ── shouldRemoveDownload — additional edge cases ─────────────────────────
+
+    @Test
+    fun `shouldRemoveDownload keeps paused download`() {
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(download("paused"), liveStatus = "paused"))
+    }
+
+    @Test
+    fun `shouldRemoveDownload uses exactly 5000ms threshold — not yet expired`() {
+        // t=10000, completedAt=5001 → age=4999ms — below threshold (move confirmed)
+        val dl = download("completed", completedAt = 5_001L, completedEventSent = true, moveCompleted = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = 10_000L))
+    }
+
+    @Test
+    fun `shouldRemoveDownload uses exactly 5000ms threshold — just expired`() {
+        // t=10000, completedAt=4999 → age=5001ms — above threshold (move confirmed)
+        val dl = download("completed", completedAt = 4_999L, completedEventSent = true, moveCompleted = true)
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = 10_000L))
+    }
+
+    @Test
+    fun `shouldRemoveDownload never removes without moveCompleted even when very old`() {
+        // completedAt far in the past, eventSent=true, but moveCompleted=false — must NOT remove
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = now - 300_000L, completedEventSent = true, moveCompleted = false)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload requires completedAt to be set to remove`() {
+        // completedAt=0 even with moveCompleted=true — guard against incomplete records
+        val now = System.currentTimeMillis()
+        val dl = download("completed", completedAt = 0L, completedEventSent = true, moveCompleted = true)
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload handles multiple downloads independently`() {
+        val now = System.currentTimeMillis()
+        val movedDl   = download("completed", completedAt = now - 10_000L, completedEventSent = true, moveCompleted = true)
+        val unmovedDl = download("completed", completedAt = now - 10_000L, completedEventSent = true, moveCompleted = false)
+        val pendingDl = download("pending")
+
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(movedDl, liveStatus = "completed", currentTimeMs = now))
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(unmovedDl, liveStatus = "completed", currentTimeMs = now))
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(pendingDl, liveStatus = "pending", currentTimeMs = now))
+    }
+
+    @Test
+    fun `shouldRemoveDownload with unknown liveStatus removes regardless of stored state`() {
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("running"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("pending"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("paused"), liveStatus = "unknown"))
+        assertTrue(DownloadManagerModule.shouldRemoveDownload(download("completed"), liveStatus = "unknown"))
+    }
+
+    @Test
+    fun `shouldRemoveDownload defaults moveCompleted to false when flag is absent`() {
+        // Legacy entries without moveCompleted key should NOT be removed
+        val now = System.currentTimeMillis()
+        val dl = JSONObject()
+            .put("downloadId", 42L)
+            .put("status", "completed")
+            .put("completedAt", now - 60_000L)
+            .put("completedEventSent", true)
+        // No moveCompleted key — defaults to false
+        assertFalse(DownloadManagerModule.shouldRemoveDownload(dl, liveStatus = "completed", currentTimeMs = now))
     }
 }

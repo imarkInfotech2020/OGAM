@@ -38,6 +38,8 @@ interface ModelCardProps {
   onDownload?: () => void;
   onDelete?: () => void;
   onSelect?: () => void;
+  onRepairVision?: () => void;
+  onCancel?: () => void;
   compact?: boolean;
 }
 
@@ -74,6 +76,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onDownload,
   onDelete,
   onSelect,
+  onRepairVision,
+  onCancel,
   compact,
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -168,6 +172,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           onDownload={onDownload}
           onSelect={onSelect}
           onDelete={onDelete}
+          onRepairVision={onRepairVision}
+          onCancel={onCancel}
         />
       </View>
     </TouchableOpacity>

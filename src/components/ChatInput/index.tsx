@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, TextInput, TouchableOpacity } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -7,12 +7,12 @@ import { VoiceRecordButton } from '../VoiceRecordButton';
 import { triggerHaptic } from '../../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { createStyles } from './styles';
-import { ChatToolbar } from './Toolbar';
+import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 
 interface ChatInputProps {
-  onSend: (message: string, attachments?: MediaAttachment[], forceImageMode?: boolean) => void;
+  onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
   onStop?: () => void;
   disabled?: boolean;
   isGenerating?: boolean;
@@ -27,12 +27,14 @@ interface ChatInputProps {
   onClearQueue?: () => void;
 }
 
+const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
+
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   onStop,
   disabled,
   isGenerating,
-  placeholder = 'Type a message...',
+  placeholder = 'Message',
   supportsVision = false,
   conversationId,
   imageModelLoaded = false,
@@ -66,12 +68,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const handleSend = () => {
     if (!canSend) return;
     triggerHaptic('impactMedium');
-    const forceImage = imageMode === 'force';
-    onSend(message.trim(), attachments.length > 0 ? attachments : undefined, forceImage);
+    onSend(message.trim(), attachments.length > 0 ? attachments : undefined, imageMode);
     setMessage('');
     clearAttachments();
     inputRef.current?.focus();
-    if (forceImage) {
+    if (imageMode === 'force') {
       setImageMode('auto');
       onImageModeChange?.('auto');
     }
@@ -81,14 +82,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (!imageModelLoaded) {
       setAlertState(showAlert(
         'No Image Model',
-        'Download an image model from the Models screen to enable image generation.',
+        'Download an image generation model from the Models screen to enable this feature.',
         [{ text: 'OK' }],
       ));
       return;
     }
-    const newMode: ImageModeState = imageMode === 'auto' ? 'force' : 'auto';
+    const currentIndex = IMAGE_MODE_CYCLE.indexOf(imageMode);
+    const newMode = IMAGE_MODE_CYCLE[(currentIndex + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);
     onImageModeChange?.(newMode);
+  };
+
+  const handleVisionPress = () => {
+    if (!supportsVision) {
+      setAlertState(showAlert(
+        'Vision Not Supported',
+        'This model does not support image input. Load a vision-capable model (with an mmproj file) to enable this feature.',
+        [{ text: 'OK' }],
+      ));
+      return;
+    }
+    handlePickImage();
   };
 
   const handleStop = () => {
@@ -98,66 +112,134 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const imageModeIcon = (): { color: string; badge: string; badgeStyle: 'on' | 'off' | 'auto' } => {
+    switch (imageMode) {
+      case 'force':
+        return { color: imageModelLoaded ? colors.primary : colors.textMuted, badge: 'ON', badgeStyle: 'on' };
+      case 'disabled':
+        return { color: colors.textMuted, badge: 'OFF', badgeStyle: 'off' };
+      default:
+        return { color: imageModelLoaded ? colors.textSecondary : colors.textMuted, badge: 'A', badgeStyle: 'auto' };
+    }
+  };
+
+  const imgState = imageModeIcon();
+
   return (
     <View style={styles.container}>
       <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
-      <ChatToolbar
-        supportsVision={supportsVision}
-        imageMode={imageMode}
-        imageModelLoaded={imageModelLoaded}
-        disabled={disabled}
+      <QueueRow
         queueCount={queueCount}
         queuedTexts={queuedTexts}
         onClearQueue={onClearQueue}
-        onPickDocument={handlePickDocument}
-        onPickImage={handlePickImage}
-        onImageModeToggle={handleImageModeToggle}
       />
-      <View style={styles.inputRow}>
-        <TextInput
-          ref={inputRef}
-          testID="chat-input"
-          style={styles.input}
-          value={message}
-          onChangeText={setMessage}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
-          multiline
-          scrollEnabled
-          editable={!disabled}
-          blurOnSubmit={false}
-          returnKeyType="default"
-        />
-        <View style={styles.inputActions}>
-          {isGenerating && onStop && (
+      <View style={styles.mainRow}>
+        {/* Pill: text input + right icons */}
+        <View style={styles.pill}>
+          <TextInput
+            ref={inputRef}
+            testID="chat-input"
+            style={styles.pillInput}
+            value={message}
+            onChangeText={setMessage}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textMuted}
+            multiline
+            scrollEnabled
+            editable={!disabled}
+            blurOnSubmit={false}
+            returnKeyType="default"
+          />
+          <View style={styles.pillIcons}>
+            {/* Attachment button */}
             <TouchableOpacity
-              testID="stop-button"
-              style={[styles.sendButton, styles.stopButton]}
-              onPress={handleStop}
-            >
-              <Icon name="square" size={16} color={colors.error} />
-            </TouchableOpacity>
-          )}
-          {canSend ? (
-            <TouchableOpacity testID="send-button" style={styles.sendButton} onPress={handleSend}>
-              <Icon name="send" size={18} color={colors.text} />
-            </TouchableOpacity>
-          ) : !isGenerating ? (
-            <VoiceRecordButton
-              isRecording={isRecording}
-              isAvailable={voiceAvailable}
-              isModelLoading={isModelLoading}
-              isTranscribing={isTranscribing}
-              partialResult={partialResult}
-              error={error}
+              testID="document-picker-button"
+              style={styles.pillIconButton}
+              onPress={handlePickDocument}
               disabled={disabled}
-              onStartRecording={startRecording}
-              onStopRecording={stopRecording}
-              onCancelRecording={() => { stopRecording(); clearResult(); }}
-              asSendButton
-            />
-          ) : null}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Icon
+                name="paperclip"
+                size={20}
+                color={disabled ? colors.textMuted : colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            {/* Vision button — always shown */}
+            <TouchableOpacity
+              testID="camera-button"
+              style={[styles.pillIconButton, supportsVision && styles.pillIconButtonActive]}
+              onPress={handleVisionPress}
+              disabled={disabled}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Icon
+                name="eye"
+                size={20}
+                color={supportsVision ? colors.primary : colors.textMuted}
+              />
+            </TouchableOpacity>
+
+            {/* Image gen toggle — always shown, cycles auto → force → disabled */}
+            <TouchableOpacity
+              testID="image-mode-toggle"
+              style={[
+                styles.pillIconButton,
+                imageMode === 'force' && styles.pillIconButtonActive,
+              ]}
+              onPress={handleImageModeToggle}
+              disabled={disabled}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Icon name="image" size={20} color={imgState.color} />
+              <View
+                testID={`image-mode-${imageMode}-badge`}
+                style={[
+                  styles.iconBadge,
+                  imgState.badgeStyle === 'on' ? styles.iconBadgeOn
+                    : imgState.badgeStyle === 'off' ? styles.iconBadgeOff
+                    : styles.iconBadgeAuto,
+                ]}
+              >
+                <Text style={styles.iconBadgeText}>{imgState.badge}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Circular action button */}
+        {canSend ? (
+          <TouchableOpacity
+            testID="send-button"
+            style={styles.circleButton}
+            onPress={handleSend}
+          >
+            <Icon name="send" size={18} color={colors.background} />
+          </TouchableOpacity>
+        ) : isGenerating && onStop ? (
+          <TouchableOpacity
+            testID="stop-button"
+            style={[styles.circleButton, styles.circleButtonStop]}
+            onPress={handleStop}
+          >
+            <Icon name="square" size={18} color={colors.background} />
+          </TouchableOpacity>
+        ) : (
+          <VoiceRecordButton
+            isRecording={isRecording}
+            isAvailable={voiceAvailable}
+            isModelLoading={isModelLoading}
+            isTranscribing={isTranscribing}
+            partialResult={partialResult}
+            error={error}
+            disabled={disabled}
+            onStartRecording={startRecording}
+            onStopRecording={stopRecording}
+            onCancelRecording={() => { stopRecording(); clearResult(); }}
+            asSendButton
+          />
+        )}
       </View>
       <CustomAlert
         visible={alertState.visible}

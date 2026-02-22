@@ -156,20 +156,18 @@ export const ActiveModelsSection: React.FC<Props> = ({
           onPress={onPressImageModel}
         />
       </View>
-      {(activeModelId || activeImageModelId || loadingState.isLoading) && (
+      {(activeModelId || activeImageModelId) && (
         <TouchableOpacity
           style={styles.ejectAllButton}
           onPress={onEjectAll}
-          disabled={isEjecting}
+          disabled={isEjecting || loadingState.isLoading}
         >
           {isEjecting ? (
             <ActivityIndicator size="small" color={colors.error} />
           ) : (
             <>
               <Icon name="power" size={14} color={colors.error} />
-              <Text style={styles.ejectAllText}>
-                {loadingState.isLoading ? 'Cancel Loading' : 'Eject All Models'}
-              </Text>
+              <Text style={styles.ejectAllText}>Eject All Models</Text>
             </>
           )}
         </TouchableOpacity>

@@ -23,6 +23,8 @@ export type DownloadItem = {
   status: string;
   downloadedAt?: string;
   filePath?: string;
+  isVisionModel?: boolean;
+  mmProjPath?: string;
 };
 
 export interface DownloadItemsData {
@@ -57,7 +59,7 @@ export function extractQuantization(fileName: string): string {
 
 export function getStatusText(status: string): string {
   if (status === 'running') return 'Downloading...';
-  if (status === 'pending') return 'Starting...';
+  if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
   if (status === 'unknown') return 'Stuck - Remove & retry';
   return status;
@@ -76,7 +78,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     }
     items.push({
       type: 'active',
-      modelType: 'text',
+      modelType: fullModelId.startsWith('image:') ? 'image' : 'text',
       modelId: fullModelId,
       fileName,
       author: fullModelId.split('/')[0] ?? 'Unknown',
@@ -101,7 +103,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     }
     items.push({
       type: 'active',
-      modelType: 'text',
+      modelType: metadata.modelId.startsWith('image:') ? 'image' : 'text',
       downloadId: download.downloadId,
       modelId: metadata.modelId,
       fileName: download.title ?? metadata.fileName,
@@ -130,6 +132,8 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       status: 'completed',
       downloadedAt: model.downloadedAt,
       filePath: model.filePath,
+      isVisionModel: model.isVisionModel,
+      mmProjPath: model.mmProjPath,
     });
   });
 
@@ -196,11 +200,13 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
 interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
+  onRepairVision?: (item: DownloadItem) => void;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const needsVisionRepair = item.isVisionModel && !item.mmProjPath;
 
   return (
     <Card style={styles.downloadCard}>
@@ -216,6 +222,15 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
+        {needsVisionRepair && onRepairVision && (
+          <TouchableOpacity
+            style={styles.repairButton}
+            testID="repair-vision-button"
+            onPress={() => onRepairVision(item)}
+          >
+            <Icon name="eye" size={18} color={colors.warning} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.deleteButton}
           testID="delete-model-button"

@@ -63,8 +63,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
          *
          * A download is removed when:
          * - [liveStatus] is "unknown" (DownloadManager no longer tracks it), OR
-         * - its stored status is "completed", the completion event has been sent, the
-         *   completedAt timestamp is set, and the entry is older than 5 seconds.
+         * - its stored status is "completed", the JS side has confirmed the move by
+         *   setting "moveCompleted" to true, and it's been at least 5 seconds since.
+         *
+         * Time-based removal alone is wrong — the JS side may not call
+         * moveCompletedDownload for minutes (phone sleeping, app backgrounded).
+         * Only moveCompletedDownload (or explicit cleanup) should remove entries.
          *
          * The [currentTimeMs] parameter is injectable so tests can control the clock.
          */
@@ -75,10 +79,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         ): Boolean {
             if (liveStatus == "unknown") return true
             if (download.optString("status", "pending") == "completed") {
-                val completedAt = download.optLong("completedAt", 0L)
-                val eventSent = download.optBoolean("completedEventSent", false)
-                val ageMs = currentTimeMs - completedAt
-                return completedAt > 0 && eventSent && ageMs > 5_000
+                val moveCompleted = download.optBoolean("moveCompleted", false)
+                if (moveCompleted) {
+                    val completedAt = download.optLong("completedAt", 0L)
+                    val ageMs = currentTimeMs - completedAt
+                    return completedAt > 0 && ageMs > 5_000
+                }
             }
             return false
         }
@@ -114,6 +120,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val description = params.getString("description") ?: "Downloading model..."
             val modelId = params.getString("modelId") ?: ""
             val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
+            val hideNotification = params.hasKey("hideNotification") && params.getBoolean("hideNotification")
 
             // Clean up any existing file with the same name to prevent DownloadManager
             // from auto-renaming (e.g., file.gguf → file-1.gguf)
@@ -132,7 +139,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val request = DownloadManager.Request(Uri.parse(url))
                 .setTitle(title)
                 .setDescription(description)
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setNotificationVisibility(
+                    if (hideNotification) DownloadManager.Request.VISIBILITY_HIDDEN
+                    else DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
                 .setDestinationInExternalFilesDir(
                     reactApplicationContext,
                     Environment.DIRECTORY_DOWNLOADS,
@@ -296,13 +306,13 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
             // Move the file
             if (sourceFile.renameTo(targetFile)) {
-                removeDownload(id)
+                markMoveCompleted(id)
                 promise.resolve(targetFile.absolutePath)
             } else {
                 // If rename fails (different filesystem), copy then delete
                 sourceFile.copyTo(targetFile, overwrite = true)
                 sourceFile.delete()
-                removeDownload(id)
+                markMoveCompleted(id)
                 promise.resolve(targetFile.absolutePath)
             }
         } catch (e: Exception) {
@@ -367,14 +377,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         sendEvent("DownloadComplete", eventParams)
                         updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
                     } else {
-                        // Event already sent - remove stale entries to stop polling spam
-                        val completedAt = download.optLong("completedAt", 0L)
-                        val ageMs = System.currentTimeMillis() - completedAt
-                        // If completed more than 5 seconds ago and still in list, it's stale - remove it
-                        if (completedAt > 0 && ageMs > 5_000) {
-                            android.util.Log.d("DownloadManager", "Removing stale completed download $downloadId (completed ${ageMs/1000}s ago)")
-                            removeDownload(downloadId)
-                        }
+                        // Event already sent — entry will be cleaned up by shouldRemoveDownload
+                        // after moveCompletedDownload marks it as moved. No time-based removal.
                     }
                 }
                 "failed" -> {
@@ -515,6 +519,16 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun markMoveCompleted(downloadId: Long) {
+        val info = getDownloadInfo(downloadId)
+        if (info != null) {
+            info.put("moveCompleted", true)
+            persistDownload(downloadId, info)
+        } else {
+            // Info already cleaned up — nothing to mark
+        }
+    }
+
     private fun removeDownload(downloadId: Long) {
         val downloads = getAllPersistedDownloads()
         val newDownloads = JSONArray()
@@ -543,7 +557,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     /**
      * Clean up stale download entries from SharedPreferences.
      * Removes entries where DownloadManager no longer has the download (status=unknown)
-     * or entries that have been completed for more than 5 seconds.
+     * or entries that have been moved to their final location by moveCompletedDownload.
      */
     private fun cleanupStaleDownloads() {
         val downloads = getAllPersistedDownloads()

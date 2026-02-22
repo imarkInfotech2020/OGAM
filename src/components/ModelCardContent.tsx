@@ -5,6 +5,7 @@ import { useThemedStyles, useTheme } from '../theme';
 import { createStyles } from './ModelCard.styles';
 import { huggingFaceService } from '../services/huggingface';
 import { ModelCredibility } from '../types';
+import { triggerHaptic } from '../utils/haptics';
 
 interface CredibilityInfo {
   color: string;
@@ -266,52 +267,59 @@ interface ModelCardActionsProps {
   onDownload: (() => void) | undefined;
   onSelect: (() => void) | undefined;
   onDelete: (() => void) | undefined;
+  onRepairVision: (() => void) | undefined;
+  onCancel: (() => void) | undefined;
+}
+
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+  icon: string; color: string; haptic: string; onPress: () => void;
+  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => { triggerHaptic(haptic as any); onPress(); }}
+      disabled={disabled}
+      hitSlop={HIT_SLOP}
+      testID={testID}
+    >
+      <Icon name={icon} size={16} color={color} />
+    </TouchableOpacity>
+  );
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded,
-  isDownloading,
-  isActive,
-  isCompatible,
-  incompatibleReason,
-  testID,
-  onDownload,
-  onSelect,
-  onDelete,
+  isDownloaded, isDownloading, isActive, isCompatible, incompatibleReason,
+  testID, onDownload, onSelect, onDelete, onRepairVision, onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
   return (
     <>
+      {isDownloading && onCancel && (
+        <ActionButton icon="x" color={colors.error} haptic="notificationWarning"
+          onPress={onCancel} testID={tid('cancel')} styles={styles} />
+      )}
       {!isDownloaded && !isDownloading && onDownload && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onDownload}
-          disabled={!isCompatible && !incompatibleReason}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          testID={testID ? `${testID}-download` : undefined}
-        >
-          <Icon name="download" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        <ActionButton icon="download" color={colors.primary} haptic="impactLight"
+          onPress={onDownload} disabled={!isCompatible && !incompatibleReason}
+          testID={tid('download')} styles={styles} />
+      )}
+      {isDownloaded && onRepairVision && (
+        <ActionButton icon="eye" color={colors.warning} haptic="impactLight"
+          onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
       {isDownloaded && !isActive && onSelect && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onSelect}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="check-circle" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        <ActionButton icon="check-circle" color={colors.primary} haptic="selection"
+          onPress={onSelect} styles={styles} />
       )}
       {isDownloaded && onDelete && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onDelete}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="trash-2" size={16} color={colors.error} />
-        </TouchableOpacity>
+        <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning"
+          onPress={onDelete} styles={styles} />
       )}
     </>
   );

@@ -141,8 +141,7 @@ function makeRef<T>(value: T): React.MutableRefObject<T> {
 const baseModel = createDownloadedModel({ id: 'model-1', filePath: '/path/model.gguf' });
 const baseImageModel = { id: 'img-1', name: 'SD Model' };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
+function makeGenerationDeps(overrides: Record<string, unknown> = {}): any { // eslint-disable-line @typescript-eslint/no-explicit-any
   return {
     activeModelId: 'model-1',
     activeModel: baseModel,
@@ -384,7 +383,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps({ activeConversationId: null });
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration: jest.fn(),
       setDebugInfo: jest.fn(),
     });
@@ -395,7 +394,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps({ activeModel: undefined });
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration: jest.fn(),
       setDebugInfo: jest.fn(),
     });
@@ -407,7 +406,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps();
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration,
       setDebugInfo: jest.fn(),
     });

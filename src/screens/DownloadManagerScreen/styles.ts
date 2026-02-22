@@ -96,6 +96,10 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginRight: -SPACING.sm,
     marginTop: -SPACING.xs,
   },
+  repairButton: {
+    padding: SPACING.sm,
+    marginTop: -SPACING.xs,
+  },
   deleteButton: {
     padding: SPACING.sm,
     marginRight: -SPACING.sm,

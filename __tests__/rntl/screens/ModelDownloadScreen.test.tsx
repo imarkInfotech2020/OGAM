@@ -173,6 +173,13 @@ jest.mock('react-native-vector-icons/Feather', () => {
 
 import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
 
+const MOCK_FILE = {
+  name: 'model-Q4_K_M.gguf',
+  size: 4000000000,
+  quantization: 'Q4_K_M',
+  downloadUrl: 'https://example.com/model.gguf',
+};
+
 const mockNavigation: any = {
   navigate: mockNavigate,
   goBack: jest.fn(),
@@ -192,7 +199,7 @@ describe('ModelDownloadScreen', () => {
     mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'medium' });
     mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
     mockHardwareService.formatBytes.mockImplementation((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`);
-    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(false);
+    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
     mockModelManager.downloadModel.mockImplementation((...args: any[]) => (mockDownloadModel as any)(...args));
     mockModelManager.downloadModelBackground.mockImplementation((...args: any[]) => (mockDownloadModelBackground as any)(...args));
     mockHuggingFaceService.getModelFiles.mockImplementation((...args: any[]) => (mockGetModelFiles as any)(...args));
@@ -360,39 +367,22 @@ describe('ModelDownloadScreen', () => {
     expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to fetch model files.');
   });
 
-  it('download button triggers handleDownload for foreground download', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
-    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(false);
+  it('download button triggers handleDownload via background download', async () => {
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 1 });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = await result.findByTestId('recommended-model-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
 
-    expect(mockDownloadModel).toHaveBeenCalled();
+    expect(mockDownloadModelBackground).toHaveBeenCalled();
   });
 
   it('download button triggers background download when supported', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
@@ -411,13 +401,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download calls onProgress callback', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     mockDownloadModel.mockImplementation((_modelId: string, _file: any, onProgress: any) => {
       onProgress({ progress: 0.5, bytesDownloaded: 2000000000, totalBytes: 4000000000 });
@@ -439,39 +423,31 @@ describe('ModelDownloadScreen', () => {
     expect(mockAppState.setDownloadProgress).toHaveBeenCalled();
   });
 
-  it('download calls onComplete callback and shows alert', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
-
+  async function setupDownloadCompletion() {
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     const completedModel = {
-      id: 'test-model',
-      name: 'Test Model',
-      author: 'test',
-      fileName: 'model-Q4_K_M.gguf',
-      filePath: '/path',
-      fileSize: 4000000000,
-      quantization: 'Q4_K_M',
+      id: 'test-model', name: 'Test Model', author: 'test',
+      fileName: 'model-Q4_K_M.gguf', filePath: '/path',
+      fileSize: 4000000000, quantization: 'Q4_K_M',
       downloadedAt: new Date().toISOString(),
     };
-
-    mockDownloadModel.mockResolvedValue(completedModel);
-
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
+    let capturedOnComplete: ((model: any) => void) | undefined;
+    mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
+      capturedOnComplete = onComplete;
+    });
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
-
     const downloadBtn = result.getByTestId('recommended-model-0-download');
-    await act(async () => {
-      fireEvent.press(downloadBtn);
-    });
+    await act(async () => { fireEvent.press(downloadBtn); });
+    await act(async () => { capturedOnComplete?.(completedModel); });
+    return { result, completedModel };
+  }
+
+  it('download calls onComplete callback and shows alert', async () => {
+    const { completedModel } = await setupDownloadCompletion();
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
     expect(mockAppState.setActiveModelId).toHaveBeenCalledWith('test-model');
@@ -483,38 +459,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download complete alert Start Chatting navigates to Main', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
-
-    const completedModel = {
-      id: 'test-model',
-      name: 'Test Model',
-      author: 'test',
-      fileName: 'model-Q4_K_M.gguf',
-      filePath: '/path',
-      fileSize: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadedAt: new Date().toISOString(),
-    };
-
-    mockDownloadModel.mockResolvedValue(completedModel);
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
-    await act(async () => {
-      fireEvent.press(downloadBtn);
-    });
+    const { result } = await setupDownloadCompletion();
 
     const startChatBtn = result.getByTestId('alert-button-Start Chatting');
     fireEvent.press(startChatBtn);
@@ -523,19 +468,16 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download calls onError callback and shows error alert', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
-    mockDownloadModel.mockRejectedValue(new Error('Download failed'));
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
+    let capturedOnError: ((err: Error) => void) | undefined;
+    mockModelManager.watchDownload.mockImplementation((_id: number, _onComplete: any, onError: any) => {
+      capturedOnError = onError;
+    });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
@@ -545,23 +487,20 @@ describe('ModelDownloadScreen', () => {
       fireEvent.press(downloadBtn);
     });
 
+    await act(async () => {
+      capturedOnError?.(new Error('Download failed'));
+    });
+
     expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'Download failed');
   });
 
   it('download catch block shows error on exception', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
-    mockDownloadModel.mockRejectedValue(new Error('Unexpected error'));
+    mockDownloadModelBackground.mockRejectedValue(new Error('Unexpected error'));
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }

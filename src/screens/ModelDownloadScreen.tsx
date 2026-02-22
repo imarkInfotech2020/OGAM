@@ -112,6 +112,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   const handleDownload = async (modelId: string, file: ModelFile) => {
     setSelectedFile(file);
     const downloadKey = `${modelId}/${file.name}`;
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
 
     const onProgress = (progress: {progress: number; bytesDownloaded: number; totalBytes: number}) => {
       setDownloadProgress(downloadKey, {
@@ -143,13 +144,8 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     };
 
     try {
-      if (modelManager.isBackgroundDownloadSupported()) {
-        const info = await modelManager.downloadModelBackground(modelId, file, onProgress);
-        modelManager.watchDownload(info.downloadId, onComplete, onError);
-      } else {
-        const model = await modelManager.downloadModel(modelId, file, onProgress);
-        onComplete(model);
-      }
+      const info = await modelManager.downloadModelBackground(modelId, file, onProgress);
+      modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (error) {
       onError(error as Error);
     }

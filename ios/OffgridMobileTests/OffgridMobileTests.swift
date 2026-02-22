@@ -394,8 +394,9 @@ final class DownloadManagerModuleTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
-    // Clear any persisted download state so tests start clean
+    // Clear persisted download state keys so tests start clean.
     UserDefaults.standard.removeObject(forKey: "ai.offgridmobile.activeDownloads")
+    UserDefaults.standard.removeObject(forKey: "ai.offgridmobile.downloadmanager.state.v1")
     module = DownloadManagerModule()
   }
 
@@ -551,5 +552,206 @@ final class DownloadManagerModuleTests: XCTestCase {
       }
     )
     waitForExpectations(timeout: 2)
+  }
+
+  // MARK: hideNotification parameter handling
+
+  /// hideNotification is a silent-download flag for dependency files (e.g. mmproj).
+  /// The module must not crash or reject INVALID_PARAMS because this key is present.
+  /// We verify by omitting URL (which is always required) — the rejection code must
+  /// be INVALID_PARAMS (missing URL), not an unexpected crash or different code.
+  func testStartDownloadAcceptsHideNotificationParamWithoutCrash() {
+    let exp = expectation(description: "startDownload with hideNotification rejects for missing URL only")
+    module.startDownload(
+      ["fileName": "dep.gguf", "modelId": "test/model", "hideNotification": true],
+      resolver: { _ in
+        XCTFail("should reject because URL is missing, not resolve")
+        exp.fulfill()
+      },
+      rejecter: { code, _, _ in
+        XCTAssertEqual(code, "INVALID_PARAMS", "Expected INVALID_PARAMS for missing URL, not a crash from hideNotification")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  func testStartDownloadWithHideNotificationFalseRejectsMissingUrl() {
+    let exp = expectation(description: "startDownload with hideNotification:false rejects missing url")
+    module.startDownload(
+      ["fileName": "dep.gguf", "modelId": "test/model", "hideNotification": false],
+      resolver: { _ in
+        XCTFail("should reject because URL is missing")
+        exp.fulfill()
+      },
+      rejecter: { code, _, _ in
+        XCTAssertEqual(code, "INVALID_PARAMS")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  // MARK: - Download entry persistence (no time-based removal)
+
+  /// Verifies that a completed download entry stays in the downloads dictionary
+  /// and is returned by getActiveDownloads — iOS does not use time-based cleanup.
+  func testCompletedDownloadEntryPersistsUntilMoved() {
+    // Inject a completed download entry directly
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: 100,
+      fileName: "test-model.gguf",
+      modelId: "test/model",
+      totalBytes: 1_000_000,
+      bytesDownloaded: 1_000_000,
+      status: "completed",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      task: nil,
+      localUri: "/tmp/test-model.gguf",
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.downloads[100] = info
+
+    let exp = expectation(description: "getActiveDownloads returns completed entry")
+    module.getActiveDownloads(
+      { value in
+        let downloads = value as? [[String: Any]] ?? []
+        XCTAssertEqual(downloads.count, 1, "Completed download must persist until moveCompletedDownload is called")
+        if let first = downloads.first {
+          XCTAssertEqual(first["status"] as? String, "completed")
+          XCTAssertEqual(first["fileName"] as? String, "test-model.gguf")
+        }
+        exp.fulfill()
+      },
+      rejecter: { _, _, _ in XCTFail("unexpected reject"); exp.fulfill() }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  /// Verifies that moveCompletedDownload actually moves a file from source to target.
+  func testMoveCompletedDownloadMovesFileToTargetPath() {
+    let fileManager = FileManager.default
+    let tmpDir = NSTemporaryDirectory()
+    let sourceFile = tmpDir + "dl_test_\(UUID().uuidString).bin"
+    let targetFile = tmpDir + "moved_\(UUID().uuidString).bin"
+
+    // Create a small source file
+    let testData = Data(repeating: 0xAB, count: 256)
+    fileManager.createFile(atPath: sourceFile, contents: testData)
+    XCTAssertTrue(fileManager.fileExists(atPath: sourceFile))
+
+    // Inject download entry pointing to the source file
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: 200,
+      fileName: "model.gguf",
+      modelId: "test/model",
+      totalBytes: 256,
+      bytesDownloaded: 256,
+      status: "completed",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      task: nil,
+      localUri: sourceFile,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.downloads[200] = info
+
+    let exp = expectation(description: "moveCompletedDownload moves file")
+    module.moveCompletedDownload(
+      200,
+      targetPath: targetFile,
+      resolver: { result in
+        XCTAssertEqual(result as? String, targetFile)
+        XCTAssertTrue(fileManager.fileExists(atPath: targetFile), "Target file must exist after move")
+        XCTAssertFalse(fileManager.fileExists(atPath: sourceFile), "Source file must be removed after move")
+
+        // Verify file contents
+        if let movedData = fileManager.contents(atPath: targetFile) {
+          XCTAssertEqual(movedData.count, 256)
+        } else {
+          XCTFail("Could not read moved file")
+        }
+
+        // Cleanup
+        try? fileManager.removeItem(atPath: targetFile)
+        exp.fulfill()
+      },
+      rejecter: { code, msg, _ in
+        XCTFail("moveCompletedDownload should succeed but got \(code ?? ""): \(msg ?? "")")
+        // Cleanup
+        try? fileManager.removeItem(atPath: sourceFile)
+        try? fileManager.removeItem(atPath: targetFile)
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 5)
+  }
+
+  /// Verifies that moveCompletedDownload rejects when the download is not yet completed (no localUri).
+  func testMoveCompletedDownloadRejectsNotCompletedDownload() {
+    // Inject a running (not completed) download entry — no localUri
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: 300,
+      fileName: "running-model.gguf",
+      modelId: "test/model",
+      totalBytes: 1_000_000,
+      bytesDownloaded: 500_000,
+      status: "running",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      task: nil,
+      localUri: nil,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.downloads[300] = info
+
+    let exp = expectation(description: "moveCompletedDownload rejects not-completed download")
+    module.moveCompletedDownload(
+      300,
+      targetPath: "/tmp/should-not-exist.bin",
+      resolver: { _ in
+        XCTFail("should reject for download that hasn't completed")
+        exp.fulfill()
+      },
+      rejecter: { code, _, _ in
+        XCTAssertEqual(code, "NOT_COMPLETED")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+}
+
+// MARK: - AppDelegate Background URL Session Tests
+
+/// Verifies that AppDelegate correctly implements the background URL session
+/// delegate method required by RNFS for background downloads to complete.
+/// If the method signature were wrong (e.g., wrong RNFSManager method name),
+/// the build itself would fail — making this test a compile-time guard.
+final class AppDelegateBackgroundSessionTests: XCTestCase {
+
+  func testAppDelegateRespondsToBackgroundURLSessionSelector() {
+    let appDelegate = AppDelegate()
+    let responds = appDelegate.responds(
+      to: #selector(
+        UIApplicationDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)
+      )
+    )
+    XCTAssertTrue(
+      responds,
+      "AppDelegate must implement handleEventsForBackgroundURLSession to properly finalise RNFS background downloads"
+    )
+  }
+
+  func testAppDelegateIsUIApplicationDelegate() {
+    let appDelegate = AppDelegate()
+    XCTAssertTrue(
+      appDelegate is UIApplicationDelegate,
+      "AppDelegate must conform to UIApplicationDelegate"
+    )
   }
 }

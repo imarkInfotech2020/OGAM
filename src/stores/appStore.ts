@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage, PersistedDownloadInfo } from '../types';
 
 interface AppState {
   // Theme
@@ -46,20 +46,8 @@ interface AppState {
   } | null) => void;
 
   // Background downloads (Android)
-  activeBackgroundDownloads: Record<number, {
-    modelId: string;
-    fileName: string;
-    quantization: string;
-    author: string;
-    totalBytes: number;
-  }>;
-  setBackgroundDownload: (downloadId: number, info: {
-    modelId: string;
-    fileName: string;
-    quantization: string;
-    author: string;
-    totalBytes: number;
-  } | null) => void;
+  activeBackgroundDownloads: Record<number, PersistedDownloadInfo>;
+  setBackgroundDownload: (downloadId: number, info: PersistedDownloadInfo | null) => void;
   clearBackgroundDownloads: () => void;
   // Settings
   settings: {

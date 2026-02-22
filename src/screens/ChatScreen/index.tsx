@@ -3,7 +3,7 @@ import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { ChatInput } from '../../components';
+import { ChatInput, CustomAlert, hideAlert } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
@@ -41,29 +41,45 @@ export const ChatScreen: React.FC = () => {
     }
   }, [chat.activeConversation?.messages.length]);
 
+  const alertEl = (
+    <CustomAlert
+      visible={chat.alertState.visible}
+      title={chat.alertState.title}
+      message={chat.alertState.message}
+      buttons={chat.alertState.buttons}
+      onClose={() => chat.setAlertState(hideAlert())}
+    />
+  );
+
   if (!chat.activeModelId || !chat.activeModel) {
     return (
-      <NoModelScreen
-        styles={styles} colors={colors}
-        downloadedModelsCount={chat.downloadedModels.length}
-        showModelSelector={chat.showModelSelector}
-        setShowModelSelector={chat.setShowModelSelector}
-        onSelectModel={chat.handleModelSelect}
-        onUnloadModel={chat.handleUnloadModel}
-        isModelLoading={chat.isModelLoading}
-      />
+      <>
+        <NoModelScreen
+          styles={styles} colors={colors}
+          downloadedModelsCount={chat.downloadedModels.length}
+          showModelSelector={chat.showModelSelector}
+          setShowModelSelector={chat.setShowModelSelector}
+          onSelectModel={chat.handleModelSelect}
+          onUnloadModel={chat.handleUnloadModel}
+          isModelLoading={chat.isModelLoading}
+        />
+        {alertEl}
+      </>
     );
   }
 
   if (chat.isModelLoading) {
     const sizeSource = chat.loadingModel ?? chat.activeModel;
     return (
-      <LoadingScreen
-        styles={styles} colors={colors}
-        loadingModelName={chat.loadingModel?.name || chat.activeModel.name}
-        modelSize={sizeSource ? chat.hardwareService.formatModelSize(sizeSource) : ''}
-        hasVision={!!(chat.loadingModel?.mmProjPath || chat.activeModel.mmProjPath)}
-      />
+      <>
+        <LoadingScreen
+          styles={styles} colors={colors}
+          loadingModelName={chat.loadingModel?.name || chat.activeModel.name}
+          modelSize={sizeSource ? chat.hardwareService.formatModelSize(sizeSource) : ''}
+          hasVision={!!(chat.loadingModel?.mmProjPath || chat.activeModel.mmProjPath)}
+        />
+        {alertEl}
+      </>
     );
   }
 
@@ -123,8 +139,6 @@ export const ChatScreen: React.FC = () => {
           setShowModelSelector={chat.setShowModelSelector}
           showSettingsPanel={chat.showSettingsPanel}
           setShowSettingsPanel={chat.setShowSettingsPanel}
-          alertState={chat.alertState}
-          setAlertState={chat.setAlertState}
           debugInfo={chat.debugInfo}
           activeProject={chat.activeProject}
           activeConversation={chat.activeConversation}
@@ -143,6 +157,7 @@ export const ChatScreen: React.FC = () => {
           handleSaveImage={chat.handleSaveImage}
         />
       </KeyboardAvoidingView>
+      {alertEl}
     </SafeAreaView>
   );
 };

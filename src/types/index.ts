@@ -58,6 +58,27 @@ export interface DownloadedModel {
   mmProjFileSize?: number;
 }
 
+export interface PersistedDownloadInfo {
+  modelId: string;
+  fileName: string;
+  quantization: string;
+  author: string;
+  totalBytes: number;
+  mainFileSize?: number;
+  mmProjFileName?: string;
+  mmProjFileSize?: number;
+  mmProjLocalPath?: string | null;
+  mmProjDownloadId?: number;
+  // Image model metadata (for restoring downloads after app kill)
+  imageModelName?: string;
+  imageModelDescription?: string;
+  imageModelSize?: number;
+  imageModelStyle?: string;
+  imageModelBackend?: string;
+  imageModelRepo?: string;
+  imageDownloadType?: 'zip' | 'multifile';
+}
+
 export interface DownloadProgress {
   modelId: string;
   fileName: string;
@@ -68,7 +89,6 @@ export interface DownloadProgress {
 
 // SoC detection types
 export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
-
 export interface SoCInfo {
   vendor: SoCVendor;
   hasNPU: boolean;
@@ -248,17 +268,11 @@ export interface ImageGenerationState {
   prompt?: string;
 }
 
-// Image generation mode
 export type ImageGenerationMode = 'auto' | 'manual';
-
-// Auto-detection method for image requests
 export type AutoDetectMethod = 'pattern' | 'llm';
-
-// Model loading strategy
 export type ModelLoadingStrategy = 'performance' | 'memory';
-
-// Image mode state for chat input
-export type ImageModeState = 'auto' | 'force';
+/** 'auto' = smart detect, 'force' = always generate image, 'disabled' = never */
+export type ImageModeState = 'auto' | 'force' | 'disabled';
 
 export interface GeneratedImage {
   id: string;
@@ -301,15 +315,7 @@ export interface Project {
   updatedAt: string;
 }
 
-// Background download types
-export type BackgroundDownloadStatus =
-  | 'pending'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'unknown';
-
+export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown';
 export interface BackgroundDownloadInfo {
   downloadId: number;
   fileName: string;
@@ -323,8 +329,6 @@ export interface BackgroundDownloadInfo {
   completedAt?: number;
   failureReason?: string;
 }
-
-// Debug info for context inspection
 export interface DebugInfo {
   systemPrompt: string;
   originalMessageCount: number;
@@ -336,7 +340,6 @@ export interface DebugInfo {
   contextUsagePercent: number;
 }
 
-// App state types
 export type AppScreen =
   | 'onboarding'
   | 'home'

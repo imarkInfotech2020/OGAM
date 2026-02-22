@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ModelSelectorModal, GenerationSettingsModal,
-  CustomAlert, hideAlert, ProjectSelectorSheet, DebugSheet,
+  ProjectSelectorSheet, DebugSheet,
 } from '../../components';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
@@ -22,8 +22,6 @@ type ChatModalSectionProps = {
   setShowModelSelector: (v: boolean) => void;
   showSettingsPanel: boolean;
   setShowSettingsPanel: (v: boolean) => void;
-  alertState: any;
-  setAlertState: (v: any) => void;
   debugInfo: any;
   activeProject: any;
   activeConversation: any;
@@ -48,7 +46,6 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
   showDebugPanel, setShowDebugPanel,
   showModelSelector, setShowModelSelector,
   showSettingsPanel, setShowSettingsPanel,
-  alertState, setAlertState,
   debugInfo, activeProject, activeConversation, settings, projects,
   handleSelectProject, handleModelSelect, handleUnloadModel, handleDeleteConversation,
   isModelLoading, imageCount, activeConversationId, navigation,
@@ -92,13 +89,6 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
       viewerImageUri={viewerImageUri}
       onClose={() => setViewerImageUri(null)}
       onSave={handleSaveImage}
-    />
-    <CustomAlert
-      visible={alertState.visible}
-      title={alertState.title}
-      message={alertState.message}
-      buttons={alertState.buttons}
-      onClose={() => setAlertState(hideAlert())}
     />
   </>
 );

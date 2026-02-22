@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card, ModelCard, Button } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -29,7 +30,8 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
-  | 'handleSelectModel' | 'handleDownload'
+  | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload'
+  | 'downloadIds'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter'
@@ -49,6 +51,9 @@ interface DetailProps {
   getDownloadedModel: (modelId: string, fileName: string) => DownloadedModel | undefined;
   isModelDownloaded: (modelId: string, fileName: string) => boolean;
   handleDownload: (model: ModelInfo, file: ModelFile) => void;
+  handleRepairMmProj: (model: ModelInfo, file: ModelFile) => void;
+  handleCancelDownload: (downloadKey: string) => void;
+  downloadIds: Record<string, number>;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
 }
@@ -56,22 +61,31 @@ interface DetailProps {
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   downloadProgress, alertState, setAlertState, onBack,
-  getDownloadedModel, isModelDownloaded, handleDownload, styles, colors,
+  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, downloadIds,
+  styles, colors,
 }) => {
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     const downloadKey = `${selectedModel.id}/${item.name}`;
-    const progress = downloadProgress[downloadKey];
+    const repairKey = `${selectedModel.id}/${item.name}-mmproj`;
+    const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
+    const downloaded = isModelDownloaded(selectedModel.id, item.name);
+    const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
+    // Show repair button when: file is downloaded, has an mmproj companion, but stored model is missing mmProjPath
+    const needsVisionRepair = downloaded && !!item.mmProjFile && !downloadedModel?.mmProjPath;
+    const canCancel = !!progress && downloadIds[downloadKey] != null;
     return (
       <ModelCard
         model={{ id: selectedModel.id, name: item.name.replace('.gguf', ''), author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item}
-        downloadedModel={getDownloadedModel(selectedModel.id, item.name)}
-        isDownloaded={isModelDownloaded(selectedModel.id, item.name)}
+        downloadedModel={downloadedModel}
+        isDownloaded={downloaded}
         isDownloading={!!progress}
         downloadProgress={progress?.progress}
         isCompatible={item.size / (1024 ** 3) < ramGB * 0.6}
         testID={`file-card-${index}`}
-        onDownload={!isModelDownloaded(selectedModel.id, item.name) && !progress ? () => handleDownload(selectedModel, item) : undefined}
+        onDownload={!downloaded && !progress ? () => handleDownload(selectedModel, item) : undefined}
+        onRepairVision={needsVisionRepair && !progress ? () => handleRepairMmProj(selectedModel, item) : undefined}
+        onCancel={canCancel ? () => handleCancelDownload(downloadKey) : undefined}
       />
     );
   };
@@ -133,7 +147,8 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels, downloadProgress,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleSelectModel, handleDownload,
+    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload,
+    downloadIds,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
     isModelDownloaded, getDownloadedModel,
@@ -154,29 +169,43 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     </AnimatedEntry>
   );
 
-  if (selectedModel) {
-    return (
-      <ModelDetailView
-        selectedModel={selectedModel}
-        modelFiles={modelFiles}
-        isLoadingFiles={isLoadingFiles}
-        filterState={filterState}
-        ramGB={ramGB}
-        downloadProgress={downloadProgress}
-        alertState={alertState}
-        setAlertState={setAlertState}
-        onBack={() => { setSelectedModel(null); setModelFiles([]); }}
-        getDownloadedModel={getDownloadedModel}
-        isModelDownloaded={isModelDownloaded}
-        handleDownload={handleDownload}
-        styles={styles}
-        colors={colors}
-      />
-    );
-  }
+  const onBack = () => { setSelectedModel(null); setModelFiles([]); };
 
   return (
     <>
+      {/* Full-screen modal for model detail / file selection */}
+      <Modal
+        visible={!!selectedModel}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onBack}
+      >
+        <SafeAreaView style={styles.container}>
+          {selectedModel && (
+            <ModelDetailView
+              selectedModel={selectedModel}
+              modelFiles={modelFiles}
+              isLoadingFiles={isLoadingFiles}
+              filterState={filterState}
+              ramGB={ramGB}
+              downloadProgress={downloadProgress}
+              alertState={alertState}
+              setAlertState={setAlertState}
+              onBack={onBack}
+              getDownloadedModel={getDownloadedModel}
+              isModelDownloaded={isModelDownloaded}
+              handleDownload={handleDownload}
+              handleRepairMmProj={handleRepairMmProj}
+              handleCancelDownload={handleCancelDownload}
+              downloadIds={downloadIds}
+              styles={styles}
+              colors={colors}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Main list / search UI */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
