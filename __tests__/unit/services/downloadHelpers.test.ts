@@ -2,18 +2,16 @@
  * Download Helpers Unit Tests
  *
  * Tests for the low-level helpers in modelManager/downloadHelpers.ts:
- * - downloadMmProjBackground  — non-200 status throws, success returns size
  * - getOrphanedTextFiles      — tracks both filePath and mmProjPath
  * - getOrphanedImageDirs      — CoreML nested-path detection avoids false positives
  */
 
 import RNFS from 'react-native-fs';
 import {
-  downloadMmProjBackground,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from '../../../src/services/modelManager/downloadHelpers';
-import { ModelFile, DownloadedModel, ONNXImageModel } from '../../../src/types';
+import { DownloadedModel, ONNXImageModel } from '../../../src/types';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
@@ -23,21 +21,6 @@ const IMAGE_MODELS_DIR = '/mock/documents/image_models';
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function makeVisionFile(overrides: Partial<ModelFile> = {}): ModelFile {
-  return {
-    name: 'vision-model.gguf',
-    size: 4_000_000_000,
-    quantization: 'Q4_K_M',
-    downloadUrl: 'https://example.com/vision.gguf',
-    mmProjFile: {
-      name: 'mmproj.gguf',
-      size: 500_000_000,
-      downloadUrl: 'https://example.com/mmproj.gguf',
-    },
-    ...overrides,
-  };
-}
 
 function makeDownloadedModel(overrides: Partial<DownloadedModel> = {}): DownloadedModel {
   return {
@@ -72,160 +55,6 @@ function makeRNFSFile(name: string, path: string, size: number | string = 1000) 
 function makeRNFSDir(name: string, path: string) {
   return { name, path, size: 0, isFile: () => false, isDirectory: () => true } as any;
 }
-
-// ============================================================================
-// downloadMmProjBackground
-// ============================================================================
-
-describe('downloadMmProjBackground', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (mockedRNFS as any).unlink = jest.fn().mockResolvedValue(undefined);
-  });
-
-  it('returns mmProjSize on HTTP 200', async () => {
-    mockedRNFS.downloadFile.mockReturnValue({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 500_000_000 }),
-    } as any);
-
-    const result = await downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress: undefined,
-    });
-
-    expect(result).toBe(500_000_000);
-    expect(RNFS.unlink).not.toHaveBeenCalled();
-  });
-
-  it('throws on HTTP 404 and unlinks partial file', async () => {
-    mockedRNFS.downloadFile.mockReturnValue({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 404, bytesWritten: 0 }),
-    } as any);
-
-    const mmProjPath = `${MODELS_DIR}/mmproj.gguf`;
-    await expect(downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: mmProjPath,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress: undefined,
-    })).rejects.toThrow('mmproj download failed with status 404');
-
-    expect(RNFS.unlink).toHaveBeenCalledWith(mmProjPath);
-  });
-
-  it('throws on HTTP 500 and unlinks partial file', async () => {
-    mockedRNFS.downloadFile.mockReturnValue({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 500, bytesWritten: 0 }),
-    } as any);
-
-    await expect(downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress: undefined,
-    })).rejects.toThrow('mmproj download failed with status 500');
-  });
-
-  it('returns 0 and skips download when mmProjFile is undefined', async () => {
-    const fileWithoutMmProj = makeVisionFile({ mmProjFile: undefined });
-
-    const result = await downloadMmProjBackground({
-      file: fileWithoutMmProj,
-      mmProjLocalPath: '',
-      modelId: 'test/model',
-      combinedTotalBytes: 4_000_000_000,
-      onProgress: undefined,
-    });
-
-    expect(result).toBe(0);
-    expect(RNFS.downloadFile).not.toHaveBeenCalled();
-  });
-
-  it('returns 0 when mmProjLocalPath is empty string', async () => {
-    const result = await downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: '', // falsy path — guard returns 0
-      modelId: 'test/model',
-      combinedTotalBytes: 4_000_000_000,
-      onProgress: undefined,
-    });
-
-    expect(result).toBe(0);
-    expect(RNFS.downloadFile).not.toHaveBeenCalled();
-  });
-
-  it('calls onProgress with bytesWritten during download', async () => {
-    let capturedProgressFn: ((res: any) => void) | undefined;
-    mockedRNFS.downloadFile.mockImplementation((opts: any) => {
-      capturedProgressFn = opts.progress;
-      return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 500_000_000 }) } as any;
-    });
-
-    const onProgress = jest.fn();
-    await downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress,
-    });
-
-    capturedProgressFn?.({ bytesWritten: 250_000_000 });
-
-    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
-      bytesDownloaded: 250_000_000,
-      totalBytes: 4_500_000_000,
-      progress: expect.closeTo(250_000_000 / 4_500_000_000, 5),
-    }));
-  });
-
-  it('passes background:true and discretionary:true to RNFS', async () => {
-    mockedRNFS.downloadFile.mockReturnValue({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 500_000_000 }),
-    } as any);
-
-    await downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress: undefined,
-    });
-
-    const opts = mockedRNFS.downloadFile.mock.calls[0][0] as any;
-    expect(opts.background).toBe(true);
-    expect(opts.discretionary).toBe(true);
-    expect(opts.cacheable).toBe(false);
-  });
-
-  it('downloads from the correct URL', async () => {
-    mockedRNFS.downloadFile.mockReturnValue({
-      jobId: 1,
-      promise: Promise.resolve({ statusCode: 200, bytesWritten: 500_000_000 }),
-    } as any);
-
-    await downloadMmProjBackground({
-      file: makeVisionFile(),
-      mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
-      modelId: 'test/model',
-      combinedTotalBytes: 4_500_000_000,
-      onProgress: undefined,
-    });
-
-    const opts = mockedRNFS.downloadFile.mock.calls[0][0] as any;
-    expect(opts.fromUrl).toBe('https://example.com/mmproj.gguf');
-    expect(opts.toFile).toBe(`${MODELS_DIR}/mmproj.gguf`);
-  });
-});
 
 // ============================================================================
 // getOrphanedTextFiles

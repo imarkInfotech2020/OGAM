@@ -192,7 +192,7 @@ describe('ModelDownloadScreen', () => {
     mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'medium' });
     mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
     mockHardwareService.formatBytes.mockImplementation((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`);
-    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(false);
+    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
     mockModelManager.downloadModel.mockImplementation((...args: any[]) => (mockDownloadModel as any)(...args));
     mockModelManager.downloadModelBackground.mockImplementation((...args: any[]) => (mockDownloadModelBackground as any)(...args));
     mockHuggingFaceService.getModelFiles.mockImplementation((...args: any[]) => (mockGetModelFiles as any)(...args));
@@ -360,7 +360,7 @@ describe('ModelDownloadScreen', () => {
     expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to fetch model files.');
   });
 
-  it('download button triggers handleDownload for foreground download', async () => {
+  it('download button triggers handleDownload via background download', async () => {
     const mockFile = {
       name: 'model-Q4_K_M.gguf',
       size: 4000000000,
@@ -368,11 +368,10 @@ describe('ModelDownloadScreen', () => {
       downloadUrl: 'https://example.com/model.gguf',
     };
     mockGetModelFiles.mockResolvedValue([mockFile]);
-    mockModelManager.isBackgroundDownloadSupported.mockReturnValue(false);
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 1 });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
@@ -382,7 +381,7 @@ describe('ModelDownloadScreen', () => {
       fireEvent.press(downloadBtn);
     });
 
-    expect(mockDownloadModel).toHaveBeenCalled();
+    expect(mockDownloadModelBackground).toHaveBeenCalled();
   });
 
   it('download button triggers background download when supported', async () => {
@@ -459,11 +458,14 @@ describe('ModelDownloadScreen', () => {
       downloadedAt: new Date().toISOString(),
     };
 
-    mockDownloadModel.mockResolvedValue(completedModel);
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
+    let capturedOnComplete: ((model: any) => void) | undefined;
+    mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
+      capturedOnComplete = onComplete;
+    });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
@@ -471,6 +473,11 @@ describe('ModelDownloadScreen', () => {
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
+    });
+
+    // Simulate completion
+    await act(async () => {
+      capturedOnComplete?.(completedModel);
     });
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
@@ -502,11 +509,14 @@ describe('ModelDownloadScreen', () => {
       downloadedAt: new Date().toISOString(),
     };
 
-    mockDownloadModel.mockResolvedValue(completedModel);
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
+    let capturedOnComplete: ((model: any) => void) | undefined;
+    mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
+      capturedOnComplete = onComplete;
+    });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
@@ -514,6 +524,10 @@ describe('ModelDownloadScreen', () => {
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
+    });
+
+    await act(async () => {
+      capturedOnComplete?.(completedModel);
     });
 
     const startChatBtn = result.getByTestId('alert-button-Start Chatting');
@@ -531,11 +545,14 @@ describe('ModelDownloadScreen', () => {
     };
     mockGetModelFiles.mockResolvedValue([mockFile]);
 
-    mockDownloadModel.mockRejectedValue(new Error('Download failed'));
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
+    let capturedOnError: ((err: Error) => void) | undefined;
+    mockModelManager.watchDownload.mockImplementation((_id: number, _onComplete: any, onError: any) => {
+      capturedOnError = onError;
+    });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
@@ -543,6 +560,10 @@ describe('ModelDownloadScreen', () => {
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
+    });
+
+    await act(async () => {
+      capturedOnError?.(new Error('Download failed'));
     });
 
     expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'Download failed');
@@ -557,11 +578,10 @@ describe('ModelDownloadScreen', () => {
     };
     mockGetModelFiles.mockResolvedValue([mockFile]);
 
-    mockDownloadModel.mockRejectedValue(new Error('Unexpected error'));
+    mockDownloadModelBackground.mockRejectedValue(new Error('Unexpected error'));
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }

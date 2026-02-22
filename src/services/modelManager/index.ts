@@ -18,7 +18,6 @@ import {
   loadDownloadedImageModels,
 } from './storage';
 import {
-  performDownloadModel,
   performBackgroundDownload,
   watchBackgroundDownload,
   syncCompletedBackgroundDownloads,
@@ -42,7 +41,6 @@ export { MODELS_STORAGE_KEY, IMAGE_MODELS_STORAGE_KEY };
 class ModelManager {
   private modelsDir: string;
   private imageModelsDir: string;
-  private downloadJobs: Map<string, { jobId: number; cancel: () => void }> = new Map();
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
   private backgroundDownloadContext: Map<number, BackgroundDownloadContext> = new Map();
 
@@ -78,36 +76,6 @@ class ModelManager {
       return await loadDownloadedModels(this.modelsDir);
     } catch {
       return [];
-    }
-  }
-
-  async downloadModel(
-    modelId: string,
-    file: ModelFile,
-    onProgress?: DownloadProgressCallback,
-  ): Promise<DownloadedModel> {
-    const downloadKey = `${modelId}/${file.name}`;
-    if (this.downloadJobs.has(downloadKey)) {
-      throw new Error('Model is already being downloaded');
-    }
-
-    try {
-      await this.initialize();
-      return await performDownloadModel({ modelId, file, modelsDir: this.modelsDir, downloadJobs: this.downloadJobs, onProgress });
-    } catch (error) {
-      this.downloadJobs.delete(downloadKey);
-      throw error;
-    }
-  }
-
-  async cancelDownload(modelId: string, fileName: string): Promise<void> {
-    const downloadKey = `${modelId}/${fileName}`;
-    const job = this.downloadJobs.get(downloadKey);
-
-    if (job) {
-      job.cancel();
-      this.downloadJobs.delete(downloadKey);
-      await RNFS.unlink(`${this.modelsDir}/${fileName}`).catch(() => {});
     }
   }
 
@@ -155,10 +123,6 @@ class ModelManager {
 
   async deleteOrphanedFile(filePath: string): Promise<void> {
     await scanDeleteOrphanedFile(filePath);
-  }
-
-  isDownloading(modelId: string, fileName: string): boolean {
-    return this.downloadJobs.has(`${modelId}/${fileName}`);
   }
 
   setBackgroundDownloadMetadataCallback(callback: BackgroundDownloadMetadataCallback): void {
@@ -249,6 +213,48 @@ class ModelManager {
 
   stopBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.stopProgressPolling();
+  }
+
+  /**
+   * Re-download just the mmproj file for a vision model whose mmproj is missing or incomplete.
+   * Uses the background download service so the transfer survives app backgrounding.
+   */
+  async repairMmProj(
+    modelId: string,
+    file: ModelFile,
+    onProgress?: DownloadProgressCallback,
+  ): Promise<void> {
+    if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
+    await this.initialize();
+
+    const mmProjLocalPath = `${this.modelsDir}/${file.mmProjFile.name}`;
+    const totalBytes = file.mmProjFile.size;
+
+    // Delete any partial file
+    if (await RNFS.exists(mmProjLocalPath)) {
+      await RNFS.unlink(mmProjLocalPath).catch(() => {});
+    }
+
+    await backgroundDownloadService.downloadFileTo({
+      params: {
+        url: file.mmProjFile.downloadUrl,
+        fileName: file.mmProjFile.name,
+        modelId,
+        totalBytes,
+      },
+      destPath: mmProjLocalPath,
+      onProgress: (bytesDownloaded: number) => {
+        onProgress?.({
+          modelId,
+          fileName: file.mmProjFile!.name,
+          bytesDownloaded,
+          totalBytes,
+          progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0,
+        });
+      },
+    });
+
+    await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);
   }
 
   async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {

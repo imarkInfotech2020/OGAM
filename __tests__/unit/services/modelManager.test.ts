@@ -30,6 +30,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
     isAvailable: jest.fn(() => false),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(),
+    downloadFileTo: jest.fn(() => Promise.resolve()),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
     moveCompletedDownload: jest.fn(),
     startProgressPolling: jest.fn(),
@@ -76,6 +77,7 @@ describe('ModelManager', () => {
     mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
     mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
     mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
+    mockedBackgroundDownloadService.downloadFileTo.mockResolvedValue(undefined as any);
     mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
     mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('' as any);
     mockedBackgroundDownloadService.startProgressPolling.mockImplementation(() => {});
@@ -176,228 +178,6 @@ describe('ModelManager', () => {
       const models = await modelManager.getDownloadedModels();
 
       expect(models).toEqual([]);
-    });
-  });
-
-  // ========================================================================
-  // downloadModel
-  // ========================================================================
-  describe('downloadModel', () => {
-    const file = createModelFile({
-      name: 'test-model-q4.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://huggingface.co/test/model/resolve/main/test-model-q4.gguf',
-    });
-
-    it('throws when already downloading', async () => {
-      // Simulate an active download
-      (modelManager as any).downloadJobs.set('test-author/test-model/test-model-q4.gguf', {
-        jobId: 1,
-        cancel: jest.fn(),
-      });
-
-      await expect(
-        modelManager.downloadModel('test-author/test-model', file)
-      ).rejects.toThrow('already being downloaded');
-    });
-
-    it('skips download when files already exist', async () => {
-      mockedRNFS.exists.mockResolvedValue(true); // All exists checks return true
-      // Mock getDownloadedModels for addDownloadedModel
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      const model = await modelManager.downloadModel('test-author/test-model', file);
-
-      expect(RNFS.downloadFile).not.toHaveBeenCalled();
-      expect(model).toBeDefined();
-    });
-
-    it('downloads via RNFS when file does not exist', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // initialize: modelsDir exists
-        .mockResolvedValueOnce(true)   // initialize: imageModelsDir exists
-        .mockResolvedValueOnce(false)  // mainExists = false
-        .mockResolvedValueOnce(true);  // mmProjExists (no mmproj, so vacuously true isn't called - but model needs to be added)
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 4000000000 }),
-      } as any);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-      // For the addDownloadedModel -> getDownloadedModels -> exists checks
-      // After download, RNFS.exists will be called to check mmProjLocalPath
-      mockedRNFS.exists.mockResolvedValue(false);
-
-      await modelManager.downloadModel('test-author/test-model', file);
-
-      expect(RNFS.downloadFile).toHaveBeenCalled();
-    });
-
-    it('reports progress via callback', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main file doesn't exist
-        .mockResolvedValue(false);     // remaining checks
-
-      let capturedProgressFn: any;
-      mockedRNFS.downloadFile.mockImplementation((opts: any) => {
-        capturedProgressFn = opts.progress;
-        return {
-          jobId: 1,
-          promise: Promise.resolve({ statusCode: 200, bytesWritten: 4000000000 }),
-        } as any;
-      });
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      const onProgress = jest.fn();
-      await modelManager.downloadModel('test-author/test-model', file, onProgress);
-
-      // Simulate progress callback
-      if (capturedProgressFn) {
-        capturedProgressFn({ bytesWritten: 2000000000 });
-        expect(onProgress).toHaveBeenCalledWith(
-          expect.objectContaining({
-            bytesDownloaded: 2000000000,
-            totalBytes: 4000000000,
-          })
-        );
-      }
-    });
-
-    it('cleans up on non-200 status', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValue(false);
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 500, bytesWritten: 0 }),
-      } as any);
-
-      await expect(
-        modelManager.downloadModel('test-author/test-model', file)
-      ).rejects.toThrow('download failed');
-
-      expect(RNFS.unlink).toHaveBeenCalled();
-    });
-
-    it('downloads mmproj file when present', async () => {
-      const visionFile = createModelFileWithMmProj({
-        name: 'vision-model.gguf',
-        size: 4000000000,
-        mmProjName: 'mmproj-vision.gguf',
-        mmProjSize: 500000000,
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(false)  // mmproj doesn't exist
-        .mockResolvedValue(false);     // remaining checks
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 4000000000 }),
-      } as any);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      await modelManager.downloadModel('test-author/test-model', visionFile);
-
-      // Should have two downloadFile calls (main + mmproj)
-      expect(RNFS.downloadFile).toHaveBeenCalledTimes(2);
-    });
-
-    it('continues without mmproj on mmproj download failure', async () => {
-      const visionFile = createModelFileWithMmProj({
-        name: 'vision-model.gguf',
-        size: 4000000000,
-        mmProjName: 'mmproj-vision.gguf',
-        mmProjSize: 500000000,
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(false)  // mmproj doesn't exist
-        .mockResolvedValue(false);
-
-      // Main succeeds, mmproj fails
-      mockedRNFS.downloadFile
-        .mockReturnValueOnce({
-          jobId: 1,
-          promise: Promise.resolve({ statusCode: 200, bytesWritten: 4000000000 }),
-        } as any)
-        .mockReturnValueOnce({
-          jobId: 2,
-          promise: Promise.resolve({ statusCode: 500, bytesWritten: 0 }),
-        } as any);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      // Should not throw - mmproj failure is not fatal
-      const model = await modelManager.downloadModel('test-author/test-model', visionFile);
-
-      expect(model).toBeDefined();
-    });
-
-    it('calls onComplete with model when done', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValue(false);
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 4000000000 }),
-      } as any);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      const model = await modelManager.downloadModel('test-author/test-model', file);
-
-      expect(model).toMatchObject({
-        fileName: 'test-model-q4.gguf',
-        quantization: 'Q4_K_M',
-      });
-    });
-  });
-
-  // ========================================================================
-  // cancelDownload
-  // ========================================================================
-  describe('cancelDownload', () => {
-    it('cancels active download job', async () => {
-      const cancelFn = jest.fn();
-      (modelManager as any).downloadJobs.set('test-model/test-file.gguf', {
-        jobId: 1,
-        cancel: cancelFn,
-      });
-
-      await modelManager.cancelDownload('test-model', 'test-file.gguf');
-
-      expect(cancelFn).toHaveBeenCalled();
-    });
-
-    it('cleans up partial file', async () => {
-      (modelManager as any).downloadJobs.set('test-model/test-file.gguf', {
-        jobId: 1,
-        cancel: jest.fn(),
-      });
-
-      await modelManager.cancelDownload('test-model', 'test-file.gguf');
-
-      expect(RNFS.unlink).toHaveBeenCalled();
-    });
-
-    it('does nothing when no active download for key', async () => {
-      await modelManager.cancelDownload('nonexistent', 'file.gguf');
-
-      expect(RNFS.unlink).not.toHaveBeenCalled();
     });
   });
 
@@ -577,7 +357,7 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
-  // determineCredibility (private, tested via downloadModel -> addDownloadedModel)
+  // determineCredibility (private)
   // ========================================================================
   describe('determineCredibility', () => {
     // Access private method
@@ -721,7 +501,7 @@ describe('ModelManager', () => {
       }));
     });
 
-    it('downloads mmproj via foreground first when present', async () => {
+    it('downloads mmproj via background service first when present', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
 
       const visionFile = createModelFileWithMmProj({
@@ -737,12 +517,6 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(false)  // main doesn't exist
         .mockResolvedValueOnce(false); // mmproj doesn't exist
 
-      // mmproj foreground download
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 500000000 }),
-      } as any);
-
       mockedBackgroundDownloadService.startDownload.mockResolvedValue({
         downloadId: 42,
         fileName: 'vision.gguf',
@@ -755,9 +529,12 @@ describe('ModelManager', () => {
 
       await modelManager.downloadModelBackground('test/model', visionFile);
 
-      // mmproj should be downloaded via RNFS (foreground)
-      expect(RNFS.downloadFile).toHaveBeenCalled();
-      // Main model via background
+      // mmproj should be downloaded via background service (downloadFileTo), not RNFS
+      expect(RNFS.downloadFile).not.toHaveBeenCalled();
+      expect(mockedBackgroundDownloadService.downloadFileTo).toHaveBeenCalledWith(
+        expect.objectContaining({ params: expect.objectContaining({ fileName: 'mmproj.gguf' }) }),
+      );
+      // Main model via background startDownload
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
     });
   });
@@ -1084,21 +861,6 @@ describe('ModelManager', () => {
       const discovered = await modelManager.scanForUntrackedImageModels();
 
       expect(discovered).toEqual([]);
-    });
-  });
-
-  // ========================================================================
-  // isDownloading
-  // ========================================================================
-  describe('isDownloading', () => {
-    it('returns true when download is active', () => {
-      (modelManager as any).downloadJobs.set('test/model.gguf', { jobId: 1, cancel: jest.fn() });
-
-      expect(modelManager.isDownloading('test', 'model.gguf')).toBe(true);
-    });
-
-    it('returns false when no active download', () => {
-      expect(modelManager.isDownloading('test', 'model.gguf')).toBe(false);
     });
   });
 
@@ -1848,32 +1610,6 @@ describe('ModelManager', () => {
         await errorCallback({ downloadId: 99, reason: 'Network error' });
         expect(onError).toHaveBeenCalledWith(expect.any(Error));
       }
-    });
-  });
-
-  describe('downloadModel error handling', () => {
-    it('throws when download fails', async () => {
-      const file = createModelFile({
-        name: 'error-model.gguf',
-        size: 4000000000,
-        quantization: 'Q4_K_M',
-        downloadUrl: 'https://huggingface.co/test/model/resolve/main/error-model.gguf',
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValue(false);
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.reject(new Error('Network failure')),
-      } as any);
-
-      await expect(
-        modelManager.downloadModel('test/model', file),
-      ).rejects.toThrow('Network failure');
     });
   });
 

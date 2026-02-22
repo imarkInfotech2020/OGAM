@@ -50,33 +50,24 @@ export async function downloadHuggingFaceModel(
       const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
       if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
 
-      if (Platform.OS === 'android') {
-        // Use Android DownloadManager so downloads survive app backgrounding.
-        // Use a flattened temp filename to avoid path issues in the Downloads dir.
-        const tempFileName = `${modelInfo.id}_${file.path.replace(/\//g, '_')}`;
-        const capturedDownloadedSize = downloadedSize;
-        await backgroundDownloadService.downloadFileTo({
-          params: {
-            url: fileUrl,
-            fileName: tempFileName,
-            modelId: `image:${modelInfo.id}`,
-            totalBytes: file.size,
-          },
-          destPath: filePath,
-          onProgress: (bytesDownloaded) => {
-            deps.updateModelProgress(
-              modelInfo.id,
-              ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95,
-            );
-          },
-        });
-      } else {
-        const result = await RNFS.downloadFile({
-          fromUrl: fileUrl, toFile: filePath, background: true, discretionary: false, progressInterval: 500,
-          progress: (res) => { deps.updateModelProgress(modelInfo.id, ((downloadedSize + res.bytesWritten) / totalSize) * 0.95); },
-        }).promise;
-        if (result.statusCode !== 200) throw new Error(`Failed to download ${file.path}: HTTP ${result.statusCode}`);
-      }
+      // Use a flattened temp filename to avoid path issues in the Downloads dir.
+      const tempFileName = `${modelInfo.id}_${file.path.replace(/\//g, '_')}`;
+      const capturedDownloadedSize = downloadedSize;
+      await backgroundDownloadService.downloadFileTo({
+        params: {
+          url: fileUrl,
+          fileName: tempFileName,
+          modelId: `image:${modelInfo.id}`,
+          totalBytes: file.size,
+        },
+        destPath: filePath,
+        onProgress: (bytesDownloaded) => {
+          deps.updateModelProgress(
+            modelInfo.id,
+            ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95,
+          );
+        },
+      });
       downloadedSize += file.size;
       deps.updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
     }
@@ -88,7 +79,9 @@ export async function downloadHuggingFaceModel(
     await modelManager.addDownloadedImageModel(imageModel);
     deps.addDownloadedImageModel(imageModel);
     if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
-    deps.updateModelProgress(modelInfo.id, 1);
+    // Remove AFTER model is registered so card doesn't disappear before appearing as downloaded.
+    deps.removeImageModelDownloading(modelInfo.id);
+    deps.clearModelProgress(modelInfo.id);
     deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
@@ -96,47 +89,6 @@ export async function downloadHuggingFaceModel(
       const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
       if (await RNFS.exists(dir)) await RNFS.unlink(dir);
     } catch { /* ignore cleanup errors */ }
-  } finally {
-    deps.removeImageModelDownloading(modelInfo.id);
-    deps.clearModelProgress(modelInfo.id);
-  }
-}
-
-export async function downloadImageModelFallback(
-  modelInfo: ImageModelDescriptor,
-  deps: ImageDownloadDeps,
-): Promise<void> {
-  deps.addImageModelDownloading(modelInfo.id);
-  deps.updateModelProgress(modelInfo.id, 0);
-  try {
-    const imageModelsDir = modelManager.getImageModelsDirectory();
-    const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    const zipPath = `${imageModelsDir}/${modelInfo.id}.zip`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    const result = await RNFS.downloadFile({
-      fromUrl: modelInfo.downloadUrl, toFile: zipPath, background: true, discretionary: true, progressInterval: 500,
-      progress: (res) => { deps.updateModelProgress(modelInfo.id, (res.bytesWritten / res.contentLength) * 0.9); },
-    }).promise;
-    if (result.statusCode !== 200) throw new Error(`Download failed with status ${result.statusCode}`);
-    deps.updateModelProgress(modelInfo.id, 0.9);
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-    await unzip(zipPath, modelDir);
-    const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
-    deps.updateModelProgress(modelInfo.id, 0.95);
-    await RNFS.unlink(zipPath).catch(() => {});
-    const imageModel: ONNXImageModel = {
-      id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
-      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
-      size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
-    };
-    await modelManager.addDownloadedImageModel(imageModel);
-    deps.addDownloadedImageModel(imageModel);
-    if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
-    deps.updateModelProgress(modelInfo.id, 1);
-    deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
-  } catch (error: any) {
-    deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-  } finally {
     deps.removeImageModelDownloading(modelInfo.id);
     deps.clearModelProgress(modelInfo.id);
   }
@@ -180,11 +132,13 @@ export async function downloadCoreMLMultiFile(
         await modelManager.addDownloadedImageModel(imageModel);
         deps.addDownloadedImageModel(imageModel);
         if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
-        deps.updateModelProgress(modelInfo.id, 1);
+        // Remove AFTER model is registered so card doesn't disappear during processing.
+        deps.removeImageModelDownloading(modelInfo.id);
+        deps.clearModelProgress(modelInfo.id);
+        deps.setBackgroundDownload(downloadInfo.downloadId, null);
         deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
       } catch (e: any) {
         deps.setAlertState(showAlert('Registration Failed', e?.message || 'Failed to register model'));
-      } finally {
         deps.removeImageModelDownloading(modelInfo.id);
         deps.clearModelProgress(modelInfo.id);
         deps.setBackgroundDownload(downloadInfo.downloadId, null);
@@ -215,10 +169,6 @@ export async function proceedWithDownload(
   }
   if (modelInfo.coremlFiles && modelInfo.coremlFiles.length > 0) {
     await downloadCoreMLMultiFile(modelInfo, deps);
-    return;
-  }
-  if (!backgroundDownloadService.isAvailable()) {
-    await downloadImageModelFallback(modelInfo, deps);
     return;
   }
 
@@ -259,11 +209,14 @@ export async function proceedWithDownload(
         await modelManager.addDownloadedImageModel(imageModel);
         deps.addDownloadedImageModel(imageModel);
         if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
-        deps.updateModelProgress(modelInfo.id, 1);
+        // Remove from downloading AFTER model is registered so the card never
+        // disappears during the processing window (unzip / move / persist).
+        deps.removeImageModelDownloading(modelInfo.id);
+        deps.clearModelProgress(modelInfo.id);
+        deps.setBackgroundDownload(downloadInfo.downloadId, null);
         deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
       } catch (e: any) {
         deps.setAlertState(showAlert('Extraction Failed', e?.message || 'Failed to extract model'));
-      } finally {
         deps.removeImageModelDownloading(modelInfo.id);
         deps.clearModelProgress(modelInfo.id);
         deps.setBackgroundDownload(downloadInfo.downloadId, null);

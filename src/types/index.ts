@@ -264,7 +264,8 @@ export type AutoDetectMethod = 'pattern' | 'llm';
 // Model loading strategy
 export type ModelLoadingStrategy = 'performance' | 'memory';
 // Image mode state for chat input
-export type ImageModeState = 'auto' | 'force';
+// 'auto' = smart detect, 'force' = always generate image, 'disabled' = never generate image
+export type ImageModeState = 'auto' | 'force' | 'disabled';
 
 export interface GeneratedImage {
   id: string;
