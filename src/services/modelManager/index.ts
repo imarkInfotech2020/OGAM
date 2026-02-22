@@ -213,7 +213,6 @@ class ModelManager {
     if (!this.isBackgroundDownloadSupported()) return [];
     return backgroundDownloadService.getActiveDownloads();
   }
-
   startBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.startProgressPolling();
   }
@@ -232,7 +231,7 @@ class ModelManager {
     const totalBytes = file.mmProjFile.size;
     if (await RNFS.exists(mmProjLocalPath)) await RNFS.unlink(mmProjLocalPath).catch(() => {});
 
-    const { downloadId, promise } = backgroundDownloadService.downloadFileTo({
+    const download = backgroundDownloadService.downloadFileTo({
       params: { url: file.mmProjFile.downloadUrl, fileName: file.mmProjFile.name, modelId, totalBytes },
       destPath: mmProjLocalPath,
       onProgress: (bytesDownloaded: number) => {
@@ -240,10 +239,16 @@ class ModelManager {
       },
       silent: true,
     });
+    const { promise } = download;
 
     if (opts?.onDownloadIdReady) {
-      const cb = opts.onDownloadIdReady;
-      const poll = setInterval(() => { if (downloadId !== 0) { clearInterval(poll); cb(downloadId); } }, 50);
+      const poll = setInterval(() => {
+        const currentDownloadId = download.downloadId;
+        if (currentDownloadId !== 0) {
+          clearInterval(poll);
+          opts.onDownloadIdReady?.(currentDownloadId);
+        }
+      }, 50);
       promise.finally(() => clearInterval(poll));
     }
     await promise;

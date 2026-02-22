@@ -30,7 +30,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const cancelledKeysRef = useRef<Set<string>>(new Set());
-
   const {
     downloadedModels,
     setDownloadedModels,
@@ -45,9 +44,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     removeImageModelDownloading,
   } = useAppStore();
 
-  // Ref keeps the onAnyProgress callback (registered once) reading the latest persisted metadata.
-  const activeBackgroundDownloadsRef = useRef(activeBackgroundDownloads);
-  useEffect(() => { activeBackgroundDownloadsRef.current = activeBackgroundDownloads; }, [activeBackgroundDownloads]);
   // Load active background downloads on mount + start/stop polling
   useEffect(() => {
     loadActiveDownloads();
@@ -65,31 +61,36 @@ export function useDownloadManager(): UseDownloadManagerResult {
   useEffect(() => {
     if (!backgroundDownloadService.isAvailable()) return;
 
+    // Broadcast progress for all downloads. Per-download listeners (useTextModels)
+    // compute combined GGUF+mmproj progress and fire first. We skip the update here
+    // if the store already has a higher bytesDownloaded (i.e. combined progress).
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
-      const key = `${event.modelId}/${event.fileName}`;
+      const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
+      if (!metadata) return;
+      const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
-      // Use the stored combined totalBytes (GGUF + mmproj) when available.
-      // event.totalBytes only reflects the GGUF file size from Android DownloadManager.
-      const storedMeta = activeBackgroundDownloadsRef.current[event.downloadId];
-      const totalBytes = storedMeta?.totalBytes ?? event.totalBytes;
+      const existing = useAppStore.getState().downloadProgress[key];
+      if (existing && existing.bytesDownloaded >= event.bytesDownloaded) return;
       setDownloadProgress(key, {
-        progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0,
+        progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
-        totalBytes,
+        totalBytes: event.totalBytes,
       });
     });
 
     const unsubComplete = backgroundDownloadService.onAnyComplete(async (event) => {
-      setDownloadProgress(`${event.modelId}/${event.fileName}`, null);
+      // Clear progress for image downloads (their per-download callbacks don't use the global store).
+      // Text model cleanup is handled by useTextModels.onComplete.
+      if (event.modelId.startsWith('image:')) {
+        const key = `${event.modelId}/${event.fileName}`;
+        setDownloadProgress(key, null);
+      }
       await loadActiveDownloads();
-      const models = await modelManager.getDownloadedModels();
-      setDownloadedModels(models);
     });
 
-    const unsubError = backgroundDownloadService.onAnyError((event) => {
-      setDownloadProgress(`${event.modelId}/${event.fileName}`, null);
-      setBackgroundDownload(event.downloadId, null);
+    const unsubError = backgroundDownloadService.onAnyError(async (event) => {
       setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
+      await loadActiveDownloads();
     });
 
     return () => {

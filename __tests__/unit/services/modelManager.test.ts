@@ -1642,6 +1642,39 @@ describe('ModelManager', () => {
     });
   });
 
+  describe('repairMmProj', () => {
+    it('emits onDownloadIdReady when download id resolves asynchronously', async () => {
+      const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      try {
+        mockedRNFS.exists.mockResolvedValue(false);
+        let resolvedDownloadId = 0;
+        let resolveDownload: (() => void) | null = null;
+        const completionPromise = new Promise<void>((resolve) => {
+          resolveDownload = resolve;
+        });
+        mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({
+          get downloadId() { return resolvedDownloadId; },
+          promise: completionPromise,
+        } as any);
+
+        const onDownloadIdReady = jest.fn();
+        const file = createModelFileWithMmProj({ name: 'vision-model.gguf', mmProjName: 'vision-model-mmproj.gguf' });
+        const repairPromise = modelManager.repairMmProj('test/model', file, { onDownloadIdReady });
+
+        await Promise.resolve();
+        await Promise.resolve();
+        resolvedDownloadId = 321;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        expect(onDownloadIdReady).toHaveBeenCalledWith(321);
+
+        resolveDownload?.();
+        await repairPromise;
+      } finally {
+        saveSpy.mockRestore();
+      }
+    });
+  });
+
   // ========================================================================
   // getActiveBackgroundDownloads
   // ========================================================================

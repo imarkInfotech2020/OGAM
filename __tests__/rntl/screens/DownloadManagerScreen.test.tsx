@@ -40,9 +40,11 @@ jest.mock('@react-navigation/native', () => {
 
 const mockUseAppStore = jest.fn();
 
-jest.mock('../../../src/stores', () => ({
-  useAppStore: (...args: any[]) => mockUseAppStore(...args),
-}));
+jest.mock('../../../src/stores', () => {
+  const store = (...args: any[]) => mockUseAppStore(...args);
+  store.getState = () => mockUseAppStore();
+  return { useAppStore: store };
+});
 
 jest.mock('../../../src/services', () => ({
   modelManager: {
@@ -496,12 +498,25 @@ describe('DownloadManagerScreen', () => {
     expect(mockBackgroundDownloadService.onAnyError).toHaveBeenCalled();
   });
 
-  it('progress event callback updates download progress', async () => {
+  it('progress event callback updates download progress when store has no existing value', async () => {
     const setDownloadProgress = jest.fn();
-    const state = createDefaultState({ setDownloadProgress });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
+    const state = createDefaultState({
+      setDownloadProgress,
+      downloadProgress: {},
+      activeBackgroundDownloads: {
+        777: {
+          modelId: 'test/model',
+          fileName: 'file.gguf',
+          totalBytes: 1000,
+        },
+      },
     });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(state);
+      return state;
+    });
+    // getState() returns the same state (no existing progress)
+
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let progressCallback: any;
@@ -512,9 +527,9 @@ describe('DownloadManagerScreen', () => {
 
     render(<DownloadManagerScreen />);
 
-    // Simulate a progress event
     await act(async () => {
       progressCallback({
+        downloadId: 777,
         modelId: 'test/model',
         fileName: 'file.gguf',
         bytesDownloaded: 500,
@@ -529,14 +544,81 @@ describe('DownloadManagerScreen', () => {
     });
   });
 
-  it('complete event callback clears progress and reloads', async () => {
+  it('progress event callback skips update when store already has higher bytesDownloaded', async () => {
     const setDownloadProgress = jest.fn();
-    const setDownloadedModels = jest.fn();
-    const state = createDefaultState({ setDownloadProgress, setDownloadedModels });
+    const state = createDefaultState({
+      setDownloadProgress,
+      downloadProgress: {
+        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200 },
+      },
+      activeBackgroundDownloads: {
+        888: {
+          modelId: 'test/model',
+          fileName: 'file.gguf',
+          totalBytes: 1200,
+        },
+      },
+    });
     mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
+      if (typeof selector === 'function') return selector(state);
+      return state;
     });
 
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    let progressCallback: any;
+    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
+      progressCallback = cb;
+      return jest.fn();
+    });
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      progressCallback({
+        downloadId: 888,
+        modelId: 'test/model',
+        fileName: 'file.gguf',
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+      });
+    });
+
+    // Should NOT have been called because store already has 800 >= 500
+    expect(setDownloadProgress).not.toHaveBeenCalled();
+  });
+
+  it('progress event callback ignores events without persisted metadata', async () => {
+    const setDownloadProgress = jest.fn();
+    const state = createDefaultState({ setDownloadProgress, downloadProgress: {}, activeBackgroundDownloads: {} });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(state);
+      return state;
+    });
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    let progressCallback: any;
+    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
+      progressCallback = cb;
+      return jest.fn();
+    });
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      progressCallback({
+        downloadId: 999,
+        modelId: 'test/model',
+        fileName: 'file.gguf',
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+      });
+    });
+
+    expect(setDownloadProgress).not.toHaveBeenCalled();
+  });
+
+  it('complete event callback reloads active downloads for text models', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let completeCallback: any;
     mockBackgroundDownloadService.onAnyComplete.mockImplementation((cb: any) => {
@@ -553,18 +635,41 @@ describe('DownloadManagerScreen', () => {
       });
     });
 
-    expect(setDownloadProgress).toHaveBeenCalledWith('test/model/file.gguf', null);
-    expect(mockModelManager.getDownloadedModels).toHaveBeenCalled();
+    // Should reload active downloads but NOT clear progress for text models
+    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
   });
 
-  it('error event callback clears progress and shows alert', async () => {
+  it('complete event callback clears progress for image models', async () => {
     const setDownloadProgress = jest.fn();
-    const setBackgroundDownload = jest.fn();
-    const state = createDefaultState({ setDownloadProgress, setBackgroundDownload });
+    const state = createDefaultState({ setDownloadProgress });
     mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
+      if (typeof selector === 'function') return selector(state);
+      return state;
     });
 
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    let completeCallback: any;
+    mockBackgroundDownloadService.onAnyComplete.mockImplementation((cb: any) => {
+      completeCallback = cb;
+      return jest.fn();
+    });
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await completeCallback({
+        modelId: 'image:sd-turbo',
+        fileName: 'sd-turbo.zip',
+      });
+    });
+
+    // Should clear progress for image downloads
+    expect(setDownloadProgress).toHaveBeenCalledWith('image:sd-turbo/sd-turbo.zip', null);
+    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
+  });
+
+  it('error event callback shows alert and reloads active downloads', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let errorCallback: any;
     mockBackgroundDownloadService.onAnyError.mockImplementation((cb: any) => {
@@ -575,7 +680,7 @@ describe('DownloadManagerScreen', () => {
     render(<DownloadManagerScreen />);
 
     await act(async () => {
-      errorCallback({
+      await errorCallback({
         modelId: 'test/model',
         fileName: 'file.gguf',
         downloadId: 42,
@@ -583,9 +688,9 @@ describe('DownloadManagerScreen', () => {
       });
     });
 
-    expect(setDownloadProgress).toHaveBeenCalledWith('test/model/file.gguf', null);
-    expect(setBackgroundDownload).toHaveBeenCalledWith(42, null);
+    // Shows alert but does NOT clear progress or background download state
     expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'Network error');
+    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
   });
 
   it('handleRefresh reloads models and image models', async () => {
@@ -1307,7 +1412,7 @@ describe('DownloadManagerScreen', () => {
     expect(result.getByText('Downloading...')).toBeTruthy();
   });
 
-  it('shows "Starting..." for background download with status "pending"', async () => {
+  it('shows "Queued" for background download with status "pending"', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
       { downloadId: 12, status: 'pending', bytesDownloaded: 0, title: 'pend.gguf' },
@@ -1322,7 +1427,7 @@ describe('DownloadManagerScreen', () => {
     const result = render(<DownloadManagerScreen />);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
-    expect(result.getByText('Starting...')).toBeTruthy();
+    expect(result.getByText('Queued')).toBeTruthy();
   });
 
   it('shows "Paused" for background download with status "paused"', async () => {
