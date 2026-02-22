@@ -107,23 +107,17 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
     const downloadKey = `${model.id}/${file.name}-mmproj`;
+    const clearRepairState = () => { setDownloadProgress(downloadKey, null); setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; }); };
     setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile?.size || 0 });
     try {
-      await modelManager.repairMmProj(
-        model.id,
-        file,
-        (p) => setDownloadProgress(downloadKey, p),
-        (id) => setDownloadIds(prev => ({ ...prev, [downloadKey]: id })),
-      );
-      setDownloadProgress(downloadKey, null);
-      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
+      await modelManager.repairMmProj(model.id, file, {
+        onProgress: (p) => setDownloadProgress(downloadKey, p),
+        onDownloadIdReady: (id) => setDownloadIds(prev => ({ ...prev, [downloadKey]: id })),
+      });
+      clearRepairState();
       await loadDownloadedModels();
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
-    } catch (e) {
-      setDownloadProgress(downloadKey, null);
-      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
-      setAlertState(showAlert('Repair Failed', (e as Error).message));
-    }
+    } catch (e) { clearRepairState(); setAlertState(showAlert('Repair Failed', (e as Error).message)); }
   };
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {

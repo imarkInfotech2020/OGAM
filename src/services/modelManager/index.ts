@@ -213,54 +213,28 @@ class ModelManager {
   async repairMmProj(
     modelId: string,
     file: ModelFile,
-    onProgress?: DownloadProgressCallback,
-    onDownloadIdReady?: (downloadId: number) => void,
+    opts?: { onProgress?: DownloadProgressCallback; onDownloadIdReady?: (id: number) => void },
   ): Promise<void> {
     if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
     await this.initialize();
-
     const mmProjLocalPath = `${this.modelsDir}/${file.mmProjFile.name}`;
     const totalBytes = file.mmProjFile.size;
-
-    // Delete any partial file
-    if (await RNFS.exists(mmProjLocalPath)) {
-      await RNFS.unlink(mmProjLocalPath).catch(() => {});
-    }
+    if (await RNFS.exists(mmProjLocalPath)) await RNFS.unlink(mmProjLocalPath).catch(() => {});
 
     const { downloadId, promise } = backgroundDownloadService.downloadFileTo({
-      params: {
-        url: file.mmProjFile.downloadUrl,
-        fileName: file.mmProjFile.name,
-        modelId,
-        totalBytes,
-      },
+      params: { url: file.mmProjFile.downloadUrl, fileName: file.mmProjFile.name, modelId, totalBytes },
       destPath: mmProjLocalPath,
       onProgress: (bytesDownloaded: number) => {
-        onProgress?.({
-          modelId,
-          fileName: file.mmProjFile!.name,
-          bytesDownloaded,
-          totalBytes,
-          progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0,
-        });
+        opts?.onProgress?.({ modelId, fileName: file.mmProjFile!.name, bytesDownloaded, totalBytes, progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0 });
       },
       silent: true,
     });
 
-    // Notify caller of downloadId once the native module has resolved it.
-    // The getter returns 0 until the native startDownload resolves, so we
-    // poll briefly to deliver it as soon as it's available.
-    if (onDownloadIdReady) {
-      const poll = setInterval(() => {
-        if (downloadId !== 0) {
-          clearInterval(poll);
-          onDownloadIdReady(downloadId);
-        }
-      }, 50);
-      // Safety: stop polling if the download finishes before we get an ID
+    if (opts?.onDownloadIdReady) {
+      const cb = opts.onDownloadIdReady;
+      const poll = setInterval(() => { if (downloadId !== 0) { clearInterval(poll); cb(downloadId); } }, 50);
       promise.finally(() => clearInterval(poll));
     }
-
     await promise;
     await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);
   }

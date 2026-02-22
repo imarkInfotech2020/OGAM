@@ -372,11 +372,7 @@ describe('ModelDownloadScreen', () => {
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = await result.findByTestId('recommended-model-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
