@@ -4,6 +4,9 @@ import {
   downloadCoreMLMultiFile,
   proceedWithDownload,
   handleDownloadImageModel,
+  cleanupDownloadState,
+  registerAndNotify,
+  wireDownloadListeners,
   ImageDownloadDeps,
 } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
@@ -511,6 +514,149 @@ describe('imageDownloadActions', () => {
       const model = makeZipModelInfo({ backend: 'qnn' });
       await handleDownloadImageModel(model, deps);
       expect(deps.addImageModelDownloading).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // cleanupDownloadState
+  // ==========================================================================
+  describe('cleanupDownloadState', () => {
+    it('calls removeImageModelDownloading, clearModelProgress, and setBackgroundDownload', () => {
+      const deps = makeDeps();
+      cleanupDownloadState(deps, 'model-1', 42);
+
+      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
+      expect(deps.clearModelProgress).toHaveBeenCalledWith('model-1');
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(42, null);
+    });
+
+    it('skips setBackgroundDownload when downloadId is undefined', () => {
+      const deps = makeDeps();
+      cleanupDownloadState(deps, 'model-1');
+
+      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
+      expect(deps.clearModelProgress).toHaveBeenCalledWith('model-1');
+      expect(deps.setBackgroundDownload).not.toHaveBeenCalled();
+    });
+
+    it('skips setBackgroundDownload when downloadId is null-ish (0 is valid)', () => {
+      const deps = makeDeps();
+      cleanupDownloadState(deps, 'model-1', 0);
+
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(0, null);
+    });
+  });
+
+  // ==========================================================================
+  // registerAndNotify
+  // ==========================================================================
+  describe('registerAndNotify', () => {
+    const imageModel = {
+      id: 'img-1', name: 'Test', description: 'desc',
+      modelPath: '/path', downloadedAt: '2026-01-01', size: 100, style: 'creative' as const,
+    };
+
+    it('registers model via modelManager and deps, then shows success alert', async () => {
+      const deps = makeDeps();
+      await registerAndNotify(deps, { imageModel, modelName: 'Test', downloadId: 10 });
+
+      expect(mockAddDownloadedImageModel).toHaveBeenCalledWith(imageModel);
+      expect(deps.addDownloadedImageModel).toHaveBeenCalledWith(imageModel);
+      expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
+      // cleanup was called
+      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('img-1');
+      expect(deps.clearModelProgress).toHaveBeenCalledWith('img-1');
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(10, null);
+    });
+
+    it('sets active model when none is active', async () => {
+      const deps = makeDeps({ activeImageModelId: null });
+      await registerAndNotify(deps, { imageModel, modelName: 'Test' });
+
+      expect(deps.setActiveImageModelId).toHaveBeenCalledWith('img-1');
+    });
+
+    it('does not set active model when one already exists', async () => {
+      const deps = makeDeps({ activeImageModelId: 'existing' });
+      await registerAndNotify(deps, { imageModel, modelName: 'Test' });
+
+      expect(deps.setActiveImageModelId).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // wireDownloadListeners
+  // ==========================================================================
+  describe('wireDownloadListeners', () => {
+    it('calls onCompleteWork on complete event', async () => {
+      const deps = makeDeps();
+      const onCompleteWork = jest.fn(() => Promise.resolve());
+
+      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
+
+      expect(mockOnCompleteCallbacks.length).toBe(1);
+      await mockOnCompleteCallbacks[0]();
+      expect(onCompleteWork).toHaveBeenCalled();
+    });
+
+    it('shows error alert and cleans up on error event', () => {
+      const deps = makeDeps();
+      const onCompleteWork = jest.fn(() => Promise.resolve());
+
+      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
+
+      expect(mockOnErrorCallbacks.length).toBe(1);
+      mockOnErrorCallbacks[0]({ reason: 'Network lost' });
+
+      expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Download Failed' }));
+      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('mdl');
+      expect(deps.clearModelProgress).toHaveBeenCalledWith('mdl');
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(50, null);
+    });
+
+    it('cleans up and shows error when onCompleteWork throws', async () => {
+      const deps = makeDeps();
+      const onCompleteWork = jest.fn(() => Promise.reject(new Error('Processing failed')));
+
+      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
+
+      await mockOnCompleteCallbacks[0]();
+
+      expect(deps.setAlertState).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Download Failed', message: 'Processing failed' }),
+      );
+      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('mdl');
+    });
+  });
+
+  // ==========================================================================
+  // Metadata persistence
+  // ==========================================================================
+  describe('metadata persistence', () => {
+    it('proceedWithDownload persists imageDownloadType: zip and metadata for zip models', async () => {
+      const deps = makeDeps();
+      await proceedWithDownload(makeZipModelInfo(), deps);
+
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(42, expect.objectContaining({
+        imageDownloadType: 'zip',
+        imageModelName: 'Test Zip Model',
+        imageModelDescription: 'A zip model',
+        imageModelSize: 2000000,
+        imageModelStyle: 'creative',
+        imageModelBackend: 'mnn',
+      }));
+    });
+
+    it('downloadCoreMLMultiFile persists imageDownloadType: multifile and repo', async () => {
+      const deps = makeDeps();
+      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
+
+      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(99, expect.objectContaining({
+        imageDownloadType: 'multifile',
+        imageModelName: 'Test CoreML Model',
+        imageModelBackend: 'coreml',
+        imageModelRepo: 'apple/coreml-sd',
+      }));
     });
   });
 });

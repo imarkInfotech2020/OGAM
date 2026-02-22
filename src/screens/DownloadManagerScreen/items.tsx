@@ -59,7 +59,7 @@ export function extractQuantization(fileName: string): string {
 
 export function getStatusText(status: string): string {
   if (status === 'running') return 'Downloading...';
-  if (status === 'pending') return 'Starting...';
+  if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
   if (status === 'unknown') return 'Stuck - Remove & retry';
   return status;
@@ -78,7 +78,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     }
     items.push({
       type: 'active',
-      modelType: 'text',
+      modelType: fullModelId.startsWith('image:') ? 'image' : 'text',
       modelId: fullModelId,
       fileName,
       author: fullModelId.split('/')[0] ?? 'Unknown',
@@ -103,7 +103,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     }
     items.push({
       type: 'active',
-      modelType: 'text',
+      modelType: metadata.modelId.startsWith('image:') ? 'image' : 'text',
       downloadId: download.downloadId,
       modelId: metadata.modelId,
       fileName: download.title ?? metadata.fileName,
