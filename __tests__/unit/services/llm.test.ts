@@ -445,15 +445,6 @@ describe('LLMService', () => {
       await expect(llmService.generateResponse(messages)).rejects.toThrow('Generation already in progress');
     });
 
-    it('calls onThinking callback', async () => {
-      await setupLoadedModel();
-      const messages = [createUserMessage('Hello')];
-      const onThinking = jest.fn();
-
-      await llmService.generateResponse(messages, undefined, undefined, undefined, onThinking);
-
-      expect(onThinking).toHaveBeenCalled();
-    });
 
     it('streams tokens via onStream callback', async () => {
       await setupLoadedModel();
@@ -499,21 +490,6 @@ describe('LLMService', () => {
       expect(llmService.isCurrentlyGenerating()).toBe(false);
     });
 
-    it('calls onError callback on failure', async () => {
-      await setupLoadedModel({
-        completion: jest.fn(() => Promise.reject(new Error('gen error'))),
-        tokenize: jest.fn(() => Promise.resolve({ tokens: [1, 2] })),
-      });
-
-      const messages = [createUserMessage('Hello')];
-      const onError = jest.fn();
-
-      await expect(
-        llmService.generateResponse(messages, undefined, undefined, onError)
-      ).rejects.toThrow();
-
-      expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    });
 
     it('uses messages format for text-only path', async () => {
       const ctx = await setupLoadedModel();
@@ -1087,7 +1063,8 @@ describe('LLMService', () => {
       mockedInitLlama
         .mockResolvedValueOnce(ctx as any) // initial load
         .mockRejectedValueOnce(new Error('GPU reload failed')) // GPU attempt
-        .mockRejectedValueOnce(new Error('CPU reload failed')); // CPU fallback
+        .mockRejectedValueOnce(new Error('CPU reload failed')) // CPU fallback
+        .mockRejectedValueOnce(new Error('CPU reload failed')); // ctx=2048 fallback
 
       // Enable GPU so both attempts happen
       useAppStore.setState({

@@ -14,7 +14,11 @@ interface ProjectState {
   duplicateProject: (id: string) => Project | null;
 }
 
-const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const generateId = () => {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return `${Date.now()}-${array[0].toString(36)}`;
+};
 
 // Default projects as examples
 const DEFAULT_PROJECTS: Project[] = [

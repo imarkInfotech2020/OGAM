@@ -22,6 +22,66 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         const val PREFS_NAME = "OffgridMobileDownloads"
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
+
+        internal fun statusToString(status: Int): String = when (status) {
+            DownloadManager.STATUS_PENDING -> "pending"
+            DownloadManager.STATUS_RUNNING -> "running"
+            DownloadManager.STATUS_PAUSED -> "paused"
+            DownloadManager.STATUS_SUCCESSFUL -> "completed"
+            DownloadManager.STATUS_FAILED -> "failed"
+            else -> "unknown"
+        }
+
+        internal fun reasonToString(status: Int, reason: Int): String {
+            if (status == DownloadManager.STATUS_PAUSED) {
+                return when (reason) {
+                    DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for WiFi"
+                    DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for network"
+                    DownloadManager.PAUSED_WAITING_TO_RETRY -> "Waiting to retry"
+                    else -> "Paused"
+                }
+            }
+            if (status == DownloadManager.STATUS_FAILED) {
+                return when (reason) {
+                    DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume"
+                    DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Device not found"
+                    DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File already exists"
+                    DownloadManager.ERROR_FILE_ERROR -> "File error"
+                    DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
+                    DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient space"
+                    DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
+                    DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unhandled HTTP code"
+                    DownloadManager.ERROR_UNKNOWN -> "Unknown error"
+                    else -> "Error: $reason"
+                }
+            }
+            return ""
+        }
+
+        /**
+         * Returns true if the given download entry should be pruned from the persisted list.
+         *
+         * A download is removed when:
+         * - [liveStatus] is "unknown" (DownloadManager no longer tracks it), OR
+         * - its stored status is "completed", the completion event has been sent, the
+         *   completedAt timestamp is set, and the entry is older than 5 seconds.
+         *
+         * The [currentTimeMs] parameter is injectable so tests can control the clock.
+         */
+        internal fun shouldRemoveDownload(
+            download: JSONObject,
+            liveStatus: String,
+            currentTimeMs: Long = System.currentTimeMillis(),
+        ): Boolean {
+            if (liveStatus == "unknown") return true
+            if (download.optString("status", "pending") == "completed") {
+                val completedAt = download.optLong("completedAt", 0L)
+                val eventSent = download.optBoolean("completedEventSent", false)
+                val ageMs = currentTimeMs - completedAt
+                return completedAt > 0 && eventSent && ageMs > 5_000
+            }
+            return false
+        }
     }
 
     private val downloadManager: DownloadManager by lazy {
@@ -414,41 +474,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         return result
     }
 
-    private fun statusToString(status: Int): String = when (status) {
-        DownloadManager.STATUS_PENDING -> "pending"
-        DownloadManager.STATUS_RUNNING -> "running"
-        DownloadManager.STATUS_PAUSED -> "paused"
-        DownloadManager.STATUS_SUCCESSFUL -> "completed"
-        DownloadManager.STATUS_FAILED -> "failed"
-        else -> "unknown"
-    }
-
-    private fun reasonToString(status: Int, reason: Int): String {
-        if (status == DownloadManager.STATUS_PAUSED) {
-            return when (reason) {
-                DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for WiFi"
-                DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for network"
-                DownloadManager.PAUSED_WAITING_TO_RETRY -> "Waiting to retry"
-                else -> "Paused"
-            }
-        }
-        if (status == DownloadManager.STATUS_FAILED) {
-            return when (reason) {
-                DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume"
-                DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Device not found"
-                DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "File already exists"
-                DownloadManager.ERROR_FILE_ERROR -> "File error"
-                DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
-                DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Insufficient space"
-                DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
-                DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Unhandled HTTP code"
-                DownloadManager.ERROR_UNKNOWN -> "Unknown error"
-                else -> "Error: $reason"
-            }
-        }
-        return ""
-    }
-
     private fun sendEvent(eventName: String, params: WritableMap) {
         reactApplicationContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
@@ -532,26 +557,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val status = statusInfo.getString("status")
             val previousStatus = download.optString("status", "pending")
 
-            // Remove if DownloadManager doesn't know about it anymore
-            if (status == "unknown") {
-                android.util.Log.d("DownloadManager", "Cleanup: removing unknown download $downloadId")
+            if (shouldRemoveDownload(download, status ?: "unknown")) {
+                android.util.Log.d("DownloadManager", "Cleanup: removing download $downloadId (liveStatus=$status, storedStatus=$previousStatus)")
                 removedCount++
                 continue
             }
 
-            // Remove completed entries that are stale (older than 5s) AND have sent the event
-            if (previousStatus == "completed") {
-                val completedAt = download.optLong("completedAt", 0L)
-                val eventSent = download.optBoolean("completedEventSent", false)
-                val ageMs = System.currentTimeMillis() - completedAt
-                // Only remove if event was sent and it's been long enough
-                if (completedAt > 0 && eventSent && ageMs > 5_000) {
-                    android.util.Log.d("DownloadManager", "Cleanup: removing stale completed download $downloadId (${ageMs/1000}s old)")
-                    removedCount++
-                    continue
-                } else if (completedAt > 0 && !eventSent) {
-                    android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
-                }
+            if (previousStatus == "completed" && download.optLong("completedAt", 0L) > 0 && !download.optBoolean("completedEventSent", false)) {
+                android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
             }
 
             cleanedDownloads.put(download)

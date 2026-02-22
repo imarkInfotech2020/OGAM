@@ -2,13 +2,19 @@
 
 ## Pre-Commit Quality Gates
 
-Before EVERY commit, you MUST first check if you have added tests for whatever you are trying to commit. If not add tests. Then run all of the following checks and ensure they pass. Do NOT commit until all three are green:
+All quality gates run automatically via Husky on every `git commit`, scoped to the file types you staged:
 
-1. **Tests**: `npm test` — if you wrote or modified code, first ensure tests exist for the changes. Write missing tests before running.
-2. **Linting**: `npm run lint`
-3. **TypeScript**: `npx tsc --noEmit`
+| Staged file type | Checks that run automatically |
+|---|---|
+| `.ts` / `.tsx` / `.js` / `.jsx` | eslint (staged only), `tsc --noEmit`, `npm test` |
+| `.swift` | swiftlint (staged only), `npm run test:ios` |
+| `.kt` / `.kts` | `compileStandardDebugKotlin` (type check), `lintStandardDebug`, `npm run test:android` |
 
-Run all three in parallel. If any fail, fix the issues and re-run until they all pass. Never skip these checks.
+**Requirements:**
+- SwiftLint: `brew install swiftlint` (skipped with a warning if not installed)
+- Android checks require the Gradle wrapper in `android/`
+
+Before writing new code, ensure tests exist for your changes. If the hook fails, fix the issue and recommit — never skip with `--no-verify`.
 
 ## Push = Create PR + Address Review
 
