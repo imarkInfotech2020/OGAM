@@ -8,7 +8,7 @@ All quality gates run automatically via Husky on every `git commit`, scoped to t
 |---|---|
 | `.ts` / `.tsx` / `.js` / `.jsx` | eslint (staged only), `tsc --noEmit`, `npm test` |
 | `.swift` | swiftlint (staged only), `npm run test:ios` |
-| `.kt` / `.kts` | `compileStandardDebugKotlin` (type check), `lintStandardDebug`, `npm run test:android` |
+| `.kt` / `.kts` | `compileDebugKotlin` (type check), `lintDebug`, `npm run test:android` |
 
 **Requirements:**
 - SwiftLint: `brew install swiftlint` (skipped with a warning if not installed)

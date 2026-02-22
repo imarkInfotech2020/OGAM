@@ -102,15 +102,6 @@ android {
             }
         }
     }
-    flavorDimensions "store"
-    productFlavors {
-        standard {
-            dimension "store"
-        }
-        fdroid {
-            dimension "store"
-        }
-    }
     lint {
         baseline = file("lint-baseline.xml")
     }
@@ -119,7 +110,6 @@ android {
             includeAndroidResources = true
         }
     }
-
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -163,9 +153,4 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.11.0")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
     testImplementation("androidx.test:core:1.6.1")
-}
-
-// Exclude Google Play Install Referrer only for F-Droid builds (non-free, flagged by F-Droid)
-configurations.matching { it.name.startsWith("fdroid") }.all {
-    exclude group: 'com.android.installreferrer', module: 'installreferrer'
 }
