@@ -58,6 +58,7 @@ class BackgroundDownloadService {
   private errorListeners: Map<string, DownloadErrorCallback> = new Map();
   private subscriptions: { remove: () => void }[] = [];
   private isPolling = false;
+  private silentDownloadIds: Set<number> = new Set();
 
   constructor() {
     if (this.isAvailable()) {
@@ -244,56 +245,71 @@ class BackgroundDownloadService {
    * finished file to destPath. Intended for sequential dependencies such as
    * mmproj → GGUF where each file must finish before the next can start.
    */
-  async downloadFileTo(opts: {
+  downloadFileTo(opts: {
     params: DownloadParams;
     destPath: string;
     onProgress?: (bytesDownloaded: number, totalBytes: number) => void;
     silent?: boolean;
-  }): Promise<void> {
+  }): { downloadId: number; promise: Promise<void> } {
     const { params, destPath, onProgress, silent } = opts;
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
 
-    const info = await DownloadManagerModule.startDownload({
-      url: params.url,
-      fileName: params.fileName,
-      modelId: params.modelId,
-      title: params.title ?? `Downloading ${params.fileName}`,
-      description: params.description ?? 'Downloading…',
-      totalBytes: params.totalBytes ?? 0,
-      hideNotification: silent === true,
-    });
-
-    this.startProgressPolling();
-    const downloadId: number = info.downloadId;
-
-    await new Promise<void>((resolve, reject) => {
-      const removeProgress = onProgress
-        ? this.onProgress(downloadId, (event) => {
-            onProgress(event.bytesDownloaded, event.totalBytes);
-          })
-        : () => {};
-
-      const removeComplete = this.onComplete(downloadId, async () => {
-        removeProgress();
-        removeComplete();
-        removeError();
-        try {
-          await this.moveCompletedDownload(downloadId, destPath);
-          resolve();
-        } catch (e) {
-          reject(e);
-        }
+    let resolvedDownloadId = 0;
+    const promise = (async () => {
+      const info = await DownloadManagerModule.startDownload({
+        url: params.url,
+        fileName: params.fileName,
+        modelId: params.modelId,
+        title: params.title ?? `Downloading ${params.fileName}`,
+        description: params.description ?? 'Downloading…',
+        totalBytes: params.totalBytes ?? 0,
+        hideNotification: silent === true,
       });
 
-      const removeError = this.onError(downloadId, (event) => {
-        removeProgress();
-        removeComplete();
-        removeError();
-        reject(new Error(event.reason ?? 'Download failed'));
+      this.startProgressPolling();
+      const downloadId: number = info.downloadId;
+      resolvedDownloadId = downloadId;
+
+      if (silent) {
+        this.silentDownloadIds.add(downloadId);
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const removeProgress = onProgress
+          ? this.onProgress(downloadId, (event) => {
+              onProgress(event.bytesDownloaded, event.totalBytes);
+            })
+          : () => {};
+
+        const removeComplete = this.onComplete(downloadId, async () => {
+          removeProgress();
+          removeComplete();
+          removeError();
+          this.silentDownloadIds.delete(downloadId);
+          try {
+            await this.moveCompletedDownload(downloadId, destPath);
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+
+        const removeError = this.onError(downloadId, (event) => {
+          removeProgress();
+          removeComplete();
+          removeError();
+          this.silentDownloadIds.delete(downloadId);
+          reject(new Error(event.reason ?? 'Download failed'));
+        });
       });
-    });
+    })();
+
+    return {
+      get downloadId() { return resolvedDownloadId; },
+      promise,
+    };
   }
 
   cleanup(): void {
@@ -310,15 +326,21 @@ class BackgroundDownloadService {
     const push = (s: { remove: () => void }) => this.subscriptions.push(s);
     push(this.eventEmitter.addListener('DownloadProgress', (e: DownloadProgressEvent) => {
       this.progressListeners.get(`progress_${e.downloadId}`)?.(e);
-      this.progressListeners.get('progress_all')?.(e);
+      if (!this.silentDownloadIds.has(e.downloadId)) {
+        this.progressListeners.get('progress_all')?.(e);
+      }
     }));
     push(this.eventEmitter.addListener('DownloadComplete', (e: DownloadCompleteEvent) => {
       this.completeListeners.get(`complete_${e.downloadId}`)?.(e);
-      this.completeListeners.get('complete_all')?.(e);
+      if (!this.silentDownloadIds.has(e.downloadId)) {
+        this.completeListeners.get('complete_all')?.(e);
+      }
     }));
     push(this.eventEmitter.addListener('DownloadError', (e: DownloadErrorEvent) => {
       this.errorListeners.get(`error_${e.downloadId}`)?.(e);
-      this.errorListeners.get('error_all')?.(e);
+      if (!this.silentDownloadIds.has(e.downloadId)) {
+        this.errorListeners.get('error_all')?.(e);
+      }
     }));
   }
 }

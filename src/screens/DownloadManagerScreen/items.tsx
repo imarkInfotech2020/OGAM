@@ -23,6 +23,8 @@ export type DownloadItem = {
   status: string;
   downloadedAt?: string;
   filePath?: string;
+  isVisionModel?: boolean;
+  mmProjPath?: string;
 };
 
 export interface DownloadItemsData {
@@ -130,6 +132,8 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       status: 'completed',
       downloadedAt: model.downloadedAt,
       filePath: model.filePath,
+      isVisionModel: model.isVisionModel,
+      mmProjPath: model.mmProjPath,
     });
   });
 
@@ -196,11 +200,13 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
 interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
+  onRepairVision?: (item: DownloadItem) => void;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const needsVisionRepair = item.isVisionModel && !item.mmProjPath;
 
   return (
     <Card style={styles.downloadCard}>
@@ -216,6 +222,15 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
+        {needsVisionRepair && onRepairVision && (
+          <TouchableOpacity
+            style={styles.repairButton}
+            testID="repair-vision-button"
+            onPress={() => onRepairVision(item)}
+          >
+            <Icon name="eye" size={18} color={colors.warning} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.deleteButton}
           testID="delete-model-button"

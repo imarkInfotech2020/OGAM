@@ -60,7 +60,7 @@ function App() {
     try {
       // Request POST_NOTIFICATIONS permission on Android 13+ so system
       // DownloadManager shows progress notifications.
-      backgroundDownloadService.requestNotificationPermission().catch(() => {});
+      backgroundDownloadService.requestNotificationPermission().catch((err) => logger.warn('Failed to request notification permission', err));
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection

@@ -30,7 +30,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
     isAvailable: jest.fn(() => false),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(),
-    downloadFileTo: jest.fn(() => Promise.resolve()),
+    downloadFileTo: jest.fn(() => ({ downloadId: 999, promise: Promise.resolve() })),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
     moveCompletedDownload: jest.fn(),
     startProgressPolling: jest.fn(),
@@ -77,7 +77,7 @@ describe('ModelManager', () => {
     mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
     mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
     mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
-    mockedBackgroundDownloadService.downloadFileTo.mockResolvedValue(undefined as any);
+    mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({ downloadId: 999, promise: Promise.resolve() } as any);
     mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
     mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('' as any);
     mockedBackgroundDownloadService.startProgressPolling.mockImplementation(() => {});

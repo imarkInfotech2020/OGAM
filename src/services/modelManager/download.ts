@@ -89,7 +89,7 @@ async function ensureMmProj(opts: EnsureMmProjOpts): Promise<number> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       if (attempt > 0) logger.log(`[ModelManager] mmproj download retry ${attempt}/${maxRetries}`);
-      await backgroundDownloadService.downloadFileTo({
+      const { promise } = backgroundDownloadService.downloadFileTo({
         params: {
           url: file.mmProjFile.downloadUrl,
           fileName: file.mmProjFile.name,
@@ -108,6 +108,7 @@ async function ensureMmProj(opts: EnsureMmProjOpts): Promise<number> {
         },
         silent: true,
       });
+      await promise;
       return file.mmProjFile.size;
     } catch (e) {
       if (attempt < maxRetries) {

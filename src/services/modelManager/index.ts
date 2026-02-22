@@ -214,6 +214,7 @@ class ModelManager {
     modelId: string,
     file: ModelFile,
     onProgress?: DownloadProgressCallback,
+    onDownloadIdReady?: (downloadId: number) => void,
   ): Promise<void> {
     if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
     await this.initialize();
@@ -226,7 +227,7 @@ class ModelManager {
       await RNFS.unlink(mmProjLocalPath).catch(() => {});
     }
 
-    await backgroundDownloadService.downloadFileTo({
+    const { downloadId, promise } = backgroundDownloadService.downloadFileTo({
       params: {
         url: file.mmProjFile.downloadUrl,
         fileName: file.mmProjFile.name,
@@ -243,8 +244,24 @@ class ModelManager {
           progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0,
         });
       },
+      silent: true,
     });
 
+    // Notify caller of downloadId once the native module has resolved it.
+    // The getter returns 0 until the native startDownload resolves, so we
+    // poll briefly to deliver it as soon as it's available.
+    if (onDownloadIdReady) {
+      const poll = setInterval(() => {
+        if (downloadId !== 0) {
+          clearInterval(poll);
+          onDownloadIdReady(downloadId);
+        }
+      }, 50);
+      // Safety: stop polling if the download finishes before we get an ID
+      promise.finally(() => clearInterval(poll));
+    }
+
+    await promise;
     await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);
   }
 

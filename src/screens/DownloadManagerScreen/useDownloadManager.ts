@@ -6,6 +6,7 @@ import {
   backgroundDownloadService,
   activeModelService,
   hardwareService,
+  huggingFaceService,
 } from '../../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
 import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
@@ -20,6 +21,7 @@ export interface UseDownloadManagerResult {
   handleRefresh: () => Promise<void>;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
+  handleRepairVision: (item: DownloadItem) => void;
   totalStorageUsed: number;
 }
 
@@ -248,6 +250,39 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (model) handleDeleteModel(model);
     }
   };
+  const handleRepairVision = async (item: DownloadItem) => {
+    // modelId format: "org/repo/fileName" — repo is everything before the last "/"
+    const lastSlash = item.modelId.lastIndexOf('/');
+    if (lastSlash < 0) return;
+    const repoId = item.modelId.substring(0, lastSlash);
+    const fileName = item.modelId.substring(lastSlash + 1);
+
+    const downloadKey = `${repoId}/${fileName}-mmproj`;
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: 0 });
+    try {
+      const files = await huggingFaceService.getModelFiles(repoId);
+      const file = files.find(f => f.name === fileName);
+      if (!file?.mmProjFile) {
+        setDownloadProgress(downloadKey, null);
+        setAlertState(showAlert('Error', 'Could not find vision projection file for this model'));
+        return;
+      }
+      setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile.size });
+      await modelManager.repairMmProj(
+        repoId,
+        file,
+        (p) => setDownloadProgress(downloadKey, p),
+      );
+      setDownloadProgress(downloadKey, null);
+      const models = await modelManager.getDownloadedModels();
+      setDownloadedModels(models);
+      setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
+    } catch (e) {
+      setDownloadProgress(downloadKey, null);
+      setAlertState(showAlert('Repair Failed', (e as Error).message));
+    }
+  };
+
   // Build items from store state
   const data: DownloadItemsData = {
     downloadProgress,
@@ -270,6 +305,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleRefresh,
     handleRemoveDownload,
     handleDeleteItem,
+    handleRepairVision,
     totalStorageUsed,
   };
 }

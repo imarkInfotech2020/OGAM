@@ -112,7 +112,8 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   cardRow: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    alignItems: 'flex-start' as const,
+    marginTop: 2,
   },
   cardContent: {
     flex: 1,

@@ -53,7 +53,7 @@ export async function downloadHuggingFaceModel(
       // Use a flattened temp filename to avoid path issues in the Downloads dir.
       const tempFileName = `${modelInfo.id}_${file.path.replace(/\//g, '_')}`;
       const capturedDownloadedSize = downloadedSize;
-      await backgroundDownloadService.downloadFileTo({
+      const { promise } = backgroundDownloadService.downloadFileTo({
         params: {
           url: fileUrl,
           fileName: tempFileName,
@@ -68,6 +68,7 @@ export async function downloadHuggingFaceModel(
           );
         },
       });
+      await promise;
       downloadedSize += file.size;
       deps.updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
     }

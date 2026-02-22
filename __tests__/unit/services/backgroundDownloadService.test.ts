@@ -896,7 +896,7 @@ describe('BackgroundDownloadService', () => {
       });
       mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
       });
@@ -921,7 +921,7 @@ describe('BackgroundDownloadService', () => {
         downloadId: 11, fileName: 'dep.gguf', modelId: 'test/model',
       });
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
       });
@@ -944,7 +944,7 @@ describe('BackgroundDownloadService', () => {
       });
       mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
         silent: true,
@@ -971,7 +971,7 @@ describe('BackgroundDownloadService', () => {
       });
       mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
         silent: false,
@@ -999,7 +999,7 @@ describe('BackgroundDownloadService', () => {
       mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
 
       const onProgress = jest.fn();
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
         onProgress,
@@ -1032,7 +1032,7 @@ describe('BackgroundDownloadService', () => {
       });
       mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
       });
@@ -1061,12 +1061,12 @@ describe('BackgroundDownloadService', () => {
         unavailableService = new (mod.backgroundDownloadService as any).constructor();
       });
 
-      await expect(
+      expect(() =>
         unavailableService.downloadFileTo({
           params: baseParams,
           destPath: '/dest/dep.gguf',
         })
-      ).rejects.toThrow('not available');
+      ).toThrow('not available');
 
       NativeModules.DownloadManagerModule = savedModule;
     });
@@ -1076,7 +1076,7 @@ describe('BackgroundDownloadService', () => {
         downloadId: 16, fileName: 'dep.gguf', modelId: 'test/model',
       });
 
-      const promise = service.downloadFileTo({
+      const { promise } = service.downloadFileTo({
         params: baseParams,
         destPath: '/dest/dep.gguf',
       });
