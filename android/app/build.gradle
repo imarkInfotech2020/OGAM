@@ -102,16 +102,7 @@ android {
             }
         }
     }
-    flavorDimensions "store"
-    productFlavors {
-        standard {
-            dimension "store"
-        }
-        fdroid {
-            dimension "store"
-        }
-    }
-    buildTypes {
+buildTypes {
         debug {
             signingConfig signingConfigs.debug
             applicationIdSuffix ".dev"
@@ -148,9 +139,4 @@ dependencies {
 
     // PDF text extraction (used by PDFExtractorModule)
     implementation("io.legere:pdfiumandroid:1.0.35")
-}
-
-// Exclude Google Play Install Referrer only for F-Droid builds (non-free, flagged by F-Droid)
-configurations.matching { it.name.startsWith("fdroid") }.all {
-    exclude group: 'com.android.installreferrer', module: 'installreferrer'
 }
