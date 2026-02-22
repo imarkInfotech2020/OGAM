@@ -239,17 +239,14 @@ class ModelManager {
       },
       silent: true,
     });
-    const { promise } = download;
+    const { promise, downloadIdPromise } = download;
 
     if (opts?.onDownloadIdReady) {
-      const poll = setInterval(() => {
-        const currentDownloadId = download.downloadId;
-        if (currentDownloadId !== 0) {
-          clearInterval(poll);
-          opts.onDownloadIdReady?.(currentDownloadId);
-        }
-      }, 50);
-      promise.finally(() => clearInterval(poll));
+      downloadIdPromise
+        .then((downloadId) => {
+          if (downloadId !== 0) opts.onDownloadIdReady?.(downloadId);
+        })
+        .catch(() => {});
     }
     await promise;
     await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);

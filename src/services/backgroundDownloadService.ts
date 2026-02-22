@@ -246,66 +246,66 @@ class BackgroundDownloadService {
     destPath: string;
     onProgress?: (bytesDownloaded: number, totalBytes: number) => void;
     silent?: boolean;
-  }): { downloadId: number; promise: Promise<void> } {
+  }): { downloadId: number; downloadIdPromise: Promise<number>; promise: Promise<void> } {
     const { params, destPath, onProgress, silent } = opts;
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
-
     let resolvedDownloadId = 0;
+    let resolveDownloadId: ((id: number) => void) | null = null;
+    let rejectDownloadId: ((error: unknown) => void) | null = null;
+    const downloadIdPromise = new Promise<number>((resolve, reject) => {
+      resolveDownloadId = resolve;
+      rejectDownloadId = reject;
+    });
     const promise = (async () => {
-      const info = await DownloadManagerModule.startDownload({
-        url: params.url,
-        fileName: params.fileName,
-        modelId: params.modelId,
-        title: params.title ?? `Downloading ${params.fileName}`,
-        description: params.description ?? 'Downloading…',
-        totalBytes: params.totalBytes ?? 0,
-        hideNotification: silent === true,
-      });
-
-      this.startProgressPolling();
-      const downloadId: number = info.downloadId;
-      resolvedDownloadId = downloadId;
-
-      if (silent) {
-        this.silentDownloadIds.add(downloadId);
+      try {
+        const info = await DownloadManagerModule.startDownload({
+          url: params.url,
+          fileName: params.fileName,
+          modelId: params.modelId,
+          title: params.title ?? `Downloading ${params.fileName}`,
+          description: params.description ?? 'Downloading…',
+          totalBytes: params.totalBytes ?? 0,
+          hideNotification: silent === true,
+        });
+        this.startProgressPolling();
+        const downloadId: number = info.downloadId;
+        resolvedDownloadId = downloadId;
+        resolveDownloadId?.(downloadId);
+        if (silent) this.silentDownloadIds.add(downloadId);
+        await new Promise<void>((resolve, reject) => {
+          const removeProgress = onProgress
+            ? this.onProgress(downloadId, (event) => {
+                onProgress(event.bytesDownloaded, event.totalBytes);
+              })
+            : () => {};
+          const removeComplete = this.onComplete(downloadId, async () => {
+            removeProgress();
+            removeComplete();
+            removeError();
+            this.silentDownloadIds.delete(downloadId);
+            try {
+              await this.moveCompletedDownload(downloadId, destPath);
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          });
+          const removeError = this.onError(downloadId, (event) => {
+            removeProgress();
+            removeComplete();
+            removeError();
+            this.silentDownloadIds.delete(downloadId);
+            reject(new Error(event.reason ?? 'Download failed'));
+          });
+        });
+      } catch (error) {
+        if (resolvedDownloadId === 0) rejectDownloadId?.(error);
+        throw error;
       }
-
-      await new Promise<void>((resolve, reject) => {
-        const removeProgress = onProgress
-          ? this.onProgress(downloadId, (event) => {
-              onProgress(event.bytesDownloaded, event.totalBytes);
-            })
-          : () => {};
-
-        const removeComplete = this.onComplete(downloadId, async () => {
-          removeProgress();
-          removeComplete();
-          removeError();
-          this.silentDownloadIds.delete(downloadId);
-          try {
-            await this.moveCompletedDownload(downloadId, destPath);
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        });
-
-        const removeError = this.onError(downloadId, (event) => {
-          removeProgress();
-          removeComplete();
-          removeError();
-          this.silentDownloadIds.delete(downloadId);
-          reject(new Error(event.reason ?? 'Download failed'));
-        });
-      });
     })();
-
-    return {
-      get downloadId() { return resolvedDownloadId; },
-      promise,
-    };
+    return { get downloadId() { return resolvedDownloadId; }, downloadIdPromise, promise };
   }
 
   markSilent(downloadId: number): void { this.silentDownloadIds.add(downloadId); }

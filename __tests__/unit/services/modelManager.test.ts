@@ -30,7 +30,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
     isAvailable: jest.fn(() => false),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(),
-    downloadFileTo: jest.fn(() => ({ downloadId: 999, promise: Promise.resolve() })),
+    downloadFileTo: jest.fn(() => ({ downloadId: 999, downloadIdPromise: Promise.resolve(999), promise: Promise.resolve() })),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
     moveCompletedDownload: jest.fn(),
     startProgressPolling: jest.fn(),
@@ -79,7 +79,7 @@ describe('ModelManager', () => {
     mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
     mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
     mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
-    mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({ downloadId: 999, promise: Promise.resolve() } as any);
+    mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({ downloadId: 999, downloadIdPromise: Promise.resolve(999), promise: Promise.resolve() } as any);
     mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
     mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('' as any);
     mockedBackgroundDownloadService.startProgressPolling.mockImplementation(() => {});
@@ -1645,15 +1645,19 @@ describe('ModelManager', () => {
   describe('repairMmProj', () => {
     it('emits onDownloadIdReady when download id resolves asynchronously', async () => {
       const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      const initSpy = jest.spyOn(modelManager, 'initialize').mockResolvedValue(undefined);
       try {
-        mockedRNFS.exists.mockResolvedValue(false);
-        let resolvedDownloadId = 0;
+        let resolveDownloadId: ((id: number) => void) | null = null;
+        const downloadIdPromise = new Promise<number>((resolve) => {
+          resolveDownloadId = resolve;
+        });
         let resolveDownload: (() => void) | null = null;
         const completionPromise = new Promise<void>((resolve) => {
           resolveDownload = resolve;
         });
         mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({
-          get downloadId() { return resolvedDownloadId; },
+          downloadId: 0,
+          downloadIdPromise,
           promise: completionPromise,
         } as any);
 
@@ -1663,13 +1667,16 @@ describe('ModelManager', () => {
 
         await Promise.resolve();
         await Promise.resolve();
-        resolvedDownloadId = 321;
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await Promise.resolve();
+        expect(mockedBackgroundDownloadService.downloadFileTo).toHaveBeenCalled();
+        resolveDownloadId?.(321);
+        await Promise.resolve();
         expect(onDownloadIdReady).toHaveBeenCalledWith(321);
 
         resolveDownload?.();
         await repairPromise;
       } finally {
+        initSpy.mockRestore();
         saveSpy.mockRestore();
       }
     });

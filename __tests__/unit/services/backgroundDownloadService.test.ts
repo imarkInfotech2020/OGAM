@@ -346,7 +346,7 @@ describe('BackgroundDownloadService', () => {
   // event dispatching
   // ========================================================================
   describe('event dispatching', () => {
-    it('dispatches progress to specific and global listeners', () => {
+    it('dispatches progress to both specific and global listeners', () => {
       const specificCb = jest.fn();
       const globalCb = jest.fn();
       service.onProgress(42, specificCb);
@@ -359,7 +359,21 @@ describe('BackgroundDownloadService', () => {
         eventHandlers.DownloadProgress(event);
       }
 
+      // Both listeners fire; consumer-side logic handles deduplication
       expect(specificCb).toHaveBeenCalledWith(event);
+      expect(globalCb).toHaveBeenCalledWith(event);
+    });
+
+    it('dispatches progress to global listener when no per-download listener exists', () => {
+      const globalCb = jest.fn();
+      service.onAnyProgress(globalCb);
+
+      const event = { downloadId: 99, bytesDownloaded: 1000, totalBytes: 5000, status: 'running', fileName: 'model.gguf', modelId: 'test' };
+
+      if (eventHandlers.DownloadProgress) {
+        eventHandlers.DownloadProgress(event);
+      }
+
       expect(globalCb).toHaveBeenCalledWith(event);
     });
 
@@ -914,6 +928,41 @@ describe('BackgroundDownloadService', () => {
 
       await promise;
       expect(mockDownloadManagerModule.moveCompletedDownload).toHaveBeenCalledWith(10, '/dest/dep.gguf');
+    });
+
+    it('resolves downloadIdPromise once native start returns id', async () => {
+      mockDownloadManagerModule.startDownload.mockResolvedValue({
+        downloadId: 17, fileName: 'dep.gguf', modelId: 'test/model',
+      });
+      mockDownloadManagerModule.moveCompletedDownload.mockResolvedValue('/dest/dep.gguf');
+
+      const { downloadIdPromise, promise } = service.downloadFileTo({
+        params: baseParams,
+        destPath: '/dest/dep.gguf',
+      });
+
+      await expect(downloadIdPromise).resolves.toBe(17);
+
+      if (eventHandlers.DownloadComplete) {
+        eventHandlers.DownloadComplete({
+          downloadId: 17, fileName: 'dep.gguf', modelId: 'test/model',
+          bytesDownloaded: 1_000_000, totalBytes: 1_000_000,
+          status: 'completed', localUri: '/downloads/dep.gguf',
+        });
+      }
+      await promise;
+    });
+
+    it('rejects downloadIdPromise when native startDownload fails', async () => {
+      mockDownloadManagerModule.startDownload.mockRejectedValue(new Error('Failed to start'));
+
+      const { downloadIdPromise, promise } = service.downloadFileTo({
+        params: baseParams,
+        destPath: '/dest/dep.gguf',
+      });
+
+      await expect(downloadIdPromise).rejects.toThrow('Failed to start');
+      await expect(promise).rejects.toThrow('Failed to start');
     });
 
     it('rejects when error event fires', async () => {
