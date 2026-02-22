@@ -1647,11 +1647,11 @@ describe('ModelManager', () => {
       const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
       const initSpy = jest.spyOn(modelManager, 'initialize').mockResolvedValue(undefined);
       try {
-        let resolveDownloadId: ((id: number) => void) | null = null;
+        let resolveDownloadId!: (id: number) => void;
         const downloadIdPromise = new Promise<number>((resolve) => {
           resolveDownloadId = resolve;
         });
-        let resolveDownload: (() => void) | null = null;
+        let resolveDownload!: () => void;
         const completionPromise = new Promise<void>((resolve) => {
           resolveDownload = resolve;
         });
@@ -1669,11 +1669,11 @@ describe('ModelManager', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(mockedBackgroundDownloadService.downloadFileTo).toHaveBeenCalled();
-        resolveDownloadId?.(321);
+        resolveDownloadId(321);
         await Promise.resolve();
         expect(onDownloadIdReady).toHaveBeenCalledWith(321);
 
-        resolveDownload?.();
+        resolveDownload();
         await repairPromise;
       } finally {
         initSpy.mockRestore();

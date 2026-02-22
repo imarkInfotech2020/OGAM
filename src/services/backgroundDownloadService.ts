@@ -252,8 +252,8 @@ class BackgroundDownloadService {
       throw new Error('Background downloads not available on this platform');
     }
     let resolvedDownloadId = 0;
-    let resolveDownloadId: ((id: number) => void) | null = null;
-    let rejectDownloadId: ((error: unknown) => void) | null = null;
+    let resolveDownloadId!: (id: number) => void;
+    let rejectDownloadId!: (error: unknown) => void;
     const downloadIdPromise = new Promise<number>((resolve, reject) => {
       resolveDownloadId = resolve;
       rejectDownloadId = reject;
@@ -272,7 +272,7 @@ class BackgroundDownloadService {
         this.startProgressPolling();
         const downloadId: number = info.downloadId;
         resolvedDownloadId = downloadId;
-        resolveDownloadId?.(downloadId);
+        resolveDownloadId(downloadId);
         if (silent) this.silentDownloadIds.add(downloadId);
         await new Promise<void>((resolve, reject) => {
           const removeProgress = onProgress
@@ -301,7 +301,7 @@ class BackgroundDownloadService {
           });
         });
       } catch (error) {
-        if (resolvedDownloadId === 0) rejectDownloadId?.(error);
+        if (resolvedDownloadId === 0) rejectDownloadId(error);
         throw error;
       }
     })();
