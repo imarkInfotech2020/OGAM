@@ -102,7 +102,7 @@ android {
             }
         }
     }
-buildTypes {
+    buildTypes {
         debug {
             signingConfig signingConfigs.debug
             applicationIdSuffix ".dev"
