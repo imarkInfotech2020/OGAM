@@ -46,6 +46,26 @@ function addSystemMsg(
   });
 }
 
+async function doLoadTextModel(deps: ModelActionDeps): Promise<void> {
+  const { activeModel, activeModelId } = deps;
+  if (!activeModel || !activeModelId) return;
+  try {
+    await activeModelService.loadTextModel(activeModelId);
+    const multimodalSupport = llmService.getMultimodalSupport();
+    deps.setSupportsVision(multimodalSupport?.vision || false);
+    if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
+      const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
+      addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
+    }
+  } catch (error: any) {
+    deps.setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
+  } finally {
+    deps.setIsModelLoading(false);
+    deps.setLoadingModel(null);
+    deps.modelLoadStartTimeRef.current = null;
+  }
+}
+
 export async function initiateModelLoad(
   deps: ModelActionDeps,
   alreadyLoading: boolean,
@@ -59,6 +79,17 @@ export async function initiateModelLoad(
       deps.setAlertState(showAlert(
         'Insufficient Memory',
         `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Load Anyway', style: 'destructive', onPress: async () => {
+            deps.setAlertState(hideAlert());
+            deps.setIsModelLoading(true);
+            deps.setLoadingModel(activeModel);
+            deps.modelLoadStartTimeRef.current = Date.now();
+            await waitForRenderFrame();
+            await doLoadTextModel(deps);
+          }},
+        ],
       ));
       return;
     }
@@ -151,7 +182,13 @@ export async function handleModelSelectFn(
   }
   const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
   if (!memoryCheck.canLoad) {
-    deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message));
+    deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Load Anyway', style: 'destructive', onPress: () => {
+        deps.setAlertState(hideAlert());
+        proceedWithModelLoadFn(deps, model);
+      }},
+    ]));
     return;
   }
   if (memoryCheck.severity === 'warning') {

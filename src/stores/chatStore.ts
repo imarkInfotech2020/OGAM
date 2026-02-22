@@ -45,9 +45,12 @@ interface ChatState {
 }
 
 const generateId = () => {
-  const array = new Uint32Array(1);
-  crypto.getRandomValues(array);
-  return `${Date.now()}-${array[0].toString(36)}`;
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return `${Date.now()}-${array[0].toString(36)}`;
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
 
 export const useChatStore = create<ChatState>()(

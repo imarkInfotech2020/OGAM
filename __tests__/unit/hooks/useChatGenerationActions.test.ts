@@ -384,7 +384,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps({ activeConversationId: null });
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration: jest.fn(),
       setDebugInfo: jest.fn(),
     });
@@ -395,7 +395,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps({ activeModel: undefined });
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration: jest.fn(),
       setDebugInfo: jest.fn(),
     });
@@ -407,7 +407,7 @@ describe('handleSendFn', () => {
     const deps = makeGenerationDeps();
     await handleSendFn(deps, {
       text: 'hello',
-      forceImageMode: false,
+      imageMode: 'auto',
       startGeneration,
       setDebugInfo: jest.fn(),
     });

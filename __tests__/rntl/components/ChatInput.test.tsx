@@ -334,14 +334,15 @@ describe('ChatInput', () => {
       expect(onStop).toHaveBeenCalled();
     });
 
-    it('shows both stop and send buttons during generation when text entered', () => {
-      const { getByTestId } = render(
+    it('shows send button (not stop) during generation when text entered for queuing', () => {
+      const { getByTestId, queryByTestId } = render(
         <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
       );
 
       fireEvent.changeText(getByTestId('chat-input'), 'queued message');
-      expect(getByTestId('stop-button')).toBeTruthy();
+      // Send button takes priority over stop — allows queuing while generating
       expect(getByTestId('send-button')).toBeTruthy();
+      expect(queryByTestId('stop-button')).toBeNull();
     });
 
     it('hides voice button during generation', () => {
@@ -349,7 +350,7 @@ describe('ChatInput', () => {
         <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
       );
 
-      // Voice button hidden during generation — stop button takes its place
+      // Voice button hidden during generation — stop button takes its place (when no text entered)
       expect(queryByTestId('voice-record-button')).toBeNull();
     });
   });
