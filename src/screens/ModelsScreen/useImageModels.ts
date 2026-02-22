@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
-import { fetchAvailableModels, HFImageModel } from '../../services/huggingFaceModelBrowser';
+import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
@@ -139,7 +139,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     const filtered = availableHFModels.filter(m => {
       if (showRecommendedOnly && imageRec && !isRecommendedModel(m)) return false;
       if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
-      if (styleFilter !== 'all' && (m as any).style !== styleFilter) return false;
+      if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
       if (!matchesSdVersionFilter(m.name, sdVersionFilter)) return false;
       if (downloadedImageModels.some(d => d.id === m.id)) return false;
       if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
