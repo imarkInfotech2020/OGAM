@@ -1,5 +1,4 @@
 import RNFS from 'react-native-fs';
-import { Platform } from 'react-native';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, PersistedDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
 import { backgroundDownloadService } from '../backgroundDownloadService';
@@ -17,70 +16,11 @@ import {
   saveModelsList,
 } from './storage';
 import logger from '../../utils/logger';
-import {
-  downloadMainFile,
-  downloadMmProjFile,
-  downloadMmProjBackground,
-} from './downloadHelpers';
 
 export {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from './downloadHelpers';
-
-type DownloadJob = { jobId: number; cancel: () => void };
-
-export interface PerformDownloadOpts {
-  modelId: string;
-  file: ModelFile;
-  modelsDir: string;
-  downloadJobs: Map<string, DownloadJob>;
-  onProgress?: DownloadProgressCallback;
-}
-
-export async function performDownloadModel(opts: PerformDownloadOpts): Promise<DownloadedModel> {
-  const { modelId, file, modelsDir, downloadJobs, onProgress } = opts;
-  const downloadKey = `${modelId}/${file.name}`;
-  const localPath = `${modelsDir}/${file.name}`;
-  const mmProjLocalPath = file.mmProjFile ? `${modelsDir}/${file.mmProjFile.name}` : null;
-  const totalSize = file.size + (file.mmProjFile?.size || 0);
-
-  const mainExists = await RNFS.exists(localPath);
-  const mmProjExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : true;
-
-  if (mainExists && mmProjExists) {
-    const model = await buildDownloadedModel({ modelId, file, resolvedLocalPath: localPath, mmProjPath: mmProjLocalPath || undefined });
-    await persistDownloadedModel(model, modelsDir);
-    return model;
-  }
-
-  if (!mainExists) {
-    const downloadUrl = huggingFaceService.getDownloadUrl(modelId, file.name);
-    await downloadMainFile({ downloadKey, downloadUrl, localPath, modelId, file, totalSize, downloadJobs, onProgress, initialMmProjBytes: 0 });
-  }
-
-  if (file.mmProjFile && mmProjLocalPath && !mmProjExists) {
-    await downloadMmProjFile({
-      mmProjDownloadKey: `${modelId}/${file.mmProjFile.name}`,
-      mmProjFile: file.mmProjFile,
-      mmProjLocalPath,
-      modelId,
-      totalSize,
-      mainBytes: file.size,
-      downloadJobs,
-      onProgress,
-    });
-  }
-
-  downloadJobs.delete(downloadKey);
-
-  const mmProjFileExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : false;
-  const finalMmProjPath = mmProjLocalPath && mmProjFileExists ? mmProjLocalPath : undefined;
-
-  const model = await buildDownloadedModel({ modelId, file, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });
-  await persistDownloadedModel(model, modelsDir);
-  return model;
-}
 
 export interface PerformBackgroundDownloadOpts {
   modelId: string;
@@ -97,7 +37,23 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
   const mmProjLocalPath = file.mmProjFile ? `${modelsDir}/${file.mmProjFile.name}` : null;
 
   const mainExists = await RNFS.exists(localPath);
-  const mmProjExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : true;
+  let mmProjExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : true;
+
+  // If mmproj exists but is smaller than expected, it's a partial file — delete and re-download
+  if (mmProjExists && mmProjLocalPath && file.mmProjFile?.size) {
+    try {
+      const stat = await RNFS.stat(mmProjLocalPath);
+      const actualSize = typeof stat.size === 'string' ? parseInt(stat.size, 10) : stat.size;
+      if (actualSize < file.mmProjFile.size) {
+        logger.warn(`[ModelManager] mmproj partial (${actualSize}/${file.mmProjFile.size}), re-downloading`);
+        await RNFS.unlink(mmProjLocalPath).catch(() => {});
+        mmProjExists = false;
+      }
+    } catch {
+      await RNFS.unlink(mmProjLocalPath).catch(() => {});
+      mmProjExists = false;
+    }
+  }
 
   if (mainExists && mmProjExists) {
     return handleAlreadyDownloaded({ modelId, file, localPath, mmProjLocalPath, backgroundDownloadContext });
@@ -108,10 +64,12 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
   let mmProjDownloaded = mmProjExists ? mmProjSize : 0;
 
   if (file.mmProjFile && mmProjLocalPath && !mmProjExists) {
-    try {
-      if (Platform.OS === 'android') {
-        // Use Android DownloadManager so mmproj survives app backgrounding.
-        // Pass silent=true so no separate notification appears for this dependency file.
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          logger.log(`[ModelManager] mmproj download retry ${attempt}/${maxRetries}`);
+        }
         await backgroundDownloadService.downloadFileTo({
           params: {
             url: file.mmProjFile.downloadUrl,
@@ -132,12 +90,15 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
           silent: true,
         });
         mmProjDownloaded = file.mmProjFile.size;
-      } else {
-        mmProjDownloaded = await downloadMmProjBackground({ file, mmProjLocalPath, modelId, combinedTotalBytes, onProgress });
+        break;
+      } catch (e) {
+        if (attempt < maxRetries) {
+          logger.warn(`[ModelManager] mmproj download attempt ${attempt + 1} failed, retrying:`, e);
+          await RNFS.unlink(mmProjLocalPath).catch(() => {});
+        } else {
+          logger.warn('[ModelManager] mmproj download failed after retries, vision will not be available:', e);
+        }
       }
-    } catch (e) {
-      logger.warn('[ModelManager] mmproj download failed, vision will not be available:', e);
-      // Continue — the GGUF download will still proceed; user just won't have vision support
     }
   }
 
@@ -313,14 +274,25 @@ export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts):
         const localPath = `${modelsDir}/${metadata.fileName}`;
         await backgroundDownloadService.moveCompletedDownload(download.downloadId, localPath);
 
+        // Recover mmproj path from persisted metadata
+        const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
+        let finalMmProjPath: string | undefined;
+        if (mmProjLocalPath) {
+          const mmProjExists = await RNFS.exists(mmProjLocalPath);
+          if (mmProjExists) {
+            finalMmProjPath = mmProjLocalPath;
+          }
+        }
+
         const fileInfo: ModelFile = {
           name: metadata.fileName,
           size: metadata.totalBytes,
           quantization: metadata.quantization,
           downloadUrl: '',
+          mmProjFile: metadata.mmProjFileName ? { name: metadata.mmProjFileName, size: 0, downloadUrl: '' } : undefined,
         };
 
-        const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath });
+        const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });
         await persistDownloadedModel(model, modelsDir);
         completedModels.push(model);
         clearDownloadCallback(download.downloadId);
