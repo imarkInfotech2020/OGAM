@@ -180,7 +180,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         presentationStyle="pageSheet"
         onRequestClose={onBack}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <SafeAreaView style={styles.container}>
           {selectedModel && (
             <ModelDetailView
               selectedModel={selectedModel}

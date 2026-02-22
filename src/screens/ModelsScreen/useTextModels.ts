@@ -240,7 +240,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         if (fetched) return { ...fetched, name: m.name, description: m.description, ...curatedFields };
         return { id: m.id, name: m.name, author: m.id.split('/')[0], description: m.description, downloads: -1, likes: 0, tags: [], lastModified: '', files: [], ...curatedFields };
       });
-  }, [deviceRecommendation.maxParameters, downloadedModels, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
+  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
 
   return {
     searchQuery, setSearchQuery,

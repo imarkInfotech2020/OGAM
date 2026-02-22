@@ -271,72 +271,55 @@ interface ModelCardActionsProps {
   onCancel: (() => void) | undefined;
 }
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+  icon: string; color: string; haptic: string; onPress: () => void;
+  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => { triggerHaptic(haptic as any); onPress(); }}
+      disabled={disabled}
+      hitSlop={HIT_SLOP}
+      testID={testID}
+    >
+      <Icon name={icon} size={16} color={color} />
+    </TouchableOpacity>
+  );
+}
+
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded,
-  isDownloading,
-  isActive,
-  isCompatible,
-  incompatibleReason,
-  testID,
-  onDownload,
-  onSelect,
-  onDelete,
-  onRepairVision,
-  onCancel,
+  isDownloaded, isDownloading, isActive, isCompatible, incompatibleReason,
+  testID, onDownload, onSelect, onDelete, onRepairVision, onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
   return (
     <>
       {isDownloading && onCancel && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => { triggerHaptic('notificationWarning'); onCancel(); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          testID={testID ? `${testID}-cancel` : undefined}
-        >
-          <Icon name="x" size={16} color={colors.error} />
-        </TouchableOpacity>
+        <ActionButton icon="x" color={colors.error} haptic="notificationWarning"
+          onPress={onCancel} testID={tid('cancel')} styles={styles} />
       )}
       {!isDownloaded && !isDownloading && onDownload && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => { triggerHaptic('impactLight'); onDownload(); }}
-          disabled={!isCompatible && !incompatibleReason}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          testID={testID ? `${testID}-download` : undefined}
-        >
-          <Icon name="download" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        <ActionButton icon="download" color={colors.primary} haptic="impactLight"
+          onPress={onDownload} disabled={!isCompatible && !incompatibleReason}
+          testID={tid('download')} styles={styles} />
       )}
       {isDownloaded && onRepairVision && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => { triggerHaptic('impactLight'); onRepairVision(); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          testID={testID ? `${testID}-repair-vision` : undefined}
-        >
-          <Icon name="eye" size={16} color={colors.warning} />
-        </TouchableOpacity>
+        <ActionButton icon="eye" color={colors.warning} haptic="impactLight"
+          onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
       {isDownloaded && !isActive && onSelect && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => { triggerHaptic('selection'); onSelect(); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="check-circle" size={16} color={colors.primary} />
-        </TouchableOpacity>
+        <ActionButton icon="check-circle" color={colors.primary} haptic="selection"
+          onPress={onSelect} styles={styles} />
       )}
       {isDownloaded && onDelete && (
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => { triggerHaptic('notificationWarning'); onDelete(); }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon name="trash-2" size={16} color={colors.error} />
-        </TouchableOpacity>
+        <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning"
+          onPress={onDelete} styles={styles} />
       )}
     </>
   );
