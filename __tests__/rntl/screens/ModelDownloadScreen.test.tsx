@@ -173,6 +173,13 @@ jest.mock('react-native-vector-icons/Feather', () => {
 
 import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
 
+const MOCK_FILE = {
+  name: 'model-Q4_K_M.gguf',
+  size: 4000000000,
+  quantization: 'Q4_K_M',
+  downloadUrl: 'https://example.com/model.gguf',
+};
+
 const mockNavigation: any = {
   navigate: mockNavigate,
   goBack: jest.fn(),
@@ -361,13 +368,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download button triggers handleDownload via background download', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 1 });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
@@ -381,13 +382,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download button triggers background download when supported', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
@@ -406,13 +401,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download calls onProgress callback', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     mockDownloadModel.mockImplementation((_modelId: string, _file: any, onProgress: any) => {
       onProgress({ progress: 0.5, bytesDownloaded: 2000000000, totalBytes: 4000000000 });
@@ -435,13 +424,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download calls onComplete callback and shows alert', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     const completedModel = {
       id: 'test-model',
@@ -486,13 +469,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download complete alert Start Chatting navigates to Main', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     const completedModel = {
       id: 'test-model',
@@ -533,13 +510,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download calls onError callback and shows error alert', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
     let capturedOnError: ((err: Error) => void) | undefined;
@@ -566,13 +537,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download catch block shows error on exception', async () => {
-    const mockFile = {
-      name: 'model-Q4_K_M.gguf',
-      size: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadUrl: 'https://example.com/model.gguf',
-    };
-    mockGetModelFiles.mockResolvedValue([mockFile]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     mockDownloadModelBackground.mockRejectedValue(new Error('Unexpected error'));
 

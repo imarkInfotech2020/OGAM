@@ -260,7 +260,7 @@ jest.mock('../../../src/components', () => ({
         )}
         <TouchableOpacity
           testID="send-with-image"
-          onPress={() => { if (text.trim()) { onSend(text, undefined, true); setText(''); } }}
+          onPress={() => { if (text.trim()) { onSend(text, undefined, 'force'); setText(''); } }}
         />
         <TouchableOpacity
           testID="send-with-doc"

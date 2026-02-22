@@ -11,6 +11,13 @@ import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils
 import { ONNXImageModel } from '../../types';
 import { ImageModelDescriptor } from './types';
 
+/** Remove downloading indicator and clear progress for a model. */
+function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, downloadId?: number) {
+  deps.removeImageModelDownloading(modelId);
+  deps.clearModelProgress(modelId);
+  if (downloadId != null) deps.setBackgroundDownload(downloadId, null);
+}
+
 export interface ImageDownloadDeps {
   addImageModelDownloading: (id: string) => void;
   removeImageModelDownloading: (id: string) => void;
@@ -81,8 +88,7 @@ export async function downloadHuggingFaceModel(
     deps.addDownloadedImageModel(imageModel);
     if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
     // Remove AFTER model is registered so card doesn't disappear before appearing as downloaded.
-    deps.removeImageModelDownloading(modelInfo.id);
-    deps.clearModelProgress(modelInfo.id);
+    cleanupDownloadState(deps, modelInfo.id);
     deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
@@ -90,8 +96,7 @@ export async function downloadHuggingFaceModel(
       const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
       if (await RNFS.exists(dir)) await RNFS.unlink(dir);
     } catch { /* ignore cleanup errors */ }
-    deps.removeImageModelDownloading(modelInfo.id);
-    deps.clearModelProgress(modelInfo.id);
+    cleanupDownloadState(deps, modelInfo.id);
   }
 }
 
@@ -134,29 +139,22 @@ export async function downloadCoreMLMultiFile(
         deps.addDownloadedImageModel(imageModel);
         if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
         // Remove AFTER model is registered so card doesn't disappear during processing.
-        deps.removeImageModelDownloading(modelInfo.id);
-        deps.clearModelProgress(modelInfo.id);
-        deps.setBackgroundDownload(downloadInfo.downloadId, null);
+        cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
         deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
       } catch (e: any) {
         deps.setAlertState(showAlert('Registration Failed', e?.message || 'Failed to register model'));
-        deps.removeImageModelDownloading(modelInfo.id);
-        deps.clearModelProgress(modelInfo.id);
-        deps.setBackgroundDownload(downloadInfo.downloadId, null);
+        cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
       }
     });
     const unsubError = backgroundDownloadService.onError(downloadInfo.downloadId, (ev) => {
       unsubProgress(); unsubComplete(); unsubError();
       deps.setAlertState(showAlert('Download Failed', ev.reason || 'Unknown error'));
-      deps.removeImageModelDownloading(modelInfo.id);
-      deps.clearModelProgress(modelInfo.id);
-      deps.setBackgroundDownload(downloadInfo.downloadId, null);
+      cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
     });
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-    deps.removeImageModelDownloading(modelInfo.id);
-    deps.clearModelProgress(modelInfo.id);
+    cleanupDownloadState(deps, modelInfo.id);
   }
 }
 
@@ -212,29 +210,22 @@ export async function proceedWithDownload(
         if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
         // Remove from downloading AFTER model is registered so the card never
         // disappears during the processing window (unzip / move / persist).
-        deps.removeImageModelDownloading(modelInfo.id);
-        deps.clearModelProgress(modelInfo.id);
-        deps.setBackgroundDownload(downloadInfo.downloadId, null);
+        cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
         deps.setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
       } catch (e: any) {
         deps.setAlertState(showAlert('Extraction Failed', e?.message || 'Failed to extract model'));
-        deps.removeImageModelDownloading(modelInfo.id);
-        deps.clearModelProgress(modelInfo.id);
-        deps.setBackgroundDownload(downloadInfo.downloadId, null);
+        cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
       }
     });
     const unsubError = backgroundDownloadService.onError(downloadInfo.downloadId, (ev) => {
       unsubProgress(); unsubComplete(); unsubError();
       deps.setAlertState(showAlert('Download Failed', ev.reason || 'Unknown error'));
-      deps.removeImageModelDownloading(modelInfo.id);
-      deps.clearModelProgress(modelInfo.id);
-      deps.setBackgroundDownload(downloadInfo.downloadId, null);
+      cleanupDownloadState(deps, modelInfo.id, downloadInfo.downloadId);
     });
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-    deps.removeImageModelDownloading(modelInfo.id);
-    deps.clearModelProgress(modelInfo.id);
+    cleanupDownloadState(deps, modelInfo.id);
   }
 }
 

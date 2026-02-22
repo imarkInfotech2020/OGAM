@@ -4,6 +4,7 @@ import {
   ImageGenerationProgress,
   GeneratedImage,
 } from '../types';
+import { generateRandomSeed } from '../utils/generateId';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
 
@@ -130,12 +131,7 @@ class LocalDreamGeneratorService {
         negativePrompt: params.negativePrompt || '',
         steps: params.steps || 20,
         guidanceScale: params.guidanceScale || 7.5,
-        seed: params.seed ?? (() => {
-          if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-            const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % 2147483647;
-          }
-          return Math.floor(Math.random() * 2147483647);
-        })(),
+        seed: params.seed ?? generateRandomSeed(),
         width: params.width || 512,
         height: params.height || 512,
         previewInterval: params.previewInterval ?? 2,

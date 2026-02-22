@@ -81,13 +81,12 @@ export async function initiateModelLoad(
         `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Load Anyway', style: 'destructive', onPress: async () => {
+          { text: 'Load Anyway', style: 'destructive', onPress: () => {
             deps.setAlertState(hideAlert());
             deps.setIsModelLoading(true);
             deps.setLoadingModel(activeModel);
             deps.modelLoadStartTimeRef.current = Date.now();
-            await waitForRenderFrame();
-            await doLoadTextModel(deps);
+            waitForRenderFrame().then(() => doLoadTextModel(deps));
           }},
         ],
       ));

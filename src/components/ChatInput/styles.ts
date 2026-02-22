@@ -6,7 +6,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: 12,
     paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 8,
+    paddingBottom: 8,
     backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.border,

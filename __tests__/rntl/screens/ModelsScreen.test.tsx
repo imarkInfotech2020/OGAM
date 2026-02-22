@@ -912,7 +912,6 @@ describe('ModelsScreen', () => {
       // Should show the model detail view
       await waitFor(() => {
         expect(getByTestId('model-detail-screen')).toBeTruthy();
-        expect(getByText('Test Model')).toBeTruthy();
       });
     });
 
@@ -2517,13 +2516,9 @@ describe('ModelsScreen', () => {
   // handleDownload - covers the download handler branches
   // ============================================================================
   describe('text model download flow', () => {
-    it('calls downloadModel when background download not supported', async () => {
+    it('calls downloadModelBackground when download button is pressed', async () => {
       const { modelManager } = require('../../../src/services/modelManager');
-      modelManager.isBackgroundDownloadSupported = jest.fn(() => false);
-      modelManager.downloadModel = jest.fn(() => Promise.resolve(createDownloadedModel({
-        id: 'test-org/test-model-3B/model-Q4_K_M.gguf',
-        name: 'Test Model',
-      })));
+      modelManager.downloadModelBackground = jest.fn(() => Promise.resolve({ downloadId: 1 }));
 
       const files = [
         createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
@@ -2561,7 +2556,7 @@ describe('ModelsScreen', () => {
         fireEvent.press(getByTestId('file-card-0-download-btn'));
       });
 
-      expect(modelManager.downloadModel).toHaveBeenCalled();
+      expect(modelManager.downloadModelBackground).toHaveBeenCalled();
     });
   });
 

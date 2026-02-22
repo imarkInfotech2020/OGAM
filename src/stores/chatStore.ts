@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
+import { generateId } from '../utils/generateId';
 
 interface ChatState {
   // Conversations
@@ -43,15 +44,6 @@ interface ChatState {
   clearAllConversations: () => void;
   getConversationMessages: (conversationId: string) => Message[];
 }
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const array = new Uint32Array(1);
-    crypto.getRandomValues(array);
-    return `${Date.now()}-${array[0].toString(36)}`;
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-};
 
 export const useChatStore = create<ChatState>()(
   persist(
