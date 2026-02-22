@@ -130,7 +130,7 @@ describe('restoreInProgressDownloads', () => {
 
   it('skips download already present in backgroundDownloadContext', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: 42 }) as any]);
-    bgContext.set(42, { modelId: 'test/model', file: {} as any, localPath: '/x', mmProjLocalPath: null, removeProgressListener: jest.fn() });
+    bgContext.set(42, { modelId: 'test/model', file: {} as any, localPath: '/x', mmProjLocalPath: null, removeProgressListener: jest.fn(), mmProjCompleted: true, mainCompleted: false });
 
     await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
 

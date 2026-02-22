@@ -15,10 +15,22 @@ export type BackgroundDownloadMetadataCallback = (
     totalBytes: number;
     mmProjFileName?: string;
     mmProjLocalPath?: string | null;
+    mmProjDownloadId?: number;
   } | null
 ) => void;
 
 export type BackgroundDownloadContext =
-  | { modelId: string; file: ModelFile; localPath: string; mmProjLocalPath: string | null; removeProgressListener: () => void }
+  | {
+      modelId: string;
+      file: ModelFile;
+      localPath: string;
+      mmProjLocalPath: string | null;
+      removeProgressListener: () => void;
+      // Parallel mmproj download tracking
+      mmProjDownloadId?: number;
+      mmProjCompleted: boolean;
+      mainCompleted: boolean;
+      removeMmProjProgressListener?: () => void;
+    }
   | { model: DownloadedModel; error: null }
   | { model: null; error: Error };

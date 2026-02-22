@@ -240,11 +240,7 @@ class BackgroundDownloadService {
     }
   }
 
-  /**
-   * Start a background download, wait for it to complete, then move the
-   * finished file to destPath. Intended for sequential dependencies such as
-   * mmproj → GGUF where each file must finish before the next can start.
-   */
+  /** Start a background download, wait for completion, then move to destPath. */
   downloadFileTo(opts: {
     params: DownloadParams;
     destPath: string;
@@ -311,6 +307,9 @@ class BackgroundDownloadService {
       promise,
     };
   }
+
+  markSilent(downloadId: number): void { this.silentDownloadIds.add(downloadId); }
+  unmarkSilent(downloadId: number): void { this.silentDownloadIds.delete(downloadId); }
 
   cleanup(): void {
     this.stopProgressPolling();

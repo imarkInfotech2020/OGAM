@@ -3,10 +3,13 @@
  * to keep each file within the max-lines limit.
  */
 import RNFS from 'react-native-fs';
+import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../types';
+import { backgroundDownloadService } from '../backgroundDownloadService';
+import { buildDownloadedModel, persistDownloadedModel } from './storage';
 
 export async function getOrphanedTextFiles(
   modelsDir: string,
-  modelsGetter: () => Promise<import('../../types').DownloadedModel[]>,
+  modelsGetter: () => Promise<DownloadedModel[]>,
 ): Promise<Array<{ name: string; path: string; size: number }>> {
   const orphaned: Array<{ name: string; path: string; size: number }> = [];
   const modelsDirExists = await RNFS.exists(modelsDir);
@@ -47,10 +50,6 @@ export async function getOrphanedImageDirs(
   const trackedImagePaths = imageModels.map(m => m.modelPath);
 
   for (const item of items) {
-    // An item is tracked if its path matches a stored modelPath exactly OR if
-    // a stored modelPath is nested inside this directory (CoreML models store a
-    // compiled subdirectory as modelPath while the parent dir also contains
-    // tokenizer files — the parent should not be flagged as an orphan).
     const isTracked = trackedImagePaths.some(
       p => p === item.path || p.startsWith(`${item.path}/`),
     );
@@ -76,4 +75,74 @@ export async function getOrphanedImageDirs(
   }
 
   return orphaned;
+}
+
+export interface SyncDownloadsOpts {
+  persistedDownloads: Record<number, PersistedDownloadInfo>;
+  modelsDir: string;
+  clearDownloadCallback: (downloadId: number) => void;
+}
+
+/** Resolve the final mmproj path for a completed sync download. */
+async function resolveMmProjPath(metadata: PersistedDownloadInfo): Promise<string | undefined> {
+  const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
+  if (metadata.mmProjDownloadId && mmProjLocalPath) {
+    try {
+      await backgroundDownloadService.moveCompletedDownload(metadata.mmProjDownloadId, mmProjLocalPath);
+      return mmProjLocalPath;
+    } catch {
+      return (await RNFS.exists(mmProjLocalPath)) ? mmProjLocalPath : undefined;
+    }
+  }
+  if (mmProjLocalPath && await RNFS.exists(mmProjLocalPath)) return mmProjLocalPath;
+  return undefined;
+}
+
+/** Check whether a parallel mmproj download is still in progress. */
+function isMmProjStillRunning(
+  metadata: PersistedDownloadInfo,
+  activeDownloads: Array<{ downloadId: number; status: string }>,
+): boolean {
+  if (!metadata.mmProjDownloadId) return false;
+  const mmProjDl = activeDownloads.find(d => d.downloadId === metadata.mmProjDownloadId);
+  return !!mmProjDl && mmProjDl.status !== 'completed' && mmProjDl.status !== 'failed';
+}
+
+export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts): Promise<DownloadedModel[]> {
+  const { persistedDownloads, modelsDir, clearDownloadCallback } = opts;
+  const completedModels: DownloadedModel[] = [];
+  const activeDownloads = await backgroundDownloadService.getActiveDownloads();
+
+  for (const download of activeDownloads) {
+    const metadata = persistedDownloads[download.downloadId];
+    if (!metadata) continue;
+
+    if (download.status === 'completed') {
+      if (isMmProjStillRunning(metadata, activeDownloads)) continue;
+
+      try {
+        const localPath = `${modelsDir}/${metadata.fileName}`;
+        await backgroundDownloadService.moveCompletedDownload(download.downloadId, localPath);
+        const finalMmProjPath = await resolveMmProjPath(metadata);
+
+        const fileInfo: ModelFile = {
+          name: metadata.fileName, size: metadata.totalBytes,
+          quantization: metadata.quantization, downloadUrl: '',
+          mmProjFile: metadata.mmProjFileName ? { name: metadata.mmProjFileName, size: 0, downloadUrl: '' } : undefined,
+        };
+
+        const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });
+        await persistDownloadedModel(model, modelsDir);
+        completedModels.push(model);
+        clearDownloadCallback(download.downloadId);
+      } catch { /* Skip failed syncs */ }
+    } else if (download.status === 'failed') {
+      if (metadata.mmProjDownloadId) {
+        backgroundDownloadService.cancelDownload(metadata.mmProjDownloadId).catch(() => {});
+      }
+      clearDownloadCallback(download.downloadId);
+    }
+  }
+
+  return completedModels;
 }

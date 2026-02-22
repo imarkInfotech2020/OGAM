@@ -66,6 +66,7 @@ export interface PersistedDownloadInfo {
   totalBytes: number;
   mmProjFileName?: string;
   mmProjLocalPath?: string | null;
+  mmProjDownloadId?: number;
   // Image model metadata (for restoring downloads after app kill)
   imageModelName?: string;
   imageModelDescription?: string;

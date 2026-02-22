@@ -165,6 +165,13 @@ class ModelManager {
       throw new Error('Background downloads not supported on this platform');
     }
 
+    // Also cancel parallel mmproj download if active
+    const ctx = this.backgroundDownloadContext.get(downloadId);
+    if (ctx && 'file' in ctx && ctx.mmProjDownloadId) {
+      backgroundDownloadService.unmarkSilent(ctx.mmProjDownloadId);
+      await backgroundDownloadService.cancelDownload(ctx.mmProjDownloadId).catch(() => {});
+    }
+
     await backgroundDownloadService.cancelDownload(downloadId);
     this.backgroundDownloadMetadataCallback?.(downloadId, null);
   }
