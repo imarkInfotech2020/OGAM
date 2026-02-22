@@ -21,10 +21,9 @@ function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, download
 /** Register a downloaded image model, activate if first, then cleanup + alert. */
 async function registerAndNotify(
   deps: ImageDownloadDeps,
-  imageModel: ONNXImageModel,
-  modelName: string,
-  downloadId?: number,
+  opts: { imageModel: ONNXImageModel; modelName: string; downloadId?: number },
 ) {
+  const { imageModel, modelName, downloadId } = opts;
   await modelManager.addDownloadedImageModel(imageModel);
   deps.addDownloadedImageModel(imageModel);
   if (!deps.activeImageModelId) deps.setActiveImageModelId(imageModel.id);
@@ -34,9 +33,10 @@ async function registerAndNotify(
 
 /** Wire error + complete listeners that unsub on completion and share cleanup logic. */
 function wireDownloadListeners(
-  downloadId: number, modelId: string, deps: ImageDownloadDeps,
+  ctx: { downloadId: number; modelId: string; deps: ImageDownloadDeps },
   onCompleteWork: () => Promise<void>,
 ) {
+  const { downloadId, modelId, deps } = ctx;
   let unsubProgress: (() => void) | null = null;
   const unsubComplete = backgroundDownloadService.onComplete(downloadId, async () => {
     unsubProgress?.(); unsubComplete(); unsubError();
@@ -121,7 +121,7 @@ export async function downloadHuggingFaceModel(
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
       size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
     };
-    await registerAndNotify(deps, imageModel, modelInfo.name);
+    await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
     try {
@@ -155,14 +155,14 @@ export async function downloadCoreMLMultiFile(
     deps.setBackgroundDownload(downloadInfo.downloadId, {
       modelId: `image:${modelInfo.id}`, fileName: modelInfo.id, quantization: 'Core ML', author: 'Image Generation', totalBytes: modelInfo.size,
     });
-    const listeners = wireDownloadListeners(downloadInfo.downloadId, modelInfo.id, deps, async () => {
+    const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       if (modelInfo.backend === 'coreml' && modelInfo.repo) await downloadCoreMLTokenizerFiles(modelDir, modelInfo.repo);
       const imageModel: ONNXImageModel = {
         id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
         modelPath: modelDir, downloadedAt: new Date().toISOString(),
         size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
       };
-      await registerAndNotify(deps, imageModel, modelInfo.name, downloadInfo.downloadId);
+      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
       deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0);
@@ -199,7 +199,7 @@ export async function proceedWithDownload(
     deps.setBackgroundDownload(downloadInfo.downloadId, {
       modelId: `image:${modelInfo.id}`, fileName, quantization: '', author: 'Image Generation', totalBytes: modelInfo.size,
     });
-    const listeners = wireDownloadListeners(downloadInfo.downloadId, modelInfo.id, deps, async () => {
+    const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       deps.updateModelProgress(modelInfo.id, 0.9);
       const imageModelsDir = modelManager.getImageModelsDirectory();
       const zipPath = `${imageModelsDir}/${fileName}`;
@@ -216,7 +216,7 @@ export async function proceedWithDownload(
         id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
         modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: modelInfo.size, style: modelInfo.style,
       };
-      await registerAndNotify(deps, imageModel, modelInfo.name, downloadInfo.downloadId);
+      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
       deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0);
