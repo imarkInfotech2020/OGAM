@@ -5,6 +5,7 @@ import { useThemedStyles, useTheme } from '../theme';
 import { createStyles } from './ModelCard.styles';
 import { huggingFaceService } from '../services/huggingface';
 import { ModelCredibility } from '../types';
+import { triggerHaptic } from '../utils/haptics';
 
 interface CredibilityInfo {
   color: string;
@@ -266,6 +267,8 @@ interface ModelCardActionsProps {
   onDownload: (() => void) | undefined;
   onSelect: (() => void) | undefined;
   onDelete: (() => void) | undefined;
+  onRepairVision: (() => void) | undefined;
+  onCancel: (() => void) | undefined;
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
@@ -278,16 +281,28 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   onDownload,
   onSelect,
   onDelete,
+  onRepairVision,
+  onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
     <>
+      {isDownloading && onCancel && (
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => { triggerHaptic('notificationWarning'); onCancel(); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID={testID ? `${testID}-cancel` : undefined}
+        >
+          <Icon name="x" size={16} color={colors.error} />
+        </TouchableOpacity>
+      )}
       {!isDownloaded && !isDownloading && onDownload && (
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onDownload}
+          onPress={() => { triggerHaptic('impactLight'); onDownload(); }}
           disabled={!isCompatible && !incompatibleReason}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           testID={testID ? `${testID}-download` : undefined}
@@ -295,10 +310,20 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
           <Icon name="download" size={16} color={colors.primary} />
         </TouchableOpacity>
       )}
+      {isDownloaded && onRepairVision && (
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => { triggerHaptic('impactLight'); onRepairVision(); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID={testID ? `${testID}-repair-vision` : undefined}
+        >
+          <Icon name="eye" size={16} color={colors.warning} />
+        </TouchableOpacity>
+      )}
       {isDownloaded && !isActive && onSelect && (
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onSelect}
+          onPress={() => { triggerHaptic('selection'); onSelect(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Icon name="check-circle" size={16} color={colors.primary} />
@@ -307,7 +332,7 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
       {isDownloaded && onDelete && (
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={onDelete}
+          onPress={() => { triggerHaptic('notificationWarning'); onDelete(); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Icon name="trash-2" size={16} color={colors.error} />
