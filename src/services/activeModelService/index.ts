@@ -58,10 +58,19 @@ class ActiveModelService {
   getPerformanceStats() { return llmService.getPerformanceStats(); }
 
   async loadTextModel(modelId: string, timeoutMs: number = 120000): Promise<void> {
-    if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) { return; }
+    if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
+      // Model already loaded natively — ensure store reflects it
+      const store = useAppStore.getState();
+      if (store.activeModelId !== modelId) { store.setActiveModelId(modelId); }
+      return;
+    }
     if (this.textLoadPromise !== null) {
       await this.textLoadPromise;
-      if (this.loadedTextModelId === modelId) { return; }
+      if (this.loadedTextModelId === modelId) {
+        const store = useAppStore.getState();
+        if (store.activeModelId !== modelId) { store.setActiveModelId(modelId); }
+        return;
+      }
     }
 
     const store = useAppStore.getState();
@@ -106,7 +115,10 @@ class ActiveModelService {
 
     if (this.loadedImageModelId === modelId) {
       const isLoaded = await onnxImageGeneratorService.isModelLoaded();
-      if (isLoaded && !needsThreadReload) { return; }
+      if (isLoaded && !needsThreadReload) {
+        if (store.activeImageModelId !== modelId) { store.setActiveImageModelId(modelId); }
+        return;
+      }
     }
     if (this.imageLoadPromise !== null) {
       await this.imageLoadPromise;
