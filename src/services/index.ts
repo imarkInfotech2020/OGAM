@@ -11,7 +11,7 @@ export { whisperService, WHISPER_MODELS } from './whisperService';
 export type { TranscriptionResult, TranscriptionCallback } from './whisperService';
 export { backgroundDownloadService } from './backgroundDownloadService';
 export { activeModelService } from './activeModelService';
-export type { ActiveModelInfo, ResourceUsage, ModelType, MemoryCheckResult, MemoryCheckSeverity } from './activeModelService';
+export type { ActiveModelInfo, ResourceUsage, ModelType, MemoryCheckResult, MemoryCheckSeverity } from './activeModelService/types';
 export { generationService } from './generationService';
 export type { GenerationState, QueuedMessage } from './generationService';
 export { imageGenerationService } from './imageGenerationService';

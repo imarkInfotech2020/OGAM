@@ -1284,9 +1284,9 @@ describe('appStore', () => {
       setDownloadProgress('m1', { progress: 0.9, bytesDownloaded: 900, totalBytes: 1000 });
 
       const progress = getAppState().downloadProgress;
-      expect(progress['m1'].progress).toBe(0.9);
-      expect(progress['m2']).toBeUndefined();
-      expect(progress['m3'].progress).toBe(0.3);
+      expect(progress.m1.progress).toBe(0.9);
+      expect(progress.m2).toBeUndefined();
+      expect(progress.m3.progress).toBe(0.3);
     });
 
     it('handles model add and remove in sequence', () => {

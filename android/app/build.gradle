@@ -102,6 +102,14 @@ android {
             }
         }
     }
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -139,4 +147,10 @@ dependencies {
 
     // PDF text extraction (used by PDFExtractorModule)
     implementation("io.legere:pdfiumandroid:1.0.35")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    testImplementation("androidx.test:core:1.6.1")
 }
