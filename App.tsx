@@ -56,8 +56,25 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const ensureAppStoreHydrated = async () => {
+    const storeWithPersist = useAppStore as typeof useAppStore & {
+      persist?: {
+        hasHydrated?: () => boolean;
+        rehydrate?: () => Promise<void>;
+      };
+    };
+    const persistApi = storeWithPersist.persist;
+    if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
+    if (!persistApi.hasHydrated()) {
+      await persistApi.rehydrate();
+    }
+  };
+
   const initializeApp = async () => {
     try {
+      // Ensure persisted download metadata is loaded before restore logic reads it.
+      await ensureAppStoreHydrated();
+
       // Request POST_NOTIFICATIONS permission on Android 13+ so system
       // DownloadManager shows progress notifications.
       backgroundDownloadService.requestNotificationPermission().catch((err) => logger.warn('Failed to request notification permission', err));
