@@ -483,103 +483,33 @@ describe('imageDownloadActions', () => {
       expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
     });
 
-    it('shows warning for incompatible QNN variant', async () => {
+    it.each([
+      ['min', '8gen2', true, 'incompatible min device with 8gen2 model'],
+      ['8gen2', '8gen2', false, 'compatible same variant'],
+      ['8gen2', 'min', false, '8gen2 device compatible with all variants'],
+      ['8gen1', '8gen2', true, '8gen1 incompatible with 8gen2 model'],
+      ['8gen1', 'min', false, '8gen1 compatible with non-8gen2 variants'],
+    ])('QNN variant: %s device + %s model → incompatible=%s (%s)', async (deviceVariant, modelVariant, expectIncompatible) => {
       Object.defineProperty(Platform, 'OS', { value: 'android' });
       const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: 'min',
-      });
-
+      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: true, qnnVariant: deviceVariant });
       const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: '8gen2' });
-
+      const model = makeZipModelInfo({ backend: 'qnn', variant: modelVariant });
       await handleDownloadImageModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Incompatible Model' }),
-      );
-    });
-
-    it('proceeds for compatible QNN variant on Android', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: '8gen2',
-      });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: '8gen2' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('8gen2 device is compatible with all model variants', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: '8gen2',
-      });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: 'min' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
+      if (expectIncompatible) {
+        expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Incompatible Model' }));
+      } else {
+        expect(deps.addImageModelDownloading).toHaveBeenCalled();
+      }
     });
 
     it('proceeds for QNN with NPU but no variant info', async () => {
       Object.defineProperty(Platform, 'OS', { value: 'android' });
       const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: undefined,
-      });
-
+      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: true, qnnVariant: undefined });
       const deps = makeDeps();
       const model = makeZipModelInfo({ backend: 'qnn' });
-
       await handleDownloadImageModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('8gen1 device is incompatible with 8gen2 model variant', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: '8gen1',
-      });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: '8gen2' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Incompatible Model' }),
-      );
-    });
-
-    it('8gen1 device is compatible with non-8gen2 model variants', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({
-        hasNPU: true,
-        qnnVariant: '8gen1',
-      });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: 'min' });
-
-      await handleDownloadImageModel(model, deps);
-
       expect(deps.addImageModelDownloading).toHaveBeenCalled();
     });
   });

@@ -423,41 +423,31 @@ describe('ModelDownloadScreen', () => {
     expect(mockAppState.setDownloadProgress).toHaveBeenCalled();
   });
 
-  it('download calls onComplete callback and shows alert', async () => {
+  async function setupDownloadCompletion() {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
-
     const completedModel = {
-      id: 'test-model',
-      name: 'Test Model',
-      author: 'test',
-      fileName: 'model-Q4_K_M.gguf',
-      filePath: '/path',
-      fileSize: 4000000000,
-      quantization: 'Q4_K_M',
+      id: 'test-model', name: 'Test Model', author: 'test',
+      fileName: 'model-Q4_K_M.gguf', filePath: '/path',
+      fileSize: 4000000000, quantization: 'Q4_K_M',
       downloadedAt: new Date().toISOString(),
     };
-
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
     let capturedOnComplete: ((model: any) => void) | undefined;
     mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
       capturedOnComplete = onComplete;
     });
-
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
     for (let i = 0; i < 10; i++) {
       await act(async () => { await Promise.resolve(); });
     }
-
     const downloadBtn = result.getByTestId('recommended-model-0-download');
-    await act(async () => {
-      fireEvent.press(downloadBtn);
-    });
+    await act(async () => { fireEvent.press(downloadBtn); });
+    await act(async () => { capturedOnComplete?.(completedModel); });
+    return { result, completedModel };
+  }
 
-    // Simulate completion
-    await act(async () => {
-      capturedOnComplete?.(completedModel);
-    });
+  it('download calls onComplete callback and shows alert', async () => {
+    const { completedModel } = await setupDownloadCompletion();
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
     expect(mockAppState.setActiveModelId).toHaveBeenCalledWith('test-model');
@@ -469,39 +459,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('download complete alert Start Chatting navigates to Main', async () => {
-    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
-
-    const completedModel = {
-      id: 'test-model',
-      name: 'Test Model',
-      author: 'test',
-      fileName: 'model-Q4_K_M.gguf',
-      filePath: '/path',
-      fileSize: 4000000000,
-      quantization: 'Q4_K_M',
-      downloadedAt: new Date().toISOString(),
-    };
-
-    mockDownloadModelBackground.mockResolvedValue({ downloadId: 42 });
-    let capturedOnComplete: ((model: any) => void) | undefined;
-    mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
-      capturedOnComplete = onComplete;
-    });
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
-    await act(async () => {
-      fireEvent.press(downloadBtn);
-    });
-
-    await act(async () => {
-      capturedOnComplete?.(completedModel);
-    });
+    const { result } = await setupDownloadCompletion();
 
     const startChatBtn = result.getByTestId('alert-button-Start Chatting');
     fireEvent.press(startChatBtn);

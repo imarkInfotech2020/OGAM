@@ -103,40 +103,17 @@ describe('restoreInProgressDownloads', () => {
   // Filtering: status gating
   // ========================================================================
 
-  it('skips completed downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'completed' }) as any]);
+  it.each([
+    ['completed', 0],
+    ['failed', 0],
+    ['unknown', 0],
+    ['running', 1],
+    ['pending', 1],
+    ['paused', 1],
+  ])('handles %s downloads (expect size=%i)', async (status, expectedSize) => {
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status }) as any]);
     await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(0);
-  });
-
-  it('skips failed downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'failed' }) as any]);
-    await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(0);
-  });
-
-  it('skips unknown status downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'unknown' }) as any]);
-    await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(0);
-  });
-
-  it('processes running downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'running' }) as any]);
-    await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(1);
-  });
-
-  it('processes pending downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'pending' }) as any]);
-    await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(1);
-  });
-
-  it('processes paused downloads', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status: 'paused' }) as any]);
-    await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });
-    expect(bgContext.size).toBe(1);
+    expect(bgContext.size).toBe(expectedSize);
   });
 
   // ========================================================================
