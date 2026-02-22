@@ -24,6 +24,7 @@ import {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
 } from './download';
+import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
 import { restoreInProgressDownloads } from './restore';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
@@ -49,7 +50,6 @@ class ModelManager {
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
-  // Private delegates for test access via (modelManager as any).method()
   private resolveStoredPath(p: string, d: string) { return resolveStoredPath(p, d); }
   private determineCredibility(a: string) { return determineCredibility(a); }
   private isMMProjFile(f: string) { return isMMProjFile(f); }
@@ -57,7 +57,6 @@ class ModelManager {
   async initialize(): Promise<void> {
     const exists = await RNFS.exists(this.modelsDir);
     if (!exists) await RNFS.mkdir(this.modelsDir);
-
     const imageModelsExists = await RNFS.exists(this.imageModelsDir);
     if (!imageModelsExists) await RNFS.mkdir(this.imageModelsDir);
   }
@@ -132,9 +131,7 @@ class ModelManager {
     if (!this.isBackgroundDownloadSupported()) {
       throw new Error('Background downloads not supported on this platform');
     }
-
     await this.initialize();
-
     return performBackgroundDownload({
       modelId,
       file,
@@ -164,8 +161,6 @@ class ModelManager {
     if (!this.isBackgroundDownloadSupported()) {
       throw new Error('Background downloads not supported on this platform');
     }
-
-    // Also cancel parallel mmproj download if active
     const ctx = this.backgroundDownloadContext.get(downloadId);
     if (ctx && 'file' in ctx && ctx.mmProjDownloadId) {
       backgroundDownloadService.unmarkSilent(ctx.mmProjDownloadId);
@@ -184,12 +179,26 @@ class ModelManager {
     await this.initialize();
     return syncCompletedBackgroundDownloads({ persistedDownloads, modelsDir: this.modelsDir, clearDownloadCallback });
   }
+  async syncCompletedImageDownloads(
+    persistedDownloads: Record<number, PersistedDownloadInfo>,
+    clearDownloadCallback: (downloadId: number) => void,
+  ): Promise<ONNXImageModel[]> {
+    if (!this.isBackgroundDownloadSupported()) return [];
+    await this.initialize();
+    return syncCompletedImageDownloadsHelper({
+      imageModelsDir: this.imageModelsDir,
+      persistedDownloads,
+      clearDownloadCallback,
+      getDownloadedImageModels: () => this.getDownloadedImageModels(),
+      addDownloadedImageModel: (model) => this.addDownloadedImageModel(model),
+    });
+  }
 
   async restoreInProgressDownloads(
     persistedDownloads: Record<number, PersistedDownloadInfo>,
     onProgress?: DownloadProgressCallback,
-  ): Promise<void> {
-    if (!this.isBackgroundDownloadSupported()) return;
+  ): Promise<number[]> {
+    if (!this.isBackgroundDownloadSupported()) return [];
     await this.initialize();
     return restoreInProgressDownloads({
       persistedDownloads,
@@ -212,11 +221,6 @@ class ModelManager {
   stopBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.stopProgressPolling();
   }
-
-  /**
-   * Re-download just the mmproj file for a vision model whose mmproj is missing or incomplete.
-   * Uses the background download service so the transfer survives app backgrounding.
-   */
   async repairMmProj(
     modelId: string,
     file: ModelFile,
@@ -290,10 +294,7 @@ class ModelManager {
   async deleteImageModel(modelId: string): Promise<void> {
     const models = await this.getDownloadedImageModels();
     const model = models.find(m => m.id === modelId);
-
     if (!model) throw new Error('Image model not found');
-    // Always remove the top-level directory: for CoreML models, model.modelPath
-    // is a compiled subdirectory so unlinking it leaves tokenizer files behind.
     const topLevelDir = `${this.imageModelsDir}/${modelId}`;
     if (!topLevelDir.startsWith(`${this.imageModelsDir}/`)) {
       throw new Error('Invalid image model path: outside app directory');

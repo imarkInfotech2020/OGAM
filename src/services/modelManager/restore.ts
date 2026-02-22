@@ -52,15 +52,90 @@ async function resolveMmProjState(
 
 /** Build a ModelFile from persisted metadata. */
 function buildFileInfo(metadata: PersistedDownloadInfo): ModelFile {
+  const mainFileSize = metadata.mainFileSize ?? metadata.totalBytes;
+  const mmProjFileSize = metadata.mmProjFileSize ?? 0;
   return {
     name: metadata.fileName,
-    size: metadata.totalBytes,
+    size: mainFileSize,
     quantization: metadata.quantization,
     downloadUrl: '',
     mmProjFile: metadata.mmProjFileName
-      ? { name: metadata.mmProjFileName, downloadUrl: '', size: 0 }
+      ? { name: metadata.mmProjFileName, downloadUrl: '', size: mmProjFileSize }
       : undefined,
   };
+}
+
+interface RestoreEntryOpts {
+  download: BackgroundDownloadInfo;
+  metadata: PersistedDownloadInfo;
+  modelsDir: string;
+  activeDownloads: BackgroundDownloadInfo[];
+  backgroundDownloadContext: Map<number, BackgroundDownloadContext>;
+  backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
+  onProgress?: DownloadProgressCallback;
+}
+
+async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
+  const {
+    download,
+    metadata,
+    modelsDir,
+    activeDownloads,
+    backgroundDownloadContext,
+    backgroundDownloadMetadataCallback,
+    onProgress,
+  } = opts;
+
+  const localPath = `${modelsDir}/${metadata.fileName}`;
+  const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
+  const mainFileSize = metadata.mainFileSize ?? metadata.totalBytes;
+  const mmProjFileSize = metadata.mmProjFileSize ?? 0;
+  const combinedTotalBytes = metadata.totalBytes > 0
+    ? metadata.totalBytes
+    : mainFileSize + mmProjFileSize;
+  const mmProjDownloadId = metadata.mmProjDownloadId;
+  const fileInfo = buildFileInfo(metadata);
+
+  let mmProjCompleted = !mmProjDownloadId;
+  if (mmProjDownloadId) {
+    mmProjCompleted = await resolveMmProjState(mmProjDownloadId, mmProjLocalPath, activeDownloads);
+  }
+
+  const mmProjDownload = mmProjDownloadId
+    ? activeDownloads.find(d => d.downloadId === mmProjDownloadId)
+    : undefined;
+  let mainBytesDownloaded = download.bytesDownloaded;
+  let mmProjBytesDownloaded = mmProjCompleted
+    ? mmProjFileSize
+    : (mmProjDownload?.bytesDownloaded || 0);
+  const reportProgress = () => {
+    const combinedDownloaded = mainBytesDownloaded + mmProjBytesDownloaded;
+    onProgress?.({
+      modelId: metadata.modelId, fileName: metadata.fileName,
+      bytesDownloaded: combinedDownloaded, totalBytes: combinedTotalBytes,
+      progress: combinedTotalBytes > 0 ? combinedDownloaded / combinedTotalBytes : 0,
+    });
+  };
+
+  const removeProgressListener = backgroundDownloadService.onProgress(
+    download.downloadId, (event) => { mainBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+  );
+
+  let removeMmProjProgressListener: (() => void) | undefined;
+  if (mmProjDownloadId && !mmProjCompleted) {
+    backgroundDownloadService.markSilent(mmProjDownloadId);
+    removeMmProjProgressListener = backgroundDownloadService.onProgress(
+      mmProjDownloadId, (event) => { mmProjBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+    );
+  }
+
+  backgroundDownloadContext.set(download.downloadId, {
+    modelId: metadata.modelId, file: fileInfo, localPath, mmProjLocalPath,
+    removeProgressListener, mmProjDownloadId, mmProjCompleted, mainCompleted: false,
+    removeMmProjProgressListener,
+  });
+  backgroundDownloadMetadataCallback?.(download.downloadId, { ...metadata, mmProjLocalPath });
+  reportProgress();
 }
 
 /**
@@ -68,60 +143,31 @@ function buildFileInfo(metadata: PersistedDownloadInfo): ModelFile {
  * when the app was killed. Called on startup after syncCompletedBackgroundDownloads
  * so that any still-running download fires onComplete/onError correctly.
  */
-export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Promise<void> {
+export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Promise<number[]> {
   const { persistedDownloads, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
 
-  if (!backgroundDownloadService.isAvailable()) return;
+  if (!backgroundDownloadService.isAvailable()) return [];
 
   const activeDownloads = await backgroundDownloadService.getActiveDownloads();
+  const restoredDownloadIds: number[] = [];
 
   for (const download of activeDownloads) {
     if (!isRestorable(download)) continue;
     const metadata = persistedDownloads[download.downloadId];
     if (!metadata || backgroundDownloadContext.has(download.downloadId)) continue;
-
-    const localPath = `${modelsDir}/${metadata.fileName}`;
-    const mmProjLocalPath = metadata.mmProjLocalPath ?? null;
-    const combinedTotalBytes = metadata.totalBytes;
-    const mmProjDownloadId = metadata.mmProjDownloadId;
-    const fileInfo = buildFileInfo(metadata);
-
-    // Determine mmproj state
-    let mmProjCompleted = !mmProjDownloadId;
-    if (mmProjDownloadId) {
-      mmProjCompleted = await resolveMmProjState(mmProjDownloadId, mmProjLocalPath, activeDownloads);
-    }
-
-    // Combined progress tracking
-    let mainBytesDownloaded = 0;
-    let mmProjBytesDownloaded = mmProjCompleted ? (fileInfo.mmProjFile?.size || 0) : 0;
-    const reportProgress = () => {
-      const combinedDownloaded = mainBytesDownloaded + mmProjBytesDownloaded;
-      onProgress?.({
-        modelId: metadata.modelId, fileName: metadata.fileName,
-        bytesDownloaded: combinedDownloaded, totalBytes: combinedTotalBytes,
-        progress: combinedTotalBytes > 0 ? combinedDownloaded / combinedTotalBytes : 0,
-      });
-    };
-
-    const removeProgressListener = backgroundDownloadService.onProgress(
-      download.downloadId, (event) => { mainBytesDownloaded = event.bytesDownloaded; reportProgress(); },
-    );
-
-    let removeMmProjProgressListener: (() => void) | undefined;
-    if (mmProjDownloadId && !mmProjCompleted) {
-      backgroundDownloadService.markSilent(mmProjDownloadId);
-      removeMmProjProgressListener = backgroundDownloadService.onProgress(
-        mmProjDownloadId, (event) => { mmProjBytesDownloaded = event.bytesDownloaded; reportProgress(); },
-      );
-    }
-
-    backgroundDownloadContext.set(download.downloadId, {
-      modelId: metadata.modelId, file: fileInfo, localPath, mmProjLocalPath,
-      removeProgressListener, mmProjDownloadId, mmProjCompleted, mainCompleted: false,
-      removeMmProjProgressListener,
+    // Image model restoration is handled by image-specific recovery logic.
+    if (metadata.modelId.startsWith('image:')) continue;
+    await restoreDownloadEntry({
+      download,
+      metadata,
+      modelsDir,
+      activeDownloads,
+      backgroundDownloadContext,
+      backgroundDownloadMetadataCallback,
+      onProgress,
     });
-
-    backgroundDownloadMetadataCallback?.(download.downloadId, { ...metadata, mmProjLocalPath });
+    restoredDownloadIds.push(download.downloadId);
   }
+
+  return restoredDownloadIds;
 }

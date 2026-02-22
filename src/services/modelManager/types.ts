@@ -13,7 +13,9 @@ export type BackgroundDownloadMetadataCallback = (
     quantization: string;
     author: string;
     totalBytes: number;
+    mainFileSize?: number;
     mmProjFileName?: string;
+    mmProjFileSize?: number;
     mmProjLocalPath?: string | null;
     mmProjDownloadId?: number;
   } | null

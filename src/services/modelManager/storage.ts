@@ -175,6 +175,15 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
   const stat = await RNFS.stat(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
   const mmProjFile = file.mmProjFile;
+  let mmProjFileSize = mmProjPath ? mmProjFile?.size : undefined;
+  if (mmProjPath) {
+    try {
+      const mmStat = await RNFS.stat(mmProjPath);
+      mmProjFileSize = typeof mmStat.size === 'string' ? parseInt(mmStat.size, 10) : mmStat.size;
+    } catch {
+      // Keep fallback size from metadata.
+    }
+  }
 
   return {
     id: `${modelId}/${file.name}`,
@@ -189,7 +198,7 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     isVisionModel: !!mmProjPath,
     mmProjPath,
     mmProjFileName: mmProjPath ? mmProjFile?.name : undefined,
-    mmProjFileSize: mmProjPath ? mmProjFile?.size : undefined,
+    mmProjFileSize,
   };
 }
 

@@ -212,7 +212,7 @@ describe('restoreInProgressDownloads', () => {
 
   it('does not throw when metadataCallback is null', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: 42 }) as any]);
-    await expect(callRestore({ persistedDownloads: { 42: makePersistedInfo() }, metadataCallback: null })).resolves.toBeUndefined();
+    await expect(callRestore({ persistedDownloads: { 42: makePersistedInfo() }, metadataCallback: null })).resolves.toEqual([42]);
   });
 
   // ========================================================================
@@ -275,7 +275,7 @@ describe('restoreInProgressDownloads', () => {
 
   it('does not throw when onProgress is undefined', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: 42 }) as any]);
-    await expect(callRestore({ persistedDownloads: { 42: makePersistedInfo() }, metadataCallback: null })).resolves.toBeUndefined();
+    await expect(callRestore({ persistedDownloads: { 42: makePersistedInfo() }, metadataCallback: null })).resolves.toEqual([42]);
   });
 
   // ========================================================================

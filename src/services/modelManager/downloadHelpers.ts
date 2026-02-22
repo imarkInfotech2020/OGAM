@@ -116,6 +116,7 @@ export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts):
   for (const download of activeDownloads) {
     const metadata = persistedDownloads[download.downloadId];
     if (!metadata) continue;
+    if (metadata.modelId.startsWith('image:')) continue;
 
     if (download.status === 'completed') {
       if (isMmProjStillRunning(metadata, activeDownloads)) continue;
@@ -125,10 +126,14 @@ export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts):
         await backgroundDownloadService.moveCompletedDownload(download.downloadId, localPath);
         const finalMmProjPath = await resolveMmProjPath(metadata);
 
+        const mainFileSize = metadata.mainFileSize ?? metadata.totalBytes;
+        const mmProjFileSize = metadata.mmProjFileSize ?? 0;
         const fileInfo: ModelFile = {
-          name: metadata.fileName, size: metadata.totalBytes,
+          name: metadata.fileName, size: mainFileSize,
           quantization: metadata.quantization, downloadUrl: '',
-          mmProjFile: metadata.mmProjFileName ? { name: metadata.mmProjFileName, size: 0, downloadUrl: '' } : undefined,
+          mmProjFile: metadata.mmProjFileName
+            ? { name: metadata.mmProjFileName, size: mmProjFileSize, downloadUrl: '' }
+            : undefined,
         };
 
         const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });

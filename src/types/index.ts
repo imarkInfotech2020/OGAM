@@ -64,7 +64,9 @@ export interface PersistedDownloadInfo {
   quantization: string;
   author: string;
   totalBytes: number;
+  mainFileSize?: number;
   mmProjFileName?: string;
+  mmProjFileSize?: number;
   mmProjLocalPath?: string | null;
   mmProjDownloadId?: number;
   // Image model metadata (for restoring downloads after app kill)
@@ -327,7 +329,6 @@ export interface BackgroundDownloadInfo {
   completedAt?: number;
   failureReason?: string;
 }
-
 export interface DebugInfo {
   systemPrompt: string;
   originalMessageCount: number;

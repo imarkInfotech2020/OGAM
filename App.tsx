@@ -77,7 +77,12 @@ function App() {
       await modelManager.cleanupMMProjEntries();
 
       // Wire up background download metadata persistence
-      const { setBackgroundDownload, activeBackgroundDownloads, addDownloadedModel } = useAppStore.getState();
+      const {
+        setBackgroundDownload,
+        activeBackgroundDownloads,
+        addDownloadedModel,
+        setDownloadProgress,
+      } = useAppStore.getState();
       modelManager.setBackgroundDownloadMetadataCallback((downloadId, info) => {
         setBackgroundDownload(downloadId, info);
       });
@@ -96,10 +101,49 @@ function App() {
         logger.error('[App] Failed to sync background downloads:', err);
       }
 
+      // Recover completed image downloads (zip unzip / multifile finalization)
+      try {
+        const recoveredImageModels = await modelManager.syncCompletedImageDownloads(
+          activeBackgroundDownloads,
+          (downloadId) => setBackgroundDownload(downloadId, null),
+        );
+        for (const model of recoveredImageModels) {
+          logger.log('[App] Recovered image download:', model.name);
+        }
+      } catch (err) {
+        logger.error('[App] Failed to sync completed image downloads:', err);
+      }
+
       // Re-wire event listeners for downloads that were still running when the
       // app was killed (running/pending status in Android DownloadManager).
       try {
-        await modelManager.restoreInProgressDownloads(activeBackgroundDownloads);
+        const restoredDownloadIds = await modelManager.restoreInProgressDownloads(
+          activeBackgroundDownloads,
+          (progress) => {
+            const key = `${progress.modelId}/${progress.fileName}`;
+            setDownloadProgress(key, {
+              progress: progress.progress,
+              bytesDownloaded: progress.bytesDownloaded,
+              totalBytes: progress.totalBytes,
+            });
+          },
+        );
+        for (const downloadId of restoredDownloadIds) {
+          const metadata = activeBackgroundDownloads[downloadId];
+          const progressKey = metadata ? `${metadata.modelId}/${metadata.fileName}` : null;
+          modelManager.watchDownload(
+            downloadId,
+            (model) => {
+              if (progressKey) setDownloadProgress(progressKey, null);
+              addDownloadedModel(model);
+              logger.log('[App] Restored in-progress download completed:', model.name);
+            },
+            (error) => {
+              if (progressKey) setDownloadProgress(progressKey, null);
+              logger.error('[App] Restored in-progress download failed:', error);
+            },
+          );
+        }
       } catch (err) {
         logger.error('[App] Failed to restore in-progress downloads:', err);
       }
