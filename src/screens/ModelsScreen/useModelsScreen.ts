@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
@@ -7,8 +7,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
-import { modelManager, backgroundDownloadService } from '../../services';
-import logger from '../../utils/logger';
+import { modelManager } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
@@ -16,6 +15,7 @@ import { initialFilterState } from './constants';
 import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
+import { useNotifRationale } from './useNotifRationale';
 
 export function useModelsScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -24,13 +24,20 @@ export function useModelsScreen() {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
-  const [showNotifRationale, setShowNotifRationale] = useState(false);
-  const pendingDownload = useRef<(() => void) | null>(null);
 
   const { addDownloadedModel, activeImageModelId, setActiveImageModelId, addDownloadedImageModel } = useAppStore();
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);
+
+  const isFirstDownload =
+    text.downloadedModels.length === 0 && image.downloadedImageModels.length === 0;
+  const {
+    showNotifRationale,
+    maybeShowNotifRationale,
+    handleNotifRationaleAllow,
+    handleNotifRationaleDismiss,
+  } = useNotifRationale(isFirstDownload);
 
   useEffect(() => {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
@@ -132,25 +139,6 @@ export function useModelsScreen() {
     image.downloadedImageModels.length +
     Object.keys(text.downloadProgress).length;
 
-  const isFirstDownload =
-    text.downloadedModels.length === 0 && image.downloadedImageModels.length === 0;
-
-  const maybeShowNotifRationale = useCallback(async (proceed: () => void) => {
-    if (Platform.OS !== 'android' || Platform.Version < 33 || !isFirstDownload) {
-      proceed();
-      return;
-    }
-    const alreadyGranted = await PermissionsAndroid.check(
-      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-    );
-    if (alreadyGranted) {
-      proceed();
-      return;
-    }
-    pendingDownload.current = proceed;
-    setShowNotifRationale(true);
-  }, [isFirstDownload]);
-
   const handleDownload = useCallback(
     (...args: Parameters<typeof text.handleDownload>) => {
       maybeShowNotifRationale(() => text.handleDownload(...args));
@@ -164,23 +152,6 @@ export function useModelsScreen() {
     },
     [maybeShowNotifRationale, image],
   );
-
-  const handleNotifRationaleAllow = useCallback(() => {
-    setShowNotifRationale(false);
-    backgroundDownloadService
-      .requestNotificationPermission()
-      .catch((err) => logger.warn('Failed to request notification permission', err))
-      .finally(() => {
-        pendingDownload.current?.();
-        pendingDownload.current = null;
-      });
-  }, []);
-
-  const handleNotifRationaleDismiss = useCallback(() => {
-    setShowNotifRationale(false);
-    pendingDownload.current?.();
-    pendingDownload.current = null;
-  }, []);
 
   return {
     navigation,
