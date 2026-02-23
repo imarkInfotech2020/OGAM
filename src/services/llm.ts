@@ -85,6 +85,16 @@ class LLMService {
 
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) return false;
+    try {
+      const stat = await RNFS.stat(mmProjPath);
+      const sizeMB = (Number(stat.size) / (1024 * 1024)).toFixed(1);
+      logger.log(`[LLM] mmproj file size: ${sizeMB} MB`);
+      if (Number(stat.size) < 100 * 1024 * 1024) {
+        console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB) - may be incomplete download!`);
+      }
+    } catch (statErr) {
+      console.error('[LLM] Failed to stat mmproj file:', statErr);
+    }
     const deviceInfo = useAppStore.getState().deviceInfo;
     const useGpuForClip = Platform.OS === 'ios' && !deviceInfo?.isEmulator;
     const { initialized, support } = await initMultimodal(this.context, mmProjPath, useGpuForClip);
@@ -180,17 +190,13 @@ class LLMService {
     messages: Message[],
     options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback },
   ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
-    return generateWithToolsImpl(
-      {
-        context: this.context, isGenerating: this.isGenerating,
-        manageContextWindow: (msgs) => this.manageContextWindow(msgs),
-        convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
-        setPerformanceStats: (s) => { this.performanceStats = s; },
-        setIsGenerating: (v) => { this.isGenerating = v; },
-      },
-      messages,
-      options,
-    );
+    return generateWithToolsImpl({
+      context: this.context, isGenerating: this.isGenerating,
+      manageContextWindow: (msgs) => this.manageContextWindow(msgs),
+      convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
+      setPerformanceStats: (s) => { this.performanceStats = s; },
+      setIsGenerating: (v) => { this.isGenerating = v; },
+    }, messages, options);
   }
 
   private async manageContextWindow(messages: Message[]): Promise<Message[]> {
@@ -254,33 +260,22 @@ class LLMService {
 
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
 
-  private formatMessages(messages: Message[]): string {
-    return formatLlamaMessages(messages, this.supportsVision());
-  }
-
-  private getImageUris(messages: Message[]): string[] {
-    return extractImageUris(messages);
-  }
-
-  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
-    return buildOAIMessages(messages);
-  }
+  private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision()); }
+  private getImageUris(messages: Message[]): string[] { return extractImageUris(messages); }
+  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages); }
 
   async getModelInfo(): Promise<{ contextLength: number; vocabSize: number } | null> {
-    if (!this.context) return null;
-    return { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 };
+    return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null;
   }
 
   async tokenize(text: string): Promise<number[]> {
     if (!this.context) throw new Error('No model loaded');
-    const result = await this.context.tokenize(text);
-    return result.tokens || [];
+    return (await this.context.tokenize(text)).tokens || [];
   }
 
   async getTokenCount(text: string): Promise<number> {
     if (!this.context) throw new Error('No model loaded');
-    const result = await this.context.tokenize(text);
-    return result.tokens?.length || 0;
+    return (await this.context.tokenize(text)).tokens?.length || 0;
   }
 
   async estimateContextUsage(messages: Message[]): Promise<{ tokenCount: number; percentUsed: number; willFit: boolean }> {
