@@ -117,7 +117,8 @@ class LLMService {
   private detectToolCallingSupport(): void {
     if (!this.context) { this.toolCallingSupported = false; return; }
     try {
-      const jinja = (this.context as any).model?.chatTemplates?.jinja;
+      const model = (this.context as any)?.model;
+      const jinja = model?.chatTemplates?.jinja;
       this.toolCallingSupported = !!(jinja?.defaultCaps?.toolCalls || jinja?.toolUse || jinja?.toolUseCaps?.toolCalls);
     } catch {
       this.toolCallingSupported = false;

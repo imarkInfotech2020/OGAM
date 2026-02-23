@@ -13,13 +13,11 @@ type CompleteCallback = (fullResponse: string) => void;
 
 function parseToolCall(tc: any): ToolCall {
   const fn = tc.function || {};
-  return {
-    id: tc.id,
-    name: fn.name || '',
-    arguments: typeof fn.arguments === 'string'
-      ? JSON.parse(fn.arguments || '{}')
-      : fn.arguments || {},
-  };
+  let args = fn.arguments || {};
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args || '{}'); } catch { args = {}; }
+  }
+  return { id: tc.id, name: fn.name || '', arguments: args };
 }
 
 export interface ToolGenerationDeps {

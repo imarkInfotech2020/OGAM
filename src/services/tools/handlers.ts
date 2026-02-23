@@ -130,11 +130,18 @@ function decodeHTMLEntities(text: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, '/');
+    .replace(/&#x2F;/g, '/')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 }
 
 function handleCalculator(expression: string): string {
-  // Validate: only allow numbers, operators, parentheses, whitespace, decimal points
+  // Validate: only allow numbers, operators, parentheses, whitespace, decimal points.
+  // SECURITY: The strict regex allowlist below ensures only numeric chars and math
+  // operators reach new Function(). No identifiers, strings, or property access
+  // can pass, so code injection is not possible.
   const sanitized = expression.replace(/\s/g, '');
   if (!/^[0-9+\-*/().,%^]+$/.test(sanitized)) {
     throw new Error('Invalid expression: only numbers and basic operators (+, -, *, /, ^, %, parentheses) are allowed');
