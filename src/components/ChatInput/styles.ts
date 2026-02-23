@@ -109,6 +109,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden' as const,
     paddingLeft: 14,
     paddingRight: 4,
     paddingVertical: 4,

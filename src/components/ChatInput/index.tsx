@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, TextInput, TouchableOpacity, Text, Animated } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -50,6 +50,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const focusAnim = useRef(new Animated.Value(0)).current;
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    Animated.timing(focusAnim, { toValue: 1, duration: 180, useNativeDriver: false }).start();
+  }, [focusAnim]);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    Animated.timing(focusAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+  }, [focusAnim]);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
 
@@ -149,8 +161,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             editable={!disabled}
             blurOnSubmit={false}
             returnKeyType="default"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
           />
-          <View style={styles.pillIcons}>
+          {/* Icons slide right and collapse width on focus */}
+          <Animated.View
+            pointerEvents={isFocused ? 'none' : 'auto'}
+            style={[styles.pillIcons, {
+              width: focusAnim.interpolate({ inputRange: [0, 1], outputRange: [108, 0] }),
+              opacity: focusAnim.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' }),
+            }]}
+          >
             {/* Attachment button */}
             <TouchableOpacity
               testID="document-picker-button"
@@ -205,10 +226,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <Text style={styles.iconBadgeText}>{imgState.badge}</Text>
               </View>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </View>
 
-        {/* Circular action button */}
+        {/* Circular action button — always visible */}
         {canSend ? (
           <TouchableOpacity
             testID="send-button"
