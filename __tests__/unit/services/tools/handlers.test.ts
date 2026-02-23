@@ -6,7 +6,6 @@
  * Priority: P0 (Critical) - Tool execution drives assistant capabilities.
  */
 
-import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { executeToolCall } from '../../../../src/services/tools/handlers';
 import { ToolCall } from '../../../../src/services/tools/types';
@@ -205,10 +204,10 @@ describe('Tool Handlers', () => {
   // Web Search (mock fetch)
   // ==========================================================================
   describe('Web Search', () => {
-    const originalFetch = global.fetch;
+    const originalFetch = (globalThis as any).fetch;
 
     afterEach(() => {
-      global.fetch = originalFetch;
+      (globalThis as any).fetch = originalFetch;
     });
 
     it('returns formatted results when fetch succeeds', async () => {
@@ -225,7 +224,7 @@ describe('Tool Handlers', () => {
         },
       ]);
 
-      global.fetch = jest.fn().mockResolvedValue({
+      (globalThis as any).fetch = jest.fn().mockResolvedValue({
         text: jest.fn().mockResolvedValue(html),
       });
 
@@ -241,7 +240,7 @@ describe('Tool Handlers', () => {
     });
 
     it('returns "No results" when HTML has no results', async () => {
-      global.fetch = jest.fn().mockResolvedValue({
+      (globalThis as any).fetch = jest.fn().mockResolvedValue({
         text: jest.fn().mockResolvedValue('<html><body>No matching documents</body></html>'),
       });
 
@@ -254,7 +253,7 @@ describe('Tool Handlers', () => {
     });
 
     it('handles fetch timeout/error gracefully', async () => {
-      global.fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
+      (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
 
       const result = await executeToolCall(
         makeToolCall('web_search', { query: 'test query' }),
