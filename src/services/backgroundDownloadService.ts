@@ -228,12 +228,6 @@ class BackgroundDownloadService {
     try {
       await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-        {
-          title: 'Notification Permission',
-          message: 'Allow Off Grid to show download progress notifications.',
-          buttonPositive: 'Allow',
-          buttonNegative: 'Deny',
-        },
       );
     } catch {
       // Non-fatal — download still works, just no system notification

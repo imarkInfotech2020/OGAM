@@ -1,12 +1,12 @@
-import React, { useState, useRef } from 'react';
-import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, TextInput, TouchableOpacity, Text, Animated } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
 import { VoiceRecordButton } from '../VoiceRecordButton';
 import { triggerHaptic } from '../../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
-import { createStyles } from './styles';
+import { createStyles, PILL_ICONS_WIDTH, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
@@ -50,6 +50,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const inputRef = useRef<TextInput>(null);
+  const hasText = message.length > 0;
+  const iconsAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(iconsAnim, {
+      toValue: hasText ? 1 : 0,
+      duration: hasText ? ANIM_DURATION_IN : ANIM_DURATION_OUT,
+      useNativeDriver: false,
+    }).start();
+  }, [hasText, iconsAnim]);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
 
@@ -150,7 +160,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             blurOnSubmit={false}
             returnKeyType="default"
           />
-          <View style={styles.pillIcons}>
+          {/* Icons collapse when user starts typing, reappear when input is empty */}
+          <Animated.View
+            pointerEvents={hasText ? 'none' : 'auto'}
+            style={[styles.pillIcons, {
+              width: iconsAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
+              opacity: iconsAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
+              overflow: 'hidden' as const,
+            }]}
+          >
             {/* Attachment button */}
             <TouchableOpacity
               testID="document-picker-button"
@@ -205,10 +223,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <Text style={styles.iconBadgeText}>{imgState.badge}</Text>
               </View>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
         </View>
 
-        {/* Circular action button */}
+        {/* Circular action button — always visible */}
         {canSend ? (
           <TouchableOpacity
             testID="send-button"

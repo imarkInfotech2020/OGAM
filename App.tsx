@@ -11,7 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService, backgroundDownloadService } from './src/services';
+import { hardwareService, modelManager, authService } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
@@ -74,10 +74,6 @@ function App() {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
-
-      // Request POST_NOTIFICATIONS permission on Android 13+ so system
-      // DownloadManager shows progress notifications.
-      backgroundDownloadService.requestNotificationPermission().catch((err) => logger.warn('Failed to request notification permission', err));
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection

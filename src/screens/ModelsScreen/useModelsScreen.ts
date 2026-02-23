@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
@@ -15,6 +15,7 @@ import { initialFilterState } from './constants';
 import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
+import { useNotifRationale } from './useNotifRationale';
 
 export function useModelsScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -28,6 +29,15 @@ export function useModelsScreen() {
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);
+
+  const isFirstDownload =
+    text.downloadedModels.length === 0 && image.downloadedImageModels.length === 0;
+  const {
+    showNotifRationale,
+    maybeShowNotifRationale,
+    handleNotifRationaleAllow,
+    handleNotifRationaleDismiss,
+  } = useNotifRationale(isFirstDownload);
 
   useEffect(() => {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
@@ -129,6 +139,20 @@ export function useModelsScreen() {
     image.downloadedImageModels.length +
     Object.keys(text.downloadProgress).length;
 
+  const handleDownload = useCallback(
+    (...args: Parameters<typeof text.handleDownload>) => {
+      maybeShowNotifRationale(() => text.handleDownload(...args));
+    },
+    [maybeShowNotifRationale, text],
+  );
+
+  const handleDownloadImageModel = useCallback(
+    (...args: Parameters<typeof image.handleDownloadImageModel>) => {
+      maybeShowNotifRationale(() => image.handleDownloadImageModel(...args));
+    },
+    [maybeShowNotifRationale, image],
+  );
+
   return {
     navigation,
     focusTrigger,
@@ -165,7 +189,7 @@ export function useModelsScreen() {
     recommendedAsModelInfo: text.recommendedAsModelInfo,
     handleSearch: text.handleSearch,
     handleSelectModel: text.handleSelectModel,
-    handleDownload: text.handleDownload,
+    handleDownload,
     handleRepairMmProj: text.handleRepairMmProj,
     handleCancelDownload: text.handleCancelDownload,
     downloadIds: text.downloadIds,
@@ -208,7 +232,10 @@ export function useModelsScreen() {
     loadHFModels: image.loadHFModels,
     clearImageFilters: image.clearImageFilters,
     isRecommendedModel: image.isRecommendedModel,
-    handleDownloadImageModel: image.handleDownloadImageModel,
+    handleDownloadImageModel,
+    showNotifRationale,
+    handleNotifRationaleAllow,
+    handleNotifRationaleDismiss,
     setUserChangedBackendFilter: image.setUserChangedBackendFilter,
   };
 }

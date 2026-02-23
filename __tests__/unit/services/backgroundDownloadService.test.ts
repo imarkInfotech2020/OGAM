@@ -846,7 +846,6 @@ describe('BackgroundDownloadService', () => {
 
       expect(PermissionsAndroid.request).toHaveBeenCalledWith(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-        expect.any(Object),
       );
     });
 

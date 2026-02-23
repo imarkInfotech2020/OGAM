@@ -1830,4 +1830,94 @@ describe('ChatInput', () => {
       jest.useRealTimers();
     });
   });
+
+  // ============================================================================
+  // Icon collapse animation (triggered by text content)
+  // ============================================================================
+  describe('icon collapse animation', () => {
+    it('starts Animated.timing to collapse when text is entered', () => {
+      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      fireEvent.changeText(getByTestId('chat-input'), 'a');
+
+      expect(timingSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ toValue: 1 }),
+      );
+      timingSpy.mockRestore();
+    });
+
+    it('starts Animated.timing to expand when text is cleared', () => {
+      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      fireEvent.changeText(getByTestId('chat-input'), 'a');
+      timingSpy.mockClear();
+      fireEvent.changeText(getByTestId('chat-input'), '');
+
+      expect(timingSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ toValue: 0 }),
+      );
+      timingSpy.mockRestore();
+    });
+
+    it('disables pointer events on pill icons when text is present', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      // Before typing, icons should be interactive
+      expect(getByTestId('document-picker-button')).toBeTruthy();
+
+      fireEvent.changeText(getByTestId('chat-input'), 'hello');
+
+      // After typing, the Animated.View wrapping icons should have pointerEvents='none'
+      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
+      expect(pointerNoneViews.length).toBeGreaterThan(0);
+    });
+
+    it('re-enables pointer events on pill icons when text is cleared', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.changeText(getByTestId('chat-input'), 'hello');
+      fireEvent.changeText(getByTestId('chat-input'), '');
+
+      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
+      expect(pointerNoneViews.length).toBe(0);
+    });
+
+    it('icons remain accessible when input is empty', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} supportsVision={true} imageModelLoaded={true} />
+      );
+
+      // All three icons should be pressable when no text
+      expect(getByTestId('document-picker-button')).toBeTruthy();
+      expect(getByTestId('camera-button')).toBeTruthy();
+      expect(getByTestId('image-mode-toggle')).toBeTruthy();
+    });
+
+    it('send button remains visible when text is entered', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent.changeText(getByTestId('chat-input'), 'Hello');
+
+      // Send button should be accessible while typing
+      expect(getByTestId('send-button')).toBeTruthy();
+    });
+
+    it('stop button remains visible when generating with no text', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
+      );
+
+      expect(getByTestId('stop-button')).toBeTruthy();
+    });
+  });
 });
