@@ -17,7 +17,6 @@ export const ImageGenerationSection: React.FC = () => {
 
   return (
     <Card style={styles.section}>
-      <Text style={styles.sectionTitle}>Image Generation</Text>
       <Text style={styles.settingHelp}>
         Control how image generation requests are handled in chat.
       </Text>

@@ -5,6 +5,7 @@ import { Card } from '../../components';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { CacheType } from '../../types';
 import { createStyles } from './styles';
 
 export const PerformanceSection: React.FC = () => {
@@ -28,7 +29,6 @@ export const PerformanceSection: React.FC = () => {
 
   return (
     <Card style={styles.section}>
-      <Text style={styles.sectionTitle}>Performance</Text>
       <Text style={styles.settingHelp}>Tune inference speed and memory usage.</Text>
 
       <View style={styles.sliderSection}>
@@ -93,6 +93,32 @@ export const PerformanceSection: React.FC = () => {
           trackColor={trackColor}
           thumbColor={isFlashAttnOn ? colors.primary : colors.textMuted}
         />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleLabel}>KV Cache Type</Text>
+          <Text style={styles.toggleDesc}>
+            {(settings?.cacheType ?? 'q8_0') === 'f16'
+              ? 'Full precision — best quality, highest memory usage'
+              : (settings?.cacheType ?? 'q8_0') === 'q8_0'
+                ? '8-bit quantized — good balance of quality and memory'
+                : '4-bit quantized — lowest memory, may reduce quality'}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.strategyButtons}>
+        {(['f16', 'q8_0', 'q4_0'] as CacheType[]).map((ct) => (
+          <Button
+            key={ct}
+            title={ct}
+            variant="secondary"
+            size="small"
+            active={(settings?.cacheType ?? 'q8_0') === ct}
+            onPress={() => updateSettings({ cacheType: ct })}
+            style={styles.flex1}
+          />
+        ))}
       </View>
 
       <View style={styles.toggleRow}>

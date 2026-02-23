@@ -58,15 +58,15 @@ export interface ModelLoadParams {
 
 export function buildModelParams(
   modelPath: string,
-  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number },
+  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string },
 ): ModelLoadParams {
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
   const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
-  const useFlashAttn = settings.flashAttn ?? (Platform.OS !== 'android');
+  const useFlashAttn = settings.flashAttn ?? true;
   const gpuEnabled = settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  const cacheType = useFlashAttn ? 'q8_0' : 'f16';
+  const cacheType = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
   return {
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_threads: nThreads,

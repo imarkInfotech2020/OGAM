@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage, PersistedDownloadInfo } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, GeneratedImage, PersistedDownloadInfo } from '../types';
 
 interface AppState {
   // Theme
@@ -79,8 +79,12 @@ interface AppState {
     gpuLayers: number;
     // Flash attention: faster but incompatible with Android Hexagon/OpenCL multi-layer GPU offload
     flashAttn: boolean;
+    // KV cache quantization type: f16 (default), q8_0 (good compression), q4_0 (max compression)
+    cacheType: CacheType;
     // Show generation details (GPU, model, tok/s, steps, etc.) in chat messages
     showGenerationDetails: boolean;
+    // Tool calling: list of enabled tool IDs
+    enabledTools: string[];
   };
   updateSettings: (settings: Partial<AppState['settings']>) => void;
   downloadedImageModels: ONNXImageModel[];
@@ -205,8 +209,10 @@ export const useAppStore = create<AppState>()(
         modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
         enableGpu: false,
         gpuLayers: 6,
-        flashAttn: Platform.OS !== 'android',
+        flashAttn: true,
+        cacheType: 'q8_0' as CacheType,
         showGenerationDetails: false,
+        enabledTools: ['calculator', 'get_current_datetime'],
       },
       updateSettings: (newSettings) =>
         set((state) => ({
@@ -305,6 +311,12 @@ export const useAppStore = create<AppState>()(
         // and the value matches the old default exactly, indicating the user never changed it.
         if (persistedState && (persistedState as any).settings?.modelLoadingStrategy === 'memory') {
           merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+        }
+        // Migrate: add cacheType if missing, derive from old flashAttn value
+        if (persistedState && (persistedState as any).settings && !((persistedState as any).settings.cacheType)) {
+          const oldFlashAttn = (persistedState as any).settings.flashAttn;
+          const derivedCacheType = oldFlashAttn ? 'q8_0' : 'f16';
+          merged.settings = { ...merged.settings, cacheType: derivedCacheType, flashAttn: true };
         }
         // Migrate old number|null → Record
         if (typeof merged.imageModelDownloadId === 'number') {

@@ -116,4 +116,20 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     lineHeight: 18,
   },
   buttonRow: { flexDirection: 'row' as const, gap: SPACING.sm },
+  systemPromptContainer: {
+    marginBottom: SPACING.md,
+  },
+  accordionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  accordionTitle: {
+    ...TYPOGRAPHY.label,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 1,
+  },
 });

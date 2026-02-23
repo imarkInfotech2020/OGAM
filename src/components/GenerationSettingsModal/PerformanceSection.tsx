@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { CacheType } from '../../types';
 import { createStyles } from './styles';
 
 // ─── GPU Acceleration ─────────────────────────────────────────────────────────
@@ -123,6 +124,43 @@ const FlashAttentionToggle: React.FC = () => {
   );
 };
 
+// ─── KV Cache Type ───────────────────────────────────────────────────────────
+
+const CACHE_TYPE_DESC: Record<CacheType, string> = {
+  f16: 'Full precision — best quality, highest memory usage',
+  q8_0: '8-bit quantized — good balance of quality and memory',
+  q4_0: '4-bit quantized — lowest memory, may reduce quality',
+};
+
+const KvCacheTypeToggle: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const current: CacheType = settings.cacheType ?? 'q8_0';
+
+  return (
+    <View style={styles.modeToggleContainer}>
+      <View style={styles.modeToggleInfo}>
+        <Text style={styles.modeToggleLabel}>KV Cache Type</Text>
+        <Text style={styles.modeToggleDesc}>{CACHE_TYPE_DESC[current]}</Text>
+      </View>
+      <View style={styles.modeToggleButtons}>
+        {(['f16', 'q8_0', 'q4_0'] as CacheType[]).map((ct) => (
+          <TouchableOpacity
+            key={ct}
+            testID={`cache-type-${ct}-button`}
+            style={[styles.modeButton, current === ct && styles.modeButtonActive]}
+            onPress={() => updateSettings({ cacheType: ct })}
+          >
+            <Text style={[styles.modeButtonText, current === ct && styles.modeButtonTextActive]}>
+              {ct}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
 // ─── Model Loading Strategy ───────────────────────────────────────────────────
 
 const ModelLoadingStrategyToggle: React.FC = () => {
@@ -205,6 +243,7 @@ export const PerformanceSection: React.FC = () => {
     <View style={styles.sectionCard}>
       {Platform.OS !== 'ios' && <GpuAccelerationToggle />}
       <FlashAttentionToggle />
+      <KvCacheTypeToggle />
       <ModelLoadingStrategyToggle />
       <ShowGenerationDetailsToggle />
     </View>
