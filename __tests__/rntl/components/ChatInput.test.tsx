@@ -1830,4 +1830,98 @@ describe('ChatInput', () => {
       jest.useRealTimers();
     });
   });
+
+  // ============================================================================
+  // Focus animation (icon collapse)
+  // ============================================================================
+  describe('focus animation', () => {
+    it('starts Animated.timing on focus', () => {
+      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      fireEvent(getByTestId('chat-input'), 'focus');
+
+      expect(timingSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ toValue: 1 }),
+      );
+      timingSpy.mockRestore();
+    });
+
+    it('starts Animated.timing on blur', () => {
+      const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      fireEvent(getByTestId('chat-input'), 'focus');
+      timingSpy.mockClear();
+      fireEvent(getByTestId('chat-input'), 'blur');
+
+      expect(timingSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ toValue: 0 }),
+      );
+      timingSpy.mockRestore();
+    });
+
+    it('disables pointer events on pill icons when focused', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      // Before focus, icons should be interactive
+      expect(getByTestId('document-picker-button')).toBeTruthy();
+
+      fireEvent(getByTestId('chat-input'), 'focus');
+
+      // After focus, the Animated.View wrapping icons should have pointerEvents='none'
+      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
+      expect(pointerNoneViews.length).toBeGreaterThan(0);
+    });
+
+    it('re-enables pointer events on pill icons after blur', () => {
+      const { getByTestId, UNSAFE_queryAllByProps } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      fireEvent(getByTestId('chat-input'), 'focus');
+      fireEvent(getByTestId('chat-input'), 'blur');
+
+      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
+      expect(pointerNoneViews.length).toBe(0);
+    });
+
+    it('icons remain accessible when input is not focused', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} supportsVision={true} imageModelLoaded={true} />
+      );
+
+      // All three icons should be pressable when not focused
+      expect(getByTestId('document-picker-button')).toBeTruthy();
+      expect(getByTestId('camera-button')).toBeTruthy();
+      expect(getByTestId('image-mode-toggle')).toBeTruthy();
+    });
+
+    it('send button remains visible during focus', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} />
+      );
+
+      const input = getByTestId('chat-input');
+      fireEvent.changeText(input, 'Hello');
+      fireEvent(input, 'focus');
+
+      // Send button should still be accessible while typing
+      expect(getByTestId('send-button')).toBeTruthy();
+    });
+
+    it('stop button remains visible during focus when generating', () => {
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
+      );
+
+      fireEvent(getByTestId('chat-input'), 'focus');
+
+      expect(getByTestId('stop-button')).toBeTruthy();
+    });
+  });
 });
