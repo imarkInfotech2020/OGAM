@@ -10,6 +10,7 @@ import {
   initMultimodal, checkContextMultimodal,
   estimateTokens, fitMessagesInBudget, recordGenerationStats,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
+  buildCompletionParams,
 } from './llmHelpers';
 import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
@@ -164,12 +165,7 @@ class LLMService {
       let firstReceived = false;
       await this.context.completion({
         messages: oaiMessages,
-        n_predict: settings.maxTokens || RESPONSE_RESERVE,
-        temperature: settings.temperature ?? 0.7,
-        top_k: 40,
-        top_p: settings.topP ?? 0.95,
-        penalty_repeat: settings.repeatPenalty ?? 1.1,
-        stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
+        ...buildCompletionParams(settings),
       }, (data) => {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }

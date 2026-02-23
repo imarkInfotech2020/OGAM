@@ -6,7 +6,7 @@
 import { useAppStore } from '../stores';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, RESPONSE_RESERVE } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams } from './llmHelpers';
 
 type StreamCallback = (token: string) => void;
 type CompleteCallback = (fullResponse: string) => void;
@@ -51,12 +51,7 @@ export async function generateWithToolsImpl(
 
     const completionResult = await deps.context.completion({
       messages: oaiMessages,
-      n_predict: settings.maxTokens || RESPONSE_RESERVE,
-      temperature: settings.temperature ?? 0.7,
-      top_k: 40,
-      top_p: settings.topP ?? 0.95,
-      penalty_repeat: settings.repeatPenalty ?? 1.1,
-      stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
+      ...buildCompletionParams(settings),
       tools: options.tools,
       tool_choice: 'auto',
     } as any, (data: any) => {

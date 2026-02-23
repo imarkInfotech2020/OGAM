@@ -228,6 +228,21 @@ export async function fitMessagesInBudget(
   return result;
 }
 
+export const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'];
+
+export function buildCompletionParams(settings: {
+  maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
+}): Record<string, any> {
+  return {
+    n_predict: settings.maxTokens || RESPONSE_RESERVE,
+    temperature: settings.temperature ?? 0.7,
+    top_k: 40,
+    top_p: settings.topP ?? 0.95,
+    penalty_repeat: settings.repeatPenalty ?? 1.1,
+    stop: STOP_TOKENS,
+  };
+}
+
 export function recordGenerationStats(
   startTime: number,
   firstTokenMs: number,
