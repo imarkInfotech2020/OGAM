@@ -6,7 +6,7 @@ import { ImageModeState, MediaAttachment } from '../../types';
 import { VoiceRecordButton } from '../VoiceRecordButton';
 import { triggerHaptic } from '../../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
-import { createStyles } from './styles';
+import { createStyles, PILL_ICONS_WIDTH } from './styles';
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
@@ -168,7 +168,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <Animated.View
             pointerEvents={isFocused ? 'none' : 'auto'}
             style={[styles.pillIcons, {
-              width: focusAnim.interpolate({ inputRange: [0, 1], outputRange: [108, 0] }),
+              width: focusAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
               opacity: focusAnim.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' }),
             }]}
           >

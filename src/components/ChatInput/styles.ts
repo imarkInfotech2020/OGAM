@@ -2,6 +2,10 @@ import type { ThemeColors, ThemeShadows } from '../../theme';
 import { FONTS } from '../../constants';
 import { Platform } from 'react-native';
 
+export const PILL_ICON_SIZE = 36;
+const NUM_PILL_ICONS = 3;
+export const PILL_ICONS_WIDTH = PILL_ICON_SIZE * NUM_PILL_ICONS;
+
 export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: 12,
@@ -135,11 +139,11 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: 0,
   },
   pillIconButton: {
-    width: 36,
-    height: 36,
+    width: PILL_ICON_SIZE,
+    height: PILL_ICON_SIZE,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    borderRadius: 18,
+    borderRadius: PILL_ICON_SIZE / 2,
     position: 'relative' as const,
   },
   pillIconButtonActive: {
