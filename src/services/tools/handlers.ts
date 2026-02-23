@@ -188,45 +188,38 @@ function handleGetDatetime(timezone?: string): string {
   }
 }
 
+async function collectDeviceSection(
+  label: string, fetcher: () => Promise<string>,
+): Promise<string> {
+  try { return await fetcher(); } catch { return `${label}: unavailable`; }
+}
+
 async function handleGetDeviceInfo(infoType?: string): Promise<string> {
   const type = infoType ?? 'all';
   const parts: string[] = [];
 
   if (type === 'all' || type === 'memory') {
-    try {
-      const totalMemory = await DeviceInfo.getTotalMemory();
-      const usedMemory = await DeviceInfo.getUsedMemory();
-      const available = totalMemory - usedMemory;
-      parts.push(
-        `Memory:\n  Total: ${formatBytes(totalMemory)}\n  Used: ${formatBytes(usedMemory)}\n  Available: ${formatBytes(available)}`,
-      );
-    } catch {
-      parts.push('Memory: unavailable');
-    }
+    parts.push(await collectDeviceSection('Memory', async () => {
+      const total = await DeviceInfo.getTotalMemory();
+      const used = await DeviceInfo.getUsedMemory();
+      return `Memory:\n  Total: ${formatBytes(total)}\n  Used: ${formatBytes(used)}\n  Available: ${formatBytes(total - used)}`;
+    }));
   }
 
   if (type === 'all' || type === 'storage') {
-    try {
-      const freeDisk = await DeviceInfo.getFreeDiskStorage();
-      const totalDisk = await DeviceInfo.getTotalDiskCapacity();
-      parts.push(
-        `Storage:\n  Total: ${formatBytes(totalDisk)}\n  Free: ${formatBytes(freeDisk)}`,
-      );
-    } catch {
-      parts.push('Storage: unavailable');
-    }
+    parts.push(await collectDeviceSection('Storage', async () => {
+      const free = await DeviceInfo.getFreeDiskStorage();
+      const total = await DeviceInfo.getTotalDiskCapacity();
+      return `Storage:\n  Total: ${formatBytes(total)}\n  Free: ${formatBytes(free)}`;
+    }));
   }
 
   if (type === 'all' || type === 'battery') {
-    try {
+    parts.push(await collectDeviceSection('Battery', async () => {
       const level = await DeviceInfo.getBatteryLevel();
       const charging = await DeviceInfo.isBatteryCharging();
-      parts.push(
-        `Battery: ${Math.round(level * 100)}%${charging ? ' (charging)' : ''}`,
-      );
-    } catch {
-      parts.push('Battery: unavailable');
-    }
+      return `Battery: ${Math.round(level * 100)}%${charging ? ' (charging)' : ''}`;
+    }));
   }
 
   if (type === 'all') {
