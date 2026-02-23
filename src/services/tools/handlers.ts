@@ -76,53 +76,50 @@ async function handleWebSearch(query: string): Promise<string> {
   }
 }
 
-function parseDuckDuckGoResults(html: string): Array<{ title: string; snippet: string; url?: string }> {
-  const results: Array<{ title: string; snippet: string; url?: string }> = [];
+type SearchResult = { title: string; snippet: string; url?: string };
 
-  // DuckDuckGo HTML uses class="result" for each result block
-  // Each result has: <a class="result__a"> for title, <a class="result__snippet"> for snippet
-  const resultBlocks = html.split(/class="result\s/).slice(1); // split on result blocks
+function parseResultBlock(block: string): SearchResult | null {
+  const titleMatch = block.match(/class="result__a"[^>]*>([^<]+)</);
+  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
+
+  const urlMatch = block.match(/class="result__url"[^>]*>([^<]+)/) ||
+                   block.match(/class="result__a"\s+href="([^"]+)"/);
+  const url = urlMatch ? decodeHTMLEntities(urlMatch[1].trim()) : '';
+
+  const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/) ||
+                       block.match(/class="result-snippet"[^>]*>([\s\S]*?)<\/td>/);
+  const snippet = snippetMatch
+    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim())
+    : '';
+
+  if (!title && !snippet) return null;
+  return { title: title || '(no title)', snippet: snippet || '(no snippet)', url };
+}
+
+function parseFallbackLinks(html: string): SearchResult[] {
+  const results: SearchResult[] = [];
+  const linkPattern = /<a[^>]*href="(https?:\/\/(?!duckduckgo)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
+  let match;
+  while ((match = linkPattern.exec(html)) !== null && results.length < 5) {
+    const title = decodeHTMLEntities(match[2].trim());
+    if (!title.includes('DuckDuckGo')) {
+      results.push({ title, snippet: '', url: match[1] });
+    }
+  }
+  return results;
+}
+
+function parseDuckDuckGoResults(html: string): SearchResult[] {
+  const resultBlocks = html.split(/class="result\s/).slice(1);
+  const results: SearchResult[] = [];
 
   for (const block of resultBlocks) {
     if (results.length >= 5) break;
-
-    // Title: <a class="result__a" href="...">Title Text</a>
-    const titleMatch = block.match(/class="result__a"[^>]*>([^<]+)</);
-    const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
-
-    // URL: extract from result__url or result__a href
-    const urlMatch = block.match(/class="result__url"[^>]*>([^<]+)/) ||
-                     block.match(/class="result__a"\s+href="([^"]+)"/);
-    const url = urlMatch ? decodeHTMLEntities(urlMatch[1].trim()) : '';
-
-    // Snippet: <a class="result__snippet">...</a> or <td class="result-snippet">
-    const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/) ||
-                         block.match(/class="result-snippet"[^>]*>([\s\S]*?)<\/td>/);
-    let snippet = '';
-    if (snippetMatch) {
-      // Strip any remaining HTML tags from snippet
-      snippet = decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim());
-    }
-
-    if (title || snippet) {
-      results.push({ title: title || '(no title)', snippet: snippet || '(no snippet)', url });
-    }
+    const parsed = parseResultBlock(block);
+    if (parsed) results.push(parsed);
   }
 
-  // Fallback: try matching any anchor with substantial text
-  if (results.length === 0) {
-    const linkPattern = /<a[^>]*href="(https?:\/\/(?!duckduckgo)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
-    let match;
-    while ((match = linkPattern.exec(html)) !== null && results.length < 5) {
-      const linkUrl = match[1];
-      const title = decodeHTMLEntities(match[2].trim());
-      if (!title.includes('DuckDuckGo')) {
-        results.push({ title, snippet: '', url: linkUrl });
-      }
-    }
-  }
-
-  return results;
+  return results.length > 0 ? results : parseFallbackLinks(html);
 }
 
 function decodeHTMLEntities(text: string): string {

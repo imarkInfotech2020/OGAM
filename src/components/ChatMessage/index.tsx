@@ -97,6 +97,47 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
   );
 };
 
+const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => {
+  const toolIcon = getToolIcon(message.toolName);
+  const toolLabel = getToolLabel(message.toolName, message.content);
+  const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
+  const hasDetails = !!(message.content && message.content.length > 0 && !message.content.startsWith('No results'));
+  return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
+};
+
+const ToolCallMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => (
+  <View testID="tool-call-message" style={styles.systemInfoContainer}>
+    {message.toolCalls?.map((tc, i) => {
+      let argsPreview = '';
+      try { argsPreview = Object.values(JSON.parse(tc.arguments)).join(', '); } catch { argsPreview = tc.arguments; }
+      return (
+        <View key={`${tc.id || i}`} style={styles.toolStatusRow}>
+          <Icon name={getToolIcon(tc.name)} size={13} color={colors.primary} />
+          <Text style={[styles.toolStatusText, { color: colors.primary }]} numberOfLines={1}>
+            Using {tc.name}{argsPreview ? `: ${argsPreview}` : ''}
+          </Text>
+        </View>
+      );
+    })}
+  </View>
+);
+
+const SystemInfoMessage: React.FC<{
+  content: string; styles: ReturnType<typeof createStyles>;
+  alertState: AlertState; onCloseAlert: () => void;
+}> = ({ content, styles, alertState, onCloseAlert }) => (
+  <>
+    <View testID="system-info-message" style={styles.systemInfoContainer}>
+      <Text style={styles.systemInfoText}>{content}</Text>
+    </View>
+    <CustomAlert
+      visible={alertState.visible} title={alertState.title}
+      message={alertState.message} buttons={alertState.buttons}
+      onClose={onCloseAlert}
+    />
+  </>
+);
+
 type MetaRowProps = {
   message: Message;
   styles: ReturnType<typeof createStyles>;
@@ -143,18 +184,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { displayContent, parsedContent } = buildMessageData(message);
 
   const isUser = message.role === 'user';
-  const hasAttachments = message.attachments && message.attachments.length > 0;
+  const hasAttachments = Boolean(message.attachments?.length);
+  const bubbleStyle = [
+    styles.bubble,
+    isUser ? styles.userBubble : styles.assistantBubble,
+    hasAttachments ? styles.bubbleWithAttachments : undefined,
+  ];
 
   const handleCopy = () => {
     Clipboard.setString(displayContent);
     triggerHaptic('notificationSuccess');
-    if (onCopy) { onCopy(displayContent); }
+    onCopy?.(displayContent);
     setShowActionMenu(false);
     setAlertState(showAlert('Copied', 'Message copied to clipboard'));
   };
 
   const handleRetry = () => {
-    if (onRetry) { onRetry(message); }
+    onRetry?.(message);
     setShowActionMenu(false);
   };
 
@@ -165,9 +211,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleSaveEdit = () => {
-    if (onEdit && editedContent.trim() !== message.content) {
-      onEdit(message, editedContent.trim());
-    }
+    const trimmed = editedContent.trim();
+    if (trimmed !== message.content) onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 
@@ -177,82 +222,26 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleLongPress = () => {
-    if (showActions && !isStreaming) {
-      triggerHaptic('impactMedium');
-      setShowActionMenu(true);
-    }
+    if (!showActions || isStreaming) return;
+    triggerHaptic('impactMedium');
+    setShowActionMenu(true);
   };
 
   const handleGenerateImage = () => {
-    if (onGenerateImage) {
-      const prompt = message.role === 'assistant'
-        ? parsedContent.response.trim()
-        : message.content.trim();
-      const truncatedPrompt = prompt.slice(0, 500);
-      onGenerateImage(truncatedPrompt);
-    }
+    const source = isUser ? message.content : parsedContent.response;
+    onGenerateImage?.(source.trim().slice(0, 500));
     setShowActionMenu(false);
   };
 
   if (message.isSystemInfo) {
     return (
-      <>
-        <View testID="system-info-message" style={styles.systemInfoContainer}>
-          <Text style={styles.systemInfoText}>{displayContent}</Text>
-        </View>
-        <CustomAlert
-          visible={alertState.visible}
-          title={alertState.title}
-          message={alertState.message}
-          buttons={alertState.buttons}
-          onClose={() => setAlertState(hideAlert())}
-        />
-      </>
+      <SystemInfoMessage content={displayContent} styles={styles}
+        alertState={alertState} onCloseAlert={() => setAlertState(hideAlert())} />
     );
   }
 
-  // Tool result messages — compact status bubble, tappable to expand details
-  if (message.role === 'tool') {
-    const toolIcon = getToolIcon(message.toolName);
-    const toolLabel = getToolLabel(message.toolName, message.content);
-    const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
-    const hasDetails = message.content && message.content.length > 0 && !message.content.startsWith('No results');
-    return (
-      <ToolResultBubble
-        toolIcon={toolIcon}
-        toolLabel={toolLabel}
-        durationLabel={durationLabel}
-        content={message.content}
-        hasDetails={!!hasDetails}
-        styles={styles}
-        colors={colors}
-      />
-    );
-  }
-
-  // Assistant messages with tool calls — show as compact "calling tool" status
-  if (message.role === 'assistant' && message.toolCalls?.length) {
-    return (
-      <View testID="tool-call-message" style={styles.systemInfoContainer}>
-        {message.toolCalls.map((tc, i) => {
-          const toolIcon = getToolIcon(tc.name);
-          let argsPreview = '';
-          try {
-            const parsed = JSON.parse(tc.arguments);
-            argsPreview = Object.values(parsed).join(', ');
-          } catch { argsPreview = tc.arguments; }
-          return (
-            <View key={`${tc.id || i}`} style={styles.toolStatusRow}>
-              <Icon name={toolIcon} size={13} color={colors.primary} />
-              <Text style={[styles.toolStatusText, { color: colors.primary }]} numberOfLines={1}>
-                Using {tc.name}{argsPreview ? `: ${argsPreview}` : ''}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-    );
-  }
+  if (message.role === 'tool') return <ToolResultMessage message={message} styles={styles} colors={colors} />;
+  if (message.role === 'assistant' && message.toolCalls?.length) return <ToolCallMessage message={message} styles={styles} colors={colors} />;
 
   const messageBody = (
     <TouchableOpacity
@@ -265,13 +254,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       onLongPress={handleLongPress}
       delayLongPress={300}
     >
-      <View
-        style={[
-          styles.bubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-          hasAttachments && styles.bubbleWithAttachments,
-        ]}
-      >
+      <View style={bubbleStyle}>
         {hasAttachments && (
           <MessageAttachments
             attachments={message.attachments!}
@@ -302,7 +285,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         onMenuOpen={() => setShowActionMenu(true)}
       />
 
-      {showGenerationDetails && message.generationMeta && message.role === 'assistant' && (
+      {showGenerationDetails && !isUser && message.generationMeta && (
         <GenerationMeta generationMeta={message.generationMeta} styles={styles} />
       )}
     </TouchableOpacity>

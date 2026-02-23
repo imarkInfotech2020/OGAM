@@ -8,6 +8,12 @@ import { useAppStore } from '../../stores';
 import { CacheType } from '../../types';
 import { createStyles } from './styles';
 
+const CACHE_DESC: Record<CacheType, string> = {
+  f16: 'Full precision — best quality, highest memory usage',
+  q8_0: '8-bit quantized — good balance of quality and memory',
+  q4_0: '4-bit quantized — lowest memory, may reduce quality',
+};
+
 export const PerformanceSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -99,11 +105,7 @@ export const PerformanceSection: React.FC = () => {
         <View style={styles.toggleInfo}>
           <Text style={styles.toggleLabel}>KV Cache Type</Text>
           <Text style={styles.toggleDesc}>
-            {(settings?.cacheType ?? 'q8_0') === 'f16'
-              ? 'Full precision — best quality, highest memory usage'
-              : (settings?.cacheType ?? 'q8_0') === 'q8_0'
-                ? '8-bit quantized — good balance of quality and memory'
-                : '4-bit quantized — lowest memory, may reduce quality'}
+            {CACHE_DESC[settings?.cacheType ?? 'q8_0']}
           </Text>
         </View>
       </View>

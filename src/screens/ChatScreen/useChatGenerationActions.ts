@@ -147,61 +147,49 @@ export async function handleImageGenerationFn(
 
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 
+async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
+  const loadedPath = llmService.getLoadedModelPath();
+  if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
+  await deps.ensureModelLoaded();
+  return llmService.isModelLoaded() && llmService.getLoadedModelPath() === deps.activeModel!.filePath;
+}
+
+async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string, messages: Message[]): Promise<void> {
+  try {
+    const contextDebug = await llmService.getContextDebugInfo(messages);
+    setDebugInfo({ systemPrompt, ...contextDebug });
+    if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
+      await llmService.clearKVCache(false).catch(() => {});
+    }
+  } catch (e) { logger.log('Debug info error:', e); }
+}
+
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.activeModel) return;
   deps.generatingForConversationRef.current = targetConversationId;
-  const currentLoadedPath = llmService.getLoadedModelPath();
-  const needsModelLoad = !currentLoadedPath || currentLoadedPath !== deps.activeModel.filePath;
-  if (needsModelLoad) {
-    await deps.ensureModelLoaded();
-    if (!llmService.isModelLoaded() || llmService.getLoadedModelPath() !== deps.activeModel.filePath) {
-      deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
-      deps.generatingForConversationRef.current = null;
-      return;
-    }
+  if (!(await ensureModelReady(deps))) {
+    deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
+    deps.generatingForConversationRef.current = null;
+    return;
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
-  const project = conversation?.projectId
-    ? useProjectStore.getState().getProject(conversation.projectId)
-    : null;
+  const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const enabledTools = deps.settings.enabledTools || [];
   const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
-  const systemPrompt = enabledTools.length > 0
-    ? basePrompt + buildToolSystemPromptHint(enabledTools)
-    : basePrompt;
+  const systemPrompt = enabledTools.length > 0 ? basePrompt + buildToolSystemPromptHint(enabledTools) : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
-  let shouldClearCache = false;
-  try {
-    const contextDebug = await llmService.getContextDebugInfo(messagesForContext);
-    setDebugInfo({ systemPrompt, ...contextDebug });
-    if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
-      shouldClearCache = true;
-    }
-  } catch (e) {
-    logger.log('Debug info error:', e);
-  }
-  if (shouldClearCache) {
-    await llmService.clearKVCache(false).catch(() => {});
-  }
+  await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
     if (enabledTools.length > 0) {
-      await generationService.generateWithTools(
-        targetConversationId,
-        messagesForContext,
-        enabledTools,
-        {
-          onFirstToken: () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
-          onToolCallStart: (name, args) => { logger.log(`[ChatScreen] Tool call: ${name}`, args); },
-          onToolCallComplete: (name, result) => { logger.log(`[ChatScreen] Tool result: ${name}`, result.durationMs, 'ms'); },
-        },
-      );
+      await generationService.generateWithTools(targetConversationId, messagesForContext, {
+        enabledToolIds: enabledTools,
+        onFirstToken: () => { logger.log('[ChatScreen] First token received'); },
+        onToolCallStart: (name) => { logger.log(`[ChatScreen] Tool call: ${name}`); },
+        onToolCallComplete: (name, result) => { logger.log(`[ChatScreen] Tool result: ${name} ${result.durationMs}ms`); },
+      });
     } else {
-      await generationService.generateResponse(
-        targetConversationId,
-        messagesForContext,
-        () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
-      );
+      await generationService.generateResponse(targetConversationId, messagesForContext);
     }
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));

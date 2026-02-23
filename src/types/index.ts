@@ -346,12 +346,4 @@ export interface DebugInfo {
   maxContextLength: number;
   contextUsagePercent: number;
 }
-
-export type AppScreen =
-  | 'onboarding'
-  | 'home'
-  | 'models'
-  | 'chat'
-  | 'settings'
-  | 'generate'
-  | 'model-download';
+export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';

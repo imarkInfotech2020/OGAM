@@ -1,0 +1,93 @@
+/**
+ * Tool-aware LLM generation helper.
+ * Extracted to keep llm.ts under the max-lines limit.
+ */
+
+import { useAppStore } from '../stores';
+import type { Message } from '../types';
+import type { ToolCall } from './tools/types';
+import { recordGenerationStats, RESPONSE_RESERVE } from './llmHelpers';
+
+type StreamCallback = (token: string) => void;
+type CompleteCallback = (fullResponse: string) => void;
+
+function parseToolCall(tc: any): ToolCall {
+  const fn = tc.function || {};
+  return {
+    id: tc.id,
+    name: fn.name || '',
+    arguments: typeof fn.arguments === 'string'
+      ? JSON.parse(fn.arguments || '{}')
+      : fn.arguments || {},
+  };
+}
+
+export interface ToolGenerationDeps {
+  context: any;
+  isGenerating: boolean;
+  manageContextWindow: (messages: Message[]) => Promise<Message[]>;
+  convertToOAIMessages: (messages: Message[]) => any[];
+  setPerformanceStats: (stats: any) => void;
+  setIsGenerating: (v: boolean) => void;
+}
+
+export async function generateWithToolsImpl(
+  deps: ToolGenerationDeps,
+  messages: Message[],
+  options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback },
+): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  if (!deps.context) throw new Error('No model loaded');
+  if (deps.isGenerating) throw new Error('Generation already in progress');
+  deps.setIsGenerating(true);
+
+  try {
+    const managed = await deps.manageContextWindow(messages);
+    const oaiMessages = deps.convertToOAIMessages(managed);
+    const { settings } = useAppStore.getState();
+    const startTime = Date.now();
+    let firstTokenMs = 0;
+    let tokenCount = 0;
+    let fullResponse = '';
+    let firstReceived = false;
+    const collectedToolCalls: ToolCall[] = [];
+
+    const completionResult = await deps.context.completion({
+      messages: oaiMessages,
+      n_predict: settings.maxTokens || RESPONSE_RESERVE,
+      temperature: settings.temperature ?? 0.7,
+      top_k: 40,
+      top_p: settings.topP ?? 0.95,
+      penalty_repeat: settings.repeatPenalty ?? 1.1,
+      stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
+      tools: options.tools,
+      tool_choice: 'auto',
+    } as any, (data: any) => {
+      if (!deps.isGenerating) return;
+      if (data.tool_calls) {
+        for (const tc of data.tool_calls) {
+          collectedToolCalls.push(parseToolCall(tc));
+        }
+      }
+      if (!data.token) return;
+      if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
+      tokenCount++;
+      fullResponse += data.token;
+      options.onStream?.(data.token);
+    });
+
+    // Check final result for tool calls if none collected during streaming
+    if ((completionResult as any)?.tool_calls?.length && collectedToolCalls.length === 0) {
+      for (const tc of (completionResult as any).tool_calls) {
+        collectedToolCalls.push(parseToolCall(tc));
+      }
+    }
+
+    deps.setPerformanceStats(recordGenerationStats(startTime, firstTokenMs, tokenCount));
+    deps.setIsGenerating(false);
+    options.onComplete?.(fullResponse);
+    return { fullResponse, toolCalls: collectedToolCalls };
+  } catch (error) {
+    deps.setIsGenerating(false);
+    throw error;
+  }
+}

@@ -32,6 +32,24 @@ interface ChatInputProps {
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
 
+const ToolsButton: React.FC<{
+  supportsToolCalling: boolean; enabledToolCount: number; disabled?: boolean;
+  onToolsPress?: () => void; styles: any; colors: any; onUnsupported: () => void;
+}> = ({ supportsToolCalling, enabledToolCount, disabled, onToolsPress, styles, colors, onUnsupported }) => (
+  <TouchableOpacity
+    testID="tools-button"
+    style={[styles.pillIconButton, supportsToolCalling && enabledToolCount > 0 && styles.pillIconButtonActive]}
+    onPress={supportsToolCalling ? onToolsPress : onUnsupported}
+    disabled={disabled}
+    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+  >
+    <Icon name="tool" size={20} color={supportsToolCalling ? (enabledToolCount > 0 ? colors.primary : colors.textSecondary) : colors.textMuted} />
+    {supportsToolCalling && enabledToolCount > 0 && (
+      <View style={[styles.iconBadge, styles.iconBadgeOn]}><Text style={styles.iconBadgeText}>{enabledToolCount}</Text></View>
+    )}
+  </TouchableOpacity>
+);
+
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   onStop,
@@ -95,37 +113,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleImageModeToggle = () => {
-    if (!imageModelLoaded) {
-      setAlertState(showAlert(
-        'No Image Model',
-        'Download an image generation model from the Models screen to enable this feature.',
-        [{ text: 'OK' }],
-      ));
-      return;
-    }
-    const currentIndex = IMAGE_MODE_CYCLE.indexOf(imageMode);
-    const newMode = IMAGE_MODE_CYCLE[(currentIndex + 1) % IMAGE_MODE_CYCLE.length];
+    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); return; }
+    const newMode = IMAGE_MODE_CYCLE[(IMAGE_MODE_CYCLE.indexOf(imageMode) + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);
     onImageModeChange?.(newMode);
   };
 
-  const handleToolsUnsupported = () => {
-    setAlertState(showAlert(
-      'Tools Not Supported',
-      'This model does not support tool calling. Load a model with tool calling support (e.g. functionary, hermes) to enable tools.',
-      [{ text: 'OK' }],
-    ));
-  };
+  const handleToolsUnsupported = () => setAlertState(showAlert('Tools Not Supported', 'This model does not support tool calling. Load a model with tool calling support to enable tools.', [{ text: 'OK' }]));
 
   const handleVisionPress = () => {
-    if (!supportsVision) {
-      setAlertState(showAlert(
-        'Vision Not Supported',
-        'This model does not support image input. Load a vision-capable model (with an mmproj file) to enable this feature.',
-        [{ text: 'OK' }],
-      ));
-      return;
-    }
+    if (!supportsVision) { setAlertState(showAlert('Vision Not Supported', 'Load a vision-capable model (with mmproj) to enable image input.', [{ text: 'OK' }])); return; }
     handlePickImage();
   };
 
@@ -198,27 +195,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               />
             </TouchableOpacity>
 
-            {/* Tools button — shown like vision icon: active color when model supports it */}
-            <TouchableOpacity
-              testID="tools-button"
-              style={[styles.pillIconButton, supportsToolCalling && enabledToolCount > 0 && styles.pillIconButtonActive]}
-              onPress={supportsToolCalling ? onToolsPress : handleToolsUnsupported}
+            <ToolsButton
+              supportsToolCalling={supportsToolCalling}
+              enabledToolCount={enabledToolCount}
               disabled={disabled}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Icon
-                name="tool"
-                size={20}
-                color={supportsToolCalling
-                  ? (enabledToolCount > 0 ? colors.primary : colors.textSecondary)
-                  : colors.textMuted}
-              />
-              {supportsToolCalling && enabledToolCount > 0 && (
-                <View style={[styles.iconBadge, styles.iconBadgeOn]}>
-                  <Text style={styles.iconBadgeText}>{enabledToolCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              onToolsPress={onToolsPress}
+              styles={styles}
+              colors={colors}
+              onUnsupported={handleToolsUnsupported}
+            />
 
             {/* Vision button — always shown */}
             <TouchableOpacity

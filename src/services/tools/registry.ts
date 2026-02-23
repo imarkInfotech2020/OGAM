@@ -95,9 +95,5 @@ export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
     .map(t => `- ${t.name}: ${t.description}`)
     .join('\n');
 
-  return (
-    '\n\nYou have access to the following tools. Use them when appropriate by making tool calls:\n' +
-    toolList +
-    '\n\nWhen a user asks about current information, real-time data, or anything you don\'t know, USE the appropriate tool instead of saying you cannot help.'
-  );
+  return `\n\nYou have access to the following tools. Use them when appropriate by making tool calls:\n${toolList}\n\nWhen a user asks about current information, real-time data, or anything you don't know, USE the appropriate tool instead of saying you cannot help.`;
 }

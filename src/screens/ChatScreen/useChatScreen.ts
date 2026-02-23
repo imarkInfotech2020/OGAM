@@ -26,7 +26,6 @@ type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
 export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
-
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(null);
   const [supportsVision, setSupportsVision] = useState(false);
@@ -45,7 +44,6 @@ export const useChatScreen = () => {
   const [imageGenState, setImageGenState] = useState<ImageGenerationState>(imageGenerationService.getState());
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [supportsToolCalling, setSupportsToolCalling] = useState(false);
-
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
   const modelLoadStartTimeRef = useRef<number | null>(null);
@@ -172,11 +170,7 @@ export const useChatScreen = () => {
   }, [activeModel?.mmProjPath]);
 
   useEffect(() => {
-    if (llmService.isModelLoaded()) {
-      setSupportsToolCalling(llmService.supportsToolCalling());
-    } else {
-      setSupportsToolCalling(false);
-    }
+    setSupportsToolCalling(llmService.isModelLoaded() ? llmService.supportsToolCalling() : false);
   }, [activeModelId, isModelLoading]);
 
   const displayMessages = getDisplayMessages(
@@ -201,11 +195,8 @@ export const useChatScreen = () => {
   const enabledTools = supportsToolCalling ? (settings.enabledTools || []) : [];
 
   const handleToggleTool = (toolId: string) => {
-    const current = settings.enabledTools || [];
-    const updated = current.includes(toolId)
-      ? current.filter((id: string) => id !== toolId)
-      : [...current, toolId];
-    useAppStore.getState().updateSettings({ enabledTools: updated });
+    const cur = settings.enabledTools || [];
+    useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
 
   return {
