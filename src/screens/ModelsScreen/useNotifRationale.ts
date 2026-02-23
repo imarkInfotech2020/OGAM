@@ -6,9 +6,10 @@ import logger from '../../utils/logger';
 export function useNotifRationale(isFirstDownload: boolean) {
   const [showNotifRationale, setShowNotifRationale] = useState(false);
   const pendingDownload = useRef<(() => void) | null>(null);
+  const hasShownRationale = useRef(false);
 
   const maybeShowNotifRationale = useCallback(async (proceed: () => void) => {
-    if (Platform.OS !== 'android' || Platform.Version < 33 || !isFirstDownload) {
+    if (Platform.OS !== 'android' || Platform.Version < 33 || !isFirstDownload || hasShownRationale.current) {
       proceed();
       return;
     }
@@ -19,6 +20,7 @@ export function useNotifRationale(isFirstDownload: boolean) {
       proceed();
       return;
     }
+    hasShownRationale.current = true;
     pendingDownload.current = proceed;
     setShowNotifRationale(true);
   }, [isFirstDownload]);

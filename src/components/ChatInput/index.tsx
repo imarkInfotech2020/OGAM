@@ -170,6 +170,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             style={[styles.pillIcons, {
               width: focusAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
               opacity: focusAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
+              overflow: 'hidden' as const,
             }]}
           >
             {/* Attachment button */}

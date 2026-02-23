@@ -123,6 +123,35 @@ describe('useNotifRationale', () => {
     expect(result.current.showNotifRationale).toBe(false);
   });
 
+  it('only shows rationale once per session', async () => {
+    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
+    Object.defineProperty(Platform, 'Version', { get: () => 33 });
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+
+    const proceed1 = jest.fn();
+    const proceed2 = jest.fn();
+    const { result } = renderHook(() => useNotifRationale(true));
+
+    // First call — shows rationale
+    await act(async () => {
+      await result.current.maybeShowNotifRationale(proceed1);
+    });
+    expect(proceed1).not.toHaveBeenCalled();
+    expect(result.current.showNotifRationale).toBe(true);
+
+    // Dismiss
+    await act(async () => {
+      result.current.handleNotifRationaleDismiss();
+    });
+
+    // Second call — skips rationale, proceeds immediately
+    await act(async () => {
+      await result.current.maybeShowNotifRationale(proceed2);
+    });
+    expect(proceed2).toHaveBeenCalled();
+    expect(result.current.showNotifRationale).toBe(false);
+  });
+
   it('handleNotifRationaleDismiss proceeds without requesting permission', async () => {
     Object.defineProperty(Platform, 'OS', { get: () => 'android' });
     Object.defineProperty(Platform, 'Version', { get: () => 33 });
