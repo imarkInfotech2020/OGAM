@@ -74,8 +74,9 @@ export async function generateWithToolsImpl(
     });
 
     // Check final result for tool calls if none collected during streaming
-    if ((completionResult as any)?.tool_calls?.length && collectedToolCalls.length === 0) {
-      for (const tc of (completionResult as any).tool_calls) {
+    const resultToolCalls = (completionResult as any)?.tool_calls;
+    if (resultToolCalls?.length && collectedToolCalls.length === 0) {
+      for (const tc of resultToolCalls) {
         collectedToolCalls.push(parseToolCall(tc));
       }
     }

@@ -133,8 +133,8 @@ function decodeHTMLEntities(text: string): string {
     .replace(/&#x2F;/g, '/')
     .replace(/&nbsp;/g, ' ')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
 }
 
 function handleCalculator(expression: string): string {
@@ -153,7 +153,7 @@ function handleCalculator(expression: string): string {
   // eslint-disable-next-line no-new-func
   const result = new Function(`"use strict"; return (${jsExpression})`)();
 
-  if (typeof result !== 'number' || !isFinite(result)) {
+  if (typeof result !== 'number' || !Number.isFinite(result)) {
     throw new Error('Expression did not evaluate to a finite number');
   }
 
@@ -189,7 +189,7 @@ function handleGetDatetime(timezone?: string): string {
 }
 
 async function handleGetDeviceInfo(infoType?: string): Promise<string> {
-  const type = infoType || 'all';
+  const type = infoType ?? 'all';
   const parts: string[] = [];
 
   if (type === 'all' || type === 'memory') {

@@ -27,6 +27,33 @@ export interface ToolLoopContext {
   onFinalResponse: (content: string) => void;
 }
 
+async function executeToolCalls(
+  ctx: ToolLoopContext,
+  toolCalls: import('./tools/types').ToolCall[],
+  loopMessages: Message[],
+): Promise<void> {
+  const chatStore = useChatStore.getState();
+  for (const tc of toolCalls) {
+    if (ctx.isAborted()) break;
+
+    ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
+    const result = await executeToolCall(tc);
+    ctx.callbacks?.onToolCallComplete?.(tc.name, result);
+
+    const toolResultMsg: Message = {
+      id: `tool-result-${Date.now()}-${tc.id || tc.name}`,
+      role: 'tool',
+      content: result.error ? `Error: ${result.error}` : result.content,
+      timestamp: Date.now(),
+      toolCallId: tc.id,
+      toolName: tc.name,
+      generationTimeMs: result.durationMs,
+    };
+    loopMessages.push(toolResultMsg);
+    chatStore.addMessage(ctx.conversationId, toolResultMsg);
+  }
+}
+
 /**
  * Run the tool-calling loop: call LLM → execute tools → re-inject results → repeat.
  * Returns when the model produces a final response with no tool calls.
@@ -68,25 +95,6 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     loopMessages.push(assistantMsg);
     chatStore.addMessage(ctx.conversationId, assistantMsg);
 
-    // Execute each tool call
-    for (const tc of toolCalls) {
-      if (ctx.isAborted()) break;
-
-      ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-      const result = await executeToolCall(tc);
-      ctx.callbacks?.onToolCallComplete?.(tc.name, result);
-
-      const toolResultMsg: Message = {
-        id: `tool-result-${Date.now()}-${tc.id || tc.name}`,
-        role: 'tool',
-        content: result.error ? `Error: ${result.error}` : result.content,
-        timestamp: Date.now(),
-        toolCallId: tc.id,
-        toolName: tc.name,
-        generationTimeMs: result.durationMs,
-      };
-      loopMessages.push(toolResultMsg);
-      chatStore.addMessage(ctx.conversationId, toolResultMsg);
-    }
+    await executeToolCalls(ctx, toolCalls, loopMessages);
   }
 }
