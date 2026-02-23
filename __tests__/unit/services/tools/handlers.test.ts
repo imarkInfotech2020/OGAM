@@ -1,0 +1,267 @@
+/**
+ * Tool Handlers Unit Tests
+ *
+ * Tests for executeToolCall dispatcher, calculator, datetime, device info,
+ * and web search handlers.
+ * Priority: P0 (Critical) - Tool execution drives assistant capabilities.
+ */
+
+import { Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
+import { executeToolCall } from '../../../../src/services/tools/handlers';
+import { ToolCall } from '../../../../src/services/tools/types';
+
+const mockedDeviceInfo = DeviceInfo as jest.Mocked<typeof DeviceInfo>;
+
+jest.mock('../../../../src/utils/logger', () => ({
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+}));
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function makeToolCall(name: string, args: Record<string, any> = {}): ToolCall {
+  return { id: 'test-call-1', name, arguments: args };
+}
+
+/**
+ * Builds a minimal DuckDuckGo-style HTML string containing result blocks.
+ * Each entry produces one block with class="result", result__a, result__url,
+ * and result__snippet elements.
+ */
+function buildDuckDuckGoHTML(
+  results: Array<{ title: string; url: string; snippet: string }>,
+): string {
+  const blocks = results
+    .map(
+      (r) =>
+        `<div class="result results_links results_links_deep web-result">
+          <div class="links_main links_deep result__body">
+            <a class="result__a" href="${r.url}">${r.title}</a>
+            <span class="result__url">${r.url}</span>
+            <a class="result__snippet">${r.snippet}</a>
+          </div>
+        </div>`,
+    )
+    .join('\n');
+  return `<html><body>${blocks}</body></html>`;
+}
+
+// ============================================================================
+// executeToolCall dispatcher
+// ============================================================================
+describe('Tool Handlers', () => {
+  describe('executeToolCall dispatcher', () => {
+    it('routes to calculator handler', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '1+1' }));
+      expect(result.name).toBe('calculator');
+      expect(result.content).toContain('1+1');
+      expect(result.content).toContain('2');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('routes to datetime handler', async () => {
+      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
+      expect(result.name).toBe('get_current_datetime');
+      expect(result.content).toContain('Current date and time');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('routes to device info handler', async () => {
+      const result = await executeToolCall(makeToolCall('get_device_info', { info_type: 'memory' }));
+      expect(result.name).toBe('get_device_info');
+      expect(result.content).toContain('Memory');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('returns error for unknown tool name', async () => {
+      const result = await executeToolCall(makeToolCall('nonexistent_tool', {}));
+      expect(result.error).toBe('Unknown tool: nonexistent_tool');
+      expect(result.content).toBe('');
+    });
+
+    it('each result includes durationMs', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '5+5' }));
+      expect(typeof result.durationMs).toBe('number');
+      expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // ==========================================================================
+  // Calculator
+  // ==========================================================================
+  describe('Calculator', () => {
+    it('evaluates basic addition (2+2)', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+2' }));
+      expect(result.content).toBe('2+2 = 4');
+    });
+
+    it('evaluates multiplication (3*4)', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '3*4' }));
+      expect(result.content).toBe('3*4 = 12');
+    });
+
+    it('evaluates expressions with parentheses', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '(2+3)*4' }));
+      expect(result.content).toBe('(2+3)*4 = 20');
+    });
+
+    it('handles exponentiation (2^3)', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '2^3' }));
+      expect(result.content).toBe('2^3 = 8');
+    });
+
+    it('rejects invalid characters (letters)', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+abc' }));
+      expect(result.error).toContain('Invalid expression');
+    });
+
+    it('rejects invalid characters (semicolons)', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+2; process.exit()' }));
+      expect(result.error).toContain('Invalid expression');
+    });
+
+    it('returns formatted "expression = result"', async () => {
+      const result = await executeToolCall(makeToolCall('calculator', { expression: '10/2' }));
+      expect(result.content).toBe('10/2 = 5');
+    });
+  });
+
+  // ==========================================================================
+  // Date/Time
+  // ==========================================================================
+  describe('Date/Time', () => {
+    it('returns formatted date/time string', async () => {
+      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
+      expect(result.content).toContain('Current date and time:');
+    });
+
+    it('includes ISO 8601 and Unix timestamp', async () => {
+      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
+      expect(result.content).toMatch(/ISO 8601: \d{4}-\d{2}-\d{2}T/);
+      expect(result.content).toMatch(/Unix timestamp: \d+/);
+    });
+
+    it('handles invalid timezone gracefully (returns fallback)', async () => {
+      const result = await executeToolCall(
+        makeToolCall('get_current_datetime', { timezone: 'Invalid/Fake_Zone' }),
+      );
+      expect(result.content).toContain('invalid');
+      expect(result.content).toContain('Invalid/Fake_Zone');
+      expect(result.error).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
+  // Device Info
+  // ==========================================================================
+  describe('Device Info', () => {
+    beforeEach(() => {
+      mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getUsedMemory.mockResolvedValue(4 * 1024 * 1024 * 1024);
+      mockedDeviceInfo.getFreeDiskStorage.mockResolvedValue(50 * 1024 * 1024 * 1024);
+      (mockedDeviceInfo as any).getTotalDiskCapacity = jest.fn().mockResolvedValue(128 * 1024 * 1024 * 1024);
+      (mockedDeviceInfo as any).getBatteryLevel = jest.fn().mockResolvedValue(0.75);
+      (mockedDeviceInfo as any).isBatteryCharging = jest.fn().mockResolvedValue(false);
+      (mockedDeviceInfo as any).getBrand = jest.fn().mockReturnValue('Google');
+      mockedDeviceInfo.getModel.mockReturnValue('Pixel 7');
+      mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+    });
+
+    it('returns memory info when type is "memory"', async () => {
+      const result = await executeToolCall(
+        makeToolCall('get_device_info', { info_type: 'memory' }),
+      );
+      expect(result.content).toContain('Memory');
+      expect(result.content).toContain('Total');
+      expect(result.content).toContain('Used');
+      expect(result.content).toContain('Available');
+    });
+
+    it('returns battery info when type is "battery"', async () => {
+      const result = await executeToolCall(
+        makeToolCall('get_device_info', { info_type: 'battery' }),
+      );
+      expect(result.content).toContain('Battery');
+      expect(result.content).toContain('75%');
+    });
+
+    it('returns all info when type is "all"', async () => {
+      const result = await executeToolCall(
+        makeToolCall('get_device_info', { info_type: 'all' }),
+      );
+      expect(result.content).toContain('Memory');
+      expect(result.content).toContain('Battery');
+      expect(result.content).toContain('Device');
+      expect(result.content).toContain('OS');
+    });
+  });
+
+  // ==========================================================================
+  // Web Search (mock fetch)
+  // ==========================================================================
+  describe('Web Search', () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    it('returns formatted results when fetch succeeds', async () => {
+      const html = buildDuckDuckGoHTML([
+        {
+          title: 'React Native Docs',
+          url: 'https://reactnative.dev',
+          snippet: 'Learn once, write anywhere.',
+        },
+        {
+          title: 'React Native GitHub',
+          url: 'https://github.com/facebook/react-native',
+          snippet: 'A framework for building native apps.',
+        },
+      ]);
+
+      global.fetch = jest.fn().mockResolvedValue({
+        text: jest.fn().mockResolvedValue(html),
+      });
+
+      const result = await executeToolCall(
+        makeToolCall('web_search', { query: 'react native' }),
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.content).toContain('React Native Docs');
+      expect(result.content).toContain('reactnative.dev');
+      expect(result.content).toContain('Learn once, write anywhere.');
+      expect(result.content).toContain('React Native GitHub');
+    });
+
+    it('returns "No results" when HTML has no results', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        text: jest.fn().mockResolvedValue('<html><body>No matching documents</body></html>'),
+      });
+
+      const result = await executeToolCall(
+        makeToolCall('web_search', { query: 'xyznonexistent12345' }),
+      );
+
+      expect(result.content).toContain('No results found');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('handles fetch timeout/error gracefully', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
+
+      const result = await executeToolCall(
+        makeToolCall('web_search', { query: 'test query' }),
+      );
+
+      expect(result.error).toContain('Network request failed');
+      expect(result.content).toBe('');
+    });
+  });
+});
