@@ -12,6 +12,7 @@ import {
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
 } from './llmHelpers';
 import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
+import type { ToolCall } from './tools/types';
 
 export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
@@ -39,6 +40,7 @@ class LLMService {
   private gpuReason: string = '';
   private gpuDevices: string[] = [];
   private activeGpuLayers: number = 0;
+  private toolCallingSupported: boolean = false;
   private lastSystemPromptHash: string | null = null;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
 
@@ -73,11 +75,13 @@ class LLMService {
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
       const visionSupported = (this.multimodalSupport as MultimodalSupport | null)?.vision ?? false;
-      logger.log('[LLM] Model loaded, vision:', visionSupported);
+      this.detectToolCallingSupport();
+      logger.log('[LLM] Model loaded, vision:', visionSupported, 'tools:', this.toolCallingSupported);
     } catch (error: any) {
       this.context = null;
       this.currentModelPath = null;
       this.multimodalSupport = null;
+      this.toolCallingSupported = false;
       Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [] });
       throw new Error(error?.message || 'Unknown error loading model');
     }
@@ -119,6 +123,33 @@ class LLMService {
   getMultimodalSupport(): MultimodalSupport | null { return this.multimodalSupport; }
   supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
 
+  supportsToolCalling(): boolean { return this.toolCallingSupported; }
+
+  private detectToolCallingSupport(): void {
+    if (!this.context) {
+      this.toolCallingSupported = false;
+      return;
+    }
+    try {
+      const model = (this.context as any).model;
+      const jinja = model?.chatTemplates?.jinja;
+      // Check if the model's chat template supports tool calls
+      this.toolCallingSupported = !!(
+        jinja?.defaultCaps?.toolCalls ||
+        jinja?.toolUse ||
+        jinja?.toolUseCaps?.toolCalls
+      );
+      logger.log('[LLM] Tool calling detection:', {
+        defaultCaps: jinja?.defaultCaps,
+        toolUse: jinja?.toolUse,
+        supported: this.toolCallingSupported,
+      });
+    } catch (e) {
+      logger.warn('[LLM] Failed to detect tool calling support:', e);
+      this.toolCallingSupported = false;
+    }
+  }
+
   async unloadModel(): Promise<void> {
     if (this.context) {
       await this.context.release();
@@ -126,6 +157,7 @@ class LLMService {
       this.currentModelPath = null;
       this.multimodalSupport = null;
       this.multimodalInitialized = false;
+      this.toolCallingSupported = false;
       this.gpuEnabled = false;
       this.gpuReason = '';
       this.gpuDevices = [];
@@ -178,6 +210,82 @@ class LLMService {
       this.isGenerating = false;
       onComplete?.(fullResponse);
       return fullResponse;
+    } catch (error) {
+      this.isGenerating = false;
+      throw error;
+    }
+  }
+
+  async generateResponseWithTools(
+    messages: Message[],
+    tools: any[],
+    onStream?: StreamCallback,
+    onComplete?: CompleteCallback,
+  ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+    if (!this.context) throw new Error('No model loaded');
+    if (this.isGenerating) throw new Error('Generation already in progress');
+    this.isGenerating = true;
+    try {
+      const managed = await this.manageContextWindow(messages);
+      const oaiMessages = this.convertToOAIMessages(managed);
+      const { settings } = useAppStore.getState();
+      const startTime = Date.now();
+      let firstTokenMs = 0;
+      let tokenCount = 0;
+      let fullResponse = '';
+      let firstReceived = false;
+      const collectedToolCalls: ToolCall[] = [];
+
+      const completionResult = await this.context.completion({
+        messages: oaiMessages,
+        n_predict: settings.maxTokens || RESPONSE_RESERVE,
+        temperature: settings.temperature ?? 0.7,
+        top_k: 40,
+        top_p: settings.topP ?? 0.95,
+        penalty_repeat: settings.repeatPenalty ?? 1.1,
+        stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
+        tools,
+        tool_choice: 'auto',
+      } as any, (data: any) => {
+        if (!this.isGenerating) return;
+        // Collect tool calls from streaming data
+        if (data.tool_calls) {
+          for (const tc of data.tool_calls) {
+            const fn = tc.function || {};
+            collectedToolCalls.push({
+              id: tc.id,
+              name: fn.name || '',
+              arguments: typeof fn.arguments === 'string'
+                ? JSON.parse(fn.arguments || '{}')
+                : fn.arguments || {},
+            });
+          }
+        }
+        if (!data.token) return;
+        if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
+        tokenCount++;
+        fullResponse += data.token;
+        onStream?.(data.token);
+      });
+
+      // Also check the final completion result for tool calls
+      if ((completionResult as any)?.tool_calls?.length && collectedToolCalls.length === 0) {
+        for (const tc of (completionResult as any).tool_calls) {
+          const fn = tc.function || {};
+          collectedToolCalls.push({
+            id: tc.id,
+            name: fn.name || '',
+            arguments: typeof fn.arguments === 'string'
+              ? JSON.parse(fn.arguments || '{}')
+              : fn.arguments || {},
+          });
+        }
+      }
+
+      this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
+      this.isGenerating = false;
+      onComplete?.(fullResponse);
+      return { fullResponse, toolCalls: collectedToolCalls };
     } catch (error) {
       this.isGenerating = false;
       throw error;
@@ -327,11 +435,13 @@ class LLMService {
       this.multimodalSupport = null;
       this.multimodalInitialized = false;
       await this.checkMultimodalSupport();
-      logger.log(`[LLM] Model reloaded, GPU: ${this.gpuEnabled ? `active (${this.activeGpuLayers}L)` : 'off'}`);
+      this.detectToolCallingSupport();
+      logger.log(`[LLM] Model reloaded, GPU: ${this.gpuEnabled ? `active (${this.activeGpuLayers}L)` : 'off'}, tools: ${this.toolCallingSupported}`);
     } catch (error) {
       logger.error('[LLM] Error reloading model:', error);
       this.context = null;
       this.currentModelPath = null;
+      this.toolCallingSupported = false;
       throw error;
     }
   }

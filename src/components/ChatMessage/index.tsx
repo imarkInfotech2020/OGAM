@@ -6,6 +6,7 @@ import {
   Clipboard,
 } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
+import Icon from 'react-native-vector-icons/Feather';
 import { stripControlTokens } from '../../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { AnimatedEntry } from '../AnimatedEntry';
@@ -19,6 +20,30 @@ import { parseThinkingContent, formatTime, formatDuration } from './utils';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
 
+function getToolIcon(toolName?: string): string {
+  switch (toolName) {
+    case 'web_search': return 'globe';
+    case 'calculator': return 'hash';
+    case 'get_current_datetime': return 'clock';
+    case 'get_device_info': return 'smartphone';
+    default: return 'tool';
+  }
+}
+
+function getToolLabel(toolName?: string, content?: string): string {
+  switch (toolName) {
+    case 'web_search': {
+      const queryMatch = content?.match(/^No results found for "([^"]+)"/);
+      if (queryMatch) return `Searched: "${queryMatch[1]}" (no results)`;
+      return 'Web search result';
+    }
+    case 'calculator': return content || 'Calculated';
+    case 'get_current_datetime': return 'Retrieved date/time';
+    case 'get_device_info': return 'Retrieved device info';
+    default: return toolName || 'Tool result';
+  }
+}
+
 function buildMessageData(message: Message) {
   const displayContent = message.role === 'assistant'
     ? stripControlTokens(message.content)
@@ -28,6 +53,49 @@ function buildMessageData(message: Message) {
     : { thinking: null, response: message.content, isThinkingComplete: true };
   return { displayContent, parsedContent };
 }
+
+type ToolResultBubbleProps = {
+  toolIcon: string;
+  toolLabel: string;
+  durationLabel: string;
+  content: string;
+  hasDetails: boolean;
+  styles: ReturnType<typeof createStyles>;
+  colors: any;
+};
+
+const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
+  toolIcon, toolLabel, durationLabel, content, hasDetails, styles, colors,
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View testID="tool-message" style={styles.systemInfoContainer}>
+      <TouchableOpacity
+        style={styles.toolStatusRow}
+        onPress={hasDetails ? () => setExpanded(!expanded) : undefined}
+        activeOpacity={hasDetails ? 0.6 : 1}
+        disabled={!hasDetails}
+      >
+        <Icon name={toolIcon} size={13} color={colors.textMuted} />
+        <Text style={styles.toolStatusText} numberOfLines={expanded ? undefined : 2}>
+          {toolLabel}{durationLabel}
+        </Text>
+        {hasDetails && (
+          <Icon
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={12}
+            color={colors.textMuted}
+          />
+        )}
+      </TouchableOpacity>
+      {expanded && hasDetails && (
+        <View style={styles.toolDetailContainer}>
+          <Text style={styles.toolDetailText} selectable>{content}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
 
 type MetaRowProps = {
   message: Message;
@@ -140,6 +208,49 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           onClose={() => setAlertState(hideAlert())}
         />
       </>
+    );
+  }
+
+  // Tool result messages — compact status bubble, tappable to expand details
+  if (message.role === 'tool') {
+    const toolIcon = getToolIcon(message.toolName);
+    const toolLabel = getToolLabel(message.toolName, message.content);
+    const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
+    const hasDetails = message.content && message.content.length > 0 && !message.content.startsWith('No results');
+    return (
+      <ToolResultBubble
+        toolIcon={toolIcon}
+        toolLabel={toolLabel}
+        durationLabel={durationLabel}
+        content={message.content}
+        hasDetails={!!hasDetails}
+        styles={styles}
+        colors={colors}
+      />
+    );
+  }
+
+  // Assistant messages with tool calls — show as compact "calling tool" status
+  if (message.role === 'assistant' && message.toolCalls?.length) {
+    return (
+      <View testID="tool-call-message" style={styles.systemInfoContainer}>
+        {message.toolCalls.map((tc, i) => {
+          const toolIcon = getToolIcon(tc.name);
+          let argsPreview = '';
+          try {
+            const parsed = JSON.parse(tc.arguments);
+            argsPreview = Object.values(parsed).join(', ');
+          } catch { argsPreview = tc.arguments; }
+          return (
+            <View key={`${tc.id || i}`} style={styles.toolStatusRow}>
+              <Icon name={toolIcon} size={13} color={colors.primary} />
+              <Text style={[styles.toolStatusText, { color: colors.primary }]} numberOfLines={1}>
+                Using {tc.name}{argsPreview ? `: ${argsPreview}` : ''}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     );
   }
 

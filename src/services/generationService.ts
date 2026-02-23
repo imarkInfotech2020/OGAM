@@ -6,6 +6,8 @@
 import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
+import { getToolsAsOpenAISchema, executeToolCall } from './tools';
+import type { ToolCall, ToolResult } from './tools/types';
 import logger from '../utils/logger';
 
 export interface QueuedMessage {
@@ -179,6 +181,131 @@ class GenerationService {
       );
     } catch (error) {
       logger.error('[GenerationService] ❌ Generation error:', error);
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
+      this.tokenBuffer = '';
+      chatStore.clearStreamingMessage();
+      this.resetState();
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a response with tool calling support.
+   * Loops: call LLM → if tool_calls, execute tools, inject results, repeat (max 5 iterations).
+   */
+  async generateWithTools(
+    conversationId: string,
+    messages: Message[],
+    enabledToolIds: string[],
+    callbacks?: {
+      onToolCallStart?: (name: string, args: Record<string, any>) => void;
+      onToolCallComplete?: (name: string, result: ToolResult) => void;
+      onFirstToken?: () => void;
+    },
+  ): Promise<void> {
+    if (this.state.isGenerating) {
+      logger.log('[GenerationService] Already generating, ignoring request');
+      return;
+    }
+
+    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
+    if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy');
+
+    this.abortRequested = false;
+    this.updateState({
+      isGenerating: true,
+      isThinking: true,
+      conversationId,
+      streamingContent: '',
+      startTime: Date.now(),
+    });
+
+    const chatStore = useChatStore.getState();
+    chatStore.startStreaming(conversationId);
+    const toolSchemas = getToolsAsOpenAISchema(enabledToolIds);
+    let loopMessages = [...messages];
+    const MAX_TOOL_ITERATIONS = 5;
+    this.tokenBuffer = '';
+
+    try {
+      for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+        if (this.abortRequested) break;
+
+        const { fullResponse, toolCalls } = await llmService.generateResponseWithTools(
+          loopMessages,
+          toolSchemas,
+          undefined, // no streaming during tool loop intermediate calls
+          undefined,
+        );
+
+        if (toolCalls.length === 0 || iteration === MAX_TOOL_ITERATIONS - 1) {
+          // No tool calls or max iterations — push the final response to UI
+          // If we already have a full response from the last iteration, push it all at once
+          if (fullResponse) {
+            this.updateState({ isThinking: false });
+            callbacks?.onFirstToken?.();
+            this.state.streamingContent = fullResponse;
+            useChatStore.getState().appendToStreamingMessage(fullResponse);
+          }
+
+          this.forceFlushTokens();
+          if (this.abortRequested) {
+            chatStore.clearStreamingMessage();
+          } else {
+            const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+            useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+          }
+          this.resetState();
+          return;
+        }
+
+        // Assistant made tool calls — add assistant message with tool_calls to context
+        const assistantMsg: Message = {
+          id: `tool-assist-${Date.now()}-${iteration}`,
+          role: 'assistant',
+          content: fullResponse || '',
+          timestamp: Date.now(),
+          toolCalls: toolCalls.map(tc => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments),
+          })),
+        };
+        loopMessages.push(assistantMsg);
+
+        // Also add the assistant tool-call message to the conversation for display
+        chatStore.addMessage(conversationId, assistantMsg);
+
+        // Execute each tool call and add results
+        for (const tc of toolCalls) {
+          if (this.abortRequested) break;
+
+          callbacks?.onToolCallStart?.(tc.name, tc.arguments);
+
+          const result = await executeToolCall(tc);
+
+          callbacks?.onToolCallComplete?.(tc.name, result);
+
+          const toolResultMsg: Message = {
+            id: `tool-result-${Date.now()}-${tc.id || tc.name}`,
+            role: 'tool',
+            content: result.error ? `Error: ${result.error}` : result.content,
+            timestamp: Date.now(),
+            toolCallId: tc.id,
+            toolName: tc.name,
+            generationTimeMs: result.durationMs,
+          };
+          loopMessages.push(toolResultMsg);
+
+          // Add tool result to conversation for display
+          chatStore.addMessage(conversationId, toolResultMsg);
+        }
+      }
+    } catch (error) {
+      logger.error('[GenerationService] Tool generation error:', error);
       if (this.flushTimer) {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;

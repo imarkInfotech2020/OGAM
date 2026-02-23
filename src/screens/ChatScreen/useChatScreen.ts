@@ -43,6 +43,8 @@ export const useChatScreen = () => {
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
   const [imageGenState, setImageGenState] = useState<ImageGenerationState>(imageGenerationService.getState());
+  const [showToolPicker, setShowToolPicker] = useState(false);
+  const [supportsToolCalling, setSupportsToolCalling] = useState(false);
 
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
@@ -169,6 +171,14 @@ export const useChatScreen = () => {
     } else if (!activeModel?.mmProjPath) { setSupportsVision(false); }
   }, [activeModel?.mmProjPath]);
 
+  useEffect(() => {
+    if (llmService.isModelLoaded()) {
+      setSupportsToolCalling(llmService.supportsToolCalling());
+    } else {
+      setSupportsToolCalling(false);
+    }
+  }, [activeModelId, isModelLoading]);
+
   const displayMessages = getDisplayMessages(
     activeConversation?.messages || [],
     { isThinking, streamingMessage, isStreamingForThisConversation },
@@ -188,16 +198,28 @@ export const useChatScreen = () => {
   };
   startGenerationRef.current = startGeneration;
 
+  const enabledTools = supportsToolCalling ? (settings.enabledTools || []) : [];
+
+  const handleToggleTool = (toolId: string) => {
+    const current = settings.enabledTools || [];
+    const updated = current.includes(toolId)
+      ? current.filter((id: string) => id !== toolId)
+      : [...current, toolId];
+    useAppStore.getState().updateSettings({ enabledTools: updated });
+  };
+
   return {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
     showDebugPanel, setShowDebugPanel,
     showModelSelector, setShowModelSelector,
     showSettingsPanel, setShowSettingsPanel,
+    showToolPicker, setShowToolPicker, supportsToolCalling,
     debugInfo, alertState, setAlertState,
     showScrollToBottom, setShowScrollToBottom,
     isClassifying, animateLastN, queueCount, queuedTexts,
     viewerImageUri, setViewerImageUri, imageGenState,
+    enabledTools, handleToggleTool,
     activeModelId, activeConversationId, activeConversation, activeModel,
     activeProject, activeImageModel, imageModelLoaded, isGeneratingImage,
     imageGenerationProgress: imageGenState.progress,

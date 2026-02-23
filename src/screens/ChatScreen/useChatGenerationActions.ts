@@ -15,6 +15,7 @@ import {
   imageGenerationService,
   onnxImageGeneratorService,
   ImageGenerationState,
+  buildToolSystemPromptHint,
 } from '../../services';
 import { useChatStore, useProjectStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy } from '../../types';
@@ -42,6 +43,7 @@ type GenerationDeps = {
     systemPrompt?: string;
     imageSteps?: number;
     imageGuidanceScale?: number;
+    enabledTools?: string[];
   };
   downloadedModels: DownloadedModel[];
   setAlertState: SetState<AlertState>;
@@ -163,7 +165,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const project = conversation?.projectId
     ? useProjectStore.getState().getProject(conversation.projectId)
     : null;
-  const systemPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const enabledTools = deps.settings.enabledTools || [];
+  const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const systemPrompt = enabledTools.length > 0
+    ? basePrompt + buildToolSystemPromptHint(enabledTools)
+    : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   let shouldClearCache = false;
   try {
@@ -179,11 +185,24 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     await llmService.clearKVCache(false).catch(() => {});
   }
   try {
-    await generationService.generateResponse(
-      targetConversationId,
-      messagesForContext,
-      () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
-    );
+    if (enabledTools.length > 0) {
+      await generationService.generateWithTools(
+        targetConversationId,
+        messagesForContext,
+        enabledTools,
+        {
+          onFirstToken: () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
+          onToolCallStart: (name, args) => { logger.log(`[ChatScreen] Tool call: ${name}`, args); },
+          onToolCallComplete: (name, result) => { logger.log(`[ChatScreen] Tool result: ${name}`, result.durationMs, 'ms'); },
+        },
+      );
+    } else {
+      await generationService.generateResponse(
+        targetConversationId,
+        messagesForContext,
+        () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
+      );
+    }
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
   }

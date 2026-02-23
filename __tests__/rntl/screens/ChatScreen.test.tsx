@@ -146,6 +146,7 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(() => true),
     supportsVision: jest.fn(() => false),
+    supportsToolCalling: jest.fn(() => false),
     clearKVCache: jest.fn(() => Promise.resolve()),
     getMultimodalSupport: jest.fn(() => null),
     getLoadedModelPath: jest.fn(() => null),
@@ -398,6 +399,18 @@ jest.mock('../../../src/components', () => ({
       <View testID="debug-sheet">
         <Text>Debug Info</Text>
         <TouchableOpacity testID="close-debug" onPress={onClose}>
+          <Text>Close</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  },
+  ToolPickerSheet: ({ visible, onClose }: any) => {
+    const { View, Text, TouchableOpacity } = require('react-native');
+    if (!visible) return null;
+    return (
+      <View testID="tool-picker-sheet">
+        <Text>Tools</Text>
+        <TouchableOpacity testID="close-tool-picker" onPress={onClose}>
           <Text>Close</Text>
         </TouchableOpacity>
       </View>

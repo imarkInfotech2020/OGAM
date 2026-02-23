@@ -3,7 +3,7 @@ import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { ChatInput, CustomAlert, hideAlert } from '../../components';
+import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
@@ -235,6 +235,15 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       queuedTexts={chat.queuedTexts}
       onClearQueue={() => generationService.clearQueue()}
       placeholder={getPlaceholderText(llmService.isModelLoaded(), chat.supportsVision)}
+      onToolsPress={() => chat.setShowToolPicker(true)}
+      enabledToolCount={chat.enabledTools.length}
+      supportsToolCalling={chat.supportsToolCalling}
+    />
+    <ToolPickerSheet
+      visible={chat.showToolPicker}
+      onClose={() => chat.setShowToolPicker(false)}
+      enabledTools={chat.enabledTools}
+      onToggleTool={chat.handleToggleTool}
     />
   </>
 );
