@@ -75,10 +75,6 @@ function App() {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
 
-      // Request POST_NOTIFICATIONS permission on Android 13+ so system
-      // DownloadManager shows progress notifications.
-      backgroundDownloadService.requestNotificationPermission().catch((err) => logger.warn('Failed to request notification permission', err));
-
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
       const deviceInfo = await hardwareService.getDeviceInfo();

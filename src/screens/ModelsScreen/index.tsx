@@ -168,6 +168,16 @@ export const ModelsScreen: React.FC = () => {
       )}
 
       <CustomAlert {...vm.alertState} onClose={() => vm.setAlertState(hideAlert())} />
+      <CustomAlert
+        visible={vm.showNotifRationale}
+        title="Download notifications"
+        message={"Off Grid can show download progress in your notification tray while you use other apps.\n\nThis is optional — downloads work fine without it."}
+        onClose={vm.handleNotifRationaleDismiss}
+        buttons={[
+          { text: 'No thanks', style: 'cancel', onPress: vm.handleNotifRationaleDismiss },
+          { text: 'Allow', style: 'default', onPress: vm.handleNotifRationaleAllow },
+        ]}
+      />
     </SafeAreaView>
   );
 };

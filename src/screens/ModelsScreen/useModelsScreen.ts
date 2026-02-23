@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Platform } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
@@ -7,7 +7,8 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
-import { modelManager } from '../../services';
+import { modelManager, backgroundDownloadService } from '../../services';
+import logger from '../../utils/logger';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
@@ -23,6 +24,8 @@ export function useModelsScreen() {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
+  const [showNotifRationale, setShowNotifRationale] = useState(false);
+  const pendingDownload = useRef<(() => void) | null>(null);
 
   const { addDownloadedModel, activeImageModelId, setActiveImageModelId, addDownloadedImageModel } = useAppStore();
 
@@ -129,6 +132,56 @@ export function useModelsScreen() {
     image.downloadedImageModels.length +
     Object.keys(text.downloadProgress).length;
 
+  const isFirstDownload =
+    text.downloadedModels.length === 0 && image.downloadedImageModels.length === 0;
+
+  const maybeShowNotifRationale = useCallback(async (proceed: () => void) => {
+    if (Platform.OS !== 'android' || Platform.Version < 33 || !isFirstDownload) {
+      proceed();
+      return;
+    }
+    const alreadyGranted = await PermissionsAndroid.check(
+      PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    );
+    if (alreadyGranted) {
+      proceed();
+      return;
+    }
+    pendingDownload.current = proceed;
+    setShowNotifRationale(true);
+  }, [isFirstDownload]);
+
+  const handleDownload = useCallback(
+    (...args: Parameters<typeof text.handleDownload>) => {
+      maybeShowNotifRationale(() => text.handleDownload(...args));
+    },
+    [maybeShowNotifRationale, text],
+  );
+
+  const handleDownloadImageModel = useCallback(
+    (...args: Parameters<typeof image.handleDownloadImageModel>) => {
+      maybeShowNotifRationale(() => image.handleDownloadImageModel(...args));
+    },
+    [maybeShowNotifRationale, image],
+  );
+
+  const handleNotifRationaleAllow = useCallback(() => {
+    setShowNotifRationale(false);
+    backgroundDownloadService
+      .requestNotificationPermission()
+      .catch((err) => logger.warn('Failed to request notification permission', err))
+      .finally(() => {
+        pendingDownload.current?.();
+        pendingDownload.current = null;
+      });
+  }, []);
+
+  const handleNotifRationaleDismiss = useCallback(() => {
+    setShowNotifRationale(false);
+    pendingDownload.current?.();
+    pendingDownload.current = null;
+  }, []);
+
   return {
     navigation,
     focusTrigger,
@@ -165,7 +218,7 @@ export function useModelsScreen() {
     recommendedAsModelInfo: text.recommendedAsModelInfo,
     handleSearch: text.handleSearch,
     handleSelectModel: text.handleSelectModel,
-    handleDownload: text.handleDownload,
+    handleDownload,
     handleRepairMmProj: text.handleRepairMmProj,
     handleCancelDownload: text.handleCancelDownload,
     downloadIds: text.downloadIds,
@@ -208,7 +261,10 @@ export function useModelsScreen() {
     loadHFModels: image.loadHFModels,
     clearImageFilters: image.clearImageFilters,
     isRecommendedModel: image.isRecommendedModel,
-    handleDownloadImageModel: image.handleDownloadImageModel,
+    handleDownloadImageModel,
+    showNotifRationale,
+    handleNotifRationaleAllow,
+    handleNotifRationaleDismiss,
     setUserChangedBackendFilter: image.setUserChangedBackendFilter,
   };
 }
