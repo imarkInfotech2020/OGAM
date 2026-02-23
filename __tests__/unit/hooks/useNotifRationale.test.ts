@@ -2,7 +2,6 @@ import { renderHook, act } from '@testing-library/react-native';
 import { Platform, PermissionsAndroid } from 'react-native';
 import { useNotifRationale } from '../../../src/screens/ModelsScreen/useNotifRationale';
 
-// Mock backgroundDownloadService
 const mockRequestNotificationPermission = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../src/services', () => ({
   backgroundDownloadService: {
@@ -15,18 +14,28 @@ jest.mock('../../../src/utils/logger', () => ({
   default: { warn: jest.fn() },
 }));
 
+function setupAndroid33(permissionGranted: boolean) {
+  Object.defineProperty(Platform, 'OS', { get: () => 'android' });
+  Object.defineProperty(Platform, 'Version', { get: () => 33 });
+  jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(permissionGranted);
+}
+
+async function renderAndTrigger(isFirstDownload: boolean) {
+  const proceed = jest.fn();
+  const hook = renderHook(() => useNotifRationale(isFirstDownload));
+  await act(async () => {
+    await hook.result.current.maybeShowNotifRationale(proceed);
+  });
+  return { ...hook, proceed };
+}
+
 describe('useNotifRationale', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('proceeds immediately when not first download', async () => {
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(false));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
+    const { result, proceed } = await renderAndTrigger(false);
 
     expect(proceed).toHaveBeenCalled();
     expect(result.current.showNotifRationale).toBe(false);
@@ -34,89 +43,45 @@ describe('useNotifRationale', () => {
 
   it('proceeds immediately on iOS', async () => {
     Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
+    const { result, proceed } = await renderAndTrigger(true);
 
     expect(proceed).toHaveBeenCalled();
     expect(result.current.showNotifRationale).toBe(false);
-
     Object.defineProperty(Platform, 'OS', { get: () => 'android' });
   });
 
   it('proceeds immediately on Android < 33', async () => {
     Object.defineProperty(Platform, 'OS', { get: () => 'android' });
     Object.defineProperty(Platform, 'Version', { get: () => 32 });
-
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
+    const { result, proceed } = await renderAndTrigger(true);
 
     expect(proceed).toHaveBeenCalled();
     expect(result.current.showNotifRationale).toBe(false);
   });
 
   it('proceeds immediately when permission already granted', async () => {
-    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
-    Object.defineProperty(Platform, 'Version', { get: () => 33 });
-    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
-
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
+    setupAndroid33(true);
+    const { result, proceed } = await renderAndTrigger(true);
 
     expect(proceed).toHaveBeenCalled();
     expect(result.current.showNotifRationale).toBe(false);
   });
 
   it('shows rationale on Android 33+ first download without permission', async () => {
-    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
-    Object.defineProperty(Platform, 'Version', { get: () => 33 });
-    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
-
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
+    setupAndroid33(false);
+    const { result, proceed } = await renderAndTrigger(true);
 
     expect(proceed).not.toHaveBeenCalled();
     expect(result.current.showNotifRationale).toBe(true);
   });
 
   it('handleNotifRationaleAllow requests permission then proceeds', async () => {
-    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
-    Object.defineProperty(Platform, 'Version', { get: () => 33 });
-    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
-
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
-
+    setupAndroid33(false);
+    const { result, proceed } = await renderAndTrigger(true);
     expect(result.current.showNotifRationale).toBe(true);
 
-    await act(async () => {
-      result.current.handleNotifRationaleAllow();
-    });
-
-    // Wait for the async permission request to resolve
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await act(async () => { result.current.handleNotifRationaleAllow(); });
+    await act(async () => { await Promise.resolve(); });
 
     expect(mockRequestNotificationPermission).toHaveBeenCalled();
     expect(proceed).toHaveBeenCalled();
@@ -124,27 +89,13 @@ describe('useNotifRationale', () => {
   });
 
   it('only shows rationale once per session', async () => {
-    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
-    Object.defineProperty(Platform, 'Version', { get: () => 33 });
-    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    setupAndroid33(false);
+    const { result, proceed } = await renderAndTrigger(true);
+    expect(proceed).not.toHaveBeenCalled();
 
-    const proceed1 = jest.fn();
+    await act(async () => { result.current.handleNotifRationaleDismiss(); });
+
     const proceed2 = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    // First call — shows rationale
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed1);
-    });
-    expect(proceed1).not.toHaveBeenCalled();
-    expect(result.current.showNotifRationale).toBe(true);
-
-    // Dismiss
-    await act(async () => {
-      result.current.handleNotifRationaleDismiss();
-    });
-
-    // Second call — skips rationale, proceeds immediately
     await act(async () => {
       await result.current.maybeShowNotifRationale(proceed2);
     });
@@ -153,20 +104,10 @@ describe('useNotifRationale', () => {
   });
 
   it('handleNotifRationaleDismiss proceeds without requesting permission', async () => {
-    Object.defineProperty(Platform, 'OS', { get: () => 'android' });
-    Object.defineProperty(Platform, 'Version', { get: () => 33 });
-    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    setupAndroid33(false);
+    const { result, proceed } = await renderAndTrigger(true);
 
-    const proceed = jest.fn();
-    const { result } = renderHook(() => useNotifRationale(true));
-
-    await act(async () => {
-      await result.current.maybeShowNotifRationale(proceed);
-    });
-
-    await act(async () => {
-      result.current.handleNotifRationaleDismiss();
-    });
+    await act(async () => { result.current.handleNotifRationaleDismiss(); });
 
     expect(mockRequestNotificationPermission).not.toHaveBeenCalled();
     expect(proceed).toHaveBeenCalled();

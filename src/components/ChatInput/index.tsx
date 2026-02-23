@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Animated } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -50,18 +50,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const inputRef = useRef<TextInput>(null);
-  const [isFocused, setIsFocused] = useState(false);
-  const focusAnim = useRef(new Animated.Value(0)).current;
+  const hasText = message.length > 0;
+  const iconsAnim = useRef(new Animated.Value(0)).current;
 
-  const handleFocus = useCallback(() => {
-    setIsFocused(true);
-    Animated.timing(focusAnim, { toValue: 1, duration: ANIM_DURATION_IN, useNativeDriver: false }).start();
-  }, [focusAnim]);
-
-  const handleBlur = useCallback(() => {
-    setIsFocused(false);
-    Animated.timing(focusAnim, { toValue: 0, duration: ANIM_DURATION_OUT, useNativeDriver: false }).start();
-  }, [focusAnim]);
+  useEffect(() => {
+    Animated.timing(iconsAnim, {
+      toValue: hasText ? 1 : 0,
+      duration: hasText ? ANIM_DURATION_IN : ANIM_DURATION_OUT,
+      useNativeDriver: false,
+    }).start();
+  }, [hasText, iconsAnim]);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
 
@@ -161,15 +159,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             editable={!disabled}
             blurOnSubmit={false}
             returnKeyType="default"
-            onFocus={handleFocus}
-            onBlur={handleBlur}
           />
-          {/* Width collapses on focus; pill overflow:hidden clips the content */}
+          {/* Icons collapse when user starts typing, reappear when input is empty */}
           <Animated.View
-            pointerEvents={isFocused ? 'none' : 'auto'}
+            pointerEvents={hasText ? 'none' : 'auto'}
             style={[styles.pillIcons, {
-              width: focusAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
-              opacity: focusAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
+              width: iconsAnim.interpolate({ inputRange: [0, 1], outputRange: [PILL_ICONS_WIDTH, 0] }),
+              opacity: iconsAnim.interpolate({ inputRange: [0, 0.4], outputRange: [1, 0], extrapolate: 'clamp' }),
               overflow: 'hidden' as const,
             }]}
           >
