@@ -21,31 +21,16 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 // Mock theme
-jest.mock('../../../src/theme', () => ({
-  useTheme: () => ({
-    colors: {
-      text: '#000',
-      textMuted: '#999',
-      textSecondary: '#666',
-      primary: '#007AFF',
-      background: '#FFF',
-      surface: '#F5F5F5',
-      border: '#E0E0E0',
-    },
-  }),
-  useThemedStyles: (createStyles: Function) => createStyles(
-    {
-      text: '#000',
-      textMuted: '#999',
-      textSecondary: '#666',
-      primary: '#007AFF',
-      background: '#FFF',
-      surface: '#F5F5F5',
-      border: '#E0E0E0',
-    },
-    {},
-  ),
-}));
+jest.mock('../../../src/theme', () => {
+  const mockColors = {
+    text: '#000', textMuted: '#999', textSecondary: '#666',
+    primary: '#007AFF', background: '#FFF', surface: '#F5F5F5', border: '#E0E0E0',
+  };
+  return {
+    useTheme: () => ({ colors: mockColors }),
+    useThemedStyles: (createStyles: Function) => createStyles(mockColors, {}),
+  };
+});
 
 // Mock AppSheet to render children when visible, with a close button
 jest.mock('../../../src/components/AppSheet', () => ({
