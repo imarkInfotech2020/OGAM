@@ -299,11 +299,11 @@ describe('runToolLoop', () => {
   // MAX_TOOL_ITERATIONS limit
   // ==========================================================================
   describe('iteration limit', () => {
-    it('stops after MAX_TOOL_ITERATIONS (5) even if model keeps requesting tools', async () => {
+    it('stops after MAX_TOOL_ITERATIONS (3) even if model keeps requesting tools', async () => {
       const toolCall = makeToolCall();
       mockExecuteToolCall.mockResolvedValue(makeToolResult());
 
-      // Model always requests tool calls, but on the 5th iteration it should
+      // Model always requests tool calls, but on the 3rd iteration it should
       // still return the final response
       mockedGenerateResponseWithTools.mockResolvedValue({
         fullResponse: 'Still thinking...',
@@ -313,17 +313,17 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      // On iteration 4 (0-indexed), the condition
+      // On iteration 2 (0-indexed), the condition
       // `iteration === MAX_TOOL_ITERATIONS - 1` triggers the final response.
-      // So generateResponseWithTools is called 5 times total.
-      expect(mockedGenerateResponseWithTools).toHaveBeenCalledTimes(5);
+      // So generateResponseWithTools is called 3 times total.
+      expect(mockedGenerateResponseWithTools).toHaveBeenCalledTimes(3);
 
       // The last iteration should produce the final response
       expect(ctx.onFinalResponse).toHaveBeenCalledWith('Still thinking...');
       expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
     });
 
-    it('executes tools for iterations 0 through 3 but not on iteration 4', async () => {
+    it('executes tools for iterations 0 through 1 but not on iteration 2', async () => {
       const toolCall = makeToolCall();
       mockExecuteToolCall.mockResolvedValue(makeToolResult());
 
@@ -335,8 +335,8 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      // Tools are executed for iterations 0-3 (4 iterations), not on iteration 4
-      expect(mockExecuteToolCall).toHaveBeenCalledTimes(4);
+      // Tools are executed for iterations 0-1 (2 iterations), not on iteration 2
+      expect(mockExecuteToolCall).toHaveBeenCalledTimes(2);
     });
   });
 

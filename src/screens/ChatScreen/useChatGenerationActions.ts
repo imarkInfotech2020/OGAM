@@ -69,7 +69,7 @@ function buildMessagesForContext(
   systemPrompt: string,
 ): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
-  const conversationMessages = conversation?.messages || [];
+  const conversationMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
   const lastUserMsg = conversationMessages.at(-1);
   const userMessageForContext = (lastUserMsg?.role === 'user'
     ? { ...lastUserMsg, content: messageText }
