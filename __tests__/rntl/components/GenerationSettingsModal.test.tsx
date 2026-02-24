@@ -582,8 +582,6 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('Top P')).toBeTruthy();
     expect(getByText('Repeat Penalty')).toBeTruthy();
     expect(getByText('Context Length')).toBeTruthy();
-    expect(getByText('CPU Threads')).toBeTruthy();
-    expect(getByText('Batch Size')).toBeTruthy();
   });
 
   it('displays formatted values for text settings', () => {
@@ -598,7 +596,6 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
     expect(getByText('2.0K')).toBeTruthy(); // contextLength: 2048
-    expect(getByText('6')).toBeTruthy(); // nThreads
   });
 
   it('shows description for text settings', () => {
@@ -955,17 +952,16 @@ describe('GenerationSettingsModal', () => {
         expect(getByText('8')).toBeTruthy();
       });
 
-      it('shows warning text and caps GPU layers to 1 when flash attention is On', () => {
-        // flashAttn: true + android → isFlashAttnOn=true → gpuLayersMax=1 → warning shown
+      it('shows GPU layers at full value when flash attention is On (no clamping)', () => {
+        // Flash attention no longer caps GPU layers — gpuLayersMax is always 99
         mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 8, flashAttn: true };
         const { getByText } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('PERFORMANCE'));
-        expect(getByText('Flash Attention limits GPU layers to 1 on Android')).toBeTruthy();
-        // gpuLayersEffective = Math.min(8, 1) = 1
-        expect(getByText('1')).toBeTruthy();
+        // gpuLayersEffective = Math.min(8, 99) = 8
+        expect(getByText('8')).toBeTruthy();
       });
 
-      it('uses default gpuLayers value of 6 when gpuLayers is undefined (covers ?? fallback)', () => {
+      it('uses default gpuLayers value of 1 when gpuLayers is undefined (covers ?? fallback)', () => {
         mockStoreValues.settings = {
           ...defaultSettings,
           enableGpu: true,
@@ -974,29 +970,35 @@ describe('GenerationSettingsModal', () => {
         };
         const { getByText } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('PERFORMANCE'));
-        // gpuLayersEffective = Math.min(undefined ?? 6, 99) = 6
-        expect(getByText('6')).toBeTruthy();
+        // gpuLayersEffective = Math.min(undefined ?? 1, 99) = 1
+        expect(getByText('1')).toBeTruthy();
       });
 
-      it('clamps to 1 when gpuLayers is undefined (defaults to 6, which is > 1)', () => {
+      it('does not clamp gpuLayers when turning flash attn On with undefined layers', () => {
         mockStoreValues.settings = { ...defaultSettings, flashAttn: false, gpuLayers: undefined as any };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('PERFORMANCE'));
         mockUpdateSettings.mockClear();
         fireEvent.press(getByTestId('flash-attn-on-button'));
         expect(mockUpdateSettings).toHaveBeenCalledWith(
-          expect.objectContaining({ flashAttn: true, gpuLayers: 1 })
+          expect.objectContaining({ flashAttn: true })
+        );
+        expect(mockUpdateSettings).not.toHaveBeenCalledWith(
+          expect.objectContaining({ gpuLayers: expect.any(Number) })
         );
       });
 
-      it('clamps gpuLayers to 1 when turning flash attn On with layers > 1', () => {
+      it('does not clamp gpuLayers when turning flash attn On with layers > 1', () => {
         mockStoreValues.settings = { ...defaultSettings, flashAttn: false, gpuLayers: 8 };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('PERFORMANCE'));
         mockUpdateSettings.mockClear();
         fireEvent.press(getByTestId('flash-attn-on-button'));
         expect(mockUpdateSettings).toHaveBeenCalledWith(
-          expect.objectContaining({ flashAttn: true, gpuLayers: 1 })
+          expect.objectContaining({ flashAttn: true })
+        );
+        expect(mockUpdateSettings).not.toHaveBeenCalledWith(
+          expect.objectContaining({ gpuLayers: expect.any(Number) })
         );
       });
 
@@ -1025,7 +1027,7 @@ describe('GenerationSettingsModal', () => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: false });
       });
 
-      it('calls updateSettings with enableGpu: true when GPU On button pressed', () => {
+      it('calls updateSettings with enableGpu: true and cacheType: f16 when GPU On button pressed on Android with quantized cache', () => {
         mockStoreValues.settings = { ...defaultSettings, enableGpu: false };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('PERFORMANCE'));
@@ -1033,7 +1035,8 @@ describe('GenerationSettingsModal', () => {
 
         fireEvent.press(getByTestId('gpu-on-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: true });
+        // On Android, enabling GPU with quantized cache (no cacheType defaults to q8_0) auto-switches to f16
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: true, cacheType: 'f16' });
       });
 
       it('calls updateSettings with gpuLayers value from GPU layers slider', () => {

@@ -625,12 +625,13 @@ describe('ModelSettingsScreen', () => {
         expect(getByText('GPU Layers')).toBeTruthy();
       });
 
-      it('clamps gpuLayers to 1 via UI when flashAttn turned on with layers > 1', () => {
+      it('does not clamp gpuLayers when flashAttn turned on with layers > 1', () => {
         useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 8 });
         const { getByTestId } = renderWithSections('performance');
         fireEvent(getByTestId('flash-attn-switch'), 'valueChange', true);
         expect(useAppStore.getState().settings.flashAttn).toBe(true);
-        expect(useAppStore.getState().settings.gpuLayers).toBe(1);
+        // GPU layers are no longer clamped when enabling flash attention
+        expect(useAppStore.getState().settings.gpuLayers).toBe(8);
       });
 
       it('updates enableGpu to false when GPU Acceleration switch is toggled off', () => {
@@ -992,7 +993,7 @@ describe('ModelSettingsScreen', () => {
       expect(s.cacheType).toBe('q8_0');
       expect(s.flashAttn).toBe(true);
       expect(s.enableGpu).toBe(false);
-      expect(s.gpuLayers).toBe(6);
+      expect(s.gpuLayers).toBe(1);
     });
   });
 });
