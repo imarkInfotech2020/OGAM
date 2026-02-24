@@ -19,11 +19,11 @@ const MAX_TOTAL_TOOL_CALLS = 5;
  */
 export function parseToolCallsFromText(text: string): { cleanText: string; toolCalls: ToolCall[] } {
   const toolCalls: ToolCall[] = [];
-  const tagPattern = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+  const tagPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
   let match;
   while ((match = tagPattern.exec(text)) !== null) {
     try {
-      const parsed = JSON.parse(match[1]);
+      const parsed = JSON.parse(match[1].trim());
       if (parsed.name) {
         toolCalls.push({
           id: `text-tc-${Date.now()}-${toolCalls.length}`,

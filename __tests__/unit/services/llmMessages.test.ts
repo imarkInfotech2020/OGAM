@@ -193,7 +193,7 @@ describe('buildOAIMessages', () => {
   it('prepends file:// to image URIs that lack a scheme', () => {
     const messages: Message[] = [
       createUserMessage('Describe', {
-        attachments: [createImageAttachment({ uri: '/tmp/photo.jpg' })],
+        attachments: [createImageAttachment({ uri: '/data/user/0/com.localllm/cache/photo.jpg' })],
       }),
     ];
 
@@ -201,7 +201,7 @@ describe('buildOAIMessages', () => {
     const parts = result[0].content as any[];
     const imageUrlPart = parts.find((p: any) => p.type === 'image_url');
 
-    expect(imageUrlPart.image_url.url).toBe('file:///tmp/photo.jpg');
+    expect(imageUrlPart.image_url.url).toBe('file:///data/user/0/com.localllm/cache/photo.jpg');
   });
 
   it('formats tool result messages correctly', () => {

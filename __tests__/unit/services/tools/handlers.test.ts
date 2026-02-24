@@ -27,6 +27,11 @@ function makeToolCall(name: string, args: Record<string, any> = {}): ToolCall {
   return { id: 'test-call-1', name, arguments: args };
 }
 
+/** Shorthand: create a tool call and execute it in one step. */
+async function runTool(name: string, args: Record<string, any> = {}) {
+  return executeToolCall(makeToolCall(name, args));
+}
+
 /**
  * Builds a minimal Brave Search-style HTML string containing result blocks.
  * Each entry produces one block with class="result-wrapper" containing
@@ -55,7 +60,7 @@ function buildBraveSearchHTML(
 describe('Tool Handlers', () => {
   describe('executeToolCall dispatcher', () => {
     it('routes to calculator handler', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '1+1' }));
+      const result = await runTool('calculator', { expression: '1+1' });
       expect(result.name).toBe('calculator');
       expect(result.content).toContain('1+1');
       expect(result.content).toContain('2');
@@ -63,27 +68,27 @@ describe('Tool Handlers', () => {
     });
 
     it('routes to datetime handler', async () => {
-      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
+      const result = await runTool('get_current_datetime');
       expect(result.name).toBe('get_current_datetime');
       expect(result.content).toContain('Current date and time');
       expect(result.error).toBeUndefined();
     });
 
     it('routes to device info handler', async () => {
-      const result = await executeToolCall(makeToolCall('get_device_info', { info_type: 'memory' }));
+      const result = await runTool('get_device_info', { info_type: 'memory' });
       expect(result.name).toBe('get_device_info');
       expect(result.content).toContain('Memory');
       expect(result.error).toBeUndefined();
     });
 
     it('returns error for unknown tool name', async () => {
-      const result = await executeToolCall(makeToolCall('nonexistent_tool', {}));
+      const result = await runTool('nonexistent_tool');
       expect(result.error).toBe('Unknown tool: nonexistent_tool');
       expect(result.content).toBe('');
     });
 
     it('each result includes durationMs', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '5+5' }));
+      const result = await runTool('calculator', { expression: '5+5' });
       expect(typeof result.durationMs).toBe('number');
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
     });
@@ -93,39 +98,25 @@ describe('Tool Handlers', () => {
   // Calculator
   // ==========================================================================
   describe('Calculator', () => {
-    it('evaluates basic addition (2+2)', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+2' }));
-      expect(result.content).toBe('2+2 = 4');
-    });
-
-    it('evaluates multiplication (3*4)', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '3*4' }));
-      expect(result.content).toBe('3*4 = 12');
-    });
-
-    it('evaluates expressions with parentheses', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '(2+3)*4' }));
-      expect(result.content).toBe('(2+3)*4 = 20');
-    });
-
-    it('handles exponentiation (2^3)', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '2^3' }));
-      expect(result.content).toBe('2^3 = 8');
+    it.each([
+      ['2+2', '2+2 = 4'],
+      ['3*4', '3*4 = 12'],
+      ['(2+3)*4', '(2+3)*4 = 20'],
+      ['2^3', '2^3 = 8'],
+      ['10/2', '10/2 = 5'],
+    ])('evaluates %s correctly', async (expr, expected) => {
+      const result = await runTool('calculator', { expression: expr });
+      expect(result.content).toBe(expected);
     });
 
     it('rejects invalid characters (letters)', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+abc' }));
+      const result = await runTool('calculator', { expression: '2+abc' });
       expect(result.error).toContain('Invalid expression');
     });
 
     it('rejects invalid characters (semicolons)', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '2+2; process.exit()' }));
+      const result = await runTool('calculator', { expression: '2+2; process.exit()' });
       expect(result.error).toContain('Invalid expression');
-    });
-
-    it('returns formatted "expression = result"', async () => {
-      const result = await executeToolCall(makeToolCall('calculator', { expression: '10/2' }));
-      expect(result.content).toBe('10/2 = 5');
     });
   });
 
@@ -133,21 +124,15 @@ describe('Tool Handlers', () => {
   // Date/Time
   // ==========================================================================
   describe('Date/Time', () => {
-    it('returns formatted date/time string', async () => {
-      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
+    it('returns formatted date/time string with ISO and Unix timestamp', async () => {
+      const result = await runTool('get_current_datetime');
       expect(result.content).toContain('Current date and time:');
-    });
-
-    it('includes ISO 8601 and Unix timestamp', async () => {
-      const result = await executeToolCall(makeToolCall('get_current_datetime', {}));
       expect(result.content).toMatch(/ISO 8601: \d{4}-\d{2}-\d{2}T/);
       expect(result.content).toMatch(/Unix timestamp: \d+/);
     });
 
     it('handles invalid timezone gracefully (returns fallback)', async () => {
-      const result = await executeToolCall(
-        makeToolCall('get_current_datetime', { timezone: 'Invalid/Fake_Zone' }),
-      );
+      const result = await runTool('get_current_datetime', { timezone: 'Invalid/Fake_Zone' });
       expect(result.content).toContain('invalid');
       expect(result.content).toContain('Invalid/Fake_Zone');
       expect(result.error).toBeUndefined();
@@ -171,9 +156,7 @@ describe('Tool Handlers', () => {
     });
 
     it('returns memory info when type is "memory"', async () => {
-      const result = await executeToolCall(
-        makeToolCall('get_device_info', { info_type: 'memory' }),
-      );
+      const result = await runTool('get_device_info', { info_type: 'memory' });
       expect(result.content).toContain('Memory');
       expect(result.content).toContain('Total');
       expect(result.content).toContain('Used');
@@ -181,21 +164,16 @@ describe('Tool Handlers', () => {
     });
 
     it('returns battery info when type is "battery"', async () => {
-      const result = await executeToolCall(
-        makeToolCall('get_device_info', { info_type: 'battery' }),
-      );
+      const result = await runTool('get_device_info', { info_type: 'battery' });
       expect(result.content).toContain('Battery');
       expect(result.content).toContain('75%');
     });
 
     it('returns all info when type is "all"', async () => {
-      const result = await executeToolCall(
-        makeToolCall('get_device_info', { info_type: 'all' }),
-      );
-      expect(result.content).toContain('Memory');
-      expect(result.content).toContain('Battery');
-      expect(result.content).toContain('Device');
-      expect(result.content).toContain('OS');
+      const result = await runTool('get_device_info', { info_type: 'all' });
+      for (const section of ['Memory', 'Battery', 'Device', 'OS']) {
+        expect(result.content).toContain(section);
+      }
     });
   });
 
@@ -227,9 +205,7 @@ describe('Tool Handlers', () => {
         text: jest.fn().mockResolvedValue(html),
       });
 
-      const result = await executeToolCall(
-        makeToolCall('web_search', { query: 'react native' }),
-      );
+      const result = await runTool('web_search', { query: 'react native' });
 
       expect(result.error).toBeUndefined();
       expect(result.content).toContain('React Native Docs');
@@ -243,9 +219,7 @@ describe('Tool Handlers', () => {
         text: jest.fn().mockResolvedValue('<html><body>No matching documents</body></html>'),
       });
 
-      const result = await executeToolCall(
-        makeToolCall('web_search', { query: 'xyznonexistent12345' }),
-      );
+      const result = await runTool('web_search', { query: 'xyznonexistent12345' });
 
       expect(result.content).toContain('No results found');
       expect(result.error).toBeUndefined();
@@ -254,35 +228,17 @@ describe('Tool Handlers', () => {
     it('handles fetch timeout/error gracefully', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
 
-      const result = await executeToolCall(
-        makeToolCall('web_search', { query: 'test query' }),
-      );
-
+      const result = await runTool('web_search', { query: 'test query' });
       expect(result.error).toContain('Network request failed');
       expect(result.content).toBe('');
     });
 
-    it('returns error when query is empty string', async () => {
-      const result = await executeToolCall(
-        makeToolCall('web_search', { query: '' }),
-      );
-
-      expect(result.error).toContain('Missing required parameter: query');
-    });
-
-    it('returns error when query is undefined', async () => {
-      const result = await executeToolCall(
-        makeToolCall('web_search', {}),
-      );
-
-      expect(result.error).toContain('Missing required parameter: query');
-    });
-
-    it('returns error when query is whitespace only', async () => {
-      const result = await executeToolCall(
-        makeToolCall('web_search', { query: '   ' }),
-      );
-
+    it.each([
+      ['empty string', { query: '' }],
+      ['undefined', {}],
+      ['whitespace only', { query: '   ' }],
+    ])('returns error when query is %s', async (_label, args) => {
+      const result = await runTool('web_search', args);
       expect(result.error).toContain('Missing required parameter: query');
     });
 

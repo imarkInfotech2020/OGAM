@@ -22,6 +22,12 @@ jest.mock('../../../src/utils/messageContent', () => ({
 const makeMessage = (overrides: Partial<Message>): Message =>
   createMessage({ id: 'msg-1', content: 'test', ...overrides } as any);
 
+/** Shorthand: create a tool result message and render it. */
+function renderToolResult(toolName: string | undefined, content: string, extra: Partial<Message> = {}) {
+  const message = makeMessage({ role: 'tool', content, toolName, ...extra });
+  return render(<ChatMessage message={message} />);
+}
+
 describe('ChatMessage — Tool message rendering', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -32,181 +38,46 @@ describe('ChatMessage — Tool message rendering', () => {
   // ==========================================================================
   describe('ToolResultMessage', () => {
     it('renders with testID "tool-message"', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Search results here',
-        toolName: 'web_search',
-      });
-
-      const { getByTestId } = render(<ChatMessage message={message} />);
-
+      const { getByTestId } = renderToolResult('web_search', 'Search results here');
       expect(getByTestId('tool-message')).toBeTruthy();
     });
 
-    it('shows globe icon for web_search tool', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Web search result',
-        toolName: 'web_search',
-      });
-
-      const { getByTestId } = render(<ChatMessage message={message} />);
-
-      // The component renders an Icon with name="globe" — mocked as "Icon"
-      // Verify the tool message container is present
-      expect(getByTestId('tool-message')).toBeTruthy();
+    it.each([
+      ['web_search', 'Web results', /Web search result/],
+      ['calculator', '42', /42/],
+      ['get_current_datetime', '2026-02-24T10:30:00Z', /Retrieved date\/time/],
+      ['get_device_info', '{"model":"iPhone 15"}', /Retrieved device info/],
+      ['custom_tool', 'result data', /custom_tool/],
+      [undefined, 'some result', /Tool result/],
+    ] as const)('shows correct label for toolName="%s"', (toolName, content, expectedLabel) => {
+      const { getByText } = renderToolResult(toolName as string | undefined, content);
+      expect(getByText(expectedLabel)).toBeTruthy();
     });
 
-    it('shows "Web search result" label for web_search tool', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Some search results returned from the web',
-        toolName: 'web_search',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText(/Web search result/)).toBeTruthy();
-    });
-
-    it('shows "Searched: query (no results)" label for empty web_search', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'No results found for "quantum computing"',
-        toolName: 'web_search',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
+    it('shows "Searched: query (no results)" for empty web_search', () => {
+      const { getByText } = renderToolResult('web_search', 'No results found for "quantum computing"');
       expect(getByText(/Searched: "quantum computing" \(no results\)/)).toBeTruthy();
     });
 
-    it('shows calculator content as label', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: '42',
-        toolName: 'calculator',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText('42')).toBeTruthy();
-    });
-
     it('shows "Calculated" label when calculator has no content', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: '',
-        toolName: 'calculator',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
+      const { getByText } = renderToolResult('calculator', '');
       expect(getByText('Calculated')).toBeTruthy();
     });
 
-    it('shows "Retrieved date/time" label for get_current_datetime', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: '2026-02-24T10:30:00Z',
-        toolName: 'get_current_datetime',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText(/Retrieved date\/time/)).toBeTruthy();
-    });
-
-    it('shows "Retrieved device info" label for get_device_info', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: '{"model":"iPhone 15","os":"iOS 18"}',
-        toolName: 'get_device_info',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText(/Retrieved device info/)).toBeTruthy();
-    });
-
-    it('shows toolName as label for unknown tools', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'result data',
-        toolName: 'custom_tool',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText('custom_tool')).toBeTruthy();
-    });
-
-    it('shows "Tool result" label when toolName is undefined', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'some result',
-        toolName: undefined,
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
-      expect(getByText('Tool result')).toBeTruthy();
-    });
-
     it('shows duration when generationTimeMs is set', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Result data',
-        toolName: 'web_search',
-        generationTimeMs: 350,
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
-
+      const { getByText } = renderToolResult('web_search', 'Result data', { generationTimeMs: 350 });
       expect(getByText(/350ms/)).toBeTruthy();
     });
 
     it('does not show duration when generationTimeMs is not set', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Result data',
-        toolName: 'web_search',
-      });
-
-      const { queryByText } = render(<ChatMessage message={message} />);
-
+      const { queryByText } = renderToolResult('web_search', 'Result data');
       expect(queryByText(/\(\d+ms\)/)).toBeNull();
     });
 
     // ---- Expandable details ----
 
-    it('is expandable when content has details (non-empty, not starting with "No results")', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Detailed search results with lots of data...',
-        toolName: 'web_search',
-      });
-
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
-
-      // Should show the tool message
-      expect(getByTestId('tool-message')).toBeTruthy();
-
-      // Tap to expand
-      fireEvent.press(getByText(/Web search result/));
-
-      // After expanding, the detailed content should be visible
-      expect(getByText('Detailed search results with lots of data...')).toBeTruthy();
-    });
-
-    it('collapses expanded content when tapped again', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Detailed search results',
-        toolName: 'web_search',
-      });
-
-      const { getByText } = render(<ChatMessage message={message} />);
+    it('expands and collapses details on tap', () => {
+      const { getByText } = renderToolResult('web_search', 'Detailed search results');
 
       // Expand
       fireEvent.press(getByText(/Web search result/));
@@ -214,41 +85,16 @@ describe('ChatMessage — Tool message rendering', () => {
 
       // Collapse
       fireEvent.press(getByText(/Web search result/));
-
-      // The label text should still be there but the detail view is removed.
-      // The detail text only appears in the expanded container, not the label.
-      // The label for web_search is "Web search result", the detail is the raw content.
-      // After collapsing, the raw content text node inside toolDetailContainer should be gone.
     });
 
     it('is not expandable when content starts with "No results"', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'No results found for "test query"',
-        toolName: 'web_search',
-      });
-
-      const { getByTestId, queryByText } = render(<ChatMessage message={message} />);
-
+      const { getByTestId, queryByText } = renderToolResult('web_search', 'No results found for "test query"');
       expect(getByTestId('tool-message')).toBeTruthy();
-
-      // The hasDetails should be false because content starts with "No results"
-      // Tapping should not expand anything (the TouchableOpacity is disabled)
-      // There should be no chevron-down icon detail content
-      // Since it's not expandable, tapping won't reveal the raw content separately
-      // The label itself shows the "no results" info
       expect(queryByText('No results found for "test query"')).toBeNull();
     });
 
     it('is not expandable when content is empty', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: '',
-        toolName: 'calculator',
-      });
-
-      const { getByTestId } = render(<ChatMessage message={message} />);
-
+      const { getByTestId } = renderToolResult('calculator', '');
       expect(getByTestId('tool-message')).toBeTruthy();
     });
   });
@@ -407,58 +253,18 @@ describe('ChatMessage — Tool message rendering', () => {
   // Routing: tool message vs assistant message vs system info
   // ==========================================================================
   describe('message routing', () => {
-    it('renders tool result for role=tool', () => {
-      const message = makeMessage({
-        role: 'tool',
-        content: 'Tool output',
-        toolName: 'calculator',
-      });
-
+    it.each([
+      ['tool result', { role: 'tool' as const, toolName: 'calculator' }, 'tool-message', ['assistant-message', 'tool-call-message']],
+      ['tool call', { role: 'assistant' as const, toolCalls: [{ id: 'tc-1', name: 'web_search', arguments: '{}' }] }, 'tool-call-message', ['assistant-message', 'tool-message']],
+      ['normal assistant', { role: 'assistant' as const }, 'assistant-message', ['tool-call-message', 'tool-message']],
+      ['system info', { role: 'assistant' as const, isSystemInfo: true }, 'system-info-message', ['assistant-message']],
+    ])('routes %s correctly', (_label, overrides, expectedId, absentIds) => {
+      const message = makeMessage({ content: 'test content', ...overrides });
       const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
-
-      expect(getByTestId('tool-message')).toBeTruthy();
-      expect(queryByTestId('assistant-message')).toBeNull();
-      expect(queryByTestId('tool-call-message')).toBeNull();
-    });
-
-    it('renders tool call for assistant with toolCalls', () => {
-      const message = makeMessage({
-        role: 'assistant',
-        content: '',
-        toolCalls: [{ id: 'tc-1', name: 'web_search', arguments: '{}' }],
-      });
-
-      const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
-
-      expect(getByTestId('tool-call-message')).toBeTruthy();
-      expect(queryByTestId('assistant-message')).toBeNull();
-      expect(queryByTestId('tool-message')).toBeNull();
-    });
-
-    it('renders normal assistant message when no toolCalls', () => {
-      const message = makeMessage({
-        role: 'assistant',
-        content: 'Normal reply',
-      });
-
-      const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
-
-      expect(getByTestId('assistant-message')).toBeTruthy();
-      expect(queryByTestId('tool-call-message')).toBeNull();
-      expect(queryByTestId('tool-message')).toBeNull();
-    });
-
-    it('renders system info before checking role', () => {
-      const message = makeMessage({
-        role: 'assistant',
-        content: 'System event',
-        isSystemInfo: true,
-      });
-
-      const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
-
-      expect(getByTestId('system-info-message')).toBeTruthy();
-      expect(queryByTestId('assistant-message')).toBeNull();
+      expect(getByTestId(expectedId)).toBeTruthy();
+      for (const id of absentIds) {
+        expect(queryByTestId(id)).toBeNull();
+      }
     });
   });
 

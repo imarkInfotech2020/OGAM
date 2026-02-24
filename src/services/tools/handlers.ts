@@ -93,8 +93,9 @@ function parseResultBlock(block: string): SearchResult | null {
 
   const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
                        block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
+  // Strip HTML tags from snippet (regex is safe: [^>]+ cannot backtrack)
   const snippet = snippetMatch
-    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim())
+    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim()) // NOSONAR
     : '';
 
   if (!title && !snippet) return null;
@@ -140,21 +141,79 @@ function decodeHTMLEntities(text: string): string {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
 }
 
+/**
+ * Safe math expression evaluator using recursive descent parsing.
+ * Supports: +, -, *, /, %, ^ (exponentiation), parentheses, decimals.
+ * No dynamic code execution (no eval/new Function).
+ */
+function evaluateExpression(expr: string): number {
+  let pos = 0;
+  const str = expr.replace(/\s/g, '');
+
+  function parseExpr(): number {
+    let left = parseTerm();
+    while (pos < str.length && (str[pos] === '+' || str[pos] === '-')) {
+      const op = str[pos++];
+      const right = parseTerm();
+      left = op === '+' ? left + right : left - right;
+    }
+    return left;
+  }
+
+  function parseTerm(): number {
+    let left = parsePower();
+    while (pos < str.length && (str[pos] === '*' || str[pos] === '/' || str[pos] === '%')) {
+      const op = str[pos++];
+      const right = parsePower();
+      if (op === '*') left *= right;
+      else if (op === '/') left /= right;
+      else left %= right;
+    }
+    return left;
+  }
+
+  function parsePower(): number {
+    let base = parseUnary();
+    if (pos < str.length && str[pos] === '^') {
+      pos++;
+      const exp = parsePower(); // right-associative
+      base = Math.pow(base, exp);
+    }
+    return base;
+  }
+
+  function parseUnary(): number {
+    if (str[pos] === '-') { pos++; return -parseAtom(); }
+    if (str[pos] === '+') { pos++; return parseAtom(); }
+    return parseAtom();
+  }
+
+  function parseAtom(): number {
+    if (str[pos] === '(') {
+      pos++; // skip '('
+      const val = parseExpr();
+      if (str[pos] !== ')') throw new Error('Mismatched parentheses');
+      pos++; // skip ')'
+      return val;
+    }
+    const start = pos;
+    while (pos < str.length && (str[pos] >= '0' && str[pos] <= '9' || str[pos] === '.')) pos++;
+    if (pos === start) throw new Error('Unexpected character');
+    return Number(str.substring(start, pos));
+  }
+
+  const result = parseExpr();
+  if (pos < str.length) throw new Error('Unexpected character');
+  return result;
+}
+
 function handleCalculator(expression: string): string {
-  // Validate: only allow numbers, operators, parentheses, whitespace, decimal points.
-  // SECURITY: The strict regex allowlist below ensures only numeric chars and math
-  // operators reach new Function(). No identifiers, strings, or property access
-  // can pass, so code injection is not possible.
   const sanitized = expression.replace(/\s/g, '');
   if (!/^[0-9+\-*/().,%^]+$/.test(sanitized)) {
     throw new Error('Invalid expression: only numbers and basic operators (+, -, *, /, ^, %, parentheses) are allowed');
   }
 
-  // Replace ^ with ** for exponentiation
-  const jsExpression = sanitized.replaceAll('^', '**');
-
-  // eslint-disable-next-line no-new-func
-  const result = new Function(`"use strict"; return (${jsExpression})`)();
+  const result = evaluateExpression(sanitized);
 
   if (typeof result !== 'number' || !Number.isFinite(result)) {
     throw new Error('Expression did not evaluate to a finite number');
