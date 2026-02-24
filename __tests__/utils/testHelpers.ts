@@ -65,8 +65,10 @@ export const resetStores = (): void => {
       enableGpu: false,
       gpuLayers: 6,
       flashAttn: false,
+      cacheType: 'q8_0',
       showGenerationDetails: false,
       enhanceImagePrompts: false,
+      enabledTools: ['calculator', 'get_current_datetime'],
     },
     downloadedImageModels: [],
     activeImageModelId: null,
@@ -77,6 +79,7 @@ export const resetStores = (): void => {
     imageGenerationStatus: null,
     imagePreviewPath: null,
     generatedImages: [],
+    hasSeenCacheTypeNudge: false,
   });
 
   // Reset chat store

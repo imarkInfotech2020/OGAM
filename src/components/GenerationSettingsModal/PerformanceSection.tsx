@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { CacheType } from '../../types';
 import { createStyles } from './styles';
 
 // ─── GPU Acceleration ─────────────────────────────────────────────────────────
@@ -11,9 +12,17 @@ const GpuAccelerationToggle: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
-  const isFlashAttnOn = settings.flashAttn ?? (Platform.OS !== 'android');
-  const gpuLayersMax = (Platform.OS === 'android' && isFlashAttnOn) ? 1 : 99;
-  const gpuLayersEffective = Math.min(settings.gpuLayers ?? 6, gpuLayersMax);
+  const gpuLayersMax = 99;
+  const gpuLayersEffective = Math.min(settings.gpuLayers ?? 1, gpuLayersMax);
+  const isQuantizedCache = (settings.cacheType ?? 'q8_0') !== 'f16';
+
+  const handleGpuOn = () => {
+    if (Platform.OS === 'android' && isQuantizedCache) {
+      updateSettings({ enableGpu: true, cacheType: 'f16' });
+    } else {
+      updateSettings({ enableGpu: true });
+    }
+  };
 
   return (
     <View style={styles.modeToggleContainer}>
@@ -36,7 +45,7 @@ const GpuAccelerationToggle: React.FC = () => {
         <TouchableOpacity
           testID="gpu-on-button"
           style={[styles.modeButton, settings.enableGpu && styles.modeButtonActive]}
-          onPress={() => updateSettings({ enableGpu: true })}
+          onPress={handleGpuOn}
         >
           <Text style={[styles.modeButtonText, settings.enableGpu && styles.modeButtonTextActive]}>
             On
@@ -65,11 +74,6 @@ const GpuAccelerationToggle: React.FC = () => {
             maximumTrackTintColor={colors.surfaceLight}
             thumbTintColor={colors.primary}
           />
-          {Platform.OS === 'android' && isFlashAttnOn && (
-            <Text style={styles.settingWarning}>
-              Flash Attention limits GPU layers to 1 on Android
-            </Text>
-          )}
         </View>
       )}
     </View>
@@ -81,14 +85,16 @@ const GpuAccelerationToggle: React.FC = () => {
 const FlashAttentionToggle: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
-  const isFlashAttnOn = settings.flashAttn ?? (Platform.OS !== 'android');
+  const isFlashAttnOn = settings.flashAttn ?? true;
+  const isQuantizedCache = (settings.cacheType ?? 'q8_0') !== 'f16';
 
-  const handleFlashAttnOn = () => {
-    const updates: Parameters<typeof updateSettings>[0] = { flashAttn: true };
-    if (Platform.OS === 'android' && (settings.gpuLayers ?? 6) > 1) {
-      updates.gpuLayers = 1;
+  const handleFlashAttnOff = () => {
+    if (isQuantizedCache) {
+      // Turning flash attention off with quantized cache → auto-switch to f16
+      updateSettings({ flashAttn: false, cacheType: 'f16' });
+    } else {
+      updateSettings({ flashAttn: false });
     }
-    updateSettings(updates);
   };
 
   return (
@@ -96,14 +102,14 @@ const FlashAttentionToggle: React.FC = () => {
       <View style={styles.modeToggleInfo}>
         <Text style={styles.modeToggleLabel}>Flash Attention</Text>
         <Text style={styles.modeToggleDesc}>
-          Faster inference and lower memory. On Android, enabling this limits GPU layers to 1. Requires model reload.
+          Faster inference and lower memory. Required for quantized KV cache (q8_0/q4_0). Requires model reload.
         </Text>
       </View>
       <View style={styles.modeToggleButtons}>
         <TouchableOpacity
           testID="flash-attn-off-button"
           style={[styles.modeButton, !isFlashAttnOn && styles.modeButtonActive]}
-          onPress={() => updateSettings({ flashAttn: false })}
+          onPress={handleFlashAttnOff}
         >
           <Text style={[styles.modeButtonText, !isFlashAttnOn && styles.modeButtonTextActive]}>
             Off
@@ -112,13 +118,73 @@ const FlashAttentionToggle: React.FC = () => {
         <TouchableOpacity
           testID="flash-attn-on-button"
           style={[styles.modeButton, isFlashAttnOn && styles.modeButtonActive]}
-          onPress={handleFlashAttnOn}
+          onPress={() => updateSettings({ flashAttn: true })}
         >
           <Text style={[styles.modeButtonText, isFlashAttnOn && styles.modeButtonTextActive]}>
             On
           </Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+};
+
+// ─── KV Cache Type ───────────────────────────────────────────────────────────
+
+const CACHE_TYPE_DESC: Record<CacheType, string> = {
+  f16: 'Full precision — best quality, highest memory usage',
+  q8_0: '8-bit quantized — good balance of quality and memory',
+  q4_0: '4-bit quantized — lowest memory, may reduce quality',
+};
+
+const KvCacheTypeToggle: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const current: CacheType = settings.cacheType ?? 'q8_0';
+  const isFlashAttnOn = settings.flashAttn ?? true;
+  const gpuForcesF16 = Platform.OS === 'android' && settings.enableGpu;
+  const cacheDisabled = gpuForcesF16;
+
+  const handleCacheTypeChange = (ct: CacheType) => {
+    if (cacheDisabled) return;
+    const updates: Partial<typeof settings> = { cacheType: ct };
+    if (ct !== 'f16' && !isFlashAttnOn) {
+      updates.flashAttn = true;
+    }
+    updateSettings(updates);
+  };
+
+  return (
+    <View style={styles.modeToggleContainer}>
+      <View style={styles.modeToggleInfo}>
+        <Text style={styles.modeToggleLabel}>KV Cache Type</Text>
+        <Text style={styles.modeToggleDesc}>{CACHE_TYPE_DESC[cacheDisabled ? 'f16' : current]}</Text>
+      </View>
+      <View style={styles.modeToggleButtons}>
+        {(['f16', 'q8_0', 'q4_0'] as CacheType[]).map((ct) => (
+          <TouchableOpacity
+            key={ct}
+            testID={`cache-type-${ct}-button`}
+            style={[styles.modeButton, (cacheDisabled ? 'f16' : current) === ct && styles.modeButtonActive]}
+            onPress={() => handleCacheTypeChange(ct)}
+            disabled={cacheDisabled && ct !== 'f16'}
+          >
+            <Text style={[styles.modeButtonText, (cacheDisabled ? 'f16' : current) === ct && styles.modeButtonTextActive]}>
+              {ct}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {cacheDisabled && (
+        <Text style={styles.settingWarning}>
+          GPU acceleration on Android requires f16 KV cache.
+        </Text>
+      )}
+      {!cacheDisabled && !isFlashAttnOn && (
+        <Text style={styles.settingWarning}>
+          Quantized cache (q8_0/q4_0) will auto-enable flash attention.
+        </Text>
+      )}
     </View>
   );
 };
@@ -196,6 +262,64 @@ const ShowGenerationDetailsToggle: React.FC = () => {
   );
 };
 
+// ─── CPU Threads & Batch Size ────────────────────────────────────────────────
+
+const CpuThreadsSlider: React.FC = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const value = settings.nThreads ?? 6;
+
+  return (
+    <View style={styles.modeToggleContainer}>
+      <View style={styles.settingHeader}>
+        <Text style={styles.settingLabel}>CPU Threads</Text>
+        <Text style={styles.settingValue}>{value}</Text>
+      </View>
+      <Text style={styles.settingDescription}>Parallel threads for inference</Text>
+      <Slider
+        style={styles.slider}
+        minimumValue={1}
+        maximumValue={12}
+        step={1}
+        value={value}
+        onSlidingComplete={(v: number) => updateSettings({ nThreads: v })}
+        minimumTrackTintColor={colors.primary}
+        maximumTrackTintColor={colors.surfaceLight}
+        thumbTintColor={colors.primary}
+      />
+    </View>
+  );
+};
+
+const BatchSizeSlider: React.FC = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const value = settings.nBatch ?? 256;
+
+  return (
+    <View style={styles.modeToggleContainer}>
+      <View style={styles.settingHeader}>
+        <Text style={styles.settingLabel}>Batch Size</Text>
+        <Text style={styles.settingValue}>{value}</Text>
+      </View>
+      <Text style={styles.settingDescription}>Tokens processed per batch</Text>
+      <Slider
+        style={styles.slider}
+        minimumValue={32}
+        maximumValue={512}
+        step={32}
+        value={value}
+        onSlidingComplete={(v: number) => updateSettings({ nBatch: v })}
+        minimumTrackTintColor={colors.primary}
+        maximumTrackTintColor={colors.surfaceLight}
+        thumbTintColor={colors.primary}
+      />
+    </View>
+  );
+};
+
 // ─── Main Section ─────────────────────────────────────────────────────────────
 
 export const PerformanceSection: React.FC = () => {
@@ -203,8 +327,11 @@ export const PerformanceSection: React.FC = () => {
 
   return (
     <View style={styles.sectionCard}>
+      <CpuThreadsSlider />
+      <BatchSizeSlider />
       {Platform.OS !== 'ios' && <GpuAccelerationToggle />}
       <FlashAttentionToggle />
+      <KvCacheTypeToggle />
       <ModelLoadingStrategyToggle />
       <ShowGenerationDetailsToggle />
     </View>

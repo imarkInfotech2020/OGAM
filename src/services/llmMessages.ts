@@ -3,7 +3,7 @@ import { Message } from '../types';
 
 export function formatLlamaMessages(messages: Message[], supportsVision: boolean): string {
   let prompt = '';
-  for (const message of messages) {
+  for (const message of messages.filter(m => !m.isSystemInfo)) {
     if (message.role === 'system') {
       prompt += `<|im_start|>system\n${message.content}<|im_end|>\n`;
     } else if (message.role === 'user') {
@@ -39,7 +39,32 @@ export function extractImageUris(messages: Message[]): string[] {
 }
 
 export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
-  return messages.map(message => {
+  return messages.filter(m => !m.isSystemInfo).map(message => {
+    // Handle tool result messages
+    if (message.role === 'tool') {
+      return {
+        role: 'tool' as any,
+        content: message.content,
+        tool_call_id: message.toolCallId || '',
+      } as any;
+    }
+
+    // Handle assistant messages with tool calls
+    if (message.role === 'assistant' && message.toolCalls?.length) {
+      return {
+        role: 'assistant',
+        content: message.content || '',
+        tool_calls: message.toolCalls.map(tc => ({
+          id: tc.id || '',
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: tc.arguments,
+          },
+        })),
+      } as any;
+    }
+
     const imageAttachments = message.attachments?.filter(a => a.type === 'image') || [];
     if (imageAttachments.length === 0 || message.role !== 'user') {
       return { role: message.role, content: message.content };

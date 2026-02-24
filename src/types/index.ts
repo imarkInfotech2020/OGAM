@@ -163,12 +163,13 @@ export interface GenerationMeta {
   guidanceScale?: number;
   /** Image resolution */
   resolution?: string;
+  cacheType?: string; // KV cache quantization type
 }
 
 // Chat-related types
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   timestamp: number;
   isStreaming?: boolean;
@@ -180,6 +181,12 @@ export interface Message {
   generationTimeMs?: number;
   /** Metadata about how the message was generated */
   generationMeta?: GenerationMeta;
+  /** Tool call ID (for tool result messages) */
+  toolCallId?: string;
+  /** Tool calls made by the assistant */
+  toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
+  /** Tool name (for tool result messages) */
+  toolName?: string;
 }
 
 export interface Conversation {
@@ -271,6 +278,7 @@ export interface ImageGenerationState {
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type ModelLoadingStrategy = 'performance' | 'memory';
+export type CacheType = 'f16' | 'q8_0' | 'q4_0';
 /** 'auto' = smart detect, 'force' = always generate image, 'disabled' = never */
 export type ImageModeState = 'auto' | 'force' | 'disabled';
 
@@ -339,12 +347,4 @@ export interface DebugInfo {
   maxContextLength: number;
   contextUsagePercent: number;
 }
-
-export type AppScreen =
-  | 'onboarding'
-  | 'home'
-  | 'models'
-  | 'chat'
-  | 'settings'
-  | 'generate'
-  | 'model-download';
+export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';

@@ -19,3 +19,5 @@ export type { ImageGenerationState } from './imageGenerationService';
 export { fetchAvailableModels, getVariantLabel, guessStyle } from './huggingFaceModelBrowser';
 export type { HFImageModel } from './huggingFaceModelBrowser';
 export { documentService } from './documentService';
+export { AVAILABLE_TOOLS, getToolsAsOpenAISchema, buildToolSystemPromptHint, executeToolCall } from './tools';
+export type { ToolDefinition, ToolCall, ToolResult } from './tools';

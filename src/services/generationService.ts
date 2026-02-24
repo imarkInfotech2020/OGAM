@@ -1,11 +1,9 @@
-/**
- * GenerationService - Handles LLM generation independently of UI lifecycle
- * This allows generation to continue even when the user navigates away from the chat screen
- */
-
+/** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
+import { runToolLoop } from './generationToolLoop';
+import type { ToolResult } from './tools/types';
 import logger from '../utils/logger';
 
 export interface QueuedMessage {
@@ -90,7 +88,7 @@ class GenerationService {
   private buildGenerationMeta(): GenerationMeta {
     const gpuInfo = llmService.getGpuInfo();
     const perfStats = llmService.getPerformanceStats();
-    const { downloadedModels, activeModelId } = useAppStore.getState();
+    const { downloadedModels, activeModelId, settings } = useAppStore.getState();
     const activeModel = downloadedModels.find(m => m.id === activeModelId);
     return {
       gpu: gpuInfo.gpu,
@@ -101,6 +99,7 @@ class GenerationService {
       decodeTokensPerSecond: perfStats.lastDecodeTokensPerSecond,
       timeToFirstToken: perfStats.lastTimeToFirstToken,
       tokenCount: perfStats.lastTokenCount,
+      cacheType: settings.cacheType,
     };
   }
 
@@ -118,18 +117,9 @@ class GenerationService {
       return;
     }
 
-    const isModelLoaded = llmService.isModelLoaded();
-    const isLlmGenerating = llmService.isCurrentlyGenerating();
-    logger.log('[GenerationService] 🟢 Starting text generation - Model loaded:', isModelLoaded, 'LLM generating:', isLlmGenerating);
-
-    if (!isModelLoaded) {
-      logger.error('[GenerationService] ❌ No model loaded');
-      throw new Error('No model loaded');
-    }
-    if (isLlmGenerating) {
-      logger.error('[GenerationService] ❌ LLM service is currently generating, cannot start');
-      throw new Error('LLM service busy - try again in a moment');
-    }
+    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
+    if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy - try again in a moment');
+    logger.log('[GenerationService] Starting text generation');
 
     this.abortRequested = false;
     this.updateState({
@@ -146,7 +136,7 @@ class GenerationService {
     let firstTokenReceived = false;
 
     try {
-      logger.log('[GenerationService] 📤 Calling llmService.generateResponse...');
+      logger.log('[GenerationService] Calling llmService.generateResponse');
       await llmService.generateResponse(
         messages,
         (token) => {
@@ -166,7 +156,7 @@ class GenerationService {
           }
         },
         () => {
-          logger.log('[GenerationService] ✅ Text generation completed');
+          logger.log('[GenerationService] Text generation completed');
           this.forceFlushTokens();
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
@@ -178,7 +168,78 @@ class GenerationService {
         },
       );
     } catch (error) {
-      logger.error('[GenerationService] ❌ Generation error:', error);
+      logger.error('[GenerationService] Generation error:', error);
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
+      this.tokenBuffer = '';
+      chatStore.clearStreamingMessage();
+      this.resetState();
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a response with tool calling support.
+   * Loops: call LLM → if tool_calls, execute tools, inject results, repeat (max 5 iterations).
+   */
+  async generateWithTools(
+    conversationId: string,
+    messages: Message[],
+    options: {
+      enabledToolIds: string[];
+      onToolCallStart?: (name: string, args: Record<string, any>) => void;
+      onToolCallComplete?: (name: string, result: ToolResult) => void;
+      onFirstToken?: () => void;
+    },
+  ): Promise<void> {
+    const { enabledToolIds, ...callbacks } = options;
+    if (this.state.isGenerating) {
+      logger.log('[GenerationService] Already generating, ignoring request');
+      return;
+    }
+
+    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
+    if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy');
+
+    this.abortRequested = false;
+    this.updateState({
+      isGenerating: true,
+      isThinking: true,
+      conversationId,
+      streamingContent: '',
+      startTime: Date.now(),
+    });
+
+    const chatStore = useChatStore.getState();
+    chatStore.startStreaming(conversationId);
+    this.tokenBuffer = '';
+
+    try {
+      await runToolLoop({
+        conversationId,
+        messages,
+        enabledToolIds,
+        callbacks,
+        isAborted: () => this.abortRequested,
+        onThinkingDone: () => this.updateState({ isThinking: false }),
+        onFinalResponse: (content) => {
+          this.state.streamingContent = content;
+          useChatStore.getState().appendToStreamingMessage(content);
+        },
+      });
+
+      this.forceFlushTokens();
+      if (this.abortRequested) {
+        chatStore.clearStreamingMessage();
+      } else {
+        const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+        useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+      }
+      this.resetState();
+    } catch (error) {
+      logger.error('[GenerationService] Tool generation error:', error);
       if (this.flushTimer) {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;

@@ -8,6 +8,7 @@ import {
   hideAlert,
 } from '../../components';
 import { APP_CONFIG } from '../../constants';
+import { useAppStore } from '../../stores/appStore';
 import {
   llmService,
   intentClassifier,
@@ -15,9 +16,10 @@ import {
   imageGenerationService,
   onnxImageGeneratorService,
   ImageGenerationState,
+  buildToolSystemPromptHint,
 } from '../../services';
 import { useChatStore, useProjectStore } from '../../stores';
-import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -42,6 +44,8 @@ type GenerationDeps = {
     systemPrompt?: string;
     imageSteps?: number;
     imageGuidanceScale?: number;
+    enabledTools?: string[];
+    cacheType?: CacheType;
   };
   downloadedModels: DownloadedModel[];
   setAlertState: SetState<AlertState>;
@@ -55,6 +59,7 @@ type GenerationDeps = {
   removeImagesByConversationId: (convId: string) => string[];
   generatingForConversationRef: MutableRefObject<string | null>;
   navigation: any;
+  setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
 };
 
@@ -64,7 +69,7 @@ function buildMessagesForContext(
   systemPrompt: string,
 ): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
-  const conversationMessages = conversation?.messages || [];
+  const conversationMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
   const lastUserMsg = conversationMessages.at(-1);
   const userMessageForContext = (lastUserMsg?.role === 'user'
     ? { ...lastUserMsg, content: messageText }
@@ -145,49 +150,73 @@ export async function handleImageGenerationFn(
 
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 
+async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
+  const loadedPath = llmService.getLoadedModelPath();
+  if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
+  await deps.ensureModelLoaded();
+  return llmService.isModelLoaded() && llmService.getLoadedModelPath() === deps.activeModel!.filePath;
+}
+
+async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string, messages: Message[]): Promise<void> {
+  try {
+    const contextDebug = await llmService.getContextDebugInfo(messages);
+    setDebugInfo({ systemPrompt, ...contextDebug });
+    logger.log(`[ChatGen] Context prepared: ${contextDebug.contextUsagePercent}% used, ${contextDebug.truncatedCount} truncated`);
+    if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
+      await llmService.clearKVCache(false).catch(() => {});
+    }
+  } catch (e) { logger.log('Debug info error:', e); }
+}
+
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.activeModel) return;
   deps.generatingForConversationRef.current = targetConversationId;
-  const currentLoadedPath = llmService.getLoadedModelPath();
-  const needsModelLoad = !currentLoadedPath || currentLoadedPath !== deps.activeModel.filePath;
-  if (needsModelLoad) {
-    await deps.ensureModelLoaded();
-    if (!llmService.isModelLoaded() || llmService.getLoadedModelPath() !== deps.activeModel.filePath) {
-      deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
-      deps.generatingForConversationRef.current = null;
-      return;
-    }
+  if (!(await ensureModelReady(deps))) {
+    deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
+    deps.generatingForConversationRef.current = null;
+    return;
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
-  const project = conversation?.projectId
-    ? useProjectStore.getState().getProject(conversation.projectId)
-    : null;
-  const systemPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
+  const enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
+  const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const systemPrompt = enabledTools.length > 0 ? basePrompt + buildToolSystemPromptHint(enabledTools) : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
-  let shouldClearCache = false;
+  await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
-    const contextDebug = await llmService.getContextDebugInfo(messagesForContext);
-    setDebugInfo({ systemPrompt, ...contextDebug });
-    if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
-      shouldClearCache = true;
+    if (enabledTools.length > 0) {
+      await generationService.generateWithTools(targetConversationId, messagesForContext, {
+        enabledToolIds: enabledTools,
+        onFirstToken: () => { logger.log('[ChatScreen] First token received'); },
+        onToolCallStart: (name) => { logger.log(`[ChatScreen] Tool call: ${name}`); },
+        onToolCallComplete: (name, result) => { logger.log(`[ChatScreen] Tool result: ${name} ${result.durationMs}ms`); },
+      });
+    } else {
+      await generationService.generateResponse(targetConversationId, messagesForContext);
     }
-  } catch (e) {
-    logger.log('Debug info error:', e);
-  }
-  if (shouldClearCache) {
-    await llmService.clearKVCache(false).catch(() => {});
-  }
-  try {
-    await generationService.generateResponse(
-      targetConversationId,
-      messagesForContext,
-      () => { logger.log('[ChatScreen] First token received for conversation:', targetConversationId); },
-    );
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
+    deps.generatingForConversationRef.current = null;
+    return;
   }
   deps.generatingForConversationRef.current = null;
+
+  const appState = useAppStore.getState();
+  if (!appState.hasSeenCacheTypeNudge && deps.settings.cacheType === 'q8_0') {
+    appState.setHasSeenCacheTypeNudge(true);
+    deps.setAlertState(showAlert(
+      'Improve Output Quality',
+      'You can improve response quality by changing the KV cache type to f16 in Model Settings. This uses more memory but produces better outputs. Requires a model reload.',
+      [
+        {
+          text: 'Go to Settings',
+          onPress: () => { deps.setAlertState(hideAlert()); deps.setShowSettingsPanel?.(true); },
+        },
+        { text: 'Got it', style: 'cancel' },
+      ],
+    ));
+  }
 }
 
 export type SendCall = {

@@ -345,6 +345,8 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('handleSelectModel shows error alert on failure', async () => {
+    // During init, the 4th model's fetch fails (silently caught).
+    // After init, handleSelectModel retries and also fails → shows alert.
     mockGetModelFiles
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
@@ -358,7 +360,10 @@ describe('ModelDownloadScreen', () => {
       await act(async () => { await Promise.resolve(); });
     }
 
-    // Press model index 3 (not pre-loaded during init, which only loads first 3)
+    // Model index 3 failed during init, so it has no files.
+    // Queue another rejection for the handleSelectModel retry.
+    mockGetModelFiles.mockRejectedValueOnce(new Error('Network error'));
+
     const modelPress = result.getByTestId('recommended-model-3-press');
     await act(async () => {
       fireEvent.press(modelPress);

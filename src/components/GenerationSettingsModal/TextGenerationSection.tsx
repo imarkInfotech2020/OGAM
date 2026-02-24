@@ -21,8 +21,6 @@ const DEFAULT_SETTINGS: Record<string, number> = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 2048,
-  nThreads: 6,
-  nBatch: 256,
 };
 
 const SETTINGS_CONFIG: SettingConfig[] = [
@@ -70,24 +68,6 @@ const SETTINGS_CONFIG: SettingConfig[] = [
     step: 512,
     format: (v) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : v.toString(),
     description: 'Max conversation memory (requires model reload)',
-  },
-  {
-    key: 'nThreads',
-    label: 'CPU Threads',
-    min: 1,
-    max: 12,
-    step: 1,
-    format: (v) => v.toString(),
-    description: 'Parallel threads for inference',
-  },
-  {
-    key: 'nBatch',
-    label: 'Batch Size',
-    min: 32,
-    max: 512,
-    step: 32,
-    format: (v) => v.toString(),
-    description: 'Tokens processed per batch',
   },
 ];
 

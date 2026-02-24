@@ -65,8 +65,8 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
       );
       setRecommendedModels(compatibleModels);
 
-      // Fetch files for the first few compatible models
-      const filesToFetch = compatibleModels.slice(0, 3);
+      // Fetch files for all compatible models
+      const filesToFetch = compatibleModels;
       const filesMap: Record<string, ModelFile[]> = {};
 
       await Promise.all(

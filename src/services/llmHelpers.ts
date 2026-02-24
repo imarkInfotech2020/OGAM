@@ -58,15 +58,19 @@ export interface ModelLoadParams {
 
 export function buildModelParams(
   modelPath: string,
-  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number },
+  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string },
 ): ModelLoadParams {
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
   const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
-  const useFlashAttn = settings.flashAttn ?? (Platform.OS !== 'android');
+  const useFlashAttn = settings.flashAttn ?? true;
   const gpuEnabled = settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  const cacheType = useFlashAttn ? 'q8_0' : 'f16';
+  // Quantized KV cache (q8_0, q4_0) requires flash attention — SIGSEGV otherwise.
+  // On Android, GPU (OpenCL) backend only supports f16 KV cache — SIGABRT in graph_split otherwise.
+  const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
+  const needsF16 = !useFlashAttn || (Platform.OS === 'android' && nGpuLayers > 0);
+  const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_threads: nThreads,
@@ -226,6 +230,21 @@ export async function fitMessagesInBudget(
     }
   }
   return result;
+}
+
+export const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'];
+
+export function buildCompletionParams(settings: {
+  maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
+}): Record<string, any> {
+  return {
+    n_predict: settings.maxTokens || RESPONSE_RESERVE,
+    temperature: settings.temperature ?? 0.7,
+    top_k: 40,
+    top_p: settings.topP ?? 0.95,
+    penalty_repeat: settings.repeatPenalty ?? 1.1,
+    stop: STOP_TOKENS,
+  };
 }
 
 export function recordGenerationStats(

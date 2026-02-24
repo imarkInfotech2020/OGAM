@@ -228,7 +228,7 @@ describe('LLMService', () => {
       );
     });
 
-    it('uses flashAttn=false from store and sets f16 KV cache', async () => {
+    it('uses flashAttn=false from store and sets f16 KV cache when cacheType is f16', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
@@ -237,6 +237,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: false,
+          cacheType: 'f16',
         },
       });
 
@@ -1410,7 +1411,7 @@ describe('LLMService', () => {
       expect(reloadCall.cache_type_v).toBe('q8_0');
     });
 
-    it('passes flashAttn=false from store to reloadWithSettings', async () => {
+    it('passes flashAttn=false and cacheType=f16 from store to reloadWithSettings', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx1 = createMockLlamaContext();
       const ctx2 = createMockLlamaContext();
@@ -1422,6 +1423,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: false,
+          cacheType: 'f16',
           enableGpu: false,
         },
       });

@@ -23,7 +23,6 @@ export const TextGenerationSection: React.FC = () => {
 
   return (
     <Card style={styles.section}>
-      <Text style={styles.sectionTitle}>Text Generation</Text>
       <Text style={styles.settingHelp}>Configure LLM behavior for text responses.</Text>
 
       <View style={styles.sliderSection}>

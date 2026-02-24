@@ -26,7 +26,6 @@ type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
 export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
-
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(null);
   const [supportsVision, setSupportsVision] = useState(false);
@@ -43,7 +42,8 @@ export const useChatScreen = () => {
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
   const [imageGenState, setImageGenState] = useState<ImageGenerationState>(imageGenerationService.getState());
-
+  const [showToolPicker, setShowToolPicker] = useState(false);
+  const [supportsToolCalling, setSupportsToolCalling] = useState(false);
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
   const modelLoadStartTimeRef = useRef<number | null>(null);
@@ -81,7 +81,7 @@ export const useChatScreen = () => {
     activeImageModel, imageModelLoaded, isStreaming, isGeneratingImage, imageGenState, settings,
     downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
-    setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation,
+    setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
   };
 
@@ -169,6 +169,10 @@ export const useChatScreen = () => {
     } else if (!activeModel?.mmProjPath) { setSupportsVision(false); }
   }, [activeModel?.mmProjPath]);
 
+  useEffect(() => {
+    setSupportsToolCalling(llmService.isModelLoaded() ? llmService.supportsToolCalling() : false);
+  }, [activeModelId, isModelLoading]);
+
   const displayMessages = getDisplayMessages(
     activeConversation?.messages || [],
     { isThinking, streamingMessage, isStreamingForThisConversation },
@@ -188,16 +192,25 @@ export const useChatScreen = () => {
   };
   startGenerationRef.current = startGeneration;
 
+  const enabledTools = supportsToolCalling ? (settings.enabledTools || []) : [];
+
+  const handleToggleTool = (toolId: string) => {
+    const cur = settings.enabledTools || [];
+    useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
+  };
+
   return {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
     showDebugPanel, setShowDebugPanel,
     showModelSelector, setShowModelSelector,
     showSettingsPanel, setShowSettingsPanel,
+    showToolPicker, setShowToolPicker, supportsToolCalling,
     debugInfo, alertState, setAlertState,
     showScrollToBottom, setShowScrollToBottom,
     isClassifying, animateLastN, queueCount, queuedTexts,
     viewerImageUri, setViewerImageUri, imageGenState,
+    enabledTools, handleToggleTool,
     activeModelId, activeConversationId, activeConversation, activeModel,
     activeProject, activeImageModel, imageModelLoaded, isGeneratingImage,
     imageGenerationProgress: imageGenState.progress,

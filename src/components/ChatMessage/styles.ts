@@ -22,6 +22,33 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     color: colors.textMuted,
     textAlign: 'center' as const,
   },
+  toolStatusRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingVertical: 2,
+  },
+  toolStatusText: {
+    fontSize: 12,
+    fontFamily: FONTS.mono,
+    color: colors.textMuted,
+    flex: 1,
+  },
+  toolDetailContainer: {
+    marginTop: 6,
+    paddingTop: 6,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignSelf: 'stretch' as const,
+    width: '100%' as const,
+  },
+  toolDetailText: {
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    color: colors.textSecondary,
+    lineHeight: 16,
+  },
   bubble: {
     maxWidth: '85%' as const,
     borderRadius: 8,
