@@ -161,6 +161,7 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
     setDebugInfo({ systemPrompt, ...contextDebug });
+    logger.log(`[ChatGen] Context prepared: ${contextDebug.contextUsagePercent}% used, ${contextDebug.truncatedCount} truncated`);
     if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
       await llmService.clearKVCache(false).catch(() => {});
     }

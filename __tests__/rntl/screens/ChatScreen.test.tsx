@@ -404,15 +404,16 @@ jest.mock('../../../src/components', () => ({
       </View>
     );
   },
-  ToolPickerSheet: ({ visible, onClose }: any) => {
+  ToolPickerSheet: ({ visible, onClose, enabledTools, onToggleTool }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
     if (!visible) return null;
     return (
       <View testID="tool-picker-sheet">
-        <Text>Tools</Text>
+        <Text>Tools ({enabledTools?.length ?? 0} enabled)</Text>
         <TouchableOpacity testID="close-tool-picker" onPress={onClose}>
           <Text>Close</Text>
         </TouchableOpacity>
+        {onToggleTool && <Text testID="toggle-tool-available">toggle</Text>}
       </View>
     );
   },
@@ -484,6 +485,7 @@ describe('ChatScreen', () => {
 
     // Re-setup llmService mock after clearAllMocks
     (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(false);
     (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(null);
     (llmService.getMultimodalSupport as jest.Mock).mockReturnValue(null);
     (llmService.getPerformanceStats as jest.Mock).mockReturnValue({

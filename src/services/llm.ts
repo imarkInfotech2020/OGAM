@@ -68,12 +68,15 @@ class LLMService {
       if (actualLength !== ctxLen) this.currentSettings.contextLength = actualLength;
       await logContextMetadata(context, actualLength);
       Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+      logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
       this.currentModelPath = modelPath;
       this.multimodalSupport = null;
       this.multimodalInitialized = false;
+      logger.log('[LLM] mmProjPath:', mmProjPath || 'none');
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
       this.detectToolCallingSupport();
+      logger.log(`[LLM] Model loaded, vision: ${this.multimodalSupport?.vision ?? false}, tools: ${this.toolCallingSupported}`);
     } catch (error: any) {
       this.context = null;
       this.currentModelPath = null;
@@ -85,7 +88,7 @@ class LLMService {
   }
 
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
-    if (!this.context) return false;
+    if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }
     try {
       const stat = await RNFS.stat(mmProjPath);
       const sizeMB = (Number(stat.size) / (1024 * 1024)).toFixed(1);
@@ -98,6 +101,7 @@ class LLMService {
     }
     const deviceInfo = useAppStore.getState().deviceInfo;
     const useGpuForClip = Platform.OS === 'ios' && !deviceInfo?.isEmulator;
+    logger.log('[LLM] Calling initMultimodal, use_gpu:', useGpuForClip);
     const { initialized, support } = await initMultimodal(this.context, mmProjPath, useGpuForClip);
     this.multimodalInitialized = initialized;
     this.multimodalSupport = support;
@@ -330,6 +334,7 @@ class LLMService {
       await this.checkMultimodalSupport();
       this.detectToolCallingSupport();
     } catch (error) {
+      logger.error('[LLM] Error reloading model:', error);
       Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false });
       throw error;
     }

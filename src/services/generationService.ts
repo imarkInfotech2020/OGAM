@@ -119,6 +119,7 @@ class GenerationService {
 
     if (!llmService.isModelLoaded()) throw new Error('No model loaded');
     if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy - try again in a moment');
+    logger.log('[GenerationService] Starting text generation');
 
     this.abortRequested = false;
     this.updateState({
@@ -135,6 +136,7 @@ class GenerationService {
     let firstTokenReceived = false;
 
     try {
+      logger.log('[GenerationService] Calling llmService.generateResponse');
       await llmService.generateResponse(
         messages,
         (token) => {
@@ -154,6 +156,7 @@ class GenerationService {
           }
         },
         () => {
+          logger.log('[GenerationService] Text generation completed');
           this.forceFlushTokens();
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
