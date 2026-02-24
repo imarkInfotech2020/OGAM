@@ -34,13 +34,13 @@ export const ToolPickerSheet: React.FC<ToolPickerSheetProps> = ({
         {AVAILABLE_TOOLS.map(tool => {
           const isEnabled = enabledTools.includes(tool.id);
           return (
-            <View key={tool.id} style={styles.toolRow}>
+            <View key={tool.id} style={styles.toolRow} testID={`tool-picker-row-${tool.id}`}>
               <View style={styles.toolIcon}>
                 <Icon name={tool.icon} size={20} color={isEnabled ? colors.primary : colors.textMuted} />
               </View>
               <View style={styles.toolInfo}>
                 <View style={styles.toolNameRow}>
-                  <Text style={styles.toolName}>{tool.displayName}</Text>
+                  <Text style={styles.toolName} testID={`tool-picker-name-${tool.id}`}>{tool.displayName}</Text>
                   {tool.requiresNetwork && (
                     <Icon name="wifi" size={12} color={colors.textMuted} style={styles.networkIcon} />
                   )}

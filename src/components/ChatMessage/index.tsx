@@ -57,6 +57,7 @@ function buildMessageData(message: Message) {
 type ToolResultBubbleProps = {
   toolIcon: string;
   toolLabel: string;
+  toolName: string;
   durationLabel: string;
   content: string;
   hasDetails: boolean;
@@ -65,7 +66,7 @@ type ToolResultBubbleProps = {
 };
 
 const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
-  toolIcon, toolLabel, durationLabel, content, hasDetails, styles, colors,
+  toolIcon, toolLabel, toolName, durationLabel, content, hasDetails, styles, colors,
 }) => {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -77,7 +78,7 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
         disabled={!hasDetails}
       >
         <Icon name={toolIcon} size={13} color={colors.textMuted} />
-        <Text style={styles.toolStatusText} numberOfLines={expanded ? undefined : 2}>
+        <Text style={styles.toolStatusText} numberOfLines={expanded ? undefined : 2} testID={`tool-result-label-${toolName || 'unknown'}`}>
           {toolLabel}{durationLabel}
         </Text>
         {hasDetails && (
@@ -102,7 +103,7 @@ const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }
   const toolLabel = getToolLabel(message.toolName, message.content);
   const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
   const hasDetails = !!(message.content && message.content.length > 0 && !message.content.startsWith('No results'));
-  return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
+  return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} toolName={message.toolName || 'unknown'} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
 };
 
 const ToolCallMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => (

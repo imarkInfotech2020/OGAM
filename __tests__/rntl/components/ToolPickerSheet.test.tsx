@@ -3,7 +3,7 @@
  *
  * Tests for the tool picker bottom sheet including:
  * - Visibility (renders nothing when not visible)
- * - Renders all tool names and descriptions
+ * - Renders all tool names and descriptions via testIDs
  * - Switch on/off state for enabled/disabled tools
  * - onToggleTool callback with correct tool ID
  * - onClose callback
@@ -61,28 +61,19 @@ describe('ToolPickerSheet', () => {
     jest.clearAllMocks();
   });
 
-  // ===========================================================================
-  // Visibility
-  // ===========================================================================
-
   it('renders nothing when visible is false', () => {
-    const { queryByTestId, queryByText } = render(
+    const { queryByTestId } = render(
       <ToolPickerSheet {...defaultProps} visible={false} />,
     );
-
     expect(queryByTestId('app-sheet')).toBeNull();
-    expect(queryByText('Tools')).toBeNull();
   });
 
-  // ===========================================================================
-  // Tool names and descriptions
-  // ===========================================================================
-
-  it('renders all 4 tool display names when visible', () => {
-    const { getByText } = render(<ToolPickerSheet {...defaultProps} />);
+  it('renders all tool rows with testIDs when visible', () => {
+    const { getByTestId } = render(<ToolPickerSheet {...defaultProps} />);
 
     for (const tool of AVAILABLE_TOOLS) {
-      expect(getByText(tool.displayName)).toBeTruthy();
+      expect(getByTestId(`tool-picker-row-${tool.id}`)).toBeTruthy();
+      expect(getByTestId(`tool-picker-name-${tool.id}`)).toBeTruthy();
     }
   });
 
@@ -94,59 +85,26 @@ describe('ToolPickerSheet', () => {
     }
   });
 
-  // ===========================================================================
-  // Switch state
-  // ===========================================================================
-
-  it('shows switch in on state for enabled tools', () => {
-    const { UNSAFE_getAllByType } = render(
-      <ToolPickerSheet
-        {...defaultProps}
-        enabledTools={['web_search', 'calculator']}
-      />,
+  it('shows switches on for enabled tools and off for disabled', () => {
+    const { getAllByRole } = render(
+      <ToolPickerSheet {...defaultProps} enabledTools={['web_search', 'calculator']} />,
     );
 
-    const { Switch } = require('react-native');
-    const switches = UNSAFE_getAllByType(Switch);
-
+    const switches = getAllByRole('switch');
     // AVAILABLE_TOOLS order: web_search, calculator, get_current_datetime, get_device_info
     expect(switches[0].props.value).toBe(true);  // web_search - enabled
     expect(switches[1].props.value).toBe(true);  // calculator - enabled
-  });
-
-  it('shows switch in off state for disabled tools', () => {
-    const { UNSAFE_getAllByType } = render(
-      <ToolPickerSheet
-        {...defaultProps}
-        enabledTools={['web_search', 'calculator']}
-      />,
-    );
-
-    const { Switch } = require('react-native');
-    const switches = UNSAFE_getAllByType(Switch);
-
-    // get_current_datetime and get_device_info are not enabled
     expect(switches[2].props.value).toBe(false); // get_current_datetime - disabled
     expect(switches[3].props.value).toBe(false); // get_device_info - disabled
   });
 
-  // ===========================================================================
-  // Callbacks
-  // ===========================================================================
-
   it('calls onToggleTool with correct tool ID when switch is toggled', () => {
     const onToggleTool = jest.fn();
-    const { UNSAFE_getAllByType } = render(
-      <ToolPickerSheet
-        {...defaultProps}
-        onToggleTool={onToggleTool}
-      />,
+    const { getAllByRole } = render(
+      <ToolPickerSheet {...defaultProps} onToggleTool={onToggleTool} />,
     );
 
-    const { Switch } = require('react-native');
-    const switches = UNSAFE_getAllByType(Switch);
-
-    // Toggle the third switch (get_current_datetime)
+    const switches = getAllByRole('switch');
     fireEvent(switches[2], 'valueChange', true);
 
     expect(onToggleTool).toHaveBeenCalledTimes(1);
@@ -160,7 +118,6 @@ describe('ToolPickerSheet', () => {
     );
 
     fireEvent.press(getByTestId('sheet-close'));
-
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

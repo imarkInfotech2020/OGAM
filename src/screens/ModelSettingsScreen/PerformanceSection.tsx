@@ -138,6 +138,7 @@ export const PerformanceSection: React.FC = () => {
           title="Save Memory"
           variant="secondary"
           size="small"
+          testID="strategy-memory-button"
           active={settings?.modelLoadingStrategy === 'memory'}
           onPress={() => updateSettings({ modelLoadingStrategy: 'memory' })}
           style={styles.flex1}
@@ -146,6 +147,7 @@ export const PerformanceSection: React.FC = () => {
           title="Fast"
           variant="secondary"
           size="small"
+          testID="strategy-performance-button"
           active={settings?.modelLoadingStrategy === 'performance'}
           onPress={() => updateSettings({ modelLoadingStrategy: 'performance' })}
           style={styles.flex1}

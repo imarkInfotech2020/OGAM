@@ -553,17 +553,17 @@ describe('ModelSettingsScreen', () => {
   describe('model loading strategy buttons', () => {
     it('updates to memory strategy when "Save Memory" is pressed', () => {
       useAppStore.getState().updateSettings({ modelLoadingStrategy: 'performance' });
-      const { getByText } = renderWithSections('performance');
+      const { getByTestId } = renderWithSections('performance');
 
-      fireEvent.press(getByText('Save Memory'));
+      fireEvent.press(getByTestId('strategy-memory-button'));
       expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('memory');
     });
 
     it('updates to performance strategy when "Fast" is pressed', () => {
       useAppStore.getState().updateSettings({ modelLoadingStrategy: 'memory' });
-      const { getByText } = renderWithSections('performance');
+      const { getByTestId } = renderWithSections('performance');
 
-      fireEvent.press(getByText('Fast'));
+      fireEvent.press(getByTestId('strategy-performance-button'));
       expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('performance');
     });
   });

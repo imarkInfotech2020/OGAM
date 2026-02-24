@@ -93,9 +93,8 @@ function parseResultBlock(block: string): SearchResult | null {
 
   const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
                        block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-  // Strip HTML tags from snippet (regex is safe: [^>]+ cannot backtrack)
   const snippet = snippetMatch
-    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim()) // NOSONAR
+    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]*>/g, '').trim())
     : '';
 
   if (!title && !snippet) return null;
