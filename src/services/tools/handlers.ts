@@ -124,15 +124,15 @@ function parseDuckDuckGoResults(html: string): SearchResult[] {
 
 function decodeHTMLEntities(text: string): string {
   return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, '/')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&apos;/g, "'")
+    .replaceAll('&amp;', '&')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&#x27;', "'")
+    .replaceAll('&#x2F;', '/')
+    .replaceAll('&nbsp;', ' ')
+    .replaceAll('&apos;', "'")
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
 }
@@ -148,7 +148,7 @@ function handleCalculator(expression: string): string {
   }
 
   // Replace ^ with ** for exponentiation
-  const jsExpression = sanitized.replace(/\^/g, '**');
+  const jsExpression = sanitized.replaceAll('^', '**');
 
   // eslint-disable-next-line no-new-func
   const result = new Function(`"use strict"; return (${jsExpression})`)();

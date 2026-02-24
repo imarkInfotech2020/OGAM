@@ -9,6 +9,7 @@
 import { runToolLoop, ToolLoopContext } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
 import { Message } from '../../../src/types';
+import { createMessage } from '../../utils/factories';
 import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 
 // ---------------------------------------------------------------------------
@@ -48,13 +49,7 @@ const mockedGenerateResponseWithTools = llmService.generateResponseWithTools as 
 // ---------------------------------------------------------------------------
 
 function makeMessage(overrides: Partial<Message> = {}): Message {
-  return {
-    id: `msg-${Date.now()}-${Math.random()}`,
-    role: 'user',
-    content: 'Hello',
-    timestamp: Date.now(),
-    ...overrides,
-  };
+  return createMessage({ content: 'Hello', ...overrides } as any);
 }
 
 function makeToolCall(overrides: Partial<ToolCall> = {}): ToolCall {

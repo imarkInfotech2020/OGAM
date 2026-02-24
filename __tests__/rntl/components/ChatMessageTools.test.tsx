@@ -11,6 +11,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
+import { createMessage } from '../../utils/factories';
 import type { Message } from '../../../src/types';
 
 // Mock stripControlTokens utility
@@ -18,16 +19,8 @@ jest.mock('../../../src/utils/messageContent', () => ({
   stripControlTokens: (content: string) => content,
 }));
 
-/**
- * Helper to create a Message with arbitrary fields including tool-specific ones.
- */
-const makeMessage = (overrides: Partial<Message>): Message => ({
-  id: 'msg-1',
-  role: 'user',
-  content: 'test',
-  timestamp: Date.now(),
-  ...overrides,
-});
+const makeMessage = (overrides: Partial<Message>): Message =>
+  createMessage({ id: 'msg-1', content: 'test', ...overrides } as any);
 
 describe('ChatMessage — Tool message rendering', () => {
   beforeEach(() => {
