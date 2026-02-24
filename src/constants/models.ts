@@ -92,6 +92,24 @@ export const RECOMMENDED_MODELS = [
   },
   // --- Vision ---
   {
+    id: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+    name: 'SmolVLM 500M',
+    params: 0.5,
+    description: 'Ultra-compact vision for low-memory devices',
+    minRam: 3,
+    type: 'vision' as const,
+    org: 'HuggingFaceTB',
+  },
+  {
+    id: 'ggml-org/SmolVLM-Instruct-GGUF',
+    name: 'SmolVLM 2B',
+    params: 2,
+    description: 'HuggingFace mobile-optimized vision-language',
+    minRam: 4,
+    type: 'vision' as const,
+    org: 'HuggingFaceTB',
+  },
+  {
     id: 'Qwen/Qwen3-VL-2B-Instruct-GGUF',
     name: 'Qwen 3 VL 2B',
     params: 2,

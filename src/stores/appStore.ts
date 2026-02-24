@@ -114,26 +114,23 @@ interface AppState {
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
+  // Cache type nudge (shown once after first generation when using default q8_0)
+  hasSeenCacheTypeNudge: boolean;
+  setHasSeenCacheTypeNudge: (v: boolean) => void;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      // Theme
       themeMode: 'system' as 'system' | 'light' | 'dark',
       setThemeMode: (mode) => set({ themeMode: mode }),
-
-      // Onboarding
       hasCompletedOnboarding: false,
       setOnboardingComplete: (complete) =>
         set({ hasCompletedOnboarding: complete }),
-
-      // Device info
       deviceInfo: null,
       modelRecommendation: null,
       setDeviceInfo: (info) => set({ deviceInfo: info }),
       setModelRecommendation: (rec) => set({ modelRecommendation: rec }),
-      // Downloaded models
       downloadedModels: [],
       setDownloadedModels: (models) => set({ downloadedModels: models }),
       addDownloadedModel: (model) =>
@@ -145,13 +142,10 @@ export const useAppStore = create<AppState>()(
           downloadedModels: state.downloadedModels.filter((m) => m.id !== modelId),
           activeModelId: state.activeModelId === modelId ? null : state.activeModelId,
         })),
-      // Active model
       activeModelId: null,
       setActiveModelId: (modelId) => set({ activeModelId: modelId }),
-      // Loading states
       isLoadingModel: false,
       setIsLoadingModel: (loading) => set({ isLoadingModel: loading }),
-      // Download progress
       downloadProgress: {},
       setDownloadProgress: (modelId, progress) =>
         set((state) => {
@@ -293,6 +287,10 @@ export const useAppStore = create<AppState>()(
       },
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
+
+      // Cache type nudge
+      hasSeenCacheTypeNudge: false,
+      setHasSeenCacheTypeNudge: (v) => set({ hasSeenCacheTypeNudge: v }),
     }),
     {
       name: 'local-llm-app-storage',
@@ -343,6 +341,8 @@ export const useAppStore = create<AppState>()(
         imageModelDownloadIds: state.imageModelDownloadIds,
         // Persist gallery
         generatedImages: state.generatedImages,
+        // Cache type nudge
+        hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
       }),
     }
   )
