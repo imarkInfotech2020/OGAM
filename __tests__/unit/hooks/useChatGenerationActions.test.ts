@@ -558,6 +558,7 @@ describe('cache type nudge after generation', () => {
     const alertCall = (mockShowAlert as jest.Mock).mock.calls.find((args: any[]) => args[0] === 'Improve Output Quality');
     const goToSettings = alertCall![2].find((b: any) => b.text === 'Go to Settings');
     goToSettings.onPress();
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ visible: false }));
     expect(setShowSettingsPanel).toHaveBeenCalledWith(true);
   });
 

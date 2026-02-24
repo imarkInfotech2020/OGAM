@@ -210,7 +210,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
       [
         {
           text: 'Go to Settings',
-          onPress: () => deps.setShowSettingsPanel?.(true),
+          onPress: () => { deps.setAlertState(hideAlert()); deps.setShowSettingsPanel?.(true); },
         },
         { text: 'Got it', style: 'cancel' },
       ],
