@@ -75,6 +75,22 @@ describe('RECOMMENDED_MODELS', () => {
       expect(model.params).toBeGreaterThan(0);
     }
   });
+
+  it('contains SmolVLM 2B vision model', () => {
+    const model = RECOMMENDED_MODELS.find(m => m.id === 'ggml-org/SmolVLM-Instruct-GGUF');
+    expect(model).toBeDefined();
+    expect(model!.type).toBe('vision');
+    expect(model!.params).toBe(2);
+    expect(model!.org).toBe('HuggingFaceTB');
+  });
+
+  it('contains SmolVLM 500M vision model', () => {
+    const model = RECOMMENDED_MODELS.find(m => m.id === 'ggml-org/SmolVLM-500M-Instruct-GGUF');
+    expect(model).toBeDefined();
+    expect(model!.type).toBe('vision');
+    expect(model!.params).toBe(0.5);
+    expect(model!.org).toBe('HuggingFaceTB');
+  });
 });
 
 describe('MODEL_ORGS', () => {

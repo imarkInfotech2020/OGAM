@@ -78,7 +78,7 @@ interface AppState {
     gpuLayers: number;
     // Flash attention: faster but incompatible with Android Hexagon/OpenCL multi-layer GPU offload
     flashAttn: boolean;
-    // KV cache quantization type: f16 (default), q8_0 (good compression), q4_0 (max compression)
+    // KV cache quantization type: q8_0 (default), f16 (full precision), q4_0 (max compression)
     cacheType: CacheType;
     // Show generation details (GPU, model, tok/s, steps, etc.) in chat messages
     showGenerationDetails: boolean;
