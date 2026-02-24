@@ -2,7 +2,7 @@ import type { ThemeColors, ThemeShadows } from '../../theme';
 import { FONTS } from '../../constants';
 import { Platform } from 'react-native';
 
-export const PILL_ICON_SIZE = 36;
+export const PILL_ICON_SIZE = 32;
 const NUM_PILL_ICONS = 4;
 export const PILL_ICONS_WIDTH = PILL_ICON_SIZE * NUM_PILL_ICONS;
 export const ANIM_DURATION_IN = 180;
@@ -103,14 +103,14 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   // Main input row (pill + circular button)
   mainRow: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   // Pill container
   pill: {
     flex: 1,
     flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
+    alignItems: 'center' as const,
     backgroundColor: colors.surface,
     borderRadius: 24,
     borderWidth: 1,
@@ -136,8 +136,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   // Icons row inside pill (right side)
   pillIcons: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-end' as const,
-    paddingBottom: 4,
+    alignItems: 'center' as const,
     gap: 0,
   },
   pillIconButton: {
@@ -148,9 +147,7 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: PILL_ICON_SIZE / 2,
     position: 'relative' as const,
   },
-  pillIconButtonActive: {
-    backgroundColor: `${colors.primary}18`,
-  },
+  pillIconButtonActive: {},
   pillIconButtonDisabled: {
     opacity: 0.4,
   },
@@ -190,10 +187,9 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     backgroundColor: colors.primary,
-    marginBottom: 2,
   },
   circleButtonStop: {
-    backgroundColor: colors.error,
+    backgroundColor: `${colors.error}CC`,
   },
   circleButtonIdle: {
     backgroundColor: colors.surface,

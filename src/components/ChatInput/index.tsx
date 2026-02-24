@@ -43,7 +43,7 @@ const ToolsButton: React.FC<{
     disabled={disabled}
     hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
   >
-    <Icon name="tool" size={20} color={supportsToolCalling ? (enabledToolCount > 0 ? colors.primary : colors.textSecondary) : colors.textMuted} />
+    <Icon name="tool" size={18} color={supportsToolCalling ? (enabledToolCount > 0 ? colors.primary : colors.textSecondary) : colors.textMuted} />
     {supportsToolCalling && enabledToolCount > 0 && (
       <View style={[styles.iconBadge, styles.iconBadgeOn]}><Text style={styles.iconBadgeText}>{enabledToolCount}</Text></View>
     )}
@@ -190,7 +190,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             >
               <Icon
                 name="paperclip"
-                size={20}
+                size={18}
                 color={disabled ? colors.textMuted : colors.textSecondary}
               />
             </TouchableOpacity>
@@ -215,7 +215,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             >
               <Icon
                 name="eye"
-                size={20}
+                size={18}
                 color={supportsVision ? colors.primary : colors.textMuted}
               />
             </TouchableOpacity>
@@ -231,7 +231,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon name="image" size={20} color={imgState.color} />
+              <Icon name="image" size={18} color={imgState.color} />
               <View
                 testID={`image-mode-${imageMode}-badge`}
                 style={[

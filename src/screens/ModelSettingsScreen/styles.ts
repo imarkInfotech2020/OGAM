@@ -132,4 +132,8 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textTransform: 'uppercase' as const,
     letterSpacing: 1,
   },
+  resetButton: {
+    alignSelf: 'center' as const,
+    marginTop: SPACING.lg,
+  },
 });

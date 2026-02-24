@@ -16,6 +16,7 @@ import { MessageAttachments } from './components/MessageAttachments';
 import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
 import { ActionMenuSheet, EditSheet } from './components/ActionMenuSheet';
+import { MarkdownText } from '../MarkdownText';
 import { parseThinkingContent, formatTime, formatDuration } from './utils';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
@@ -91,7 +92,7 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
       </TouchableOpacity>
       {expanded && hasDetails && (
         <View style={styles.toolDetailContainer}>
-          <Text style={styles.toolDetailText} selectable>{content}</Text>
+          <MarkdownText dimmed>{content}</MarkdownText>
         </View>
       )}
     </View>

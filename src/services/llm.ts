@@ -124,8 +124,12 @@ class LLMService {
     try {
       const model = (this.context as any)?.model;
       const jinja = model?.chatTemplates?.jinja;
+      logger.log('[LLM] Chat template jinja:', JSON.stringify(jinja, null, 2));
+      logger.log('[LLM] Chat template keys:', model?.chatTemplates ? Object.keys(model.chatTemplates) : 'none');
       this.toolCallingSupported = !!(jinja?.defaultCaps?.toolCalls || jinja?.toolUse || jinja?.toolUseCaps?.toolCalls);
-    } catch {
+      logger.log('[LLM] Tool calling supported:', this.toolCallingSupported);
+    } catch (e) {
+      logger.warn('[LLM] Error detecting tool calling support:', e);
       this.toolCallingSupported = false;
     }
   }

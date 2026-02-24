@@ -40,6 +40,8 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     paddingHorizontal: 4,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    alignSelf: 'stretch' as const,
+    width: '100%' as const,
   },
   toolDetailText: {
     fontSize: 11,

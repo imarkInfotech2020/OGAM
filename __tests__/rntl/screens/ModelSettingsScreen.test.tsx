@@ -952,4 +952,47 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('Uses text model for classification')).toBeTruthy();
     });
   });
+
+  // ============================================================================
+  // Reset to Defaults
+  // ============================================================================
+  describe('reset to defaults', () => {
+    it('renders reset button', () => {
+      const { getByTestId } = renderScreen();
+      expect(getByTestId('reset-settings-button')).toBeTruthy();
+    });
+
+    it('shows confirmation alert when pressed', () => {
+      const { getByTestId, getByText } = renderScreen();
+      fireEvent.press(getByTestId('reset-settings-button'));
+      expect(getByText('Reset All Settings')).toBeTruthy();
+    });
+
+    it('resets all settings to defaults when confirmed', () => {
+      useAppStore.getState().updateSettings({
+        temperature: 1.5,
+        maxTokens: 4096,
+        nThreads: 2,
+        nBatch: 64,
+        cacheType: 'f16',
+        flashAttn: false,
+        enableGpu: true,
+        gpuLayers: 20,
+      });
+
+      const { getByTestId, getByText } = renderScreen();
+      fireEvent.press(getByTestId('reset-settings-button'));
+      fireEvent.press(getByText('Reset'));
+
+      const s = useAppStore.getState().settings;
+      expect(s.temperature).toBe(0.7);
+      expect(s.maxTokens).toBe(1024);
+      expect(s.nThreads).toBe(6);
+      expect(s.nBatch).toBe(256);
+      expect(s.cacheType).toBe('q8_0');
+      expect(s.flashAttn).toBe(true);
+      expect(s.enableGpu).toBe(false);
+      expect(s.gpuLayers).toBe(6);
+    });
+  });
 });

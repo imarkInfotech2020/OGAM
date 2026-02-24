@@ -19,18 +19,41 @@ export const PerformanceSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
 
-  const isFlashAttnOn = settings?.flashAttn ?? (Platform.OS !== 'android');
-  const gpuLayersMax = Platform.OS === 'android' && isFlashAttnOn ? 1 : 99;
-  const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 6, gpuLayersMax);
+  const isFlashAttnOn = settings?.flashAttn ?? true;
+  const currentCache: CacheType = settings?.cacheType ?? 'q8_0';
+  const isQuantizedCache = currentCache !== 'f16';
+  const gpuLayersMax = 99;
+  const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, gpuLayersMax);
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const isGpuEnabled = settings?.enableGpu !== false;
+  const isAndroid = Platform.OS === 'android';
+  // On Android, GPU (OpenCL) only supports f16 KV cache
+  const gpuForcesF16 = isAndroid && isGpuEnabled;
+  const cacheDisabled = gpuForcesF16;
 
   const handleFlashAttnChange = (value: boolean) => {
-    const updates: Parameters<typeof updateSettings>[0] = { flashAttn: value };
-    if (value && Platform.OS === 'android' && (settings?.gpuLayers ?? 6) > 1) {
-      updates.gpuLayers = 1;
+    if (!value && isQuantizedCache) {
+      updateSettings({ flashAttn: false, cacheType: 'f16' });
+    } else {
+      updateSettings({ flashAttn: value });
+    }
+  };
+
+  const handleCacheTypeChange = (ct: CacheType) => {
+    const updates: Partial<typeof settings> = { cacheType: ct };
+    if (ct !== 'f16' && !isFlashAttnOn) {
+      updates.flashAttn = true;
     }
     updateSettings(updates);
+  };
+
+  const handleGpuChange = (value: boolean) => {
+    if (value && isAndroid && isQuantizedCache) {
+      // GPU on Android requires f16 cache
+      updateSettings({ enableGpu: true, cacheType: 'f16' });
+    } else {
+      updateSettings({ enableGpu: value });
+    }
   };
 
   return (
@@ -78,10 +101,10 @@ export const PerformanceSection: React.FC = () => {
       {Platform.OS !== 'ios' && (
         <GpuSection
           isGpuEnabled={isGpuEnabled}
-          isFlashAttnOn={isFlashAttnOn}
           gpuLayersMax={gpuLayersMax}
           gpuLayersEffective={gpuLayersEffective}
           trackColor={trackColor}
+          onGpuChange={handleGpuChange}
         />
       )}
 
@@ -89,7 +112,7 @@ export const PerformanceSection: React.FC = () => {
         <View style={styles.toggleInfo}>
           <Text style={styles.toggleLabel}>Flash Attention</Text>
           <Text style={styles.toggleDesc}>
-            Faster inference and lower memory. On Android, enabling this limits GPU layers to 1. Requires model reload.
+            Faster inference and lower memory. Required for quantized KV cache (q8_0/q4_0). Requires model reload.
           </Text>
         </View>
         <Switch
@@ -105,7 +128,7 @@ export const PerformanceSection: React.FC = () => {
         <View style={styles.toggleInfo}>
           <Text style={styles.toggleLabel}>KV Cache Type</Text>
           <Text style={styles.toggleDesc}>
-            {CACHE_DESC[settings?.cacheType ?? 'q8_0']}
+            {CACHE_DESC[currentCache]}
           </Text>
         </View>
       </View>
@@ -116,12 +139,23 @@ export const PerformanceSection: React.FC = () => {
             title={ct}
             variant="secondary"
             size="small"
-            active={(settings?.cacheType ?? 'q8_0') === ct}
-            onPress={() => updateSettings({ cacheType: ct })}
+            active={(cacheDisabled ? 'f16' : currentCache) === ct}
+            disabled={cacheDisabled && ct !== 'f16'}
+            onPress={() => handleCacheTypeChange(ct)}
             style={styles.flex1}
           />
         ))}
       </View>
+      {cacheDisabled && (
+        <Text style={styles.warningText}>
+          GPU acceleration on Android requires f16 KV cache.
+        </Text>
+      )}
+      {!cacheDisabled && !isFlashAttnOn && (
+        <Text style={styles.warningText}>
+          Quantized cache (q8_0/q4_0) will auto-enable flash attention.
+        </Text>
+      )}
 
       <View style={styles.toggleRow}>
         <View style={styles.toggleInfo}>
@@ -159,18 +193,18 @@ export const PerformanceSection: React.FC = () => {
 
 interface GpuSectionProps {
   isGpuEnabled: boolean;
-  isFlashAttnOn: boolean;
   gpuLayersMax: number;
   gpuLayersEffective: number;
   trackColor: { false: string; true: string };
+  onGpuChange: (value: boolean) => void;
 }
 
 const GpuSection: React.FC<GpuSectionProps> = ({
   isGpuEnabled,
-  isFlashAttnOn,
   gpuLayersMax,
   gpuLayersEffective,
   trackColor,
+  onGpuChange,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -188,7 +222,7 @@ const GpuSection: React.FC<GpuSectionProps> = ({
         <Switch
           testID="gpu-acceleration-switch"
           value={isGpuEnabled}
-          onValueChange={(value) => updateSettings({ enableGpu: value })}
+          onValueChange={onGpuChange}
           trackColor={trackColor}
           thumbColor={isGpuEnabled ? colors.primary : colors.textMuted}
         />
@@ -215,11 +249,6 @@ const GpuSection: React.FC<GpuSectionProps> = ({
             maximumTrackTintColor={colors.surface}
             thumbTintColor={colors.primary}
           />
-          {Platform.OS === 'android' && isFlashAttnOn && (
-            <Text style={styles.warningText}>
-              Flash Attention limits GPU layers to 1 on Android
-            </Text>
-          )}
         </View>
       )}
     </>

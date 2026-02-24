@@ -66,7 +66,11 @@ export function buildModelParams(
   const useFlashAttn = settings.flashAttn ?? true;
   const gpuEnabled = settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  const cacheType = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
+  // Quantized KV cache (q8_0, q4_0) requires flash attention — SIGSEGV otherwise.
+  // On Android, GPU (OpenCL) backend only supports f16 KV cache — SIGABRT in graph_split otherwise.
+  const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
+  const needsF16 = !useFlashAttn || (Platform.OS === 'android' && nGpuLayers > 0);
+  const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_threads: nThreads,

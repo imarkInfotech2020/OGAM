@@ -86,6 +86,7 @@ interface AppState {
     enabledTools: string[];
   };
   updateSettings: (settings: Partial<AppState['settings']>) => void;
+  resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
   activeImageModelId: string | null;
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
@@ -118,6 +119,33 @@ interface AppState {
   hasSeenCacheTypeNudge: boolean;
   setHasSeenCacheTypeNudge: (v: boolean) => void;
 }
+
+const DEFAULT_SETTINGS: AppState['settings'] = {
+  systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
+  temperature: 0.7,
+  maxTokens: 1024,
+  topP: 0.9,
+  repeatPenalty: 1.1,
+  contextLength: 2048,
+  nThreads: 6,
+  nBatch: 256,
+  imageGenerationMode: 'auto' as ImageGenerationMode,
+  autoDetectMethod: 'pattern' as AutoDetectMethod,
+  classifierModelId: null,
+  imageSteps: 20,
+  imageGuidanceScale: 7.5,
+  imageThreads: 4,
+  imageWidth: 512,
+  imageHeight: 512,
+  enhanceImagePrompts: false,
+  modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
+  enableGpu: false,
+  gpuLayers: 1,
+  flashAttn: true,
+  cacheType: 'q8_0' as CacheType,
+  showGenerationDetails: false,
+  enabledTools: ['calculator', 'get_current_datetime'],
+};
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -177,39 +205,12 @@ export const useAppStore = create<AppState>()(
       clearBackgroundDownloads: () =>
         set({ activeBackgroundDownloads: {} }),
       // Settings
-      settings: {
-        systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
-        temperature: 0.7,
-        maxTokens: 1024,
-        topP: 0.9,
-        repeatPenalty: 1.1,
-        contextLength: 2048,
-        nThreads: 6,
-        nBatch: 256,
-        imageGenerationMode: 'auto',
-        // 'pattern' = fast regex only, 'llm' = use model for uncertain cases
-        autoDetectMethod: 'pattern',
-        classifierModelId: null as string | null,
-        // More steps = better quality but slower; 20 is a good default for SD1.5
-        imageSteps: 20,
-        imageGuidanceScale: 7.5,
-        imageThreads: 4,
-        // SD1.5 models are trained at 512x512; must be divisible by 8
-        imageWidth: 512,
-        imageHeight: 512,
-        enhanceImagePrompts: false,
-        modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
-        enableGpu: false,
-        gpuLayers: 6,
-        flashAttn: true,
-        cacheType: 'q8_0' as CacheType,
-        showGenerationDetails: false,
-        enabledTools: ['calculator', 'get_current_datetime'],
-      },
+      settings: { ...DEFAULT_SETTINGS },
       updateSettings: (newSettings) =>
         set((state) => ({
           settings: { ...state.settings, ...newSettings },
         })),
+      resetSettings: () => set({ settings: { ...DEFAULT_SETTINGS } }),
 
       // Image models (ONNX-based)
       downloadedImageModels: [],

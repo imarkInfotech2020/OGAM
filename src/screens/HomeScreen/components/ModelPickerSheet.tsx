@@ -96,7 +96,8 @@ export const ModelPickerSheet: React.FC<Props> = ({
                     >
                       <View style={styles.pickerItemInfo}>
                         <Text style={styles.pickerItemName}>
-                          {model.name}{model.isVisionModel ? ' 👁' : ''}
+                          {model.name}{' '}
+                          {model.isVisionModel && <Icon name="eye" size={14} color={colors.info} />}
                         </Text>
                         <Text style={styles.pickerItemMeta}>
                           {model.quantization} · {hardwareService.formatModelSize(model)}

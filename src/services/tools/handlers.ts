@@ -74,7 +74,7 @@ async function handleWebSearch(query: string): Promise<string> {
 
     return results
       .slice(0, 5)
-      .map((r, i) => `${i + 1}. ${r.title}${r.url ? `\n   ${r.url}` : ''}\n   ${r.snippet}`)
+      .map((r, i) => `${i + 1}. ${r.url ? `[${r.title}](${r.url})` : r.title}\n   ${r.snippet}`)
       .join('\n\n');
   } finally {
     clearTimeout(timeout);
