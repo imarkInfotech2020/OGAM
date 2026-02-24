@@ -83,36 +83,34 @@ async function handleWebSearch(query: string): Promise<string> {
 
 type SearchResult = { title: string; snippet: string; url?: string };
 
+function parseResultBlock(block: string): SearchResult | null {
+  const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
+  const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
+
+  const titleMatch = block.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</) ||
+                     block.match(/<a[^>]*href="https?:\/\/[^"]*"[^>]*>\s*<span[^>]*>([^<]+)/);
+  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
+
+  const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
+                       block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
+  const snippet = snippetMatch
+    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim())
+    : '';
+
+  if (!title && !snippet) return null;
+  return { title: title || '(no title)', snippet: snippet || '(no snippet)', url };
+}
+
 function parseBraveResults(html: string): SearchResult[] {
   const results: SearchResult[] = [];
-
-  // Split on result-wrapper boundaries
   const blocks = html.split(/class="result-wrapper/).slice(1);
+
   for (const block of blocks) {
     if (results.length >= 5) break;
-
-    // Extract URL from first <a href="https://...">
-    const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
-    const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
-
-    // Extract title from the link text (inside heading or title class)
-    const titleMatch = block.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</) ||
-                       block.match(/<a[^>]*href="https?:\/\/[^"]*"[^>]*>\s*<span[^>]*>([^<]+)/);
-    const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
-
-    // Extract snippet
-    const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
-                         block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-    const snippet = snippetMatch
-      ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]+>/g, '').trim())
-      : '';
-
-    if (title || snippet) {
-      results.push({ title: title || '(no title)', snippet: snippet || '(no snippet)', url });
-    }
+    const parsed = parseResultBlock(block);
+    if (parsed) results.push(parsed);
   }
 
-  // Fallback: extract any linked results
   if (results.length === 0) {
     const linkPattern = /<a[^>]*href="(https?:\/\/(?!search\.brave)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
     let match;

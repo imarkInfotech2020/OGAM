@@ -261,5 +261,30 @@ describe('Tool Handlers', () => {
       expect(result.error).toContain('Network request failed');
       expect(result.content).toBe('');
     });
+
+    it('returns error when query is empty string', async () => {
+      const result = await executeToolCall(
+        makeToolCall('web_search', { query: '' }),
+      );
+
+      expect(result.error).toContain('Missing required parameter: query');
+    });
+
+    it('returns error when query is undefined', async () => {
+      const result = await executeToolCall(
+        makeToolCall('web_search', {}),
+      );
+
+      expect(result.error).toContain('Missing required parameter: query');
+    });
+
+    it('returns error when query is whitespace only', async () => {
+      const result = await executeToolCall(
+        makeToolCall('web_search', { query: '   ' }),
+      );
+
+      expect(result.error).toContain('Missing required parameter: query');
+    });
+
   });
 });
