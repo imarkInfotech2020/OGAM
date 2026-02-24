@@ -83,6 +83,17 @@ async function handleWebSearch(query: string): Promise<string> {
 
 type SearchResult = { title: string; snippet: string; url?: string };
 
+function stripHtmlTags(html: string): string {
+  let result = '';
+  let inTag = false;
+  for (let i = 0; i < html.length; i++) {
+    if (html[i] === '<') { inTag = true; continue; }
+    if (html[i] === '>') { inTag = false; continue; }
+    if (!inTag) result += html[i];
+  }
+  return result;
+}
+
 function parseResultBlock(block: string): SearchResult | null {
   const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
   const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
@@ -94,7 +105,7 @@ function parseResultBlock(block: string): SearchResult | null {
   const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
                        block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
   const snippet = snippetMatch
-    ? decodeHTMLEntities(snippetMatch[1].replace(/<[^>]*>/g, '').trim())
+    ? decodeHTMLEntities(stripHtmlTags(snippetMatch[1]).trim())
     : '';
 
   if (!title && !snippet) return null;
