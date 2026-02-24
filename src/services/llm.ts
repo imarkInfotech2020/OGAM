@@ -76,7 +76,7 @@ class LLMService {
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
       this.detectToolCallingSupport();
-      logger.log(`[LLM] Model loaded, vision: ${this.multimodalSupport?.vision ?? false}, tools: ${this.toolCallingSupported}`);
+      logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}`);
     } catch (error: any) {
       this.context = null;
       this.currentModelPath = null;
