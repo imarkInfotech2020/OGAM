@@ -178,7 +178,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
-  const enabledTools = deps.settings.enabledTools || [];
+  const enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
   const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   const systemPrompt = enabledTools.length > 0 ? basePrompt + buildToolSystemPromptHint(enabledTools) : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);

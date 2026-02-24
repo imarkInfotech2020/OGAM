@@ -56,6 +56,7 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     getLoadedModelPath: jest.fn(),
     isModelLoaded: jest.fn(),
+    supportsToolCalling: jest.fn(() => false),
     stopGeneration: jest.fn(),
     getContextDebugInfo: jest.fn(),
     clearKVCache: jest.fn(),
