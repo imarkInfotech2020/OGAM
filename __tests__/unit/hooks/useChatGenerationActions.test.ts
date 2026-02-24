@@ -546,18 +546,19 @@ describe('cache type nudge after generation', () => {
     expect(mockSetHasSeenCacheTypeNudge).not.toHaveBeenCalled();
   });
 
-  it('"Go to Settings" navigates to ModelSettings', async () => {
+  it('"Go to Settings" opens the in-chat settings panel', async () => {
     (mockAppStore.getState as jest.Mock).mockReturnValue({
       hasSeenCacheTypeNudge: false,
       setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
     });
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' } });
+    const setShowSettingsPanel = jest.fn();
+    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' }, setShowSettingsPanel });
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
 
     const alertCall = (mockShowAlert as jest.Mock).mock.calls.find((args: any[]) => args[0] === 'Improve Output Quality');
     const goToSettings = alertCall![2].find((b: any) => b.text === 'Go to Settings');
     goToSettings.onPress();
-    expect(deps.navigation.navigate).toHaveBeenCalledWith('ModelSettings');
+    expect(setShowSettingsPanel).toHaveBeenCalledWith(true);
   });
 
   it('"Got it" button has cancel style', async () => {

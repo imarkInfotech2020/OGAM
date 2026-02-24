@@ -59,6 +59,7 @@ type GenerationDeps = {
   removeImagesByConversationId: (convId: string) => string[];
   generatingForConversationRef: MutableRefObject<string | null>;
   navigation: any;
+  setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
 };
 
@@ -209,7 +210,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
       [
         {
           text: 'Go to Settings',
-          onPress: () => deps.navigation.navigate('ModelSettings'),
+          onPress: () => deps.setShowSettingsPanel?.(true),
         },
         { text: 'Got it', style: 'cancel' },
       ],
