@@ -6,7 +6,7 @@
 
 ### The Swiss Army Knife of On-Device AI
 
-**Chat. Generate images. See. Listen. All on your phone. All offline. Zero data leaves your device.**
+**Chat. Generate images. Use tools. See. Listen. All on your phone. All offline. Zero data leaves your device.**
 
 [![GitHub stars](https://img.shields.io/github/stars/alichherawalla/off-grid-mobile?style=social)](https://github.com/alichherawalla/off-grid-mobile)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -22,7 +22,7 @@
 
 ## Not just another chat app
 
-Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a **complete offline AI suite** — text generation, image generation, vision AI, voice transcription, and document analysis, all running natively on your phone's hardware.
+Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a **complete offline AI suite** — text generation, image generation, vision AI, voice transcription, tool calling, and document analysis, all running natively on your phone's hardware.
 
 ---
 
@@ -40,7 +40,9 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 </table>
 </div>
 
-**Text Generation** — Run Qwen 3, Llama 3.2, Gemma 3, Phi-4, and any GGUF model. Streaming responses, thinking mode, 15-30 tok/s on flagship devices. Bring your own `.gguf` files too.
+**Text Generation** — Run Qwen 3, Llama 3.2, Gemma 3, Phi-4, and any GGUF model. Streaming responses, thinking mode, markdown rendering, 15-30 tok/s on flagship devices. Bring your own `.gguf` files too.
+
+**Tool Calling** — Models that support function calling can use built-in tools: web search, calculator, date/time, and device info. Automatic tool loop with runaway prevention. Clickable links in search results.
 
 **Image Generation** — On-device Stable Diffusion with real-time preview. NPU-accelerated on Snapdragon (5-10s per image), Core ML on iOS. 20+ models including Absolute Reality, DreamShaper, Anything V5.
 
