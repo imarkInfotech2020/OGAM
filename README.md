@@ -104,9 +104,11 @@ npm run ios
 
 ## Testing
 
+[![CI](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
+![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/alichherawalla/test-results-badge/raw/off-grid-mobile-test-count.json)
 
-**3,600+ tests** across three platforms:
+Tests run across three platforms on every PR:
 
 | Platform | Framework | What's covered |
 |----------|-----------|----------------|
