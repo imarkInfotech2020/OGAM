@@ -104,15 +104,22 @@ npm run ios
 
 ## Testing
 
-Tests run across three platforms — Jest for React Native, JUnit for Android native modules, and XCTest for iOS native modules:
+[![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
+
+**3,600+ tests** across three platforms:
+
+| Platform | Framework | What's covered |
+|----------|-----------|----------------|
+| React Native | Jest + RNTL | Stores, services, components, screens, contracts |
+| Android | JUnit | LocalDream, DownloadManager, BroadcastReceiver |
+| iOS | XCTest | PDFExtractor, CoreMLDiffusion, DownloadManager |
+| E2E | Maestro | Critical path flows (launch, chat, models, downloads) |
 
 ```bash
 npm test              # Run all tests (Jest + Android + iOS)
-npm run test:count    # Print test counts across all platforms
+npm run test:count    # Print exact counts across all platforms
 npm run test:e2e      # Run Maestro E2E flows (requires running app)
 ```
-
-[![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
 
 ---
 
