@@ -102,6 +102,20 @@ npm run ios
 
 ---
 
+## Testing
+
+Tests run across three platforms — Jest for React Native, JUnit for Android native modules, and XCTest for iOS native modules:
+
+```bash
+npm test              # Run all tests (Jest + Android + iOS)
+npm run test:count    # Print test counts across all platforms
+npm run test:e2e      # Run Maestro E2E flows (requires running app)
+```
+
+[![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
+
+---
+
 ## Documentation
 
 | Document | Description |
