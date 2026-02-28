@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
 import { createStyles } from './styles';
@@ -34,6 +36,16 @@ export const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
+  const { goTo } = useSpotlightTour();
+
+  // If user arrived here via onboarding spotlight flow, show input spotlight
+  useEffect(() => {
+    const pending = consumePendingSpotlight();
+    if (pending !== null) {
+      const timer = setTimeout(() => goTo(pending), 600);
+      return () => clearTimeout(timer);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (chat.activeConversation?.messages.length && isNearBottomRef.current) {
@@ -56,6 +68,7 @@ export const ChatScreen: React.FC = () => {
       <>
         <NoModelScreen
           styles={styles} colors={colors}
+          navigation={chat.navigation}
           downloadedModelsCount={chat.downloadedModels.length}
           showModelSelector={chat.showModelSelector}
           setShowModelSelector={chat.setShowModelSelector}
@@ -74,6 +87,7 @@ export const ChatScreen: React.FC = () => {
       <>
         <LoadingScreen
           styles={styles} colors={colors}
+          navigation={chat.navigation}
           loadingModelName={chat.loadingModel?.name || chat.activeModel.name}
           modelSize={sizeSource ? chat.hardwareService.formatModelSize(sizeSource) : ''}
           hasVision={!!(chat.loadingModel?.mmProjPath || chat.activeModel.mmProjPath)}
@@ -222,23 +236,25 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         <Text style={styles.classifyingText}>Understanding your request...</Text>
       </View>
     )}
-    <ChatInput
-      onSend={chat.handleSend}
-      onStop={chat.handleStop}
-      disabled={!llmService.isModelLoaded()}
-      isGenerating={chat.isStreaming || chat.isThinking}
-      supportsVision={chat.supportsVision}
-      conversationId={chat.activeConversationId}
-      imageModelLoaded={chat.imageModelLoaded}
-      onOpenSettings={() => chat.setShowSettingsPanel(true)}
-      queueCount={chat.queueCount}
-      queuedTexts={chat.queuedTexts}
-      onClearQueue={() => generationService.clearQueue()}
-      placeholder={getPlaceholderText(llmService.isModelLoaded(), chat.supportsVision)}
-      onToolsPress={() => chat.setShowToolPicker(true)}
-      enabledToolCount={chat.enabledTools.length}
-      supportsToolCalling={chat.supportsToolCalling}
-    />
+    <AttachStep index={3} fill>
+      <ChatInput
+        onSend={chat.handleSend}
+        onStop={chat.handleStop}
+        disabled={!llmService.isModelLoaded()}
+        isGenerating={chat.isStreaming || chat.isThinking}
+        supportsVision={chat.supportsVision}
+        conversationId={chat.activeConversationId}
+        imageModelLoaded={chat.imageModelLoaded}
+        onOpenSettings={() => chat.setShowSettingsPanel(true)}
+        queueCount={chat.queueCount}
+        queuedTexts={chat.queuedTexts}
+        onClearQueue={() => generationService.clearQueue()}
+        placeholder={getPlaceholderText(llmService.isModelLoaded(), chat.supportsVision)}
+        onToolsPress={() => chat.setShowToolPicker(true)}
+        enabledToolCount={chat.enabledTools.length}
+        supportsToolCalling={chat.supportsToolCalling}
+      />
+    </AttachStep>
     <ToolPickerSheet
       visible={chat.showToolPicker}
       onClose={() => chat.setShowToolPicker(false)}

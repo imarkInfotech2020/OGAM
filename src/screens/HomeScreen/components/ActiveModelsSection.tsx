@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { AttachStep } from 'react-native-spotlight-tour';
 import { AnimatedPressable } from '../../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
@@ -143,12 +144,14 @@ export const ActiveModelsSection: React.FC<Props> = ({
   return (
     <>
       <View style={styles.modelsRow}>
-        <TextModelCard
-          loadingState={loadingState}
-          activeTextModel={activeTextModel}
-          downloadedModels={downloadedModels}
-          onPress={onPressTextModel}
-        />
+        <AttachStep index={1} style={attachStepStyles.flex}>
+          <TextModelCard
+            loadingState={loadingState}
+            activeTextModel={activeTextModel}
+            downloadedModels={downloadedModels}
+            onPress={onPressTextModel}
+          />
+        </AttachStep>
         <ImageModelCard
           loadingState={loadingState}
           activeImageModel={activeImageModel}
@@ -175,3 +178,7 @@ export const ActiveModelsSection: React.FC<Props> = ({
     </>
   );
 };
+
+const attachStepStyles = StyleSheet.create({
+  flex: { flex: 1 },
+});

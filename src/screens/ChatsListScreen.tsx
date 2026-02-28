@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
+import { AttachStep } from 'react-native-spotlight-tour';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
@@ -21,9 +23,12 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
 import { Conversation } from '../types';
-import { ChatsStackParamList } from '../navigation/types';
+import { RootStackParamList, MainTabParamList } from '../navigation/types';
 
-type NavigationProp = NativeStackNavigationProp<ChatsStackParamList, 'ChatsList'>;
+type NavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -148,14 +153,16 @@ export const ChatsListScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
-        <Button
-          title="New"
-          variant="primary"
-          size="small"
-          onPress={handleNewChat}
-          disabled={!hasModels}
-          icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
-        />
+        <AttachStep index={2}>
+          <Button
+            title="New"
+            variant="primary"
+            size="small"
+            onPress={handleNewChat}
+            disabled={!hasModels}
+            icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+          />
+        </AttachStep>
       </View>
 
       {sortedConversations.length === 0 ? (

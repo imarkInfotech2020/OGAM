@@ -1,13 +1,18 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSpotlightTour } from 'react-native-spotlight-tour';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
+import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
+import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
+import { STEP_TAB_MAP, STEP_INDEX_MAP, CHAT_INPUT_STEP_INDEX, MODEL_SETTINGS_STEP_INDEX, PROJECT_EDIT_STEP_INDEX, DOWNLOAD_FILE_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
+import { setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
-import { useThemedStyles } from '../../theme';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme } from '../../theme';
+import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
 import { ActiveModelsSection } from './components/ActiveModelsSection';
@@ -23,6 +28,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
+  const { goTo } = useSpotlightTour();
+
+  const handleStepPress = useCallback((stepId: string) => {
+    closeSheet();
+    const tab = STEP_TAB_MAP[stepId];
+    const stepIndex = STEP_INDEX_MAP[stepId];
+
+    // For multi-step flows, queue the continuation step.
+    if (stepId === 'downloadedModel') {
+      setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
+    }
+    if (stepId === 'sentMessage') {
+      setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
+    }
+    if (stepId === 'exploredSettings') {
+      setPendingSpotlight(MODEL_SETTINGS_STEP_INDEX);
+    }
+    if (stepId === 'createdProject') {
+      setPendingSpotlight(PROJECT_EDIT_STEP_INDEX);
+    }
+
+    // Navigate to the correct tab
+    if (tab && tab !== 'HomeTab') {
+      navigation.navigate(tab as any);
+    }
+
+    // Delay spotlight to allow navigation transition to complete
+    if (stepIndex !== undefined) {
+      setTimeout(() => goTo(stepIndex), 600);
+    }
+  }, [closeSheet, navigation, goTo]);
 
   const {
     pickerType,
@@ -57,6 +94,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Off Grid</Text>
+            {showIcon && <PulsatingIcon onPress={openSheet} />}
           </View>
 
           {/* Active Models Section */}
@@ -124,7 +162,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.galleryCardInfo}>
               <Text style={styles.galleryCardTitle}>Image Gallery</Text>
               <Text style={styles.galleryCardMeta}>
-                {generatedImages.length} image{generatedImages.length !== 1 ? 's' : ''}
+                {generatedImages.length === 1 ? 'image' : 'images'}
               </Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
@@ -182,6 +220,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         message={alertState.message}
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
+      />
+
+      <OnboardingSheet
+        visible={sheetVisible}
+        onClose={closeSheet}
+        onStepPress={handleStepPress}
       />
     </SafeAreaView>
   );
