@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSpotlightTour } from 'react-native-spotlight-tour';
@@ -8,10 +8,11 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
-import { STEP_TAB_MAP, STEP_INDEX_MAP, CHAT_INPUT_STEP_INDEX, MODEL_SETTINGS_STEP_INDEX, PROJECT_EDIT_STEP_INDEX, DOWNLOAD_FILE_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
+import { STEP_TAB_MAP, STEP_INDEX_MAP, CHAT_INPUT_STEP_INDEX, MODEL_SETTINGS_STEP_INDEX, PROJECT_EDIT_STEP_INDEX, DOWNLOAD_FILE_STEP_INDEX, MODEL_PICKER_STEP_INDEX, IMAGE_LOAD_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import Icon from 'react-native-vector-icons/Feather';
+import { useAppStore } from '../../stores/appStore';
 import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
@@ -39,6 +40,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // For multi-step flows, queue the continuation step.
     if (stepId === 'downloadedModel') {
       setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
+    }
+    if (stepId === 'loadedModel') {
+      setPendingSpotlight(MODEL_PICKER_STEP_INDEX);
     }
     if (stepId === 'sentMessage') {
       setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
@@ -87,6 +91,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     continueChat,
     handleDeleteConversation,
   } = useHomeScreen(navigation);
+
+  // Reactive spotlight state for image gen flow
+  const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
+  const shownSpotlights = useAppStore(s => s.shownSpotlights);
+  const markSpotlightShown = useAppStore(s => s.markSpotlightShown);
+
+  // Reactive: image model downloaded but not loaded → spotlight ImageModelCard (step 13)
+  useEffect(() => {
+    if (
+      downloadedImageModels.length > 0 &&
+      !activeImageModelId &&
+      !shownSpotlights.imageLoad &&
+      !onboardingChecklist.triedImageGen
+    ) {
+      markSpotlightShown('imageLoad');
+      setTimeout(() => goTo(IMAGE_LOAD_STEP_INDEX), 800);
+    }
+  }, [downloadedImageModels.length, activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

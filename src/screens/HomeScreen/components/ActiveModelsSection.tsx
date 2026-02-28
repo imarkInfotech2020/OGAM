@@ -152,12 +152,14 @@ export const ActiveModelsSection: React.FC<Props> = ({
             onPress={onPressTextModel}
           />
         </AttachStep>
-        <ImageModelCard
-          loadingState={loadingState}
-          activeImageModel={activeImageModel}
-          downloadedImageModels={downloadedImageModels}
-          onPress={onPressImageModel}
-        />
+        <AttachStep index={13} style={attachStepStyles.flex}>
+          <ImageModelCard
+            loadingState={loadingState}
+            activeImageModel={activeImageModel}
+            downloadedImageModels={downloadedImageModels}
+            onPress={onPressImageModel}
+          />
+        </AttachStep>
       </View>
       {(activeModelId || activeImageModelId) && (
         <TouchableOpacity

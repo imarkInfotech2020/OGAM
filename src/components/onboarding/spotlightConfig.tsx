@@ -50,6 +50,24 @@ export const DOWNLOAD_FILE_STEP_INDEX = 9;
 // Download Manager icon spotlight (continuation of downloadedModel flow)
 export const DOWNLOAD_MANAGER_STEP_INDEX = 10;
 
+// Model picker first item spotlight (continuation of loadedModel flow)
+export const MODEL_PICKER_STEP_INDEX = 11;
+
+// Voice record button spotlight (continuation of sentMessage flow)
+export const VOICE_HINT_STEP_INDEX = 12;
+
+// Image model card spotlight (reactive, triedImageGen part 2)
+export const IMAGE_LOAD_STEP_INDEX = 13;
+
+// New chat button spotlight (reactive, triedImageGen part 3)
+export const IMAGE_NEW_CHAT_STEP_INDEX = 14;
+
+// Chat input "draw a dog" spotlight (reactive, triedImageGen part 4)
+export const IMAGE_DRAW_STEP_INDEX = 15;
+
+// Image mode toggle spotlight (reactive, triedImageGen part 5)
+export const IMAGE_SETTINGS_STEP_INDEX = 16;
+
 export const STEP_TAB_MAP: Record<string, string> = {
   downloadedModel: 'ModelsTab',
   loadedModel: 'HomeTab',
@@ -187,6 +205,78 @@ export function createSpotlightSteps(): TourStep[] {
         <Tooltip
           title="Download Manager"
           description="Track your download progress here"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 11: First model in ModelPickerSheet — loadedModel (part 2)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Select a model"
+          description="Tap this model to load it for chatting"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 12: VoiceRecordButton on ChatScreen — sentMessage (part 3)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Try voice input"
+          description="Download a speech model in Voice Settings to send voice messages"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 13: ImageModelCard on HomeScreen — triedImageGen (part 2, reactive)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Load your image model"
+          description="Tap here to load the image model you downloaded"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 14: "New Chat" button — triedImageGen (part 3, reactive)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Generate an image"
+          description="Start a new chat and try asking for an image"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 15: ChatInput — triedImageGen (part 4, reactive)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Draw something"
+          description="Try typing 'draw a dog' and send it"
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 16: Image mode toggle — triedImageGen (part 5, reactive)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Image generation settings"
+          description="Control when images are generated: auto, always, or off. Configure more in Settings."
           stop={stop}
         />
       ),

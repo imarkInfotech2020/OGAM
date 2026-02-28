@@ -79,6 +79,9 @@ interface AppState {
   clearGeneratedImages: () => void;
   hasSeenCacheTypeNudge: boolean;
   setHasSeenCacheTypeNudge: (v: boolean) => void;
+  shownSpotlights: Record<string, boolean>;
+  markSpotlightShown: (key: string) => void;
+  resetShownSpotlights: () => void;
 }
 
 const DEFAULT_CHECKLIST: OnboardingChecklist = {
@@ -126,7 +129,7 @@ export const useAppStore = create<AppState>()(
       completeChecklistStep: (key) =>
         set((state) => ({ onboardingChecklist: { ...state.onboardingChecklist, [key]: true } })),
       dismissChecklist: () => set({ checklistDismissed: true }),
-      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST } }),
+      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST }, shownSpotlights: {} }),
       deviceInfo: null,
       modelRecommendation: null,
       setDeviceInfo: (info) => set({ deviceInfo: info }),
@@ -263,6 +266,11 @@ export const useAppStore = create<AppState>()(
       // Cache type nudge
       hasSeenCacheTypeNudge: false,
       setHasSeenCacheTypeNudge: (v) => set({ hasSeenCacheTypeNudge: v }),
+      // Reactive spotlight tracking
+      shownSpotlights: {},
+      markSpotlightShown: (key) =>
+        set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
+      resetShownSpotlights: () => set({ shownSpotlights: {} }),
     }),
     {
       name: 'local-llm-app-storage',
@@ -315,6 +323,8 @@ export const useAppStore = create<AppState>()(
         imageModelDownloadIds: state.imageModelDownloadIds,
         // Persist gallery
         generatedImages: state.generatedImages,
+        // Reactive spotlight tracking
+        shownSpotlights: state.shownSpotlights,
         // Cache type nudge
         hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
       }),

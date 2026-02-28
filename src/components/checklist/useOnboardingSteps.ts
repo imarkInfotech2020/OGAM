@@ -8,7 +8,6 @@ import type { OnboardingStep, ChecklistTheme } from './types';
 export function useOnboardingSteps() {
   const downloadedModels = useAppStore(s => s.downloadedModels);
   const activeModelId = useAppStore(s => s.activeModelId);
-  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const conversations = useChatStore(s => s.conversations);
   const projects = useProjectStore(s => s.projects);
@@ -17,10 +16,10 @@ export function useOnboardingSteps() {
     { id: 'downloadedModel', title: 'Download a model', subtitle: 'Browse and download an AI model', completed: downloadedModels.length > 0 },
     { id: 'loadedModel', title: 'Load a model', subtitle: 'Select a model to activate it', completed: activeModelId !== null },
     { id: 'sentMessage', title: 'Send your first message', subtitle: 'Start a conversation with AI', completed: conversations.some(c => c.messages.length > 0) },
-    { id: 'triedImageGen', title: 'Try image generation', subtitle: 'Download an image model', completed: downloadedImageModels.length > 0 },
+    { id: 'triedImageGen', title: 'Try image generation', subtitle: 'Generate your first image', completed: onboardingChecklist.triedImageGen },
     { id: 'exploredSettings', title: 'Explore settings', subtitle: 'Configure your experience', completed: onboardingChecklist.exploredSettings },
     { id: 'createdProject', title: 'Create a project', subtitle: 'Organize chats by topic', completed: projects.length > 4 },
-  ], [downloadedModels.length, activeModelId, conversations, onboardingChecklist.exploredSettings, projects.length, downloadedImageModels.length]);
+  ], [downloadedModels.length, activeModelId, conversations, onboardingChecklist.exploredSettings, onboardingChecklist.triedImageGen, projects.length]);
 
   const completedCount = steps.filter(s => s.completed).length;
 

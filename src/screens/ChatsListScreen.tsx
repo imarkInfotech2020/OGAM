@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
-import { AttachStep } from 'react-native-spotlight-tour';
+import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
+import { IMAGE_NEW_CHAT_STEP_INDEX } from '../components/onboarding/spotlightConfig';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
@@ -37,8 +38,21 @@ export const ChatsListScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { conversations, deleteConversation, setActiveConversation } = useChatStore();
   const { getProject } = useProjectStore();
-  const { downloadedModels, removeImagesByConversationId } = useAppStore();
+  const { downloadedModels, removeImagesByConversationId, activeImageModelId, onboardingChecklist, shownSpotlights, markSpotlightShown } = useAppStore();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { goTo } = useSpotlightTour();
+
+  // Reactive: image model loaded → spotlight "New Chat" button (step 14)
+  useEffect(() => {
+    if (
+      activeImageModelId &&
+      !shownSpotlights.imageNewChat &&
+      !onboardingChecklist.triedImageGen
+    ) {
+      markSpotlightShown('imageNewChat');
+      setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
+    }
+  }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   const hasModels = downloadedModels.length > 0;
 
@@ -154,14 +168,16 @@ export const ChatsListScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
         <AttachStep index={2}>
-          <Button
-            title="New"
-            variant="primary"
-            size="small"
-            onPress={handleNewChat}
-            disabled={!hasModels}
-            icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
-          />
+          <AttachStep index={14}>
+            <Button
+              title="New"
+              variant="primary"
+              size="small"
+              onPress={handleNewChat}
+              disabled={!hasModels}
+              icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+            />
+          </AttachStep>
         </AttachStep>
       </View>
 
