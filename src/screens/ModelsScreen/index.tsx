@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -38,7 +38,7 @@ export const ModelsScreen: React.FC = () => {
       {/* Collapse header/import/tabs when showing model detail — detail has its own header.
            Use height:0 + overflow:hidden instead of unmounting so AttachStep components
            stay registered with the SpotlightTourProvider (prevents broken spotlight overlays). */}
-      <View style={isShowingDetail ? { height: 0, overflow: 'hidden' } : undefined}>
+      <View style={isShowingDetail ? collapsedStyle.hidden : undefined}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Models</Text>
@@ -210,3 +210,7 @@ export const ModelsScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
+const collapsedStyle = StyleSheet.create({
+  hidden: { height: 0, overflow: 'hidden' },
+});

@@ -14,7 +14,7 @@ import { render, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupFullChat } from '../../utils/testHelpers';
-import { createGeneratedImage, createONNXImageModel } from '../../utils/factories';
+import { createGeneratedImage } from '../../utils/factories';
 import {
   setPendingSpotlight,
   peekPendingSpotlight,

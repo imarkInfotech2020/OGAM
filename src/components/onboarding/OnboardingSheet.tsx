@@ -68,7 +68,7 @@ const ChecklistRow: React.FC<ChecklistRowProps> = ({
   return (
     <Animated.View style={rowAnimStyle}>
       <TouchableOpacity
-        style={[styles.row, step.disabled && { opacity: 0.4 }]}
+        style={[styles.row, step.disabled && styles.disabled]}
         activeOpacity={isDisabled ? 1 : theme.itemPressedOpacity}
         onPress={isDisabled ? undefined : onPress}
         disabled={isDisabled}
@@ -193,5 +193,8 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.meta,
     fontFamily: FONTS.mono,
     marginTop: 1,
+  },
+  disabled: {
+    opacity: 0.4,
   },
 });

@@ -92,21 +92,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     const stepIndex = STEP_INDEX_MAP[stepId];
 
     // For multi-step flows, queue the continuation step.
-    if (stepId === 'downloadedModel') {
-      setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
-    }
-    if (stepId === 'loadedModel') {
-      setPendingSpotlight(MODEL_PICKER_STEP_INDEX);
-    }
-    if (stepId === 'sentMessage') {
-      setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
-    }
-    if (stepId === 'exploredSettings') {
-      setPendingSpotlight(MODEL_SETTINGS_STEP_INDEX);
-    }
-    if (stepId === 'createdProject') {
-      setPendingSpotlight(PROJECT_EDIT_STEP_INDEX);
-    }
+    const pendingMap: Record<string, number> = {
+      downloadedModel: DOWNLOAD_FILE_STEP_INDEX, loadedModel: MODEL_PICKER_STEP_INDEX,
+      sentMessage: CHAT_INPUT_STEP_INDEX, exploredSettings: MODEL_SETTINGS_STEP_INDEX,
+      createdProject: PROJECT_EDIT_STEP_INDEX,
+    };
+    if (pendingMap[stepId] !== undefined) setPendingSpotlight(pendingMap[stepId]);
 
     // Navigate to the correct tab
     if (tab && tab !== 'HomeTab') {

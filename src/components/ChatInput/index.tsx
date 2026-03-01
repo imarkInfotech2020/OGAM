@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, Animated } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, Animated, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -285,7 +285,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
         {/* Circular action button — conditionally wrapped with AttachStep */}
         {activeSpotlight === 12 ? (
-          <AttachStep index={12} style={{ alignSelf: 'center' }}>{actionButton}</AttachStep>
+          <AttachStep index={12} style={spotlightStyles.centered}>{actionButton}</AttachStep>
         ) : actionButton}
       </View>
       <CustomAlert
@@ -300,3 +300,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return content;
 };
+
+const spotlightStyles = StyleSheet.create({
+  centered: { alignSelf: 'center' },
+});
