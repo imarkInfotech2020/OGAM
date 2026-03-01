@@ -11,7 +11,7 @@ export const ANIM_DURATION_OUT = 200;
 export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingTop: 12,
     paddingBottom: 8,
     backgroundColor: colors.background,
     borderTopWidth: 1,

@@ -11,7 +11,8 @@ const createLayoutStyles = (colors: ThemeColors) => ({
 const createHeaderStyles = (colors: ThemeColors) => ({
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.background,

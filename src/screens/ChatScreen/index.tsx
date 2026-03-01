@@ -197,7 +197,7 @@ export const ChatScreen: React.FC = () => {
   const imageCount = countConversationImages(chat.activeConversation);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView testID="chat-screen" style={styles.keyboardView} behavior="padding" keyboardVerticalOffset={0}>
         <ChatHeader
           styles={styles} colors={colors}
