@@ -12,7 +12,9 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
   // MARK: - State
 
-  private var pipeline: StableDiffusionPipeline?
+  /// Both StableDiffusionPipeline and StableDiffusionXLPipeline conform to
+  /// StableDiffusionPipelineProtocol, so we store whichever one was created.
+  private var pipeline: StableDiffusionPipelineProtocol?
   private var loadedModelPath: String?
   private var generating = false
   private var cancelRequested = false
@@ -26,6 +28,15 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
   override func supportedEvents() -> [String]! {
     ["LocalDreamProgress", "LocalDreamError"]
+  }
+
+  // MARK: - SDXL detection
+
+  /// Returns true if the model directory contains TextEncoder2.mlmodelc,
+  /// which is the hallmark of an SDXL model.
+  private func isXLModel(at url: URL) -> Bool {
+    let te2 = url.appendingPathComponent("TextEncoder2.mlmodelc")
+    return FileManager.default.fileExists(atPath: te2.path)
   }
 
   // MARK: - loadModel
@@ -53,12 +64,24 @@ class CoreMLDiffusionModule: RCTEventEmitter {
         let config = MLModelConfiguration()
         config.computeUnits = .cpuAndNeuralEngine
 
-        let pipe = try StableDiffusionPipeline(
-          resourcesAt: url,
-          controlNet: [],
-          configuration: config,
-          reduceMemory: true
-        )
+        let pipe: StableDiffusionPipelineProtocol
+
+        if self.isXLModel(at: url) {
+          // SDXL models need the XL pipeline which uses TextEncoderXL
+          // (expects "hidden_embeds" output instead of "last_hidden_state")
+          pipe = try StableDiffusionXLPipeline(
+            resourcesAt: url,
+            configuration: config,
+            reduceMemory: true
+          )
+        } else {
+          pipe = try StableDiffusionPipeline(
+            resourcesAt: url,
+            controlNet: [],
+            configuration: config,
+            reduceMemory: true
+          )
+        }
 
         try pipe.loadResources()
 
@@ -126,7 +149,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
       defer { self.generating = false }
 
       do {
-        var pipelineConfig = StableDiffusionPipeline.Configuration(prompt: prompt)
+        var pipelineConfig = PipelineConfiguration(prompt: prompt)
         pipelineConfig.negativePrompt = negativePrompt
         pipelineConfig.stepCount = steps
         pipelineConfig.guidanceScale = Float(guidanceScale)
