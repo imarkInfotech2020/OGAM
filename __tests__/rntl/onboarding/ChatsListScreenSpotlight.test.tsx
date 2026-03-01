@@ -13,63 +13,27 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createDownloadedModel } from '../../utils/factories';
+import { mockGoTo, clearSpotlightMocks } from '../../utils/spotlightMocks';
 
-// Capture goTo calls
-const mockGoTo = jest.fn();
+jest.mock('react-native-spotlight-tour', () =>
+  require('../../utils/spotlightMocks').createSpotlightTourMock()
+);
 
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: mockGoTo,
-    current: 0,
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
+jest.mock('@react-navigation/native', () =>
+  require('../../utils/spotlightMocks').createNavigationMock()
+);
 
-// Mock navigation
-const mockNavigate = jest.fn();
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
-  return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: jest.fn(),
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
-    }),
-  };
-});
+jest.mock('../../../src/components/AnimatedEntry', () =>
+  require('../../utils/spotlightMocks').createAnimatedEntryMock()
+);
 
-// Mock child components
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
+jest.mock('../../../src/components/AnimatedListItem', () =>
+  require('../../utils/spotlightMocks').createAnimatedListItemMock()
+);
 
-jest.mock('../../../src/components/AnimatedListItem', () => ({
-  AnimatedListItem: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} style={style} testID={testID}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
-
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: () => null,
-  showAlert: jest.fn(),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-}));
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../utils/spotlightMocks').createCustomAlertMock()
+);
 
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   onnxImageGeneratorService: {
@@ -104,8 +68,7 @@ describe('ChatsListScreen Spotlight Integration', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     resetStores();
-    mockGoTo.mockClear();
-    mockNavigate.mockClear();
+    clearSpotlightMocks();
     unmountFn = null;
   });
 
@@ -119,7 +82,6 @@ describe('ChatsListScreen Spotlight Integration', () => {
   // ========================================================================
   describe('reactive: imageNewChat spotlight (step 14)', () => {
     it('fires goTo(14) when image model is loaded', () => {
-      // Pre-set image model as active
       act(() => {
         useAppStore.getState().setActiveImageModelId('img-model');
       });
@@ -165,11 +127,9 @@ describe('ChatsListScreen Spotlight Integration', () => {
     it('fires when image model is loaded AFTER mount', () => {
       renderScreen();
 
-      // Initially no goTo
       act(() => { jest.advanceTimersByTime(1000); });
       expect(mockGoTo).not.toHaveBeenCalled();
 
-      // Now set active image model → triggers reactive effect
       act(() => {
         useAppStore.getState().setActiveImageModelId('img-model');
       });

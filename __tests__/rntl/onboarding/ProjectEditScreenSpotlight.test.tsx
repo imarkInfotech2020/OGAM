@@ -11,52 +11,26 @@ import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { resetStores } from '../../utils/testHelpers';
+import { mockGoTo, clearSpotlightMocks } from '../../utils/spotlightMocks';
 import {
   setPendingSpotlight,
   peekPendingSpotlight,
 } from '../../../src/components/onboarding/spotlightState';
 
-// Capture goTo calls
-const mockGoTo = jest.fn();
+jest.mock('react-native-spotlight-tour', () =>
+  require('../../utils/spotlightMocks').createSpotlightTourMock()
+);
 
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: mockGoTo,
-    current: 0,
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
-
-// Mock navigation
 const mockRoute = { params: {} as any };
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
-  return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: jest.fn(),
-      goBack: jest.fn(),
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
-    }),
+jest.mock('@react-navigation/native', () =>
+  require('../../utils/spotlightMocks').createNavigationMock({
     useRoute: () => mockRoute,
-  };
-});
+  })
+);
 
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: () => null,
-  showAlert: jest.fn(),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-}));
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../utils/spotlightMocks').createCustomAlertMock()
+);
 
 import { ProjectEditScreen } from '../../../src/screens/ProjectEditScreen';
 
@@ -77,7 +51,7 @@ describe('ProjectEditScreen Spotlight Integration', () => {
     jest.useFakeTimers();
     resetStores();
     setPendingSpotlight(null);
-    mockGoTo.mockClear();
+    clearSpotlightMocks();
     unmountFn = null;
   });
 

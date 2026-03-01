@@ -15,50 +15,33 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupFullChat } from '../../utils/testHelpers';
 import { createGeneratedImage } from '../../utils/factories';
+import { mockGoTo, clearSpotlightMocks } from '../../utils/spotlightMocks';
 import {
   setPendingSpotlight,
   peekPendingSpotlight,
 } from '../../../src/components/onboarding/spotlightState';
 
-// Capture goTo calls and current state
-const mockGoTo = jest.fn();
+// Capture current state for step-chaining tests
 let mockCurrent: number | undefined = 0;
 
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: mockGoTo,
-    get current() { return mockCurrent; },
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
-
-// Mock navigation
-const mockNavigate = jest.fn();
-const mockGoBack = jest.fn();
-const mockRoute = { params: {} as any };
-
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
+jest.mock('react-native-spotlight-tour', () => {
+  const mocks = require('../../utils/spotlightMocks');
   return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: mockGoBack,
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
+    ...mocks.createSpotlightTourMock(),
+    useSpotlightTour: () => ({
+      ...mocks.createSpotlightTourMock().useSpotlightTour(),
+      get current() { return mockCurrent; },
     }),
-    useRoute: () => mockRoute,
-    useFocusEffect: jest.fn((cb) => cb()),
   };
 });
+
+const mockRoute = { params: {} as any };
+jest.mock('@react-navigation/native', () =>
+  require('../../utils/spotlightMocks').createNavigationMock({
+    useRoute: () => mockRoute,
+    useFocusEffect: jest.fn((cb: () => void) => cb()),
+  })
+);
 
 // Mock services
 jest.mock('../../../src/services/generationService', () => ({
@@ -66,20 +49,11 @@ jest.mock('../../../src/services/generationService', () => ({
     generateResponse: jest.fn(() => Promise.resolve()),
     stopGeneration: jest.fn(() => Promise.resolve()),
     getState: jest.fn(() => ({
-      isGenerating: false,
-      isThinking: false,
-      conversationId: null,
-      streamingContent: '',
-      queuedMessages: [],
+      isGenerating: false, isThinking: false, conversationId: null,
+      streamingContent: '', queuedMessages: [],
     })),
-    subscribe: jest.fn((cb) => {
-      cb({
-        isGenerating: false,
-        isThinking: false,
-        conversationId: null,
-        streamingContent: '',
-        queuedMessages: [],
-      });
+    subscribe: jest.fn((cb: (s: any) => void) => {
+      cb({ isGenerating: false, isThinking: false, conversationId: null, streamingContent: '', queuedMessages: [] });
       return jest.fn();
     }),
     isGeneratingFor: jest.fn(() => false),
@@ -101,31 +75,22 @@ jest.mock('../../../src/services/activeModelService', () => ({
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     })),
-    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })) as any,
+    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })),
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: null })),
     subscribe: jest.fn(() => jest.fn()),
   },
 }));
 
 const mockImageGenState = {
-  isGenerating: false,
-  progress: null,
-  status: null,
-  previewPath: null,
-  prompt: null,
-  conversationId: null,
-  error: null,
-  result: null,
+  isGenerating: false, progress: null, status: null, previewPath: null,
+  prompt: null, conversationId: null, error: null, result: null,
 };
 
 jest.mock('../../../src/services/imageGenerationService', () => ({
   imageGenerationService: {
     generateImage: jest.fn(() => Promise.resolve(true)),
     getState: jest.fn(() => mockImageGenState),
-    subscribe: jest.fn((cb) => {
-      cb(mockImageGenState);
-      return jest.fn();
-    }),
+    subscribe: jest.fn((cb: (s: any) => void) => { cb(mockImageGenState); return jest.fn(); }),
     isGeneratingFor: jest.fn(() => false),
     cancel: jest.fn(),
     cancelGeneration: jest.fn(() => Promise.resolve()),
@@ -149,39 +114,22 @@ jest.mock('../../../src/services/llm', () => ({
     getLoadedModelPath: jest.fn(() => null),
     stopGeneration: jest.fn(() => Promise.resolve()),
     getPerformanceStats: jest.fn(() => ({
-      tokensPerSecond: 0,
-      totalTokens: 0,
-      timeToFirstToken: 0,
-      lastTokensPerSecond: 0,
-      lastTimeToFirstToken: 0,
+      tokensPerSecond: 0, totalTokens: 0, timeToFirstToken: 0,
+      lastTokensPerSecond: 0, lastTimeToFirstToken: 0,
     })),
     getContextDebugInfo: jest.fn(() => Promise.resolve({
-      contextUsagePercent: 0,
-      truncatedCount: 0,
-      totalTokens: 0,
-      maxContext: 2048,
+      contextUsagePercent: 0, truncatedCount: 0, totalTokens: 0, maxContext: 2048,
     })),
   },
 }));
 
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: {
-    getDeviceInfo: jest.fn(() => Promise.resolve({
-      totalMemory: 8 * 1024 * 1024 * 1024,
-      availableMemory: 4 * 1024 * 1024 * 1024,
-    })),
-    formatBytes: jest.fn((bytes: number) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`),
-    formatModelSize: jest.fn(() => '4.0 GB'),
-  },
-}));
+jest.mock('../../../src/services/hardware', () =>
+  require('../../utils/spotlightMocks').createHardwareServiceMock()
+);
 
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
-    getDownloadedModels: jest.fn(() => Promise.resolve([])),
-    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
-    deleteModel: jest.fn(() => Promise.resolve()),
-  },
-}));
+jest.mock('../../../src/services/modelManager', () =>
+  require('../../utils/spotlightMocks').createModelManagerMock()
+);
 
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: {
@@ -204,32 +152,20 @@ jest.mock('../../../src/components', () => ({
   GenerationSettingsModal: () => null,
   ProjectSelectorSheet: () => null,
   DebugSheet: () => null,
-  CustomAlert: () => null,
-  showAlert: jest.fn(),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
+  ...require('../../utils/spotlightMocks').createCustomAlertMock(),
   ToolPickerSheet: () => null,
 }));
 
-jest.mock('../../../src/components/AnimatedPressable', () => ({
-  AnimatedPressable: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} style={style} testID={testID}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
+jest.mock('../../../src/components/AnimatedPressable', () =>
+  require('../../utils/spotlightMocks').createAnimatedPressableMock()
+);
 
 import { ChatScreen } from '../../../src/screens/ChatScreen';
 
 let unmountFn: (() => void) | null = null;
 
 function renderChatScreen() {
-  // Need an active model for ChatScreen to render chat UI
   setupFullChat();
-
   const result = render(
     <NavigationContainer>
       <ChatScreen />
@@ -244,7 +180,7 @@ describe('ChatScreen Spotlight Integration', () => {
     jest.useFakeTimers();
     resetStores();
     setPendingSpotlight(null);
-    mockGoTo.mockClear();
+    clearSpotlightMocks();
     mockCurrent = 0;
     unmountFn = null;
   });
@@ -260,23 +196,17 @@ describe('ChatScreen Spotlight Integration', () => {
   describe('pending spotlight consumption', () => {
     it('consumes pending step 3 and fires goTo(3) after 600ms', () => {
       setPendingSpotlight(3);
-
       renderChatScreen();
 
-      // Pending should be consumed
       expect(peekPendingSpotlight()).toBeNull();
-
-      // goTo not called yet
       expect(mockGoTo).not.toHaveBeenCalled();
 
-      // After 600ms, goTo(3) fires
       act(() => { jest.advanceTimersByTime(600); });
       expect(mockGoTo).toHaveBeenCalledWith(3);
     });
 
     it('consumes arbitrary pending step and fires goTo', () => {
       setPendingSpotlight(15);
-
       renderChatScreen();
 
       expect(peekPendingSpotlight()).toBeNull();
@@ -299,26 +229,14 @@ describe('ChatScreen Spotlight Integration', () => {
   describe('step 3 → step 12 chain', () => {
     it('chains to step 12 after step 3 tour stops', () => {
       setPendingSpotlight(3);
-
       renderChatScreen();
 
-      // Fire step 3
       act(() => { jest.advanceTimersByTime(600); });
       expect(mockGoTo).toHaveBeenCalledWith(3);
 
       // Simulate tour stopping (current becomes undefined)
       act(() => { mockCurrent = undefined; });
-
-      // Need to trigger re-render for the useEffect to fire
-      // The current value change triggers the effect
-      // In real app, spotlight-tour updates current reactively
-      // In test, we need to force a re-render
-      // The useEffect watching `current` should fire
       act(() => { jest.advanceTimersByTime(800); });
-
-      // Step 12 should be called (chained)
-      // Note: This depends on `current` being reactive in the mock
-      // If the mock's `current` getter is called during re-render, it works
     });
   });
 
@@ -330,7 +248,6 @@ describe('ChatScreen Spotlight Integration', () => {
       setPendingSpotlight(15);
       renderChatScreen();
 
-      // InteractionManager.runAfterInteractions is async — advance timers to resolve
       act(() => { jest.advanceTimersByTime(600); });
       expect(mockGoTo).toHaveBeenCalledWith(15);
     });

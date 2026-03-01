@@ -14,55 +14,23 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
-import {
-  createONNXImageModel,
-} from '../../utils/factories';
+import { createONNXImageModel } from '../../utils/factories';
+import { mockGoTo, mockNavigate, clearSpotlightMocks } from '../../utils/spotlightMocks';
 import {
   peekPendingSpotlight,
   setPendingSpotlight,
 } from '../../../src/components/onboarding/spotlightState';
 
-// Capture goTo calls from inside rendered components
-const mockGoTo = jest.fn();
-const mockStart = jest.fn();
-const mockStop = jest.fn();
-
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: mockStart,
-    stop: mockStop,
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: mockGoTo,
-    current: 0,
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
+jest.mock('react-native-spotlight-tour', () =>
+  require('../../utils/spotlightMocks').createSpotlightTourMock()
+);
 
 // Mock requestAnimationFrame
-(globalThis as any).requestAnimationFrame = (cb: () => void) => {
-  return setTimeout(cb, 0);
-};
+(globalThis as any).requestAnimationFrame = (cb: () => void) => setTimeout(cb, 0);
 
-// Mock navigation
-const mockNavigate = jest.fn();
-const mockGoBack = jest.fn();
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
-  return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: mockGoBack,
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
-    }),
-  };
-});
+jest.mock('@react-navigation/native', () =>
+  require('../../utils/spotlightMocks').createNavigationMock()
+);
 
 // Mock services
 jest.mock('../../../src/services/activeModelService', () => ({
@@ -76,34 +44,22 @@ jest.mock('../../../src/services/activeModelService', () => ({
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' })),
     subscribe: jest.fn(() => jest.fn()),
     getResourceUsage: jest.fn(() => Promise.resolve({
-      textModelMemory: 0,
-      imageModelMemory: 0,
-      totalMemory: 0,
+      textModelMemory: 0, imageModelMemory: 0, totalMemory: 0,
       memoryAvailable: 4 * 1024 * 1024 * 1024,
     })),
     syncWithNativeState: jest.fn(),
   },
 }));
 
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
-    getDownloadedModels: jest.fn(() => Promise.resolve([])),
-    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
-  },
-}));
+jest.mock('../../../src/services/modelManager', () =>
+  require('../../utils/spotlightMocks').createModelManagerMock()
+);
 
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: {
-    getDeviceInfo: jest.fn(() => Promise.resolve({
-      totalMemory: 8 * 1024 * 1024 * 1024,
-      availableMemory: 4 * 1024 * 1024 * 1024,
-    })),
-    formatBytes: jest.fn((bytes: number) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`),
-    formatModelSize: jest.fn(() => '4.0 GB'),
-  },
-}));
+jest.mock('../../../src/services/hardware', () =>
+  require('../../utils/spotlightMocks').createHardwareServiceMock()
+);
 
-// Mock child components to simplify
+// Mock child components
 jest.mock('../../../src/components/AppSheet', () => ({
   AppSheet: ({ visible, onClose, title, children }: any) => {
     const { View, Text, TouchableOpacity } = require('react-native');
@@ -120,38 +76,21 @@ jest.mock('../../../src/components/AppSheet', () => ({
   },
 }));
 
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
+jest.mock('../../../src/components/AnimatedEntry', () =>
+  require('../../utils/spotlightMocks').createAnimatedEntryMock()
+);
 
-jest.mock('../../../src/components/AnimatedPressable', () => ({
-  AnimatedPressable: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} style={style} testID={testID}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
+jest.mock('../../../src/components/AnimatedPressable', () =>
+  require('../../utils/spotlightMocks').createAnimatedPressableMock()
+);
 
-jest.mock('../../../src/components/AnimatedListItem', () => ({
-  AnimatedListItem: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} style={style} testID={testID}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
+jest.mock('../../../src/components/AnimatedListItem', () =>
+  require('../../utils/spotlightMocks').createAnimatedListItemMock()
+);
 
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: () => null,
-  showAlert: jest.fn(),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-}));
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../utils/spotlightMocks').createCustomAlertMock()
+);
 
 // Mock OnboardingSheet to expose step presses
 jest.mock('../../../src/components/onboarding/OnboardingSheet', () => ({
@@ -245,15 +184,11 @@ describe('HomeScreen Spotlight Integration', () => {
     jest.useFakeTimers();
     resetStores();
     setPendingSpotlight(null);
-    mockGoTo.mockClear();
-    mockNavigate.mockClear();
-    mockStart.mockClear();
-    mockStop.mockClear();
+    clearSpotlightMocks();
     unmountFn = null;
   });
 
   afterEach(() => {
-    // Unmount before flushing timers to prevent async state update loops during cleanup
     if (unmountFn) { unmountFn(); unmountFn = null; }
     jest.useRealTimers();
   });
@@ -269,16 +204,10 @@ describe('HomeScreen Spotlight Integration', () => {
         fireEvent.press(getByTestId('step-downloadedModel'));
       });
 
-      // Should queue step 9 (DOWNLOAD_FILE_STEP_INDEX)
       expect(peekPendingSpotlight()).toBe(9);
-
-      // Should navigate to ModelsTab
       expect(mockNavigate).toHaveBeenCalledWith('ModelsTab');
-
-      // goTo not called yet (800ms delay for cross-tab)
       expect(mockGoTo).not.toHaveBeenCalled();
 
-      // Advance past delay
       act(() => { jest.advanceTimersByTime(800); });
       expect(mockGoTo).toHaveBeenCalledWith(0);
     });
@@ -295,13 +224,8 @@ describe('HomeScreen Spotlight Integration', () => {
         fireEvent.press(getByTestId('step-loadedModel'));
       });
 
-      // Should queue step 11 (MODEL_PICKER_STEP_INDEX)
       expect(peekPendingSpotlight()).toBe(11);
-
-      // Should NOT navigate (HomeTab)
       expect(mockNavigate).not.toHaveBeenCalled();
-
-      // goTo not called yet (600ms delay for same-tab)
       expect(mockGoTo).not.toHaveBeenCalled();
 
       act(() => { jest.advanceTimersByTime(600); });
@@ -339,7 +263,6 @@ describe('HomeScreen Spotlight Integration', () => {
         fireEvent.press(getByTestId('step-triedImageGen'));
       });
 
-      // Pending spotlight queued for first image model card (step 17)
       expect(peekPendingSpotlight()).toBe(17);
       expect(mockNavigate).toHaveBeenCalledWith('ModelsTab');
 
@@ -348,7 +271,6 @@ describe('HomeScreen Spotlight Integration', () => {
     });
 
     it('image model downloaded but not loaded: fires goTo(13) on HomeTab', () => {
-      // Pre-seed store with a downloaded image model (not loaded)
       const { addDownloadedImageModel } = useAppStore.getState();
       addDownloadedImageModel(createONNXImageModel());
 
@@ -366,7 +288,6 @@ describe('HomeScreen Spotlight Integration', () => {
     });
 
     it('image model already loaded: navigates to ChatsTab, fires goTo(14)', () => {
-      // Pre-seed store with a loaded image model
       const { addDownloadedImageModel, setActiveImageModelId } = useAppStore.getState();
       addDownloadedImageModel(createONNXImageModel());
       setActiveImageModelId('test-image-model');
@@ -432,11 +353,9 @@ describe('HomeScreen Spotlight Integration', () => {
 
       act(() => { fireEvent.press(getByTestId('step-downloadedModel')); });
 
-      // Not called at 799ms
       act(() => { jest.advanceTimersByTime(799); });
       expect(mockGoTo).not.toHaveBeenCalled();
 
-      // Called at 800ms
       act(() => { jest.advanceTimersByTime(1); });
       expect(mockGoTo).toHaveBeenCalledWith(0);
     });
@@ -461,21 +380,16 @@ describe('HomeScreen Spotlight Integration', () => {
     it('fires goTo(13) when image model downloaded but not loaded', () => {
       renderHomeScreen();
 
-      // Add a downloaded image model → triggers the reactive effect
       act(() => {
         useAppStore.getState().addDownloadedImageModel(createONNXImageModel());
       });
 
-      // The effect fires with 800ms delay
       act(() => { jest.advanceTimersByTime(800); });
       expect(mockGoTo).toHaveBeenCalledWith(13);
-
-      // Should mark spotlight as shown
       expect(useAppStore.getState().shownSpotlights.imageLoad).toBe(true);
     });
 
     it('does NOT fire when image model is already loaded', () => {
-      // Pre-set active image model
       act(() => {
         useAppStore.getState().addDownloadedImageModel(createONNXImageModel());
         useAppStore.getState().setActiveImageModelId('some-model');

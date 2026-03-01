@@ -673,12 +673,12 @@ describe('HomeScreen', () => {
       expect(getByText('Image Gallery')).toBeTruthy();
     });
 
-    it('shows "images" (plural) when no images', () => {
+    it('shows "0 images" when no images', () => {
       const { getByText } = renderHomeScreen();
-      expect(getByText('images')).toBeTruthy();
+      expect(getByText('0 images')).toBeTruthy();
     });
 
-    it('shows "images" (plural) for multiple images', () => {
+    it('shows count with "images" (plural) for multiple images', () => {
       useAppStore.setState({
         generatedImages: [
           { id: '1', prompt: 'test', imagePath: '/path', width: 512, height: 512, steps: 20, seed: 1, modelId: 'm', createdAt: '' },
@@ -687,10 +687,10 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
-      expect(getByText('images')).toBeTruthy();
+      expect(getByText('2 images')).toBeTruthy();
     });
 
-    it('shows "image" (singular) for single image', () => {
+    it('shows "1 image" (singular) for single image', () => {
       useAppStore.setState({
         generatedImages: [
           { id: '1', prompt: 'test', imagePath: '/path', width: 512, height: 512, steps: 20, seed: 1, modelId: 'm', createdAt: '' },
@@ -698,7 +698,7 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
-      expect(getByText('image')).toBeTruthy();
+      expect(getByText('1 image')).toBeTruthy();
     });
   });
 

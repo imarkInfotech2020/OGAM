@@ -27,6 +27,7 @@ import {
   IMAGE_DOWNLOAD_STEP_INDEX,
   IMAGE_LOAD_STEP_INDEX,
   IMAGE_NEW_CHAT_STEP_INDEX,
+  IMAGE_DRAW_STEP_INDEX,
 } from '../../../src/components/onboarding/spotlightConfig';
 
 interface ImageState {
@@ -34,6 +35,19 @@ interface ImageState {
   downloadedImageModelsCount: number;
   markSpotlightShown: jest.Mock;
 }
+
+/**
+ * Reimplements handleStepPress logic from HomeScreen/index.tsx
+ * so we can test it without rendering the component.
+ */
+/** Pending spotlight mapping — mirrors HomeScreen/index.tsx pendingMap */
+const PENDING_MAP: Record<string, number> = {
+  downloadedModel: DOWNLOAD_FILE_STEP_INDEX,
+  loadedModel: MODEL_PICKER_STEP_INDEX,
+  sentMessage: CHAT_INPUT_STEP_INDEX,
+  exploredSettings: MODEL_SETTINGS_STEP_INDEX,
+  createdProject: PROJECT_EDIT_STEP_INDEX,
+};
 
 /**
  * Reimplements handleStepPress logic from HomeScreen/index.tsx
@@ -50,6 +64,7 @@ function simulateHandleStepPress(
   // Image gen flow is state-aware
   if (stepId === 'triedImageGen') {
     if (imageState.activeImageModelId) {
+      setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
       navigate('ChatsTab');
       setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
     } else if (imageState.downloadedImageModelsCount > 0) {
@@ -58,7 +73,8 @@ function simulateHandleStepPress(
     } else {
       setPendingSpotlight(IMAGE_DOWNLOAD_STEP_INDEX);
       navigate('ModelsTab');
-      setTimeout(() => goTo(STEP_INDEX_MAP[stepId]!), 800);
+      const idx = STEP_INDEX_MAP[stepId];
+      if (idx !== undefined) setTimeout(() => goTo(idx), 800);
     }
     return;
   }
@@ -67,26 +83,11 @@ function simulateHandleStepPress(
   const stepIndex = STEP_INDEX_MAP[stepId];
 
   // Queue continuation spotlight for multi-step flows
-  if (stepId === 'downloadedModel') {
-    setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
-  }
-  if (stepId === 'loadedModel') {
-    setPendingSpotlight(MODEL_PICKER_STEP_INDEX);
-  }
-  if (stepId === 'sentMessage') {
-    setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
-  }
-  if (stepId === 'exploredSettings') {
-    setPendingSpotlight(MODEL_SETTINGS_STEP_INDEX);
-  }
-  if (stepId === 'createdProject') {
-    setPendingSpotlight(PROJECT_EDIT_STEP_INDEX);
-  }
+  const pending = PENDING_MAP[stepId];
+  if (pending !== undefined) setPendingSpotlight(pending);
 
   // Navigate to the correct tab
-  if (tab && tab !== 'HomeTab') {
-    navigate(tab);
-  }
+  if (tab && tab !== 'HomeTab') navigate(tab);
 
   // Delay spotlight based on whether cross-tab navigation is needed
   if (stepIndex !== undefined) {
@@ -272,9 +273,9 @@ describe('handleStepPress', () => {
     describe('image model already loaded', () => {
       const imageState: ImageState = { activeImageModelId: 'img-1', downloadedImageModelsCount: 1, markSpotlightShown: jest.fn() };
 
-      it('does not queue pending spotlight', () => {
+      it('queues pending spotlight 15 (IMAGE_DRAW_STEP_INDEX)', () => {
         simulateHandleStepPress('triedImageGen', callbacks(), imageState);
-        expect(peekPendingSpotlight()).toBeNull();
+        expect(peekPendingSpotlight()).toBe(15);
       });
 
       it('navigates to ChatsTab', () => {

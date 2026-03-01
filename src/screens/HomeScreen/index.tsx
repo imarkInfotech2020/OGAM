@@ -83,7 +83,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         // No image model yet → navigate to ModelsTab and spotlight Image Models tab
         setPendingSpotlight(IMAGE_DOWNLOAD_STEP_INDEX);
         navigation.navigate('ModelsTab' as any);
-        setTimeout(() => goTo(STEP_INDEX_MAP[stepId]!), 800);
+        const idx = STEP_INDEX_MAP[stepId];
+        if (idx !== undefined) setTimeout(() => goTo(idx), 800);
       }
       return;
     }
@@ -200,7 +201,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.galleryCardInfo}>
               <Text style={styles.galleryCardTitle}>Image Gallery</Text>
               <Text style={styles.galleryCardMeta}>
-                {generatedImages.length === 1 ? 'image' : 'images'}
+                {generatedImages.length} {generatedImages.length === 1 ? 'image' : 'images'}
               </Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
