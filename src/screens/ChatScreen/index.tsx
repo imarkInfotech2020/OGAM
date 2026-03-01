@@ -115,7 +115,9 @@ export const ChatScreen: React.FC = () => {
       onboardingChecklist.triedImageGen
     ) {
       markSpotlightShown('imageSettings');
-      setTimeout(() => goTo(IMAGE_SETTINGS_STEP_INDEX), 800);
+      // No cleanup — markSpotlightShown guards against double-firing, and returning
+      // a cleanup here would cancel the task when the store update re-triggers the effect.
+      InteractionManager.runAfterInteractions(() => goTo(IMAGE_SETTINGS_STEP_INDEX));
     }
   }, [generatedImages.length, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
