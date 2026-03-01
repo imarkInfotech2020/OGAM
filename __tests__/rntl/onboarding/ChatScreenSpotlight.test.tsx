@@ -323,45 +323,19 @@ describe('ChatScreen Spotlight Integration', () => {
   });
 
   // ========================================================================
-  // Reactive: imageDraw spotlight (step 15)
+  // Pending spotlight: imageDraw (step 15) via focus-based consumption
   // ========================================================================
-  describe('reactive: imageDraw spotlight (step 15)', () => {
-    function setupImageModelLoaded() {
-      // Both addDownloadedImageModel AND setActiveImageModelId needed
-      // because useChatScreen derives imageModelLoaded from both
-      const model = createONNXImageModel();
-      useAppStore.getState().addDownloadedImageModel(model);
-      useAppStore.getState().setActiveImageModelId(model.id);
-    }
-
-    it('fires goTo(15) when image model loaded, not shown, not completed', () => {
-      act(() => { setupImageModelLoaded(); });
-
+  describe('pending spotlight: imageDraw (step 15) via focus', () => {
+    it('fires goTo(15) when pending spotlight is set', () => {
+      setPendingSpotlight(15);
       renderChatScreen();
 
-      act(() => { jest.advanceTimersByTime(800); });
+      // InteractionManager.runAfterInteractions is async — advance timers to resolve
+      act(() => { jest.advanceTimersByTime(600); });
       expect(mockGoTo).toHaveBeenCalledWith(15);
-      expect(useAppStore.getState().shownSpotlights.imageDraw).toBe(true);
     });
 
-    it('does NOT fire when imageDraw already shown', () => {
-      act(() => {
-        setupImageModelLoaded();
-        useAppStore.getState().markSpotlightShown('imageDraw');
-      });
-
-      renderChatScreen();
-
-      act(() => { jest.advanceTimersByTime(1000); });
-      expect(mockGoTo).not.toHaveBeenCalled();
-    });
-
-    it('does NOT fire when triedImageGen is completed', () => {
-      act(() => {
-        setupImageModelLoaded();
-        useAppStore.getState().completeChecklistStep('triedImageGen');
-      });
-
+    it('does NOT fire when no pending spotlight is set', () => {
       renderChatScreen();
 
       act(() => { jest.advanceTimersByTime(1000); });

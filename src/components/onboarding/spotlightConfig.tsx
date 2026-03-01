@@ -68,6 +68,9 @@ export const IMAGE_DRAW_STEP_INDEX = 15;
 // Image mode toggle spotlight (reactive, triedImageGen part 5)
 export const IMAGE_SETTINGS_STEP_INDEX = 16;
 
+// First recommended image model card spotlight (continuation of triedImageGen flow)
+export const IMAGE_DOWNLOAD_STEP_INDEX = 17;
+
 export const STEP_TAB_MAP: Record<string, string> = {
   downloadedModel: 'ModelsTab',
   loadedModel: 'HomeTab',
@@ -277,6 +280,18 @@ export function createSpotlightSteps(): TourStep[] {
         <Tooltip
           title="Image generation settings"
           description="Control when images are generated: auto, always, or off. Configure more in Settings."
+          stop={stop}
+        />
+      ),
+      onBackdropPress: 'stop',
+      shape: { type: 'rectangle', padding: 8 },
+    },
+    // 17: First recommended image model card — triedImageGen (part 1b, continuation)
+    {
+      render: ({ stop }) => (
+        <Tooltip
+          title="Download an image model"
+          description="Tap this recommended model to start downloading it"
           stop={stop}
         />
       ),

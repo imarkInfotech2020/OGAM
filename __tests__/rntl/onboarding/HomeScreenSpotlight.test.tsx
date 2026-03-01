@@ -332,19 +332,56 @@ describe('HomeScreen Spotlight Integration', () => {
   // Flow 4: Try Image Generation
   // ========================================================================
   describe('Flow 4: triedImageGen', () => {
-    it('does NOT queue pending, navigates to ModelsTab, fires goTo(4)', () => {
+    it('no image model: queues step 17, navigates to ModelsTab, fires goTo(4)', () => {
       const { getByTestId } = renderHomeScreen();
 
       act(() => {
         fireEvent.press(getByTestId('step-triedImageGen'));
       });
 
-      // No pending queued for image gen flow (only immediate step)
-      expect(peekPendingSpotlight()).toBeNull();
+      // Pending spotlight queued for first image model card (step 17)
+      expect(peekPendingSpotlight()).toBe(17);
       expect(mockNavigate).toHaveBeenCalledWith('ModelsTab');
 
       act(() => { jest.advanceTimersByTime(800); });
       expect(mockGoTo).toHaveBeenCalledWith(4);
+    });
+
+    it('image model downloaded but not loaded: fires goTo(13) on HomeTab', () => {
+      // Pre-seed store with a downloaded image model (not loaded)
+      const { addDownloadedImageModel } = useAppStore.getState();
+      addDownloadedImageModel(createONNXImageModel());
+
+      const { getByTestId } = renderHomeScreen();
+
+      act(() => {
+        fireEvent.press(getByTestId('step-triedImageGen'));
+      });
+
+      expect(peekPendingSpotlight()).toBeNull();
+      expect(mockNavigate).not.toHaveBeenCalled();
+
+      act(() => { jest.advanceTimersByTime(600); });
+      expect(mockGoTo).toHaveBeenCalledWith(13);
+    });
+
+    it('image model already loaded: navigates to ChatsTab, fires goTo(14)', () => {
+      // Pre-seed store with a loaded image model
+      const { addDownloadedImageModel, setActiveImageModelId } = useAppStore.getState();
+      addDownloadedImageModel(createONNXImageModel());
+      setActiveImageModelId('test-image-model');
+
+      const { getByTestId } = renderHomeScreen();
+
+      act(() => {
+        fireEvent.press(getByTestId('step-triedImageGen'));
+      });
+
+      expect(peekPendingSpotlight()).toBe(15);
+      expect(mockNavigate).toHaveBeenCalledWith('ChatsTab');
+
+      act(() => { jest.advanceTimersByTime(800); });
+      expect(mockGoTo).toHaveBeenCalledWith(14);
     });
   });
 

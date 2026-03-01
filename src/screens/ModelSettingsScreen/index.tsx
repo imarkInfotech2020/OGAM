@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
@@ -32,8 +32,8 @@ export const ModelSettingsScreen: React.FC = () => {
   useEffect(() => {
     const pending = consumePendingSpotlight();
     if (pending !== null) {
-      const timer = setTimeout(() => goTo(pending), 600);
-      return () => clearTimeout(timer);
+      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+      return () => task.cancel();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

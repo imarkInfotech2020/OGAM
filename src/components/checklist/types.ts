@@ -3,6 +3,8 @@ export interface OnboardingStep {
   title: string;
   subtitle?: string;
   completed: boolean;
+  /** When true, step cannot be tapped (prerequisite not met). */
+  disabled?: boolean;
 }
 
 export interface ChecklistTheme {

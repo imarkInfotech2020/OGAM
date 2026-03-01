@@ -7,6 +7,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -39,8 +40,8 @@ export const ProjectEditScreen: React.FC = () => {
   useEffect(() => {
     const pending = consumePendingSpotlight();
     if (pending !== null) {
-      const timer = setTimeout(() => goTo(pending), 600);
-      return () => clearTimeout(timer);
+      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+      return () => task.cancel();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

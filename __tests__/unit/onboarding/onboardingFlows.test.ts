@@ -2,7 +2,7 @@
  * Onboarding Spotlight Flow Tests
  *
  * Tests that verify the onboarding checklist flows work correctly:
- * - Spotlight step configuration (all 17 steps exist with correct tooltips)
+ * - Spotlight step configuration (all 18 steps exist with correct tooltips)
  * - Pending spotlight state coordination (queue → consume → chain)
  * - Reactive spotlight store state (shownSpotlights tracking)
  * - Checklist step completion criteria
@@ -46,12 +46,12 @@ describe('Onboarding Flows', () => {
   // ==========================================================================
   // Spotlight Step Configuration
   //
-  // All 17 steps (0-16) should exist and render tooltips.
+  // All 18 steps (0-16) should exist and render tooltips.
   // ==========================================================================
   describe('spotlight step configuration', () => {
-    it('has exactly 17 spotlight steps (indices 0-16)', () => {
+    it('has exactly 18 spotlight steps (indices 0-17)', () => {
       const steps = createSpotlightSteps();
-      expect(steps).toHaveLength(17);
+      expect(steps).toHaveLength(18);
     });
 
     it('every step has a render function and rectangle shape', () => {

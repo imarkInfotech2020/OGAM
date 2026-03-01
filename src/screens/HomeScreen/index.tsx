@@ -8,7 +8,7 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
-import { STEP_TAB_MAP, STEP_INDEX_MAP, CHAT_INPUT_STEP_INDEX, MODEL_SETTINGS_STEP_INDEX, PROJECT_EDIT_STEP_INDEX, DOWNLOAD_FILE_STEP_INDEX, MODEL_PICKER_STEP_INDEX, IMAGE_LOAD_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
+import { STEP_TAB_MAP, STEP_INDEX_MAP, CHAT_INPUT_STEP_INDEX, MODEL_SETTINGS_STEP_INDEX, PROJECT_EDIT_STEP_INDEX, DOWNLOAD_FILE_STEP_INDEX, MODEL_PICKER_STEP_INDEX, IMAGE_LOAD_STEP_INDEX, IMAGE_DOWNLOAD_STEP_INDEX, IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import Icon from 'react-native-vector-icons/Feather';
@@ -31,42 +31,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const styles = useThemedStyles(createStyles);
   const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
   const { goTo } = useSpotlightTour();
-
-  const handleStepPress = useCallback((stepId: string) => {
-    closeSheet();
-    const tab = STEP_TAB_MAP[stepId];
-    const stepIndex = STEP_INDEX_MAP[stepId];
-
-    // For multi-step flows, queue the continuation step.
-    if (stepId === 'downloadedModel') {
-      setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
-    }
-    if (stepId === 'loadedModel') {
-      setPendingSpotlight(MODEL_PICKER_STEP_INDEX);
-    }
-    if (stepId === 'sentMessage') {
-      setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
-    }
-    if (stepId === 'exploredSettings') {
-      setPendingSpotlight(MODEL_SETTINGS_STEP_INDEX);
-    }
-    if (stepId === 'createdProject') {
-      setPendingSpotlight(PROJECT_EDIT_STEP_INDEX);
-    }
-
-    // Navigate to the correct tab
-    if (tab && tab !== 'HomeTab') {
-      navigation.navigate(tab as any);
-    }
-
-    // Delay spotlight to allow sheet close + navigation transition to complete.
-    // Cross-tab navigations need more time for the target screen to mount and
-    // measure AttachStep layout; 800ms covers sheet-close + tab-switch animation.
-    if (stepIndex !== undefined) {
-      const delay = tab && tab !== 'HomeTab' ? 800 : 600;
-      setTimeout(() => goTo(stepIndex), delay);
-    }
-  }, [closeSheet, navigation, goTo]);
 
   const {
     pickerType,
@@ -99,6 +63,64 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
   const markSpotlightShown = useAppStore(s => s.markSpotlightShown);
+
+  const handleStepPress = useCallback((stepId: string) => {
+    closeSheet();
+
+    // Image gen flow is state-aware: skip steps the user has already completed.
+    if (stepId === 'triedImageGen') {
+      if (activeImageModelId) {
+        // Model already loaded → go straight to "start a new chat"
+        // Queue step 15 so ChatScreen picks it up when "New Chat" is tapped
+        setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
+        navigation.navigate('ChatsTab' as any);
+        setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
+      } else if (downloadedImageModels.length > 0) {
+        // Model downloaded but not loaded → spotlight "load your image model" on HomeScreen
+        markSpotlightShown('imageLoad');
+        setTimeout(() => goTo(IMAGE_LOAD_STEP_INDEX), 600);
+      } else {
+        // No image model yet → navigate to ModelsTab and spotlight Image Models tab
+        setPendingSpotlight(IMAGE_DOWNLOAD_STEP_INDEX);
+        navigation.navigate('ModelsTab' as any);
+        setTimeout(() => goTo(STEP_INDEX_MAP[stepId]!), 800);
+      }
+      return;
+    }
+
+    const tab = STEP_TAB_MAP[stepId];
+    const stepIndex = STEP_INDEX_MAP[stepId];
+
+    // For multi-step flows, queue the continuation step.
+    if (stepId === 'downloadedModel') {
+      setPendingSpotlight(DOWNLOAD_FILE_STEP_INDEX);
+    }
+    if (stepId === 'loadedModel') {
+      setPendingSpotlight(MODEL_PICKER_STEP_INDEX);
+    }
+    if (stepId === 'sentMessage') {
+      setPendingSpotlight(CHAT_INPUT_STEP_INDEX);
+    }
+    if (stepId === 'exploredSettings') {
+      setPendingSpotlight(MODEL_SETTINGS_STEP_INDEX);
+    }
+    if (stepId === 'createdProject') {
+      setPendingSpotlight(PROJECT_EDIT_STEP_INDEX);
+    }
+
+    // Navigate to the correct tab
+    if (tab && tab !== 'HomeTab') {
+      navigation.navigate(tab as any);
+    }
+
+    // Delay spotlight to allow sheet close + navigation transition to complete.
+    // Cross-tab navigations need more time for the target screen to mount and
+    // measure AttachStep layout; 800ms covers sheet-close + tab-switch animation.
+    if (stepIndex !== undefined) {
+      const delay = tab && tab !== 'HomeTab' ? 800 : 600;
+      setTimeout(() => goTo(stepIndex), delay);
+    }
+  }, [closeSheet, navigation, goTo, activeImageModelId, downloadedImageModels.length, markSpotlightShown]);
 
   // Reactive: image model downloaded but not loaded → spotlight ImageModelCard (step 13)
   useEffect(() => {

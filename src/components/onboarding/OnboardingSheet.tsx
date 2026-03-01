@@ -63,13 +63,15 @@ const ChecklistRow: React.FC<ChecklistRowProps> = ({
     outputRange: [theme.checkboxBorderColor, theme.checkboxCompletedBorderColor],
   });
 
+  const isDisabled = step.completed || step.disabled;
+
   return (
     <Animated.View style={rowAnimStyle}>
       <TouchableOpacity
-        style={styles.row}
-        activeOpacity={step.completed ? 1 : theme.itemPressedOpacity}
-        onPress={step.completed ? undefined : onPress}
-        disabled={step.completed}
+        style={[styles.row, step.disabled && { opacity: 0.4 }]}
+        activeOpacity={isDisabled ? 1 : theme.itemPressedOpacity}
+        onPress={isDisabled ? undefined : onPress}
+        disabled={isDisabled}
       >
         {/* Checkbox */}
         <Animated.View

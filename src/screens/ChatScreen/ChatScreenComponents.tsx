@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AttachStep } from 'react-native-spotlight-tour';
 import { ModelSelectorModal } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { llmService } from '../../services';
@@ -132,9 +133,11 @@ export const ChatHeader: React.FC<{
         </TouchableOpacity>
       </View>
       <View style={styles.headerActions}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
-          <Icon name="sliders" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <AttachStep index={16}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
+            <Icon name="sliders" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </AttachStep>
       </View>
     </View>
   </View>

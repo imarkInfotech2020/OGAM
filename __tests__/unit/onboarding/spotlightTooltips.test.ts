@@ -26,6 +26,7 @@ describe('Spotlight Tooltip Content', () => {
     { index: 14, title: 'Generate an image', description: 'Start a new chat and try asking for an image' },
     { index: 15, title: 'Draw something', description: "Try typing 'draw a dog' and send it" },
     { index: 16, title: 'Image generation settings', description: 'Control when images are generated: auto, always, or off. Configure more in Settings.' },
+    { index: 17, title: 'Download an image model', description: 'Tap this recommended model to start downloading it' },
   ];
 
   it.each(expectedTooltips)(

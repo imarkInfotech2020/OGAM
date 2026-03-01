@@ -12,7 +12,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { IMAGE_NEW_CHAT_STEP_INDEX } from '../components/onboarding/spotlightConfig';
+import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/onboarding/spotlightConfig';
+import { setPendingSpotlight } from '../components/onboarding/spotlightState';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
@@ -50,6 +51,8 @@ export const ChatsListScreen: React.FC = () => {
       !onboardingChecklist.triedImageGen
     ) {
       markSpotlightShown('imageNewChat');
+      // Queue step 15 so ChatScreen picks it up when "New Chat" is tapped
+      setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
       setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
     }
   }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
@@ -167,17 +170,15 @@ export const ChatsListScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
-        <AttachStep index={2}>
-          <AttachStep index={14}>
-            <Button
-              title="New"
-              variant="primary"
-              size="small"
-              onPress={handleNewChat}
-              disabled={!hasModels}
-              icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
-            />
-          </AttachStep>
+        <AttachStep index={[2, 14]}>
+          <Button
+            title="New"
+            variant="primary"
+            size="small"
+            onPress={handleNewChat}
+            disabled={!hasModels}
+            icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+          />
         </AttachStep>
       </View>
 

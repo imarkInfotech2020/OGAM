@@ -24,7 +24,16 @@ import {
   PROJECT_EDIT_STEP_INDEX,
   DOWNLOAD_FILE_STEP_INDEX,
   MODEL_PICKER_STEP_INDEX,
+  IMAGE_DOWNLOAD_STEP_INDEX,
+  IMAGE_LOAD_STEP_INDEX,
+  IMAGE_NEW_CHAT_STEP_INDEX,
 } from '../../../src/components/onboarding/spotlightConfig';
+
+interface ImageState {
+  activeImageModelId: string | null;
+  downloadedImageModelsCount: number;
+  markSpotlightShown: jest.Mock;
+}
 
 /**
  * Reimplements handleStepPress logic from HomeScreen/index.tsx
@@ -32,10 +41,27 @@ import {
  */
 function simulateHandleStepPress(
   stepId: string,
-  callbacks: { closeSheet: jest.Mock; navigate: jest.Mock; goTo: jest.Mock }
+  callbacks: { closeSheet: jest.Mock; navigate: jest.Mock; goTo: jest.Mock },
+  imageState: ImageState = { activeImageModelId: null, downloadedImageModelsCount: 0, markSpotlightShown: jest.fn() },
 ) {
   const { closeSheet, navigate, goTo } = callbacks;
   closeSheet();
+
+  // Image gen flow is state-aware
+  if (stepId === 'triedImageGen') {
+    if (imageState.activeImageModelId) {
+      navigate('ChatsTab');
+      setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
+    } else if (imageState.downloadedImageModelsCount > 0) {
+      imageState.markSpotlightShown('imageLoad');
+      setTimeout(() => goTo(IMAGE_LOAD_STEP_INDEX), 600);
+    } else {
+      setPendingSpotlight(IMAGE_DOWNLOAD_STEP_INDEX);
+      navigate('ModelsTab');
+      setTimeout(() => goTo(STEP_INDEX_MAP[stepId]!), 800);
+    }
+    return;
+  }
 
   const tab = STEP_TAB_MAP[stepId];
   const stepIndex = STEP_INDEX_MAP[stepId];
@@ -194,23 +220,73 @@ describe('handleStepPress', () => {
   });
 
   // ========================================================================
-  // Flow 4: Try Image Generation
+  // Flow 4: Try Image Generation (state-aware)
   // ========================================================================
   describe('Flow 4: triedImageGen', () => {
-    it('does NOT queue any pending spotlight (only immediate step)', () => {
-      simulateHandleStepPress('triedImageGen', callbacks());
-      expect(peekPendingSpotlight()).toBeNull();
+    describe('no image model downloaded', () => {
+      const imageState: ImageState = { activeImageModelId: null, downloadedImageModelsCount: 0, markSpotlightShown: jest.fn() };
+
+      it('queues pending spotlight for first image model card (step 17)', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(peekPendingSpotlight()).toBe(17);
+      });
+
+      it('navigates to ModelsTab', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(navigate).toHaveBeenCalledWith('ModelsTab');
+      });
+
+      it('fires goTo(4) after 800ms delay', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        jest.advanceTimersByTime(800);
+        expect(goTo).toHaveBeenCalledWith(4);
+      });
     });
 
-    it('navigates to ModelsTab', () => {
-      simulateHandleStepPress('triedImageGen', callbacks());
-      expect(navigate).toHaveBeenCalledWith('ModelsTab');
+    describe('image model downloaded but not loaded', () => {
+      const markShown = jest.fn();
+      const imageState: ImageState = { activeImageModelId: null, downloadedImageModelsCount: 1, markSpotlightShown: markShown };
+
+      it('does not queue pending spotlight', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(peekPendingSpotlight()).toBeNull();
+      });
+
+      it('does not navigate (stays on HomeTab)', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(navigate).not.toHaveBeenCalled();
+      });
+
+      it('marks imageLoad spotlight as shown', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(markShown).toHaveBeenCalledWith('imageLoad');
+      });
+
+      it('fires goTo(13) after 600ms delay', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        jest.advanceTimersByTime(600);
+        expect(goTo).toHaveBeenCalledWith(13);
+      });
     });
 
-    it('fires goTo(4) after delay', () => {
-      simulateHandleStepPress('triedImageGen', callbacks());
-      jest.advanceTimersByTime(800);
-      expect(goTo).toHaveBeenCalledWith(4);
+    describe('image model already loaded', () => {
+      const imageState: ImageState = { activeImageModelId: 'img-1', downloadedImageModelsCount: 1, markSpotlightShown: jest.fn() };
+
+      it('does not queue pending spotlight', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(peekPendingSpotlight()).toBeNull();
+      });
+
+      it('navigates to ChatsTab', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        expect(navigate).toHaveBeenCalledWith('ChatsTab');
+      });
+
+      it('fires goTo(14) after 800ms delay', () => {
+        simulateHandleStepPress('triedImageGen', callbacks(), imageState);
+        jest.advanceTimersByTime(800);
+        expect(goTo).toHaveBeenCalledWith(14);
+      });
     });
   });
 

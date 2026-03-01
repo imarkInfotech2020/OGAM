@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard, Button } from '../../components';
@@ -75,8 +75,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const pending = consumePendingSpotlight();
     if (pending !== null) {
       setPendingSpotlight(DOWNLOAD_MANAGER_STEP_INDEX);
-      const timer = setTimeout(() => goTo(pending), 600);
-      return () => clearTimeout(timer);
+      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+      return () => task.cancel();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -213,7 +213,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     setSelectedModel(null);
     setModelFiles([]);
     if (pending !== null) {
-      setTimeout(() => goTo(pending), 400);
+      InteractionManager.runAfterInteractions(() => goTo(pending));
     }
   };
 

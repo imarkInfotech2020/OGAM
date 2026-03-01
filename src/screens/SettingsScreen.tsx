@@ -40,7 +40,8 @@ export const SettingsScreen: React.FC = () => {
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
-  }, [completeChecklistStep]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleResetOnboarding = () => {
     setOnboardingComplete(false);

@@ -298,9 +298,5 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     </View>
   );
 
-  // Wrap entire component only when spotlight 16 is active
-  if (activeSpotlight === 16) {
-    return <AttachStep index={16}>{content}</AttachStep>;
-  }
   return content;
 };

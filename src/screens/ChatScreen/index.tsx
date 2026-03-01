@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
-import { VOICE_HINT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
+import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
@@ -60,13 +61,14 @@ export const ChatScreen: React.FC = () => {
       // Chain: step 3 (ChatInput) → step 12 (VoiceRecordButton)
       pendingNextRef.current = VOICE_HINT_STEP_INDEX;
       step3ShownRef.current = false;
-      setChatSpotlight(3);
-      setTimeout(() => {
+      const task = InteractionManager.runAfterInteractions(() => {
         step3ShownRef.current = true;
         goTo(3);
-      }, 600);
+      });
+      return () => task.cancel();
     } else if (pending !== null) {
-      setTimeout(() => goTo(pending), 600);
+      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+      return () => task.cancel();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,18 +94,17 @@ export const ChatScreen: React.FC = () => {
     }
   }, [current, goTo]);
 
-  // Reactive: image model loaded, no image generated yet → spotlight ChatInput (step 15)
-  useEffect(() => {
-    if (
-      chat.imageModelLoaded &&
-      !shownSpotlights.imageDraw &&
-      !onboardingChecklist.triedImageGen
-    ) {
-      markSpotlightShown('imageDraw');
-      setChatSpotlight(IMAGE_DRAW_STEP_INDEX);
-      setTimeout(() => goTo(IMAGE_DRAW_STEP_INDEX), 800);
-    }
-  }, [chat.imageModelLoaded, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
+  // Consume pending spotlights on focus (handles reused screen instances where
+  // the mount-only useEffect above won't re-fire after navigation).
+  useFocusEffect(
+    useCallback(() => {
+      const pending = consumePendingSpotlight();
+      if (pending !== null) {
+        const task = InteractionManager.runAfterInteractions(() => goTo(pending));
+        return () => task.cancel();
+      }
+    }, [goTo]),
+  );
 
   // Reactive: after first image generated → spotlight image mode toggle (step 16)
   const generatedImages = useAppStore(s => s.generatedImages);
@@ -114,7 +115,6 @@ export const ChatScreen: React.FC = () => {
       onboardingChecklist.triedImageGen
     ) {
       markSpotlightShown('imageSettings');
-      setChatSpotlight(IMAGE_SETTINGS_STEP_INDEX);
       setTimeout(() => goTo(IMAGE_SETTINGS_STEP_INDEX), 800);
     }
   }, [generatedImages.length, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
@@ -250,14 +250,6 @@ export const ChatScreen: React.FC = () => {
 };
 
 /** Conditionally wraps children in AttachStep. When index is null, renders children directly. */
-const MaybeAttachStep = ({ index, children }: { index: number | null; children: React.ReactElement }) => {
-  if (index !== null) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return <AttachStep index={index} fill>{children as any}</AttachStep>;
-  }
-  return children;
-};
-
 type ChatMessageAreaProps = {
   flatListRef: React.RefObject<FlatList | null>;
   isNearBottomRef: React.MutableRefObject<boolean>;
@@ -319,10 +311,9 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         <Text style={styles.classifyingText}>Understanding your request...</Text>
       </View>
     )}
-    {/* Only mount ONE AttachStep at a time — multiple causes waypoint dots/lines.
-         Steps 3/15 wrap ChatInput from outside; steps 12/16 are handled inside ChatInput
-         via activeSpotlight prop. Always render the same ChatInput to avoid remounting. */}
-    <MaybeAttachStep index={chatSpotlight === 3 ? 3 : chatSpotlight === 15 ? 15 : null}>
+    {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
+         Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
+    <AttachStep index={[3, 15]} fill>
       <ChatInput
         onSend={chat.handleSend}
         onStop={chat.handleStop}
@@ -339,9 +330,9 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         onToolsPress={() => chat.setShowToolPicker(true)}
         enabledToolCount={chat.enabledTools.length}
         supportsToolCalling={chat.supportsToolCalling}
-        activeSpotlight={chatSpotlight === 12 || chatSpotlight === 16 ? chatSpotlight : null}
+        activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
       />
-    </MaybeAttachStep>
+    </AttachStep>
     <ToolPickerSheet
       visible={chat.showToolPicker}
       onClose={() => chat.setShowToolPicker(false)}
