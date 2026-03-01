@@ -102,6 +102,29 @@ npm run ios
 
 ---
 
+## Testing
+
+[![CI](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/alichherawalla/off-grid-mobile/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
+![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/alichherawalla/test-results-badge/raw/off-grid-mobile-test-count.json)
+
+Tests run across three platforms on every PR:
+
+| Platform | Framework | What's covered |
+|----------|-----------|----------------|
+| React Native | Jest + RNTL | Stores, services, components, screens, contracts |
+| Android | JUnit | LocalDream, DownloadManager, BroadcastReceiver |
+| iOS | XCTest | PDFExtractor, CoreMLDiffusion, DownloadManager |
+| E2E | Maestro | Critical path flows (launch, chat, models, downloads) |
+
+```bash
+npm test              # Run all tests (Jest + Android + iOS)
+npm run test:count    # Print exact counts across all platforms
+npm run test:e2e      # Run Maestro E2E flows (requires running app)
+```
+
+---
+
 ## Documentation
 
 | Document | Description |

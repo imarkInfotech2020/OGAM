@@ -72,6 +72,8 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 | Secure Storage | `react-native-keychain` |
 | Device Info | `react-native-device-info` |
 | Image Picker | `react-native-image-picker` |
+| Document Picker | `@react-native-documents/picker` |
+| Document Viewer | `@react-native-documents/viewer` |
 | Zip Extraction | `react-native-zip-archive` |
 | Icons | `react-native-vector-icons` (Feather) |
 
@@ -103,8 +105,35 @@ OffgridMobile/
 │   │   ├── AppSheet.tsx                 # Bottom sheet wrapper
 │   │   ├── Button.tsx                   # Styled button
 │   │   ├── Card.tsx                     # Card layout
-│   │   ├── ChatInput.tsx                # Message input bar (text, voice, attachments, image mode)
-│   │   ├── ChatMessage.tsx              # Single message bubble (streaming, images, metadata)
+│   │   ├── ChatInput/                   # Message input bar (text, voice, attachments, image mode)
+│   │   │   ├── index.tsx                # Main ChatInput component
+│   │   │   ├── Attachments.tsx          # Document/image attachment picker and preview
+│   │   │   ├── Toolbar.tsx              # Input toolbar (send, voice, attachments, image mode)
+│   │   │   ├── Voice.ts                 # Voice recording integration
+│   │   │   └── styles.ts               # ChatInput styles
+│   │   ├── ChatMessage/                 # Single message bubble (streaming, images, metadata)
+│   │   │   ├── index.tsx                # Main ChatMessage component
+│   │   │   ├── components/
+│   │   │   │   ├── ActionMenuSheet.tsx  # Long-press action menu
+│   │   │   │   ├── BlinkingCursor.tsx   # Streaming cursor animation
+│   │   │   │   ├── GenerationMeta.tsx   # Generation metadata display
+│   │   │   │   ├── MessageAttachments.tsx # Image/document attachment rendering
+│   │   │   │   ├── MessageContent.tsx   # Message text/markdown rendering
+│   │   │   │   └── ThinkingBlock.tsx    # Collapsible thinking block
+│   │   │   ├── types.ts                 # ChatMessage types
+│   │   │   ├── utils.ts                 # ChatMessage utilities
+│   │   │   └── styles.ts               # ChatMessage styles
+│   │   ├── checklist/                   # Onboarding checklist components
+│   │   │   ├── index.ts                 # Checklist exports
+│   │   │   ├── ProgressBar.tsx          # Checklist progress bar
+│   │   │   ├── useOnboardingSteps.ts    # Onboarding step definitions
+│   │   │   ├── animations.ts            # Checklist animations
+│   │   │   └── types.ts                 # Checklist types
+│   │   ├── onboarding/                  # Onboarding sheet components
+│   │   │   ├── index.ts                 # Onboarding exports
+│   │   │   ├── OnboardingSheet.tsx      # Onboarding bottom sheet
+│   │   │   ├── PulsatingIcon.tsx        # Animated pulsating icon
+│   │   │   └── useOnboardingSheet.ts    # Onboarding sheet hook
 │   │   ├── CustomAlert.tsx              # Alert dialog
 │   │   ├── DebugSheet.tsx               # Debug info bottom sheet
 │   │   ├── GenerationSettingsModal.tsx  # All generation settings in a modal
@@ -117,10 +146,43 @@ OffgridMobile/
 │   ├── screens/                         # Screen components (19 screens)
 │   │   ├── OnboardingScreen.tsx         # Welcome slides
 │   │   ├── ModelDownloadScreen.tsx      # First model download during onboarding
-│   │   ├── HomeScreen.tsx               # Dashboard: active models, memory, recent chats
-│   │   ├── ChatScreen.tsx               # Main chat (67KB — largest screen)
+│   │   ├── HomeScreen/                  # Dashboard: active models, memory, recent chats
+│   │   │   ├── index.tsx                # Main HomeScreen component
+│   │   │   ├── styles.ts               # HomeScreen styles
+│   │   │   └── components/
+│   │   │       ├── ActiveModelsSection.tsx  # Active model cards
+│   │   │       ├── RecentConversations.tsx  # Recent chat list
+│   │   │       ├── ModelPickerSheet.tsx     # Model selection bottom sheet
+│   │   │       └── LoadingOverlay.tsx       # Loading state overlay
+│   │   ├── ChatScreen/                  # Main chat interface
+│   │   │   ├── index.tsx                # Main ChatScreen component
+│   │   │   ├── ChatScreenComponents.tsx # Extracted sub-components
+│   │   │   ├── ChatModalSection.tsx     # Modal overlays (model selector, settings, etc.)
+│   │   │   ├── MessageRenderer.tsx      # Message list rendering
+│   │   │   ├── useChatScreen.ts         # Main chat screen hook
+│   │   │   ├── useChatGenerationActions.ts # Text/image generation actions
+│   │   │   ├── useChatModelActions.ts   # Model loading/switching actions
+│   │   │   ├── useSaveImage.ts          # Image save-to-device logic
+│   │   │   ├── types.ts                 # ChatScreen types
+│   │   │   ├── styles.ts               # ChatScreen styles
+│   │   │   └── stylesImage.ts           # Image generation styles
 │   │   ├── ChatsListScreen.tsx          # Conversation list
-│   │   ├── ModelsScreen.tsx             # Model browser (text + image tabs)
+│   │   ├── ModelsScreen/                # Model browser (text + image tabs)
+│   │   │   ├── index.tsx                # Main ModelsScreen component
+│   │   │   ├── TextModelsTab.tsx        # Text model browsing tab
+│   │   │   ├── ImageModelsTab.tsx       # Image model browsing tab
+│   │   │   ├── TextFiltersSection.tsx   # Text model filter UI
+│   │   │   ├── ImageFilterBar.tsx       # Image model filter UI
+│   │   │   ├── useTextModels.ts         # Text model browsing hook
+│   │   │   ├── useImageModels.ts        # Image model browsing hook
+│   │   │   ├── useModelsScreen.ts       # Main models screen hook
+│   │   │   ├── useNotifRationale.ts     # Notification permission rationale
+│   │   │   ├── imageDownloadActions.ts  # Image model download logic
+│   │   │   ├── constants.ts             # ModelsScreen constants
+│   │   │   ├── types.ts                 # ModelsScreen types
+│   │   │   ├── utils.ts                 # ModelsScreen utilities
+│   │   │   ├── styles.ts               # Text models styles
+│   │   │   └── imageStyles.ts           # Image models styles
 │   │   ├── ProjectsScreen.tsx           # Projects list
 │   │   ├── ProjectDetailScreen.tsx      # View project + linked chats
 │   │   ├── ProjectEditScreen.tsx        # Create/edit project
