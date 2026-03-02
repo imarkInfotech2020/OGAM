@@ -703,58 +703,20 @@ describe('HardwareService', () => {
         delete NativeModules.LocalDreamModule;
       });
 
-      it('returns 8gen2 for SM8550 (Snapdragon 8 Gen 2)', async () => {
-        await setupQualcommWithSoC('SM8550-AB');
+      it.each([
+        ['SM8550-AB', '8gen2', 'Snapdragon 8 Gen 2'],
+        ['SM8650-AC', '8gen2', 'Snapdragon 8 Gen 3'],
+        ['SM8750-AB', '8gen2', 'Snapdragon 8 Elite'],
+        ['SM8845-AB', '8gen2', 'Snapdragon 8 Gen 5'],
+        ['SM9000-XX', '8gen2', 'future flagship'],
+        ['SM8450-AB', '8gen1', 'Snapdragon 8 Gen 1'],
+        ['SM8475-AB', '8gen1', 'Snapdragon 8+ Gen 1'],
+        ['SM8350-AC', 'min', 'SM8350 and below'],
+        ['SM7550-AB', 'min', 'SM7-series mid-range'],
+      ] as const)('returns %s variant for %s (%s)', async (socModel, expected, _desc) => {
+        await setupQualcommWithSoC(socModel);
         const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen2');
-      });
-
-      it('returns 8gen2 for SM8650 (Snapdragon 8 Gen 3)', async () => {
-        await setupQualcommWithSoC('SM8650-AC');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen2');
-      });
-
-      it('returns 8gen2 for SM8750 (Snapdragon 8 Elite)', async () => {
-        await setupQualcommWithSoC('SM8750-AB');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen2');
-      });
-
-      it('returns 8gen2 for SM8845 (Snapdragon 8 Gen 5)', async () => {
-        await setupQualcommWithSoC('SM8845-AB');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen2');
-      });
-
-      it('returns 8gen2 for future SM9000+ SoCs', async () => {
-        await setupQualcommWithSoC('SM9000-XX');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen2');
-      });
-
-      it('returns 8gen1 for SM8450 (Snapdragon 8 Gen 1)', async () => {
-        await setupQualcommWithSoC('SM8450-AB');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen1');
-      });
-
-      it('returns 8gen1 for SM8475 (Snapdragon 8+ Gen 1)', async () => {
-        await setupQualcommWithSoC('SM8475-AB');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen1');
-      });
-
-      it('returns min for SM8350 and below', async () => {
-        await setupQualcommWithSoC('SM8350-AC');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('min');
-      });
-
-      it('returns min for SM7-series mid-range SoCs', async () => {
-        await setupQualcommWithSoC('SM7550-AB');
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('min');
+        expect(soc.qnnVariant).toBe(expected);
       });
     });
 
