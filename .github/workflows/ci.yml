@@ -78,39 +78,20 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Test
-        id: test
+      - name: Run Jest tests
+        run: npx jest --coverage --forceExit
+
+      - name: Run Android tests
+        run: cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks
+
+      - name: Run iOS tests
         run: |
-          # Run Jest and capture output
-          JEST_OUTPUT=$(npx jest --coverage --forceExit 2>&1) || true
-          echo "$JEST_OUTPUT"
-          JEST_COUNT=$(echo "$JEST_OUTPUT" | grep -oE 'Tests:.*[0-9]+ passed' | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
-
-          # Run Android tests
-          cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks && cd ..
-          ANDROID_COUNT=0
-          for xml in android/app/build/test-results/testDebugUnitTest/TEST-*.xml; do
-            count=$(grep -oE 'tests="[0-9]+"' "$xml" | grep -oE '[0-9]+')
-            ANDROID_COUNT=$((ANDROID_COUNT + count))
-          done
-
-          # Run iOS tests
           cd ios && xcodebuild test \
             -workspace OffgridMobile.xcworkspace \
             -scheme OffgridMobile \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
             -only-testing:OffgridMobileTests \
-            2>&1 | (xcpretty 2>/dev/null || cat) && cd ..
-          IOS_COUNT=$(grep -c 'func test' ios/OffgridMobileTests/OffgridMobileTests.swift 2>/dev/null || echo 0)
-
-          TOTAL=$((JEST_COUNT + ANDROID_COUNT + IOS_COUNT))
-          echo "jest_count=$JEST_COUNT" >> "$GITHUB_OUTPUT"
-          echo "android_count=$ANDROID_COUNT" >> "$GITHUB_OUTPUT"
-          echo "ios_count=$IOS_COUNT" >> "$GITHUB_OUTPUT"
-          echo "total_count=$TOTAL" >> "$GITHUB_OUTPUT"
-
-          # Fail if Jest reported failures
-          echo "$JEST_OUTPUT" | grep -q '0 failed' || echo "$JEST_OUTPUT" | grep -qv 'failed'
+            2>&1 | (xcpretty 2>/dev/null || cat)
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -118,17 +99,6 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
           fail_ci_if_error: false
-
-      - name: Update test count badge
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: ${{ vars.TEST_BADGE_GIST_ID }}
-          filename: off-grid-mobile-test-count.json
-          label: tests
-          message: ${{ steps.test.outputs.total_count }} passing
-          color: brightgreen
 
       - name: Upload iOS test results
         if: always()
