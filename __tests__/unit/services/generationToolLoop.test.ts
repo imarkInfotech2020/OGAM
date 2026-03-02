@@ -6,7 +6,7 @@
  * Priority: P0 (Critical) - Core tool-calling functionality.
  */
 
-import { runToolLoop, ToolLoopContext, parseToolCallsFromText } from '../../../src/services/generationToolLoop';
+import { runToolLoop, ToolLoopContext, parseToolCallsFromText, wrapToolResultContent, stripToolResultWrapper } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
 import { Message } from '../../../src/types';
 import { createMessage } from '../../utils/factories';
@@ -217,10 +217,10 @@ describe('runToolLoop', () => {
       expect(assistantMsg.toolCalls[0].name).toBe('web_search');
       expect(assistantMsg.toolCalls[0].arguments).toBe(JSON.stringify({ query: 'test' }));
 
-      // Second: tool result message
+      // Second: tool result message (content is wrapped with tool result labels)
       const toolMsg = mockAddMessage.mock.calls[1][1];
       expect(toolMsg.role).toBe('tool');
-      expect(toolMsg.content).toBe('Search results here');
+      expect(toolMsg.content).toBe(wrapToolResultContent('web_search', 'Search results here'));
       expect(toolMsg.toolCallId).toBe('tc-1');
       expect(toolMsg.toolName).toBe('web_search');
       expect(toolMsg.generationTimeMs).toBe(120);
@@ -244,9 +244,9 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      // Tool result message should contain the error
+      // Tool result message should contain the error (wrapped with tool result labels)
       const toolMsg = mockAddMessage.mock.calls[1][1];
-      expect(toolMsg.content).toBe('Error: Network timeout');
+      expect(toolMsg.content).toBe(wrapToolResultContent('web_search', 'Error: Network timeout'));
     });
 
     it('executes multiple tool calls in a single iteration', async () => {
@@ -739,6 +739,46 @@ describe('parseToolCallsFromText', () => {
     expect(result.toolCalls[0].name).toBe('web_search');
     expect(result.toolCalls[0].arguments).toEqual({ query: 'alias test' });
   });
+
+  // XML-like format: <tool_call><function=NAME><parameter=KEY>VALUE</tool_call>
+  it('parses XML-like format with function and parameter tags (closed)', () => {
+    const text = '<tool_call><function=web_search><parameter=query>Off Grid Mobile AI</tool_call>';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('web_search');
+    expect(result.toolCalls[0].arguments).toEqual({ query: 'Off Grid Mobile AI' });
+    expect(result.cleanText).toBe('');
+  });
+
+  it('parses XML-like format without closing tag (EOS)', () => {
+    const text = 'Let me search for that.\n<tool_call>\n<function=web_search>\n<parameter=query>\nOff Grid Mobile AI';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('web_search');
+    expect(result.toolCalls[0].arguments).toEqual({ query: 'Off Grid Mobile AI' });
+    expect(result.cleanText).toBe('Let me search for that.');
+  });
+
+  it('parses XML-like format with multiple parameters', () => {
+    const text = '<tool_call><function=read_url><parameter=url>https://example.com</tool_call>';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('read_url');
+    expect(result.toolCalls[0].arguments).toEqual({ url: 'https://example.com' });
+  });
+
+  it('cleans text around XML-like tool calls', () => {
+    const text = 'Before text <tool_call><function=calculator><parameter=expression>2+2</tool_call> after text';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('calculator');
+    expect(result.toolCalls[0].arguments).toEqual({ expression: '2+2' });
+    expect(result.cleanText).toBe('Before text  after text');
+  });
 });
 
 // ===========================================================================
@@ -985,5 +1025,44 @@ describe('runToolLoop – token streaming', () => {
 
     expect(ctx.callbacks!.onFirstToken).toHaveBeenCalledTimes(1);
     expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ===========================================================================
+// wrapToolResultContent / stripToolResultWrapper
+// ===========================================================================
+
+describe('wrapToolResultContent', () => {
+  it('wraps content with tool name labels', () => {
+    const wrapped = wrapToolResultContent('web_search', 'Search results here');
+    expect(wrapped).toBe('[Tool Result: web_search]\nSearch results here\n[End Tool Result]');
+  });
+
+  it('wraps error content the same way', () => {
+    const wrapped = wrapToolResultContent('calculator', 'Error: division by zero');
+    expect(wrapped).toBe('[Tool Result: calculator]\nError: division by zero\n[End Tool Result]');
+  });
+});
+
+describe('stripToolResultWrapper', () => {
+  it('strips wrapper labels and returns inner content', () => {
+    const wrapped = '[Tool Result: web_search]\nSearch results here\n[End Tool Result]';
+    expect(stripToolResultWrapper(wrapped)).toBe('Search results here');
+  });
+
+  it('returns original content when no wrapper is present', () => {
+    const plain = 'Just plain content';
+    expect(stripToolResultWrapper(plain)).toBe('Just plain content');
+  });
+
+  it('handles multiline inner content', () => {
+    const wrapped = '[Tool Result: read_url]\nLine 1\nLine 2\nLine 3\n[End Tool Result]';
+    expect(stripToolResultWrapper(wrapped)).toBe('Line 1\nLine 2\nLine 3');
+  });
+
+  it('roundtrips with wrapToolResultContent', () => {
+    const original = 'Some tool output\nwith multiple lines';
+    const wrapped = wrapToolResultContent('my_tool', original);
+    expect(stripToolResultWrapper(wrapped)).toBe(original);
   });
 });
