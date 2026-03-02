@@ -194,7 +194,7 @@ class DownloadManagerModule: RCTEventEmitter {
       bytesDownloaded: info.bytesDownloaded,
       status: info.status,
       startedAt: info.startedAt,
-      taskIdentifier: info.task?.taskIdentifier ?? info.taskIdentifier,
+      taskIdentifier: info.taskIdentifier ?? info.task?.taskIdentifier,
       localUri: info.localUri,
       multiFileDestDir: info.multiFileDestDir,
       isMultiFile: info.isMultiFile,
