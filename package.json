@@ -16,7 +16,6 @@
     "test:e2e:single": "maestro test",
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest",
     "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
-    "test:count": "./scripts/test-count.sh",
     "postinstall": "patch-package"
   },
   "dependencies": {
