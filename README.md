@@ -133,10 +133,6 @@ npm run test:e2e      # Run Maestro E2E flows (requires running app)
 | [Codebase Guide](docs/standards/CODEBASE_GUIDE.md) | Comprehensive code walkthrough |
 | [Design System](docs/design/DESIGN_PHILOSOPHY_SYSTEM.md) | Brutalist design philosophy, theme system, tokens |
 | [Visual Hierarchy Standard](docs/design/VISUAL_HIERARCHY_STANDARD.md) | Visual hierarchy and layout standards |
-| [Test Flows](docs/test/TEST_FLOWS.md) | End-to-end test flows |
-| [Test Coverage Report](docs/test/TEST_COVERAGE_REPORT.md) | Current test coverage status |
-| [Test Priority Map](docs/test/TEST_PRIORITY_MAP.md) | Test prioritization guide |
-| [Test Spec Format](docs/test/TEST_SPEC_FORMAT.md) | Test specification format reference |
 
 ---
 
