@@ -612,7 +612,10 @@ final class DownloadManagerModuleTests: XCTestCase {
       multiFileDestDir: nil,
       isMultiFile: false
     )
-    module.downloads[100] = info
+    module.queue.async(flags: .barrier) {
+      self.module.downloads[100] = info
+    }
+    module.queue.sync {}
 
     let exp = expectation(description: "getActiveDownloads returns completed entry")
     module.getActiveDownloads(
@@ -657,7 +660,10 @@ final class DownloadManagerModuleTests: XCTestCase {
       multiFileDestDir: nil,
       isMultiFile: false
     )
-    module.downloads[200] = info
+    module.queue.async(flags: .barrier) {
+      self.module.downloads[200] = info
+    }
+    module.queue.sync {}
 
     let exp = expectation(description: "moveCompletedDownload moves file")
     module.moveCompletedDownload(
@@ -707,7 +713,10 @@ final class DownloadManagerModuleTests: XCTestCase {
       multiFileDestDir: nil,
       isMultiFile: false
     )
-    module.downloads[300] = info
+    module.queue.async(flags: .barrier) {
+      self.module.downloads[300] = info
+    }
+    module.queue.sync {}
 
     let exp = expectation(description: "moveCompletedDownload rejects not-completed download")
     module.moveCompletedDownload(
