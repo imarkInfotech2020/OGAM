@@ -5,7 +5,7 @@
  * Priority: P0 (Critical) - Device capability detection drives model selection.
  */
 
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
 
@@ -681,6 +681,42 @@ describe('HardwareService', () => {
         const soc = await hardwareService.getSoCInfo();
         expect(soc.vendor).toBe('unknown');
         expect(soc.hasNPU).toBe(false);
+      });
+    });
+
+    describe('getQnnVariantFromSoC range-based detection', () => {
+      const setupQualcommWithSoC = async (socModel: string) => {
+        Platform.OS = 'android' as typeof Platform.OS;
+        NativeModules.LocalDreamModule = { getSoCModel: jest.fn().mockResolvedValue(socModel) };
+        mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getModel.mockReturnValue('Test');
+        mockedDeviceInfo.getSystemName.mockReturnValue('Android');
+        mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+        mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+        mockedDeviceInfo.getHardware.mockResolvedValue('qcom');
+        await hardwareService.getDeviceInfo();
+      };
+
+      afterEach(() => {
+        Platform.OS = originalOS;
+        delete NativeModules.LocalDreamModule;
+      });
+
+      it.each([
+        ['SM8550-AB', '8gen2', 'Snapdragon 8 Gen 2'],
+        ['SM8650-AC', '8gen2', 'Snapdragon 8 Gen 3'],
+        ['SM8750-AB', '8gen2', 'Snapdragon 8 Elite'],
+        ['SM8845-AB', '8gen2', 'Snapdragon 8 Gen 5'],
+        ['SM9000-XX', '8gen2', 'future flagship'],
+        ['SM8450-AB', '8gen1', 'Snapdragon 8 Gen 1'],
+        ['SM8475-AB', '8gen1', 'Snapdragon 8+ Gen 1'],
+        ['SM8350-AC', 'min', 'SM8350 and below'],
+        ['SM7550-AB', 'min', 'SM7-series mid-range'],
+      ] as const)('returns %s variant for %s (%s)', async (socModel, expected, _desc) => {
+        await setupQualcommWithSoC(socModel);
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe(expected);
       });
     });
 

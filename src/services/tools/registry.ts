@@ -57,6 +57,21 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    id: 'read_url',
+    name: 'read_url',
+    displayName: 'URL Reader',
+    description: 'Fetch and read the content of a web page',
+    icon: 'link',
+    requiresNetwork: true,
+    parameters: {
+      url: {
+        type: 'string',
+        description: 'The URL to fetch and read',
+        required: true,
+      },
+    },
+  },
 ];
 
 export function getToolsAsOpenAISchema(enabledToolIds: string[]) {

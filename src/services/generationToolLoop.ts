@@ -52,6 +52,8 @@ export interface ToolLoopContext {
   callbacks?: ToolLoopCallbacks;
   isAborted: () => boolean;
   onThinkingDone: () => void;
+  onStream?: (token: string) => void;
+  onStreamReset?: () => void;
   onFinalResponse: (content: string) => void;
 }
 
@@ -111,13 +113,29 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
 
+  let firstTokenFired = false;
+  let streamedContent = '';
+
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
 
+    streamedContent = '';
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
     const { fullResponse, toolCalls } = await llmService.generateResponseWithTools(
       loopMessages,
-      { tools: toolSchemas },
+      {
+        tools: toolSchemas,
+        onStream: ctx.onStream ? (token: string) => {
+          if (ctx.isAborted()) return;
+          if (!firstTokenFired) {
+            firstTokenFired = true;
+            ctx.onThinkingDone();
+            ctx.callbacks?.onFirstToken?.();
+          }
+          streamedContent += token;
+          ctx.onStream!(token);
+        } : undefined,
+      },
     );
     logger.log(`[ToolLoop] Result: response=${fullResponse.length} chars, toolCalls=${toolCalls.length}`);
 
@@ -138,7 +156,8 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     totalToolCalls += cappedToolCalls.length;
 
     if (cappedToolCalls.length === 0 || iteration === MAX_TOOL_ITERATIONS - 1) {
-      if (displayResponse) {
+      // Final response — if we already streamed it, no need to push again
+      if (displayResponse && !streamedContent) {
         ctx.onThinkingDone();
         ctx.callbacks?.onFirstToken?.();
         ctx.onFinalResponse(displayResponse);
@@ -146,7 +165,12 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
       return;
     }
 
-    // Assistant made tool calls — add to context
+    // Assistant made tool calls — clear any streamed content and reset for next iteration
+    if (streamedContent) {
+      ctx.onStreamReset?.();
+      chatStore.setStreamingMessage('');
+    }
+
     const assistantMsg: Message = {
       id: `tool-assist-${Date.now()}-${iteration}`,
       role: 'assistant',

@@ -25,6 +25,14 @@ export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
       case 'get_device_info':
         content = await handleGetDeviceInfo(call.arguments.info_type);
         break;
+      case 'read_url': {
+        const url = call.arguments.url;
+        if (!url || typeof url !== 'string' || !url.trim()) {
+          return { toolCallId: call.id, name: call.name, content: '', error: 'Missing required parameter: url', durationMs: Date.now() - start };
+        }
+        content = await handleReadUrl(url.trim());
+        break;
+      }
       default:
         return {
           toolCallId: call.id,
@@ -302,6 +310,25 @@ async function handleGetDeviceInfo(infoType?: string): Promise<string> {
   }
 
   return parts.join('\n\n');
+}
+
+async function handleReadUrl(url: string): Promise<string> {
+  if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Accept': 'text/html, text/plain, */*',
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const text = stripHtmlTags(await response.text()).replace(/\s+/g, ' ').trim();
+    if (!text) return `The page at ${url} returned no readable content.`;
+    return text.length > 4000 ? `${text.slice(0, 4000)}\n\n[Content truncated]` : text;
+  } finally { clearTimeout(timeout); }
 }
 
 function formatBytes(bytes: number): string {
