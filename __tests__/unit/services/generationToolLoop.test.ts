@@ -17,11 +17,13 @@ import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 // ---------------------------------------------------------------------------
 
 const mockAddMessage = jest.fn();
+const mockSetStreamingMessage = jest.fn();
 
 jest.mock('../../../src/stores', () => ({
   useChatStore: {
     getState: () => ({
       addMessage: mockAddMessage,
+      setStreamingMessage: mockSetStreamingMessage,
     }),
   },
 }));
@@ -808,6 +810,10 @@ describe('runToolLoop – web search fallback query', () => {
     ]);
   });
 
+  beforeEach(() => {
+    mockSetStreamingMessage.mockClear();
+  });
+
   it('uses last user message as query when web_search is called with empty args', async () => {
     mockExecuteToolCall.mockResolvedValue({
       toolCallId: 'tc-empty',
@@ -834,5 +840,150 @@ describe('runToolLoop – web search fallback query', () => {
     expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
     const executedCall = mockExecuteToolCall.mock.calls[0][0];
     expect(executedCall.arguments.query).toBe('What is the weather in Tokyo?');
+  });
+});
+
+// ===========================================================================
+// Token streaming via onStream
+// ===========================================================================
+
+describe('runToolLoop – token streaming', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExecuteToolCall.mockReset();
+    mockedGenerateResponseWithTools.mockReset();
+    mockSetStreamingMessage.mockClear();
+    mockGetToolsAsOpenAISchema.mockReturnValue([
+      { type: 'function', function: { name: 'web_search' } },
+    ]);
+  });
+
+  function createStreamingContext(overrides: Partial<ToolLoopContext> = {}): ToolLoopContext {
+    return {
+      conversationId: 'conv-1',
+      messages: [makeMessage()],
+      enabledToolIds: ['web_search'],
+      isAborted: () => false,
+      onThinkingDone: jest.fn(),
+      onStream: jest.fn(),
+      onStreamReset: jest.fn(),
+      onFinalResponse: jest.fn(),
+      callbacks: { onFirstToken: jest.fn() },
+      ...overrides,
+    };
+  }
+
+  it('passes onStream through to generateResponseWithTools', async () => {
+    mockedGenerateResponseWithTools.mockResolvedValue({ fullResponse: 'Answer', toolCalls: [] });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    const callOptions = mockedGenerateResponseWithTools.mock.calls[0][1];
+    expect(callOptions.onStream).toBeDefined();
+    expect(typeof callOptions.onStream).toBe('function');
+  });
+
+  it('does not pass onStream when ctx.onStream is undefined', async () => {
+    mockedGenerateResponseWithTools.mockResolvedValue({ fullResponse: 'Answer', toolCalls: [] });
+
+    const ctx = createStreamingContext({ onStream: undefined });
+    await runToolLoop(ctx);
+
+    const callOptions = mockedGenerateResponseWithTools.mock.calls[0][1];
+    expect(callOptions.onStream).toBeUndefined();
+  });
+
+  it('streams tokens to ctx.onStream and fires onThinkingDone + onFirstToken on first token', async () => {
+    // Mock generateResponseWithTools to call onStream with tokens
+    mockedGenerateResponseWithTools.mockImplementation(async (_msgs: any, opts: any) => {
+      if (opts.onStream) {
+        opts.onStream('Hello');
+        opts.onStream(' world');
+      }
+      return { fullResponse: 'Hello world', toolCalls: [] };
+    });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    expect(ctx.onStream).toHaveBeenCalledTimes(2);
+    expect(ctx.onStream).toHaveBeenNthCalledWith(1, 'Hello');
+    expect(ctx.onStream).toHaveBeenNthCalledWith(2, ' world');
+    expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
+    expect(ctx.callbacks!.onFirstToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips onFinalResponse when content was already streamed', async () => {
+    mockedGenerateResponseWithTools.mockImplementation(async (_msgs: any, opts: any) => {
+      if (opts.onStream) opts.onStream('Streamed');
+      return { fullResponse: 'Streamed', toolCalls: [] };
+    });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    expect(ctx.onFinalResponse).not.toHaveBeenCalled();
+  });
+
+  it('calls onStreamReset and clears streaming message when tool calls follow streamed content', async () => {
+    mockExecuteToolCall.mockResolvedValue(makeToolResult());
+
+    mockedGenerateResponseWithTools
+      .mockImplementationOnce(async (_msgs: any, opts: any) => {
+        if (opts.onStream) opts.onStream('Searching...');
+        return { fullResponse: 'Searching...', toolCalls: [makeToolCall()] };
+      })
+      .mockResolvedValueOnce({ fullResponse: 'Done.', toolCalls: [] });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    expect(ctx.onStreamReset).toHaveBeenCalledTimes(1);
+    expect(mockSetStreamingMessage).toHaveBeenCalledWith('');
+  });
+
+  it('does not call onStreamReset when no content was streamed before tool calls', async () => {
+    mockExecuteToolCall.mockResolvedValue(makeToolResult());
+
+    mockedGenerateResponseWithTools
+      .mockResolvedValueOnce({ fullResponse: '', toolCalls: [makeToolCall()] })
+      .mockResolvedValueOnce({ fullResponse: 'Done.', toolCalls: [] });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    expect(ctx.onStreamReset).not.toHaveBeenCalled();
+    expect(mockSetStreamingMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not stream tokens when aborted', async () => {
+    mockedGenerateResponseWithTools.mockImplementation(async (_msgs: any, opts: any) => {
+      if (opts.onStream) opts.onStream('Should not appear');
+      return { fullResponse: 'Aborted', toolCalls: [] };
+    });
+
+    const ctx = createStreamingContext({ isAborted: () => true });
+    await runToolLoop(ctx);
+
+    // Loop exits before calling generateResponseWithTools due to abort check
+    expect(ctx.onStream).not.toHaveBeenCalled();
+  });
+
+  it('fires onFirstToken only once across multiple streaming tokens', async () => {
+    mockedGenerateResponseWithTools.mockImplementation(async (_msgs: any, opts: any) => {
+      if (opts.onStream) {
+        opts.onStream('A');
+        opts.onStream('B');
+        opts.onStream('C');
+      }
+      return { fullResponse: 'ABC', toolCalls: [] };
+    });
+
+    const ctx = createStreamingContext();
+    await runToolLoop(ctx);
+
+    expect(ctx.callbacks!.onFirstToken).toHaveBeenCalledTimes(1);
+    expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
   });
 });

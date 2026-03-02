@@ -5,7 +5,7 @@
  * Priority: P0 (Critical) - Device capability detection drives model selection.
  */
 
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import { hardwareService } from '../../../src/services/hardware';
 import DeviceInfo from 'react-native-device-info';
 
@@ -681,6 +681,80 @@ describe('HardwareService', () => {
         const soc = await hardwareService.getSoCInfo();
         expect(soc.vendor).toBe('unknown');
         expect(soc.hasNPU).toBe(false);
+      });
+    });
+
+    describe('getQnnVariantFromSoC range-based detection', () => {
+      const setupQualcommWithSoC = async (socModel: string) => {
+        Platform.OS = 'android' as typeof Platform.OS;
+        NativeModules.LocalDreamModule = { getSoCModel: jest.fn().mockResolvedValue(socModel) };
+        mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getModel.mockReturnValue('Test');
+        mockedDeviceInfo.getSystemName.mockReturnValue('Android');
+        mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+        mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+        mockedDeviceInfo.getHardware.mockResolvedValue('qcom');
+        await hardwareService.getDeviceInfo();
+      };
+
+      afterEach(() => {
+        Platform.OS = originalOS;
+        delete NativeModules.LocalDreamModule;
+      });
+
+      it('returns 8gen2 for SM8550 (Snapdragon 8 Gen 2)', async () => {
+        await setupQualcommWithSoC('SM8550-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('returns 8gen2 for SM8650 (Snapdragon 8 Gen 3)', async () => {
+        await setupQualcommWithSoC('SM8650-AC');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('returns 8gen2 for SM8750 (Snapdragon 8 Elite)', async () => {
+        await setupQualcommWithSoC('SM8750-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('returns 8gen2 for SM8845 (Snapdragon 8 Gen 5)', async () => {
+        await setupQualcommWithSoC('SM8845-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('returns 8gen2 for future SM9000+ SoCs', async () => {
+        await setupQualcommWithSoC('SM9000-XX');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen2');
+      });
+
+      it('returns 8gen1 for SM8450 (Snapdragon 8 Gen 1)', async () => {
+        await setupQualcommWithSoC('SM8450-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen1');
+      });
+
+      it('returns 8gen1 for SM8475 (Snapdragon 8+ Gen 1)', async () => {
+        await setupQualcommWithSoC('SM8475-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('8gen1');
+      });
+
+      it('returns min for SM8350 and below', async () => {
+        await setupQualcommWithSoC('SM8350-AC');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('min');
+      });
+
+      it('returns min for SM7-series mid-range SoCs', async () => {
+        await setupQualcommWithSoC('SM7550-AB');
+        const soc = await hardwareService.getSoCInfo();
+        expect(soc.qnnVariant).toBe('min');
       });
     });
 

@@ -1,7 +1,9 @@
 import { Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 
-const { LocalDreamModule } = NativeModules;
+// Access NativeModules.LocalDreamModule dynamically (not destructured)
+// so it can be mocked in tests after module import.
+const getLocalDreamModule = () => NativeModules.LocalDreamModule;
 import { DeviceInfo as DeviceInfoType, ModelRecommendation, SoCInfo, SoCVendor, ImageModelRecommendation } from '../types';
 import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
 
@@ -243,13 +245,18 @@ class HardwareService {
   private async getQnnVariantFromSoC(): Promise<'8gen2' | '8gen1' | 'min'> {
     let socModel = '';
     try {
-      if (LocalDreamModule?.getSoCModel) socModel = await LocalDreamModule.getSoCModel();
+      const localDream = getLocalDreamModule();
+      if (localDream?.getSoCModel) socModel = await localDream.getSoCModel();
     } catch { /* fall through to RAM heuristic */ }
     if (socModel) {
       const base = socModel.split('-')[0].toUpperCase();
-      // SM8550/8650/8750 = 8Gen2/8Gen3/8Elite; SM8450/8475 = 8Gen1/8+Gen1
-      if (['SM8550', 'SM8650', 'SM8750', 'SM8845'].includes(base)) return '8gen2';
-      if (['SM8450', 'SM8475'].includes(base)) return '8gen1';
+      const smMatch = base.match(/^SM(\d+)$/);
+      if (smMatch) {
+        const num = parseInt(smMatch[1], 10);
+        if (num >= 8550) return '8gen2';
+        if (num >= 8450) return '8gen1';
+        return 'min';
+      }
       return 'min';
     }
     return this.getTotalMemoryGB() >= 12 ? '8gen1' : 'min';

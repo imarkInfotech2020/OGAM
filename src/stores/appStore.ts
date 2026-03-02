@@ -113,7 +113,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
-  enabledTools: ['calculator', 'get_current_datetime'],
+  enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url'],
 };
 
 export const useAppStore = create<AppState>()(
