@@ -314,7 +314,9 @@ async function handleGetDeviceInfo(infoType?: string): Promise<string> {
 
 async function handleReadUrl(rawUrl: string): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
-  const url = rawUrl.replace(/^["'<\s]+|["'>\s]+$/g, '');
+  let url = rawUrl.trim();
+  while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
+  while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
   logger.log(`[Tools] read_url fetching: "${url}" (raw: "${rawUrl}")`);
   const controller = new AbortController();

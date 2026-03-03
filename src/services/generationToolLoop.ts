@@ -13,6 +13,7 @@ import logger from '../utils/logger';
 
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
+let toolCallIdCounter = 0;
 
 /**
  * Parse the XML-like tool call format that some models emit:
@@ -35,7 +36,7 @@ function parseXmlStyleToolCall(body: string): ToolCall | null {
   }
 
   return {
-    id: `text-tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `text-tc-${Date.now()}-${++toolCallIdCounter}`,
     name,
     arguments: args,
   };

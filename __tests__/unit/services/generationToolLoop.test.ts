@@ -745,62 +745,43 @@ describe('parseToolCallsFromText', () => {
   });
 
   // XML-like format: <tool_call><function=NAME><parameter=KEY>VALUE</tool_call>
-  it('parses XML-like format with function and parameter tags (closed)', () => {
-    const text = '<tool_call><function=web_search><parameter=query>Off Grid Mobile AI</tool_call>';
+  it.each([
+    {
+      desc: 'closed tag with single param',
+      text: '<tool_call><function=web_search><parameter=query>Off Grid Mobile AI</tool_call>',
+      name: 'web_search', args: { query: 'Off Grid Mobile AI' }, clean: '',
+    },
+    {
+      desc: 'unclosed tag (EOS)',
+      text: 'Let me search for that.\n<tool_call>\n<function=web_search>\n<parameter=query>\nOff Grid Mobile AI',
+      name: 'web_search', args: { query: 'Off Grid Mobile AI' }, clean: 'Let me search for that.',
+    },
+    {
+      desc: 'single parameter (read_url)',
+      text: '<tool_call><function=read_url><parameter=url>https://example.com</tool_call>',
+      name: 'read_url', args: { url: 'https://example.com' },
+    },
+    {
+      desc: 'multiple parameters',
+      text: '<tool_call><function=calculator><parameter=expression>2+2<parameter=format>decimal</tool_call>',
+      name: 'calculator', args: { expression: '2+2', format: 'decimal' },
+    },
+    {
+      desc: 'strips closing XML tags from values',
+      text: '<tool_call><function=read_url><parameter=url>https://www.wednesday.is\n</parameter>\n</function></tool_call>',
+      name: 'read_url', args: { url: 'https://www.wednesday.is' },
+    },
+    {
+      desc: 'cleans surrounding text',
+      text: 'Before text <tool_call><function=calculator><parameter=expression>2+2</tool_call> after text',
+      name: 'calculator', args: { expression: '2+2' }, clean: 'Before text  after text',
+    },
+  ])('parses XML-like format: $desc', ({ text, name, args, clean }) => {
     const result = parseToolCallsFromText(text);
-
     expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('web_search');
-    expect(result.toolCalls[0].arguments).toEqual({ query: 'Off Grid Mobile AI' });
-    expect(result.cleanText).toBe('');
-  });
-
-  it('parses XML-like format without closing tag (EOS)', () => {
-    const text = 'Let me search for that.\n<tool_call>\n<function=web_search>\n<parameter=query>\nOff Grid Mobile AI';
-    const result = parseToolCallsFromText(text);
-
-    expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('web_search');
-    expect(result.toolCalls[0].arguments).toEqual({ query: 'Off Grid Mobile AI' });
-    expect(result.cleanText).toBe('Let me search for that.');
-  });
-
-  it('parses XML-like format with single parameter', () => {
-    const text = '<tool_call><function=read_url><parameter=url>https://example.com</tool_call>';
-    const result = parseToolCallsFromText(text);
-
-    expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('read_url');
-    expect(result.toolCalls[0].arguments).toEqual({ url: 'https://example.com' });
-  });
-
-  it('parses XML-like format with multiple parameters', () => {
-    const text = '<tool_call><function=calculator><parameter=expression>2+2<parameter=format>decimal</tool_call>';
-    const result = parseToolCallsFromText(text);
-
-    expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('calculator');
-    expect(result.toolCalls[0].arguments).toEqual({ expression: '2+2', format: 'decimal' });
-  });
-
-  it('strips closing XML tags from parameter values', () => {
-    // Models sometimes emit </parameter></function> closing tags
-    const text = '<tool_call><function=read_url><parameter=url>https://www.wednesday.is\n</parameter>\n</function></tool_call>';
-    const result = parseToolCallsFromText(text);
-
-    expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('read_url');
-    expect(result.toolCalls[0].arguments).toEqual({ url: 'https://www.wednesday.is' });
-  });
-
-  it('cleans text around XML-like tool calls', () => {
-    const text = 'Before text <tool_call><function=calculator><parameter=expression>2+2</tool_call> after text';
-    const result = parseToolCallsFromText(text);
-
-    expect(result.toolCalls).toHaveLength(1);
-    expect(result.toolCalls[0].name).toBe('calculator');
-    expect(result.toolCalls[0].arguments).toEqual({ expression: '2+2' });
-    expect(result.cleanText).toBe('Before text  after text');
+    expect(result.toolCalls[0].name).toBe(name);
+    expect(result.toolCalls[0].arguments).toEqual(args);
+    if (clean !== undefined) expect(result.cleanText).toBe(clean);
   });
 });
 
