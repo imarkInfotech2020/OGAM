@@ -312,15 +312,18 @@ async function handleGetDeviceInfo(infoType?: string): Promise<string> {
   return parts.join('\n\n');
 }
 
-async function handleReadUrl(url: string): Promise<string> {
+async function handleReadUrl(rawUrl: string): Promise<string> {
+  // Strip surrounding quotes/angle brackets that models sometimes emit
+  const url = rawUrl.replace(/^["'<\s]+|["'>\s]+$/g, '');
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
+  logger.log(`[Tools] read_url fetching: ${url}`);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         'Accept': 'text/html, text/plain, */*',
       },
     });

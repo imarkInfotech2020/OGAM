@@ -115,6 +115,25 @@ describe('read_url handler', () => {
     expect(result.content).toContain('no readable content');
   });
 
+  it('strips surrounding quotes and angle brackets from URL', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      text: async () => '<p>Content</p>',
+    });
+
+    const result = await executeToolCall({
+      id: 'call_9',
+      name: 'read_url',
+      arguments: { url: '"https://example.com"' },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://example.com',
+      expect.any(Object),
+    );
+  });
+
   it('includes durationMs in result', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
