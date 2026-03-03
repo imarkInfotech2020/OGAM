@@ -243,20 +243,10 @@ function handleCalculator(expression: string): string {
 function handleGetDatetime(timezone?: string): string {
   const now = new Date();
   const options: Intl.DateTimeFormatOptions = {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'long',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
+    ...(timezone ? { timeZone: timezone } : {}),
   };
-
-  if (timezone) {
-    options.timeZone = timezone;
-  }
-
   try {
     const formatted = new Intl.DateTimeFormat('en-US', options).format(now);
     const isoString = now.toISOString();
@@ -312,12 +302,22 @@ async function handleGetDeviceInfo(infoType?: string): Promise<string> {
   return parts.join('\n\n');
 }
 
+/** Block SSRF: reject private/loopback/link-local/cloud-metadata URLs. */
+function isPrivateUrl(url: string): boolean {
+  const m = url.match(/^https?:\/\/([^/:]+)/i);
+  if (!m) return false;
+  const h = m[1].toLowerCase();
+  return h === 'localhost' || h === '[::1]' || h === 'metadata.google.internal'
+    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
+}
+
 async function handleReadUrl(rawUrl: string): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
   let url = rawUrl.trim();
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
   while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
+  if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
   logger.log(`[Tools] read_url fetching: "${url}" (raw: "${rawUrl}")`);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);

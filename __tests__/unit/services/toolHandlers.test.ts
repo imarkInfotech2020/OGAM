@@ -134,6 +134,20 @@ describe('read_url handler', () => {
     );
   });
 
+  it.each([
+    'http://localhost/admin',
+    'http://127.0.0.1:8080/secret',
+    'http://10.0.0.1/internal',
+    'http://192.168.1.1/router',
+    'http://169.254.169.254/latest/meta-data',
+  ])('blocks private/loopback URL: %s', async (privateUrl) => {
+    const result = await executeToolCall({
+      id: 'call_ssrf', name: 'read_url', arguments: { url: privateUrl },
+    });
+    expect(result.error).toContain('Blocked');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('includes durationMs in result', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

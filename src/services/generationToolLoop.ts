@@ -13,7 +13,6 @@ import logger from '../utils/logger';
 
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
-let toolCallIdCounter = 0;
 
 /**
  * Parse the XML-like tool call format that some models emit:
@@ -21,7 +20,7 @@ let toolCallIdCounter = 0;
  * or without a closing tag (model hits EOS):
  *   <tool_call><function=NAME><parameter=KEY>VALUE
  */
-function parseXmlStyleToolCall(body: string): ToolCall | null {
+function parseXmlStyleToolCall(body: string, idSuffix: number): ToolCall | null {
   const funcMatch = body.match(/<function=(\w+)>/);
   if (!funcMatch) return null;
 
@@ -36,7 +35,7 @@ function parseXmlStyleToolCall(body: string): ToolCall | null {
   }
 
   return {
-    id: `text-tc-${Date.now()}-${++toolCallIdCounter}`,
+    id: `text-tc-${Date.now()}-${idSuffix}`,
     name,
     arguments: args,
   };
@@ -56,7 +55,7 @@ function parseToolCallBody(body: string, idSuffix: number): ToolCall | null {
   } catch {
     // Not JSON — fall through to XML
   }
-  return parseXmlStyleToolCall(body);
+  return parseXmlStyleToolCall(body, idSuffix);
 }
 
 /**
