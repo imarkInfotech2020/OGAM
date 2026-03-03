@@ -122,13 +122,13 @@ ARCHIVE_PATH="$ARCHIVE_DIR/OffgridMobile-v${NEW_VERSION}.xcarchive"
 mkdir -p "$ARCHIVE_DIR"
 
 xcodebuild archive \
-  -project ios/OffgridMobile.xcodeproj \
+  -workspace ios/OffgridMobile.xcworkspace \
   -scheme OffgridMobile \
   -configuration Release \
   -archivePath "$ARCHIVE_PATH" \
   -destination "generic/platform=iOS" \
-  CODE_SIGN_IDENTITY=- \
-  AD_HOC_CODE_SIGNING_ALLOWED=YES
+  CODE_SIGN_STYLE=Automatic \
+  -allowProvisioningUpdates
 
 [ -d "$ARCHIVE_PATH" ] || error "iOS archive not found at $ARCHIVE_PATH"
 info "iOS archive ready: $ARCHIVE_PATH"
