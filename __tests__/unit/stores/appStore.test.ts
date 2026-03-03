@@ -316,7 +316,8 @@ describe('appStore', () => {
       expect(settings.topP).toBe(0.9);
       expect(settings.contextLength).toBe(2048);
       expect(settings.imageGenerationMode).toBe('auto');
-      expect(settings.enableGpu).toBe(false);
+      // Test env is iOS, so GPU is enabled by default
+      expect(settings.enableGpu).toBe(true);
     });
 
     it('updateSettings merges partial settings', () => {
@@ -1161,11 +1162,11 @@ describe('appStore', () => {
     });
 
     it('has correct default nThreads', () => {
-      expect(getAppState().settings.nThreads).toBe(6);
+      expect(getAppState().settings.nThreads).toBe(4);
     });
 
     it('has correct default nBatch', () => {
-      expect(getAppState().settings.nBatch).toBe(256);
+      expect(getAppState().settings.nBatch).toBe(512);
     });
 
     it('has correct default autoDetectMethod', () => {
@@ -1194,8 +1195,8 @@ describe('appStore', () => {
       expect(getAppState().settings.modelLoadingStrategy).toBe('performance');
     });
 
-    it('has gpuLayers set to 6 by default', () => {
-      expect(getAppState().settings.gpuLayers).toBe(6);
+    it('has gpuLayers set to 99 by default', () => {
+      expect(getAppState().settings.gpuLayers).toBe(99);
     });
 
     it('has flashAttn enabled by default on iOS (test env platform)', () => {

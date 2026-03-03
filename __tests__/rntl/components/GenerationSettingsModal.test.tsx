@@ -81,10 +81,10 @@ const defaultSettings = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 2048,
-  nThreads: 6,
-  nBatch: 256,
+  nThreads: 4,
+  nBatch: 512,
   enableGpu: false,
-  gpuLayers: 6,
+  gpuLayers: 99,
   flashAttn: false,
   modelLoadingStrategy: 'memory',
   showGenerationDetails: false,
@@ -237,8 +237,8 @@ describe('GenerationSettingsModal', () => {
       topP: 0.9,
       repeatPenalty: 1.1,
       contextLength: 2048,
-      nThreads: 6,
-      nBatch: 256,
+      nThreads: 4,
+      nBatch: 512,
     });
   });
 
@@ -595,7 +595,7 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('1.0K')).toBeTruthy(); // maxTokens: 1024
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
-    expect(getByText('2.0K')).toBeTruthy(); // contextLength: 2048
+    expect(getByText('2K')).toBeTruthy(); // contextLength: 2048
   });
 
   it('shows description for text settings', () => {

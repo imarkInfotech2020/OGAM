@@ -12,8 +12,10 @@ export const CONTEXT_SAFETY_MARGIN = 0.85;
 import { Platform } from 'react-native';
 import logger from '../utils/logger';
 
-const DEFAULT_THREADS = Platform.OS === 'android' ? 6 : 4;
-const DEFAULT_BATCH = 256;
+// Use 4 threads by default to target only performance cores.
+// Over-threading onto efficiency cores (A520) slows down inference.
+const DEFAULT_THREADS = 4;
+const DEFAULT_BATCH = 512;
 export const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
 
 export function getOptimalThreadCount(): number {
@@ -22,6 +24,19 @@ export function getOptimalThreadCount(): number {
 
 export function getOptimalBatchSize(): number {
   return DEFAULT_BATCH;
+}
+
+const REPACKABLE_QUANTS = ['q4_0', 'iq4_nl'];
+
+/**
+ * Detect if a model uses repackable quantization formats.
+ * For these formats, disabling mmap allows llama.cpp to repack weights into
+ * a more efficient layout at load time, improving inference speed.
+ */
+export function shouldDisableMmap(modelPath: string): boolean {
+  if (Platform.OS !== 'android') return false;
+  const lower = modelPath.toLowerCase();
+  return REPACKABLE_QUANTS.some(q => lower.includes(q));
 }
 
 export function hashString(str: string): string {
@@ -71,10 +86,11 @@ export function buildModelParams(
   const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
   const needsF16 = !useFlashAttn || (Platform.OS === 'android' && nGpuLayers > 0);
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
+  const useMmap = !shouldDisableMmap(modelPath);
   return {
     baseParams: {
-      model: modelPath, use_mlock: false, n_batch: nBatch, n_threads: nThreads,
-      use_mmap: true, vocab_only: false, flash_attn: useFlashAttn,
+      model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
+      use_mmap: useMmap, vocab_only: false, flash_attn: useFlashAttn,
       cache_type_k: cacheType, cache_type_v: cacheType,
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
@@ -135,19 +151,29 @@ export function captureGpuInfo(
   return { gpuEnabled, gpuReason, gpuDevices, activeGpuLayers };
 }
 
-export async function logContextMetadata(context: LlamaContext, contextLength: number): Promise<void> {
+/**
+ * Reads the model's trained context length from metadata.
+ * Returns the max context the model supports, or null if unavailable.
+ */
+export function getModelMaxContext(context: LlamaContext): number | null {
   try {
     const metadata = (context as any).model?.metadata;
-    if (!metadata) return;
+    if (!metadata) return null;
     const trainCtx = metadata['llama.context_length'] || metadata['general.context_length'] || metadata.context_length;
-    if (!trainCtx) return;
+    if (!trainCtx) return null;
     const maxModelCtx = parseInt(trainCtx, 10);
-    logger.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
-    if (contextLength > maxModelCtx) {
-      logger.warn(`[LLM] Requested context (${contextLength}) exceeds model max (${maxModelCtx})`);
-    }
+    return isNaN(maxModelCtx) || maxModelCtx <= 0 ? null : maxModelCtx;
   } catch {
-    // Metadata reading is best-effort
+    return null;
+  }
+}
+
+export function logContextMetadata(context: LlamaContext, contextLength: number): void {
+  const maxModelCtx = getModelMaxContext(context);
+  if (maxModelCtx == null) return;
+  logger.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
+  if (contextLength > maxModelCtx) {
+    logger.warn(`[LLM] Requested context (${contextLength}) exceeds model max (${maxModelCtx})`);
   }
 }
 
@@ -244,6 +270,7 @@ export function buildCompletionParams(settings: {
     top_p: settings.topP ?? 0.95,
     penalty_repeat: settings.repeatPenalty ?? 1.1,
     stop: STOP_TOKENS,
+    ctx_shift: true,
   };
 }
 

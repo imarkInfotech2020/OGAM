@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, GeneratedImage, PersistedDownloadInfo } from '../types';
 
@@ -44,6 +45,8 @@ interface AppState {
   setActiveModelId: (modelId: string | null) => void;
   isLoadingModel: boolean;
   setIsLoadingModel: (loading: boolean) => void;
+  modelMaxContext: number | null;
+  setModelMaxContext: (ctx: number | null) => void;
   downloadProgress: Record<string, DownloadProgressInfo>;
   setDownloadProgress: (modelId: string, progress: DownloadProgressInfo | null) => void;
   activeBackgroundDownloads: Record<number, PersistedDownloadInfo>;
@@ -96,8 +99,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 2048,
-  nThreads: 6,
-  nBatch: 256,
+  nThreads: 4,
+  nBatch: 512,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
@@ -108,8 +111,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageHeight: 512,
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
-  enableGpu: false,
-  gpuLayers: 1,
+  enableGpu: Platform.OS === 'ios',
+  gpuLayers: 99,
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
@@ -149,6 +152,8 @@ export const useAppStore = create<AppState>()(
       setActiveModelId: (modelId) => set({ activeModelId: modelId }),
       isLoadingModel: false,
       setIsLoadingModel: (loading) => set({ isLoadingModel: loading }),
+      modelMaxContext: null,
+      setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
       downloadProgress: {},
       setDownloadProgress: (modelId, progress) =>
         set((state) => {
