@@ -40,6 +40,23 @@ function parseXmlStyleToolCall(body: string): ToolCall | null {
   };
 }
 
+/** Try to parse a tool call body as JSON then XML. Returns null if neither works. */
+function parseToolCallBody(body: string, idSuffix: number): ToolCall | null {
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed.name) {
+      return {
+        id: `text-tc-${Date.now()}-${idSuffix}`,
+        name: parsed.name,
+        arguments: parsed.arguments || parsed.parameters || {},
+      };
+    }
+  } catch {
+    // Not JSON — fall through to XML
+  }
+  return parseXmlStyleToolCall(body);
+}
+
 /**
  * Parse tool calls from text output (fallback for small models that emit
  * <tool_call> tags as text instead of using the structured tool calling format).
@@ -59,28 +76,11 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
 
   while ((match = closedPattern.exec(text)) !== null) {
     matchedRanges.push([match.index, match.index + match[0].length]);
-    const body = match[1].trim();
-
-    // Try JSON first
-    try {
-      const parsed = JSON.parse(body);
-      if (parsed.name) {
-        toolCalls.push({
-          id: `text-tc-${Date.now()}-${toolCalls.length}`,
-          name: parsed.name,
-          arguments: parsed.arguments || parsed.parameters || {},
-        });
-        continue;
-      }
-    } catch {
-      // Not JSON — try XML-like format
-    }
-
-    const xmlCall = parseXmlStyleToolCall(body);
-    if (xmlCall) {
-      toolCalls.push(xmlCall);
+    const call = parseToolCallBody(match[1].trim(), toolCalls.length);
+    if (call) {
+      toolCalls.push(call);
     } else {
-      logger.log(`[ToolLoop] Failed to parse tool_call tag: ${body.substring(0, 100)}`);
+      logger.log(`[ToolLoop] Failed to parse tool_call tag: ${match[1].trim().substring(0, 100)}`);
     }
   }
 
@@ -91,23 +91,8 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
     const unclosedStart = text.lastIndexOf(unclosedMatch[0]);
     const alreadyMatched = matchedRanges.some(([s, e]) => unclosedStart >= s && unclosedStart < e);
     if (!alreadyMatched) {
-      const body = unclosedMatch[1].trim();
-      // Try JSON first
-      try {
-        const parsed = JSON.parse(body);
-        if (parsed.name) {
-          toolCalls.push({
-            id: `text-tc-${Date.now()}-${toolCalls.length}`,
-            name: parsed.name,
-            arguments: parsed.arguments || parsed.parameters || {},
-          });
-        }
-      } catch {
-        const xmlCall = parseXmlStyleToolCall(body);
-        if (xmlCall) {
-          toolCalls.push(xmlCall);
-        }
-      }
+      const call = parseToolCallBody(unclosedMatch[1].trim(), toolCalls.length);
+      if (call) toolCalls.push(call);
       matchedRanges.push([unclosedStart, text.length]);
     }
   }
