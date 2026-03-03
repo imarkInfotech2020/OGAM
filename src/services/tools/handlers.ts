@@ -316,7 +316,7 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
   // Strip surrounding quotes/angle brackets that models sometimes emit
   const url = rawUrl.replace(/^["'<\s]+|["'>\s]+$/g, '');
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
-  logger.log(`[Tools] read_url fetching: ${url}`);
+  logger.log(`[Tools] read_url fetching: "${url}" (raw: "${rawUrl}")`);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
@@ -327,10 +327,14 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
         'Accept': 'text/html, text/plain, */*',
       },
     });
+    logger.log(`[Tools] read_url response: status=${response.status}, ok=${response.ok}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     const text = stripHtmlTags(await response.text()).replace(/\s+/g, ' ').trim();
     if (!text) return `The page at ${url} returned no readable content.`;
     return text.length > 4000 ? `${text.slice(0, 4000)}\n\n[Content truncated]` : text;
+  } catch (e: any) {
+    logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`, e?.stack || '');
+    throw e;
   } finally { clearTimeout(timeout); }
 }
 
