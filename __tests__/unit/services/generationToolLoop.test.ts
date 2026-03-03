@@ -765,13 +765,22 @@ describe('parseToolCallsFromText', () => {
     expect(result.cleanText).toBe('Let me search for that.');
   });
 
-  it('parses XML-like format with multiple parameters', () => {
+  it('parses XML-like format with single parameter', () => {
     const text = '<tool_call><function=read_url><parameter=url>https://example.com</tool_call>';
     const result = parseToolCallsFromText(text);
 
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0].name).toBe('read_url');
     expect(result.toolCalls[0].arguments).toEqual({ url: 'https://example.com' });
+  });
+
+  it('parses XML-like format with multiple parameters', () => {
+    const text = '<tool_call><function=calculator><parameter=expression>2+2<parameter=format>decimal</tool_call>';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('calculator');
+    expect(result.toolCalls[0].arguments).toEqual({ expression: '2+2', format: 'decimal' });
   });
 
   it('strips closing XML tags from parameter values', () => {

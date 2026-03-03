@@ -822,13 +822,12 @@ On-device function calling for compatible models.
 **Tool Loop (`generationToolLoop.ts`):**
 - Orchestrates multi-turn tool execution: LLM → parse → execute → inject → repeat
 - Hard limits: 3 iterations, 5 total tool calls
-- `wrapToolResultContent()` / `stripToolResultWrapper()` — Wraps tool results with `[Tool Result: name]...[End Tool Result]` labels so models that mishandle `role: "tool"` still see context
 - Supports structured tool calls AND fallback text parsing for smaller models:
   - JSON format: `<tool_call>{"name":"web_search","arguments":{"query":"test"}}</tool_call>`
   - XML-like format: `<tool_call><function=web_search><parameter=query>test</tool_call>`
   - Unclosed tags: handles models that hit EOS without emitting `</tool_call>`
 - Empty web search queries fall back to last user message
-- **Retry with backoff** (`callLLMWithRetry`): Up to 4 retries with 1000ms exponential backoff for transient native context errors ("Context is busy", "already in progress", etc.). Non-retryable errors ("No model loaded", "aborted") fail immediately.
+- **Retry with backoff** (`callLLMWithRetry`): Up to 4 retries with linear backoff (1s, 2s, 3s, …) for transient native context errors ("Context is busy", "already in progress", etc.). Non-retryable errors ("No model loaded", "aborted") fail immediately.
 - **Context release pause** (500ms): Delay after tool execution before next LLM call, allowing native context to fully release
 
 **LLM Tool Generation (`llmToolGeneration.ts`):**

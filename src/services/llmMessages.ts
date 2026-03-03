@@ -44,7 +44,8 @@ export function extractImageUris(messages: Message[]): string[] {
  * (C++ wants arguments as string, Jinja wants dict — can't satisfy both).
  */
 function formatToolCallAsText(tc: { name: string; arguments: string }): string {
-  return `<tool_call>{"name":"${tc.name}","arguments":${tc.arguments}}</tool_call>`;
+  const escapedName = JSON.stringify(tc.name);
+  return `<tool_call>{"name":${escapedName},"arguments":${tc.arguments}}</tool_call>`;
 }
 
 export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
