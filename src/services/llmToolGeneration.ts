@@ -24,7 +24,6 @@ function parseToolCall(tc: any): ToolCall {
 export interface ToolGenerationDeps {
   context: any;
   isGenerating: boolean;
-  isThinkingModel: boolean;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
   convertToOAIMessages: (messages: Message[]) => any[];
   setPerformanceStats: (stats: any) => void;
@@ -54,7 +53,6 @@ export async function generateWithToolsImpl(
     let tokenCount = 0;
     let fullResponse = '';
     let firstReceived = false;
-    let injectedThinkTag = false;
     const collectedToolCalls: ToolCall[] = [];
 
     const completionParams = {
@@ -73,13 +71,6 @@ export async function generateWithToolsImpl(
       }
       if (!data.token) return;
       if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
-      // For thinking models whose Jinja template consumes <think>,
-      // inject it before the first token so ThinkingBlock renders immediately
-      if (deps.isThinkingModel && !injectedThinkTag) {
-        injectedThinkTag = true;
-        fullResponse += '<think>';
-        options.onStream?.('<think>');
-      }
       tokenCount++;
       fullResponse += data.token;
       options.onStream?.(data.token);

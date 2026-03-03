@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
-import { llmService } from '../llm';
 import logger from '../../utils/logger';
 
 export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
@@ -328,10 +327,7 @@ async function handleReadUrl(url: string): Promise<string> {
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     const text = stripHtmlTags(await response.text()).replace(/\s+/g, ' ').trim();
     if (!text) return `The page at ${url} returned no readable content.`;
-    // Use 80% of context window for content (~4 chars per token)
-    const ctxLen = llmService.getPerformanceSettings().contextLength || 2048;
-    const maxChars = Math.floor(ctxLen * 0.8 * 4);
-    return text.length > maxChars ? `${text.slice(0, maxChars)}\n\n[Content truncated — showing ${maxChars} of ${text.length} chars]` : text;
+    return text.length > 4000 ? `${text.slice(0, 4000)}\n\n[Content truncated]` : text;
   } finally { clearTimeout(timeout); }
 }
 

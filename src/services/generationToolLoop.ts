@@ -13,17 +13,6 @@ import logger from '../utils/logger';
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
 
-/** Wrap tool result content with labels so models that mishandle `role: "tool"` still see context. */
-export function wrapToolResultContent(toolName: string, content: string): string {
-  return `[Tool Result: ${toolName}]\n${content}\n[End Tool Result]`;
-}
-
-/** Strip tool result wrapper labels for clean display in the UI. */
-export function stripToolResultWrapper(content: string): string {
-  const match = content.match(/^\[Tool Result: [^\]]+\]\n([\s\S]*)\n\[End Tool Result\]$/);
-  return match ? match[1] : content;
-}
-
 /**
  * Parse the XML-like tool call format that some models emit:
  *   <tool_call><function=NAME><parameter=KEY>VALUE<parameter=KEY2>VALUE2</tool_call>
@@ -183,11 +172,10 @@ async function executeToolCalls(
     const result = await executeToolCall(tc);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
 
-    const rawContent = result.error ? `Error: ${result.error}` : result.content;
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`,
       role: 'tool',
-      content: wrapToolResultContent(tc.name, rawContent),
+      content: result.error ? `Error: ${result.error}` : result.content,
       timestamp: Date.now(),
       toolCallId: tc.id,
       toolName: tc.name,
@@ -199,11 +187,12 @@ async function executeToolCalls(
 }
 
 const MAX_LLM_RETRIES = 4;
-const RETRY_BACKOFF_MS = 800;
-const CONTEXT_RELEASE_PAUSE_MS = 300;
+const RETRY_BACKOFF_MS = 1000;
+const CONTEXT_RELEASE_PAUSE_MS = 500;
 
-function isRetryableError(msg: string): boolean {
-  return msg.includes('Context is busy') || msg.includes('already in progress') || msg.includes('HostFunction');
+/** Non-retryable errors that should fail immediately. */
+function isNonRetryableError(msg: string): boolean {
+  return msg.includes('No model loaded') || msg.includes('aborted');
 }
 
 /** Call LLM with retry+backoff for transient native context errors. */
@@ -212,21 +201,28 @@ async function callLLMWithRetry(
   tools: any[],
   onStream?: (token: string) => void,
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  let lastError: any;
   for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt++) {
     try {
       return await llmService.generateResponseWithTools(messages, { tools, onStream });
     } catch (e: any) {
-      const msg = e?.message || '';
-      if (isRetryableError(msg) && attempt < MAX_LLM_RETRIES - 1) {
-        const delayMs = (attempt + 1) * RETRY_BACKOFF_MS;
-        logger.log(`[ToolLoop] Retryable error: "${msg.substring(0, 80)}", retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_LLM_RETRIES})`);
-        await new Promise<void>(resolve => setTimeout(resolve, delayMs));
-        continue;
+      lastError = e;
+      const msg = e?.message || String(e) || '';
+      // Fail fast on errors that won't resolve with a retry
+      if (isNonRetryableError(msg) || attempt >= MAX_LLM_RETRIES - 1) {
+        break;
       }
-      throw e;
+      // Force-stop native context and reset isGenerating before retrying —
+      // the native context may be stuck in a busy state after an error
+      logger.log(`[ToolLoop] Error: "${msg.substring(0, 120) || '(no message)'}", stopping context and retrying (attempt ${attempt + 1}/${MAX_LLM_RETRIES})`);
+      await llmService.stopGeneration().catch(() => {});
+      const delayMs = (attempt + 1) * RETRY_BACKOFF_MS;
+      await new Promise<void>(resolve => setTimeout(resolve, delayMs));
     }
   }
-  throw new Error('Unexpected: retry loop exited without result');
+  // Preserve a meaningful error message for the UI
+  const errMsg = lastError?.message || String(lastError) || 'Unknown LLM error after tool execution';
+  throw new Error(errMsg);
 }
 
 /** If no structured tool calls, try parsing <tool_call> tags from text. */
@@ -253,15 +249,27 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   let totalToolCalls = 0;
   let firstTokenFired = false;
   let streamedContent = '';
+  const isThinkingModel = llmService.supportsThinking();
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
     streamedContent = '';
+    let thinkInjected = false;
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
 
     const onStream = ctx.onStream ? (token: string) => {
       if (ctx.isAborted()) return;
       if (!firstTokenFired) { firstTokenFired = true; ctx.onThinkingDone(); ctx.callbacks?.onFirstToken?.(); }
+      // For thinking models on the first iteration only, inject <think> into the
+      // stream (not fullResponse) so the UI shows ThinkingBlock immediately.
+      // Skip on follow-ups — the model may respond directly without thinking.
+      if (isThinkingModel && iteration === 0 && !thinkInjected) {
+        thinkInjected = true;
+        if (!token.startsWith('<think>')) {
+          streamedContent += '<think>';
+          ctx.onStream!('<think>');
+        }
+      }
       streamedContent += token;
       ctx.onStream!(token);
     } : undefined;
@@ -293,6 +301,9 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     chatStore.addMessage(ctx.conversationId, assistantMsg);
 
     await executeToolCalls(ctx, cappedToolCalls, loopMessages);
+
+    // Show "Thinking..." indicator while waiting for the next LLM response
+    chatStore.setIsThinking(true);
     await new Promise<void>(resolve => setTimeout(resolve, CONTEXT_RELEASE_PAUSE_MS));
 
     if (totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {

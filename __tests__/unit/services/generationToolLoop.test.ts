@@ -6,7 +6,7 @@
  * Priority: P0 (Critical) - Core tool-calling functionality.
  */
 
-import { runToolLoop, ToolLoopContext, parseToolCallsFromText, wrapToolResultContent, stripToolResultWrapper } from '../../../src/services/generationToolLoop';
+import { runToolLoop, ToolLoopContext, parseToolCallsFromText } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
 import { Message } from '../../../src/types';
 import { createMessage } from '../../utils/factories';
@@ -18,12 +18,14 @@ import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 
 const mockAddMessage = jest.fn();
 const mockSetStreamingMessage = jest.fn();
+const mockSetIsThinking = jest.fn();
 
 jest.mock('../../../src/stores', () => ({
   useChatStore: {
     getState: () => ({
       addMessage: mockAddMessage,
       setStreamingMessage: mockSetStreamingMessage,
+      setIsThinking: mockSetIsThinking,
     }),
   },
 }));
@@ -31,6 +33,8 @@ jest.mock('../../../src/stores', () => ({
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
     generateResponseWithTools: jest.fn(),
+    supportsThinking: jest.fn(() => false),
+    stopGeneration: jest.fn(),
   },
 }));
 
@@ -217,10 +221,10 @@ describe('runToolLoop', () => {
       expect(assistantMsg.toolCalls[0].name).toBe('web_search');
       expect(assistantMsg.toolCalls[0].arguments).toBe(JSON.stringify({ query: 'test' }));
 
-      // Second: tool result message (content is wrapped with tool result labels)
+      // Second: tool result message
       const toolMsg = mockAddMessage.mock.calls[1][1];
       expect(toolMsg.role).toBe('tool');
-      expect(toolMsg.content).toBe(wrapToolResultContent('web_search', 'Search results here'));
+      expect(toolMsg.content).toBe('Search results here');
       expect(toolMsg.toolCallId).toBe('tc-1');
       expect(toolMsg.toolName).toBe('web_search');
       expect(toolMsg.generationTimeMs).toBe(120);
@@ -244,9 +248,9 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      // Tool result message should contain the error (wrapped with tool result labels)
+      // Tool result message should contain the error
       const toolMsg = mockAddMessage.mock.calls[1][1];
-      expect(toolMsg.content).toBe(wrapToolResultContent('web_search', 'Error: Network timeout'));
+      expect(toolMsg.content).toBe('Error: Network timeout');
     });
 
     it('executes multiple tool calls in a single iteration', async () => {
@@ -1028,41 +1032,3 @@ describe('runToolLoop – token streaming', () => {
   });
 });
 
-// ===========================================================================
-// wrapToolResultContent / stripToolResultWrapper
-// ===========================================================================
-
-describe('wrapToolResultContent', () => {
-  it('wraps content with tool name labels', () => {
-    const wrapped = wrapToolResultContent('web_search', 'Search results here');
-    expect(wrapped).toBe('[Tool Result: web_search]\nSearch results here\n[End Tool Result]');
-  });
-
-  it('wraps error content the same way', () => {
-    const wrapped = wrapToolResultContent('calculator', 'Error: division by zero');
-    expect(wrapped).toBe('[Tool Result: calculator]\nError: division by zero\n[End Tool Result]');
-  });
-});
-
-describe('stripToolResultWrapper', () => {
-  it('strips wrapper labels and returns inner content', () => {
-    const wrapped = '[Tool Result: web_search]\nSearch results here\n[End Tool Result]';
-    expect(stripToolResultWrapper(wrapped)).toBe('Search results here');
-  });
-
-  it('returns original content when no wrapper is present', () => {
-    const plain = 'Just plain content';
-    expect(stripToolResultWrapper(plain)).toBe('Just plain content');
-  });
-
-  it('handles multiline inner content', () => {
-    const wrapped = '[Tool Result: read_url]\nLine 1\nLine 2\nLine 3\n[End Tool Result]';
-    expect(stripToolResultWrapper(wrapped)).toBe('Line 1\nLine 2\nLine 3');
-  });
-
-  it('roundtrips with wrapToolResultContent', () => {
-    const original = 'Some tool output\nwith multiple lines';
-    const wrapped = wrapToolResultContent('my_tool', original);
-    expect(stripToolResultWrapper(wrapped)).toBe(original);
-  });
-});

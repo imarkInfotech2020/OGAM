@@ -53,9 +53,8 @@ describe('read_url handler', () => {
     expect(result.error).toContain('Missing required parameter: url');
   });
 
-  it('truncates content exceeding 80% of context window', async () => {
-    // Default context is 2048 tokens → maxChars = 2048 * 0.8 * 4 = 6553
-    const longContent = 'A'.repeat(10000);
+  it('truncates content exceeding 4000 characters', async () => {
+    const longContent = 'A'.repeat(5000);
     mockFetch.mockResolvedValue({
       ok: true,
       text: async () => longContent,
@@ -68,8 +67,8 @@ describe('read_url handler', () => {
     });
 
     expect(result.error).toBeUndefined();
-    expect(result.content).toContain('[Content truncated');
-    expect(result.content!.length).toBeLessThan(10000);
+    expect(result.content).toContain('[Content truncated]');
+    expect(result.content!.length).toBeLessThan(5000);
   });
 
   it('handles HTTP error responses', async () => {

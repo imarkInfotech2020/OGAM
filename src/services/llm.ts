@@ -143,7 +143,6 @@ class LLMService {
     try {
       const model = (this.context as any)?.model;
       const metadata = model?.metadata || {};
-      // GGUF models store the chat template in tokenizer.chat_template metadata
       const template = metadata['tokenizer.chat_template'] || '';
       this.thinkingSupported = typeof template === 'string' && template.includes('<think>');
       logger.log('[LLM] Thinking supported:', this.thinkingSupported);
@@ -198,11 +197,12 @@ class LLMService {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
         // For thinking models whose Jinja template consumes <think>,
-        // inject it before the first token so ThinkingBlock renders immediately
+        // inject into stream only (for UI) — keep fullResponse clean
         if (isThinkingModel && !injectedThinkTag) {
           injectedThinkTag = true;
-          fullResponse += '<think>';
-          onStream?.('<think>');
+          if (!data.token.startsWith('<think>')) {
+            onStream?.('<think>');
+          }
         }
         tokenCount++;
         fullResponse += data.token;
@@ -223,7 +223,7 @@ class LLMService {
     options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback },
   ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
     return generateWithToolsImpl({
-      context: this.context, isGenerating: this.isGenerating, isThinkingModel: this.thinkingSupported,
+      context: this.context, isGenerating: this.isGenerating,
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
       setPerformanceStats: (s) => { this.performanceStats = s; },
@@ -244,8 +244,8 @@ class LLMService {
     const truncated = conv.length - fitted.length;
     if (truncated > 0) {
       result.push({
-        id: 'context-note', role: 'system', timestamp: 0,
-        content: `[Note: ${truncated} earlier message(s) in this conversation have been summarized to fit context. Continue naturally from the recent messages below.]`,
+        id: 'context-note', role: 'user', timestamp: 0,
+        content: `[Note: ${truncated} earlier message(s) were trimmed to fit context. Continue naturally from the recent messages.]`,
       });
     }
     result.push(...fitted);

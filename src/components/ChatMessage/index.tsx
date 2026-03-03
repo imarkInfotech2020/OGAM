@@ -8,7 +8,6 @@ import {
 import { useTheme, useThemedStyles } from '../../theme';
 import Icon from 'react-native-vector-icons/Feather';
 import { stripControlTokens } from '../../utils/messageContent';
-import { stripToolResultWrapper } from '../../services/generationToolLoop';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { AnimatedEntry } from '../AnimatedEntry';
 import { triggerHaptic } from '../../utils/haptics';
@@ -102,12 +101,11 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
 };
 
 const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => {
-  const strippedContent = stripToolResultWrapper(message.content);
   const toolIcon = getToolIcon(message.toolName);
-  const toolLabel = getToolLabel(message.toolName, strippedContent);
+  const toolLabel = getToolLabel(message.toolName, message.content);
   const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
-  const hasDetails = !!(strippedContent && strippedContent.length > 0 && !strippedContent.startsWith('No results'));
-  return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} toolName={message.toolName || 'unknown'} durationLabel={durationLabel} content={strippedContent} hasDetails={hasDetails} styles={styles} colors={colors} />;
+  const hasDetails = !!(message.content && message.content.length > 0 && !message.content.startsWith('No results'));
+  return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} toolName={message.toolName || 'unknown'} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
 };
 
 const ToolCallMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => (

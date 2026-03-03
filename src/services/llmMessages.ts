@@ -38,31 +38,35 @@ export function extractImageUris(messages: Message[]): string[] {
   return uris;
 }
 
+/**
+ * Format a tool call as plain text for the assistant message.
+ * Avoids structured tool_calls which cause Jinja template errors
+ * (C++ wants arguments as string, Jinja wants dict — can't satisfy both).
+ */
+function formatToolCallAsText(tc: { name: string; arguments: string }): string {
+  return `<tool_call>{"name":"${tc.name}","arguments":${tc.arguments}}</tool_call>`;
+}
+
 export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
   return messages.filter(m => !m.isSystemInfo).map(message => {
-    // Handle tool result messages
+    // Flatten tool result messages into user messages —
+    // avoids role:"tool" which some Jinja templates don't handle
     if (message.role === 'tool') {
+      const label = message.toolName || 'tool';
       return {
-        role: 'tool' as any,
-        content: message.content,
-        tool_call_id: message.toolCallId || '',
-      } as any;
+        role: 'user' as const,
+        content: `[Tool Result: ${label}]\n${message.content}\n[End Tool Result]`,
+      };
     }
 
-    // Handle assistant messages with tool calls
+    // Flatten assistant tool calls into plain text —
+    // structured tool_calls in history cause Jinja/C++ conflicts
     if (message.role === 'assistant' && message.toolCalls?.length) {
-      return {
-        role: 'assistant',
-        content: message.content || '',
-        tool_calls: message.toolCalls.map(tc => ({
-          id: tc.id || '',
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: tc.arguments,
-          },
-        })),
-      } as any;
+      const toolCallText = message.toolCalls.map(formatToolCallAsText).join('\n');
+      const content = message.content
+        ? `${message.content}\n${toolCallText}`
+        : toolCallText;
+      return { role: 'assistant' as const, content };
     }
 
     const imageAttachments = message.attachments?.filter(a => a.type === 'image') || [];

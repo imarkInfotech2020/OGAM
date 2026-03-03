@@ -27,7 +27,6 @@ function createMockDeps(overrides: Partial<ToolGenerationDeps> = {}): ToolGenera
       completion: jest.fn(async (_params: any, _cb?: any) => ({})),
     },
     isGenerating: false,
-    isThinkingModel: false,
     manageContextWindow: jest.fn(async (msgs: Message[]) => msgs),
     convertToOAIMessages: jest.fn((msgs: Message[]) =>
       msgs.map(m => ({ role: m.role, content: m.content })),
