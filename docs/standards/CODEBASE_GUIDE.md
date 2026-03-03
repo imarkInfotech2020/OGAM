@@ -30,7 +30,7 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 
 **Core capabilities:**
 - Text chat with streaming LLM inference (llama.cpp via `llama.rn`)
-- Tool calling with automatic tool loop (web search, calculator, date/time, device info)
+- Tool calling with automatic tool loop (web search, URL reader, calculator, date/time, device info)
 - Image generation with Stable Diffusion (MNN/QNN backends via LocalDream)
 - Voice input via Whisper speech-to-text (whisper.cpp via `whisper.rn`)
 - Vision model support (multimodal LLMs with image understanding)
@@ -76,6 +76,15 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 | Document Viewer | `@react-native-documents/viewer` |
 | Zip Extraction | `react-native-zip-archive` |
 | Icons | `react-native-vector-icons` (Feather) |
+| Animations | `react-native-reanimated`, `lottie-react-native`, `moti` |
+| Lists | `@shopify/flash-list` |
+| Gradients | `react-native-linear-gradient` |
+| Blur | `@react-native-community/blur` |
+| Haptics | `react-native-haptic-feedback` |
+| Gestures | `react-native-gesture-handler` |
+| SVG | `react-native-svg` |
+| Sliders | `@react-native-community/slider` |
+| Onboarding | `react-native-spotlight-tour` |
 
 ### Key Design Patterns
 - **Lifecycle-independent services** — Text and image generation continue running even when the user navigates away from the chat screen. Services use a subscriber/observer pattern so any screen can re-attach.
@@ -115,7 +124,7 @@ OffgridMobile/
 │   │   ├── ChatMessage/                 # Single message bubble (streaming, images, metadata)
 │   │   │   ├── index.tsx                # Main ChatMessage component
 │   │   │   ├── components/
-│   │   │   │   ├── ActionMenuSheet.tsx  # Long-press action menu
+│   │   │   │   ├── ActionMenuSheet.tsx  # Long-press action menu + EditSheet for inline message editing
 │   │   │   │   ├── BlinkingCursor.tsx   # Streaming cursor animation
 │   │   │   │   ├── GenerationMeta.tsx   # Generation metadata display
 │   │   │   │   ├── MessageAttachments.tsx # Image/document attachment rendering
@@ -286,12 +295,12 @@ OffgridMobile/
 │   │   ├── backgroundDownloadService.ts # DownloadManager bridge (Android + iOS)
 │   │   ├── documentService.ts          # Document text extraction
 │   │   ├── pdfExtractor.ts             # Native PDF text extraction
-│   │   ├── generationToolLoop.ts       # Multi-turn tool loop orchestration (max 3 iterations)
+│   │   ├── generationToolLoop.ts       # Multi-turn tool loop orchestration (max 3 iterations, retry with backoff)
 │   │   ├── llmToolGeneration.ts        # Tool-aware LLM generation with schema injection
 │   │   └── tools/                      # Tool calling subsystem
 │   │       ├── index.ts                # Public exports
 │   │       ├── registry.ts             # Tool definitions, OpenAI schema conversion
-│   │       ├── handlers.ts             # Tool execution (web search, calculator, datetime, device info)
+│   │       ├── handlers.ts             # Tool execution (web search, URL reader, calculator, datetime, device info)
 │   │       └── types.ts                # ToolDefinition, ToolCall, ToolResult types
 │   │
 │   ├── hooks/
@@ -338,11 +347,11 @@ OffgridMobile/
 │
 ├── ios/                                 # iOS native code
 │   ├── CoreMLDiffusionModule.swift      # Core ML image generation (root level)
-│   ├── CoreMLDiffusionModule.m          # ObjC bridge
+│   ├── CoreMLDiffusionModule.m          # ObjC bridge (root level)
 │   ├── DownloadManagerModule.swift      # iOS download manager (root level)
-│   ├── DownloadManagerModule.m          # ObjC bridge
+│   ├── DownloadManagerModule.m          # ObjC bridge (root level)
 │   ├── PDFExtractorModule.swift         # Native PDF text extraction (root level)
-│   ├── PDFExtractorModule.m             # ObjC bridge
+│   ├── PDFExtractorModule.m             # ObjC bridge (root level)
 │   └── OffgridMobile/
 │       ├── AppDelegate.swift            # Application delegate
 │       ├── OffgridMobile-Bridging-Header.h # Swift/ObjC bridging header
@@ -351,7 +360,8 @@ OffgridMobile/
 │       ├── Download/
 │       │   └── DownloadManagerModule.m  # ObjC bridge (subdirectory)
 │       └── PDFExtractor/
-│           └── PDFExtractorModule.m     # ObjC bridge (subdirectory)
+│           ├── PDFExtractorModule.m     # ObjC bridge (subdirectory)
+│           └── PDFExtractorModule.swift # Swift implementation (subdirectory)
 │
 ├── __tests__/                           # Test suites (~108 test files)
 │   ├── unit/                            # Store & service unit tests
@@ -498,7 +508,7 @@ All stores use `zustand/middleware` `persist` with AsyncStorage. Only serializab
 | **Settings** | `systemPrompt`, `temperature`, `maxTokens`, `topP`, `repeatPenalty`, `contextLength`, `nThreads`, `nBatch`, `useGPU`, `nGPULayers`, `modelLoadingStrategy`, `flashAttention`, `kvCacheType` | All persisted |
 | **Image Settings** | `imageSteps`, `imageGuidanceScale`, `imageWidth`, `imageHeight`, `imageThreads` | All persisted |
 | **Intent** | `imageGenerationMode`, `autoDetectMethod`, `classifierModelId` | Persisted |
-| **Tools** | `enabledTools[]` | User-selected tool IDs (default: `['calculator', 'get_current_datetime']`). Persisted |
+| **Tools** | `enabledTools[]` | User-selected tool IDs (default: all 5 tools enabled — `['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url']`). Persisted |
 | **UI** | `showGenerationDetails` | Persisted |
 | **Gallery** | `generatedImages[]` | Full metadata array, persisted |
 
@@ -574,12 +584,15 @@ Conversation
 └── projectId?
 
 Message
-├── id, role ('user' | 'assistant' | 'system')
+├── id, role ('user' | 'assistant' | 'system' | 'tool')
 ├── content, timestamp
 ├── isStreaming?, isThinking?, isSystemInfo?
 ├── attachments?: MediaAttachment[]
 ├── generationTimeMs?
-└── generationMeta?: GenerationMeta
+├── generationMeta?: GenerationMeta
+├── toolCallId? (for tool result messages)
+├── toolCalls?: Array<{ id?, name, arguments }> (for assistant tool call messages)
+└── toolName? (for tool result messages)
 
 MediaAttachment
 ├── id, type ('image' | 'document'), uri
@@ -589,7 +602,7 @@ MediaAttachment
 
 GenerationMeta
 ├── gpu, gpuBackend?, gpuLayers?
-├── kvCacheType?, flashAttention?
+├── cacheType? (KV cache quantization type, e.g. 'f16', 'q8_0', 'q4_0')
 ├── modelName?
 ├── tokensPerSecond?, decodeTokensPerSecond?
 ├── timeToFirstToken?, tokenCount?
@@ -616,6 +629,29 @@ Project
 | `ModelLoadingStrategy` | `'performance' \| 'memory'` | Settings: keep loaded vs load-on-demand |
 | `ImageModeState` | `'auto' \| 'force'` | Chat input toggle |
 | `BackgroundDownloadStatus` | `'pending' \| 'running' \| 'paused' \| 'completed' \| 'failed' \| 'unknown'` | Download manager |
+| `SoCVendor` | `'qualcomm' \| 'mediatek' \| 'exynos' \| 'tensor' \| 'apple' \| 'unknown'` | SoC detection |
+| `CacheType` | `'f16' \| 'q8_0' \| 'q4_0'` | KV cache quantization |
+
+### Additional Interfaces
+
+```
+SoCInfo                      # System-on-Chip detection
+├── vendor: SoCVendor
+├── hasNPU: boolean
+├── qnnVariant?: '8gen2' | '8gen1' | 'min'
+└── appleChip?: 'A14' | 'A15' | 'A16' | 'A17Pro' | 'A18'
+
+ImageModelRecommendation     # Per-device image model recommendation
+├── recommendedBackend: 'qnn' | 'mnn' | 'coreml' | 'all'
+├── qnnVariant?, recommendedModels?
+├── bannerText, warning?
+└── compatibleBackends: Array<'mnn' | 'qnn' | 'coreml'>
+
+PersistedDownloadInfo        # Persisted download state for restore after app kill
+├── modelId, fileName, quantization, author, totalBytes
+├── mainFileSize?, mmProjFileName?, mmProjFileSize?
+└── imageModel* fields (for image model download restore)
+```
 
 ---
 
@@ -772,7 +808,7 @@ Bridge to native download managers on both platforms. This is now the **only** d
 On-device function calling for compatible models.
 
 **Tool Registry (`tools/registry.ts`):**
-- Defines 4 built-in tools: `web_search`, `calculator`, `get_current_datetime`, `get_device_info`
+- Defines **5 built-in tools**: `web_search`, `calculator`, `get_current_datetime`, `get_device_info`, `read_url`
 - Converts tool definitions to OpenAI function calling schema for llama.cpp
 - Generates system prompt hints listing available tools
 
@@ -781,17 +817,26 @@ On-device function calling for compatible models.
 - `calculator` — Recursive descent parser (no `eval()`), supports `+, -, *, /, %, ^, ()`
 - `get_current_datetime` — Formatted date/time with optional timezone
 - `get_device_info` — Battery, storage, memory via `react-native-device-info`
+- `read_url` — Fetches and reads web page content, strips HTML, truncates to 80% of context window
 
 **Tool Loop (`generationToolLoop.ts`):**
 - Orchestrates multi-turn tool execution: LLM → parse → execute → inject → repeat
 - Hard limits: 3 iterations, 5 total tool calls
-- Supports structured tool calls AND fallback XML tag parsing for smaller models
+- `wrapToolResultContent()` / `stripToolResultWrapper()` — Wraps tool results with `[Tool Result: name]...[End Tool Result]` labels so models that mishandle `role: "tool"` still see context
+- Supports structured tool calls AND fallback text parsing for smaller models:
+  - JSON format: `<tool_call>{"name":"web_search","arguments":{"query":"test"}}</tool_call>`
+  - XML-like format: `<tool_call><function=web_search><parameter=query>test</tool_call>`
+  - Unclosed tags: handles models that hit EOS without emitting `</tool_call>`
 - Empty web search queries fall back to last user message
+- **Retry with backoff** (`callLLMWithRetry`): Up to 4 retries with 1000ms exponential backoff for transient native context errors ("Context is busy", "already in progress", etc.). Non-retryable errors ("No model loaded", "aborted") fail immediately.
+- **Context release pause** (500ms): Delay after tool execution before next LLM call, allowing native context to fully release
 
 **LLM Tool Generation (`llmToolGeneration.ts`):**
 - Reserves ~100 tokens per tool in context window for schema injection
 - Passes tool schemas via `tool_choice: 'auto'` to llama.rn
-- Prefers completion result tool calls over streaming (more complete)
+- Prefers `completionResult.tool_calls` over streamed tool calls — streaming may deliver partial tool calls (name only, no arguments) while the final result contains complete data
+- **`completionResult.text` fallback**: If streaming produced no tokens but the completion result has a `.text` field (can happen with thinking models), uses that as the response
+- **Thinking model support**: For models with `<think>` Jinja templates, injects `<think>` tag into stream for UI display while keeping `fullResponse` clean for tool call parsing
 
 ---
 
