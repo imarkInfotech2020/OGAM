@@ -9,8 +9,9 @@ import {
   initMultimodal, checkContextMultimodal,
   recordGenerationStats,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
-  buildCompletionParams, createThinkInjector,
+  buildCompletionParams, createThinkInjector, getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
 } from './llmHelpers';
+import { hardwareService } from './hardware';
 import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
@@ -91,23 +92,25 @@ class LLMService {
     }
   }
 
-  /**
-   * Load context and auto-scale to model's trained context length when the user
-   * hasn't set a custom value. Capped at 8192 to avoid OOM on mobile devices.
-   */
+  /** Auto-scale context and cap GPU layers based on device RAM to prevent abort() on low-RAM devices. */
   private async initWithAutoContext(
     params: { baseParams: object; ctxLen: number; nGpuLayers: number },
   ): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
-    const initial = await initContextWithFallback(params.baseParams, params.ctxLen, params.nGpuLayers);
+    const deviceInfo = await hardwareService.getDeviceInfo();
+    const safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
+    if (safeGpuLayers !== params.nGpuLayers) {
+      logger.log(`[LLM] Low RAM (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB), GPU layers ${params.nGpuLayers} → ${safeGpuLayers}`);
+    }
+    const initial = await initContextWithFallback(params.baseParams, params.ctxLen, safeGpuLayers);
     const modelMax = getModelMaxContext(initial.context);
     const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
-    if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) {
-      return initial;
-    }
-    const targetCtx = Math.min(modelMax, 4096);
-    logger.log(`[LLM] Model supports ${modelMax} context, scaling up from ${initial.actualLength} to ${targetCtx}`);
+    if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) return initial;
+    const deviceMaxCtx = getMaxContextForDevice(deviceInfo.totalMemory);
+    const targetCtx = Math.min(modelMax, 4096, deviceMaxCtx);
+    if (targetCtx <= initial.actualLength) return initial;
+    logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
     await initial.context.release();
-    return initContextWithFallback(params.baseParams, targetCtx, params.nGpuLayers);
+    return initContextWithFallback(params.baseParams, targetCtx, safeGpuLayers);
   }
 
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
@@ -122,8 +125,9 @@ class LLMService {
     } catch (statErr) {
       console.error('[LLM] Failed to stat mmproj file:', statErr);
     }
-    const deviceInfo = useAppStore.getState().deviceInfo;
-    const useGpuForClip = Platform.OS === 'ios' && !deviceInfo?.isEmulator;
+    const devInfo = useAppStore.getState().deviceInfo;
+    const mem = devInfo?.totalMemory ?? 0;
+    const useGpuForClip = Platform.OS === 'ios' && !devInfo?.isEmulator && mem > 4 * BYTES_PER_GB;
     logger.log('[LLM] Calling initMultimodal, use_gpu:', useGpuForClip);
     const { initialized, support } = await initMultimodal(this.context, mmProjPath, useGpuForClip);
     this.multimodalInitialized = initialized;
@@ -259,16 +263,12 @@ class LLMService {
   }
 
   async stopGeneration(): Promise<void> {
-    if (this.context) {
-      try { await this.context.stopCompletion(); }
-      catch (e) { logger.log('[LLM] Stop completion error (may be already stopped):', e); }
-    }
+    if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
   }
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
-    try { await (this.context as any).clearCache(clearData); logger.log('[LLM] KV cache cleared'); }
-    catch (e) { logger.log('[LLM] Failed to clear KV cache:', e); }
+    try { await (this.context as any).clearCache(clearData); } catch (e) { logger.log('[LLM] Clear cache error:', e); }
   }
   getEstimatedMemoryUsage(): { contextMemoryMB: number; totalEstimatedMB: number } {
     if (!this.context) return { contextMemoryMB: 0, totalEstimatedMB: 0 };
@@ -310,15 +310,15 @@ class LLMService {
 
   async getContextDebugInfo(messages: Message[]) {
     const managed = await this.manageContextWindow(messages);
-    const formatted = this.formatMessages(managed);
-    let estimatedTokens = 0;
-    try { if (this.context) estimatedTokens = (await this.context.tokenize(formatted)).tokens?.length || 0; }
-    catch { estimatedTokens = Math.ceil(formatted.length / 4); }
-    const sysCount = (msgs: Message[]) => msgs.filter(m => m.role === 'system').length;
-    const truncated = (messages.length - sysCount(messages)) - (managed.length - sysCount(managed));
-    const ctxLen = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
-    return { originalMessageCount: messages.length, managedMessageCount: managed.length, truncatedCount: truncated,
-      formattedPrompt: formatted, estimatedTokens, maxContextLength: ctxLen, contextUsagePercent: (estimatedTokens / ctxLen) * 100 };
+    const fmt = this.formatMessages(managed);
+    let tokens = 0;
+    try { if (this.context) tokens = (await this.context.tokenize(fmt)).tokens?.length || 0; }
+    catch { tokens = Math.ceil(fmt.length / 4); }
+    const sys = (m: Message[]) => m.filter(x => x.role === 'system').length;
+    const ctx = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
+    return { originalMessageCount: messages.length, managedMessageCount: managed.length,
+      truncatedCount: (messages.length - sys(messages)) - (managed.length - sys(managed)),
+      formattedPrompt: fmt, estimatedTokens: tokens, maxContextLength: ctx, contextUsagePercent: (tokens / ctx) * 100 };
   }
   updatePerformanceSettings(settings: Partial<LLMPerformanceSettings>): void {
     this.currentSettings = { ...this.currentSettings, ...settings };
