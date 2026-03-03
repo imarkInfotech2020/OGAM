@@ -10,7 +10,7 @@ import {
   initMultimodal, checkContextMultimodal,
   estimateTokens, fitMessagesInBudget, recordGenerationStats,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
-  buildCompletionParams,
+  buildCompletionParams, createThinkInjector,
 } from './llmHelpers';
 import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
@@ -188,25 +188,17 @@ class LLMService {
       let tokenCount = 0;
       let fullResponse = '';
       let firstReceived = false;
-      const isThinkingModel = this.thinkingSupported;
-      let injectedThinkTag = false;
+      const thinkStream = this.thinkingSupported && onStream
+        ? createThinkInjector(t => onStream(t)) : null;
       await this.context.completion({
         messages: oaiMessages,
         ...buildCompletionParams(settings),
       }, (data) => {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
-        // For thinking models whose Jinja template consumes <think>,
-        // inject into stream only (for UI) — keep fullResponse clean
-        if (isThinkingModel && !injectedThinkTag) {
-          injectedThinkTag = true;
-          if (!data.token.startsWith('<think>')) {
-            onStream?.('<think>');
-          }
-        }
         tokenCount++;
         fullResponse += data.token;
-        onStream?.(data.token);
+        if (thinkStream) { thinkStream(data.token); } else { onStream?.(data.token); }
       });
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       this.isGenerating = false;

@@ -8,6 +8,7 @@ import { useChatStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
+import { createThinkInjector } from './llmHelpers';
 import logger from '../utils/logger';
 
 const MAX_TOOL_ITERATIONS = 3;
@@ -239,24 +240,16 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
     streamedContent = '';
-    let thinkInjected = false;
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
+
+    // For thinking models on iteration 0, wrap stream with <think> injector
+    const thinkStream = isThinkingModel && iteration === 0 && ctx.onStream
+      ? createThinkInjector(t => { streamedContent += t; ctx.onStream!(t); }) : null;
 
     const onStream = ctx.onStream ? (token: string) => {
       if (ctx.isAborted()) return;
       if (!firstTokenFired) { firstTokenFired = true; ctx.onThinkingDone(); ctx.callbacks?.onFirstToken?.(); }
-      // For thinking models on the first iteration only, inject <think> into the
-      // stream (not fullResponse) so the UI shows ThinkingBlock immediately.
-      // Skip on follow-ups — the model may respond directly without thinking.
-      if (isThinkingModel && iteration === 0 && !thinkInjected) {
-        thinkInjected = true;
-        if (!token.startsWith('<think>')) {
-          streamedContent += '<think>';
-          ctx.onStream!('<think>');
-        }
-      }
-      streamedContent += token;
-      ctx.onStream!(token);
+      if (thinkStream) { thinkStream(token); } else { streamedContent += token; ctx.onStream!(token); }
     } : undefined;
 
     const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, onStream);
