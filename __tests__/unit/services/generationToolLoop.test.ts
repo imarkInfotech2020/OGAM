@@ -774,6 +774,16 @@ describe('parseToolCallsFromText', () => {
     expect(result.toolCalls[0].arguments).toEqual({ url: 'https://example.com' });
   });
 
+  it('strips closing XML tags from parameter values', () => {
+    // Models sometimes emit </parameter></function> closing tags
+    const text = '<tool_call><function=read_url><parameter=url>https://www.wednesday.is\n</parameter>\n</function></tool_call>';
+    const result = parseToolCallsFromText(text);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('read_url');
+    expect(result.toolCalls[0].arguments).toEqual({ url: 'https://www.wednesday.is' });
+  });
+
   it('cleans text around XML-like tool calls', () => {
     const text = 'Before text <tool_call><function=calculator><parameter=expression>2+2</tool_call> after text';
     const result = parseToolCallsFromText(text);

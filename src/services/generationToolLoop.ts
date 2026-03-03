@@ -26,8 +26,8 @@ function parseXmlStyleToolCall(body: string): ToolCall | null {
   const name = funcMatch[1];
   const args: Record<string, any> = {};
 
-  // Extract all <parameter=KEY>VALUE pairs
-  const paramPattern = /<parameter=(\w+)>([\s\S]*?)(?=<parameter=|$)/g;
+  // Extract all <parameter=KEY>VALUE pairs, stopping at next param, closing tags, or end
+  const paramPattern = /<parameter=(\w+)>([\s\S]*?)(?=<parameter=|<\/|$)/g;
   let pm;
   while ((pm = paramPattern.exec(body)) !== null) {
     args[pm[1]] = pm[2].trim();
