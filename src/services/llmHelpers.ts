@@ -247,6 +247,26 @@ export function buildCompletionParams(settings: {
   };
 }
 
+/**
+ * Creates a one-shot injector that prepends `<think>` into the stream
+ * for thinking models whose Jinja template consumes the tag.
+ * Returns a wrapper: call it with each token; it injects once then passes through.
+ */
+export function createThinkInjector(
+  emit: (token: string) => void,
+): (token: string) => void {
+  let injected = false;
+  return (token: string) => {
+    if (!injected) {
+      injected = true;
+      if (!token.startsWith('<think>')) {
+        emit('<think>');
+      }
+    }
+    emit(token);
+  };
+}
+
 export function recordGenerationStats(
   startTime: number,
   firstTokenMs: number,

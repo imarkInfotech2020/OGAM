@@ -204,12 +204,13 @@ describe('buildOAIMessages', () => {
     expect(imageUrlPart.image_url.url).toBe('file:///data/user/0/com.localllm/cache/photo.jpg');
   });
 
-  it('formats tool result messages correctly', () => {
+  it('flattens tool result messages into user messages with labels', () => {
     const messages: Message[] = [
       createMessage({
         role: 'tool',
         content: '{"result": 42}',
         toolCallId: 'call_123',
+        toolName: 'calculator',
       }),
     ];
 
@@ -218,14 +219,13 @@ describe('buildOAIMessages', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(
       expect.objectContaining({
-        role: 'tool',
-        content: '{"result": 42}',
-        tool_call_id: 'call_123',
+        role: 'user',
+        content: '[Tool Result: calculator]\n{"result": 42}\n[End Tool Result]',
       }),
     );
   });
 
-  it('formats assistant messages with tool calls correctly', () => {
+  it('flattens assistant tool calls into plain text content', () => {
     const messages: Message[] = [
       createMessage({
         role: 'assistant',
@@ -240,16 +240,11 @@ describe('buildOAIMessages', () => {
     expect(result[0]).toEqual(
       expect.objectContaining({
         role: 'assistant',
-        content: '',
-        tool_calls: [
-          {
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'search', arguments: '{"q":"test"}' },
-          },
-        ],
+        content: '<tool_call>{"name":"search","arguments":{"q":"test"}}</tool_call>',
       }),
     );
+    // No structured tool_calls — avoids Jinja/C++ conflicts
+    expect((result[0] as any).tool_calls).toBeUndefined();
   });
 });
 

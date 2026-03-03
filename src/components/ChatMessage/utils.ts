@@ -5,6 +5,20 @@ export function parseThinkingContent(content: string): ParsedContent {
   const thinkEndMatch = content.match(/<\/think>/i);
 
   if (!thinkStartMatch) {
+    // Handle </think> without <think> — llama.rn Jinja template may consume
+    // the opening <think> tag while leaving thinking text + </think> as tokens
+    if (thinkEndMatch) {
+      const thinkEnd = thinkEndMatch.index!;
+      const thinkingContent = content.slice(0, thinkEnd).trim();
+      const responseContent = content.slice(thinkEnd + thinkEndMatch[0].length).trim();
+      if (thinkingContent) {
+        return {
+          thinking: thinkingContent,
+          response: responseContent,
+          isThinkingComplete: true,
+        };
+      }
+    }
     return { thinking: null, response: content, isThinkingComplete: true };
   }
 

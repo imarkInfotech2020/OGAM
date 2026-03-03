@@ -243,20 +243,10 @@ function handleCalculator(expression: string): string {
 function handleGetDatetime(timezone?: string): string {
   const now = new Date();
   const options: Intl.DateTimeFormatOptions = {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'long',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
+    ...(timezone ? { timeZone: timezone } : {}),
   };
-
-  if (timezone) {
-    options.timeZone = timezone;
-  }
-
   try {
     const formatted = new Intl.DateTimeFormat('en-US', options).format(now);
     const isoString = now.toISOString();
@@ -312,22 +302,41 @@ async function handleGetDeviceInfo(infoType?: string): Promise<string> {
   return parts.join('\n\n');
 }
 
-async function handleReadUrl(url: string): Promise<string> {
+/** Block SSRF: reject private/loopback/link-local/cloud-metadata URLs. */
+function isPrivateUrl(url: string): boolean {
+  const m = url.match(/^https?:\/\/([^/:]+)/i);
+  if (!m) return false;
+  const h = m[1].toLowerCase();
+  return h === 'localhost' || h === '[::1]' || h === 'metadata.google.internal'
+    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
+}
+
+async function handleReadUrl(rawUrl: string): Promise<string> {
+  // Strip surrounding quotes/angle brackets that models sometimes emit
+  let url = rawUrl.trim();
+  while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
+  while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
+  if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  logger.log(`[Tools] read_url fetching: "${url}" (raw: "${rawUrl}")`);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
         'Accept': 'text/html, text/plain, */*',
       },
     });
+    logger.log(`[Tools] read_url response: status=${response.status}, ok=${response.ok}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     const text = stripHtmlTags(await response.text()).replace(/\s+/g, ' ').trim();
     if (!text) return `The page at ${url} returned no readable content.`;
     return text.length > 4000 ? `${text.slice(0, 4000)}\n\n[Content truncated]` : text;
+  } catch (e: any) {
+    logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`, e?.stack || '');
+    throw e;
   } finally { clearTimeout(timeout); }
 }
 

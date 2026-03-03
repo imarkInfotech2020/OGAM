@@ -10,7 +10,7 @@ import {
   initMultimodal, checkContextMultimodal,
   estimateTokens, fitMessagesInBudget, recordGenerationStats,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
-  buildCompletionParams,
+  buildCompletionParams, createThinkInjector,
 } from './llmHelpers';
 import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
@@ -43,6 +43,7 @@ class LLMService {
   private gpuDevices: string[] = [];
   private activeGpuLayers: number = 0;
   private toolCallingSupported: boolean = false;
+  private thinkingSupported: boolean = false;
   private lastSystemPromptHash: string | null = null;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
 
@@ -76,12 +77,14 @@ class LLMService {
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
       this.detectToolCallingSupport();
-      logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}`);
+      this.detectThinkingSupport();
+      logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
     } catch (error: any) {
       this.context = null;
       this.currentModelPath = null;
       this.multimodalSupport = null;
       this.toolCallingSupported = false;
+      this.thinkingSupported = false;
       Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [] });
       throw new Error(error?.message || 'Unknown error loading model');
     }
@@ -118,6 +121,7 @@ class LLMService {
   supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
 
   supportsToolCalling(): boolean { return this.toolCallingSupported; }
+  supportsThinking(): boolean { return this.thinkingSupported; }
 
   private detectToolCallingSupport(): void {
     if (!this.context) { this.toolCallingSupported = false; return; }
@@ -131,6 +135,19 @@ class LLMService {
     } catch (e) {
       logger.warn('[LLM] Error detecting tool calling support:', e);
       this.toolCallingSupported = false;
+    }
+  }
+
+  private detectThinkingSupport(): void {
+    if (!this.context) { this.thinkingSupported = false; return; }
+    try {
+      const model = (this.context as any)?.model;
+      const metadata = model?.metadata || {};
+      const template = metadata['tokenizer.chat_template'] || '';
+      this.thinkingSupported = typeof template === 'string' && template.includes('<think>');
+      logger.log('[LLM] Thinking supported:', this.thinkingSupported);
+    } catch (_e) {
+      this.thinkingSupported = false;
     }
   }
 
@@ -171,6 +188,8 @@ class LLMService {
       let tokenCount = 0;
       let fullResponse = '';
       let firstReceived = false;
+      const thinkStream = this.thinkingSupported && onStream
+        ? createThinkInjector(t => onStream(t)) : null;
       await this.context.completion({
         messages: oaiMessages,
         ...buildCompletionParams(settings),
@@ -179,7 +198,7 @@ class LLMService {
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
         tokenCount++;
         fullResponse += data.token;
-        onStream?.(data.token);
+        if (thinkStream) { thinkStream(data.token); } else { onStream?.(data.token); }
       });
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       this.isGenerating = false;
@@ -217,8 +236,8 @@ class LLMService {
     const truncated = conv.length - fitted.length;
     if (truncated > 0) {
       result.push({
-        id: 'context-note', role: 'system', timestamp: 0,
-        content: `[Note: ${truncated} earlier message(s) in this conversation have been summarized to fit context. Continue naturally from the recent messages below.]`,
+        id: 'context-note', role: 'user', timestamp: 0,
+        content: `[Note: ${truncated} earlier message(s) were trimmed to fit context. Continue naturally from the recent messages.]`,
       });
     }
     result.push(...fitted);
@@ -227,32 +246,21 @@ class LLMService {
 
   async stopGeneration(): Promise<void> {
     if (this.context) {
-      try {
-        await this.context.stopCompletion();
-      } catch (e) {
-        logger.log('[LLM] Stop completion error (may be already stopped):', e);
-      }
+      try { await this.context.stopCompletion(); }
+      catch (e) { logger.log('[LLM] Stop completion error (may be already stopped):', e); }
     }
     this.isGenerating = false;
   }
-
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
-    try {
-      await (this.context as any).clearCache(clearData);
-      logger.log('[LLM] KV cache cleared');
-    } catch (e) {
-      logger.log('[LLM] Failed to clear KV cache:', e);
-    }
+    try { await (this.context as any).clearCache(clearData); logger.log('[LLM] KV cache cleared'); }
+    catch (e) { logger.log('[LLM] Failed to clear KV cache:', e); }
   }
-
   getEstimatedMemoryUsage(): { contextMemoryMB: number; totalEstimatedMB: number } {
     if (!this.context) return { contextMemoryMB: 0, totalEstimatedMB: 0 };
-    const ctxLen = this.currentSettings.contextLength || 2048;
-    const contextMemoryMB = ctxLen * 0.5;
+    const contextMemoryMB = (this.currentSettings.contextLength || 2048) * 0.5;
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
-
   getGpuInfo(): { gpu: boolean; gpuBackend: string; gpuLayers: number; reasonNoGPU: string } {
     let backend = 'CPU';
     if (this.gpuEnabled) {
@@ -262,9 +270,7 @@ class LLMService {
     }
     return { gpu: this.gpuEnabled, gpuBackend: backend, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
   }
-
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
-
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision()); }
   private getImageUris(messages: Message[]): string[] { return extractImageUris(messages); }
   private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages); }
@@ -272,56 +278,40 @@ class LLMService {
   async getModelInfo(): Promise<{ contextLength: number; vocabSize: number } | null> {
     return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null;
   }
-
   async tokenize(text: string): Promise<number[]> {
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens || [];
   }
-
   async getTokenCount(text: string): Promise<number> {
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens?.length || 0;
   }
-
   async estimateContextUsage(messages: Message[]): Promise<{ tokenCount: number; percentUsed: number; willFit: boolean }> {
     const prompt = this.formatMessages(messages);
     const tokenCount = await this.getTokenCount(prompt);
     const ctxLen = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
     return { tokenCount, percentUsed: (tokenCount / ctxLen) * 100, willFit: tokenCount < ctxLen * 0.9 };
   }
-
   getFormattedPrompt(messages: Message[]): string { return this.formatMessages(messages); }
 
-  async getContextDebugInfo(messages: Message[]): Promise<{
-    originalMessageCount: number; managedMessageCount: number; truncatedCount: number;
-    formattedPrompt: string; estimatedTokens: number; maxContextLength: number; contextUsagePercent: number;
-  }> {
+  async getContextDebugInfo(messages: Message[]) {
     const managed = await this.manageContextWindow(messages);
     const formatted = this.formatMessages(managed);
     let estimatedTokens = 0;
-    try {
-      if (this.context) estimatedTokens = (await this.context.tokenize(formatted)).tokens?.length || 0;
-    } catch {
-      estimatedTokens = Math.ceil(formatted.length / 4);
-    }
+    try { if (this.context) estimatedTokens = (await this.context.tokenize(formatted)).tokens?.length || 0; }
+    catch { estimatedTokens = Math.ceil(formatted.length / 4); }
     const sysCount = (msgs: Message[]) => msgs.filter(m => m.role === 'system').length;
     const truncated = (messages.length - sysCount(messages)) - (managed.length - sysCount(managed));
     const ctxLen = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
-    return {
-      originalMessageCount: messages.length, managedMessageCount: managed.length, truncatedCount: truncated,
-      formattedPrompt: formatted, estimatedTokens, maxContextLength: ctxLen,
-      contextUsagePercent: (estimatedTokens / ctxLen) * 100,
-    };
+    return { originalMessageCount: messages.length, managedMessageCount: managed.length, truncatedCount: truncated,
+      formattedPrompt: formatted, estimatedTokens, maxContextLength: ctxLen, contextUsagePercent: (estimatedTokens / ctxLen) * 100 };
   }
-
   updatePerformanceSettings(settings: Partial<LLMPerformanceSettings>): void {
     this.currentSettings = { ...this.currentSettings, ...settings };
     logger.log('[LLM] Performance settings updated:', this.currentSettings);
   }
-
   getPerformanceSettings(): LLMPerformanceSettings { return { ...this.currentSettings }; }
   getPerformanceStats(): LLMPerformanceStats { return { ...this.performanceStats }; }
-
   async reloadWithSettings(modelPath: string, settings: LLMPerformanceSettings): Promise<void> {
     this.updatePerformanceSettings(settings);
     if (this.context) await this.unloadModel();
@@ -333,13 +323,11 @@ class LLMService {
       this.context = context;
       Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
       this.currentModelPath = modelPath;
-      this.multimodalSupport = null;
-      this.multimodalInitialized = false;
-      await this.checkMultimodalSupport();
-      this.detectToolCallingSupport();
+      this.multimodalSupport = null; this.multimodalInitialized = false;
+      await this.checkMultimodalSupport(); this.detectToolCallingSupport(); this.detectThinkingSupport();
     } catch (error) {
       logger.error('[LLM] Error reloading model:', error);
-      Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false });
+      Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false, thinkingSupported: false });
       throw error;
     }
   }

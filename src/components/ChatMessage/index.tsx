@@ -18,6 +18,7 @@ import { GenerationMeta } from './components/GenerationMeta';
 import { ActionMenuSheet, EditSheet } from './components/ActionMenuSheet';
 import { MarkdownText } from '../MarkdownText';
 import { parseThinkingContent, formatTime, formatDuration } from './utils';
+import { ThinkingBlock } from './components/ThinkingBlock';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
 
@@ -162,6 +163,21 @@ const MessageMetaRow: React.FC<MetaRowProps> = ({ message, styles, isStreaming, 
   </View>
 );
 
+const ToolCallWithThinking: React.FC<{
+  message: Message; showThinking: boolean; onToggle: () => void; styles: any; colors: any;
+}> = ({ message, showThinking, onToggle, styles, colors }) => {
+  const tc = message.content ? parseThinkingContent(stripControlTokens(message.content)) : null;
+  if (tc?.thinking) {
+    return (
+      <View style={styles.systemInfoContainer}>
+        <ThinkingBlock parsedContent={tc} showThinking={showThinking} onToggle={onToggle} styles={styles} />
+        <ToolCallMessage message={message} styles={styles} colors={colors} />
+      </View>
+    );
+  }
+  return <ToolCallMessage message={message} styles={styles} colors={colors} />;
+};
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   isStreaming,
@@ -236,15 +252,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   if (message.isSystemInfo) {
-    return (
-      <SystemInfoMessage content={displayContent} styles={styles}
-        alertState={alertState} onCloseAlert={() => setAlertState(hideAlert())} />
-    );
+    return <SystemInfoMessage content={displayContent} styles={styles}
+      alertState={alertState} onCloseAlert={() => setAlertState(hideAlert())} />;
   }
-
   if (message.role === 'tool') return <ToolResultMessage message={message} styles={styles} colors={colors} />;
-  if (message.role === 'assistant' && message.toolCalls?.length) return <ToolCallMessage message={message} styles={styles} colors={colors} />;
-
+  if (message.role === 'assistant' && message.toolCalls?.length) {
+    return <ToolCallWithThinking message={message} showThinking={showThinking}
+      onToggle={() => setShowThinking(!showThinking)} styles={styles} colors={colors} />;
+  }
   const messageBody = (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -322,13 +337,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         colors={colors}
       />
 
-      <CustomAlert
-        visible={alertState.visible}
-        title={alertState.title}
-        message={alertState.message}
-        buttons={alertState.buttons}
-        onClose={() => setAlertState(hideAlert())}
-      />
+      <CustomAlert visible={alertState.visible} title={alertState.title}
+        message={alertState.message} buttons={alertState.buttons} onClose={() => setAlertState(hideAlert())} />
     </>
   );
 };

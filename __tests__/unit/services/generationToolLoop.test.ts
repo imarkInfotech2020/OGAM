@@ -18,12 +18,14 @@ import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 
 const mockAddMessage = jest.fn();
 const mockSetStreamingMessage = jest.fn();
+const mockSetIsThinking = jest.fn();
 
 jest.mock('../../../src/stores', () => ({
   useChatStore: {
     getState: () => ({
       addMessage: mockAddMessage,
       setStreamingMessage: mockSetStreamingMessage,
+      setIsThinking: mockSetIsThinking,
     }),
   },
 }));
@@ -31,6 +33,8 @@ jest.mock('../../../src/stores', () => ({
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
     generateResponseWithTools: jest.fn(),
+    supportsThinking: jest.fn(() => false),
+    stopGeneration: jest.fn(),
   },
 }));
 
@@ -739,6 +743,46 @@ describe('parseToolCallsFromText', () => {
     expect(result.toolCalls[0].name).toBe('web_search');
     expect(result.toolCalls[0].arguments).toEqual({ query: 'alias test' });
   });
+
+  // XML-like format: <tool_call><function=NAME><parameter=KEY>VALUE</tool_call>
+  it.each([
+    {
+      desc: 'closed tag with single param',
+      text: '<tool_call><function=web_search><parameter=query>Off Grid Mobile AI</tool_call>',
+      name: 'web_search', args: { query: 'Off Grid Mobile AI' }, clean: '',
+    },
+    {
+      desc: 'unclosed tag (EOS)',
+      text: 'Let me search for that.\n<tool_call>\n<function=web_search>\n<parameter=query>\nOff Grid Mobile AI',
+      name: 'web_search', args: { query: 'Off Grid Mobile AI' }, clean: 'Let me search for that.',
+    },
+    {
+      desc: 'single parameter (read_url)',
+      text: '<tool_call><function=read_url><parameter=url>https://example.com</tool_call>',
+      name: 'read_url', args: { url: 'https://example.com' },
+    },
+    {
+      desc: 'multiple parameters',
+      text: '<tool_call><function=calculator><parameter=expression>2+2<parameter=format>decimal</tool_call>',
+      name: 'calculator', args: { expression: '2+2', format: 'decimal' },
+    },
+    {
+      desc: 'strips closing XML tags from values',
+      text: '<tool_call><function=read_url><parameter=url>https://www.wednesday.is\n</parameter>\n</function></tool_call>',
+      name: 'read_url', args: { url: 'https://www.wednesday.is' },
+    },
+    {
+      desc: 'cleans surrounding text',
+      text: 'Before text <tool_call><function=calculator><parameter=expression>2+2</tool_call> after text',
+      name: 'calculator', args: { expression: '2+2' }, clean: 'Before text  after text',
+    },
+  ])('parses XML-like format: $desc', ({ text, name, args, clean }) => {
+    const result = parseToolCallsFromText(text);
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe(name);
+    expect(result.toolCalls[0].arguments).toEqual(args);
+    if (clean !== undefined) expect(result.cleanText).toBe(clean);
+  });
 });
 
 // ===========================================================================
@@ -987,3 +1031,4 @@ describe('runToolLoop – token streaming', () => {
     expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
   });
 });
+
