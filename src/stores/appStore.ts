@@ -282,8 +282,8 @@ export const useAppStore = create<AppState>()(
       resetShownSpotlights: () => set({ shownSpotlights: {} }),
       textGenerationCount: 0,
       imageGenerationCount: 0,
-      incrementTextGenerationCount: () => { const c = get().textGenerationCount + 1; set({ textGenerationCount: c }); return c; },
-      incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
+      incrementTextGenerationCount: () => { let c = 0; set(state => ({ textGenerationCount: c = state.textGenerationCount + 1 })); return c; },
+      incrementImageGenerationCount: () => { let c = 0; set(state => ({ imageGenerationCount: c = state.imageGenerationCount + 1 })); return c; },
     }),
     {
       name: 'local-llm-app-storage',
