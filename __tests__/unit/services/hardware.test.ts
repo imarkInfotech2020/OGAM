@@ -636,25 +636,21 @@ describe('HardwareService', () => {
         await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Samsung Galaxy S24' });
         const soc = await hardwareService.getSoCInfo();
         expect(soc.vendor).toBe('qualcomm');
-        expect(soc.hasNPU).toBe(true);
+        // hasNPU depends on RAM heuristic (no native module) — 8GB → min variant → true
       });
 
-      it('assigns qnnVariant 8gen1 for 12GB+ Qualcomm (RAM fallback when native module unavailable)', async () => {
+      it('returns undefined qnnVariant when native module unavailable (no RAM heuristic)', async () => {
         await setupDevice({ totalGB: 12, platform: 'android', hardware: 'qcom', model: 'Test' });
         const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('8gen1');
+        expect(soc.qnnVariant).toBeUndefined();
+        expect(soc.hasNPU).toBe(false);
       });
 
-      it('assigns qnnVariant min for 8GB Qualcomm (RAM fallback when native module unavailable)', async () => {
+      it('returns hasNPU false for Qualcomm without native module (any RAM)', async () => {
         await setupDevice({ totalGB: 8, platform: 'android', hardware: 'qcom', model: 'Test' });
         const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('min');
-      });
-
-      it('assigns qnnVariant min for <8GB Qualcomm', async () => {
-        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'qcom', model: 'Test' });
-        const soc = await hardwareService.getSoCInfo();
-        expect(soc.qnnVariant).toBe('min');
+        expect(soc.qnnVariant).toBeUndefined();
+        expect(soc.hasNPU).toBe(false);
       });
 
       it('detects Tensor for Pixel devices', async () => {
@@ -706,17 +702,27 @@ describe('HardwareService', () => {
       it.each([
         ['SM8550-AB', '8gen2', 'Snapdragon 8 Gen 2'],
         ['SM8650-AC', '8gen2', 'Snapdragon 8 Gen 3'],
+        ['SM8735-AB', '8gen2', 'SM8735 flagship variant'],
         ['SM8750-AB', '8gen2', 'Snapdragon 8 Elite'],
-        ['SM8845-AB', '8gen2', 'Snapdragon 8 Gen 5'],
-        ['SM9000-XX', '8gen2', 'future flagship'],
+        ['SM8845-AB', '8gen2', 'SM8845 flagship variant'],
+        ['SM8850-AB', '8gen2', 'Snapdragon 8 Elite Gen 5'],
         ['SM8450-AB', '8gen1', 'Snapdragon 8 Gen 1'],
         ['SM8475-AB', '8gen1', 'Snapdragon 8+ Gen 1'],
-        ['SM8350-AC', 'min', 'SM8350 and below'],
-        ['SM7550-AB', 'min', 'SM7-series mid-range'],
+        ['SM8635-AB', 'min', 'Snapdragon 8s Gen 3'],
+        ['SM8535-AB', 'min', 'Snapdragon 8s Gen 2'],
+        ['SM8350-AC', 'min', 'Snapdragon 888'],
+        ['SM8250-AB', 'min', 'Snapdragon 870'],
+        ['SM7450-AB', 'min', 'Snapdragon 7 Gen 1'],
+        ['SM7475-AB', 'min', 'Snapdragon 7+ Gen 2'],
+        ['SM7550-AB', 'min', 'Snapdragon 7 Gen 3'],
+        ['SM7675-AB', 'min', 'Snapdragon 7+ Gen 3'],
+        ['SM7225-AB', 'min', 'Snapdragon 750G'],
+        ['SM6375-AB', 'min', 'Snapdragon 695'],
       ] as const)('returns %s variant for %s (%s)', async (socModel, expected, _desc) => {
         await setupQualcommWithSoC(socModel);
         const soc = await hardwareService.getSoCInfo();
         expect(soc.qnnVariant).toBe(expected);
+        expect(soc.hasNPU).toBe(true);
       });
     });
 
@@ -755,6 +761,7 @@ describe('HardwareService', () => {
     const originalOS = Platform.OS;
     afterEach(() => {
       Platform.OS = originalOS;
+      delete NativeModules.LocalDreamModule;
     });
 
     describe('iOS recommendations', () => {
@@ -789,18 +796,28 @@ describe('HardwareService', () => {
     });
 
     describe('Android Qualcomm recommendations', () => {
-      it('recommends QNN for Qualcomm devices (RAM fallback)', async () => {
-        await setupDevice({ totalGB: 12, platform: 'android', hardware: 'qcom', model: 'Test' });
+      it('recommends QNN for Qualcomm devices with known SoC', async () => {
+        Platform.OS = 'android' as typeof Platform.OS;
+        NativeModules.LocalDreamModule = { getSoCModel: jest.fn().mockResolvedValue('SM8550-AB') };
+        mockedDeviceInfo.getTotalMemory.mockResolvedValue(12 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getModel.mockReturnValue('Test');
+        mockedDeviceInfo.getSystemName.mockReturnValue('Android');
+        mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+        mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+        mockedDeviceInfo.getHardware.mockResolvedValue('qcom');
+        await hardwareService.getDeviceInfo();
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('qnn');
-        expect(rec.qnnVariant).toBe('8gen1');
+        expect(rec.qnnVariant).toBe('8gen2');
         expect(rec.compatibleBackends).toEqual(expect.arrayContaining(['qnn', 'mnn']));
       });
 
-      it('sets qnnVariant based on RAM tier', async () => {
-        await setupDevice({ totalGB: 6, platform: 'android', hardware: 'qcom', model: 'Test' });
+      it('recommends MNN for Qualcomm without native module (cannot determine SoC)', async () => {
+        await setupDevice({ totalGB: 12, platform: 'android', hardware: 'qcom', model: 'Test' });
         const rec = await hardwareService.getImageModelRecommendation();
-        expect(rec.qnnVariant).toBe('min');
+        expect(rec.recommendedBackend).toBe('mnn');
+        expect(rec.bannerText).toContain('Snapdragon');
       });
     });
 
@@ -810,6 +827,7 @@ describe('HardwareService', () => {
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('mnn');
         expect(rec.bannerText).toContain('CPU');
+        expect(rec.bannerText).toContain('888');
         expect(rec.compatibleBackends).toEqual(['mnn']);
       });
 
@@ -817,6 +835,26 @@ describe('HardwareService', () => {
         await setupDevice({ totalGB: 8, platform: 'android', hardware: 'unknown-hw', model: 'Pixel 8 Pro' });
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('mnn');
+      });
+    });
+
+    describe('Android Qualcomm without SM prefix', () => {
+      it('recommends MNN for Qualcomm with non-SM SoC (e.g. native module unavailable)', async () => {
+        Platform.OS = 'android' as typeof Platform.OS;
+        NativeModules.LocalDreamModule = { getSoCModel: jest.fn().mockResolvedValue('') };
+        mockedDeviceInfo.getTotalMemory.mockResolvedValue(8 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getUsedMemory.mockResolvedValue(2 * 1024 * 1024 * 1024);
+        mockedDeviceInfo.getModel.mockReturnValue('POCO F3');
+        mockedDeviceInfo.getSystemName.mockReturnValue('Android');
+        mockedDeviceInfo.getSystemVersion.mockReturnValue('14');
+        mockedDeviceInfo.isEmulator.mockResolvedValue(false);
+        mockedDeviceInfo.getHardware.mockResolvedValue('qcom');
+        await hardwareService.getDeviceInfo();
+
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('mnn');
+        expect(rec.bannerText).toContain('CPU');
+        expect(rec.compatibleBackends).toEqual(['mnn']);
       });
     });
 

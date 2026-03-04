@@ -7,6 +7,17 @@ const getLocalDreamModule = () => NativeModules.LocalDreamModule;
 import { DeviceInfo as DeviceInfoType, ModelRecommendation, SoCInfo, SoCVendor, ImageModelRecommendation } from '../types';
 import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
 
+/**
+ * QNN variant tiers — mirrors local-dream's chipsetModelSuffixes map exactly.
+ * Source: https://github.com/xororz/local-dream — Model.kt getChipsetSuffix()
+ *
+ * - 8gen2: SM8550, SM8650, SM8735, SM8750, SM8845, SM8850
+ * - 8gen1: SM8450, SM8475
+ * - min:   any other SM-prefixed chip (fallback, same as local-dream)
+ */
+const FLAGSHIP_8GEN2 = new Set([8550, 8650, 8735, 8750, 8845, 8850]);
+const FLAGSHIP_8GEN1 = new Set([8450, 8475]);
+
 class HardwareService {
   private cachedDeviceInfo: DeviceInfoType | null = null;
   private cachedSoCInfo: SoCInfo | null = null;
@@ -238,28 +249,34 @@ class HardwareService {
     else if (hw.includes('mt') || hw.includes('mediatek')) vendor = 'mediatek';
     else if (hw.includes('exynos') || hw.includes('samsungexynos')) vendor = 'exynos';
     const qnnVariant = vendor === 'qualcomm' ? await this.getQnnVariantFromSoC() : undefined;
-    this.cachedSoCInfo = { vendor, hasNPU: vendor === 'qualcomm', qnnVariant };
+    this.cachedSoCInfo = { vendor, hasNPU: vendor === 'qualcomm' && !!qnnVariant, qnnVariant };
     return this.cachedSoCInfo;
   }
 
-  private async getQnnVariantFromSoC(): Promise<'8gen2' | '8gen1' | 'min'> {
-    let socModel = '';
+  private async getQnnVariantFromSoC(): Promise<'8gen2' | '8gen1' | 'min' | undefined> {
+    const socModel = await this.fetchSoCModel();
+    if (!socModel) return undefined;
+    return this.classifySmNumber(socModel);
+  }
+
+  private async fetchSoCModel(): Promise<string> {
     try {
       const localDream = getLocalDreamModule();
-      if (localDream?.getSoCModel) socModel = await localDream.getSoCModel();
-    } catch { /* fall through to RAM heuristic */ }
-    if (socModel) {
-      const base = socModel.split('-')[0].toUpperCase();
-      const smMatch = base.match(/^SM(\d+)$/);
-      if (smMatch) {
-        const num = parseInt(smMatch[1], 10);
-        if (num >= 8550) return '8gen2';
-        if (num >= 8450) return '8gen1';
-        return 'min';
-      }
-      return 'min';
-    }
-    return this.getTotalMemoryGB() >= 12 ? '8gen1' : 'min';
+      if (localDream?.getSoCModel) return await localDream.getSoCModel();
+    } catch { /* native module unavailable */ }
+    return '';
+  }
+
+  private classifySmNumber(socModel: string): '8gen2' | '8gen1' | 'min' | undefined {
+    const base = socModel.split('-')[0].toUpperCase();
+    // Must start with SM — matches local-dream's getChipsetSuffix fallback
+    if (!base.startsWith('SM')) return undefined;
+    const smMatch = /^SM(\d+)/.exec(base);
+    if (!smMatch) return undefined;
+    const num = parseInt(smMatch[1], 10);
+    if (FLAGSHIP_8GEN2.has(num)) return '8gen2';
+    if (FLAGSHIP_8GEN1.has(num)) return '8gen1';
+    return 'min';
   }
 
   private getIosImageRec(chip: SoCInfo['appleChip'], ramGB: number): ImageModelRecommendation {
@@ -285,10 +302,12 @@ class HardwareService {
     let rec: ImageModelRecommendation;
     if (Platform.OS === 'ios') {
       rec = this.getIosImageRec(socInfo.appleChip, ramGB);
-    } else if (socInfo.vendor === 'qualcomm') {
+    } else if (socInfo.vendor === 'qualcomm' && socInfo.hasNPU) {
       rec = this.getQualcommImageRec(socInfo);
+    } else if (socInfo.vendor === 'qualcomm') {
+      rec = { recommendedBackend: 'mnn', bannerText: 'CPU models recommended \u2014 your Snapdragon doesn\u2019t support NPU acceleration', compatibleBackends: ['mnn'] };
     } else {
-      rec = { recommendedBackend: 'mnn', bannerText: 'CPU models recommended \u2014 NPU requires Snapdragon', compatibleBackends: ['mnn'] };
+      rec = { recommendedBackend: 'mnn', bannerText: 'CPU models recommended \u2014 NPU requires Snapdragon 888+', compatibleBackends: ['mnn'] };
     }
     if (ramGB < 4) { rec.warning = 'Low RAM \u2014 expect slower performance'; }
     this.cachedImageRecommendation = rec;

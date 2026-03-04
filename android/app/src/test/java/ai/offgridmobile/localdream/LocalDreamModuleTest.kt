@@ -23,6 +23,7 @@ import java.io.File
  * Tests for pure helper functions in LocalDreamModule.
  * All methods under test live in the companion object and have no instance state.
  */
+@Suppress("kotlin:S100") // Backtick test names are idiomatic Kotlin
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], application = Application::class)
 class LocalDreamModuleTest {
@@ -33,26 +34,68 @@ class LocalDreamModuleTest {
     // ── isNpuSupportedInternal ────────────────────────────────────────────────
 
     @Test
-    fun `isNpuSupportedInternal returns true for Snapdragon SM prefix`() {
+    fun `isNpuSupportedInternal returns true for SM8650 (SD 8 Gen 3)`() {
         ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM8650")
         assertTrue(LocalDreamModule.isNpuSupportedInternal())
     }
 
     @Test
-    fun `isNpuSupportedInternal returns true for QCS prefix`() {
-        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "QCS8550")
+    fun `isNpuSupportedInternal returns true for SM8550 (SD 8 Gen 2)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM8550")
         assertTrue(LocalDreamModule.isNpuSupportedInternal())
     }
 
     @Test
-    fun `isNpuSupportedInternal returns true for QCM prefix`() {
-        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "QCM6490")
+    fun `isNpuSupportedInternal returns true for SM8350 (SD 888)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM8350")
         assertTrue(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns true for SM8635 (SD 8s Gen 3)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM8635")
+        assertTrue(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns true for SM7450 (SD 7 Gen 1)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM7450")
+        assertTrue(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns true for SM8250 (SD 870 — any SM is supported)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM8250")
+        assertTrue(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns true for SM7225 (SD 750G — any SM is supported)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "SM7225")
+        assertTrue(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns false for QCS prefix (not SM)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "QCS8550")
+        assertFalse(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns false for QCM prefix (not SM)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "QCM6490")
+        assertFalse(LocalDreamModule.isNpuSupportedInternal())
     }
 
     @Test
     fun `isNpuSupportedInternal returns false for non-Qualcomm SoC`() {
         ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "Exynos2400")
+        assertFalse(LocalDreamModule.isNpuSupportedInternal())
+    }
+
+    @Test
+    fun `isNpuSupportedInternal returns false for Tensor (Google)`() {
+        ReflectionHelpers.setStaticField(Build::class.java, "SOC_MODEL", "Tensor G4")
         assertFalse(LocalDreamModule.isNpuSupportedInternal())
     }
 

@@ -1,9 +1,36 @@
 import React, { useCallback, useMemo } from 'react';
-import { Linking } from 'react-native';
+import { Linking, Pressable, Text, StyleSheet } from 'react-native';
 import Markdown from '@ronradtke/react-native-markdown-display';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
+
+/**
+ * Escape asterisks used as multiplication operators (digit*digit) so
+ * markdown-it doesn't treat them as emphasis markers.
+ * Lookahead handles chains like 5*5*5*5 in a single pass.
+ */
+export function preprocessMarkdown(text: string): string {
+  return text.replace(/(\d)\*(?=\d)/g, String.raw`$1\*`);
+}
+
+const linkWrapperStyles = StyleSheet.create({
+  pressable: { flexShrink: 1, paddingBottom: 6 },
+});
+
+/** Custom link rule that constrains the Pressable wrapper width */
+function createLinkRule(onPress: (url: string) => void) {
+  return (node: any, renderChildren: any, _parent: any) => (
+    <Pressable
+      key={node.key}
+      accessibilityRole="link"
+      style={linkWrapperStyles.pressable}
+      onPress={() => onPress(node.attributes?.href ?? '')}
+    >
+      <Text>{renderChildren}</Text>
+    </Pressable>
+  );
+}
 
 interface MarkdownTextProps {
   children: string;
@@ -22,8 +49,13 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
     return false;
   }, []);
 
+  const processed = useMemo(() => preprocessMarkdown(children), [children]);
+  const rules = useMemo(() => ({ link: createLinkRule(handleLinkPress) }), [handleLinkPress]);
+
   return (
-    <Markdown style={markdownStyles} onLinkPress={handleLinkPress}>{children}</Markdown>
+    <Markdown style={markdownStyles} onLinkPress={handleLinkPress} rules={rules}>
+      {processed}
+    </Markdown>
   );
 }
 
@@ -35,6 +67,7 @@ function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean) {
       ...TYPOGRAPHY.body,
       color: textColor,
       lineHeight: 20,
+      flexShrink: 1,
     },
     heading1: {
       ...TYPOGRAPHY.h2,
@@ -119,7 +152,7 @@ function createMarkdownStyles(colors: ThemeColors, dimmed?: boolean) {
       marginVertical: SPACING.xs,
     },
     list_item: {
-      marginVertical: 2,
+      marginVertical: 4,
     },
     // Tables
     table: {
