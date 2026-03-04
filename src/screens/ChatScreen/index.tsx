@@ -11,6 +11,7 @@ import { consumePendingSpotlight } from '../../components/onboarding/spotlightSt
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
+import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
 import { createStyles } from './styles';
@@ -21,9 +22,9 @@ import {
 } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 
-function countConversationImages(conv: any): number {
-  return (conv?.messages || []).reduce((n: number, m: any) =>
-    n + (m.attachments?.filter((a: any) => a.type === 'image').length || 0), 0);
+function countConversationImages(conv: Conversation | undefined): number {
+  return (conv?.messages || []).reduce((n: number, m: Message) =>
+    n + (m.attachments?.filter((a) => a.type === 'image').length || 0), 0);
 }
 
 export const ChatScreen: React.FC = () => {

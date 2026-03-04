@@ -7,6 +7,8 @@ import type { ToolResult } from './tools/types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 
+const SHARE_PROMPT_DELAY_MS = 1500;
+
 export interface QueuedMessage {
   id: string; conversationId: string; text: string;
   attachments?: MediaAttachment[]; messageText: string;
@@ -79,7 +81,7 @@ class GenerationService {
     this.notifyListeners();
   }
 
-  private checkSharePrompt(delayMs = 1500): void {
+  private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
     const store = useAppStore.getState();
     if (store.hasEngagedSharePrompt) return;
     const count = store.incrementTextGenerationCount();
