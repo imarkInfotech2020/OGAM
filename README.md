@@ -30,12 +30,15 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 
 <div align="center">
 <table>
-<tr>
-<td align="center"><img src="demo-gifs/onboarding.gif" width="200" /><br /><b>Onboarding</b></td>
-<td align="center"><img src="demo-gifs/text-gen.gif" width="200" /><br /><b>Text Generation</b></td>
-<td align="center"><img src="demo-gifs/image-gen.gif" width="200" /><br /><b>Image Generation</b></td>
-<td align="center"><img src="demo-gifs/vision.gif" width="200" /><br /><b>Vision AI</b></td>
-<td align="center"><img src="demo-gifs/attachments.gif" width="200" /><br /><b>Attachments</b></td>
+  <tr>
+    <td align="center"><img src="demo-gifs/onboarding.gif" width="200" /><br /><b>Onboarding</b></td>
+    <td align="center"><img src="demo-gifs/text-gen.gif" width="200" /><br /><b>Text Generation</b></td>
+    <td align="center"><img src="demo-gifs/image-gen.gif" width="200" /><br /><b>Image Generation</b></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="demo-gifs/vision.gif" width="200" /><br /><b>Vision AI</b></td>
+    <td align="center"><img src="demo-gifs/attachments.gif" width="200" /><br /><b>Attachments</b></td>
+    <td align="center"><img src="demo-gifs/tool-calling.gif" width="200" /><br /><b>Tool Calling</b></td>
 </tr>
 </table>
 </div>
