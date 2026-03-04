@@ -4,6 +4,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -20,6 +21,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
+import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
 
 type NavigationProp = CompositeNavigationProp<
@@ -122,8 +124,34 @@ export const SettingsScreen: React.FC = () => {
         </View>
         </AttachStep>
 
-        {/* About */}
+        {/* Community */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.navSection}>
+            <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
+              <View style={styles.navItemIcon}>
+                <Icon name="star" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Star on GitHub</Text>
+                <Text style={styles.navItemDesc}>Support the open-source project</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => Linking.openURL(SHARE_ON_X_URL)}>
+              <View style={styles.navItemIcon}>
+                <Icon name="share-2" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Share on X</Text>
+                <Text style={styles.navItemDesc}>Tell others about Off Grid</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </AnimatedEntry>
+
+        {/* About */}
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.section}>
             <View style={styles.aboutRow}>
               <Text style={styles.aboutLabel}>Version</Text>
@@ -136,7 +164,7 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Privacy */}
-        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.privacyCard}>
             <View style={styles.privacyIconContainer}>
               <Icon name="shield" size={18} color={colors.textSecondary} />
@@ -151,7 +179,7 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Dev-only: Reset Onboarding */}
         {__DEV__ && (
-          <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+          <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
             <View style={styles.devButtonGroup}>
               <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
                 <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
@@ -170,35 +198,15 @@ export const SettingsScreen: React.FC = () => {
 };
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    minHeight: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
+    flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const,
+    paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, minHeight: 60,
+    borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface, ...shadows.small, zIndex: 1,
   },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xxl,
-  },
+  title: { ...TYPOGRAPHY.h2, color: colors.text },
+  scrollView: { flex: 1 },
+  content: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.xxl },
   themeToggleRow: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
@@ -244,95 +252,34 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  navItemLast: {
-    borderBottomWidth: 0,
-  },
+  navItemLast: { borderBottomWidth: 0 },
   navItemIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: 'transparent',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginRight: SPACING.md,
+    width: 28, height: 28, borderRadius: 6, backgroundColor: 'transparent',
+    alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: SPACING.md,
   },
-  navItemContent: {
-    flex: 1,
-  },
-  navItemTitle: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '400' as const,
-    color: colors.text,
-  },
-  navItemDesc: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  section: {
-    marginBottom: SPACING.lg,
-  },
+  navItemContent: { flex: 1 },
+  navItemTitle: { ...TYPOGRAPHY.body, fontWeight: '400' as const, color: colors.text },
+  navItemDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
+  section: { marginBottom: SPACING.lg },
   aboutRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    marginBottom: SPACING.sm,
+    flexDirection: 'row' as const, justifyContent: 'space-between' as const,
+    alignItems: 'center' as const, marginBottom: SPACING.sm,
   },
-  aboutLabel: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-  },
-  aboutValue: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '400' as const,
-    color: colors.text,
-  },
-  aboutText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  privacyCard: {
-    alignItems: 'center' as const,
-    backgroundColor: colors.surface,
-  },
+  aboutLabel: { ...TYPOGRAPHY.body, color: colors.textSecondary },
+  aboutValue: { ...TYPOGRAPHY.body, fontWeight: '400' as const, color: colors.text },
+  aboutText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, lineHeight: 18 },
+  privacyCard: { alignItems: 'center' as const, backgroundColor: colors.surface },
   privacyIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'transparent',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: SPACING.md,
+    width: 36, height: 36, borderRadius: 18, backgroundColor: 'transparent',
+    alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: SPACING.md,
   },
-  privacyTitle: {
-    ...TYPOGRAPHY.h3,
-    color: colors.text,
-    marginBottom: SPACING.sm,
-  },
-  privacyText: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 20,
-  },
+  privacyTitle: { ...TYPOGRAPHY.h3, color: colors.text, marginBottom: SPACING.sm },
+  privacyText: { ...TYPOGRAPHY.body, color: colors.textSecondary, textAlign: 'center' as const, lineHeight: 20 },
   devButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: SPACING.sm,
-    paddingVertical: SPACING.md,
-    marginTop: SPACING.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed' as const,
-    borderRadius: 6,
+    flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const,
+    gap: SPACING.sm, paddingVertical: SPACING.md, marginTop: SPACING.lg,
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' as const, borderRadius: 6,
   },
-  devButtonGroup: {
-    gap: 12,
-  },
-  devButtonText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-  },
+  devButtonGroup: { gap: 12 },
+  devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
 });

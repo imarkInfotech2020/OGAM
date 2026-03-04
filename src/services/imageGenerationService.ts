@@ -262,9 +262,9 @@ class ImageGenerationService {
       if (params.conversationId) result.conversationId = params.conversationId;
       useAppStore.getState().addGeneratedImage(result);
       useAppStore.getState().completeChecklistStep('triedImageGen');
-      const newCount = useAppStore.getState().incrementImageGenerationCount();
-      if (shouldShowSharePrompt(newCount)) {
-        setTimeout(() => emitSharePrompt('image'), 2000);
+      if (!useAppStore.getState().hasEngagedSharePrompt) {
+        const newCount = useAppStore.getState().incrementImageGenerationCount();
+        if (shouldShowSharePrompt(newCount)) setTimeout(() => emitSharePrompt('image'), 2000);
       }
       if (params.conversationId) {
         const genTime = Date.now() - startTime;

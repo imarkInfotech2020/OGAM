@@ -14,6 +14,7 @@ import React from 'react';
 import { Linking } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { SharePromptSheet } from '../../../src/components/SharePromptSheet';
+import { useAppStore } from '../../../src/stores/appStore';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../../../src/utils/sharePrompt';
 
 jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as any);
@@ -21,6 +22,7 @@ jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as any);
 describe('SharePromptSheet', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    useAppStore.setState({ hasEngagedSharePrompt: false });
   });
 
   it('renders the message text when visible', () => {
@@ -78,5 +80,29 @@ describe('SharePromptSheet', () => {
     );
     fireEvent.press(getByText('Maybe later'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('sets hasEngagedSharePrompt when Star on GitHub is pressed', () => {
+    const { getByText } = render(
+      <SharePromptSheet visible={true} onClose={jest.fn()} />,
+    );
+    fireEvent.press(getByText('Star on GitHub'));
+    expect(useAppStore.getState().hasEngagedSharePrompt).toBe(true);
+  });
+
+  it('sets hasEngagedSharePrompt when Share on X is pressed', () => {
+    const { getByText } = render(
+      <SharePromptSheet visible={true} onClose={jest.fn()} />,
+    );
+    fireEvent.press(getByText('Share on X'));
+    expect(useAppStore.getState().hasEngagedSharePrompt).toBe(true);
+  });
+
+  it('does not set hasEngagedSharePrompt when Maybe later is pressed', () => {
+    const { getByText } = render(
+      <SharePromptSheet visible={true} onClose={jest.fn()} />,
+    );
+    fireEvent.press(getByText('Maybe later'));
+    expect(useAppStore.getState().hasEngagedSharePrompt).toBe(false);
   });
 });

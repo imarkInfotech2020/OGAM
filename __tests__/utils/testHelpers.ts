@@ -83,6 +83,7 @@ export const resetStores = (): void => {
     shownSpotlights: {},
     textGenerationCount: 0,
     imageGenerationCount: 0,
+    hasEngagedSharePrompt: false,
     onboardingChecklist: {
       downloadedModel: false,
       loadedModel: false,

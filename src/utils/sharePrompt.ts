@@ -1,6 +1,6 @@
 const GITHUB_URL = 'https://github.com/alichherawalla/off-grid-mobile-ai';
 
-const SHARE_TEXT = `Just tried Off Grid — a completely free, open-source AI that runs 100% on your phone. No cloud, no subscriptions, no data leaving your device.
+const SHARE_TEXT = `Just tried Off Grid - a completely free, open-source AI that runs 100% on your phone. No cloud, no subscriptions, no data leaving your device.
 
 If you believe everyone should have access to private AI, check it out
 

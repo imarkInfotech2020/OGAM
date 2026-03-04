@@ -26,12 +26,8 @@ type QueueProcessor = (item: QueuedMessage) => Promise<void>;
 
 class GenerationService {
   private state: GenerationState = {
-    isGenerating: false,
-    isThinking: false,
-    conversationId: null,
-    streamingContent: '',
-    startTime: null,
-    queuedMessages: [],
+    isGenerating: false, isThinking: false, conversationId: null,
+    streamingContent: '', startTime: null, queuedMessages: [],
   };
 
   private listeners: Set<GenerationListener> = new Set();
@@ -84,7 +80,9 @@ class GenerationService {
   }
 
   private checkSharePrompt(delayMs = 1500): void {
-    const count = useAppStore.getState().incrementTextGenerationCount();
+    const store = useAppStore.getState();
+    if (store.hasEngagedSharePrompt) return;
+    const count = store.incrementTextGenerationCount();
     if (shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('text'), delayMs);
   }
 
