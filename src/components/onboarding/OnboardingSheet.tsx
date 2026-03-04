@@ -170,6 +170,7 @@ export const OnboardingSheet: React.FC<OnboardingSheetProps> = ({
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
     paddingBottom: SPACING.md,
   },
   row: {
