@@ -154,6 +154,7 @@ jest.mock('../../../src/components', () => ({
   DebugSheet: () => null,
   ...require('../../utils/spotlightMocks').createCustomAlertMock(),
   ToolPickerSheet: () => null,
+  SharePromptSheet: () => null,
 }));
 
 jest.mock('../../../src/components/AnimatedPressable', () =>

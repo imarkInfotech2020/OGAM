@@ -85,6 +85,12 @@ interface AppState {
   shownSpotlights: Record<string, boolean>;
   markSpotlightShown: (key: string) => void;
   resetShownSpotlights: () => void;
+  textGenerationCount: number;
+  imageGenerationCount: number;
+  incrementTextGenerationCount: () => number;
+  incrementImageGenerationCount: () => number;
+  hasEngagedSharePrompt: boolean;
+  setHasEngagedSharePrompt: (v: boolean) => void;
 }
 
 const DEFAULT_CHECKLIST: OnboardingChecklist = {
@@ -276,6 +282,12 @@ export const useAppStore = create<AppState>()(
       markSpotlightShown: (key) =>
         set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
       resetShownSpotlights: () => set({ shownSpotlights: {} }),
+      textGenerationCount: 0,
+      imageGenerationCount: 0,
+      incrementTextGenerationCount: () => { let c = 0; set(state => ({ textGenerationCount: c = state.textGenerationCount + 1 })); return c; },
+      incrementImageGenerationCount: () => { let c = 0; set(state => ({ imageGenerationCount: c = state.imageGenerationCount + 1 })); return c; },
+      hasEngagedSharePrompt: false,
+      setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
     }),
     {
       name: 'local-llm-app-storage',
@@ -321,17 +333,15 @@ export const useAppStore = create<AppState>()(
         activeModelId: state.activeModelId,
         settings: state.settings,
         activeBackgroundDownloads: state.activeBackgroundDownloads,
-        // Persist image model state
         activeImageModelId: state.activeImageModelId,
-        // Persist image model download tracking (survives app restart)
         imageModelDownloading: state.imageModelDownloading,
         imageModelDownloadIds: state.imageModelDownloadIds,
-        // Persist gallery
         generatedImages: state.generatedImages,
-        // Reactive spotlight tracking
         shownSpotlights: state.shownSpotlights,
-        // Cache type nudge
         hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
+        textGenerationCount: state.textGenerationCount,
+        imageGenerationCount: state.imageGenerationCount,
+        hasEngagedSharePrompt: state.hasEngagedSharePrompt,
       }),
     }
   )

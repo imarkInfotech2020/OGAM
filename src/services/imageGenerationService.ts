@@ -1,9 +1,4 @@
-/**
- * ImageGenerationService - Handles image generation independently of UI lifecycle
- * This allows generation to continue even when the user navigates away from the screen
- * Follows the same pattern as generationService.ts for text LLM generation
- */
-
+/** ImageGenerationService - Handles image generation independently of UI lifecycle */
 import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
@@ -11,6 +6,9 @@ import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage, GenerationMeta, Message } from '../types';
 import logger from '../utils/logger';
+import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+
+const SHARE_PROMPT_DELAY_MS = 2000;
 
 export interface ImageGenerationState {
   isGenerating: boolean;
@@ -144,6 +142,12 @@ class ImageGenerationService {
     if ('previewPath' in partial) appStore.setImagePreviewPath(this.state.previewPath);
   }
 
+  private _checkSharePrompt(): void {
+    if (useAppStore.getState().hasEngagedSharePrompt) return;
+    const count = useAppStore.getState().incrementImageGenerationCount();
+    if (shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('image'), SHARE_PROMPT_DELAY_MS);
+  }
+
   private async _resetLlmAfterEnhancement(): Promise<void> {
     logger.log('[ImageGen] 🔄 Starting cleanup - generating:', llmService.isCurrentlyGenerating());
     try {
@@ -261,6 +265,7 @@ class ImageGenerationService {
       if (params.conversationId) result.conversationId = params.conversationId;
       useAppStore.getState().addGeneratedImage(result);
       useAppStore.getState().completeChecklistStep('triedImageGen');
+      this._checkSharePrompt();
       if (params.conversationId) {
         const genTime = Date.now() - startTime;
         useChatStore.getState().addMessage(params.conversationId, {

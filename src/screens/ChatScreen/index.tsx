@@ -5,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet, ThinkingIndicator } from '../../components';
+import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet, ThinkingIndicator, SharePromptSheet } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
+import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
+import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { llmService, generationService } from '../../services';
 import { createStyles } from './styles';
@@ -20,17 +22,9 @@ import {
 } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 
-function countConversationImages(activeConversation: any): number {
-  const messages = activeConversation?.messages || [];
-  let count = 0;
-  for (const msg of messages) {
-    if (msg.attachments) {
-      for (const att of msg.attachments) {
-        if (att.type === 'image') count++;
-      }
-    }
-  }
-  return count;
+function countConversationImages(conv: Conversation | undefined): number {
+  return (conv?.messages || []).reduce((n: number, m: Message) =>
+    n + (m.attachments?.filter((a) => a.type === 'image').length || 0), 0);
 }
 
 export const ChatScreen: React.FC = () => {
@@ -41,6 +35,10 @@ export const ChatScreen: React.FC = () => {
   const chat = useChatScreen();
   const { goTo, current } = useSpotlightTour();
   const pendingNextRef = useRef<number | null>(null);
+
+  // Share prompt sheet
+  const [sharePromptVisible, setSharePromptVisible] = useState(false);
+  useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
 
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
   // chatSpotlight controls which index is active (3, 12, 15, or 16).
@@ -247,6 +245,7 @@ export const ChatScreen: React.FC = () => {
         />
       </KeyboardAvoidingView>
       {alertEl}
+      <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
     </SafeAreaView>
   );
 };

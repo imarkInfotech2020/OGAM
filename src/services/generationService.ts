@@ -5,13 +5,13 @@ import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import logger from '../utils/logger';
+import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+
+const SHARE_PROMPT_DELAY_MS = 1500;
 
 export interface QueuedMessage {
-  id: string;
-  conversationId: string;
-  text: string;
-  attachments?: MediaAttachment[];
-  messageText: string;
+  id: string; conversationId: string; text: string;
+  attachments?: MediaAttachment[]; messageText: string;
 }
 
 export interface GenerationState {
@@ -28,12 +28,8 @@ type QueueProcessor = (item: QueuedMessage) => Promise<void>;
 
 class GenerationService {
   private state: GenerationState = {
-    isGenerating: false,
-    isThinking: false,
-    conversationId: null,
-    streamingContent: '',
-    startTime: null,
-    queuedMessages: [],
+    isGenerating: false, isThinking: false, conversationId: null,
+    streamingContent: '', startTime: null, queuedMessages: [],
   };
 
   private listeners: Set<GenerationListener> = new Set();
@@ -83,6 +79,13 @@ class GenerationService {
   private updateState(partial: Partial<GenerationState>): void {
     this.state = { ...this.state, ...partial };
     this.notifyListeners();
+  }
+
+  private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
+    const store = useAppStore.getState();
+    if (store.hasEngagedSharePrompt) return;
+    const count = store.incrementTextGenerationCount();
+    if (shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('text'), delayMs);
   }
 
   private buildGenerationMeta(): GenerationMeta {
@@ -163,6 +166,7 @@ class GenerationService {
           } else {
             const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
             chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+            this.checkSharePrompt();
           }
           this.resetState();
         },
@@ -252,6 +256,7 @@ class GenerationService {
       } else {
         const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
         useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+        this.checkSharePrompt();
       }
       this.resetState();
     } catch (error) {
@@ -284,6 +289,7 @@ class GenerationService {
     const chatStore = useChatStore.getState();
     if (conversationId && streamingContent.trim()) {
       chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+      this.checkSharePrompt();
     } else {
       chatStore.clearStreamingMessage();
     }
