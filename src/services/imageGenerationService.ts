@@ -11,6 +11,7 @@ import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage, GenerationMeta, Message } from '../types';
 import logger from '../utils/logger';
+import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 
 export interface ImageGenerationState {
   isGenerating: boolean;
@@ -261,6 +262,10 @@ class ImageGenerationService {
       if (params.conversationId) result.conversationId = params.conversationId;
       useAppStore.getState().addGeneratedImage(result);
       useAppStore.getState().completeChecklistStep('triedImageGen');
+      const newCount = useAppStore.getState().incrementImageGenerationCount();
+      if (shouldShowSharePrompt(newCount)) {
+        setTimeout(() => emitSharePrompt('image'), 2000);
+      }
       if (params.conversationId) {
         const genTime = Date.now() - startTime;
         useChatStore.getState().addMessage(params.conversationId, {

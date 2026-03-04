@@ -85,6 +85,10 @@ interface AppState {
   shownSpotlights: Record<string, boolean>;
   markSpotlightShown: (key: string) => void;
   resetShownSpotlights: () => void;
+  textGenerationCount: number;
+  imageGenerationCount: number;
+  incrementTextGenerationCount: () => number;
+  incrementImageGenerationCount: () => number;
 }
 
 const DEFAULT_CHECKLIST: OnboardingChecklist = {
@@ -276,6 +280,10 @@ export const useAppStore = create<AppState>()(
       markSpotlightShown: (key) =>
         set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
       resetShownSpotlights: () => set({ shownSpotlights: {} }),
+      textGenerationCount: 0,
+      imageGenerationCount: 0,
+      incrementTextGenerationCount: () => { const c = get().textGenerationCount + 1; set({ textGenerationCount: c }); return c; },
+      incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
     }),
     {
       name: 'local-llm-app-storage',
@@ -321,17 +329,14 @@ export const useAppStore = create<AppState>()(
         activeModelId: state.activeModelId,
         settings: state.settings,
         activeBackgroundDownloads: state.activeBackgroundDownloads,
-        // Persist image model state
         activeImageModelId: state.activeImageModelId,
-        // Persist image model download tracking (survives app restart)
         imageModelDownloading: state.imageModelDownloading,
         imageModelDownloadIds: state.imageModelDownloadIds,
-        // Persist gallery
         generatedImages: state.generatedImages,
-        // Reactive spotlight tracking
         shownSpotlights: state.shownSpotlights,
-        // Cache type nudge
         hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
+        textGenerationCount: state.textGenerationCount,
+        imageGenerationCount: state.imageGenerationCount,
       }),
     }
   )

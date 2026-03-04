@@ -81,6 +81,8 @@ export const resetStores = (): void => {
     generatedImages: [],
     hasSeenCacheTypeNudge: false,
     shownSpotlights: {},
+    textGenerationCount: 0,
+    imageGenerationCount: 0,
     onboardingChecklist: {
       downloadedModel: false,
       loadedModel: false,

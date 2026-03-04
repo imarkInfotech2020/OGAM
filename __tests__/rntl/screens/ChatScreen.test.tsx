@@ -417,6 +417,7 @@ jest.mock('../../../src/components', () => ({
       </View>
     );
   },
+  SharePromptSheet: () => null,
 }));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
