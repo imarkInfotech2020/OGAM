@@ -96,41 +96,39 @@ class GenerationService {
     };
   }
 
+  /** Shared pre-generation setup: guard, state init, drain pending stop, validate LLM. */
+  private async prepareGeneration(conversationId: string): Promise<boolean> {
+    if (this.state.isGenerating) {
+      logger.log('[GenerationService] Already generating, ignoring request');
+      return false;
+    }
+    this.updateState({
+      isGenerating: true, isThinking: true, conversationId,
+      streamingContent: '', startTime: Date.now(),
+    });
+    useChatStore.getState().startStreaming(conversationId);
+    // Drain pending native stop so LLM is idle before we start.
+    if (this.pendingStop) await this.pendingStop;
+    if (!this.state.isGenerating) return false; // stop called during drain
+    this.abortRequested = false;
+    if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
+    if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy'); }
+    this.tokenBuffer = '';
+    return true;
+  }
+
   /** Generate a response for a conversation. Runs independently of UI lifecycle. */
   async generateResponse(
     conversationId: string,
     messages: Message[],
     onFirstToken?: () => void
   ): Promise<void> {
-    if (this.state.isGenerating) {
-      logger.log('[GenerationService] Already generating, ignoring request');
-      return;
-    }
-
-    this.updateState({
-      isGenerating: true,
-      isThinking: true,
-      conversationId,
-      streamingContent: '',
-      startTime: Date.now(),
-    });
-
+    if (!(await this.prepareGeneration(conversationId))) return;
     const chatStore = useChatStore.getState();
-    chatStore.startStreaming(conversationId);
-
-    // Drain pending native stop so LLM is idle before we start.
-    if (this.pendingStop) await this.pendingStop;
-    if (!this.state.isGenerating) return; // stop called during drain — already cleaned up
-    this.abortRequested = false;
-
-    if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
-    if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy - try again in a moment'); }
     logger.log('[GenerationService] Starting text generation');
-    this.tokenBuffer = '';
     let firstTokenReceived = false;
 
     try {
-      logger.log('[GenerationService] Calling llmService.generateResponse');
       await llmService.generateResponse(
         messages,
         (token) => {
@@ -186,30 +184,8 @@ class GenerationService {
     },
   ): Promise<void> {
     const { enabledToolIds, ...callbacks } = options;
-    if (this.state.isGenerating) {
-      logger.log('[GenerationService] Already generating, ignoring request');
-      return;
-    }
-
-    this.updateState({
-      isGenerating: true,
-      isThinking: true,
-      conversationId,
-      streamingContent: '',
-      startTime: Date.now(),
-    });
-
+    if (!(await this.prepareGeneration(conversationId))) return;
     const chatStore = useChatStore.getState();
-    chatStore.startStreaming(conversationId);
-
-    // Drain pending native stop so LLM is idle before we start.
-    if (this.pendingStop) await this.pendingStop;
-    if (!this.state.isGenerating) return; // stop called during drain — already cleaned up
-    this.abortRequested = false;
-
-    if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
-    if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy'); }
-    this.tokenBuffer = '';
 
     try {
       await runToolLoop({
