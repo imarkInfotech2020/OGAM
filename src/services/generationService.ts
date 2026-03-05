@@ -43,12 +43,18 @@ class GenerationService {
   private static readonly FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
   private flushTokenBuffer(): void {
-    if (this.tokenBuffer) { useChatStore.getState().appendToStreamingMessage(this.tokenBuffer); this.tokenBuffer = ''; }
+    if (this.tokenBuffer) {
+      useChatStore.getState().appendToStreamingMessage(this.tokenBuffer);
+      this.tokenBuffer = '';
+    }
     this.flushTimer = null;
   }
 
   private forceFlushTokens(): void {
-    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
     this.flushTokenBuffer();
   }
 
@@ -59,15 +65,10 @@ class GenerationService {
   }
 
   subscribe(listener: GenerationListener): () => void {
-    this.listeners.add(listener);
-    listener(this.getState());
-    return () => this.listeners.delete(listener);
+    this.listeners.add(listener); listener(this.getState()); return () => this.listeners.delete(listener);
   }
 
-  private notifyListeners(): void {
-    const state = this.getState();
-    this.listeners.forEach(listener => listener(state));
-  }
+  private notifyListeners(): void { this.listeners.forEach(l => l(this.getState())); }
 
   private updateState(partial: Partial<GenerationState>): void {
     this.state = { ...this.state, ...partial };
@@ -75,10 +76,9 @@ class GenerationService {
   }
 
   private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
-    const store = useAppStore.getState();
-    if (store.hasEngagedSharePrompt) return;
-    const count = store.incrementTextGenerationCount();
-    if (shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('text'), delayMs);
+    const s = useAppStore.getState();
+    if (s.hasEngagedSharePrompt) return;
+    if (shouldShowSharePrompt(s.incrementTextGenerationCount())) setTimeout(() => emitSharePrompt('text'), delayMs);
   }
 
   private buildGenerationMeta(): GenerationMeta {
@@ -118,10 +118,9 @@ class GenerationService {
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
 
-    // Drain any in-flight native stop before touching the LLM.
-    // UI already shows thinking state so the user gets immediate feedback.
-    // Reset abortRequested AFTER drain so old onComplete callbacks still see it as true.
+    // Drain pending native stop so LLM is idle before we start.
     if (this.pendingStop) await this.pendingStop;
+    if (!this.state.isGenerating) return; // stop called during drain — already cleaned up
     this.abortRequested = false;
 
     if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
@@ -162,9 +161,12 @@ class GenerationService {
         },
       );
     } catch (error) {
-      if (this.abortRequested) return; // stopGeneration() handled cleanup
+      if (this.abortRequested) return;
       logger.error('[GenerationService] Generation error:', error);
-      if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
       this.tokenBuffer = '';
       chatStore.clearStreamingMessage();
       this.resetState();
@@ -200,9 +202,9 @@ class GenerationService {
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
 
-    // Drain any in-flight native stop before touching the LLM.
-    // Reset abortRequested AFTER drain so old onComplete callbacks still see it as true.
+    // Drain pending native stop so LLM is idle before we start.
     if (this.pendingStop) await this.pendingStop;
+    if (!this.state.isGenerating) return; // stop called during drain — already cleaned up
     this.abortRequested = false;
 
     if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
@@ -248,9 +250,12 @@ class GenerationService {
         this.resetState();
       }
     } catch (error) {
-      if (this.abortRequested) return; // stopGeneration() handled cleanup
+      if (this.abortRequested) return;
       logger.error('[GenerationService] Tool generation error:', error);
-      if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = null;
+      }
       this.tokenBuffer = '';
       chatStore.clearStreamingMessage();
       this.resetState();
