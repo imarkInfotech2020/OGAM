@@ -397,11 +397,18 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 if (responseCode in 300..399) {
                     val location = connection.getHeaderField("Location")
                     if (location.isNullOrEmpty()) return currentUrl
-                    currentUrl = if (location.startsWith("http")) {
+                    val nextUrl = if (location.startsWith("http")) {
                         location
                     } else {
                         URL(URL(currentUrl), location).toString()
                     }
+                    // Re-validate redirected host against allowlist to prevent SSRF bypass
+                    val nextHost = try { URL(nextUrl).host } catch (_: Exception) { null }
+                    if (nextHost == null || !allowedDownloadHosts.any { nextHost == it || nextHost.endsWith(".$it") }) {
+                        android.util.Log.w("DownloadManager", "Redirect to unauthorized host blocked: $nextHost")
+                        return currentUrl
+                    }
+                    currentUrl = nextUrl
                 } else {
                     return currentUrl
                 }
