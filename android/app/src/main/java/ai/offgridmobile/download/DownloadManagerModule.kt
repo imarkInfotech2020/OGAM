@@ -15,6 +15,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.Executors
 
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -92,6 +93,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    private val executor = Executors.newSingleThreadExecutor()
+
+    private val allowedDownloadHosts = setOf(
+        "huggingface.co",
+        "cdn-lfs.huggingface.co",
+        "cas-bridge.xethub.hf.co",
+    )
+
     private val downloadManager: DownloadManager by lazy {
         reactApplicationContext.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     }
@@ -119,7 +128,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             promise.reject("DOWNLOAD_ERROR", "URL is required")
             return
         }
-        val fileName = params.getString("fileName") ?: run {
+        val fileName = params.getString("fileName")?.let { File(it).name } ?: run {
             promise.reject("DOWNLOAD_ERROR", "fileName is required")
             return
         }
@@ -129,8 +138,15 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
         val hideNotification = params.hasKey("hideNotification") && params.getBoolean("hideNotification")
 
+        // Validate URL against allowed download hosts to prevent SSRF
+        val parsedHost = try { URL(url).host } catch (_: Exception) { null }
+        if (parsedHost == null || !allowedDownloadHosts.any { parsedHost == it || parsedHost.endsWith(".$it") }) {
+            promise.reject("DOWNLOAD_ERROR", "Download URL host not allowed: $parsedHost")
+            return
+        }
+
         // Resolve redirects on a background thread (network I/O)
-        Thread {
+        executor.execute {
             try {
                 // Clean up any existing file with the same name to prevent DownloadManager
                 // from auto-renaming (e.g., file.gguf → file-1.gguf)
@@ -191,7 +207,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             } catch (e: Exception) {
                 promise.reject("DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
             }
-        }.start()
+        }
     }
 
     @ReactMethod
@@ -396,7 +412,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 connection.disconnect()
             }
         }
-        return currentUrl
+        android.util.Log.w("DownloadManager", "Redirect resolution exceeded max redirects ($maxRedirects), using original URL")
+        return originalUrl
     }
 
     private fun pollAllDownloads() {
