@@ -128,8 +128,7 @@ class LLMService {
 
   async checkMultimodalSupport(): Promise<MultimodalSupport> {
     if (!this.context) { this.multimodalSupport = { vision: false, audio: false }; return this.multimodalSupport; }
-    this.multimodalSupport = await checkContextMultimodal(this.context);
-    return this.multimodalSupport;
+    this.multimodalSupport = await checkContextMultimodal(this.context); return this.multimodalSupport;
   }
   getMultimodalSupport(): MultimodalSupport | null { return this.multimodalSupport; }
   supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
@@ -154,11 +153,11 @@ class LLMService {
   async unloadModel(): Promise<void> {
     if (this.context) {
       if (this.isGenerating) {
-        try { await this.context.stopCompletion(); } catch (_e) { /* best effort */ }
+        try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
         this.isGenerating = false;
       }
       if (this.activeCompletionPromise) {
-        try { await this.activeCompletionPromise; } catch (_e) { /* drain */ }
+        try { await this.activeCompletionPromise; } catch (e) { logger.log('[LLM] Drain during unload:', e); }
         this.activeCompletionPromise = null;
       }
       await this.context.release();
@@ -181,6 +180,7 @@ class LLMService {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
+    const ctx = this.context;
     const completionWork = (async () => {
       const managed = await this.manageContextWindow(messages);
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
@@ -198,7 +198,7 @@ class LLMService {
       let firstReceived = false;
       const thinkStream = this.thinkingSupported && onStream
         ? createThinkInjector(t => onStream(t)) : null;
-      const completionResult = await this.context!.completion({
+      const completionResult = await ctx.completion({
         messages: oaiMessages,
         ...buildCompletionParams(settings),
       }, (data) => {
@@ -274,7 +274,7 @@ class LLMService {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
     if (this.activeCompletionPromise) {
-      try { await this.activeCompletionPromise; } catch (_e) { /* drain */ }
+      try { await this.activeCompletionPromise; } catch (e) { logger.log('[LLM] Drain during stop:', e); }
       this.activeCompletionPromise = null;
     }
   }
