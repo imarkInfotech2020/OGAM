@@ -34,6 +34,7 @@ class GenerationService {
 
   private listeners: Set<GenerationListener> = new Set();
   private abortRequested: boolean = false;
+  private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
 
   // Token batching — collect tokens and flush to UI at a controlled rate
@@ -42,24 +43,16 @@ class GenerationService {
   private static readonly FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
   private flushTokenBuffer(): void {
-    if (this.tokenBuffer) {
-      useChatStore.getState().appendToStreamingMessage(this.tokenBuffer);
-      this.tokenBuffer = '';
-    }
+    if (this.tokenBuffer) { useChatStore.getState().appendToStreamingMessage(this.tokenBuffer); this.tokenBuffer = ''; }
     this.flushTimer = null;
   }
 
   private forceFlushTokens(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
     this.flushTokenBuffer();
   }
 
-  getState(): GenerationState {
-    return { ...this.state };
-  }
+  getState(): GenerationState { return { ...this.state }; }
 
   isGeneratingFor(conversationId: string): boolean {
     return this.state.isGenerating && this.state.conversationId === conversationId;
@@ -89,27 +82,21 @@ class GenerationService {
   }
 
   private buildGenerationMeta(): GenerationMeta {
-    const gpuInfo = llmService.getGpuInfo();
-    const perfStats = llmService.getPerformanceStats();
+    const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo();
+    const perf = llmService.getPerformanceStats();
     const { downloadedModels, activeModelId, settings } = useAppStore.getState();
-    const activeModel = downloadedModels.find(m => m.id === activeModelId);
     return {
-      gpu: gpuInfo.gpu,
-      gpuBackend: gpuInfo.gpuBackend,
-      gpuLayers: gpuInfo.gpuLayers,
-      modelName: activeModel?.name,
-      tokensPerSecond: perfStats.lastTokensPerSecond,
-      decodeTokensPerSecond: perfStats.lastDecodeTokensPerSecond,
-      timeToFirstToken: perfStats.lastTimeToFirstToken,
-      tokenCount: perfStats.lastTokenCount,
+      gpu, gpuBackend, gpuLayers,
+      modelName: downloadedModels.find(m => m.id === activeModelId)?.name,
+      tokensPerSecond: perf.lastTokensPerSecond,
+      decodeTokensPerSecond: perf.lastDecodeTokensPerSecond,
+      timeToFirstToken: perf.lastTimeToFirstToken,
+      tokenCount: perf.lastTokenCount,
       cacheType: settings.cacheType,
     };
   }
 
-  /**
-   * Generate a response for a conversation.
-   * Runs independently of UI — continues even if user navigates away.
-   */
+  /** Generate a response for a conversation. Runs independently of UI lifecycle. */
   async generateResponse(
     conversationId: string,
     messages: Message[],
@@ -120,11 +107,6 @@ class GenerationService {
       return;
     }
 
-    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
-    if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy - try again in a moment');
-    logger.log('[GenerationService] Starting text generation');
-
-    this.abortRequested = false;
     this.updateState({
       isGenerating: true,
       isThinking: true,
@@ -135,6 +117,16 @@ class GenerationService {
 
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
+
+    // Drain any in-flight native stop before touching the LLM.
+    // UI already shows thinking state so the user gets immediate feedback.
+    // Reset abortRequested AFTER drain so old onComplete callbacks still see it as true.
+    if (this.pendingStop) await this.pendingStop;
+    this.abortRequested = false;
+
+    if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
+    if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy - try again in a moment'); }
+    logger.log('[GenerationService] Starting text generation');
     this.tokenBuffer = '';
     let firstTokenReceived = false;
 
@@ -160,23 +152,19 @@ class GenerationService {
         },
         () => {
           logger.log('[GenerationService] Text generation completed');
+          // If aborted, stopGeneration() already handled cleanup — don't clobber new generation state.
+          if (this.abortRequested) return;
           this.forceFlushTokens();
-          if (this.abortRequested) {
-            chatStore.clearStreamingMessage();
-          } else {
-            const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-            chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
-            this.checkSharePrompt();
-          }
+          const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+          chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+          this.checkSharePrompt();
           this.resetState();
         },
       );
     } catch (error) {
+      if (this.abortRequested) return; // stopGeneration() handled cleanup
       logger.error('[GenerationService] Generation error:', error);
-      if (this.flushTimer) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
+      if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
       this.tokenBuffer = '';
       chatStore.clearStreamingMessage();
       this.resetState();
@@ -184,10 +172,7 @@ class GenerationService {
     }
   }
 
-  /**
-   * Generate a response with tool calling support.
-   * Loops: call LLM → if tool_calls, execute tools, inject results, repeat (max 5 iterations).
-   */
+  /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
   async generateWithTools(
     conversationId: string,
     messages: Message[],
@@ -204,10 +189,6 @@ class GenerationService {
       return;
     }
 
-    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
-    if (llmService.isCurrentlyGenerating()) throw new Error('LLM service busy');
-
-    this.abortRequested = false;
     this.updateState({
       isGenerating: true,
       isThinking: true,
@@ -218,6 +199,14 @@ class GenerationService {
 
     const chatStore = useChatStore.getState();
     chatStore.startStreaming(conversationId);
+
+    // Drain any in-flight native stop before touching the LLM.
+    // Reset abortRequested AFTER drain so old onComplete callbacks still see it as true.
+    if (this.pendingStop) await this.pendingStop;
+    this.abortRequested = false;
+
+    if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
+    if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy'); }
     this.tokenBuffer = '';
 
     try {
@@ -250,21 +239,18 @@ class GenerationService {
         },
       });
 
-      this.forceFlushTokens();
-      if (this.abortRequested) {
-        chatStore.clearStreamingMessage();
-      } else {
+      // If aborted, stopGeneration() already handled cleanup.
+      if (!this.abortRequested) {
+        this.forceFlushTokens();
         const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
         useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
         this.checkSharePrompt();
+        this.resetState();
       }
-      this.resetState();
     } catch (error) {
+      if (this.abortRequested) return; // stopGeneration() handled cleanup
       logger.error('[GenerationService] Tool generation error:', error);
-      if (this.flushTimer) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
+      if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
       this.tokenBuffer = '';
       chatStore.clearStreamingMessage();
       this.resetState();
@@ -272,19 +258,20 @@ class GenerationService {
     }
   }
 
-  /**
-   * Stop the current generation.
-   * Returns the partial content if any was generated.
-   */
+  /** Stop the current generation. Returns partial content if any was generated. */
   async stopGeneration(): Promise<string> {
-    await llmService.stopGeneration().catch(() => {});
-    if (!this.state.isGenerating) return '';
+    if (!this.state.isGenerating) {
+      await llmService.stopGeneration().catch(() => {});
+      return '';
+    }
 
+    // Set abort flag BEFORE stopping LLM so the onComplete callback
+    // knows we're stopping and won't finalize/reset on its own.
+    this.abortRequested = true;
     this.forceFlushTokens();
 
     const { conversationId, streamingContent, startTime } = this.state;
     const generationTime = startTime ? Date.now() - startTime : undefined;
-    this.abortRequested = true;
 
     const chatStore = useChatStore.getState();
     if (conversationId && streamingContent.trim()) {
@@ -295,6 +282,14 @@ class GenerationService {
     }
 
     this.resetState();
+
+    // Stop the native completion after we've already updated UI state,
+    // so the user sees immediate feedback. Store the promise so new
+    // generations can drain it before starting.
+    this.pendingStop = llmService.stopGeneration().catch(() => {}).finally(() => {
+      this.pendingStop = null;
+    });
+
     return streamingContent;
   }
 
