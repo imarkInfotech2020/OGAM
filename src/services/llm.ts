@@ -114,9 +114,9 @@ class LLMService {
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }
     try {
-      const sizeMB = (Number((await RNFS.stat(mmProjPath)).size) / (1024 * 1024)).toFixed(1);
-      logger.log(`[LLM] mmproj file size: ${sizeMB} MB`);
-      if (Number(sizeMB) < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB)`);
+      const sizeMB = Number((await RNFS.stat(mmProjPath)).size) / (1024 * 1024);
+      logger.log(`[LLM] mmproj file size: ${sizeMB.toFixed(1)} MB`);
+      if (sizeMB < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
     } catch (statErr) { console.error('[LLM] Failed to stat mmproj file:', statErr); }
     const devInfo = useAppStore.getState().deviceInfo;
     const useGpuForClip = Platform.OS === 'ios' && !devInfo?.isEmulator && (devInfo?.totalMemory ?? 0) > 4 * BYTES_PER_GB;
