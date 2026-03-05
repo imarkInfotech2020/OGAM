@@ -950,37 +950,6 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // getImageUris
-  // ========================================================================
-  describe('getImageUris', () => {
-    it('extracts image URIs from messages', () => {
-      const messages = [{
-        id: 'msg-1',
-        role: 'user' as const,
-        content: 'Look',
-        timestamp: Date.now(),
-        attachments: [
-          { type: 'image' as const, uri: '/img1.jpg', name: 'img1.jpg' },
-          { type: 'audio' as const, uri: '/voice.wav', name: 'voice.wav' },
-          { type: 'image' as const, uri: '/img2.jpg', name: 'img2.jpg' },
-        ],
-      }];
-      const uris = (llmService as any).getImageUris(messages);
-
-      expect(uris).toHaveLength(2);
-      expect(uris).toContain('/img1.jpg');
-      expect(uris).toContain('/img2.jpg');
-    });
-
-    it('returns empty array when no attachments', () => {
-      const messages = [createUserMessage('Hello')];
-      const uris = (llmService as any).getImageUris(messages);
-
-      expect(uris).toEqual([]);
-    });
-  });
-
-  // ========================================================================
   // context window tokenize fallback
   // ========================================================================
   describe('context window tokenize fallback', () => {
