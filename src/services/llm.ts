@@ -157,7 +157,7 @@ class LLMService {
         this.isGenerating = false;
       }
       if (this.activeCompletionPromise) {
-        try { await this.activeCompletionPromise; } catch (e) { logger.log('[LLM] Drain during unload:', e); }
+        await this.activeCompletionPromise;
         this.activeCompletionPromise = null;
       }
       await this.context.release();
@@ -274,7 +274,7 @@ class LLMService {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
     if (this.activeCompletionPromise) {
-      try { await this.activeCompletionPromise; } catch (e) { logger.log('[LLM] Drain during stop:', e); }
+      await this.activeCompletionPromise;
       this.activeCompletionPromise = null;
     }
   }
