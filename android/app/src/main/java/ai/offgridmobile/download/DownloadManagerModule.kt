@@ -122,6 +122,13 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     override fun getName(): String = NAME
 
+    override fun onCatalystInstanceDestroy() {
+        super.onCatalystInstanceDestroy()
+        if (!executor.isShutdown) {
+            executor.shutdown()
+        }
+    }
+
     @ReactMethod
     fun startDownload(params: ReadableMap, promise: Promise) {
         val url = params.getString("url") ?: run {
