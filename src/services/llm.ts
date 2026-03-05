@@ -156,7 +156,7 @@ class LLMService {
         try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
         this.isGenerating = false;
       }
-      if (this.activeCompletionPromise) {
+      if (this.activeCompletionPromise !== null) {
         await this.activeCompletionPromise;
         this.activeCompletionPromise = null;
       }
@@ -273,7 +273,7 @@ class LLMService {
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
-    if (this.activeCompletionPromise) {
+    if (this.activeCompletionPromise !== null) {
       await this.activeCompletionPromise;
       this.activeCompletionPromise = null;
     }
