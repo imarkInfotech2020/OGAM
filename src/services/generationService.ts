@@ -108,7 +108,7 @@ class GenerationService {
     });
     useChatStore.getState().startStreaming(conversationId);
     // Drain pending native stop so LLM is idle before we start.
-    if (this.pendingStop) await this.pendingStop;
+    if (this.pendingStop !== null) await this.pendingStop;
     if (!this.state.isGenerating) return false; // stop called during drain
     this.abortRequested = false;
     if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
