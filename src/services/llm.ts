@@ -12,7 +12,7 @@ import {
   buildCompletionParams, createThinkInjector, getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
 } from './llmHelpers';
 import { hardwareService } from './hardware';
-import { formatLlamaMessages, extractImageUris, buildOAIMessages } from './llmMessages';
+import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 
@@ -25,6 +25,7 @@ class LLMService {
   private context: LlamaContext | null = null;
   private currentModelPath: string | null = null;
   private isGenerating: boolean = false;
+  private activeCompletionPromise: Promise<void> | null = null;
   private multimodalSupport: MultimodalSupport | null = null;
   private multimodalInitialized: boolean = false;
   private performanceStats: LLMPerformanceStats = {
@@ -113,19 +114,12 @@ class LLMService {
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }
     try {
-      const stat = await RNFS.stat(mmProjPath);
-      const sizeMB = (Number(stat.size) / (1024 * 1024)).toFixed(1);
-      logger.log(`[LLM] mmproj file size: ${sizeMB} MB`);
-      if (Number(stat.size) < 100 * 1024 * 1024) {
-        console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB) - may be incomplete download!`);
-      }
-    } catch (statErr) {
-      console.error('[LLM] Failed to stat mmproj file:', statErr);
-    }
+      const sizeMB = Number((await RNFS.stat(mmProjPath)).size) / (1024 * 1024);
+      logger.log(`[LLM] mmproj file size: ${sizeMB.toFixed(1)} MB`);
+      if (sizeMB < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
+    } catch (statErr) { console.error('[LLM] Failed to stat mmproj file:', statErr); }
     const devInfo = useAppStore.getState().deviceInfo;
-    const mem = devInfo?.totalMemory ?? 0;
-    const useGpuForClip = Platform.OS === 'ios' && !devInfo?.isEmulator && mem > 4 * BYTES_PER_GB;
-    logger.log('[LLM] Calling initMultimodal, use_gpu:', useGpuForClip);
+    const useGpuForClip = Platform.OS === 'ios' && !devInfo?.isEmulator && (devInfo?.totalMemory ?? 0) > 4 * BYTES_PER_GB;
     const { initialized, support } = await initMultimodal(this.context, mmProjPath, useGpuForClip);
     this.multimodalInitialized = initialized;
     this.multimodalSupport = support;
@@ -134,8 +128,7 @@ class LLMService {
 
   async checkMultimodalSupport(): Promise<MultimodalSupport> {
     if (!this.context) { this.multimodalSupport = { vision: false, audio: false }; return this.multimodalSupport; }
-    this.multimodalSupport = await checkContextMultimodal(this.context);
-    return this.multimodalSupport;
+    this.multimodalSupport = await checkContextMultimodal(this.context); return this.multimodalSupport;
   }
   getMultimodalSupport(): MultimodalSupport | null { return this.multimodalSupport; }
   supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
@@ -144,33 +137,29 @@ class LLMService {
   private detectToolCallingSupport(): void {
     if (!this.context) { this.toolCallingSupported = false; return; }
     try {
-      const model = (this.context as any)?.model;
-      const jinja = model?.chatTemplates?.jinja;
-      logger.log('[LLM] Chat template jinja:', JSON.stringify(jinja, null, 2));
-      logger.log('[LLM] Chat template keys:', model?.chatTemplates ? Object.keys(model.chatTemplates) : 'none');
+      const jinja = (this.context as any)?.model?.chatTemplates?.jinja;
       this.toolCallingSupported = !!(jinja?.defaultCaps?.toolCalls || jinja?.toolUse || jinja?.toolUseCaps?.toolCalls);
       logger.log('[LLM] Tool calling supported:', this.toolCallingSupported);
-    } catch (e) {
-      logger.warn('[LLM] Error detecting tool calling support:', e);
-      this.toolCallingSupported = false;
-    }
+    } catch (e) { logger.warn('[LLM] Error detecting tool calling support:', e); this.toolCallingSupported = false; }
   }
-
   private detectThinkingSupport(): void {
     if (!this.context) { this.thinkingSupported = false; return; }
     try {
-      const model = (this.context as any)?.model;
-      const metadata = model?.metadata || {};
-      const template = metadata['tokenizer.chat_template'] || '';
+      const template = (this.context as any)?.model?.metadata?.['tokenizer.chat_template'] || '';
       this.thinkingSupported = typeof template === 'string' && template.includes('<think>');
-      logger.log('[LLM] Thinking supported:', this.thinkingSupported);
-    } catch (_e) {
-      this.thinkingSupported = false;
-    }
+    } catch (_e) { this.thinkingSupported = false; }
   }
 
   async unloadModel(): Promise<void> {
     if (this.context) {
+      if (this.isGenerating) {
+        try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
+        this.isGenerating = false;
+      }
+      if (this.activeCompletionPromise !== null) {
+        await this.activeCompletionPromise;
+        this.activeCompletionPromise = null;
+      }
       await this.context.release();
       useAppStore.getState().setModelMaxContext(null);
       Object.assign(this, {
@@ -191,7 +180,8 @@ class LLMService {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
-    try {
+    const ctx = this.context;
+    const completionWork = (async () => {
       const managed = await this.manageContextWindow(messages);
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
       const useMultimodal = hasImages && this.multimodalInitialized;
@@ -208,7 +198,7 @@ class LLMService {
       let firstReceived = false;
       const thinkStream = this.thinkingSupported && onStream
         ? createThinkInjector(t => onStream(t)) : null;
-      const completionResult = await this.context.completion({
+      const completionResult = await ctx.completion({
         messages: oaiMessages,
         ...buildCompletionParams(settings),
       }, (data) => {
@@ -219,16 +209,19 @@ class LLMService {
         if (thinkStream) { thinkStream(data.token); } else { onStream?.(data.token); }
       });
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
-      this.isGenerating = false;
       if (completionResult?.context_full) {
         logger.log('[LLM] Context full detected — signalling for compaction');
         throw new Error('Context is full');
       }
       onComplete?.(fullResponse);
       return fullResponse;
-    } catch (error) {
+    })();
+    this.activeCompletionPromise = completionWork.then(() => {}, () => {});
+    try {
+      return await completionWork;
+    } finally {
       this.isGenerating = false;
-      throw error;
+      this.activeCompletionPromise = null;
     }
   }
 
@@ -236,13 +229,19 @@ class LLMService {
     messages: Message[],
     options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback },
   ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
-    return generateWithToolsImpl({
+    const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
       setPerformanceStats: (s) => { this.performanceStats = s; },
       setIsGenerating: (v) => { this.isGenerating = v; },
     }, messages, options);
+    this.activeCompletionPromise = work.then(() => {}, () => {});
+    try {
+      return await work;
+    } finally {
+      this.activeCompletionPromise = null;
+    }
   }
 
   /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
@@ -253,61 +252,63 @@ class LLMService {
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
+    if (this.isGenerating) throw new Error('Generation already in progress');
+    this.isGenerating = true;
     const oaiMessages = this.convertToOAIMessages(messages);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
-    await this.context.completion(
+    const completionWork = this.context.completion(
       { messages: oaiMessages, ...buildCompletionParams(settings), n_predict: maxTokens },
-      (data) => { if (data.token) fullResponse += data.token; },
+      (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     );
-    return fullResponse.trim();
+    this.activeCompletionPromise = completionWork.then(() => {}, () => {});
+    try {
+      await completionWork;
+      return fullResponse.trim();
+    } finally {
+      this.isGenerating = false;
+      this.activeCompletionPromise = null;
+    }
   }
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
+    if (this.activeCompletionPromise !== null) {
+      await this.activeCompletionPromise;
+      this.activeCompletionPromise = null;
+    }
   }
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
     try { await (this.context as any).clearCache(clearData); } catch (e) { logger.log('[LLM] Clear cache error:', e); }
   }
-  getEstimatedMemoryUsage(): { contextMemoryMB: number; totalEstimatedMB: number } {
-    if (!this.context) return { contextMemoryMB: 0, totalEstimatedMB: 0 };
-    const contextMemoryMB = (this.currentSettings.contextLength || 2048) * 0.5;
+  getEstimatedMemoryUsage() {
+    const contextMemoryMB = this.context ? (this.currentSettings.contextLength || 2048) * 0.5 : 0;
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
-  getGpuInfo(): { gpu: boolean; gpuBackend: string; gpuLayers: number; reasonNoGPU: string } {
-    let backend = 'CPU';
-    if (this.gpuEnabled) {
-      if (Platform.OS === 'ios') backend = 'Metal';
-      else if (this.gpuDevices.length > 0) backend = this.gpuDevices.join(', ');
-      else backend = 'OpenCL';
-    }
+  getGpuInfo() {
+    const backend = !this.gpuEnabled ? 'CPU' : Platform.OS === 'ios' ? 'Metal'
+      : this.gpuDevices.length > 0 ? this.gpuDevices.join(', ') : 'OpenCL';
     return { gpu: this.gpuEnabled, gpuBackend: backend, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision()); }
-  private getImageUris(messages: Message[]): string[] { return extractImageUris(messages); }
   private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages); }
-
-  async getModelInfo(): Promise<{ contextLength: number; vocabSize: number } | null> {
-    return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null;
-  }
-  async tokenize(text: string): Promise<number[]> {
+  async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
+  async tokenize(text: string) {
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens || [];
   }
-  async getTokenCount(text: string): Promise<number> {
+  async getTokenCount(text: string) {
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens?.length || 0;
   }
-  async estimateContextUsage(messages: Message[]): Promise<{ tokenCount: number; percentUsed: number; willFit: boolean }> {
-    const prompt = this.formatMessages(messages);
-    const tokenCount = await this.getTokenCount(prompt);
+  async estimateContextUsage(messages: Message[]) {
+    const tokenCount = await this.getTokenCount(this.formatMessages(messages));
     const ctxLen = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
     return { tokenCount, percentUsed: (tokenCount / ctxLen) * 100, willFit: tokenCount < ctxLen * 0.9 };
   }
   getFormattedPrompt(messages: Message[]): string { return this.formatMessages(messages); }
-
   async getContextDebugInfo(messages: Message[]) {
     const managed = await this.manageContextWindow(messages);
     const fmt = this.formatMessages(managed);
@@ -329,8 +330,7 @@ class LLMService {
   async reloadWithSettings(modelPath: string, settings: LLMPerformanceSettings): Promise<void> {
     this.updatePerformanceSettings(settings);
     if (this.context) await this.unloadModel();
-    const { settings: appS } = useAppStore.getState();
-    const { baseParams, nGpuLayers } = buildModelParams(modelPath, { ...appS, ...settings });
+    const { baseParams, nGpuLayers } = buildModelParams(modelPath, { ...useAppStore.getState().settings, ...settings });
     logger.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
     try {
       const { context, gpuAttemptFailed } = await initContextWithFallback(baseParams, settings.contextLength, nGpuLayers);
