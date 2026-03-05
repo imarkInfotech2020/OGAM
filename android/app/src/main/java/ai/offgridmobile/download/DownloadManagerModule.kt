@@ -13,6 +13,8 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -113,68 +115,83 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun startDownload(params: ReadableMap, promise: Promise) {
-        try {
-            val url = params.getString("url") ?: throw IllegalArgumentException("URL is required")
-            val fileName = params.getString("fileName") ?: throw IllegalArgumentException("fileName is required")
-            val title = params.getString("title") ?: fileName
-            val description = params.getString("description") ?: "Downloading model..."
-            val modelId = params.getString("modelId") ?: ""
-            val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
-            val hideNotification = params.hasKey("hideNotification") && params.getBoolean("hideNotification")
+        val url = params.getString("url") ?: run {
+            promise.reject("DOWNLOAD_ERROR", "URL is required")
+            return
+        }
+        val fileName = params.getString("fileName") ?: run {
+            promise.reject("DOWNLOAD_ERROR", "fileName is required")
+            return
+        }
+        val title = params.getString("title") ?: fileName
+        val description = params.getString("description") ?: "Downloading model..."
+        val modelId = params.getString("modelId") ?: ""
+        val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
+        val hideNotification = params.hasKey("hideNotification") && params.getBoolean("hideNotification")
 
-            // Clean up any existing file with the same name to prevent DownloadManager
-            // from auto-renaming (e.g., file.gguf → file-1.gguf)
-            val existingFile = File(
-                reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                fileName
-            )
-            if (existingFile.exists()) {
-                android.util.Log.d("DownloadManager", "Deleting existing file before download: ${existingFile.absolutePath}")
-                existingFile.delete()
-            }
-
-            // Also clean up any stale entries from previous sessions
-            cleanupStaleDownloads()
-
-            val request = DownloadManager.Request(Uri.parse(url))
-                .setTitle(title)
-                .setDescription(description)
-                .setNotificationVisibility(
-                    if (hideNotification) DownloadManager.Request.VISIBILITY_HIDDEN
-                    else DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-                )
-                .setDestinationInExternalFilesDir(
-                    reactApplicationContext,
-                    Environment.DIRECTORY_DOWNLOADS,
+        // Resolve redirects on a background thread (network I/O)
+        Thread {
+            try {
+                // Clean up any existing file with the same name to prevent DownloadManager
+                // from auto-renaming (e.g., file.gguf → file-1.gguf)
+                val existingFile = File(
+                    reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                     fileName
                 )
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(true)
+                if (existingFile.exists()) {
+                    android.util.Log.d("DownloadManager", "Deleting existing file before download: ${existingFile.absolutePath}")
+                    existingFile.delete()
+                }
 
-            val downloadId = downloadManager.enqueue(request)
+                // Also clean up any stale entries from previous sessions
+                cleanupStaleDownloads()
 
-            // Persist download info
-            val downloadInfo = JSONObject().apply {
-                put("downloadId", downloadId)
-                put("url", url)
-                put("fileName", fileName)
-                put("modelId", modelId)
-                put("title", title)
-                put("totalBytes", totalBytes)
-                put("status", "pending")
-                put("startedAt", System.currentTimeMillis())
+                // Pre-resolve redirects so DownloadManager gets the final CDN URL directly.
+                // HuggingFace returns a 302 redirect to a long signed CDN URL (~1350 chars)
+                // that some OEM DownloadManager implementations fail to follow silently.
+                val resolvedUrl = resolveRedirects(url)
+                android.util.Log.d("DownloadManager", "Resolved URL: ${resolvedUrl.take(120)}...")
+
+                val request = DownloadManager.Request(Uri.parse(resolvedUrl))
+                    .setTitle(title)
+                    .setDescription(description)
+                    .setNotificationVisibility(
+                        if (hideNotification) DownloadManager.Request.VISIBILITY_HIDDEN
+                        else DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                    )
+                    .setDestinationInExternalFilesDir(
+                        reactApplicationContext,
+                        Environment.DIRECTORY_DOWNLOADS,
+                        fileName
+                    )
+                    .setAllowedOverMetered(true)
+                    .setAllowedOverRoaming(true)
+
+                val downloadId = downloadManager.enqueue(request)
+
+                // Persist download info
+                val downloadInfo = JSONObject().apply {
+                    put("downloadId", downloadId)
+                    put("url", url)
+                    put("fileName", fileName)
+                    put("modelId", modelId)
+                    put("title", title)
+                    put("totalBytes", totalBytes)
+                    put("status", "pending")
+                    put("startedAt", System.currentTimeMillis())
+                }
+                persistDownload(downloadId, downloadInfo)
+
+                val result = Arguments.createMap().apply {
+                    putDouble("downloadId", downloadId.toDouble())
+                    putString("fileName", fileName)
+                    putString("modelId", modelId)
+                }
+                promise.resolve(result)
+            } catch (e: Exception) {
+                promise.reject("DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
             }
-            persistDownload(downloadId, downloadInfo)
-
-            val result = Arguments.createMap().apply {
-                putDouble("downloadId", downloadId.toDouble())
-                putString("fileName", fileName)
-                putString("modelId", modelId)
-            }
-            promise.resolve(result)
-        } catch (e: Exception) {
-            promise.reject("DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
-        }
+        }.start()
     }
 
     @ReactMethod
@@ -344,6 +361,44 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         // Required for RN event emitter
     }
 
+    /**
+     * Follow HTTP redirects manually and return the final URL.
+     * Some OEM DownloadManager implementations silently fail on 302 redirects
+     * to long signed CDN URLs (e.g. HuggingFace → xethub.hf.co).
+     * By pre-resolving, DownloadManager gets the direct URL with no redirects.
+     * Falls back to the original URL on any error so downloads aren't blocked.
+     */
+    internal fun resolveRedirects(originalUrl: String, maxRedirects: Int = 5): String {
+        var currentUrl = originalUrl
+        for (i in 0 until maxRedirects) {
+            val connection = URL(currentUrl).openConnection() as HttpURLConnection
+            try {
+                connection.instanceFollowRedirects = false
+                connection.requestMethod = "HEAD"
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+                val responseCode = connection.responseCode
+                if (responseCode in 300..399) {
+                    val location = connection.getHeaderField("Location")
+                    if (location.isNullOrEmpty()) return currentUrl
+                    currentUrl = if (location.startsWith("http")) {
+                        location
+                    } else {
+                        URL(URL(currentUrl), location).toString()
+                    }
+                } else {
+                    return currentUrl
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("DownloadManager", "Redirect resolution failed, using original URL", e)
+                return originalUrl
+            } finally {
+                connection.disconnect()
+            }
+        }
+        return currentUrl
+    }
+
     private fun pollAllDownloads() {
         val downloads = getAllPersistedDownloads()
 
@@ -361,6 +416,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 putDouble("totalBytes", statusInfo.getDouble("totalBytes").takeIf { it > 0 }
                     ?: download.optDouble("totalBytes", 0.0))
                 putString("status", status)
+                putString("reason", statusInfo.getString("reason") ?: "")
             }
 
             val previousStatus = download.optString("status", "pending")
