@@ -30,7 +30,7 @@ jest.mock('../../../src/services/huggingface', () => ({ huggingFaceService: {} }
 jest.mock('../../../src/services/modelManager', () => ({ modelManager: {} }));
 jest.mock('../../../src/services/hardware', () => ({ hardwareService: {} }));
 jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: { isAvailable: jest.fn(() => false) },
+  backgroundDownloadService: { isAvailable: jest.fn(() => false), excludeFromBackup: jest.fn(() => Promise.resolve(true)) },
 }));
 jest.mock('../../../src/services/activeModelService/index', () => ({
   activeModelService: { loadTextModel: jest.fn(), unloadTextModel: jest.fn() },
