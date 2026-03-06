@@ -59,7 +59,7 @@ class ModelManager {
     if (!(await RNFS.exists(this.imageModelsDir))) await RNFS.mkdir(this.imageModelsDir);
     const exclude = (p: string) => backgroundDownloadService.excludeFromBackup(p);
     await Promise.all([exclude(this.modelsDir), exclude(this.imageModelsDir),
-      exclude(`${RNFS.DocumentDirectoryPath}/whisper-models`)]);
+      exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`)]);
   }
 
   async getDownloadedModels(): Promise<DownloadedModel[]> {

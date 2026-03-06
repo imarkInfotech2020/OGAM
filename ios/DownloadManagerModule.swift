@@ -87,16 +87,27 @@ class DownloadManagerModule: RCTEventEmitter {
 
   // MARK: - Backup Exclusion
 
-  static func excludeFromBackup(at url: URL) {
+  @discardableResult
+  static func excludeFromBackup(at url: URL) -> Bool {
     var mutableURL = url
     do {
       var resourceValues = URLResourceValues()
       resourceValues.isExcludedFromBackup = true
       try mutableURL.setResourceValues(resourceValues)
       NSLog("[DownloadManager] Excluded from backup: %@", url.path)
+      return true
     } catch {
       NSLog("[DownloadManager] Failed to exclude from backup %@: %@", url.path, error.localizedDescription)
+      return false
     }
+  }
+
+  private static func isPathWithinAppSandbox(_ path: String) -> Bool {
+    let documentsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? ""
+    let cachesDir = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? ""
+    let tmpDir = NSTemporaryDirectory()
+    let resolved = (path as NSString).standardizingPath
+    return resolved.hasPrefix(documentsDir) || resolved.hasPrefix(cachesDir) || resolved.hasPrefix(tmpDir)
   }
 
   // MARK: - RCTEventEmitter
@@ -674,13 +685,17 @@ extension DownloadManagerModule {
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    let url = URL(fileURLWithPath: path)
+    guard DownloadManagerModule.isPathWithinAppSandbox(path) else {
+      NSLog("[DownloadManager] excludePathFromBackup: path outside sandbox: %@", path)
+      reject("INVALID_PATH", "Path is outside the app sandbox", nil)
+      return
+    }
     guard FileManager.default.fileExists(atPath: path) else {
       resolve(false)
       return
     }
-    DownloadManagerModule.excludeFromBackup(at: url)
-    resolve(true)
+    let result = DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: path))
+    resolve(result)
   }
 
   @objc func startProgressPolling() {
