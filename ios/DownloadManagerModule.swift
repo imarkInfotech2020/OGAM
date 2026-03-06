@@ -85,6 +85,31 @@ class DownloadManagerModule: RCTEventEmitter {
   var hasListeners = false
   private let storageKey = "ai.offgridmobile.downloadmanager.state.v1"
 
+  // MARK: - Backup Exclusion
+
+  @discardableResult
+  static func excludeFromBackup(at url: URL) -> Bool {
+    var mutableURL = url
+    do {
+      var resourceValues = URLResourceValues()
+      resourceValues.isExcludedFromBackup = true
+      try mutableURL.setResourceValues(resourceValues)
+      NSLog("[DownloadManager] Excluded from backup: %@", url.path)
+      return true
+    } catch {
+      NSLog("[DownloadManager] Failed to exclude from backup %@: %@", url.path, error.localizedDescription)
+      return false
+    }
+  }
+
+  private static func isPathWithinAppSandbox(_ path: String) -> Bool {
+    let documentsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first ?? ""
+    let cachesDir = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? ""
+    let tmpDir = NSTemporaryDirectory()
+    let resolved = (path as NSString).standardizingPath
+    return resolved.hasPrefix(documentsDir) || resolved.hasPrefix(cachesDir) || resolved.hasPrefix(tmpDir)
+  }
+
   // MARK: - RCTEventEmitter
 
   override init() {
@@ -611,9 +636,11 @@ extension DownloadManagerModule {
 
       if info.isMultiFile {
         NSLog("[DownloadManager] Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
+        let destDir = info.multiFileDestDir ?? targetPath
+        DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
-        resolve(info.multiFileDestDir ?? targetPath)
+        resolve(destDir)
         return
       }
 
@@ -633,26 +660,42 @@ extension DownloadManagerModule {
       try? fileManager.removeItem(at: targetURL)
 
       do {
-        try fileManager.moveItem(at: sourceURL, to: targetURL)
-        NSLog("[DownloadManager] File moved successfully")
+        do {
+          try fileManager.moveItem(at: sourceURL, to: targetURL)
+          NSLog("[DownloadManager] File moved successfully")
+        } catch {
+          NSLog("[DownloadManager] moveItem failed: %@, trying copyItem", error.localizedDescription)
+          try fileManager.copyItem(at: sourceURL, to: targetURL)
+          try? fileManager.removeItem(at: sourceURL)
+          NSLog("[DownloadManager] File copied successfully")
+        }
+        DownloadManagerModule.excludeFromBackup(at: targetURL)
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
         resolve(targetPath)
       } catch {
-        NSLog("[DownloadManager] moveItem failed: %@, trying copyItem", error.localizedDescription)
-        do {
-          try fileManager.copyItem(at: sourceURL, to: targetURL)
-          try? fileManager.removeItem(at: sourceURL)
-          NSLog("[DownloadManager] File copied successfully")
-          self.downloads.removeValue(forKey: id)
-          self.persistStateLocked()
-          resolve(targetPath)
-        } catch {
-          NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
-          reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)
-        }
+        NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
+        reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)
       }
     }
+  }
+
+  @objc func excludePathFromBackup(
+    _ path: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard DownloadManagerModule.isPathWithinAppSandbox(path) else {
+      NSLog("[DownloadManager] excludePathFromBackup: path outside sandbox: %@", path)
+      reject("INVALID_PATH", "Path is outside the app sandbox", nil)
+      return
+    }
+    guard FileManager.default.fileExists(atPath: path) else {
+      resolve(false)
+      return
+    }
+    let result = DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: path))
+    resolve(result)
   }
 
   @objc func startProgressPolling() {
@@ -849,6 +892,9 @@ extension DownloadManagerModule {
     let allDone = info.fileTasks.values.allSatisfy { $0.completed }
     if allDone {
       NSLog("[DownloadManager] ALL files complete for download#%lld!", downloadId)
+      if let destDir = info.multiFileDestDir {
+        DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
+      }
       info.status = "completed"
       info.bytesDownloaded = info.totalBytes
       info.localUri = info.multiFileDestDir
