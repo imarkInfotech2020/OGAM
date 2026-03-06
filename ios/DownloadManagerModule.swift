@@ -649,26 +649,22 @@ extension DownloadManagerModule {
       try? fileManager.removeItem(at: targetURL)
 
       do {
-        try fileManager.moveItem(at: sourceURL, to: targetURL)
-        NSLog("[DownloadManager] File moved successfully")
+        do {
+          try fileManager.moveItem(at: sourceURL, to: targetURL)
+          NSLog("[DownloadManager] File moved successfully")
+        } catch {
+          NSLog("[DownloadManager] moveItem failed: %@, trying copyItem", error.localizedDescription)
+          try fileManager.copyItem(at: sourceURL, to: targetURL)
+          try? fileManager.removeItem(at: sourceURL)
+          NSLog("[DownloadManager] File copied successfully")
+        }
         DownloadManagerModule.excludeFromBackup(at: targetURL)
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
         resolve(targetPath)
       } catch {
-        NSLog("[DownloadManager] moveItem failed: %@, trying copyItem", error.localizedDescription)
-        do {
-          try fileManager.copyItem(at: sourceURL, to: targetURL)
-          try? fileManager.removeItem(at: sourceURL)
-          NSLog("[DownloadManager] File copied successfully")
-          DownloadManagerModule.excludeFromBackup(at: targetURL)
-          self.downloads.removeValue(forKey: id)
-          self.persistStateLocked()
-          resolve(targetPath)
-        } catch {
-          NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
-          reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)
-        }
+        NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
+        reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)
       }
     }
   }
