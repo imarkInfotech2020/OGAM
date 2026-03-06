@@ -228,7 +228,7 @@ describe('search_knowledge_base handler', () => {
     mockSearchProject.mockResolvedValue({
       chunks: [
         { doc_id: 1, name: 'guide.pdf', content: 'Machine learning basics', position: 0, score: 0.95 },
-        { doc_id: 1, name: 'guide.pdf', content: 'Neural network architecture', position: 1, score: 0.80 },
+        { doc_id: 1, name: 'guide.pdf', content: 'Neural network architecture', position: 1, score: 0.8 },
       ],
       truncated: false,
     });

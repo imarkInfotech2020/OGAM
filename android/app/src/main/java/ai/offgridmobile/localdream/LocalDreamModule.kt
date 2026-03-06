@@ -465,23 +465,23 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             isServerReady = true
             Log.i(TAG, "Server is ready on port $SERVER_PORT (backend: $backend)")
             return StartResult(true)
-        } else {
-            // Check if process died
-            val alive = serverProcess?.isAlive == true
-            val exitCode = if (!alive) try { serverProcess?.exitValue() } catch (_: Exception) { null } else null
-
-            return if (!alive) {
-                val socModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else "unknown"
-                StartResult(false,
-                    "Server process exited with code $exitCode. " +
-                    "Your device ($socModel) may not support this model's backend. " +
-                    "Try a GPU model instead.")
-            } else {
-                StartResult(false,
-                    "Server failed to start within ${timeoutMs/1000}s. " +
-                    "The model may be too large or the device is low on memory.")
-            }
         }
+        return buildStartFailure(timeoutMs)
+    }
+
+    private fun buildStartFailure(timeoutMs: Long): StartResult {
+        val alive = serverProcess?.isAlive == true
+        if (alive) {
+            return StartResult(false,
+                "Server failed to start within ${timeoutMs/1000}s. " +
+                "The model may be too large or the device is low on memory.")
+        }
+        val exitCode = try { serverProcess?.exitValue() } catch (_: Exception) { null }
+        val socModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else "unknown"
+        return StartResult(false,
+            "Server process exited with code $exitCode. " +
+            "Your device ($socModel) may not support this model's backend. " +
+            "Try a CPU model instead.")
     }
 
     /**

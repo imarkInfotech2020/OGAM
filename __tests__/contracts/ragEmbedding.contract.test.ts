@@ -148,7 +148,7 @@ describe('RAG Embedding Contract', () => {
     it('search results are sorted by descending score', () => {
       const results = [
         { score: 0.95 },
-        { score: 0.80 },
+        { score: 0.8 },
         { score: 0.65 },
       ];
 

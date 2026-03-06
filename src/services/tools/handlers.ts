@@ -337,7 +337,7 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   const result = await ragService.searchProject(projectId, query);
   if (result.chunks.length === 0) return `No results found for "${query}" in the knowledge base.`;
   return result.chunks
-    .map((c: any, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
+    .map((c: import('../rag').RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
     .join('\n\n---\n\n');
 }
 
