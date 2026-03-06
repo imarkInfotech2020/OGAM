@@ -66,10 +66,9 @@ class RetrievalService {
     return `<knowledge_base>\nThe following excerpts are from the user's project knowledge base. Use them to inform your response when relevant.\n\n${sections.join('\n\n---\n\n')}\n</knowledge_base>`;
   }
 
-  estimateCharBudget(contextLength: number): number {
-    // Reserve 25% of context window for RAG
-    // Rough estimate: 1 token ~ 4 chars
-    return Math.floor(contextLength * 4 * 0.25);
+  estimateCharBudget(contextLengthTokens: number): number {
+    // 25% of context window reserved for RAG; ~4 chars per token → simplifies to contextLength
+    return Math.max(0, Math.floor(contextLengthTokens));
   }
 
   async searchWithBudget(params: { projectId: string; query: string; contextLength: number; topK?: number }): Promise<SearchResult> {
