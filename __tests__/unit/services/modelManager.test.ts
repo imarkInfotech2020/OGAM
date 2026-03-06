@@ -77,6 +77,7 @@ describe('ModelManager', () => {
     (mockedRNFS as any).moveFile = jest.fn(() => Promise.resolve());
 
     // Reset backgroundDownloadService mock implementations
+    mockedBackgroundDownloadService.excludeFromBackup.mockResolvedValue(true);
     mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
     mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
     mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
@@ -103,7 +104,7 @@ describe('ModelManager', () => {
 
       await modelManager.initialize();
 
-      expect(RNFS.mkdir).toHaveBeenCalledTimes(2);
+      expect(RNFS.mkdir).toHaveBeenCalledTimes(3);
     });
 
     it('does not create dirs when they already exist', async () => {
@@ -112,6 +113,14 @@ describe('ModelManager', () => {
       await modelManager.initialize();
 
       expect(RNFS.mkdir).not.toHaveBeenCalled();
+    });
+
+    it('excludes model directories from iCloud backup', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await modelManager.initialize();
+
+      expect(backgroundDownloadService.excludeFromBackup).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -430,6 +439,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false)  // main doesn't exist
         .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
 
@@ -452,8 +462,9 @@ describe('ModelManager', () => {
     it('sets up progress listener during start and complete/error via watchDownload', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false)
         .mockResolvedValueOnce(true);
 
@@ -478,8 +489,9 @@ describe('ModelManager', () => {
     it('calls metadata callback with download info', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false)
         .mockResolvedValueOnce(true);
 
@@ -517,6 +529,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false)  // main doesn't exist
         .mockResolvedValueOnce(false); // mmproj doesn't exist
 
@@ -1051,6 +1064,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false); // destExists = false
       mockedRNFS.stat.mockResolvedValue({ size: 2000000000, isFile: () => true } as any);
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
@@ -1077,6 +1091,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)  // modelsDir
         .mockResolvedValueOnce(true)  // imageModelsDir
+        .mockResolvedValueOnce(true)  // whisperDir
         .mockResolvedValue(true);     // destExists = true
       mockedRNFS.stat.mockResolvedValue({ size: 1000, isFile: () => true } as any);
 
@@ -1544,6 +1559,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false)  // main doesn't exist
         .mockResolvedValueOnce(false); // mmproj doesn't exist
 
@@ -1931,6 +1947,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(true);  // modelsDir for scan
 
       mockedAsyncStorage.getItem
@@ -2023,9 +2040,10 @@ describe('ModelManager', () => {
 
     it('handles string file sizes', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
+        .mockResolvedValueOnce(true);  // scan
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2069,6 +2087,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(false); // imageModelsDir scan
 
       const result = await modelManager.scanForUntrackedImageModels();
@@ -2079,6 +2098,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
         .mockResolvedValueOnce(true);  // imageModelsDir scan
 
       mockedAsyncStorage.getItem
@@ -2122,9 +2142,10 @@ describe('ModelManager', () => {
 
     it('detects qnn backend from directory name', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
+        .mockResolvedValueOnce(true);  // scan
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2144,9 +2165,10 @@ describe('ModelManager', () => {
 
     it('detects coreml backend from directory name', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
+        .mockResolvedValueOnce(true);  // scan
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2201,9 +2223,10 @@ describe('ModelManager', () => {
 
     it('handles string file sizes in model directory', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir
+        .mockResolvedValueOnce(true);  // scan
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -2235,7 +2258,8 @@ describe('ModelManager', () => {
     it('replaces existing model with same ID in registry', async () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir (initialize)
-        .mockResolvedValueOnce(true)   // imageModelsDir (initialize)
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(true)   // whisperDir (initialize)
         .mockResolvedValueOnce(false)  // destExists = false
         .mockResolvedValueOnce(true);  // existing model file exists (getDownloadedModels validation)
 
