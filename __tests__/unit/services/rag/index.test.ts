@@ -97,6 +97,22 @@ describe('RagService', () => {
       await expect(ragService.indexDocument({ projectId: 'proj1', filePath: '/p', fileName: 'f', fileSize: 0 })).rejects.toThrow('no indexable content');
     });
 
+    it('throws if document with same path already exists', async () => {
+      mockDb.getDocumentsByProject.mockReturnValueOnce([
+        { id: 1, project_id: 'proj1', name: 'test.txt', path: '/path/test.txt', size: 100, created_at: '', enabled: 1 },
+      ]);
+      await expect(ragService.indexDocument({ projectId: 'proj1', filePath: '/path/test.txt', fileName: 'test.txt', fileSize: 100 }))
+        .rejects.toThrow('already in the knowledge base');
+    });
+
+    it('throws if document with same name already exists', async () => {
+      mockDb.getDocumentsByProject.mockReturnValueOnce([
+        { id: 1, project_id: 'proj1', name: 'test.txt', path: '/other/path', size: 100, created_at: '', enabled: 1 },
+      ]);
+      await expect(ragService.indexDocument({ projectId: 'proj1', filePath: '/new/path', fileName: 'test.txt', fileSize: 100 }))
+        .rejects.toThrow('already in the knowledge base');
+    });
+
     it('continues without embeddings if embedding fails', async () => {
       mockEmbedding.load.mockRejectedValueOnce(new Error('model not found'));
       const docId = await ragService.indexDocument({ projectId: 'proj1', filePath: '/p', fileName: 'test.txt', fileSize: 100 });

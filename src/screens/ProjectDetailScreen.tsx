@@ -43,8 +43,9 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
 
   const loadKbDocs = useCallback(async () => {
-    try { setKbDocs(await ragService.getDocumentsByProject(projectId)); } catch { /* ignore */ }
-  }, [projectId]);
+    try { setKbDocs(await ragService.getDocumentsByProject(projectId)); }
+    catch (err: any) { setAlertState(showAlert('Error', err?.message || 'Failed to load documents')); }
+  }, [projectId, setAlertState]);
 
   useEffect(() => { loadKbDocs(); }, [loadKbDocs]);
 
@@ -66,15 +67,16 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
   };
 
   const handleToggleDocument = async (docId: number, enabled: boolean) => {
-    await ragService.toggleDocument(docId, enabled);
-    await loadKbDocs();
+    try { await ragService.toggleDocument(docId, enabled); await loadKbDocs(); }
+    catch (err: any) { setAlertState(showAlert('Error', err?.message || 'Failed to update document')); }
   };
 
   const handleDeleteDocument = (doc: RagDocument) => {
     setAlertState(showAlert('Remove Document', `Remove "${doc.name}" from the knowledge base?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => {
-        ragService.deleteDocument(doc.id).then(() => loadKbDocs());
+        ragService.deleteDocument(doc.id).then(() => loadKbDocs())
+          .catch((err: any) => setAlertState(showAlert('Error', err?.message || 'Failed to remove document')));
       }},
     ]));
   };

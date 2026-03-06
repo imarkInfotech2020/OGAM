@@ -321,7 +321,6 @@ export interface Project {
   icon?: string;
   createdAt: string;
   updatedAt: string;
-  knowledgeBaseDocCount?: number;
 }
 export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown';
 export interface BackgroundDownloadInfo {

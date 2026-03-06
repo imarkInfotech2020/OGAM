@@ -86,7 +86,8 @@ class RagDatabase {
       'INSERT INTO rag_documents (project_id, name, path, size, created_at) VALUES (?, ?, ?, ?, ?)',
       [doc.projectId, doc.name, doc.path, doc.size, new Date().toISOString()]
     );
-    return result.insertId ?? 0;
+    if (result.insertId == null) throw new Error('Failed to insert document: no insertId returned');
+    return result.insertId;
   }
 
   insertChunks(docId: number, chunks: Chunk[]): number[] {
@@ -97,7 +98,8 @@ class RagDatabase {
         'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
         [chunk.content, docId, chunk.position]
       );
-      rowIds.push(result.insertId ?? 0);
+      if (result.insertId == null) throw new Error(`Failed to insert chunk at position ${chunk.position}`);
+      rowIds.push(result.insertId);
     }
     return rowIds;
   }

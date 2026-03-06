@@ -34,6 +34,12 @@ class RagService {
     const { projectId, filePath, fileName, fileSize, onProgress } = params;
     await this.ensureReady();
 
+    // Prevent duplicate indexing of the same file
+    const existing = ragDatabase.getDocumentsByProject(projectId);
+    if (existing.some(d => d.path === filePath || d.name === fileName)) {
+      throw new Error(`Document "${fileName}" is already in the knowledge base`);
+    }
+
     onProgress?.({ stage: 'extracting', message: `Extracting text from ${fileName}...` });
     const attachment = await documentService.processDocumentFromPath(filePath, fileName);
     if (!attachment?.textContent) {

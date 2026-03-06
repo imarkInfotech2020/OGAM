@@ -59,7 +59,7 @@ class RetrievalService {
     const sections = result.chunks.map((chunk) => {
       // Sanitize content to prevent prompt injection from user-uploaded documents
       const safeName = chunk.name.replace(/[<>]/g, '');
-      const safeContent = chunk.content.replace(/<\/?knowledge_base>/gi, '');
+      const safeContent = chunk.content.replace(/<[^>]*>/g, '');
       return `[Source: ${safeName} (part ${chunk.position + 1})]\n${safeContent}`;
     });
 
