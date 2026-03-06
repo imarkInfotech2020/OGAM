@@ -129,12 +129,13 @@ class LocalDreamGeneratorService {
       const result = await DiffusionModule.generateImage({
         prompt: params.prompt,
         negativePrompt: params.negativePrompt || '',
-        steps: params.steps || 20,
+        steps: params.steps || 8,
         guidanceScale: params.guidanceScale || 7.5,
         seed: params.seed ?? generateRandomSeed(),
         width: params.width || 512,
         height: params.height || 512,
         previewInterval: params.previewInterval ?? 2,
+        useOpenCL: params.useOpenCL ?? true,
       });
 
       return {
@@ -144,7 +145,7 @@ class LocalDreamGeneratorService {
         imagePath: result.imagePath,
         width: result.width,
         height: result.height,
-        steps: params.steps || 20,
+        steps: params.steps || 8,
         seed: result.seed,
         modelId: '',
         createdAt: Date.now().toString(),
@@ -188,6 +189,16 @@ class LocalDreamGeneratorService {
   async deleteGeneratedImage(imageId: string): Promise<boolean> {
     if (!this.isAvailable()) return false;
     return await DiffusionModule.deleteGeneratedImage(imageId);
+  }
+
+  async clearOpenCLCache(modelPath: string): Promise<number> {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return 0;
+    return await DiffusionModule.clearOpenCLCache(modelPath);
+  }
+
+  async hasKernelCache(modelPath: string): Promise<boolean> {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return true;
+    return await DiffusionModule.hasOpenCLCache(modelPath);
   }
 
   getConstants() {
