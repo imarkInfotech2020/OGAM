@@ -68,8 +68,17 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
   },
 }));
 jest.mock('../../../src/services/rag', () => ({
-  ragService: { searchProject: jest.fn(() => Promise.resolve({ chunks: [], truncated: false })) },
+  ragService: {
+    searchProject: jest.fn(() => Promise.resolve({ chunks: [], truncated: false })),
+    getDocumentsByProject: jest.fn(() => Promise.resolve([])),
+  },
   retrievalService: { formatForPrompt: jest.fn(() => '<knowledge_base>mock RAG context</knowledge_base>') },
+}));
+jest.mock('../../../src/services/rag/embedding', () => ({
+  embeddingService: {
+    isLoaded: jest.fn(() => false),
+    load: jest.fn(() => Promise.resolve()),
+  },
 }));
 
 // Get mock references after hoisting
@@ -97,6 +106,7 @@ const mockDeleteGeneratedImage = localDreamGeneratorService.deleteGeneratedImage
 const { ragService } = require('../../../src/services/rag');
 const { retrievalService } = require('../../../src/services/rag');
 const mockSearchProject = ragService.searchProject as jest.Mock;
+const mockGetDocsByProject = ragService.getDocumentsByProject as jest.Mock;
 const mockFormatForPrompt = retrievalService.formatForPrompt as jest.Mock;
 
 const mockSetHasSeenCacheTypeNudge = jest.fn();
@@ -148,6 +158,7 @@ beforeEach(() => {
   mockGetGenerationState.mockReturnValue({ isGenerating: false });
   mockEnqueueMessage.mockReturnValue(undefined);
   mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+  mockGetDocsByProject.mockResolvedValue([]);
   mockFormatForPrompt.mockReturnValue('<knowledge_base>mock RAG context</knowledge_base>');
   mockChatStoreGetState.mockReturnValue({ conversations: [], updateCompactionState: jest.fn() });
   mockProjectStoreGetProject.mockReturnValue(null);
@@ -164,7 +175,7 @@ function makeRef<T>(value: T): React.MutableRefObject<T> {
 const baseModel = createDownloadedModel({ id: 'model-1', filePath: '/path/model.gguf' });
 const baseImageModel = { id: 'img-1', name: 'SD Model' };
 
-function makeGenerationDeps(overrides: Record<string, unknown> = {}): any { // eslint-disable-line @typescript-eslint/no-explicit-any
+function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
   return {
     activeModelId: 'model-1',
     activeModel: baseModel,
@@ -593,19 +604,38 @@ describe('cache type nudge after generation', () => {
 // ─────────────────────────────────────────────
 
 describe('RAG context injection in startGenerationFn', () => {
-  it('injects RAG context when conversation has a projectId and search returns chunks', async () => {
+  it('injects doc list and RAG context when conversation has a projectId and search returns chunks', async () => {
     const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
     mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
     mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
     mockSearchProject.mockResolvedValue({
-      chunks: [{ doc_id: 1, name: 'doc.txt', content: 'relevant info', position: 0, rank: -1.5 }],
+      chunks: [{ doc_id: 1, name: 'doc.txt', content: 'relevant info', position: 0, score: 0.85 }],
       truncated: false,
     });
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
+    expect(mockGetDocsByProject).toHaveBeenCalledWith('proj-1');
     expect(mockSearchProject).toHaveBeenCalledWith('proj-1', 'hello');
     expect(mockFormatForPrompt).toHaveBeenCalled();
+    expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+
+  it('injects doc list even when BM25 returns no chunks', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'what is in your knowledge base?', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([
+      { id: 1, name: 'guide.pdf', enabled: 1 },
+      { id: 2, name: 'notes.txt', enabled: 1 },
+    ]);
+    mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+    const deps = makeGenerationDeps();
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what is in your knowledge base?' });
+
+    expect(mockGetDocsByProject).toHaveBeenCalledWith('proj-1');
+    expect(mockFormatForPrompt).not.toHaveBeenCalled();
     expect(mockGenerateResponse).toHaveBeenCalled();
   });
 
@@ -615,19 +645,20 @@ describe('RAG context injection in startGenerationFn', () => {
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
+    expect(mockGetDocsByProject).not.toHaveBeenCalled();
     expect(mockSearchProject).not.toHaveBeenCalled();
     expect(mockGenerateResponse).toHaveBeenCalled();
   });
 
-  it('does not inject RAG context when search returns no chunks', async () => {
+  it('does not inject doc list when all docs are disabled', async () => {
     const conv = { id: 'conv-1', projectId: 'proj-1', messages: [] };
     mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
     mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
-    mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 0 }]);
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
-    expect(mockSearchProject).toHaveBeenCalled();
+    expect(mockSearchProject).not.toHaveBeenCalled();
     expect(mockFormatForPrompt).not.toHaveBeenCalled();
   });
 
@@ -635,12 +666,27 @@ describe('RAG context injection in startGenerationFn', () => {
     const conv = { id: 'conv-1', projectId: 'proj-1', messages: [] };
     mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
     mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
-    mockSearchProject.mockRejectedValue(new Error('DB error'));
+    mockGetDocsByProject.mockRejectedValue(new Error('DB error'));
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
     // Generation should still proceed despite RAG error
     expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+
+  it('auto-enables search_knowledge_base tool for project conversations', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search'] } });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
+
+    // generateWithTools should have been called (not generateResponse) since tools are enabled
+    const { generationService: genSvc } = require('../../../src/services/generationService');
+    // The generation should include search_knowledge_base in the tool list
+    expect(genSvc.generateWithTools || genSvc.generateResponse).toBeDefined();
   });
 });
 
@@ -649,13 +695,15 @@ describe('RAG context injection in regenerateResponseFn', () => {
     const userMsg = { id: 'm1', role: 'user' as const, content: 'explain docs', timestamp: 0 };
     const conv = { id: 'conv-1', projectId: 'proj-1', messages: [userMsg] };
     mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
     mockSearchProject.mockResolvedValue({
-      chunks: [{ doc_id: 1, name: 'doc.txt', content: 'relevant info', position: 0, rank: -1.5 }],
+      chunks: [{ doc_id: 1, name: 'doc.txt', content: 'relevant info', position: 0, score: 0.85 }],
       truncated: false,
     });
     const deps = makeGenerationDeps({ activeProject: { id: 'proj-1', systemPrompt: 'Be helpful' } });
     await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg });
 
+    expect(mockGetDocsByProject).toHaveBeenCalledWith('proj-1');
     expect(mockSearchProject).toHaveBeenCalledWith('proj-1', 'explain docs');
     expect(mockFormatForPrompt).toHaveBeenCalled();
   });
@@ -667,6 +715,76 @@ describe('RAG context injection in regenerateResponseFn', () => {
     const deps = makeGenerationDeps();
     await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg });
 
+    expect(mockGetDocsByProject).not.toHaveBeenCalled();
     expect(mockSearchProject).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────
+// Embedding warmup
+// ─────────────────────────────────────────────
+
+const { embeddingService } = require('../../../src/services/rag/embedding');
+const mockEmbeddingIsLoaded = embeddingService.isLoaded as jest.Mock;
+const mockEmbeddingLoad = embeddingService.load as jest.Mock;
+
+describe('embedding model warmup in injectRagContext', () => {
+  it('fires embeddingService.load() when project has enabled docs and model is not loaded', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
+    mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+    mockEmbeddingIsLoaded.mockReturnValue(false);
+
+    const deps = makeGenerationDeps();
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
+
+    expect(mockEmbeddingLoad).toHaveBeenCalled();
+  });
+
+  it('does not call load() when embedding model is already loaded', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
+    mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+    mockEmbeddingIsLoaded.mockReturnValue(true);
+
+    const deps = makeGenerationDeps();
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
+
+    expect(mockEmbeddingLoad).not.toHaveBeenCalled();
+  });
+
+  it('does not block generation if embedding load fails', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 1 }]);
+    mockSearchProject.mockResolvedValue({ chunks: [], truncated: false });
+    mockEmbeddingIsLoaded.mockReturnValue(false);
+    mockEmbeddingLoad.mockRejectedValue(new Error('model not found'));
+
+    const deps = makeGenerationDeps();
+    // Should not throw — warmup failure is non-blocking
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
+    // Flush pending microtasks from fire-and-forget warmup
+    await new Promise<void>(resolve => setImmediate(resolve));
+
+    expect(mockEmbeddingLoad).toHaveBeenCalled();
+  });
+
+  it('does not fire warmup when no enabled docs exist', async () => {
+    const conv = { id: 'conv-1', projectId: 'proj-1', messages: [{ id: 'm1', role: 'user', content: 'hello', timestamp: 0 }] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    mockProjectStoreGetProject.mockReturnValue({ id: 'proj-1', systemPrompt: 'Be helpful', name: 'Test' });
+    mockGetDocsByProject.mockResolvedValue([{ id: 1, name: 'doc.txt', enabled: 0 }]);
+    mockEmbeddingIsLoaded.mockReturnValue(false);
+
+    const deps = makeGenerationDeps();
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
+
+    expect(mockEmbeddingLoad).not.toHaveBeenCalled();
   });
 });

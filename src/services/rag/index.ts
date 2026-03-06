@@ -1,6 +1,7 @@
 import { ragDatabase } from './database';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
+import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
 import logger from '../../utils/logger';
 
@@ -9,9 +10,10 @@ export type { RagDocument, RagSearchResult } from './database';
 export type { SearchResult } from './retrieval';
 export { chunkDocument } from './chunking';
 export { retrievalService } from './retrieval';
+export { embeddingService } from './embedding';
 
 export interface IndexProgress {
-  stage: 'extracting' | 'chunking' | 'indexing' | 'done';
+  stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
   message: string;
 }
 
@@ -46,11 +48,58 @@ class RagService {
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
     const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: filePath, size: fileSize });
-    ragDatabase.insertChunks(docId, chunks);
+    const rowIds = ragDatabase.insertChunks(docId, chunks);
+
+    onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
+    try {
+      await embeddingService.load();
+      const texts = chunks.map(c => c.content);
+      const embeddings = await embeddingService.embedBatch(texts);
+      const entries = rowIds.map((rowId, i) => ({
+        chunkRowid: rowId,
+        docId,
+        embedding: embeddings[i],
+      }));
+      ragDatabase.insertEmbeddingsBatch(entries);
+      logger.log(`[RAG] Generated ${embeddings.length} embeddings for ${fileName}`);
+    } catch (err) {
+      logger.error('[RAG] Embedding generation failed (non-fatal):', err);
+    }
 
     onProgress?.({ stage: 'done', message: 'Done' });
     logger.log(`[RAG] Indexed ${fileName}: ${chunks.length} chunks`);
     return docId;
+  }
+
+  async backfillEmbeddings(projectId: string): Promise<number> {
+    await this.ensureReady();
+    const docs = ragDatabase.getDocumentsByProject(projectId);
+    let total = 0;
+
+    for (const doc of docs) {
+      if (ragDatabase.hasEmbeddingsForDocument(doc.id)) continue;
+
+      const chunks = ragDatabase.getChunksByDocument(doc.id);
+      if (chunks.length === 0) continue;
+
+      try {
+        await embeddingService.load();
+        const texts = chunks.map(c => c.content);
+        const embeddings = await embeddingService.embedBatch(texts);
+        const entries = chunks.map((chunk, i) => ({
+          chunkRowid: chunk.id,
+          docId: doc.id,
+          embedding: embeddings[i],
+        }));
+        ragDatabase.insertEmbeddingsBatch(entries);
+        total += embeddings.length;
+        logger.log(`[RAG] Backfilled ${embeddings.length} embeddings for ${doc.name}`);
+      } catch (err) {
+        logger.error(`[RAG] Backfill failed for ${doc.name}:`, err);
+      }
+    }
+
+    return total;
   }
 
   async deleteDocument(docId: number): Promise<void> {

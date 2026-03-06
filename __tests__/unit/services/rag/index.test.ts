@@ -2,12 +2,24 @@ jest.mock('../../../../src/services/rag/database', () => ({
   ragDatabase: {
     ensureReady: jest.fn(() => Promise.resolve()),
     insertDocument: jest.fn((_doc: any) => 1),
-    insertChunks: jest.fn(),
+    insertChunks: jest.fn(() => [1, 2]),
     deleteDocument: jest.fn(),
     getDocumentsByProject: jest.fn(() => []),
     toggleEnabled: jest.fn(),
-    searchByProject: jest.fn(() => []),
+    getChunksByProject: jest.fn(() => []),
+    getEmbeddingsByProject: jest.fn(() => []),
+    insertEmbeddingsBatch: jest.fn(),
+    hasEmbeddingsForDocument: jest.fn(() => false),
+    getChunksByDocument: jest.fn(() => []),
     deleteDocumentsByProject: jest.fn(),
+  },
+}));
+
+jest.mock('../../../../src/services/rag/embedding', () => ({
+  embeddingService: {
+    load: jest.fn(() => Promise.resolve()),
+    embedBatch: jest.fn(() => Promise.resolve([[0.1, 0.2], [0.3, 0.4]])),
+    isLoaded: jest.fn(() => false),
   },
 }));
 
@@ -31,10 +43,12 @@ jest.mock('../../../../src/utils/logger', () => ({
 
 import { ragService } from '../../../../src/services/rag';
 import { ragDatabase } from '../../../../src/services/rag/database';
+import { embeddingService } from '../../../../src/services/rag/embedding';
 import { documentService } from '../../../../src/services/documentService';
 
 const mockDb = ragDatabase as jest.Mocked<typeof ragDatabase>;
 const mockDocService = documentService as jest.Mocked<typeof documentService>;
+const mockEmbedding = embeddingService as jest.Mocked<typeof embeddingService>;
 
 describe('RagService', () => {
   beforeEach(() => {
@@ -49,7 +63,7 @@ describe('RagService', () => {
   });
 
   describe('indexDocument', () => {
-    it('extracts text, chunks, and stores in database', async () => {
+    it('extracts text, chunks, stores, and generates embeddings', async () => {
       const onProgress = jest.fn();
       const docId = await ragService.indexDocument({ projectId: 'proj1', filePath: '/path/test.txt', fileName: 'test.txt', fileSize: 100, onProgress });
 
@@ -58,11 +72,17 @@ describe('RagService', () => {
       expect(mockDb.insertChunks).toHaveBeenCalled();
       expect(docId).toBe(1);
 
-      // Progress callbacks
+      // Progress callbacks include new 'embedding' stage
       expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ stage: 'extracting' }));
       expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ stage: 'chunking' }));
       expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ stage: 'indexing' }));
+      expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ stage: 'embedding' }));
       expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ stage: 'done' }));
+
+      // Verify embeddings were generated
+      expect(mockEmbedding.load).toHaveBeenCalled();
+      expect(mockEmbedding.embedBatch).toHaveBeenCalled();
+      expect(mockDb.insertEmbeddingsBatch).toHaveBeenCalled();
     });
 
     it('throws when no text content extracted', async () => {
@@ -77,8 +97,39 @@ describe('RagService', () => {
       await expect(ragService.indexDocument({ projectId: 'proj1', filePath: '/p', fileName: 'f', fileSize: 0 })).rejects.toThrow('no indexable content');
     });
 
-    it('works without onProgress callback', async () => {
-      await expect(ragService.indexDocument({ projectId: 'proj1', filePath: '/p', fileName: 'f', fileSize: 100 })).resolves.toBe(1);
+    it('continues without embeddings if embedding fails', async () => {
+      mockEmbedding.load.mockRejectedValueOnce(new Error('model not found'));
+      const docId = await ragService.indexDocument({ projectId: 'proj1', filePath: '/p', fileName: 'test.txt', fileSize: 100 });
+      expect(docId).toBe(1); // Still returns docId
+    });
+  });
+
+  describe('backfillEmbeddings', () => {
+    it('generates embeddings for documents without them', async () => {
+      mockDb.getDocumentsByProject.mockReturnValue([
+        { id: 1, project_id: 'proj1', name: 'a.txt', path: '/a', size: 100, created_at: '', enabled: 1 },
+      ]);
+      mockDb.hasEmbeddingsForDocument.mockReturnValue(false);
+      mockDb.getChunksByDocument.mockReturnValue([
+        { id: 10, content: 'chunk one', position: 0 },
+        { id: 11, content: 'chunk two', position: 1 },
+      ]);
+
+      const total = await ragService.backfillEmbeddings('proj1');
+      expect(total).toBe(2);
+      expect(mockEmbedding.embedBatch).toHaveBeenCalled();
+      expect(mockDb.insertEmbeddingsBatch).toHaveBeenCalled();
+    });
+
+    it('skips documents that already have embeddings', async () => {
+      mockDb.getDocumentsByProject.mockReturnValue([
+        { id: 1, project_id: 'proj1', name: 'a.txt', path: '/a', size: 100, created_at: '', enabled: 1 },
+      ]);
+      mockDb.hasEmbeddingsForDocument.mockReturnValue(true);
+
+      const total = await ragService.backfillEmbeddings('proj1');
+      expect(total).toBe(0);
+      expect(mockEmbedding.embedBatch).not.toHaveBeenCalled();
     });
   });
 
@@ -108,13 +159,11 @@ describe('RagService', () => {
 
   describe('searchProject', () => {
     it('calls search without contextLength', async () => {
-      mockDb.searchByProject.mockReturnValue([]);
       const result = await ragService.searchProject('proj1', 'query');
       expect(result.chunks).toEqual([]);
     });
 
     it('calls searchWithBudget with contextLength', async () => {
-      mockDb.searchByProject.mockReturnValue([]);
       const result = await ragService.searchProject('proj1', 'query', 2048);
       expect(result.chunks).toEqual([]);
     });

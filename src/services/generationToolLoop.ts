@@ -118,6 +118,7 @@ export interface ToolLoopContext {
   conversationId: string;
   messages: Message[];
   enabledToolIds: string[];
+  projectId?: string;
   callbacks?: ToolLoopCallbacks;
   isAborted: () => boolean;
   onThinkingDone: () => void;
@@ -154,6 +155,7 @@ async function executeToolCalls(
       }
     }
 
+    if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
     const result = await executeToolCall(tc);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);

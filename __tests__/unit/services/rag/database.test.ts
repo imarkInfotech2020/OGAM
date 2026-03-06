@@ -32,9 +32,11 @@ describe('RagDatabase', () => {
     it('opens the database and creates tables', async () => {
       await ragDatabase.ensureReady();
       expect(open).toHaveBeenCalledWith({ name: 'rag.db' });
-      expect(mockExecuteSync).toHaveBeenCalledTimes(2);
+      // rag_documents, rag_chunks, rag_embeddings = 3 tables
+      expect(mockExecuteSync).toHaveBeenCalledTimes(3);
       expect(mockExecuteSync.mock.calls[0][0]).toContain('rag_documents');
       expect(mockExecuteSync.mock.calls[1][0]).toContain('rag_chunks');
+      expect(mockExecuteSync.mock.calls[2][0]).toContain('rag_embeddings');
     });
 
     it('does not re-initialize on second call', async () => {
@@ -60,13 +62,16 @@ describe('RagDatabase', () => {
   });
 
   describe('insertChunks', () => {
-    it('inserts each chunk with doc_id', async () => {
+    it('inserts each chunk and returns rowids', async () => {
       await ragDatabase.ensureReady();
+      mockExecuteSync.mockReturnValue({ insertId: 10, rowsAffected: 1, rows: [] });
+
       const chunks = [
         { content: 'chunk one', position: 0 },
         { content: 'chunk two', position: 1 },
       ];
-      ragDatabase.insertChunks(42, chunks);
+      const rowIds = ragDatabase.insertChunks(42, chunks);
+      expect(rowIds).toEqual([10, 10]); // mock always returns 10
       const chunkInserts = mockExecuteSync.mock.calls.filter(
         (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_chunks')
       );
@@ -76,16 +81,79 @@ describe('RagDatabase', () => {
     });
   });
 
+  describe('insertEmbeddingsBatch', () => {
+    it('inserts multiple embeddings', async () => {
+      await ragDatabase.ensureReady();
+      ragDatabase.insertEmbeddingsBatch([
+        { chunkRowid: 1, docId: 42, embedding: [0.1] },
+        { chunkRowid: 2, docId: 42, embedding: [0.2] },
+      ]);
+
+      const embInserts = mockExecuteSync.mock.calls.filter(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO rag_embeddings')
+      );
+      expect(embInserts).toHaveLength(2);
+    });
+  });
+
+  describe('getEmbeddingsByProject', () => {
+    it('returns stored embeddings with chunk data', async () => {
+      await ragDatabase.ensureReady();
+      const embBuffer = new Float32Array([0.1, 0.2]).buffer;
+      mockExecuteSync.mockReturnValue({
+        rows: [{
+          chunk_rowid: 1, doc_id: 42, name: 'doc.txt',
+          content: 'hello', position: 0, embedding: embBuffer,
+        }],
+      });
+
+      const results = ragDatabase.getEmbeddingsByProject('proj1');
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe('hello');
+      expect(results[0].embedding).toBeInstanceOf(Array);
+    });
+  });
+
+  describe('hasEmbeddingsForDocument', () => {
+    it('returns true when embeddings exist', async () => {
+      await ragDatabase.ensureReady();
+      mockExecuteSync.mockReturnValue({ rows: [{ count: 5 }] });
+
+      expect(ragDatabase.hasEmbeddingsForDocument(42)).toBe(true);
+    });
+
+    it('returns false when no embeddings', async () => {
+      await ragDatabase.ensureReady();
+      mockExecuteSync.mockReturnValue({ rows: [{ count: 0 }] });
+
+      expect(ragDatabase.hasEmbeddingsForDocument(42)).toBe(false);
+    });
+  });
+
+  describe('getChunksByDocument', () => {
+    it('returns chunks for a document', async () => {
+      await ragDatabase.ensureReady();
+      mockExecuteSync.mockReturnValue({
+        rows: [{ id: 1, content: 'chunk', position: 0 }],
+      });
+
+      const chunks = ragDatabase.getChunksByDocument(42);
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0].content).toBe('chunk');
+    });
+  });
+
   describe('deleteDocument', () => {
-    it('deletes chunks and document', async () => {
+    it('deletes embeddings, chunks and document', async () => {
       await ragDatabase.ensureReady();
       ragDatabase.deleteDocument(42);
       const deleteCalls = mockExecuteSync.mock.calls.filter(
         (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
       );
-      expect(deleteCalls).toHaveLength(2);
-      expect(deleteCalls[0][0]).toContain('rag_chunks');
-      expect(deleteCalls[1][0]).toContain('rag_documents');
+      expect(deleteCalls).toHaveLength(3);
+      expect(deleteCalls[0][0]).toContain('rag_embeddings');
+      expect(deleteCalls[1][0]).toContain('rag_chunks');
+      expect(deleteCalls[2][0]).toContain('rag_documents');
     });
   });
 
@@ -114,44 +182,21 @@ describe('RagDatabase', () => {
     });
   });
 
-  describe('searchByProject', () => {
-    it('returns search results', async () => {
+  describe('getChunksByProject', () => {
+    it('returns chunks for a project', async () => {
       await ragDatabase.ensureReady();
       const mockResults = [
-        { doc_id: 1, name: 'doc.txt', content: 'match content', position: 0, rank: -1.5 },
+        { doc_id: 1, name: 'doc.txt', content: 'some content', position: 0, score: 0 },
       ];
       mockExecuteSync.mockReturnValue({ rows: mockResults });
 
-      const results = ragDatabase.searchByProject('proj1', 'test query', 5);
+      const results = ragDatabase.getChunksByProject('proj1', 5);
       expect(results).toEqual(mockResults);
-    });
-
-    it('returns empty array for empty query', async () => {
-      await ragDatabase.ensureReady();
-      const results = ragDatabase.searchByProject('proj1', '', 5);
-      expect(results).toEqual([]);
-    });
-
-    it('returns empty array for query with only special characters', async () => {
-      await ragDatabase.ensureReady();
-      const results = ragDatabase.searchByProject('proj1', '!@#$%', 5);
-      expect(results).toEqual([]);
-    });
-
-    it('sanitizes special characters from query', async () => {
-      await ragDatabase.ensureReady();
-      mockExecuteSync.mockReturnValue({ rows: [] });
-      ragDatabase.searchByProject('proj1', 'hello "world"', 5);
-      const searchCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('MATCH')
-      );
-      expect(searchCalls).toHaveLength(1);
-      expect(searchCalls[0][1][1]).toBe('hello  world');
     });
   });
 
   describe('deleteDocumentsByProject', () => {
-    it('deletes all chunks and documents for a project in two queries', async () => {
+    it('deletes all embeddings, chunks and documents for a project', async () => {
       await ragDatabase.ensureReady();
 
       ragDatabase.deleteDocumentsByProject('proj1');
@@ -159,11 +204,11 @@ describe('RagDatabase', () => {
       const deleteCalls = mockExecuteSync.mock.calls.filter(
         (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
       );
-      // 1 bulk chunk delete (via subselect) + 1 project-level doc delete
-      expect(deleteCalls).toHaveLength(2);
-      expect(deleteCalls[0][0]).toContain('rag_chunks');
-      expect(deleteCalls[0][0]).toContain('IN (SELECT id FROM rag_documents');
-      expect(deleteCalls[1][0]).toContain('rag_documents');
+      // 1 embeddings delete + 1 chunks delete + 1 docs delete
+      expect(deleteCalls).toHaveLength(3);
+      expect(deleteCalls[0][0]).toContain('rag_embeddings');
+      expect(deleteCalls[1][0]).toContain('rag_chunks');
+      expect(deleteCalls[2][0]).toContain('rag_documents');
     });
   });
 

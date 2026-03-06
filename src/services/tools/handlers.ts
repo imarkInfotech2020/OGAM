@@ -3,60 +3,51 @@ import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import logger from '../../utils/logger';
 
+function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
+  return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
+}
+
+function requireString(call: ToolCall, param: string): string | null {
+  const val = call.arguments[param];
+  return (val && typeof val === 'string' && val.trim()) ? val.trim() : null;
+}
+
 export async function executeToolCall(call: ToolCall): Promise<ToolResult> {
   const start = Date.now();
   try {
-    let content: string;
-    switch (call.name) {
-      case 'web_search': {
-        const query = call.arguments.query;
-        if (!query || typeof query !== 'string' || !query.trim()) {
-          return { toolCallId: call.id, name: call.name, content: '', error: 'Missing required parameter: query', durationMs: Date.now() - start };
-        }
-        content = await handleWebSearch(query.trim());
-        break;
-      }
-      case 'calculator':
-        content = handleCalculator(call.arguments.expression);
-        break;
-      case 'get_current_datetime':
-        content = handleGetDatetime(call.arguments.timezone);
-        break;
-      case 'get_device_info':
-        content = await handleGetDeviceInfo(call.arguments.info_type);
-        break;
-      case 'read_url': {
-        const url = call.arguments.url;
-        if (!url || typeof url !== 'string' || !url.trim()) {
-          return { toolCallId: call.id, name: call.name, content: '', error: 'Missing required parameter: url', durationMs: Date.now() - start };
-        }
-        content = await handleReadUrl(url.trim());
-        break;
-      }
-      default:
-        return {
-          toolCallId: call.id,
-          name: call.name,
-          content: '',
-          error: `Unknown tool: ${call.name}`,
-          durationMs: Date.now() - start,
-        };
-    }
-    return {
-      toolCallId: call.id,
-      name: call.name,
-      content,
-      durationMs: Date.now() - start,
-    };
+    const content = await dispatchTool(call);
+    return makeResult(call, start, { content });
   } catch (error: any) {
     logger.error(`[Tools] Error executing ${call.name}:`, error);
-    return {
-      toolCallId: call.id,
-      name: call.name,
-      content: '',
-      error: error.message || 'Tool execution failed',
-      durationMs: Date.now() - start,
-    };
+    return makeResult(call, start, { content: '', error: error.message || 'Tool execution failed' });
+  }
+}
+
+async function dispatchTool(call: ToolCall): Promise<string> {
+  switch (call.name) {
+    case 'web_search': {
+      const q = requireString(call, 'query');
+      if (!q) throw new Error('Missing required parameter: query');
+      return handleWebSearch(q);
+    }
+    case 'calculator':
+      return handleCalculator(call.arguments.expression);
+    case 'get_current_datetime':
+      return handleGetDatetime(call.arguments.timezone);
+    case 'get_device_info':
+      return handleGetDeviceInfo(call.arguments.info_type);
+    case 'search_knowledge_base': {
+      const q = requireString(call, 'query');
+      if (!q) throw new Error('Missing required parameter: query');
+      return handleSearchKnowledgeBase(q, call.context?.projectId);
+    }
+    case 'read_url': {
+      const url = requireString(call, 'url');
+      if (!url) throw new Error('Missing required parameter: url');
+      return handleReadUrl(url);
+    }
+    default:
+      throw new Error(`Unknown tool: ${call.name}`);
   }
 }
 
@@ -338,6 +329,16 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
     logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`, e?.stack || '');
     throw e;
   } finally { clearTimeout(timeout); }
+}
+
+async function handleSearchKnowledgeBase(query: string, projectId?: string): Promise<string> {
+  if (!projectId) return 'No project context. Knowledge base requires an active project.';
+  const { ragService } = require('../rag');
+  const result = await ragService.searchProject(projectId, query);
+  if (result.chunks.length === 0) return `No results found for "${query}" in the knowledge base.`;
+  return result.chunks
+    .map((c: any, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
+    .join('\n\n---\n\n');
 }
 
 function formatBytes(bytes: number): string {

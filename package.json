@@ -87,7 +87,5 @@
   "engines": {
     "node": ">=20"
   },
-  "op-sqlite": {
-    "fts5": true
-  }
+  "op-sqlite": {}
 }

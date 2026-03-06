@@ -18,7 +18,16 @@ export interface RagSearchResult {
   name: string;
   content: string;
   position: number;
-  rank: number;
+  score: number;
+}
+
+export interface StoredEmbedding {
+  chunk_rowid: number;
+  doc_id: number;
+  name: string;
+  content: string;
+  position: number;
+  embedding: number[];
 }
 
 class RagDatabase {
@@ -41,10 +50,22 @@ class RagDatabase {
         )`
       );
       this.db.executeSync(
-        `CREATE VIRTUAL TABLE IF NOT EXISTS rag_chunks USING fts5(
-          content,
-          doc_id UNINDEXED,
-          position UNINDEXED
+        `CREATE TABLE IF NOT EXISTS rag_chunks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          doc_id INTEGER NOT NULL,
+          position INTEGER NOT NULL,
+          FOREIGN KEY (doc_id) REFERENCES rag_documents(id)
+        )`
+      );
+      this.db.executeSync(
+        `CREATE TABLE IF NOT EXISTS rag_embeddings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          chunk_rowid INTEGER NOT NULL,
+          doc_id INTEGER NOT NULL,
+          embedding BLOB NOT NULL,
+          FOREIGN KEY (chunk_rowid) REFERENCES rag_chunks(id),
+          FOREIGN KEY (doc_id) REFERENCES rag_documents(id)
         )`
       );
       this.ready = true;
@@ -68,18 +89,77 @@ class RagDatabase {
     return result.insertId ?? 0;
   }
 
-  insertChunks(docId: number, chunks: Chunk[]): void {
+  insertChunks(docId: number, chunks: Chunk[]): number[] {
     const db = this.getDb();
+    const rowIds: number[] = [];
     for (const chunk of chunks) {
-      db.executeSync(
+      const result = db.executeSync(
         'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
         [chunk.content, docId, chunk.position]
+      );
+      rowIds.push(result.insertId ?? 0);
+    }
+    return rowIds;
+  }
+
+  private embeddingToBlob(embedding: number[]): ArrayBuffer {
+    return new Float32Array(embedding).buffer;
+  }
+
+  private blobToEmbedding(blob: any): number[] {
+    if (blob instanceof ArrayBuffer) return Array.from(new Float32Array(blob));
+    if (blob?.buffer instanceof ArrayBuffer) return Array.from(new Float32Array(blob.buffer));
+    return [];
+  }
+
+  insertEmbeddingsBatch(entries: { chunkRowid: number; docId: number; embedding: number[] }[]): void {
+    const db = this.getDb();
+    for (const entry of entries) {
+      db.executeSync(
+        'INSERT INTO rag_embeddings (chunk_rowid, doc_id, embedding) VALUES (?, ?, ?)',
+        [entry.chunkRowid, entry.docId, this.embeddingToBlob(entry.embedding)]
       );
     }
   }
 
+  getEmbeddingsByProject(projectId: string): StoredEmbedding[] {
+    const db = this.getDb();
+    const result = db.executeSync(
+      `SELECT e.chunk_rowid, e.doc_id, d.name, c.content, c.position, e.embedding
+       FROM rag_embeddings e
+       JOIN rag_chunks c ON e.chunk_rowid = c.id
+       JOIN rag_documents d ON e.doc_id = d.id
+       WHERE d.project_id = ? AND d.enabled = 1`,
+      [projectId]
+    );
+    return ((result.rows ?? []) as unknown as any[]).map(row => ({
+      ...row,
+      embedding: this.blobToEmbedding(row.embedding),
+    }));
+  }
+
+  hasEmbeddingsForDocument(docId: number): boolean {
+    const db = this.getDb();
+    const result = db.executeSync(
+      'SELECT COUNT(*) as count FROM rag_embeddings WHERE doc_id = ?',
+      [docId]
+    );
+    const rows = (result.rows ?? []) as unknown as { count: number }[];
+    return rows.length > 0 && rows[0].count > 0;
+  }
+
+  getChunksByDocument(docId: number): { id: number; content: string; position: number }[] {
+    const db = this.getDb();
+    const result = db.executeSync(
+      'SELECT id, content, position FROM rag_chunks WHERE doc_id = ? ORDER BY position',
+      [docId]
+    );
+    return (result.rows ?? []) as unknown as { id: number; content: string; position: number }[];
+  }
+
   deleteDocument(docId: number): void {
     const db = this.getDb();
+    db.executeSync('DELETE FROM rag_embeddings WHERE doc_id = ?', [docId]);
     db.executeSync('DELETE FROM rag_chunks WHERE doc_id = ?', [docId]);
     db.executeSync('DELETE FROM rag_documents WHERE id = ?', [docId]);
   }
@@ -98,25 +178,21 @@ class RagDatabase {
     db.executeSync('UPDATE rag_documents SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, docId]);
   }
 
-  searchByProject(projectId: string, query: string, topK: number = 5): RagSearchResult[] {
-    if (!query.trim()) return [];
+  getChunksByProject(projectId: string, topK: number = 5): RagSearchResult[] {
     const db = this.getDb();
-    // Sanitize the query for FTS5: remove special characters that could break the MATCH syntax
-    const sanitized = query.replace(/[^\w\s]/g, ' ').trim();
-    if (!sanitized) return [];
-
     const result = db.executeSync(
-      `SELECT c.doc_id, d.name, c.content, c.position, rank
+      `SELECT c.doc_id, d.name, c.content, c.position, 0 as score
        FROM rag_chunks c JOIN rag_documents d ON c.doc_id = d.id
-       WHERE d.project_id = ? AND d.enabled = 1 AND rag_chunks MATCH ?
-       ORDER BY rank LIMIT ?`,
-      [projectId, sanitized, topK]
+       WHERE d.project_id = ? AND d.enabled = 1
+       ORDER BY c.position LIMIT ?`,
+      [projectId, topK]
     );
     return (result.rows ?? []) as unknown as RagSearchResult[];
   }
 
   deleteDocumentsByProject(projectId: string): void {
     const db = this.getDb();
+    db.executeSync('DELETE FROM rag_embeddings WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
     db.executeSync('DELETE FROM rag_chunks WHERE doc_id IN (SELECT id FROM rag_documents WHERE project_id = ?)', [projectId]);
     db.executeSync('DELETE FROM rag_documents WHERE project_id = ?', [projectId]);
   }
