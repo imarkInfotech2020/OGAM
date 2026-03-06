@@ -1141,4 +1141,48 @@ describe('BackgroundDownloadService', () => {
       await expect(promise).rejects.toThrow('Download failed');
     });
   });
+
+  // ========================================================================
+  // excludeFromBackup
+  // ========================================================================
+  describe('excludeFromBackup', () => {
+    it('returns false when service is not available', async () => {
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let freshService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        freshService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      const result = await freshService.excludeFromBackup('/some/path');
+      expect(result).toBe(false);
+
+      NativeModules.DownloadManagerModule = savedModule;
+    });
+
+    it('returns false when excludePathFromBackup is not a function (Android)', async () => {
+      // Simulate Android where the native module lacks excludePathFromBackup
+      delete (mockDownloadManagerModule as any).excludePathFromBackup;
+
+      const result = await service.excludeFromBackup('/some/path');
+      expect(result).toBe(false);
+    });
+
+    it('calls native excludePathFromBackup when available (iOS)', async () => {
+      (mockDownloadManagerModule as any).excludePathFromBackup = jest.fn(() => Promise.resolve(true));
+
+      const result = await service.excludeFromBackup('/some/path');
+      expect(result).toBe(true);
+      expect((mockDownloadManagerModule as any).excludePathFromBackup).toHaveBeenCalledWith('/some/path');
+    });
+
+    it('returns false when native excludePathFromBackup rejects', async () => {
+      (mockDownloadManagerModule as any).excludePathFromBackup = jest.fn(() => Promise.reject(new Error('fail')));
+
+      const result = await service.excludeFromBackup('/some/path');
+      expect(result).toBe(false);
+    });
+  });
 });
