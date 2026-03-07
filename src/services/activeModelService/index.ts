@@ -166,9 +166,8 @@ class ActiveModelService {
       await this.unloadTextModel();
     }
     const memCheck = await this.checkMemoryForModel(modelId, 'image');
-    // On low-memory iOS devices, allow image model loading even if over budget:
-    // the text model is already unloaded above, reduceMemory mode lazily loads
-    // submodels, and cpuAndGPU uses less memory than ANE.
+    // On low-memory iOS devices, allow loading: the text model is already
+    // unloaded above, and chunked Unet models keep peak memory within limits.
     const canProceed =
       memCheck.severity !== 'critical' || (isLowMem && Platform.OS === 'ios');
     if (!canProceed) {

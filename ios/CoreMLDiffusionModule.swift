@@ -90,9 +90,9 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
         let cpuOnly = params["cpuOnly"] as? Bool ?? false
         let config = MLModelConfiguration()
-        // Low-memory devices use CPU+GPU (Metal) instead of CPU-only because
-        // ANE-optimized models (SPLIT_EINSUM attention) produce gray images on CPU.
-        // GPU handles SPLIT_EINSUM correctly with less memory overhead than ANE.
+        let attentionVariant = params["attentionVariant"] as? String ?? "split_einsum"
+        // ANE is required — palettized weights produce gray images on pure CPU.
+        // cpuAndGPU fallback lets low-memory devices avoid ANE compilation overhead.
         config.computeUnits = cpuOnly ? .cpuAndGPU : .cpuAndNeuralEngine
 
         let pipe: StableDiffusionPipelineProtocol
@@ -114,7 +114,13 @@ class CoreMLDiffusionModule: RCTEventEmitter {
           )
         }
 
-        try pipe.loadResources()
+        // Skip prewarm for 'original' variant (low-memory devices): prewarm
+        // loads the full Unet into memory just to unload it, causing an OOM spike.
+        // With reduceMemory=true the pipeline lazily loads each submodel during
+        // generateImages(), so prewarming is unnecessary.
+        if attentionVariant != "original" {
+          try pipe.loadResources()
+        }
 
         self.pipeline = pipe
         self.loadedModelPath = modelPath

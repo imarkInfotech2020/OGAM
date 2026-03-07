@@ -267,7 +267,9 @@ class HardwareService {
       return { recommendedBackend: coreml, recommendedModels: ['sdxl', 'xl-base'], bannerText: 'All models supported \u2014 SDXL for best quality', compatibleBackends: [coreml] };
     if ((chip === 'A15' || chip === 'A16') && ramGB >= 6)
       return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized', '2-1-base-palettized'], bannerText: 'SD 1.5 or SD 2.1 Palettized recommended', compatibleBackends: [coreml] };
-    return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized'], bannerText: 'SD 1.5 Palettized recommended for your device', compatibleBackends: [coreml] };
+    if (ramGB < 4)
+      return { recommendedBackend: coreml, recommendedModels: ['low ram'], bannerText: 'Low RAM models recommended for your device', compatibleBackends: [coreml] };
+    return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized', '2-1-base-palettized'], bannerText: 'SD 1.5 or SD 2.1 Palettized recommended for your device', compatibleBackends: [coreml] };
   }
   private getQualcommImageRec(socInfo: SoCInfo): ImageModelRecommendation {
     const label = socInfo.qnnVariant === '8gen2' ? 'flagship' : socInfo.qnnVariant === '8gen1' ? '' : 'lightweight ';

@@ -158,7 +158,11 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
       onnxImageGeneratorService.loadModel(
         ctx.model.modelPath,
         ctx.imageThreads,
-        { backend: ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'), cpuOnly: ctx.cpuOnly },
+        {
+          backend: ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'),
+          cpuOnly: ctx.cpuOnly,
+          attentionVariant: ctx.model.attentionVariant,
+        },
       ),
       timeoutPromise,
     ]);

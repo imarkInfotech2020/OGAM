@@ -930,7 +930,7 @@ describe('HardwareService', () => {
         expect(rec.bannerText).toContain('Palettized');
       });
 
-      it('recommends SD 1.5 palettized only for low-end', async () => {
+      it('recommends SD 1.5 palettized for mid-range (4GB+)', async () => {
         await setupDevice({
           totalGB: 4,
           platform: 'ios',
@@ -938,7 +938,19 @@ describe('HardwareService', () => {
         });
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('coreml');
-        expect(rec.recommendedModels).toEqual(['v1-5-palettized']);
+        expect(rec.recommendedModels).toEqual(['v1-5-palettized', '2-1-base-palettized']);
+      });
+
+      it('recommends Low RAM models for <4GB devices', async () => {
+        await setupDevice({
+          totalGB: 3.7,
+          platform: 'ios',
+          deviceId: 'iPhone11,2',
+        });
+        const rec = await hardwareService.getImageModelRecommendation();
+        expect(rec.recommendedBackend).toBe('coreml');
+        expect(rec.recommendedModels).toEqual(['low ram']);
+        expect(rec.bannerText).toContain('Low RAM');
       });
 
       it('always includes coreml in compatible backends on iOS', async () => {
