@@ -197,7 +197,7 @@ class LLMService {
       let tokenCount = 0;
       let fullResponse = '';
       let firstReceived = false;
-      const thinkStream = this.isThinkingEnabled() && onStream
+      const thinkStream = this.thinkingSupported && onStream
         ? createThinkInjector(t => onStream(t)) : null;
       const completionResult = await ctx.completion({
         messages: oaiMessages,
