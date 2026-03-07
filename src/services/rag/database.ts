@@ -93,13 +93,20 @@ class RagDatabase {
   insertChunks(docId: number, chunks: Chunk[]): number[] {
     const db = this.getDb();
     const rowIds: number[] = [];
-    for (const chunk of chunks) {
-      const result = db.executeSync(
-        'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
-        [chunk.content, docId, chunk.position]
-      );
-      if (result.insertId == null) throw new Error(`Failed to insert chunk at position ${chunk.position}`);
-      rowIds.push(result.insertId);
+    db.executeSync('BEGIN');
+    try {
+      for (const chunk of chunks) {
+        const result = db.executeSync(
+          'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
+          [chunk.content, docId, chunk.position]
+        );
+        if (result.insertId == null) throw new Error(`Failed to insert chunk at position ${chunk.position}`);
+        rowIds.push(result.insertId);
+      }
+      db.executeSync('COMMIT');
+    } catch (e) {
+      db.executeSync('ROLLBACK');
+      throw e;
     }
     return rowIds;
   }
@@ -116,11 +123,18 @@ class RagDatabase {
 
   insertEmbeddingsBatch(entries: { chunkRowid: number; docId: number; embedding: number[] }[]): void {
     const db = this.getDb();
-    for (const entry of entries) {
-      db.executeSync(
-        'INSERT INTO rag_embeddings (chunk_rowid, doc_id, embedding) VALUES (?, ?, ?)',
-        [entry.chunkRowid, entry.docId, this.embeddingToBlob(entry.embedding)]
-      );
+    db.executeSync('BEGIN');
+    try {
+      for (const entry of entries) {
+        db.executeSync(
+          'INSERT INTO rag_embeddings (chunk_rowid, doc_id, embedding) VALUES (?, ?, ?)',
+          [entry.chunkRowid, entry.docId, this.embeddingToBlob(entry.embedding)]
+        );
+      }
+      db.executeSync('COMMIT');
+    } catch (e) {
+      db.executeSync('ROLLBACK');
+      throw e;
     }
   }
 

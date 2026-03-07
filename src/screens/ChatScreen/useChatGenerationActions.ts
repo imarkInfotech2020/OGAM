@@ -202,7 +202,7 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
       embeddingService.load().catch(err => logger.error('[RAG] Embedding warmup failed', err));
     }
 
-    const docList = enabledDocs.map((d: any) => `- ${d.name}`).join('\n');
+    const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
     kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
 
