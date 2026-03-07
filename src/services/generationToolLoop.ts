@@ -235,7 +235,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   let totalToolCalls = 0;
   let firstTokenFired = false;
   let streamedContent = '';
-  const isThinkingModel = llmService.supportsThinking();
+  const isThinkingModel = llmService.isThinkingEnabled();
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
