@@ -1,5 +1,4 @@
 // ActiveModelService — THE ONLY PLACE models should be loaded/unloaded from.
-import { Platform } from 'react-native';
 import { llmService } from '../llm';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
@@ -148,32 +147,26 @@ class ActiveModelService {
   private async checkImageModelCanLoad(
     modelId: string,
     model: ONNXImageModel,
-  ): Promise<{ canLoad: boolean; isLowMem: boolean; error?: string }> {
+  ): Promise<{ canLoad: boolean; error?: string }> {
     if (model.backend === 'qnn') {
       const socInfo = await hardwareService.getSoCInfo();
       if (!socInfo.hasNPU) {
         return {
           canLoad: false,
-          isLowMem: false,
           error:
             'NPU models require a Qualcomm Snapdragon processor. Your device does not have a compatible NPU. Please use a GPU model instead.',
         };
       }
     }
     const totalMemGB = hardwareService.getTotalMemoryGB();
-    const isLowMem = totalMemGB <= 4;
-    if (isLowMem && this.loadedTextModelId && llmService.isModelLoaded()) {
+    if (totalMemGB <= 4 && this.loadedTextModelId && llmService.isModelLoaded()) {
       await this.unloadTextModel();
     }
     const memCheck = await this.checkMemoryForModel(modelId, 'image');
-    // On low-memory iOS devices, allow loading: the text model is already
-    // unloaded above, and chunked Unet models keep peak memory within limits.
-    const canProceed =
-      memCheck.severity !== 'critical' || (isLowMem && Platform.OS === 'ios');
-    if (!canProceed) {
-      return { canLoad: false, isLowMem, error: memCheck.message };
+    if (memCheck.severity === 'critical') {
+      return { canLoad: false, error: memCheck.message };
     }
-    return { canLoad: true, isLowMem };
+    return { canLoad: true };
   }
   async loadImageModel(
     modelId: string,
@@ -210,7 +203,6 @@ class ActiveModelService {
     if (!check.canLoad) {
       throw new Error(check.error);
     }
-    const isLowMemDevice = check.isLowMem;
     this.loadingState.image = true;
     this.notifyListeners();
     this.imageLoadPromise = doLoadImageModel({
@@ -218,7 +210,7 @@ class ActiveModelService {
       modelId,
       imageThreads,
       needsThreadReload,
-      cpuOnly: isLowMemDevice,
+      cpuOnly: false,
       store,
       timeoutMs,
       loadedImageModelId: this.loadedImageModelId,

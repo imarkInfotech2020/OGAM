@@ -1548,7 +1548,7 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeImageModelId).toBe('img');
     });
 
-    it('passes cpuOnly=true to native loader', async () => {
+    it('passes cpuOnly=false to native loader', async () => {
       setupLowMemDevice();
 
       const imageModel = createONNXImageModel({ id: 'img-cpu', size: 512 * 1024 * 1024 });
@@ -1564,7 +1564,7 @@ describe('ActiveModelService Integration', () => {
       expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
         imageModel.modelPath,
         4,
-        { backend: imageModel.backend ?? 'auto', cpuOnly: true },
+        expect.objectContaining({ cpuOnly: false }),
       );
     });
 
@@ -1587,10 +1587,9 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeImageModelId).toBe('img-no-txt');
     });
 
-    it('allows loading on low-memory iOS even when model exceeds budget (reduceMemory handles it)', async () => {
+    it('blocks loading when model exceeds memory budget', async () => {
       setupLowMemDevice();
 
-      // Image model over budget but iOS reduceMemory mode lazily loads submodels
       const imageModel = createONNXImageModel({ id: 'img-huge', size: 2 * 1024 * 1024 * 1024 });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
@@ -1600,8 +1599,7 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
       mockLocalDreamService.loadModel.mockResolvedValue(true);
 
-      await activeModelService.loadImageModel('img-huge');
-      expect(getAppState().activeImageModelId).toBe('img-huge');
+      await expect(activeModelService.loadImageModel('img-huge')).rejects.toThrow();
     });
   });
 

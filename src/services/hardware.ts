@@ -99,7 +99,7 @@ class HardwareService {
         .catch(error =>
           console.warn('Failed to fetch total memory in background:', error),
         );
-      return 6; // Safe default: assume mid-range device (6GB) until we know better
+      return 4; // Safe default until cache is populated
     }
     return this.cachedDeviceInfo.totalMemory / (1024 * 1024 * 1024);
   }
@@ -119,7 +119,7 @@ class HardwareService {
             error,
           ),
         );
-      return 3; // Safe default until we know better
+      return 2; // Safe default until cache is populated
     }
     return this.cachedDeviceInfo.availableMemory / (1024 * 1024 * 1024);
   }

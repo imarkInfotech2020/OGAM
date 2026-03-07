@@ -150,8 +150,8 @@ describe('HardwareService', () => {
   // getTotalMemoryGB
   // ========================================================================
   describe('getTotalMemoryGB', () => {
-    it('returns 6 when no cached info', () => {
-      expect(hardwareService.getTotalMemoryGB()).toBe(6);
+    it('returns 4 when no cached info', () => {
+      expect(hardwareService.getTotalMemoryGB()).toBe(4);
     });
 
     it('returns correct GB from cached total memory', async () => {
@@ -185,8 +185,8 @@ describe('HardwareService', () => {
   // getAvailableMemoryGB
   // ========================================================================
   describe('getAvailableMemoryGB', () => {
-    it('returns 3 when no cached info', () => {
-      expect(hardwareService.getAvailableMemoryGB()).toBe(3);
+    it('returns 2 when no cached info', () => {
+      expect(hardwareService.getAvailableMemoryGB()).toBe(2);
     });
 
     it('returns correct GB from cached available memory', async () => {
@@ -581,9 +581,9 @@ describe('HardwareService', () => {
       expect(hardwareService.getDeviceTier()).toBe('flagship');
     });
 
-    it('returns "high" for default (no cached info)', () => {
-      // Default getTotalMemoryGB returns 6, which is "high"
-      expect(hardwareService.getDeviceTier()).toBe('high');
+    it('returns "medium" for default (no cached info)', () => {
+      // Default getTotalMemoryGB returns 4, which is "medium"
+      expect(hardwareService.getDeviceTier()).toBe('medium');
     });
 
     it('returns "flagship" for exactly 8GB', async () => {
