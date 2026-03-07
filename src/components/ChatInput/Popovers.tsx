@@ -70,10 +70,18 @@ interface QuickSettingsPopoverProps {
   onToolsPress?: () => void;
 }
 
-function getImageModeLabel(mode: ImageModeState): string {
-  if (mode === 'force') return 'ON';
-  if (mode === 'disabled') return 'OFF';
-  return 'Auto';
+function getImageModeBadge(mode: ImageModeState, colors: any) {
+  if (mode === 'force') return { label: 'ON', bg: colors.primary };
+  if (mode === 'disabled') return { label: 'OFF', bg: colors.textMuted };
+  return { label: 'Auto', bg: `${colors.textMuted}80` };
+}
+
+function getToolsStyle(supported: boolean, count: number, colors: any) {
+  const iconColor = supported ? (count > 0 ? colors.primary : colors.text) : colors.textMuted;
+  const badgeBg = supported && count > 0 ? colors.primary : colors.textMuted;
+  const labelColor = supported ? colors.text : colors.textMuted;
+  const badgeLabel = supported ? String(count) : 'N/A';
+  return { iconColor, badgeBg, labelColor, badgeLabel };
 }
 
 export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
@@ -85,6 +93,9 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
   const { settings, updateSettings } = useAppStore();
 
   if (!visible) return null;
+
+  const imgBadge = getImageModeBadge(imageMode, colors);
+  const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -104,14 +115,8 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
               >
                 <Icon name="image" size={16} color={imageModelLoaded ? colors.text : colors.textMuted} />
                 <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Image Gen</Text>
-                <View style={[popoverStyles.badge, {
-                  backgroundColor: imageMode === 'force' ? colors.primary
-                    : imageMode === 'disabled' ? colors.textMuted
-                    : `${colors.textMuted}80`,
-                }]}>
-                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>
-                    {getImageModeLabel(imageMode)}
-                  </Text>
+                <View style={[popoverStyles.badge, { backgroundColor: imgBadge.bg }]}>
+                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{imgBadge.label}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -142,21 +147,13 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                 onPress={() => {
                   triggerHaptic('impactLight');
                   onClose();
-                  if (supportsToolCalling) {
-                    onToolsPress?.();
-                  }
+                  if (supportsToolCalling) { onToolsPress?.(); }
                 }}
               >
-                <Icon name="tool" size={16} color={supportsToolCalling ? (enabledToolCount > 0 ? colors.primary : colors.text) : colors.textMuted} />
-                <Text style={[popoverStyles.rowLabel, { color: supportsToolCalling ? colors.text : colors.textMuted }]}>Tools</Text>
-                <View style={[popoverStyles.badge, {
-                  backgroundColor: !supportsToolCalling ? colors.textMuted
-                    : enabledToolCount > 0 ? colors.primary
-                    : colors.textMuted,
-                }]}>
-                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>
-                    {supportsToolCalling ? enabledToolCount : 'N/A'}
-                  </Text>
+                <Icon name="tool" size={16} color={tools.iconColor} />
+                <Text style={[popoverStyles.rowLabel, { color: tools.labelColor }]}>Tools</Text>
+                <View style={[popoverStyles.badge, { backgroundColor: tools.badgeBg }]}>
+                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{tools.badgeLabel}</Text>
                 </View>
               </TouchableOpacity>
             </View>
