@@ -94,6 +94,8 @@ export function buildOAIMessages(messages: Message[], options?: { disableThinkin
     }
     if (message.content) {
       contentParts.push({ type: 'text', text: maybeAppendNoThink(message.content) });
+    } else if (shouldAppendNoThink) {
+      contentParts.push({ type: 'text', text: '/no_think' });
     }
     return { role: message.role, content: contentParts };
   });
