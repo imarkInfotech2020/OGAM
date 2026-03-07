@@ -124,9 +124,11 @@ export function hfModelToDescriptor(
   return {
     id: hfModel.id,
     name: hfModel.displayName,
-    description: hfModel._coreml
-      ? `Core ML model from ${hfModel.repo}`
-      : `${hfModel.backend === 'qnn' ? 'NPU' : 'GPU'} model from ${hfModel.repo}`,
+    description: (() => {
+      if (hfModel._coreml) return `Core ML model from ${hfModel.repo}`;
+      const backendLabel = hfModel.backend === 'qnn' ? 'NPU' : 'GPU';
+      return `${backendLabel} model from ${hfModel.repo}`;
+    })(),
     downloadUrl: hfModel.downloadUrl,
     size: hfModel.size,
     style: guessStyle(hfModel.name),

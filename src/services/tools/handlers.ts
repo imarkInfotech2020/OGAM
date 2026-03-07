@@ -6,7 +6,6 @@ import logger from '../../utils/logger';
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
 }
-
 function requireString(call: ToolCall, param: string): string | null {
   const val = call.arguments[param];
   return (val && typeof val === 'string' && val.trim()) ? val.trim() : null;
@@ -73,7 +72,10 @@ async function handleWebSearch(query: string): Promise<string> {
 
     return results
       .slice(0, 5)
-      .map((r, i) => `${i + 1}. ${r.url ? `[${r.title}](${r.url})` : r.title}\n   ${r.snippet}`)
+      .map((r, i) => {
+        const heading = r.url ? `[${r.title}](${r.url})` : r.title;
+        return `${i + 1}. ${heading}\n   ${r.snippet}`;
+      })
       .join('\n\n');
   } finally {
     clearTimeout(timeout);
@@ -85,10 +87,10 @@ type SearchResult = { title: string; snippet: string; url?: string };
 function stripHtmlTags(html: string): string {
   let result = '';
   let inTag = false;
-  for (let i = 0; i < html.length; i++) {
-    if (html[i] === '<') { inTag = true; continue; }
-    if (html[i] === '>') { inTag = false; continue; }
-    if (!inTag) result += html[i];
+  for (const ch of html) {
+    if (ch === '<') { inTag = true; continue; }
+    if (ch === '>') { inTag = false; continue; }
+    if (!inTag) result += ch;
   }
   return result;
 }
@@ -225,7 +227,7 @@ function handleCalculator(expression: string): string {
   const result = evaluateExpression(sanitized);
 
   if (typeof result !== 'number' || !Number.isFinite(result)) {
-    throw new Error('Expression did not evaluate to a finite number');
+    throw new TypeError('Expression did not evaluate to a finite number');
   }
 
   return `${expression} = ${result}`;
@@ -255,8 +257,8 @@ async function collectDeviceSection(
   try { return await fetcher(); } catch { return `${label}: unavailable`; }
 }
 
-async function handleGetDeviceInfo(infoType?: string): Promise<string> {
-  const type = infoType ?? 'all';
+async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
+  const type = infoType;
   const parts: string[] = [];
 
   if (type === 'all' || type === 'memory') {
@@ -343,7 +345,6 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  return bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }

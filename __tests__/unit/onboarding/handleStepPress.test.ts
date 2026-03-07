@@ -62,19 +62,20 @@ const PENDING_MAP: Record<string, number> = {
 function simulateHandleStepPress(
   stepId: string,
   callbacks: { closeSheet: jest.Mock; navigate: jest.Mock; goTo: jest.Mock },
-  imageState: ImageState = DEFAULT_IMAGE_STATE,
+  imageState?: ImageState,
 ) {
+  const resolvedImageState = imageState ?? DEFAULT_IMAGE_STATE;
   const { closeSheet, navigate, goTo } = callbacks;
   closeSheet();
 
   // Image gen flow is state-aware
   if (stepId === 'triedImageGen') {
-    if (imageState.activeImageModelId) {
+    if (resolvedImageState.activeImageModelId) {
       setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
       navigate('ChatsTab');
       setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
-    } else if (imageState.downloadedImageModelsCount > 0) {
-      imageState.markSpotlightShown('imageLoad');
+    } else if (resolvedImageState.downloadedImageModelsCount > 0) {
+      resolvedImageState.markSpotlightShown('imageLoad');
       setTimeout(() => goTo(IMAGE_LOAD_STEP_INDEX), 600);
     } else {
       setPendingSpotlight(IMAGE_DOWNLOAD_STEP_INDEX);

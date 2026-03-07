@@ -47,7 +47,7 @@ export const SecuritySettingsScreen: React.FC = () => {
               setAlertState(hideAlert());
               authService.removePassphrase().then(() => {
                 setAuthEnabled(false);
-              });
+              }).catch(() => {});
             },
           },
         ]

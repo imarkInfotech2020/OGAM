@@ -219,7 +219,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     return filtered.map(model => {
       const type = getModelType(model);
       const params = parseParamCount(model);
-      return { ...model, modelType: type !== 'image-gen' ? type as 'text' | 'vision' | 'code' : undefined, paramCount: params ?? undefined };
+      return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
     });
   }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, matchesOrgFilter, parseParamCount, ramGB]);
 

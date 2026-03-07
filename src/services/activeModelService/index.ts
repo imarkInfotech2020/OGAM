@@ -107,18 +107,33 @@ class ActiveModelService {
     }
   }
 
+  private async isImageModelAlreadyLoaded(modelId: string, imageThreads: number): Promise<boolean> {
+    if (this.loadedImageModelId !== modelId) return false;
+    const needsThreadReload = this.loadedImageModelThreads !== imageThreads;
+    const isLoaded = await onnxImageGeneratorService.isModelLoaded();
+    return isLoaded && !needsThreadReload;
+  }
+
+  private async validateQnnBackend(backend: string | undefined): Promise<void> {
+    if (backend !== 'qnn') return;
+    const socInfo = await hardwareService.getSoCInfo();
+    if (!socInfo.hasNPU) {
+      throw new Error(
+        'NPU models require a Qualcomm Snapdragon processor. ' +
+        'Your device does not have a compatible NPU. Please use a CPU model instead.',
+      );
+    }
+  }
+
   async loadImageModel(modelId: string, timeoutMs: number = 180000): Promise<void> {
     const store = useAppStore.getState();
     const imageThreads = store.settings?.imageThreads ?? 4;
     const needsThreadReload =
       this.loadedImageModelId === modelId && this.loadedImageModelThreads !== imageThreads;
 
-    if (this.loadedImageModelId === modelId) {
-      const isLoaded = await onnxImageGeneratorService.isModelLoaded();
-      if (isLoaded && !needsThreadReload) {
-        if (store.activeImageModelId !== modelId) { store.setActiveImageModelId(modelId); }
-        return;
-      }
+    if (await this.isImageModelAlreadyLoaded(modelId, imageThreads)) {
+      if (store.activeImageModelId !== modelId) { store.setActiveImageModelId(modelId); }
+      return;
     }
     if (this.imageLoadPromise !== null) {
       await this.imageLoadPromise;
@@ -128,15 +143,7 @@ class ActiveModelService {
     const model = store.downloadedImageModels.find(m => m.id === modelId);
     if (!model) { throw new Error('Model not found'); }
 
-    if (model.backend === 'qnn') {
-      const socInfo = await hardwareService.getSoCInfo();
-      if (!socInfo.hasNPU) {
-        throw new Error(
-          'NPU models require a Qualcomm Snapdragon processor. ' +
-          'Your device does not have a compatible NPU. Please use a GPU model instead.',
-        );
-      }
-    }
+    await this.validateQnnBackend(model.backend);
 
     this.loadingState.image = true;
     this.notifyListeners();

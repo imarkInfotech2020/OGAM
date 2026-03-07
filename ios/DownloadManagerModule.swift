@@ -1033,7 +1033,7 @@ class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
     NSLog("[DownloadManager] DownloadSessionDelegate created")
   }
 
-  func urlSession(_ session: URLSession,
+  func urlSession(_: URLSession,
                   downloadTask: URLSessionDownloadTask,
                   didWriteData bytesWritten: Int64,
                   totalBytesWritten: Int64,
@@ -1046,7 +1046,7 @@ class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
     )
   }
 
-  func urlSession(_ session: URLSession,
+  func urlSession(_: URLSession,
                   downloadTask: URLSessionDownloadTask,
                   didFinishDownloadingTo location: URL) {
     NSLog("[DownloadManager] Delegate: didFinishDownloadingTo for task#%d at %@",
@@ -1068,7 +1068,7 @@ class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
     }
   }
 
-  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+  func urlSession(_: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     if let error = error {
       NSLog("[DownloadManager] Delegate: didCompleteWithError for task#%d: %@",
             task.taskIdentifier, error.localizedDescription)

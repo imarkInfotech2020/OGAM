@@ -10,8 +10,6 @@ import {
   DownloadErrorCallback,
 } from './types';
 import {
-  MODELS_STORAGE_KEY,
-  IMAGE_MODELS_STORAGE_KEY,
   saveModelsList,
   saveImageModelsList,
   loadDownloadedModels,
@@ -36,14 +34,14 @@ import {
 } from './scan';
 import { resolveStoredPath, determineCredibility } from './storage';
 
-export type { BackgroundDownloadMetadataCallback };
-export { MODELS_STORAGE_KEY, IMAGE_MODELS_STORAGE_KEY };
+export type { BackgroundDownloadMetadataCallback } from './types';
+export { MODELS_STORAGE_KEY, IMAGE_MODELS_STORAGE_KEY } from './storage';
 
 class ModelManager {
-  private modelsDir: string;
-  private imageModelsDir: string;
+  private readonly modelsDir: string;
+  private readonly imageModelsDir: string;
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
-  private backgroundDownloadContext: Map<number, BackgroundDownloadContext> = new Map();
+  private readonly backgroundDownloadContext: Map<number, BackgroundDownloadContext> = new Map();
 
   constructor() {
     this.modelsDir = `${RNFS.DocumentDirectoryPath}/${APP_CONFIG.modelStorageDir}`;

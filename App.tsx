@@ -5,7 +5,7 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback } from 'react';
-import { StatusBar, ActivityIndicator, View, StyleSheet } from 'react-native';
+import { StatusBar, ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -16,7 +16,6 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
-import { LogBox } from 'react-native';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -57,13 +56,7 @@ function App() {
   }, []);
 
   const ensureAppStoreHydrated = async () => {
-    const storeWithPersist = useAppStore as typeof useAppStore & {
-      persist?: {
-        hasHydrated?: () => boolean;
-        rehydrate?: () => Promise<void>;
-      };
-    };
-    const persistApi = storeWithPersist.persist;
+    const persistApi = useAppStore.persist;
     if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
     if (!persistApi.hasHydrated()) {
       await persistApi.rehydrate();

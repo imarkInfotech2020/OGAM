@@ -20,7 +20,7 @@ import { useNotifRationale } from './useNotifRationale';
 export function useModelsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
-  const [activeTab, setActiveTabRaw] = useState<ModelTab>('text');
+  const [activeTab, setActiveTabState] = useState<ModelTab>('text');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
@@ -47,7 +47,7 @@ export function useModelsScreen() {
   }, [activeTab]);
 
   const setActiveTab = (tab: ModelTab) => {
-    setActiveTabRaw(tab);
+    setActiveTabState(tab);
     text.setFilterState(initialFilterState);
     text.setTextFiltersVisible(false);
     image.setImageFiltersVisible(false);

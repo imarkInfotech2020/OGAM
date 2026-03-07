@@ -74,7 +74,7 @@ describe('read_url handler', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.content).toContain('[Content truncated]');
-    expect(result.content!.length).toBeLessThan(5000);
+    expect(result.content.length).toBeLessThan(5000);
   });
 
   it('handles HTTP error responses', async () => {
