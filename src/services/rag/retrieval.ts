@@ -3,6 +3,18 @@ import { embeddingService } from './embedding';
 import { cosineSimilarity } from './vectorMath';
 import logger from '../../utils/logger';
 
+/** Strip HTML-like tags without regex backtracking risk. */
+function stripAngleBracketTags(text: string): string {
+  let result = '';
+  let inTag = false;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '<') { inTag = true; continue; }
+    if (text[i] === '>') { inTag = false; continue; }
+    if (!inTag) result += text[i];
+  }
+  return result;
+}
+
 export interface SearchResult {
   chunks: RagSearchResult[];
   truncated: boolean;
@@ -59,7 +71,7 @@ class RetrievalService {
     const sections = result.chunks.map((chunk) => {
       // Sanitize content to prevent prompt injection from user-uploaded documents
       const safeName = chunk.name.replaceAll(/[<>]/g, '');
-      const safeContent = chunk.content.replaceAll(/<[^>]*>/g, '');
+      const safeContent = stripAngleBracketTags(chunk.content);
       return `[Source: ${safeName} (part ${chunk.position + 1})]\n${safeContent}`;
     });
 
