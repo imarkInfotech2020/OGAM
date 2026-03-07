@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -130,14 +130,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleQuickSettingsPress = () => {
     quickSettingsRef.current?.measureInWindow?.((...args: number[]) => {
-      setPopoverAnchor({ y: (args[3] ?? 0) + 52, x: 12 });
+      const screenH = Dimensions.get('window').height;
+      setPopoverAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
     });
     setShowQuickSettings(true);
   };
 
   const handleAttachPress = () => {
     attachRef.current?.measureInWindow?.((...args: number[]) => {
-      setAttachAnchor({ y: (args[3] ?? 0) + 52, x: 12 });
+      const screenH = Dimensions.get('window').height;
+      setAttachAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
     });
     setShowAttachPicker(true);
   };
