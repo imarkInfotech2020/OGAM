@@ -169,7 +169,7 @@ class ActiveModelService {
       await this.unloadTextModel();
     }
     const memCheck = await this.checkMemoryForModel(modelId, 'image');
-    const canProceed = memCheck.severity !== 'critical' || isLowMem;
+    const canProceed = memCheck.severity !== 'critical';
     if (!canProceed) {
       return { canLoad: false, isLowMem, error: memCheck.message };
     }
@@ -298,51 +298,21 @@ class ActiveModelService {
   async getResourceUsage(): Promise<ResourceUsage> {
     return _getResourceUsage();
   }
-  // Exposed for testing via (service as any) — delegates to standalone memory helper
+  private getIds() {
+    return { loadedTextModelId: this.loadedTextModelId, loadedImageModelId: this.loadedImageModelId };
+  }
+  private getLists() {
+    const s = useAppStore.getState();
+    return { downloadedModels: s.downloadedModels, downloadedImageModels: s.downloadedImageModels };
+  }
   private getCurrentlyLoadedMemoryGB(): number {
-    const store = useAppStore.getState();
-    return _getCurrentlyLoadedMemoryGB(
-      {
-        loadedTextModelId: this.loadedTextModelId,
-        loadedImageModelId: this.loadedImageModelId,
-      },
-      {
-        downloadedModels: store.downloadedModels,
-        downloadedImageModels: store.downloadedImageModels,
-      },
-    );
+    return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
-  async checkMemoryForModel(
-    modelId: string,
-    modelType: ModelType,
-  ): Promise<MemoryCheckResult> {
-    const store = useAppStore.getState();
-    return _checkMemoryForModel({
-      modelId,
-      modelType,
-      ids: {
-        loadedTextModelId: this.loadedTextModelId,
-        loadedImageModelId: this.loadedImageModelId,
-      },
-      lists: {
-        downloadedModels: store.downloadedModels,
-        downloadedImageModels: store.downloadedImageModels,
-      },
-    });
+  async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {
+    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists() });
   }
-  async checkMemoryForDualModel(
-    textModelId: string | null,
-    imageModelId: string | null,
-  ): Promise<MemoryCheckResult> {
-    const store = useAppStore.getState();
-    return _checkMemoryForDualModel({
-      textModelId,
-      imageModelId,
-      lists: {
-        downloadedModels: store.downloadedModels,
-        downloadedImageModels: store.downloadedImageModels,
-      },
-    });
+  async checkMemoryForDualModel(textModelId: string | null, imageModelId: string | null): Promise<MemoryCheckResult> {
+    return _checkMemoryForDualModel({ textModelId, imageModelId, lists: this.getLists() });
   }
   async clearTextModelCache(): Promise<void> {
     if (llmService.isModelLoaded()) {

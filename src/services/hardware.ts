@@ -96,7 +96,9 @@ class HardwareService {
             this.cachedDeviceInfo.totalMemory = mem;
           }
         })
-        .catch(() => {});
+        .catch(error =>
+          console.warn('Failed to fetch total memory in background:', error),
+        );
       return 6; // Safe default: assume mid-range device (6GB) until we know better
     }
     return this.cachedDeviceInfo.totalMemory / (1024 * 1024 * 1024);
@@ -111,7 +113,12 @@ class HardwareService {
               mem - (this.cachedDeviceInfo.usedMemory || 0);
           }
         })
-        .catch(() => {});
+        .catch(error =>
+          console.warn(
+            'Failed to fetch available memory in background:',
+            error,
+          ),
+        );
       return 3; // Safe default until we know better
     }
     return this.cachedDeviceInfo.availableMemory / (1024 * 1024 * 1024);
@@ -162,26 +169,11 @@ class HardwareService {
     return (parametersBillions * bitsPerWeight) / 8;
   }
   private getQuantizationBits(quantization: string): number {
-    const bits: Record<string, number> = {
-      Q2_K: 2.625,
-      Q3_K_S: 3.4375,
-      Q3_K_M: 3.4375,
-      Q4_0: 4,
-      Q4_K_S: 4.5,
-      Q4_K_M: 4.5,
-      Q5_K_S: 5.5,
-      Q5_K_M: 5.5,
-      Q6_K: 6.5,
-      Q8_0: 8,
-      F16: 16,
-    };
-    // Try to match quantization string
+    const bits: Record<string, number> = { Q2_K: 2.625, Q3_K_S: 3.4375, Q3_K_M: 3.4375, Q4_0: 4, Q4_K_S: 4.5, Q4_K_M: 4.5, Q5_K_S: 5.5, Q5_K_M: 5.5, Q6_K: 6.5, Q8_0: 8, F16: 16 };
     for (const [key, value] of Object.entries(bits)) {
-      if (quantization.toUpperCase().includes(key)) {
-        return value;
-      }
+      if (quantization.toUpperCase().includes(key)) return value;
     }
-    return 4.5; // Default to Q4_K_M
+    return 4.5;
   }
   formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
@@ -189,49 +181,17 @@ class HardwareService {
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
   }
-  /**
-   * Get combined model size including mmproj for vision models.
-   * Use this everywhere model size is displayed for consistency.
-   */
-  getModelTotalSize(model: {
-    fileSize?: number;
-    size?: number;
-    mmProjFileSize?: number;
-  }): number {
-    const mainSize = model.fileSize || model.size || 0;
-    const mmProjSize = model.mmProjFileSize || 0;
-    return mainSize + mmProjSize;
+  getModelTotalSize(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
+    return (model.fileSize || model.size || 0) + (model.mmProjFileSize || 0);
   }
-  /**
-   * Format combined model size including mmproj.
-   * Use this everywhere model size is displayed for consistency.
-   */
-  formatModelSize(model: {
-    fileSize?: number;
-    size?: number;
-    mmProjFileSize?: number;
-  }): string {
+  formatModelSize(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): string {
     return this.formatBytes(this.getModelTotalSize(model));
   }
-  /**
-   * Get estimated RAM usage for a model (combined size * overhead multiplier).
-   */
-  estimateModelRam(
-    model: { fileSize?: number; size?: number; mmProjFileSize?: number },
-    multiplier: number = 1.5,
-  ): number {
+  estimateModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): number {
     return this.getModelTotalSize(model) * multiplier;
   }
-  /**
-   * Format estimated RAM usage for a model.
-   */
-  formatModelRam(
-    model: { fileSize?: number; size?: number; mmProjFileSize?: number },
-    multiplier: number = 1.5,
-  ): string {
-    const ramBytes = this.estimateModelRam(model, multiplier);
-    const ramGB = ramBytes / (1024 * 1024 * 1024);
-    return `~${ramGB.toFixed(1)} GB`;
+  formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): string {
+    return `~${(this.estimateModelRam(model, multiplier) / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
   private detectAppleChip(deviceId: string): SoCInfo['appleChip'] {
     const match = deviceId.match(/iPhone(\d+)/);
@@ -301,52 +261,18 @@ class HardwareService {
     if (FLAGSHIP_8GEN1.has(num)) return '8gen1';
     return 'min';
   }
-  private getIosImageRec(
-    chip: SoCInfo['appleChip'],
-    ramGB: number,
-  ): ImageModelRecommendation {
-    if ((chip === 'A17Pro' || chip === 'A18') && ramGB >= 6) {
-      return {
-        recommendedBackend: 'coreml',
-        recommendedModels: ['sdxl', 'xl-base'],
-        bannerText: 'All models supported \u2014 SDXL for best quality',
-        compatibleBackends: ['coreml'],
-      };
-    }
-    if ((chip === 'A15' || chip === 'A16') && ramGB >= 6) {
-      return {
-        recommendedBackend: 'coreml',
-        recommendedModels: ['v1-5-palettized', '2-1-base-palettized'],
-        bannerText: 'SD 1.5 or SD 2.1 Palettized recommended',
-        compatibleBackends: ['coreml'],
-      };
-    }
-    return {
-      recommendedBackend: 'coreml',
-      recommendedModels: ['v1-5-palettized'],
-      bannerText: 'SD 1.5 Palettized recommended for your device',
-      compatibleBackends: ['coreml'],
-    };
+  private getIosImageRec(chip: SoCInfo['appleChip'], ramGB: number): ImageModelRecommendation {
+    const coreml = 'coreml';
+    if ((chip === 'A17Pro' || chip === 'A18') && ramGB >= 6)
+      return { recommendedBackend: coreml, recommendedModels: ['sdxl', 'xl-base'], bannerText: 'All models supported \u2014 SDXL for best quality', compatibleBackends: [coreml] };
+    if ((chip === 'A15' || chip === 'A16') && ramGB >= 6)
+      return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized', '2-1-base-palettized'], bannerText: 'SD 1.5 or SD 2.1 Palettized recommended', compatibleBackends: [coreml] };
+    return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized'], bannerText: 'SD 1.5 Palettized recommended for your device', compatibleBackends: [coreml] };
   }
   private getQualcommImageRec(socInfo: SoCInfo): ImageModelRecommendation {
-    const label =
-      socInfo.qnnVariant === '8gen2'
-        ? 'flagship'
-        : socInfo.qnnVariant === '8gen1'
-        ? ''
-        : 'lightweight ';
-    const suffix =
-      socInfo.qnnVariant === '8gen2'
-        ? 'NPU models for fastest inference'
-        : socInfo.qnnVariant === '8gen1'
-        ? 'NPU models supported'
-        : 'lightweight NPU models recommended';
-    return {
-      recommendedBackend: 'qnn',
-      qnnVariant: socInfo.qnnVariant,
-      bannerText: `Snapdragon ${label}\u2014 ${suffix}`,
-      compatibleBackends: ['qnn', 'mnn'],
-    };
+    const label = socInfo.qnnVariant === '8gen2' ? 'flagship' : socInfo.qnnVariant === '8gen1' ? '' : 'lightweight ';
+    const suffix = socInfo.qnnVariant === '8gen2' ? 'NPU models for fastest inference' : socInfo.qnnVariant === '8gen1' ? 'NPU models supported' : 'lightweight NPU models recommended';
+    return { recommendedBackend: 'qnn', qnnVariant: socInfo.qnnVariant, bannerText: `Snapdragon ${label}\u2014 ${suffix}`, compatibleBackends: ['qnn', 'mnn'] };
   }
   async getImageModelRecommendation(): Promise<ImageModelRecommendation> {
     if (this.cachedImageRecommendation) return this.cachedImageRecommendation;

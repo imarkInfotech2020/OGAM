@@ -1079,7 +1079,7 @@ describe('HomeScreen', () => {
       });
 
       // Wait for sheet-close delay before alert appears
-      await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 400)); });
 
       await act(async () => {
         fireEvent.press(getByText('Load Anyway'));
@@ -1552,7 +1552,7 @@ describe('HomeScreen', () => {
       });
 
       // Wait for sheet-close delay before alert appears
-      await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 400)); });
 
       await act(async () => {
         fireEvent.press(getByText('Load Anyway'));
