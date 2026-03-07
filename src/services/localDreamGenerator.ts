@@ -63,17 +63,20 @@ class LocalDreamGeneratorService {
     }
   }
 
-  async loadModel(modelPath: string, threads?: number, backend: 'mnn' | 'qnn' | 'auto' = 'auto'): Promise<boolean> {
+  async loadModel(modelPath: string, threads?: number, backend: 'mnn' | 'qnn' | 'auto' = 'auto', cpuOnly?: boolean): Promise<boolean> {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
     }
 
-    const params: { modelPath: string; threads?: number; backend: string } = {
+    const params: { modelPath: string; threads?: number; backend: string; cpuOnly?: boolean } = {
       modelPath,
       backend,
     };
     if (typeof threads === 'number') {
       params.threads = threads;
+    }
+    if (cpuOnly) {
+      params.cpuOnly = true;
     }
 
     const result = await DiffusionModule.loadModel(params);

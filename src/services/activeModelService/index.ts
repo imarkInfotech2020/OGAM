@@ -138,10 +138,24 @@ class ActiveModelService {
       }
     }
 
+    // On ≤4GB devices, auto-unload text model to free memory and use CPU-only
+    // compute units to avoid ANE/GPU memory spikes that cause jetsam kills.
+    const totalMemGB = hardwareService.getTotalMemoryGB();
+    const isLowMemDevice = totalMemGB <= 4;
+    if (isLowMemDevice && this.loadedTextModelId && llmService.isModelLoaded()) {
+      await this.unloadTextModel();
+    }
+
+    // Check memory after potentially unloading text model
+    const memCheck = await this.checkMemoryForModel(modelId, 'image');
+    if (memCheck.severity === 'critical') {
+      throw new Error(memCheck.message);
+    }
+
     this.loadingState.image = true;
     this.notifyListeners();
     this.imageLoadPromise = doLoadImageModel({
-      model, modelId, imageThreads, needsThreadReload, store, timeoutMs,
+      model, modelId, imageThreads, needsThreadReload, cpuOnly: isLowMemDevice, store, timeoutMs,
       loadedImageModelId: this.loadedImageModelId,
       onLoaded: (id, threads) => { this.loadedImageModelId = id; this.loadedImageModelThreads = threads; },
       onError: () => { this.loadedImageModelId = null; this.loadedImageModelThreads = null; },

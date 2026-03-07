@@ -128,6 +128,7 @@ export interface ImageLoadContext {
   modelId: string;
   imageThreads: number;
   needsThreadReload: boolean;
+  cpuOnly: boolean;
   store: ReturnType<typeof useAppStore.getState>;
   timeoutMs: number;
   loadedImageModelId: string | null;
@@ -158,6 +159,7 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
         ctx.model.modelPath,
         ctx.imageThreads,
         ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'),
+        ctx.cpuOnly,
       ),
       timeoutPromise,
     ]);
