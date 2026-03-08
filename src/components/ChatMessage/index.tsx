@@ -50,10 +50,16 @@ function buildMessageData(message: Message) {
   const displayContent = message.role === 'assistant'
     ? stripControlTokens(message.content)
     : message.content;
+  const responseContent = message.reasoningContent
+    ? displayContent.replace(/<\/?think>/gi, '').trim()
+    : displayContent;
+  // Use reasoningContent from llama.rn if available, fall back to parsing <think> tags for old messages
   const parsedContent = message.role === 'assistant'
-    ? parseThinkingContent(displayContent)
+    ? (message.reasoningContent
+      ? { thinking: message.reasoningContent, response: responseContent, isThinkingComplete: true }
+      : parseThinkingContent(displayContent))
     : { thinking: null, response: message.content, isThinkingComplete: true };
-  return { displayContent, parsedContent };
+  return { displayContent: responseContent, parsedContent };
 }
 
 type ToolResultBubbleProps = {

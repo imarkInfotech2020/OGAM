@@ -48,13 +48,9 @@ function formatToolCallAsText(tc: { name: string; arguments: string }): string {
   return `<tool_call>{"name":${escapedName},"arguments":${tc.arguments}}</tool_call>`;
 }
 
-export function buildOAIMessages(messages: Message[], options?: { disableThinking?: boolean }): RNLlamaOAICompatibleMessage[] {
+export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
   const filtered = messages.filter(m => !m.isSystemInfo);
-  // Find the index of the last user message so we can append /no_think
-  const lastUserIdx = options?.disableThinking
-    ? filtered.reduce((acc, m, i) => (m.role === 'user' ? i : acc), -1)
-    : -1;
-  return filtered.map((message, idx) => {
+  return filtered.map((message) => {
     // Flatten tool result messages into user messages —
     // avoids role:"tool" which some Jinja templates don't handle
     if (message.role === 'tool') {
@@ -75,13 +71,9 @@ export function buildOAIMessages(messages: Message[], options?: { disableThinkin
       return { role: 'assistant' as const, content };
     }
 
-    const shouldAppendNoThink = idx === lastUserIdx && message.role === 'user';
-    const maybeAppendNoThink = (text: string) =>
-      shouldAppendNoThink ? `${text} /no_think` : text;
-
     const imageAttachments = message.attachments?.filter(a => a.type === 'image') || [];
     if (imageAttachments.length === 0 || message.role !== 'user') {
-      return { role: message.role, content: maybeAppendNoThink(message.content) };
+      return { role: message.role, content: message.content };
     }
 
     const contentParts: RNLlamaMessagePart[] = [];
@@ -93,9 +85,7 @@ export function buildOAIMessages(messages: Message[], options?: { disableThinkin
       contentParts.push({ type: 'image_url', image_url: { url: imagePath } });
     }
     if (message.content) {
-      contentParts.push({ type: 'text', text: maybeAppendNoThink(message.content) });
-    } else if (shouldAppendNoThink) {
-      contentParts.push({ type: 'text', text: '/no_think' });
+      contentParts.push({ type: 'text', text: message.content });
     }
     return { role: message.role, content: contentParts };
   });

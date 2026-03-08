@@ -63,7 +63,7 @@ export const useChatScreen = () => {
 
   const {
     activeConversationId, conversations, createConversation, addMessage,
-    updateMessageContent, deleteMessagesAfter, streamingMessage,
+    updateMessageContent, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
     streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
     deleteConversation, setActiveConversation, setConversationProject,
   } = useChatStore();
@@ -182,7 +182,7 @@ export const useChatScreen = () => {
     setSupportsThinking(loaded ? llmService.supportsThinking() : false);
   }, [activeModelId, isModelLoading]);
 
-  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, isStreamingForThisConversation });
+  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation });
 
   useEffect(() => {
     const prev = lastMessageCountRef.current, curr = displayMessages.length;
