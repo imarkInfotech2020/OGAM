@@ -22,7 +22,7 @@ When asked to push code, follow this full workflow:
 
 0. ensure that you are on a branch that is specific to this change i.e feat/new-feature or fix/bug-fix or docs/update-readme or chore/update-dependencies, or test/new-test, etc
 1. Push the branch to the remote (`git push -u origin <branch>`)
-2. Create a PR using `gh pr create`. Ensure that you are adhering to the PR template. **Do NOT include "Generated with Claude Code" or any AI attribution in PR descriptions.**
+2. Create a PR using `gh pr create`. Ensure that you are adhering to the PR template. **Do NOT include "Generated with Codex" or any AI attribution in PR descriptions.**
 3. Wait for Gemini to review the PR (poll with `gh pr checks` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews` until a review appears)
 4. Once a review exists, pull down the review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews`
 5. Address every review comment — fix the code, re-run the quality gates (tests, lint, tsc). Resolve the comment appropriately and post that on the PR directly.
