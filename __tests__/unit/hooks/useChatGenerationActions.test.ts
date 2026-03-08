@@ -19,7 +19,6 @@ import {
   handleSendFn,
   handleStopFn,
 } from '../../../src/screens/ChatScreen/useChatGenerationActions';
-import { shouldUseToolsForMessage } from '../../../src/screens/ChatScreen/toolUsage';
 import { createDownloadedModel } from '../../utils/factories';
 
 // ─────────────────────────────────────────────
@@ -494,7 +493,7 @@ describe('startGenerationFn', () => {
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
-  it('keeps greetings on the normal generation path even when tools are available', async () => {
+  it('always uses tool loop when tools are enabled (even for greetings)', async () => {
     (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
     const deps = makeGenerationDeps({
       settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
@@ -502,8 +501,8 @@ describe('startGenerationFn', () => {
 
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
 
-    expect(mockGenerateResponse).toHaveBeenCalled();
-    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+    expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), { enabledToolIds: ['get_current_datetime'] });
+    expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
   it('uses the tool loop when the message clearly needs a tool', async () => {
@@ -515,17 +514,6 @@ describe('startGenerationFn', () => {
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'What time is it?' });
 
     expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), { enabledToolIds: ['get_current_datetime'] });
-  });
-});
-
-describe('shouldUseToolsForMessage', () => {
-  it('returns false for plain chat turns', () => {
-    expect(shouldUseToolsForMessage('Hi', ['get_current_datetime'])).toBe(false);
-  });
-
-  it('returns true for clear tool-oriented requests', () => {
-    expect(shouldUseToolsForMessage('What time is it?', ['get_current_datetime'])).toBe(true);
-    expect(shouldUseToolsForMessage('Calculate 25 * 18', ['calculator'])).toBe(true);
   });
 });
 

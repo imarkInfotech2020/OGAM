@@ -21,7 +21,6 @@ import {
 import { useChatStore, useProjectStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
-import { shouldUseToolsForMessage } from './toolUsage';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
@@ -165,7 +164,7 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
     setDebugInfo({ systemPrompt, ...contextDebug });
     logger.log(`[ChatGen] Context prepared: ${contextDebug.contextUsagePercent}% used, ${contextDebug.truncatedCount} truncated`);
     if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
-      await llmService.clearKVCache(false).catch(() => {});
+      await llmService.clearKVCache(false).catch(() => { });
     }
   } catch (e) { logger.log('Debug info error:', e); }
 }
@@ -181,12 +180,12 @@ async function generateWithCompactionRetry(
   try { await gen(opts.messages); } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
     logger.log('[ChatGen] Context full — compacting');
-    await llmService.stopGeneration().catch(() => {});
+    await llmService.stopGeneration().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
       logger.log(`[ChatGen] Compaction failed — falling back to last ${FALLBACK_RECENT_MESSAGE_COUNT} messages`);
-      await llmService.clearKVCache(true).catch(() => {});
+      await llmService.clearKVCache(true).catch(() => { });
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
     });
@@ -206,7 +205,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
-  const activeTools = shouldUseToolsForMessage(messageText, enabledTools) ? enabledTools : [];
+  const activeTools = enabledTools;
   const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   const systemPrompt = activeTools.length > 0 ? basePrompt + buildToolSystemPromptHint(activeTools) : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
@@ -287,9 +286,9 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
 
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'generatingForConversationRef'>): Promise<void> {
   deps.generatingForConversationRef.current = null;
-  try { await generationService.stopGeneration().catch(() => {}); }
+  try { await generationService.stopGeneration().catch(() => { }); }
   catch (e) { logger.error('Error stopping generation:', e); }
-  if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => {});
+  if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => { });
 }
 
 export async function executeDeleteConversationFn(

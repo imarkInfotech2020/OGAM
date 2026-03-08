@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Dimensions } from 'react-native';
+import { View, TextInput, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -12,6 +12,7 @@ import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
+import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -64,12 +65,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [message, setMessage] = useState('');
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [showAttachPicker, setShowAttachPicker] = useState(false);
-  const [popoverAnchor, setPopoverAnchor] = useState({ y: 0, x: 0 });
-  const [attachAnchor, setAttachAnchor] = useState({ y: 0, x: 0 });
-  const quickSettingsRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
-  const attachRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
+  const quickSettings = useKeyboardAwarePopover();
+  const attachPicker = useKeyboardAwarePopover();
   const inputRef = useRef<TextInput>(null);
   const hasText = message.length > 0;
   const iconsAnim = useRef(new Animated.Value(0)).current;
@@ -110,7 +107,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleImageModeToggle = () => {
-    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); setShowQuickSettings(false); return; }
+    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); quickSettings.hide(); return; }
     const newMode = IMAGE_MODE_CYCLE[(IMAGE_MODE_CYCLE.indexOf(imageMode) + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);
     onImageModeChange?.(newMode);
@@ -128,21 +125,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleQuickSettingsPress = () => {
-    quickSettingsRef.current?.measureInWindow?.((...args: number[]) => {
-      const screenH = Dimensions.get('window').height;
-      setPopoverAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
-    });
-    setShowQuickSettings(true);
-  };
+  const handleQuickSettingsPress = () => quickSettings.show();
 
-  const handleAttachPress = () => {
-    attachRef.current?.measureInWindow?.((...args: number[]) => {
-      const screenH = Dimensions.get('window').height;
-      setAttachAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
-    });
-    setShowAttachPicker(true);
-  };
+  const handleAttachPress = () => attachPicker.show();
 
   const actionButton = canSend ? (
     <TouchableOpacity
@@ -212,7 +197,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           >
             {/* Attach button — opens picker for image or document */}
             <TouchableOpacity
-              ref={attachRef}
+              ref={attachPicker.triggerRef}
               testID="attach-button"
               style={styles.pillIconButton}
               onPress={handleAttachPress}
@@ -228,7 +213,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
             {/* Quick settings button */}
             <TouchableOpacity
-              ref={quickSettingsRef}
+              ref={quickSettings.triggerRef}
               testID="quick-settings-button"
               style={styles.pillIconButton}
               onPress={handleQuickSettingsPress}
@@ -248,20 +233,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       </View>
 
       <AttachPickerPopover
-        visible={showAttachPicker}
-        onClose={() => setShowAttachPicker(false)}
-        anchorY={attachAnchor.y}
-        anchorX={attachAnchor.x}
+        visible={attachPicker.visible}
+        onClose={attachPicker.hide}
+        anchorY={attachPicker.anchor.y}
+        anchorX={attachPicker.anchor.x}
         supportsVision={supportsVision}
         onPhoto={handleVisionPress}
         onDocument={handlePickDocument}
       />
 
       <QuickSettingsPopover
-        visible={showQuickSettings}
-        onClose={() => setShowQuickSettings(false)}
-        anchorY={popoverAnchor.y}
-        anchorX={popoverAnchor.x}
+        visible={quickSettings.visible}
+        onClose={quickSettings.hide}
+        anchorY={quickSettings.anchor.y}
+        anchorX={quickSettings.anchor.x}
         imageMode={imageMode}
         onImageModeToggle={handleImageModeToggle}
         imageModelLoaded={imageModelLoaded}
