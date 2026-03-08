@@ -1,10 +1,24 @@
+const SIMPLE_CALC_CHARS = new Set([' ', '+', '-', '*', '/', '^', '%', '.', '(', ')']);
+
+function looksLikeSimpleMathExpression(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || !/^[(-]?\d/.test(trimmed)) return false;
+
+  for (const char of trimmed) {
+    if ((char >= '0' && char <= '9') || SIMPLE_CALC_CHARS.has(char)) continue;
+    return false;
+  }
+
+  return true;
+}
+
 const TOOL_TRIGGER_PATTERNS = {
   web_search: [
     /\b(latest|current|today|news|weather|stock|price|score|results?|headlines?)\b/i,
     /\b(search|look up|find online|google)\b/i,
   ],
   calculator: [
-    /^\s*[-(]?\d[\d\s+\-*/^%.()]*\s*$/,
+    looksLikeSimpleMathExpression,
     /\b(calculate|compute|solve|evaluate)\b/i,
     /\b\d+\s*(plus|minus|times|multiplied by|divided by)\s*\d+\b/i,
   ],
@@ -18,6 +32,6 @@ export function shouldUseToolsForMessage(messageText: string, enabledTools: stri
   if (!trimmed || enabledTools.length === 0) return false;
   return enabledTools.some((toolId) => {
     const patterns = TOOL_TRIGGER_PATTERNS[toolId as keyof typeof TOOL_TRIGGER_PATTERNS];
-    return patterns?.some((pattern) => pattern.test(trimmed)) ?? false;
+    return patterns?.some((pattern) => typeof pattern === 'function' ? pattern(trimmed) : pattern.test(trimmed)) ?? false;
   });
 }

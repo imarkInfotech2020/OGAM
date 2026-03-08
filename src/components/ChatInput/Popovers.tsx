@@ -77,10 +77,19 @@ function getImageModeBadge(mode: ImageModeState, colors: any) {
 }
 
 function getToolsStyle(supported: boolean, count: number, colors: any) {
-  const iconColor = supported ? (count > 0 ? colors.primary : colors.text) : colors.textMuted;
-  const badgeBg = supported && count > 0 ? colors.primary : colors.textMuted;
-  const labelColor = supported ? colors.text : colors.textMuted;
-  const badgeLabel = supported ? String(count) : 'N/A';
+  let iconColor = colors.textMuted;
+  let badgeBg = colors.textMuted;
+  let labelColor = colors.textMuted;
+  let badgeLabel = 'N/A';
+
+  if (supported) {
+    const hasEnabledTools = count > 0;
+    iconColor = hasEnabledTools ? colors.primary : colors.text;
+    badgeBg = hasEnabledTools ? colors.primary : colors.textMuted;
+    labelColor = colors.text;
+    badgeLabel = String(count);
+  }
+
   return { iconColor, badgeBg, labelColor, badgeLabel };
 }
 

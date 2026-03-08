@@ -246,12 +246,13 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     streamedContent = '';
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
 
-    const onStream = ctx.onStream ? (data: StreamChunk) => {
+    const streamHandler = ctx.onStream;
+    const onStream = streamHandler ? (data: StreamChunk) => {
       if (ctx.isAborted()) return;
       const chunk = normalizeStreamChunk(data);
       if (!firstTokenFired) { firstTokenFired = true; ctx.onThinkingDone(); ctx.callbacks?.onFirstToken?.(); }
       if (chunk.content) streamedContent += chunk.content;
-      ctx.onStream!(data);
+      streamHandler(data);
     } : undefined;
 
     const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, onStream);

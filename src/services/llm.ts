@@ -189,7 +189,8 @@ class LLMService {
       const enableThinking = this.isThinkingEnabled();
       const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings), ...buildThinkingCompletionParams(enableThinking) };
       const completionResult = await ctx.completion(completionParams, (data: any) => {
-        if (!this.isGenerating || !data.token) return;
+        if (!this.isGenerating) return;
+        if (!data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
         tokenCount++;
         const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
@@ -232,8 +233,7 @@ class LLMService {
       tools: options.tools,
       onStream: options.onStream,
       onComplete: options.onComplete
-        ? (fullResponse: string) => options.onComplete!({ content: fullResponse, reasoningContent: '' })
-        : undefined,
+        ? ((onComplete) => (fullResponse: string) => onComplete({ content: fullResponse, reasoningContent: '' }))(options.onComplete) : undefined,
     });
     this.activeCompletionPromise = work.then(() => {}, () => {});
     try {
