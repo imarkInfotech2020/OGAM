@@ -1,5 +1,6 @@
+/* eslint-disable max-lines-per-function */
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Animated, StyleSheet, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -11,6 +12,7 @@ import { createStyles, PILL_ICONS_WIDTH, ANIM_DURATION_IN, ANIM_DURATION_OUT } f
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
+import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -29,6 +31,7 @@ interface ChatInputProps {
   onToolsPress?: () => void;
   enabledToolCount?: number;
   supportsToolCalling?: boolean;
+  supportsThinking?: boolean;
   /** When set, mounts a single AttachStep for that index. Only one at a time to avoid waypoint dots. */
   activeSpotlight?: number | null;
 }
@@ -40,27 +43,6 @@ function getImageModeIcon(imageMode: ImageModeState, imageModelLoaded: boolean, 
   if (imageMode === 'disabled') return { color: colors.textMuted, badge: 'OFF', badgeStyle: 'off' };
   return { color: imageModelLoaded ? colors.textSecondary : colors.textMuted, badge: 'A', badgeStyle: 'auto' };
 }
-
-const ToolsButton: React.FC<{
-  supportsToolCalling: boolean; enabledToolCount: number; disabled?: boolean;
-  onToolsPress?: () => void; styles: any; colors: any; onUnsupported: () => void;
-}> = ({ supportsToolCalling, enabledToolCount, disabled, onToolsPress, styles, colors, onUnsupported }) => (
-  <TouchableOpacity
-    testID="tools-button"
-    style={[styles.pillIconButton, supportsToolCalling && enabledToolCount > 0 && styles.pillIconButtonActive]}
-    onPress={supportsToolCalling ? onToolsPress : onUnsupported}
-    disabled={disabled}
-    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-  >
-    <Icon name="tool" size={18} color={(() => {
-      if (!supportsToolCalling) return colors.textMuted;
-      return enabledToolCount > 0 ? colors.primary : colors.textSecondary;
-    })()} />
-    {supportsToolCalling && enabledToolCount > 0 && (
-      <View style={[styles.iconBadge, styles.iconBadgeOn]}><Text style={styles.iconBadgeText}>{enabledToolCount}</Text></View>
-    )}
-  </TouchableOpacity>
-);
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
@@ -79,6 +61,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onToolsPress,
   enabledToolCount = 0,
   supportsToolCalling = false,
+  supportsThinking = false,
   activeSpotlight = null,
 }) => {
   const { colors } = useTheme();
@@ -86,6 +69,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [message, setMessage] = useState('');
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [showQuickSettings, setShowQuickSettings] = useState(false);
+  const [showAttachPicker, setShowAttachPicker] = useState(false);
+  const [popoverAnchor, setPopoverAnchor] = useState({ y: 0, x: 0 });
+  const [attachAnchor, setAttachAnchor] = useState({ y: 0, x: 0 });
+  const quickSettingsRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
+  const attachRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
   const inputRef = useRef<TextInput>(null);
   const hasText = message.length > 0;
   const iconsAnim = useRef(new Animated.Value(0)).current;
@@ -126,13 +115,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleImageModeToggle = () => {
-    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); return; }
+    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); setShowQuickSettings(false); return; }
     const newMode = IMAGE_MODE_CYCLE[(IMAGE_MODE_CYCLE.indexOf(imageMode) + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);
     onImageModeChange?.(newMode);
   };
-
-  const handleToolsUnsupported = () => setAlertState(showAlert('Tools Not Supported', 'This model does not support tool calling. Load a model with tool calling support to enable tools.', [{ text: 'OK' }]));
 
   const handleVisionPress = () => {
     if (!supportsVision) { setAlertState(showAlert('Vision Not Supported', 'Load a vision-capable model (with mmproj) to enable image input.', [{ text: 'OK' }])); return; }
@@ -145,50 +132,54 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       onStop();
     }
   };
-
   const imgState = getImageModeIcon(imageMode, imageModelLoaded, colors);
-
-  const getActionButton = () => {
-    if (canSend) {
-      return (
-        <TouchableOpacity
-          testID="send-button"
-          style={styles.circleButton}
-          onPress={handleSend}
-        >
-          <Icon name="send" size={18} color={colors.background} />
-        </TouchableOpacity>
-      );
-    }
-    if (isGenerating && onStop) {
-      return (
-        <TouchableOpacity
-          testID="stop-button"
-          style={[styles.circleButton, styles.circleButtonStop]}
-          onPress={handleStop}
-        >
-          <Icon name="square" size={18} color={colors.background} />
-        </TouchableOpacity>
-      );
-    }
-    return (
-      <VoiceRecordButton
-        isRecording={isRecording}
-        isAvailable={voiceAvailable}
-        isModelLoading={isModelLoading}
-        isTranscribing={isTranscribing}
-        partialResult={partialResult}
-        error={error}
-        disabled={disabled}
-        onStartRecording={startRecording}
-        onStopRecording={stopRecording}
-        onCancelRecording={() => { stopRecording(); clearResult(); }}
-        asSendButton
-      />
-    );
+  const handleQuickSettingsPress = () => {
+    quickSettingsRef.current?.measureInWindow?.((...args: number[]) => {
+      const screenH = Dimensions.get('window').height;
+      setPopoverAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
+    });
+    setShowQuickSettings(true);
   };
 
-  const actionButton = getActionButton();
+  const handleAttachPress = () => {
+    attachRef.current?.measureInWindow?.((...args: number[]) => {
+      const screenH = Dimensions.get('window').height;
+      setAttachAnchor({ y: screenH - (args[1] ?? 0), x: 12 });
+    });
+    setShowAttachPicker(true);
+  };
+
+  const actionButton = canSend ? (
+    <TouchableOpacity
+      testID="send-button"
+      style={styles.circleButton}
+      onPress={handleSend}
+    >
+      <Icon name="send" size={18} color={colors.background} />
+    </TouchableOpacity>
+  ) : isGenerating && onStop ? (
+    <TouchableOpacity
+      testID="stop-button"
+      style={[styles.circleButton, styles.circleButtonStop]}
+      onPress={handleStop}
+    >
+      <Icon name="square" size={18} color={colors.background} />
+    </TouchableOpacity>
+  ) : (
+    <VoiceRecordButton
+      isRecording={isRecording}
+      isAvailable={voiceAvailable}
+      isModelLoading={isModelLoading}
+      isTranscribing={isTranscribing}
+      partialResult={partialResult}
+      error={error}
+      disabled={disabled}
+      onStartRecording={startRecording}
+      onStopRecording={stopRecording}
+      onCancelRecording={() => { stopRecording(); clearResult(); }}
+      asSendButton
+    />
+  );
 
   const content = (
     <View style={styles.container}>
@@ -224,44 +215,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               overflow: 'hidden' as const,
             }]}
           >
-            {/* Attachment button */}
+            {/* Attach button — opens picker for image or document */}
             <TouchableOpacity
-              testID="document-picker-button"
+              ref={attachRef}
+              testID="attach-button"
               style={styles.pillIconButton}
-              onPress={handlePickDocument}
+              onPress={handleAttachPress}
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Icon
-                name="paperclip"
-                size={18}
+                name="plus"
+                size={20}
                 color={disabled ? colors.textMuted : colors.textSecondary}
               />
             </TouchableOpacity>
 
-            <ToolsButton
-              supportsToolCalling={supportsToolCalling}
-              enabledToolCount={enabledToolCount}
-              disabled={disabled}
-              onToolsPress={onToolsPress}
-              styles={styles}
-              colors={colors}
-              onUnsupported={handleToolsUnsupported}
-            />
-
-            {/* Vision button — always shown */}
+            {/* Quick settings button */}
             <TouchableOpacity
-              testID="camera-button"
-              style={[styles.pillIconButton, supportsVision && styles.pillIconButtonActive]}
-              onPress={handleVisionPress}
+              ref={quickSettingsRef}
+              testID="quick-settings-button"
+              style={styles.pillIconButton}
+              onPress={handleQuickSettingsPress}
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon
-                name="eye"
-                size={18}
-                color={supportsVision ? colors.primary : colors.textMuted}
-              />
+              <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
             </TouchableOpacity>
 
             {/* Image gen toggle — always shown, cycles auto → force → disabled */}
@@ -298,6 +277,31 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <AttachStep index={12} style={spotlightStyles.centered}>{actionButton}</AttachStep>
         ) : actionButton}
       </View>
+
+      <AttachPickerPopover
+        visible={showAttachPicker}
+        onClose={() => setShowAttachPicker(false)}
+        anchorY={attachAnchor.y}
+        anchorX={attachAnchor.x}
+        supportsVision={supportsVision}
+        onPhoto={handleVisionPress}
+        onDocument={handlePickDocument}
+      />
+
+      <QuickSettingsPopover
+        visible={showQuickSettings}
+        onClose={() => setShowQuickSettings(false)}
+        anchorY={popoverAnchor.y}
+        anchorX={popoverAnchor.x}
+        imageMode={imageMode}
+        onImageModeToggle={handleImageModeToggle}
+        imageModelLoaded={imageModelLoaded}
+        supportsThinking={supportsThinking}
+        supportsToolCalling={supportsToolCalling}
+        enabledToolCount={enabledToolCount}
+        onToolsPress={onToolsPress}
+      />
+
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
@@ -21,6 +22,7 @@ type AppSettings = {
   imageUseOpenCL: boolean; enhanceImagePrompts: boolean; modelLoadingStrategy: ModelLoadingStrategy;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
+  thinkingEnabled: boolean;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -126,8 +128,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url'],
+  thinkingEnabled: true,
 };
-
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({

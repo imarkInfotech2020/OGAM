@@ -4,15 +4,16 @@
  */
 
 import { llmService } from './llm';
+import type { StreamToken } from './llm';
 import { useChatStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
-import { createThinkInjector } from './llmHelpers';
 import logger from '../utils/logger';
 
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
+type StreamChunk = string | StreamToken;
 
 /**
  * Parse the XML-like tool call format that some models emit:
@@ -123,9 +124,13 @@ export interface ToolLoopContext {
   callbacks?: ToolLoopCallbacks;
   isAborted: () => boolean;
   onThinkingDone: () => void;
-  onStream?: (token: string) => void;
+  onStream?: (data: StreamChunk) => void;
   onStreamReset?: () => void;
   onFinalResponse: (content: string) => void;
+}
+
+function normalizeStreamChunk(data: StreamChunk): StreamToken {
+  return typeof data === 'string' ? { content: data } : data;
 }
 
 /** Extract last user message from the loop messages for fallback context. */
@@ -188,7 +193,7 @@ function isNonRetryableError(msg: string): boolean {
 async function callLLMWithRetry(
   messages: Message[],
   tools: any[],
-  onStream?: (token: string) => void,
+  onStream?: (data: StreamToken) => void,
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
   let lastError: any;
   for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt++) {
@@ -235,22 +240,18 @@ interface ToolLoopState {
 function buildStreamHandler(
   ctx: ToolLoopContext,
   state: ToolLoopState,
-  thinkStream: ((token: string) => void) | null,
-): ((token: string) => void) | undefined {
+): ((data: StreamChunk) => void) | undefined {
   if (!ctx.onStream) return undefined;
-  return (token: string) => {
+  return (data: StreamChunk) => {
     if (ctx.isAborted()) return;
+    const chunk = normalizeStreamChunk(data);
     if (!state.firstTokenFired) {
       state.firstTokenFired = true;
       ctx.onThinkingDone();
       ctx.callbacks?.onFirstToken?.();
     }
-    if (thinkStream) {
-      thinkStream(token);
-    } else {
-      state.streamedContent += token;
-      ctx.onStream!(token);
-    }
+    if (chunk.content) state.streamedContent += chunk.content;
+    ctx.onStream!(data);
   };
 }
 
@@ -272,16 +273,13 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
   const state: ToolLoopState = { firstTokenFired: false, streamedContent: '' };
-  const isThinkingModel = llmService.supportsThinking();
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
     state.streamedContent = '';
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
 
-    const thinkStream = isThinkingModel && iteration === 0 && ctx.onStream
-      ? createThinkInjector(t => { state.streamedContent += t; ctx.onStream!(t); }) : null;
-    const onStream = buildStreamHandler(ctx, state, thinkStream);
+    const onStream = buildStreamHandler(ctx, state);
 
     const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, onStream);
     logger.log(`[ToolLoop] Result: response=${fullResponse.length} chars, toolCalls=${toolCalls.length}`);

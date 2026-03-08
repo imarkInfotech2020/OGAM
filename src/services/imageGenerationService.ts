@@ -156,7 +156,7 @@ class ImageGenerationService {
     }
     try {
       logger.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
-      let raw = await llmService.generateResponse(buildEnhancementMessages(params.prompt, contextMessages), (_token) => { });
+      let raw = await llmService.generateResponse(buildEnhancementMessages(params.prompt, contextMessages), (_data) => { });
       logger.log('[ImageGen] 📥 llmService.generateResponse returned');
       logger.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());
       raw = cleanEnhancedPrompt(raw);

@@ -169,6 +169,8 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
+  /** Reasoning/thinking content parsed by llama.rn (separate from response content) */
+  reasoningContent?: string;
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;
@@ -341,9 +343,7 @@ export interface DebugInfo {
   originalMessageCount: number;
   managedMessageCount: number;
   truncatedCount: number;
-  formattedPrompt: string;
-  estimatedTokens: number;
-  maxContextLength: number;
-  contextUsagePercent: number;
+  formattedPrompt: string; estimatedTokens: number;
+  maxContextLength: number; contextUsagePercent: number;
 }
 export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';

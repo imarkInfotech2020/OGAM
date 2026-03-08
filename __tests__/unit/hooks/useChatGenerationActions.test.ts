@@ -19,6 +19,7 @@ import {
   handleSendFn,
   handleStopFn,
 } from '../../../src/screens/ChatScreen/useChatGenerationActions';
+import { shouldUseToolsForMessage } from '../../../src/screens/ChatScreen/toolUsage';
 import { createDownloadedModel } from '../../utils/factories';
 
 // ─────────────────────────────────────────────
@@ -41,6 +42,7 @@ jest.mock('../../../src/services/intentClassifier', () => ({
 jest.mock('../../../src/services/generationService', () => ({
   generationService: {
     generateResponse: jest.fn(),
+    generateWithTools: jest.fn(),
     stopGeneration: jest.fn(),
     enqueueMessage: jest.fn(),
     getState: jest.fn(() => ({ isGenerating: false })),
@@ -57,6 +59,7 @@ jest.mock('../../../src/services/llm', () => ({
     getLoadedModelPath: jest.fn(),
     isModelLoaded: jest.fn(),
     supportsToolCalling: jest.fn(() => false),
+    supportsThinking: jest.fn(() => false),
     stopGeneration: jest.fn(),
     getContextDebugInfo: jest.fn(),
     clearKVCache: jest.fn(),
@@ -91,6 +94,7 @@ const { localDreamGeneratorService } = require('../../../src/services/localDream
 // Typed references
 const mockClassifyIntent = intentClassifier.classifyIntent as jest.Mock;
 const mockGenerateResponse = generationService.generateResponse as jest.Mock;
+const mockGenerateWithTools = generationService.generateWithTools as jest.Mock;
 const mockStopGenerationService = generationService.stopGeneration as jest.Mock;
 const mockEnqueueMessage = generationService.enqueueMessage as jest.Mock;
 const mockGetGenerationState = generationService.getState as jest.Mock;
@@ -146,6 +150,7 @@ jest.mock('../../../src/constants', () => ({
 beforeEach(() => {
   mockClassifyIntent.mockResolvedValue('text');
   mockGenerateResponse.mockResolvedValue(undefined);
+  mockGenerateWithTools.mockResolvedValue(undefined);
   mockStopGenerationService.mockResolvedValue(undefined);
   mockGenerateImage.mockResolvedValue(null);
   mockCancelGeneration.mockResolvedValue(undefined);
@@ -509,6 +514,40 @@ describe('startGenerationFn', () => {
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hi' });
     expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Error' }));
     expect(mockGenerateResponse).not.toHaveBeenCalled();
+  });
+
+  it('keeps greetings on the normal generation path even when tools are available', async () => {
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
+    });
+
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
+
+    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+  });
+
+  it('uses the tool loop when the message clearly needs a tool', async () => {
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
+    });
+
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'What time is it?' });
+
+    expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), { enabledToolIds: ['get_current_datetime'] });
+  });
+});
+
+describe('shouldUseToolsForMessage', () => {
+  it('returns false for plain chat turns', () => {
+    expect(shouldUseToolsForMessage('Hi', ['get_current_datetime'])).toBe(false);
+  });
+
+  it('returns true for clear tool-oriented requests', () => {
+    expect(shouldUseToolsForMessage('What time is it?', ['get_current_datetime'])).toBe(true);
+    expect(shouldUseToolsForMessage('Calculate 25 * 18', ['calculator'])).toBe(true);
   });
 });
 

@@ -24,7 +24,7 @@ import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
-
+import { shouldUseToolsForMessage } from './toolUsage';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
@@ -248,11 +248,12 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  const systemPrompt = enabledTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(enabledTools)}` : basePrompt;
+  const activeTools = shouldUseToolsForMessage(messageText, enabledTools) ? enabledTools : [];
+  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
-    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, enabledTools, conversation?.projectId);
+    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
@@ -325,10 +326,12 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const messages = (conversation?.messages || []).filter((m: Message) => !m.isSystemInfo);
   const messagesUpToUser = messages.slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
-  const systemPrompt = await injectRagContext(conversation?.projectId, userMessage.content, rawPrompt);
+  const activeTools = shouldUseToolsForMessage(userMessage.content, enabledTools) ? enabledTools : [];
+  const basePrompt = await injectRagContext(conversation?.projectId, userMessage.content, rawPrompt);
+  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
-    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, enabledTools, conversation?.projectId);
+    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
   }

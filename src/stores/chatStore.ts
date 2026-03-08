@@ -34,6 +34,7 @@ interface ChatState {
 
   // Current message being streamed
   streamingMessage: string;
+  streamingReasoningContent: string;
   streamingForConversationId: string | null; // Which conversation is being generated for
   isStreaming: boolean;
   isThinking: boolean; // True when processing prompt, before first token
@@ -56,11 +57,12 @@ interface ChatState {
   startStreaming: (conversationId: string) => void;
   setStreamingMessage: (content: string) => void;
   appendToStreamingMessage: (token: string) => void;
+  appendToStreamingReasoningContent: (token: string) => void;
   setIsStreaming: (streaming: boolean) => void;
   setIsThinking: (thinking: boolean) => void;
   finalizeStreamingMessage: (conversationId: string, generationTimeMs?: number, generationMeta?: GenerationMeta) => void;
   clearStreamingMessage: () => void;
-  getStreamingState: () => { conversationId: string | null; content: string; isStreaming: boolean; isThinking: boolean };
+  getStreamingState: () => { conversationId: string | null; content: string; reasoningContent: string; isStreaming: boolean; isThinking: boolean };
 
   // Compaction
   updateCompactionState: (conversationId: string, summary?: string, cutoffMessageId?: string) => void;
@@ -76,6 +78,7 @@ export const useChatStore = create<ChatState>()(
       conversations: [],
       activeConversationId: null,
       streamingMessage: '',
+      streamingReasoningContent: '',
       streamingForConversationId: null,
       isStreaming: false,
       isThinking: false,
@@ -207,6 +210,7 @@ export const useChatStore = create<ChatState>()(
         set({
           streamingForConversationId: conversationId,
           streamingMessage: '',
+          streamingReasoningContent: '',
           isStreaming: false,
           isThinking: true,
         });
@@ -224,6 +228,14 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      appendToStreamingReasoningContent: (token) => {
+        set((state) => ({
+          streamingReasoningContent: state.streamingReasoningContent + token,
+          isStreaming: true,
+          isThinking: false,
+        }));
+      },
+
       setIsStreaming: (streaming) => {
         set({ isStreaming: streaming, isThinking: false });
       },
@@ -233,19 +245,22 @@ export const useChatStore = create<ChatState>()(
       },
 
       finalizeStreamingMessage: (conversationId, generationTimeMs, generationMeta) => {
-        const { streamingMessage, streamingForConversationId, addMessage } = get();
+        const { streamingMessage, streamingReasoningContent, streamingForConversationId, addMessage } = get();
         // Only finalize if this is the conversation we were generating for
         const sanitizedMessage = stripControlTokens(streamingMessage).trim();
-        if (streamingForConversationId === conversationId && sanitizedMessage) {
+        const reasoningContent = streamingReasoningContent.trim() || undefined;
+        if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {
             role: 'assistant',
             content: sanitizedMessage,
+            reasoningContent,
             generationTimeMs,
             generationMeta,
           });
         }
         set({
           streamingMessage: '',
+          streamingReasoningContent: '',
           streamingForConversationId: null,
           isStreaming: false,
           isThinking: false,
@@ -255,6 +270,7 @@ export const useChatStore = create<ChatState>()(
       clearStreamingMessage: () => {
         set({
           streamingMessage: '',
+          streamingReasoningContent: '',
           streamingForConversationId: null,
           isStreaming: false,
           isThinking: false,
@@ -266,6 +282,7 @@ export const useChatStore = create<ChatState>()(
         return {
           conversationId: state.streamingForConversationId,
           content: state.streamingMessage,
+          reasoningContent: state.streamingReasoningContent,
           isStreaming: state.isStreaming,
           isThinking: state.isThinking,
         };
