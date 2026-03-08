@@ -6,13 +6,15 @@ import {
   TouchableOpacity,
   Switch,
   ActivityIndicator,
+  ScrollView,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick } from '@react-native-documents/picker';
+import { pick, keepLocalCopy } from '@react-native-documents/picker';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
@@ -36,9 +38,11 @@ interface KBSectionProps {
   colors: any;
   styles: any;
   setAlertState: (state: AlertState) => void;
+  onNavigateToKb: () => void;
+  onDocumentPress: (doc: RagDocument) => void;
 }
 
-const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, styles, setAlertState }) => {
+const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, styles, setAlertState, onNavigateToKb, onDocumentPress }) => {
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
 
@@ -51,11 +55,48 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
 
   const handleAddDocument = async () => {
     try {
-      const [file] = await pick({ mode: 'open' });
-      if (!file) return;
-      const fileName = file.name || 'document';
-      setIndexingFile(fileName);
-      await ragService.indexDocument({ projectId, filePath: file.uri, fileName, fileSize: file.size || 0 });
+      // Allow multi-select for knowledge base uploads
+      const files = await pick({ mode: 'open', allowMultiSelection: true });
+      if (!files || files.length === 0) return;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileName = file.name || 'document';
+        setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
+
+        console.log('[DocumentPicker] Original URI:', file.uri);
+        console.log('[DocumentPicker] File name:', fileName, 'Size:', file.size);
+
+        let filePath = file.uri;
+        try {
+          const copyResult = await keepLocalCopy({
+            files: [{ uri: file.uri, fileName }],
+            destination: 'documentDirectory',
+          });
+          console.log('[DocumentPicker] keepLocalCopy result:', JSON.stringify(copyResult));
+          if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+            filePath = copyResult[0].localUri;
+            console.log('[DocumentPicker] Using localUri:', filePath);
+          } else if (copyResult[0]?.status === 'error') {
+            console.warn('[DocumentPicker] keepLocalCopy failed:', copyResult[0].copyError);
+          }
+        } catch (copyErr: any) {
+          console.warn('[DocumentPicker] keepLocalCopy error:', copyErr?.message);
+        }
+
+        // Decode the file path and strip file:// prefix for storage
+        let pathForDb = filePath;
+        try {
+          pathForDb = decodeURIComponent(filePath).replace(/^file:\/\//, '');
+          console.log('[DocumentPicker] Path for DB storage:', pathForDb);
+        } catch (e) {
+          console.warn('[DocumentPicker] Could not decode path:', e);
+        }
+
+        console.log('[DocumentPicker] Final filePath for indexing:', pathForDb);
+        await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
+      }
+
       await loadKbDocs();
     } catch (err: any) {
       if (err && !err.message?.includes('cancel')) {
@@ -82,39 +123,66 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
   };
 
   return (
-    <>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Knowledge Base</Text>
-        <Button title="Add" variant="primary" size="small" onPress={handleAddDocument} disabled={!!indexingFile}
-          icon={<Icon name="plus" size={16} color={indexingFile ? colors.textDisabled : colors.primary} />} />
-      </View>
+    <View style={styles.sectionContent}>
+      <TouchableOpacity
+        style={styles.sectionHeader}
+        onPress={onNavigateToKb}
+        activeOpacity={0.7}
+      >
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Knowledge Base</Text>
+          {kbDocs.length > 0 && (
+            <Text style={styles.sectionCount}>{kbDocs.length}</Text>
+          )}
+        </View>
+        <View style={styles.sectionActions}>
+          <Button
+            title="Add"
+            variant="primary"
+            size="small"
+            onPress={handleAddDocument}
+            disabled={!!indexingFile}
+            icon={<Icon name="plus" size={16} color={indexingFile ? colors.textDisabled : colors.primary} />}
+          />
+          <Icon
+            name="chevron-right"
+            size={16}
+            color={colors.textMuted}
+            style={styles.navIcon}
+          />
+        </View>
+      </TouchableOpacity>
+
       {indexingFile && (
         <View style={styles.kbIndexing}>
           <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.kbIndexingText} numberOfLines={1}>Indexing {indexingFile}...</Text>
         </View>
       )}
+
       {kbDocs.length === 0 && !indexingFile ? (
-        <View style={styles.kbEmpty}>
-          <Icon name="file-text" size={20} color={colors.textMuted} />
-          <Text style={styles.kbEmptyText}>No documents added</Text>
+        <View style={styles.emptyState}>
+          <Icon name="file-text" size={24} color={colors.textMuted} />
+          <Text style={styles.emptyStateText}>No documents added</Text>
         </View>
       ) : (
-        kbDocs.map((doc) => (
-          <View key={doc.id} style={styles.kbDocRow}>
-            <View style={styles.kbDocInfo}>
-              <Text style={styles.kbDocName} numberOfLines={1}>{doc.name}</Text>
-              <Text style={styles.kbDocSize}>{formatFileSize(doc.size)}</Text>
-            </View>
-            <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}
-              trackColor={{ false: colors.border, true: colors.primary }} />
-            <TouchableOpacity style={styles.kbDocDelete} onPress={() => handleDeleteDocument(doc)}>
-              <Icon name="trash-2" size={14} color={colors.error} />
+        <ScrollView style={styles.sectionList} nestedScrollEnabled>
+          {kbDocs.map((doc) => (
+            <TouchableOpacity key={doc.id} style={styles.kbDocRow} onPress={() => onDocumentPress(doc)} activeOpacity={0.7}>
+              <View style={styles.kbDocInfo}>
+                <Text style={styles.kbDocName} numberOfLines={1}>{doc.name}</Text>
+                <Text style={styles.kbDocSize}>{formatFileSize(doc.size)}</Text>
+              </View>
+              <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}
+                trackColor={{ false: colors.border, true: colors.primary }} />
+              <TouchableOpacity style={styles.kbDocDelete} onPress={() => handleDeleteDocument(doc)}>
+                <Icon name="trash-2" size={14} color={colors.error} />
+              </TouchableOpacity>
             </TouchableOpacity>
-          </View>
-        ))
+          ))}
+        </ScrollView>
       )}
-    </>
+    </View>
   );
 };
 
@@ -148,16 +216,13 @@ export const ProjectDetailScreen: React.FC = () => {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
-    // Create a new conversation with this project
     const modelId = activeModelId || downloadedModels[0]?.id;
     if (modelId) {
       const newConversationId = createConversation(modelId, undefined, projectId);
       navigation.navigate('Chat', { conversationId: newConversationId, projectId });
     }
   };
-  const handleEditProject = () => {
-    navigation.navigate('ProjectEdit', { projectId });
-  };
+
   const handleDeleteProject = () => {
     setAlertState(showAlert(
       'Delete Project',
@@ -175,6 +240,7 @@ export const ProjectDetailScreen: React.FC = () => {
       ]
     ));
   };
+
   const handleDeleteChat = (conversation: Conversation) => {
     setAlertState(showAlert(
       'Delete Chat',
@@ -189,6 +255,7 @@ export const ProjectDetailScreen: React.FC = () => {
       ]
     ));
   };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -200,9 +267,8 @@ export const ProjectDetailScreen: React.FC = () => {
       return 'Yesterday';
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: 'short' });
-    } 
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   const renderChatRightActions = (conversation: Conversation) => (
@@ -213,6 +279,7 @@ export const ProjectDetailScreen: React.FC = () => {
       <Icon name="trash-2" size={16} color={colors.error} />
     </TouchableOpacity>
   );
+
   const renderChat = ({ item }: { item: Conversation }) => {
     const lastMessage = item.messages[item.messages.length - 1];
 
@@ -276,62 +343,80 @@ export const ProjectDetailScreen: React.FC = () => {
           </View>
           <Text style={styles.headerTitle} numberOfLines={1}>{project.name}</Text>
         </View>
-        <TouchableOpacity onPress={handleEditProject} style={styles.editButton}>
+        <TouchableOpacity onPress={() => navigation.navigate('ProjectEdit', { projectId })} style={styles.editButton}>
           <Icon name="edit-2" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
-      {/* Project Info */}
-      <View style={styles.projectInfo}>
-        {project.description ? (
-          <Text style={styles.projectDescription}>{project.description}</Text>
-        ) : null}
-        <View style={styles.projectStats}>
-          <View style={styles.statItem}>
-            <Icon name="message-circle" size={16} color={colors.textMuted} />
-            <Text style={styles.statText}>{projectChats.length} chats</Text>
-          </View>
+      <View style={styles.sectionsContainer}>
+        {/* Knowledge Base Section */}
+        <View style={styles.sectionHalf}>
+          <KnowledgeBaseSection
+            projectId={projectId}
+            colors={colors}
+            styles={styles}
+            setAlertState={setAlertState}
+            onNavigateToKb={() => navigation.navigate('KnowledgeBase', { projectId })}
+            onDocumentPress={(doc) => navigation.navigate('DocumentPreview', { filePath: doc.path, fileName: doc.name, fileSize: doc.size })}
+          />
+        </View>
+
+        {/* Chats Section */}
+        <View style={styles.sectionHalf}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => navigation.navigate('ProjectChats', { projectId })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Chats</Text>
+              {projectChats.length > 0 && (
+                <Text style={styles.sectionCount}>{projectChats.length}</Text>
+              )}
+            </View>
+            <View style={styles.sectionActions}>
+              <Button
+                title="New"
+                variant="primary"
+                size="small"
+                onPress={handleNewChat}
+                disabled={!hasModels}
+                icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+              />
+              <Icon
+                name="chevron-right"
+                size={16}
+                color={colors.textMuted}
+                style={styles.navIcon}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <ScrollView style={styles.sectionList} nestedScrollEnabled>
+            {projectChats.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="message-circle" size={24} color={colors.textMuted} />
+                <Text style={styles.emptyStateText}>No chats yet</Text>
+                {hasModels && (
+                  <Button
+                    title="Start a Chat"
+                    variant="primary"
+                    size="small"
+                    onPress={handleNewChat}
+                    style={styles.emptyStateButton}
+                  />
+                )}
+              </View>
+            ) : (
+              projectChats.map((chat) => (
+                <View key={chat.id} style={styles.chatItemWrapper}>
+                  {renderChat({ item: chat })}
+                </View>
+              ))
+            )}
+          </ScrollView>
         </View>
       </View>
-
-      {/* Knowledge Base Section */}
-      <KnowledgeBaseSection projectId={projectId} colors={colors} styles={styles} setAlertState={setAlertState} />
-
-      {/* Chats Section */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Chats</Text>
-        <Button
-          title="New Chat"
-          variant="primary"
-          size="small"
-          onPress={handleNewChat}
-          disabled={!hasModels}
-          icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
-        />
-      </View>
-
-      {projectChats.length === 0 ? (
-        <View style={styles.emptyChats}>
-          <Icon name="message-circle" size={24} color={colors.textMuted} />
-          <Text style={styles.emptyChatsText}>No chats in this project yet</Text>
-          {hasModels && (
-            <Button
-              title="Start a Chat"
-              variant="primary"
-              size="medium"
-              onPress={handleNewChat}
-            />
-          )}
-        </View>
-      ) : (
-        <FlatList
-          data={projectChats}
-          renderItem={renderChat}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.chatList}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
 
       {/* Delete Project Button */}
       <View style={styles.footer}>

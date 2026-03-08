@@ -82,10 +82,59 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
+  sectionTitleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
     color: colors.text,
     fontWeight: '400' as const,
+  },
+  sectionCount: {
+    ...TYPOGRAPHY.labelSmall,
+    color: colors.textMuted,
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  sectionActions: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
+  navIcon: {
+    marginLeft: SPACING.xs,
+  },
+  sectionList: {
+    flex: 1,
+  },
+  sectionsContainer: {
+    flex: 1,
+  },
+  sectionHalf: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sectionContent: {
+    flex: 1,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: SPACING.xl,
+  },
+  emptyStateText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textMuted,
+    marginTop: SPACING.sm,
+  },
+  emptyStateButton: {
+    marginTop: SPACING.md,
   },
   chatList: {
     paddingHorizontal: SPACING.lg,
@@ -100,6 +149,10 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 6,
     marginBottom: SPACING.sm,
     ...shadows.small,
+  },
+  chatItemWrapper: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   chatIcon: {
     width: 28,
@@ -133,18 +186,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
   },
-  emptyChats: {
-    flex: 1,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    paddingHorizontal: SPACING.xxl,
-  },
-  emptyChatsText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
   footer: {
     padding: SPACING.lg,
     borderTopWidth: 1,
@@ -173,16 +214,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 12,
     marginBottom: SPACING.sm,
     marginLeft: 10,
-  },
-  kbEmpty: {
-    alignItems: 'center' as const,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.lg,
-  },
-  kbEmptyText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    marginTop: SPACING.sm,
   },
   kbIndexing: {
     flexDirection: 'row' as const,

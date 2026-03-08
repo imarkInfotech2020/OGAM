@@ -26,6 +26,9 @@ import {
   ChatsListScreen,
   ProjectDetailScreen,
   ProjectEditScreen,
+  ProjectChatsScreen,
+  KnowledgeBaseScreen,
+  DocumentPreviewScreen,
   DownloadManagerScreen,
   ModelSettingsScreen,
   VoiceSettingsScreen,
@@ -33,6 +36,7 @@ import {
   StorageSettingsScreen,
   SecuritySettingsScreen,
   GalleryScreen,
+  RemoteServersScreen,
 } from '../screens';
 import {
   RootStackParamList,
@@ -214,12 +218,16 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Main" component={MainTabs} />
         <RootStack.Screen name="Chat" component={ChatScreen} />
         <RootStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
+        <RootStack.Screen name="ProjectChats" component={ProjectChatsScreen} />
         <RootStack.Screen
           name="ProjectEdit"
           component={ProjectEditScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
+        <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
+        <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
         <RootStack.Screen name="VoiceSettings" component={VoiceSettingsScreen} />
         <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
