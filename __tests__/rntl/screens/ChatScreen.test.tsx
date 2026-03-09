@@ -4122,6 +4122,7 @@ describe('ChatScreen', () => {
   describe('pending settings warning', () => {
     it('shows warning when settings have changed but model not reloaded', async () => {
       const model = createDownloadedModel({ id: 'test-model' });
+      // Set up state BEFORE rendering
       useAppStore.setState({
         activeModelId: model.id,
         downloadedModels: [model],
@@ -4150,10 +4151,11 @@ describe('ChatScreen', () => {
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
 
       const { queryByText } = renderChatScreen();
-      await act(async () => {});
 
-      // Should show warning about pending settings
-      expect(queryByText(/Settings changed/i)).toBeTruthy();
+      // Wait for component to process the state
+      await waitFor(() => {
+        expect(queryByText(/Settings changed/i)).toBeTruthy();
+      });
     });
 
     it('does not show warning when settings match loaded settings', async () => {
