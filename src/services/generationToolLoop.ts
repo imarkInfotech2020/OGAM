@@ -5,10 +5,13 @@
 
 import { llmService } from './llm';
 import type { StreamToken } from './llm';
-import { useChatStore } from '../stores';
+import { useChatStore, useRemoteServerStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
+import { providerRegistry } from './providers';
+import type { GenerationOptions, CompletionResult } from './providers/types';
+import { useAppStore } from '../stores';
 import logger from '../utils/logger';
 
 const MAX_TOOL_ITERATIONS = 3;
@@ -127,6 +130,8 @@ export interface ToolLoopContext {
   onStream?: (data: StreamChunk) => void;
   onStreamReset?: () => void;
   onFinalResponse: (content: string) => void;
+  /** Force using remote provider (from generationService) */
+  forceRemote?: boolean;
 }
 
 function normalizeStreamChunk(data: StreamChunk): StreamToken {
@@ -186,7 +191,62 @@ const CONTEXT_RELEASE_PAUSE_MS = 500;
 
 /** Non-retryable errors that should fail immediately. */
 function isNonRetryableError(msg: string): boolean {
-  return msg.includes('No model loaded') || msg.includes('aborted');
+  return msg.includes('No model loaded') || msg.includes('aborted') || msg.includes('Remote provider');
+}
+
+/** Call remote LLM provider with tools */
+async function callRemoteLLMWithTools(
+  messages: Message[],
+  tools: any[],
+  onStream?: (data: StreamToken) => void,
+): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  if (!activeServerId) {
+    throw new Error('No remote provider active');
+  }
+
+  const provider = providerRegistry.getProvider(activeServerId);
+  if (!provider) {
+    throw new Error('Remote provider not found');
+  }
+
+  const settings = useAppStore.getState().settings;
+  const options: GenerationOptions = {
+    temperature: settings.temperature,
+    maxTokens: settings.maxTokens,
+    topP: settings.topP,
+    tools,
+  };
+
+  let fullContent = '';
+  let toolCalls: ToolCall[] = [];
+
+  return new Promise((resolve, reject) => {
+    provider.generate(messages, options, {
+      onToken: (token: string) => {
+        fullContent += token;
+        onStream?.({ content: token });
+      },
+      onReasoning: (content: string) => {
+        onStream?.({ reasoningContent: content });
+      },
+      onComplete: (result: CompletionResult) => {
+        if (result.toolCalls) {
+          toolCalls = result.toolCalls.map(tc => ({
+            id: tc.id || `call-${Date.now()}`,
+            name: tc.name,
+            arguments: typeof tc.arguments === 'string'
+              ? JSON.parse(tc.arguments) as Record<string, any>
+              : tc.arguments,
+          }));
+        }
+        resolve({ fullResponse: result.content, toolCalls });
+      },
+      onError: (error: Error) => {
+        reject(error);
+      },
+    });
+  });
 }
 
 /** Call LLM with retry+backoff for transient native context errors. */
@@ -194,7 +254,22 @@ async function callLLMWithRetry(
   messages: Message[],
   tools: any[],
   onStream?: (data: StreamToken) => void,
+  forceRemote?: boolean,
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  // Use remote provider if forced or if active server is set
+  const useRemote = forceRemote || useRemoteServerStore.getState().activeServerId !== null;
+
+  if (useRemote) {
+    // Remote providers don't retry in the same way - errors are network-related
+    try {
+      return await callRemoteLLMWithTools(messages, tools, onStream);
+    } catch (e: any) {
+      const errMsg = e?.message || String(e) || 'Remote LLM error';
+      throw new Error(errMsg);
+    }
+  }
+
+  // Local provider with retry logic
   let lastError: any;
   for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt++) {
     try {
@@ -281,7 +356,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     const onStream = buildStreamHandler(ctx, state);
 
-    const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, onStream);
+    const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, onStream, ctx.forceRemote);
     logger.log(`[ToolLoop] Result: response=${fullResponse.length} chars, toolCalls=${toolCalls.length}`);
 
     const { effectiveToolCalls, displayResponse } = resolveToolCalls(fullResponse, toolCalls);
