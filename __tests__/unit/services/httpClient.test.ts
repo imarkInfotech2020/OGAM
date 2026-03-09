@@ -12,6 +12,9 @@ import {
   isPrivateNetworkEndpoint,
   testEndpoint,
   fetchWithTimeout,
+  imageToBase64DataUrl,
+  detectServerType,
+  createStreamingRequest,
 } from '../../../src/services/httpClient';
 
 // Mock React Native FS
@@ -636,6 +639,721 @@ describe('httpClient', () => {
       const result = await testEndpoint('http://192.168.1.50:11434', 5000);
 
       expect(result.success).toBe(false);
+    });
+
+    it('should try alternate health endpoints when /v1/models fails', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+        });
+
+      const result = await testEndpoint('http://192.168.1.50:11434', 5000);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should strip trailing slashes from endpoint', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+      });
+
+      await testEndpoint('http://192.168.1.50:11434///', 5000);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://192.168.1.50:11434/v1/models',
+        expect.any(Object)
+      );
+    });
+  });
+
+  // ─── Image to Base64 Tests ─────────────────────────────────────────────────
+
+  describe('imageToBase64DataUrl', () => {
+    const RNFS = require('react-native-fs');
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should return data URL as-is if already encoded', async () => {
+      const dataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+      const result = await imageToBase64DataUrl(dataUrl);
+
+      expect(result).toBe(dataUrl);
+    });
+
+    it('should encode file:// URI to base64', async () => {
+      RNFS.exists.mockResolvedValue(true);
+      RNFS.readFile.mockResolvedValue('base64encodeddata');
+      RNFS.DocumentDirectoryPath = '/docs';
+
+      const result = await imageToBase64DataUrl('file:///path/to/image.png');
+
+      expect(result).toBe('data:image/png;base64,base64encodeddata');
+      expect(RNFS.exists).toHaveBeenCalledWith('/path/to/image.png');
+    });
+
+    it('should throw if file does not exist', async () => {
+      RNFS.exists.mockResolvedValue(false);
+
+      await expect(imageToBase64DataUrl('file:///missing.png')).rejects.toThrow(
+        'Image file not found'
+      );
+    });
+
+    it('should determine MIME type from extension', async () => {
+      RNFS.exists.mockResolvedValue(true);
+      RNFS.readFile.mockResolvedValue('data');
+
+      const jpgResult = await imageToBase64DataUrl('file:///image.jpg');
+      expect(jpgResult).toContain('data:image/jpeg;base64,');
+
+      const jpegResult = await imageToBase64DataUrl('file:///image.jpeg');
+      expect(jpegResult).toContain('data:image/jpeg;base64,');
+
+      const gifResult = await imageToBase64DataUrl('file:///image.gif');
+      expect(gifResult).toContain('data:image/gif;base64,');
+
+      const webpResult = await imageToBase64DataUrl('file:///image.webp');
+      expect(webpResult).toContain('data:image/webp;base64,');
+    });
+
+    it('should default to jpeg for unknown extensions', async () => {
+      RNFS.exists.mockResolvedValue(true);
+      RNFS.readFile.mockResolvedValue('data');
+
+      const result = await imageToBase64DataUrl('file:///image.unknown');
+
+      expect(result).toContain('data:image/jpeg;base64,');
+    });
+
+    it('should handle paths without file:// prefix', async () => {
+      RNFS.exists.mockResolvedValue(true);
+      RNFS.readFile.mockResolvedValue('data');
+      RNFS.DocumentDirectoryPath = '/docs';
+
+      const result = await imageToBase64DataUrl('/docs/photo.png');
+
+      expect(result).toContain('data:image/png;base64,');
+    });
+
+    it('should fetch and encode remote URLs', async () => {
+      const mockBlob = new Blob(['image data'], { type: 'image/png' });
+      const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob),
+      } as unknown as Response);
+
+      // Mock FileReader with proper event handling
+      const mockReader = {
+        readAsDataURL: jest.fn(function(this: any) {
+          // Simulate async completion
+          setTimeout(() => {
+            this.result = 'data:image/png;base64,encoded';
+            if (this.onload) this.onload({ target: this });
+          }, 0);
+        }),
+        onload: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        result: null as string | null,
+      };
+      (global as any).FileReader = jest.fn(() => mockReader);
+
+      const result = await imageToBase64DataUrl('http://example.com/image.png');
+
+      expect(result).toBe('data:image/png;base64,encoded');
+      expect(mockFetch).toHaveBeenCalledWith('http://example.com/image.png');
+    });
+
+    it('should throw on fetch failure', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+      } as Response);
+
+      await expect(imageToBase64DataUrl('http://example.com/missing.png')).rejects.toThrow(
+        'Failed to fetch image: 404'
+      );
+    });
+
+    it('should throw on FileReader error', async () => {
+      const mockBlob = new Blob(['image data'], { type: 'image/png' });
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob),
+      } as unknown as Response);
+
+      // Mock FileReader with error
+      const mockReader = {
+        readAsDataURL: jest.fn(function(this: any) {
+          setTimeout(() => {
+            if (this.onerror) this.onerror({ target: this });
+          }, 0);
+        }),
+        onload: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        result: null as string | null,
+      };
+      (global as any).FileReader = jest.fn(() => mockReader);
+
+      await expect(imageToBase64DataUrl('http://example.com/image.png')).rejects.toThrow('Failed to read image as base64');
+    });
+  });
+
+  // ─── Detect Server Type Tests ───────────────────────────────────────────────
+
+  describe('detectServerType', () => {
+    beforeEach(() => {
+      global.fetch = jest.fn();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should detect Ollama from server header', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        headers: { get: () => 'Ollama/1.0' },
+        json: () => Promise.resolve({ object: 'list', data: [] }),
+      });
+
+      const result = await detectServerType('http://localhost:11434', 5000);
+
+      expect(result).toEqual({ type: 'ollama' });
+    });
+
+    it('should detect Ollama from /api/tags endpoint', async () => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ models: [] }),
+        });
+
+      const result = await detectServerType('http://localhost:11434', 5000);
+
+      expect(result).toEqual({ type: 'ollama' });
+    });
+
+    it('should detect LM Studio from model list', async () => {
+      // First call to /v1/models fails (not OpenAI-compatible)
+      // Then /api/tags fails (not Ollama)
+      // Then LM Studio check succeeds with gguf models
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            data: [{ id: 'model.gguf' }, { id: 'other.gguf' }],
+          }),
+        });
+
+      const result = await detectServerType('http://localhost:1234', 5000);
+
+      expect(result).toEqual({ type: 'lmstudio' });
+    });
+
+    it('should detect generic OpenAI-compatible server', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ object: 'list', data: [{ id: 'gpt-4' }] }),
+      });
+
+      const result = await detectServerType('http://localhost:8080', 5000);
+
+      expect(result).toEqual({ type: 'openai-compatible' });
+    });
+
+    it('should return null when server type cannot be determined', async () => {
+      // All endpoints return failures
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        });
+
+      const result = await detectServerType('http://unknown-server.com', 5000);
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+
+      const result = await detectServerType('http://unreachable.com', 5000);
+
+      expect(result).toBeNull();
+    });
+
+    it('should strip trailing slashes from endpoint', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ object: 'list', data: [] }),
+      });
+
+      await detectServerType('http://localhost:11434///', 5000);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.any(Object)
+      );
+    });
+
+    it('should fallback to Ollama when OpenAI-compatible check fails', async () => {
+      // /v1/models fails, then /api/tags succeeds
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ models: [] }),
+        });
+
+      const result = await detectServerType('http://localhost:11434', 5000);
+
+      expect(result).toEqual({ type: 'ollama' });
+    });
+  });
+
+  // ─── Create Streaming Request Tests ────────────────────────────────────────
+
+  describe('createStreamingRequest', () => {
+    let mockXHR: any;
+    let onReadyStateChange: (() => void) | null;
+    let onProgress: (() => void) | null;
+    let onError: (() => void) | null;
+    let onTimeout: (() => void) | null;
+
+    beforeEach(() => {
+      onReadyStateChange = null;
+      onProgress = null;
+      onError = null;
+      onTimeout = null;
+
+      mockXHR = {
+        open: jest.fn(),
+        setRequestHeader: jest.fn(),
+        send: jest.fn(),
+        abort: jest.fn(),
+        onreadystatechange: null,
+        onprogress: null,
+        onerror: null,
+        ontimeout: null,
+        readyState: 0,
+        status: 0,
+        statusText: '',
+        responseText: '',
+      };
+
+      // Capture event handlers
+      Object.defineProperty(mockXHR, 'onreadystatechange', {
+        set: (fn: () => void) => { onReadyStateChange = fn; },
+        get: () => onReadyStateChange,
+      });
+      Object.defineProperty(mockXHR, 'onprogress', {
+        set: (fn: () => void) => { onProgress = fn; },
+        get: () => onProgress,
+      });
+      Object.defineProperty(mockXHR, 'onerror', {
+        set: (fn: () => void) => { onError = fn; },
+        get: () => onError,
+      });
+      Object.defineProperty(mockXHR, 'ontimeout', {
+        set: (fn: () => void) => { onTimeout = fn; },
+        get: () => onTimeout,
+      });
+
+      (global as any).XMLHttpRequest = jest.fn(() => mockXHR);
+
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    it('should make POST request with correct headers', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        { 'Authorization': 'Bearer token' },
+        (event) => events.push(event)
+      );
+
+      expect(mockXHR.open).toHaveBeenCalledWith('POST', 'http://localhost:11434/api/chat', true);
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Accept', 'text/event-stream');
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer token');
+      expect(mockXHR.send).toHaveBeenCalledWith('{"model":"test"}');
+    });
+
+    it('should parse SSE events on progress', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      // Simulate progress event
+      mockXHR.responseText = 'data: {"text":"hello"}\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('{"text":"hello"}');
+    });
+
+    it('should resolve on successful completion', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'data: final\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it('should reject on HTTP error', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'Internal Server Error';
+      mockXHR.status = 500;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await expect(promise).rejects.toThrow('HTTP 500');
+    });
+
+    it('should reject on network error', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      if (onError) {
+        onError();
+      }
+
+      await expect(promise).rejects.toThrow('Network error');
+    });
+
+    it('should reject on timeout', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      // Advance timers past timeout
+      jest.advanceTimersByTime(300000);
+
+      expect(mockXHR.abort).toHaveBeenCalled();
+      await expect(promise).rejects.toThrow('Request timeout');
+    });
+
+    it('should handle events with event type', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'event: message\ndata: {"text":"hello"}\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('message');
+      expect(events[0].data).toBe('{"text":"hello"}');
+    });
+
+    it('should handle events with id field', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'id: 123\ndata: hello\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('123');
+      expect(events[0].data).toBe('hello');
+    });
+
+    it('should handle multi-line data', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'data: line1\ndata: line2\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('line1\nline2');
+    });
+
+    it('should process final chunk on completion', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'data: final\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await promise;
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('final');
+    });
+
+    it('should handle incremental progress updates', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      // First progress event
+      mockXHR.responseText = 'data: first\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('first');
+
+      // Second progress event with more data
+      mockXHR.responseText = 'data: first\n\ndata: second\n\n';
+
+      if (onProgress) {
+        onProgress();
+      }
+
+      expect(events).toHaveLength(2);
+      expect(events[1].data).toBe('second');
+    });
+
+    it('should handle events with id in final chunk', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'id: event-1\ndata: hello\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await promise;
+
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('event-1');
+      expect(events[0].data).toBe('hello');
+    });
+
+    it('should handle multi-line data in final chunk', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'data: line1\ndata: line2\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await promise;
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('line1\nline2');
+    });
+
+    it('should handle events with event type in final chunk', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      mockXHR.responseText = 'event: message\ndata: hello\n\n';
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+
+      if (onReadyStateChange) {
+        onReadyStateChange();
+      }
+
+      await promise;
+
+      expect(events).toHaveLength(1);
+      expect(events[0].event).toBe('message');
+      expect(events[0].data).toBe('hello');
+    });
+
+    it('should handle XHR timeout event', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      if (onTimeout) {
+        onTimeout();
+      }
+
+      await expect(promise).rejects.toThrow('Request timeout');
+    });
+
+    it('should handle XHR timeout via ontimeout', async () => {
+      const events: any[] = [];
+      const promise = createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        (event) => events.push(event)
+      );
+
+      // Simulate XHR timeout
+      jest.advanceTimersByTime(300000);
+
+      expect(mockXHR.abort).toHaveBeenCalled();
+      await expect(promise).rejects.toThrow('Request timeout');
+    });
+
+    it('should reject on send error', async () => {
+      // Mock XHR that throws on send
+      const mockXHRThatThrows = {
+        open: jest.fn(),
+        setRequestHeader: jest.fn(),
+        send: jest.fn(() => {
+          throw new Error('Send failed');
+        }),
+        abort: jest.fn(),
+      };
+
+      (global as any).XMLHttpRequest = jest.fn(() => mockXHRThatThrows);
+
+      await expect(createStreamingRequest(
+        'http://localhost:11434/api/chat',
+        { model: 'test' },
+        {},
+        () => {}
+      )).rejects.toThrow('Send failed');
     });
   });
 });
