@@ -6,7 +6,6 @@
  */
 
 import { OpenAICompatibleProvider, createOpenAIProvider } from '../../../../src/services/providers/openAICompatibleProvider';
-import { Message } from '../../../../src/types';
 import * as httpClient from '../../../../src/services/httpClient';
 
 // Mock httpClient

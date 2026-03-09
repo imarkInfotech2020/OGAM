@@ -9,7 +9,6 @@ import {
   parseSSEStream,
   parseOpenAIMessage,
   parseAnthropicMessage,
-  imageToBase64DataUrl,
   isPrivateNetworkEndpoint,
   testEndpoint,
   fetchWithTimeout,
@@ -311,7 +310,7 @@ describe('httpClient', () => {
         ok: true,
         headers: { get: () => 'application/json' },
         json: () => Promise.resolve(mockData),
-      } as Response);
+      } as unknown as Response);
 
       const result = await fetchWithTimeout('http://test.com/api', { timeout: 5000 });
 
@@ -323,7 +322,7 @@ describe('httpClient', () => {
         ok: true,
         headers: { get: () => 'text/html' },
         text: () => Promise.resolve('<html>ok</html>'),
-      } as Response);
+      } as unknown as Response);
 
       const result = await fetchWithTimeout('http://test.com/page', { timeout: 5000 });
 
@@ -364,7 +363,7 @@ describe('httpClient', () => {
           ok: true,
           headers: { get: () => 'application/json' },
           json: () => Promise.resolve(mockData),
-        } as Response);
+        } as unknown as Response);
 
       const result = await fetchWithTimeout('http://test.com/api', {
         timeout: 5000,

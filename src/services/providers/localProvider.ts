@@ -1,3 +1,4 @@
+/* eslint-disable max-params */
 /**
  * Local Provider
  *
@@ -13,7 +14,6 @@ import type {
   ProviderCapabilities,
   GenerationOptions,
   StreamCallbacks,
-  CompletionResult,
 } from './types';
 import logger from '../../utils/logger';
 

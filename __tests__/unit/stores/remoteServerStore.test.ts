@@ -96,14 +96,14 @@ describe('remoteServerStore', () => {
 
     it('should not modify other servers', () => {
       let server1Id = '';
-      let server2Id = '';
+      let _server2Id = '';
       act(() => {
         server1Id = useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://server1:11434',
           providerType: 'openai-compatible',
         });
-        server2Id = useRemoteServerStore.getState().addServer({
+        _server2Id = useRemoteServerStore.getState().addServer({
           name: 'Server 2',
           endpoint: 'http://server2:11434',
           providerType: 'openai-compatible',
@@ -291,8 +291,8 @@ describe('remoteServerStore', () => {
         result = await useRemoteServerStore.getState().testConnection(serverId);
       });
 
-      expect(result.success).toBe(true);
-      expect(result.latency).toBe(50);
+      expect(result!.success).toBe(true);
+      expect(result!.latency).toBe(50);
     });
 
     it('should return error on connection failure', async () => {
@@ -315,8 +315,8 @@ describe('remoteServerStore', () => {
         result = await useRemoteServerStore.getState().testConnection(serverId);
       });
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Connection refused');
+      expect(result!.success).toBe(false);
+      expect(result!.error).toContain('Connection refused');
     });
   });
 
@@ -332,7 +332,7 @@ describe('remoteServerStore', () => {
         result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
       });
 
-      expect(result.success).toBe(true);
+      expect(result!.success).toBe(true);
       expect(useRemoteServerStore.getState().servers).toHaveLength(0);
     });
   });

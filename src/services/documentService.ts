@@ -88,7 +88,7 @@ class DocumentService {
         await RNFS.copyFile(uri, tempPath);
         console.log(`[DocumentService] Copied iOS file:// URI to: ${tempPath}`);
         return tempPath;
-      } catch (copyError) {
+      } catch (_copyError) {
         // If direct copy fails, try stripping the file:// prefix
         const pathWithoutScheme = decodedUri.replace(/^file:\/\//, '');
         try {

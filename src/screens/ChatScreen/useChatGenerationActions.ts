@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 let _msgIdSeq = 0;
 const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;

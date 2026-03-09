@@ -5,7 +5,6 @@
  * generationService correctly routes to the appropriate provider.
  */
 
-import { generationService } from '../../../src/services/generationService';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/providers/registry';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';

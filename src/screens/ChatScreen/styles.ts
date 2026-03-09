@@ -29,6 +29,7 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   headerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 2 },
   headerSubtitle: { ...TYPOGRAPHY.h3, color: colors.textMuted },
   modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  remoteIcon: { marginRight: 4 },
   modelSelectorArrow: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginLeft: SPACING.xs },
   headerImageBadge: {
     width: 18,

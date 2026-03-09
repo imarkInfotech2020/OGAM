@@ -384,7 +384,7 @@ jest.mock('react-native-zip-archive', () => ({
 // PDFExtractor module mock - controlled by tests
 const mockPdfExtractor = {
   isAvailable: jest.fn(() => true),
-  extractText: jest.fn((filePath: string, maxChars: number = 50000) => {
+  extractText: jest.fn((filePath: string, _maxChars: number = 50000) => {
     // Simulate PDF extraction based on file path
     if (filePath.includes('test.pdf')) {
       return Promise.resolve('This is extracted PDF text content for testing.');

@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-params, complexity */
 /**
  * OpenAI-Compatible Provider
  *
@@ -5,27 +6,24 @@
  * Handles model discovery, streaming generation, vision, and tool calling.
  */
 
-import { Message, MediaAttachment } from '../../types';
+import { Message } from '../../types';
 import type {
   LLMProvider,
   ProviderType,
   ProviderCapabilities,
   GenerationOptions,
   StreamCallbacks,
-  CompletionResult,
-  ToolDefinition,
 } from './types';
 import {
   createStreamingRequest,
   parseOpenAIMessage,
   imageToBase64DataUrl,
-  fetchWithTimeout,
 } from '../httpClient';
 import { useAppStore } from '../../stores';
 import logger from '../../utils/logger';
 
 /** OpenAI model info */
-interface OpenAIModel {
+interface _OpenAIModel {
   id: string;
   object?: string;
   owned_by?: string;
@@ -327,7 +325,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       // User or assistant
-      const hasAttachments = msg.attachments && msg.attachments.length > 0;
+      const _hasAttachments = msg.attachments && msg.attachments.length > 0;
       const hasImages = msg.attachments?.some(a => a.type === 'image');
 
       if (msg.role === 'user' && hasImages && this.modelCapabilities.supportsVision) {

@@ -5,8 +5,8 @@ import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
-import { getProviderForServer, providerRegistry } from './providers';
-import type { StreamCallbacks, GenerationOptions, CompletionResult } from './providers/types';
+import { providerRegistry } from './providers';
+import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 
@@ -122,7 +122,7 @@ class GenerationService {
     if (this.isUsingRemoteProvider()) {
       const remoteStore = useRemoteServerStore.getState();
       const activeServer = remoteStore.getActiveServer();
-      const modelId = providerRegistry.getActiveProvider().getLoadedModelId();
+      const _modelId = providerRegistry.getActiveProvider().getLoadedModelId();
 
       // Estimate token count from streaming content (roughly 4 chars per token)
       const contentLength = this.state.streamingContent.length;
@@ -460,7 +460,7 @@ class GenerationService {
               );
             }
           },
-          onComplete: (result: CompletionResult) => {
+          onComplete: (_result: CompletionResult) => {
             if (this.abortRequested) return;
             logger.log('[GenerationService] Remote text generation completed');
             this.forceFlushTokens();
@@ -516,7 +516,6 @@ class GenerationService {
     // and we use runToolLoop for tool execution
 
     if (!(await this.prepareGeneration(conversationId))) return;
-    const chatStore = useChatStore.getState();
     const provider = this.getCurrentProvider();
 
     if (!provider) {

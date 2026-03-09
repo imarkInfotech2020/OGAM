@@ -4,7 +4,7 @@
  * Tests for the local LLM provider wrapper that delegates to llmService.
  */
 
-import { localProvider, LocalProvider } from '../../../../src/services/providers/localProvider';
+import { localProvider } from '../../../../src/services/providers/localProvider';
 import { llmService } from '../../../../src/services/llm';
 import { Message } from '../../../../src/types';
 

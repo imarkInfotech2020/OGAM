@@ -118,10 +118,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             activeRemoteImageModelId: null,
           });
         }
-        set((state) => ({
-          servers: state.servers.filter((s) => s.id !== id),
+        set((s) => ({
+          servers: s.servers.filter((s) => s.id !== id),
           discoveredModels: Object.fromEntries(
-            Object.entries(state.discoveredModels).filter(([key]) => key !== id)
+            Object.entries(s.discoveredModels).filter(([key]) => key !== id)
           ),
           serverHealth: Object.fromEntries(
             Object.entries(state.serverHealth).filter(([key]) => key !== id)

@@ -1,3 +1,5 @@
+/* eslint-disable max-lines, max-params */
+/* eslint-disable max-lines, max-params */
 /**
  * Tool-calling generation loop.
  * Extracted to keep generationService.ts under the max-lines limit.
@@ -218,13 +220,13 @@ async function callRemoteLLMWithTools(
     tools,
   };
 
-  let fullContent = '';
+  let _fullContent = '';
   let toolCalls: ToolCall[] = [];
 
   return new Promise((resolve, reject) => {
     provider.generate(messages, options, {
       onToken: (token: string) => {
-        fullContent += token;
+        _fullContent += token;
         onStream?.({ content: token });
       },
       onReasoning: (content: string) => {

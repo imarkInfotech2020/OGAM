@@ -124,7 +124,7 @@ export const ChatHeader: React.FC<{
         </Text>
         <TouchableOpacity style={styles.modelSelector} onPress={() => setShowModelSelector(true)} testID="model-selector">
           {isRemote && (
-            <Icon name="cloud" size={12} color={colors.primary} style={{ marginRight: 4 }} />
+            <Icon name="cloud" size={12} color={colors.primary} style={styles.remoteIcon} />
           )}
           <Text style={styles.headerSubtitle} numberOfLines={1} testID="model-loaded-indicator">
             {activeModelName || activeModel?.name || 'Unknown'}

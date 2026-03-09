@@ -4,7 +4,6 @@
  * Tests for routing between local and remote providers in the generation service.
  */
 
-import { generationService } from '../../../../src/services/generationService';
 import { providerRegistry, localProvider } from '../../../src/services/providers';
 import { useRemoteServerStore } from '../../../src/stores';
 import { OpenAICompatibleProvider } from '../../../src/services/providers/openAICompatibleProvider';
@@ -104,7 +103,7 @@ describe('Generation Service Provider Routing', () => {
     it('should return local provider from getProviderForServer(null)', () => {
       const provider = providerRegistry.getProvider('local');
 
-      expect(provider.id).toBe('local');
+      expect(provider!.id).toBe('local');
       expect(provider).toBe(localProvider);
     });
   });
@@ -148,7 +147,7 @@ describe('Generation Service Provider Routing', () => {
       const provider = providerRegistry.getProvider('unknown-id');
 
       // Should fall back to local
-      expect(provider.id).toBe('local');
+      expect(provider!.id).toBe('local');
     });
 
     it('should not unregister local provider', () => {

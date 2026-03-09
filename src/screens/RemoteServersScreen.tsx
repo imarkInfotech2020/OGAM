@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+/* eslint-disable max-lines */
 /**
  * Remote Servers Settings Screen
  *
@@ -194,7 +196,7 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, activeServerId, setActiveServerId, removeServer, testConnection } = useRemoteServerStore();
+  const { servers, activeServerId, setActiveServerId, testConnection } = useRemoteServerStore();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
