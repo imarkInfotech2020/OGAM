@@ -347,3 +347,16 @@ export interface DebugInfo {
   maxContextLength: number; contextUsagePercent: number;
 }
 export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';
+
+// Remote server types
+export type {
+  RemoteProviderType,
+  RemoteServer,
+  RemoteModel,
+  RemoteModelCapabilities,
+  ServerTestResult,
+  ServerInfo,
+  RemoteGenerationSettings,
+  SelectableModel,
+} from './remoteServer';
+export { DEFAULT_REMOTE_GENERATION_SETTINGS } from './remoteServer';
