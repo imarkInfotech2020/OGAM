@@ -43,17 +43,19 @@ jest.mock('../../../src/stores', () => ({
   useRemoteServerStore: () => mockUseRemoteServerStore(),
 }));
 
-const mockLoadImageModel = jest.fn().mockResolvedValue(undefined);
-const mockUnloadImageModel = jest.fn().mockResolvedValue(undefined);
-
 jest.mock('../../../src/services', () => ({
   activeModelService: {
-    loadImageModel: (...args: any[]) => mockLoadImageModel(...args),
-    unloadImageModel: (...args: any[]) => mockUnloadImageModel(...args),
+    loadImageModel: jest.fn().mockResolvedValue(undefined),
+    unloadImageModel: jest.fn().mockResolvedValue(undefined),
   },
   hardwareService: {
     formatModelSize: jest.fn(() => '4.0 GB'),
     formatBytes: jest.fn(() => '2.0 GB'),
+  },
+  remoteServerManager: {
+    clearActiveRemoteModel: jest.fn(),
+    setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
+    setActiveRemoteImageModel: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
