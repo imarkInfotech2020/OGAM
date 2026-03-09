@@ -20,7 +20,7 @@ jest.mock('../../../src/services/llm', () => ({
   },
 }));
 
-jest.mock('../../../src/services/providers', () => ({
+jest.mock('../../../src/services/providers/registry', () => ({
   providerRegistry: {
     getProvider: jest.fn(),
     getActiveProvider: jest.fn(),
