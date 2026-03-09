@@ -11,7 +11,6 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useProjectStore } from '../../src/stores/projectStore';
 import { useWhisperStore } from '../../src/stores/whisperStore';
 import { useRemoteServerStore } from '../../src/stores/remoteServerStore';
-import { useRemoteServerStore } from '../../src/stores/remoteServerStore';
 import {
   createConversation,
   createMessage,
