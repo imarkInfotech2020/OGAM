@@ -23,6 +23,7 @@ import { render, fireEvent, act, waitFor, cleanup } from '@testing-library/react
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores, setupFullChat } from '../../utils/testHelpers';
 import {
@@ -878,31 +879,40 @@ describe('ChatScreen', () => {
       expect(input).toBeTruthy();
     });
 
-    it('shows "Loading model..." placeholder when model not loaded', () => {
-      setupFullChat();
-      (llmService.isModelLoaded as jest.Mock).mockReturnValue(false);
+    it('shows NoModelScreen when no model selected', () => {
+      // Setup with no active model
+      useAppStore.setState({
+        downloadedModels: [],
+        activeModelId: null,
+        hasCompletedOnboarding: true,
+      });
+      useChatStore.setState({
+        conversations: [],
+        activeConversationId: null,
+      });
+      // Reset remote server store to have no active model
+      useRemoteServerStore.setState({
+        activeServerId: null,
+        activeRemoteTextModelId: null,
+      });
 
-      const { getByTestId } = renderChatScreen();
-      const input = getByTestId('chat-text-input');
-      expect(input.props.placeholder).toBe('Loading model...');
+      const { getByText } = renderChatScreen();
+      expect(getByText('No Model Selected')).toBeTruthy();
     });
 
-    it('shows "Type a message..." placeholder when model is loaded', () => {
+    it('shows "Type a message..." placeholder when model is selected', () => {
       setupFullChat();
-      (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
 
       const { getByTestId } = renderChatScreen();
       const input = getByTestId('chat-text-input');
       expect(input.props.placeholder).toBe('Type a message...');
     });
 
-    it('disables input when model is not loaded', () => {
+    it('shows chat input when model is selected', () => {
       setupFullChat();
-      (llmService.isModelLoaded as jest.Mock).mockReturnValue(false);
 
       const { getByTestId } = renderChatScreen();
-      const input = getByTestId('chat-text-input');
-      expect(input.props.editable).toBe(false);
+      expect(getByTestId('chat-text-input')).toBeTruthy();
     });
 
     it('shows send button when not generating', () => {
@@ -4103,6 +4113,104 @@ describe('ChatScreen', () => {
       // The proceedWithModelLoad flow is triggered. checkMemoryForModel was called
       // for model2 (lines 482-495 exercised).
       expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith('sysgen-2', 'text');
+    });
+  });
+
+  // ============================================================================
+  // Pending settings warning
+  // ============================================================================
+  describe('pending settings warning', () => {
+    it('shows warning when settings have changed but model not reloaded', async () => {
+      const model = createDownloadedModel({ id: 'test-model' });
+      useAppStore.setState({
+        activeModelId: model.id,
+        downloadedModels: [model],
+        settings: {
+          ...useAppStore.getState().settings,
+          nThreads: 8,
+          enableGpu: true,
+          gpuLayers: 99,
+          contextLength: 4096,
+        },
+        // Settings that were active when model was loaded (different from current)
+        loadedSettings: {
+          nThreads: 4,
+          enableGpu: false,
+          gpuLayers: 0,
+          nBatch: 512,
+          contextLength: 2048,
+          flashAttn: true,
+          cacheType: 'q8_0',
+        },
+      });
+      useChatStore.setState({
+        conversations: [createConversation({ modelId: model.id })],
+        activeConversationId: 'conv-1',
+      });
+      (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
+
+      const { queryByText } = renderChatScreen();
+      await act(async () => {});
+
+      // Should show warning about pending settings
+      expect(queryByText(/Settings changed/i)).toBeTruthy();
+    });
+
+    it('does not show warning when settings match loaded settings', async () => {
+      const model = createDownloadedModel({ id: 'test-model' });
+      const settings = {
+        nThreads: 4,
+        enableGpu: true,
+        gpuLayers: 99,
+        nBatch: 512,
+        contextLength: 2048,
+        flashAttn: true,
+        cacheType: 'q8_0' as const,
+      };
+      useAppStore.setState({
+        activeModelId: model.id,
+        downloadedModels: [model],
+        settings: {
+          ...useAppStore.getState().settings,
+          ...settings,
+        },
+        loadedSettings: { ...settings },
+      });
+      useChatStore.setState({
+        conversations: [createConversation({ modelId: model.id })],
+        activeConversationId: 'conv-1',
+      });
+      (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
+
+      const { queryByText } = renderChatScreen();
+      await act(async () => {});
+
+      // Should NOT show warning
+      expect(queryByText(/Settings changed/i)).toBeNull();
+    });
+
+    it('does not show warning when no model is loaded', async () => {
+      useAppStore.setState({
+        activeModelId: null,
+        downloadedModels: [],
+        settings: {
+          ...useAppStore.getState().settings,
+          nThreads: 8,
+        },
+        loadedSettings: {
+          nThreads: 4,
+        } as any,
+      });
+      useChatStore.setState({
+        conversations: [],
+        activeConversationId: null,
+      });
+
+      const { queryByText } = renderChatScreen();
+      await act(async () => {});
+
+      // Should NOT show warning (no model loaded)
+      expect(queryByText(/Settings changed/i)).toBeNull();
     });
   });
 });
