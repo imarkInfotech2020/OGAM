@@ -12,7 +12,14 @@ import * as Keychain from 'react-native-keychain';
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/providers/registry');
-jest.mock('react-native-keychain');
+jest.mock('react-native-keychain', () => ({
+  setGenericPassword: jest.fn().mockResolvedValue(true),
+  getGenericPassword: jest.fn().mockResolvedValue(null),
+  resetGenericPassword: jest.fn().mockResolvedValue(true),
+  ACCESSIBLE: {
+    WHEN_UNLOCKED: 'WHEN_UNLOCKED',
+  },
+}));
 
 describe('remoteServerManager', () => {
   beforeEach(() => {
