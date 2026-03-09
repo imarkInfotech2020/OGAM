@@ -274,6 +274,7 @@ export async function createStreamingRequest(
   onEvent: (event: SSEEvent) => void,
   timeout: number = 300000 // 5 minutes default
 ): Promise<void> {
+  logger.log('[HttpClient] Creating streaming request to:', url);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -288,6 +289,28 @@ export async function createStreamingRequest(
     Object.entries(headers).forEach(([key, value]) => {
       xhr.setRequestHeader(key, value);
     });
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 1) {
+        logger.log('[HttpClient] Request opened');
+      } else if (xhr.readyState === 2) {
+        logger.log('[HttpClient] Headers received, status:', xhr.status);
+      } else if (xhr.readyState === 3) {
+        logger.log('[HttpClient] Loading data...');
+      } else if (xhr.readyState === 4) {
+        logger.log('[HttpClient] Request complete, status:', xhr.status);
+      }
+    };
+
+    xhr.onerror = () => {
+      logger.error('[HttpClient] Network error:', xhr.status, xhr.statusText);
+      reject(new Error(`Network error: ${xhr.status} ${xhr.statusText}`));
+    };
+
+    xhr.ontimeout = () => {
+      logger.error('[HttpClient] Request timeout');
+      reject(new Error('Request timeout'));
+    };
 
     // Track processed length for incremental parsing
     let processedLength = 0;
@@ -433,9 +456,12 @@ export async function createStreamingRequest(
     };
 
     try {
-      xhr.send(JSON.stringify(body));
+      const bodyStr = JSON.stringify(body);
+      logger.log('[HttpClient] Sending request body, length:', bodyStr.length);
+      xhr.send(bodyStr);
     } catch (err) {
       clearTimeout(timeoutId);
+      logger.error('[HttpClient] Error sending request:', err);
       reject(err);
     }
   });

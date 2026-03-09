@@ -163,32 +163,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
         stream: true,
       };
 
-      // Add optional parameters
-      if (options.temperature !== undefined) {
-        requestBody.temperature = options.temperature;
-      }
-      if (options.maxTokens !== undefined) {
-        requestBody.max_tokens = options.maxTokens;
-      }
-      if (options.topP !== undefined) {
-        requestBody.top_p = options.topP;
-      }
-      if (options.topK !== undefined) {
-        // Some providers support top_k
-        requestBody.top_k = options.topK;
-      }
-      if (options.repeatPenalty !== undefined) {
-        // Some providers support repeat_penalty
-        requestBody.repeat_penalty = options.repeatPenalty;
-      }
-      if (options.stopSequences && options.stopSequences.length > 0) {
-        requestBody.stop = options.stopSequences;
-      }
-      if (options.tools && options.tools.length > 0) {
-        requestBody.tools = options.tools;
-        requestBody.tool_choice = 'auto';
-      }
-
       // Build headers
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -200,6 +174,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
       // Make the streaming request
       const url = `${this.config.endpoint.replace(/\/+$/, '')}/v1/chat/completions`;
+      logger.log('[OpenAIProvider] Making request to:', url, 'with model:', this.config.modelId);
 
       let fullContent = '';
       let fullReasoningContent = '';
