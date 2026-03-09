@@ -7,19 +7,217 @@
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/providers/registry';
+import * as Keychain from 'react-native-keychain';
 
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/providers/registry');
-jest.mock('react-native-keychain', () => ({
-  setGenericPassword: jest.fn().mockResolvedValue(true),
-  getGenericPassword: jest.fn().mockResolvedValue(null),
-  resetGenericPassword: jest.fn().mockResolvedValue(true),
-}));
+jest.mock('react-native-keychain');
 
 describe('remoteServerManager', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('addServer', () => {
+    it('should add server without API key', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434', createdAt: Date.now() };
+      const mockAddServer = jest.fn().mockReturnValue('server-1');
+      const mockGetServerById = jest.fn().mockReturnValue(mockServer);
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        addServer: mockAddServer,
+        getServerById: mockGetServerById,
+      });
+      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(undefined);
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
+
+      const result = await remoteServerManager.addServer({
+        name: 'Test',
+        endpoint: 'http://localhost:11434',
+      });
+
+      expect(result).toEqual(mockServer);
+      expect(mockAddServer).toHaveBeenCalled();
+    });
+
+    it('should add server with API key and store it', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434', createdAt: Date.now() };
+      const mockAddServer = jest.fn().mockReturnValue('server-1');
+      const mockGetServerById = jest.fn().mockReturnValue(mockServer);
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        addServer: mockAddServer,
+        getServerById: mockGetServerById,
+      });
+      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(undefined);
+      (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
+
+      const result = await remoteServerManager.addServer({
+        name: 'Test',
+        endpoint: 'http://localhost:11434',
+        apiKey: 'secret-key',
+      });
+
+      expect(Keychain.setGenericPassword).toHaveBeenCalledWith(
+        'server_server-1',
+        'secret-key',
+        expect.objectContaining({ service: expect.stringContaining('server-1') })
+      );
+      expect(result).toEqual(mockServer);
+    });
+
+    it('should throw when server creation fails', async () => {
+      const mockAddServer = jest.fn().mockReturnValue('server-1');
+      const mockGetServerById = jest.fn().mockReturnValue(null);
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        addServer: mockAddServer,
+        getServerById: mockGetServerById,
+      });
+
+      await expect(remoteServerManager.addServer({
+        name: 'Test',
+        endpoint: 'http://localhost:11434',
+      })).rejects.toThrow('Failed to create server');
+    });
+  });
+
+  describe('updateServer', () => {
+    it('should update server without API key change', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434', createdAt: Date.now() };
+      const mockGetServerById = jest.fn().mockReturnValue(mockServer);
+      const mockUpdateServer = jest.fn();
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: mockGetServerById,
+        updateServer: mockUpdateServer,
+      });
+      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+
+      await remoteServerManager.updateServer('server-1', { name: 'Updated' });
+
+      expect(mockUpdateServer).toHaveBeenCalledWith('server-1', { name: 'Updated' });
+    });
+
+    it('should update server with new API key', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434', createdAt: Date.now() };
+      const mockGetServerById = jest.fn().mockReturnValue(mockServer);
+      const mockUpdateServer = jest.fn();
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: mockGetServerById,
+        updateServer: mockUpdateServer,
+      });
+      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+
+      await remoteServerManager.updateServer('server-1', { apiKey: 'new-key' });
+
+      expect(Keychain.setGenericPassword).toHaveBeenCalled();
+      expect(mockUpdateServer).toHaveBeenCalledWith('server-1', {});
+    });
+
+    it('should remove API key when set to empty string', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434', createdAt: Date.now() };
+      const mockGetServerById = jest.fn().mockReturnValue(mockServer);
+      const mockUpdateServer = jest.fn();
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: mockGetServerById,
+        updateServer: mockUpdateServer,
+      });
+      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (Keychain.resetGenericPassword as jest.Mock).mockResolvedValue(true);
+
+      await remoteServerManager.updateServer('server-1', { apiKey: '' });
+
+      expect(Keychain.resetGenericPassword).toHaveBeenCalled();
+    });
+
+    it('should throw when server not found', async () => {
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: jest.fn().mockReturnValue(null),
+      });
+
+      await expect(remoteServerManager.updateServer('nonexistent', { name: 'Test' }))
+        .rejects.toThrow('Server not found');
+    });
+  });
+
+  describe('removeServer', () => {
+    it('should remove server and clean up', async () => {
+      const mockRemoveServer = jest.fn();
+
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        removeServer: mockRemoveServer,
+      });
+      (providerRegistry.unregisterProvider as jest.Mock).mockReturnValue(undefined);
+      (Keychain.resetGenericPassword as jest.Mock).mockResolvedValue(true);
+
+      await remoteServerManager.removeServer('server-1');
+
+      expect(providerRegistry.unregisterProvider).toHaveBeenCalledWith('server-1');
+      expect(Keychain.resetGenericPassword).toHaveBeenCalled();
+      expect(mockRemoveServer).toHaveBeenCalledWith('server-1');
+    });
+  });
+
+  describe('getApiKey', () => {
+    it('should return API key from keychain', async () => {
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
+        username: 'server_server-1',
+        password: 'secret-key',
+      });
+
+      const key = await remoteServerManager.getApiKey('server-1');
+
+      expect(key).toBe('secret-key');
+    });
+
+    it('should return null when no key stored', async () => {
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
+
+      const key = await remoteServerManager.getApiKey('server-1');
+
+      expect(key).toBeNull();
+    });
+
+    it('should return null on keychain error', async () => {
+      (Keychain.getGenericPassword as jest.Mock).mockRejectedValue(new Error('Keychain error'));
+
+      const key = await remoteServerManager.getApiKey('server-1');
+
+      expect(key).toBeNull();
+    });
+  });
+
+  describe('getServerWithApiKey', () => {
+    it('should return server with API key', async () => {
+      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: jest.fn().mockReturnValue(mockServer),
+      });
+      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
+        username: 'server_server-1',
+        password: 'secret-key',
+      });
+
+      const result = await remoteServerManager.getServerWithApiKey('server-1');
+
+      expect(result).toEqual({ ...mockServer, apiKey: 'secret-key' });
+    });
+
+    it('should return null when server not found', async () => {
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: jest.fn().mockReturnValue(null),
+      });
+
+      const result = await remoteServerManager.getServerWithApiKey('nonexistent');
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('setActiveRemoteTextModel', () => {
@@ -172,6 +370,151 @@ describe('remoteServerManager', () => {
       nonToolModels.forEach(modelId => {
         expect(manager.detectToolCallingCapability(modelId)).toBe(false);
       });
+    });
+
+    it('should detect models with tool/function keywords', () => {
+      const manager = remoteServerManager as any;
+
+      expect(manager.detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
+      expect(manager.detectToolCallingCapability('mistral-function-call')).toBe(true);
+      expect(manager.detectToolCallingCapability('firefunction-v1')).toBe(true);
+      expect(manager.detectToolCallingCapability('dbrx-instruct')).toBe(true);
+      expect(manager.detectToolCallingCapability('command-r')).toBe(true);
+    });
+  });
+
+  describe('detectVisionCapability', () => {
+    it('should detect all vision model patterns', () => {
+      const manager = remoteServerManager as any;
+
+      const visionModels = [
+        'llava-v1.6-mistral-7b',
+        'bakllava-7b',
+        'moondream-1',
+        'cogvlm-7b',
+        'cogagent-9b',
+        'fuyu-8b',
+        'idefics-9b',
+        'qwen-vl-chat',
+        'gpt-4-vision-preview',
+        'gpt-4o',
+        'claude-3-opus',
+        'gemini-pro-vision',
+        'pixtral-8b',
+        'phi-3.5-vision',
+        'minicpm-v',
+        'internvl-7b',
+        'yi-vl-6b',
+      ];
+
+      visionModels.forEach(modelId => {
+        expect(manager.detectVisionCapability(modelId)).toBe(true);
+      });
+    });
+
+    it('should return false for non-vision models', () => {
+      const manager = remoteServerManager as any;
+
+      const nonVisionModels = [
+        'llama-2-7b',
+        'mistral-7b-instruct',
+        'codellama-34b',
+        'phi-2',
+        'gpt-3.5-turbo',
+      ];
+
+      nonVisionModels.forEach(modelId => {
+        expect(manager.detectVisionCapability(modelId)).toBe(false);
+      });
+    });
+  });
+
+  describe('getServer', () => {
+    it('should return server by ID from store', () => {
+      const mockServer = { id: 'server-1', name: 'Test Server' };
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: jest.fn().mockReturnValue(mockServer),
+      });
+
+      const result = remoteServerManager.getServer('server-1');
+
+      expect(result).toEqual(mockServer);
+    });
+
+    it('should return null when server not found', () => {
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getServerById: jest.fn().mockReturnValue(null),
+      });
+
+      const result = remoteServerManager.getServer('nonexistent');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getServers', () => {
+    it('should return all servers from store', () => {
+      const mockServers = [
+        { id: 'server-1', name: 'Server 1' },
+        { id: 'server-2', name: 'Server 2' },
+      ];
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        servers: mockServers,
+      });
+
+      const result = remoteServerManager.getServers();
+
+      expect(result).toEqual(mockServers);
+    });
+  });
+
+  describe('getActiveServer', () => {
+    it('should return active server from store', () => {
+      const mockServer = { id: 'server-1', name: 'Active Server' };
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getActiveServer: jest.fn().mockReturnValue(mockServer),
+      });
+
+      const result = remoteServerManager.getActiveServer();
+
+      expect(result).toEqual(mockServer);
+    });
+
+    it('should return null when no active server', () => {
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        getActiveServer: jest.fn().mockReturnValue(null),
+      });
+
+      const result = remoteServerManager.getActiveServer();
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('setActiveServer', () => {
+    it('should set active server and provider', () => {
+      const mockSetActiveProvider = jest.fn();
+      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        setActiveServerId: jest.fn(),
+      });
+
+      remoteServerManager.setActiveServer('server-1');
+
+      expect(useRemoteServerStore.getState().setActiveServerId).toHaveBeenCalledWith('server-1');
+      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('server-1');
+    });
+
+    it('should set to local when id is null', () => {
+      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        setActiveServerId: jest.fn(),
+      });
+
+      remoteServerManager.setActiveServer(null);
+
+      expect(useRemoteServerStore.getState().setActiveServerId).toHaveBeenCalledWith(null);
+      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('local');
     });
   });
 });
