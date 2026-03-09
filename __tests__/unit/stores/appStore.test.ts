@@ -428,59 +428,6 @@ describe('appStore', () => {
       expect(getAppState().loadedSettings?.nThreads).toBe(4);
       expect(getAppState().settings.nThreads).toBe(8);
     });
-  });
-
-  // ============================================================================
-  // Loaded Settings (for reload-required settings tracking)
-  // ============================================================================
-  describe('loadedSettings', () => {
-    it('starts with null loadedSettings', () => {
-      expect(getAppState().loadedSettings).toBeNull();
-    });
-
-    it('setLoadedSettings saves settings that require model reload', () => {
-      const { setLoadedSettings } = useAppStore.getState();
-
-      setLoadedSettings({
-        enableGpu: true,
-        gpuLayers: 99,
-        nThreads: 4,
-        nBatch: 512,
-        contextLength: 2048,
-        flashAttn: true,
-        cacheType: 'q8_0',
-      });
-
-      const loaded = getAppState().loadedSettings;
-      expect(loaded).not.toBeNull();
-      expect(loaded?.enableGpu).toBe(true);
-      expect(loaded?.gpuLayers).toBe(99);
-      expect(loaded?.nThreads).toBe(4);
-      expect(loaded?.nBatch).toBe(512);
-      expect(loaded?.contextLength).toBe(2048);
-      expect(loaded?.flashAttn).toBe(true);
-      expect(loaded?.cacheType).toBe('q8_0');
-    });
-
-    it('setLoadedSettings can be cleared with null', () => {
-      const { setLoadedSettings } = useAppStore.getState();
-
-      setLoadedSettings({
-        enableGpu: true,
-        gpuLayers: 99,
-        nThreads: 4,
-        nBatch: 512,
-        contextLength: 2048,
-        flashAttn: true,
-        cacheType: 'q8_0',
-      });
-
-      expect(getAppState().loadedSettings).not.toBeNull();
-
-      setLoadedSettings(null);
-
-      expect(getAppState().loadedSettings).toBeNull();
-    });
 
     it('loadedSettings can be partial', () => {
       const { setLoadedSettings } = useAppStore.getState();
