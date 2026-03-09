@@ -1,3 +1,5 @@
+/* eslint-disable max-lines */
+/* eslint-disable max-lines */
 /**
  * Remote Server Store
  *
@@ -118,10 +120,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             activeRemoteImageModelId: null,
           });
         }
-        set((s) => ({
-          servers: s.servers.filter((s) => s.id !== id),
+        set((prev) => ({
+          servers: prev.servers.filter((srv) => srv.id !== id),
           discoveredModels: Object.fromEntries(
-            Object.entries(s.discoveredModels).filter(([key]) => key !== id)
+            Object.entries(prev.discoveredModels).filter(([key]) => key !== id)
           ),
           serverHealth: Object.fromEntries(
             Object.entries(state.serverHealth).filter(([key]) => key !== id)
@@ -411,7 +413,7 @@ async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[
     Accept: 'application/json',
   };
   if (server.apiKey) {
-    headers['Authorization'] = `Bearer ${server.apiKey}`;
+    headers.Authorization = `Bearer ${server.apiKey}`;
   }
 
   // Try OpenAI-compatible endpoint first

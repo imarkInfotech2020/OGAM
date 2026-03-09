@@ -1,5 +1,4 @@
 /* eslint-disable max-lines-per-function */
-/* eslint-disable max-lines-per-function */
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';

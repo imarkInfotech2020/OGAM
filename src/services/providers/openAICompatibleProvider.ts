@@ -167,7 +167,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         Accept: 'text/event-stream',
       };
       if (this.config.apiKey) {
-        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        headers.Authorization = `Bearer ${this.config.apiKey}`;
       }
 
       // Make the streaming request

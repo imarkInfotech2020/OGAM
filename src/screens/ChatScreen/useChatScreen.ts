@@ -1,4 +1,4 @@
-/* eslint-disable max-lines-per-function */
+/* eslint-disable max-lines, max-lines-per-function */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, showAlert, initialAlertState } from '../../components';
@@ -66,7 +66,7 @@ export const useChatScreen = () => {
     downloadedImageModels, setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
     setImageGenerationStatus: setAppImageGenerationStatus,
-    removeImagesByConversationId,
+    removeImagesByConversationId, loadedSettings,
   } = useAppStore();
 
   // Remote model state - use proper selectors for reactivity
@@ -163,6 +163,7 @@ export const useChatScreen = () => {
     const unsub2 = contextCompactionService.subscribeCompacting(setIsCompacting);
     return () => { unsub1(); unsub2(); };
   }, []);
+
   useEffect(() => {
     return generationService.subscribe(state => {
       setQueueCount(state.queuedMessages.length);
@@ -266,6 +267,22 @@ export const useChatScreen = () => {
     const cur = settings.enabledTools || [];
     useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
+  // Check if there are pending settings that require model reload
+  const hasPendingSettings = (() => {
+    // No pending settings if no model is loaded
+    if (!loadedSettings) return false;
+    // Compare settings that require reload
+    return (
+      settings.nThreads !== loadedSettings.nThreads ||
+      settings.nBatch !== loadedSettings.nBatch ||
+      settings.contextLength !== loadedSettings.contextLength ||
+      settings.enableGpu !== loadedSettings.enableGpu ||
+      settings.gpuLayers !== loadedSettings.gpuLayers ||
+      settings.flashAttn !== loadedSettings.flashAttn ||
+      settings.cacheType !== loadedSettings.cacheType
+    );
+  })();
+
   return {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
@@ -284,7 +301,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, displayMessages, downloadedModels, projects, settings,
+    isStreaming, isThinking, isCompacting, hasPendingSettings, displayMessages, downloadedModels, projects, settings,
     navigation, hardwareService,
     handleSend: (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
       handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo }),

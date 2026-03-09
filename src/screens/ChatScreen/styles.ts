@@ -156,6 +156,17 @@ const createIndicatorStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.background,
   },
   classifyingText: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
+  pendingSettingsBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceLight,
+  },
+  pendingSettingsText: { ...TYPOGRAPHY.meta, color: colors.warning },
   imageProgressContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,

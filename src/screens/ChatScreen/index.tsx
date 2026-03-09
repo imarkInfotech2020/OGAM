@@ -1,5 +1,4 @@
 /* eslint-disable max-lines */
-/* eslint-disable max-lines */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -321,6 +320,14 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
     {chat.isCompacting && (
       <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>
         <ThinkingIndicator text="Compacting your conversation..." />
+      </Animated.View>
+    )}
+    {chat.hasPendingSettings && !chat.isCompacting && (
+      <Animated.View entering={FadeIn.duration(200)} style={styles.pendingSettingsBar}>
+        <Icon name="alert-circle" size={16} color={colors.warning} />
+        <Text style={styles.pendingSettingsText}>
+          Settings changed — reload model to apply
+        </Text>
       </Animated.View>
     )}
     {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).

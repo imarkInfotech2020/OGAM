@@ -1,5 +1,4 @@
 /* eslint-disable max-lines */
-/* eslint-disable max-lines */
 /**
  * Remote Servers Settings Screen
  *
@@ -156,6 +155,14 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     deleteButtonText: {
       color: colors.error,
     },
+    selectButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceLight,
+    },
+    selectButtonActive: {
+      backgroundColor: colors.primary,
+    },
     addButton: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
@@ -289,13 +296,10 @@ export const RemoteServersScreen: React.FC = () => {
                     </View>
                     <TouchableOpacity
                       onPress={() => handleSelectServer(server.id)}
-                      style={{
-                        padding: 8,
-                        borderRadius: 8,
-                        backgroundColor: isActive
-                          ? theme.colors.primary
-                          : theme.colors.surfaceLight,
-                      }}
+                      style={[
+                        styles.selectButton,
+                        isActive && styles.selectButtonActive,
+                      ]}
                     >
                       <Icon
                         name={isActive ? 'check' : 'circle'}

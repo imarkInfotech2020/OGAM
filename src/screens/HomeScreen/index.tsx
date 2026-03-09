@@ -1,5 +1,4 @@
 /* eslint-disable max-lines-per-function */
-/* eslint-disable max-lines-per-function */
 import React, { useCallback, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

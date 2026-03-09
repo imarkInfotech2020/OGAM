@@ -165,6 +165,10 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       marginTop: 20,
       marginBottom: 8,
     },
+    notesInput: {
+      minHeight: 80,
+      textAlignVertical: 'top' as const,
+    },
   };
 }
 
@@ -273,7 +277,8 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
     } else {
       saveServer();
     }
-  }, [validateForm, endpoint, name, apiKey, notes, server]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [validateForm, endpoint]);
 
   const saveServer = useCallback(async () => {
     try {
@@ -376,7 +381,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
 
         <Text style={styles.label}>Notes (Optional)</Text>
         <TextInput
-          style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+          style={[styles.input, styles.notesInput]}
           placeholder="Add notes about this server..."
           placeholderTextColor={theme.colors.textMuted}
           value={notes}

@@ -1,5 +1,4 @@
 /* eslint-disable max-lines, max-params */
-/* eslint-disable max-lines, max-params */
 /**
  * Tool-calling generation loop.
  * Extracted to keep generationService.ts under the max-lines limit.

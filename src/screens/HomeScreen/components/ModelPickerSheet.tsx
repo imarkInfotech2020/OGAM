@@ -1,5 +1,4 @@
 /* eslint-disable max-lines, max-lines-per-function, complexity */
-/* eslint-disable max-lines, max-lines-per-function, complexity */
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
