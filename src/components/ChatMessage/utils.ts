@@ -37,8 +37,8 @@ export function parseThinkingContent(content: string): ParsedContent {
     };
   }
 
-  // Fall back to HLSL HLSL format
-  const thinkStartMatch = content.match(/ HLSL/i);
+  // Fall back to <think></think> format
+  const thinkStartMatch = content.match(/<think>/i);
   const thinkEndMatch = content.match(/<\/think>/i);
 
   if (!thinkStartMatch) {
