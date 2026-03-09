@@ -59,6 +59,9 @@ jest.mock('../../../src/services', () => ({
   },
 }));
 
+// Import mocked functions after the mock is defined
+const { activeModelService } = require('../../../src/services');
+
 describe('ModelSelectorModal', () => {
   const defaultProps = {
     visible: true,
@@ -571,7 +574,7 @@ describe('ModelSelectorModal', () => {
         fireEvent.press(getByText('SD Model'));
       });
 
-      expect(mockLoadImageModel).toHaveBeenCalledWith('img1');
+      expect(activeModelService.loadImageModel).toHaveBeenCalledWith('img1');
     });
 
     it('does not call loadImageModel when pressing the currently active image model', async () => {
@@ -598,7 +601,7 @@ describe('ModelSelectorModal', () => {
         modelTexts.forEach(el => fireEvent.press(el));
       });
 
-      expect(mockLoadImageModel).not.toHaveBeenCalled();
+      expect(activeModelService.loadImageModel).not.toHaveBeenCalled();
     });
 
     it('shows currently loaded image model info', () => {
@@ -651,7 +654,7 @@ describe('ModelSelectorModal', () => {
         fireEvent.press(getByText('Unload'));
       });
 
-      expect(mockUnloadImageModel).toHaveBeenCalled();
+      expect(activeModelService.unloadImageModel).toHaveBeenCalled();
     });
 
     it('shows "Switch Model" in image tab when image model is loaded', () => {
