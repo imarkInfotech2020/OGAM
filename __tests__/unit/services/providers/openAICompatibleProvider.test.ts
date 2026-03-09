@@ -175,11 +175,12 @@ describe('OpenAICompatibleProvider', () => {
       await provider.loadModel('test-model');
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
-      mockCreateStreamingRequest.mockImplementation(async (_url, _body, _headers, onEvent) => {
+      mockCreateStreamingRequest.mockImplementation((_url, _body, _headers, onEvent) => {
         // Simulate SSE events
         onEvent({ data: '{"choices":[{"delta":{"content":"Hello"}}]}' });
-        onEvent({ data: '{"choices":[{"delta":{"content":" world"}]}' });
+        onEvent({ data: '{"choices":[{"delta":{"content":" world"}}]}' });
         onEvent({ data: '{"choices":[{"finish_reason":"stop"}]}' });
+        return Promise.resolve();
       });
 
       const onToken = jest.fn();
@@ -220,7 +221,7 @@ describe('OpenAICompatibleProvider', () => {
       await secureProvider.loadModel('test-model');
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
-      mockCreateStreamingRequest.mockImplementation(async () => {});
+      mockCreateStreamingRequest.mockImplementation(async () => { });
 
       await secureProvider.generate(
         [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
