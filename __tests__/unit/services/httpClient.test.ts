@@ -140,6 +140,70 @@ describe('httpClient', () => {
       expect(mockReader.releaseLock).toHaveBeenCalled();
     });
 
+    it('should throw when body is not readable', async () => {
+      const mockResponse = {
+        body: null,
+      } as unknown as Response;
+
+      await expect(async () => {
+        for await (const _ of parseSSEStream(mockResponse)) {
+          // Should not reach here
+        }
+      }).rejects.toThrow('Response body is not readable');
+    });
+
+    it('should handle events with id field', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('id: event-123\nevent: message\ndata: {"text":"hello"}\n\n'),
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('event-123');
+      expect(events[0].event).toBe('message');
+      expect(events[0].data).toBe('{"text":"hello"}');
+    });
+
+    it('should handle data as object type', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('data: first\ndata: second\n\n'),
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('first\nsecond');
+    });
+
     it('should handle chunked data correctly', async () => {
       const mockReader = {
         read: jest.fn()
@@ -168,6 +232,122 @@ describe('httpClient', () => {
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('hello');
       expect(mockReader.releaseLock).toHaveBeenCalled();
+    });
+
+    it('should handle event with id field', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('event: message\nid: 123\ndata: hello\n\n'),
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].id).toBe('123');
+      expect(events[0].event).toBe('message');
+      expect(events[0].data).toBe('hello');
+    });
+
+    it('should throw when response body is not readable', async () => {
+      const mockResponse = {
+        body: null,
+      } as unknown as Response;
+
+      await expect(async () => {
+        for await (const _ of parseSSEStream(mockResponse)) {
+          // Should not reach here
+        }
+      }).rejects.toThrow('Response body is not readable');
+    });
+
+    it('should handle events with only data field', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('data: test\n\n'),
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('test');
+      expect(events[0].event).toBeUndefined();
+      expect(events[0].id).toBeUndefined();
+    });
+
+    it('should skip events without data', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('event: message\n\n'),
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      // Events without data should not be yielded
+      expect(events).toHaveLength(0);
+    });
+
+    it('should yield remaining event at end of stream', async () => {
+      const mockReader = {
+        read: jest.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('data: final\n'), // No trailing newline
+          })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        releaseLock: jest.fn(),
+      };
+      const mockResponse = {
+        body: {
+          getReader: () => mockReader,
+        },
+      } as unknown as Response;
+
+      const events: any[] = [];
+      for await (const event of parseSSEStream(mockResponse)) {
+        events.push(event);
+      }
+
+      expect(events).toHaveLength(1);
+      expect(events[0].data).toBe('final');
     });
   });
 
@@ -373,6 +553,45 @@ describe('httpClient', () => {
 
       expect(result).toEqual({ success: true });
       expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw "Request cancelled" on AbortError', async () => {
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      jest.spyOn(global, 'fetch').mockRejectedValue(abortError);
+
+      await expect(fetchWithTimeout('http://test.com/api', { timeout: 5000 }))
+        .rejects.toThrow('Request cancelled');
+    });
+
+    it('should fallback to text when content-type header is missing', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        headers: { get: () => null },
+        text: () => Promise.resolve('plain text response'),
+      } as unknown as Response);
+
+      const result = await fetchWithTimeout('http://test.com/api', { timeout: 5000 });
+
+      expect(result).toBe('plain text response');
+    });
+
+    it('should fallback to "Unknown error" when response.text() fails', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.reject(new Error('text failed')),
+      } as unknown as Response);
+
+      await expect(fetchWithTimeout('http://test.com/error', { timeout: 5000 }))
+        .rejects.toThrow('HTTP 500: Unknown error');
+    });
+
+    it('should handle non-Error thrown values', async () => {
+      jest.spyOn(global, 'fetch').mockRejectedValue('string error');
+
+      await expect(fetchWithTimeout('http://test.com/api', { timeout: 5000, retries: 0 }))
+        .rejects.toThrow('string error');
     });
   });
 
