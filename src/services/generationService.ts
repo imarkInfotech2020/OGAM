@@ -41,6 +41,7 @@ class GenerationService {
   private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private currentRemoteAbortController: AbortController | null = null;
+  private remoteTimeToFirstToken: number | undefined;
 
   // Token batching — collect tokens and flush to UI at a controlled rate
   private tokenBuffer: string = '';
@@ -117,15 +118,25 @@ class GenerationService {
   }
 
   private buildGenerationMeta(): GenerationMeta {
-    // For remote providers, return basic metadata
+    // For remote providers, return basic metadata with token estimation
     if (this.isUsingRemoteProvider()) {
       const remoteStore = useRemoteServerStore.getState();
       const activeServer = remoteStore.getActiveServer();
       const modelId = providerRegistry.getActiveProvider().getLoadedModelId();
+
+      // Estimate token count from streaming content (roughly 4 chars per token)
+      const contentLength = this.state.streamingContent.length;
+      const estimatedTokens = Math.ceil(contentLength / 4);
+      const generationTime = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : 0;
+      const tokensPerSecond = generationTime > 0 ? estimatedTokens / generationTime : undefined;
+
       return {
         gpu: false,
         gpuBackend: 'Remote',
         modelName: activeServer?.name || 'Remote Model',
+        tokenCount: estimatedTokens,
+        tokensPerSecond,
+        timeToFirstToken: this.remoteTimeToFirstToken,
       };
     }
 
@@ -406,6 +417,7 @@ class GenerationService {
 
     logger.log('[GenerationService] Starting remote text generation');
     let firstTokenReceived = false;
+    this.remoteTimeToFirstToken = undefined;
 
     this.currentRemoteAbortController = new AbortController();
 
@@ -425,6 +437,7 @@ class GenerationService {
             if (this.abortRequested) return;
             if (!firstTokenReceived) {
               firstTokenReceived = true;
+              this.remoteTimeToFirstToken = this.state.startTime ? Date.now() - this.state.startTime : undefined;
               this.updateState({ isThinking: false });
               onFirstToken?.();
             }
@@ -452,12 +465,7 @@ class GenerationService {
             logger.log('[GenerationService] Remote text generation completed');
             this.forceFlushTokens();
             const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-            const meta: GenerationMeta = {
-              gpu: false,
-              gpuBackend: 'Remote',
-              modelName: provider.getLoadedModelId() || 'Remote Model',
-            };
-            chatStore.finalizeStreamingMessage(conversationId, generationTime, meta);
+            chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
             this.checkSharePrompt();
             this.resetState();
           },

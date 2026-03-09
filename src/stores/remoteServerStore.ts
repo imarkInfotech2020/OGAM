@@ -110,9 +110,13 @@ export const useRemoteServerStore = create<RemoteServerState>()(
 
       removeServer: (id) => {
         const state = get();
-        // Don't allow removing the active server
+        // Clear active server and model IDs if removing the active server
         if (state.activeServerId === id) {
-          set({ activeServerId: null });
+          set({
+            activeServerId: null,
+            activeRemoteTextModelId: null,
+            activeRemoteImageModelId: null,
+          });
         }
         set((state) => ({
           servers: state.servers.filter((s) => s.id !== id),

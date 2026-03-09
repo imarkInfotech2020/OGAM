@@ -115,8 +115,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const handleEjectAll = () => {
-    const hasModels = activeModelId || activeImageModelId;
-    if (!hasModels) { return; }
+    const hasLocalModels = activeModelId || activeImageModelId;
+    const hasRemoteModel = activeRemoteTextModelId || activeRemoteImageModelId;
+    if (!hasLocalModels && !hasRemoteModel) { return; }
+
     const doEjectAll = async () => {
       setAlertState(hideAlert());
       setIsEjecting(true);
@@ -126,8 +128,17 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350))
       );
       try {
-        const results = await activeModelService.unloadAllModels();
-        const count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+        let count = 0;
+        // Unload local models
+        if (hasLocalModels) {
+          const results = await activeModelService.unloadAllModels();
+          count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+        }
+        // Disconnect remote server
+        if (hasRemoteModel) {
+          remoteServerManager.clearActiveRemoteModel();
+          count += 1;
+        }
         if (count > 0) {
           setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
         }

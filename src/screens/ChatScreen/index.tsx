@@ -13,7 +13,7 @@ import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../componen
 import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
-import { llmService, generationService } from '../../services';
+import { generationService } from '../../services';
 import { createStyles } from './styles';
 import { useChatScreen, getPlaceholderText } from './useChatScreen';
 import { MessageRenderer } from './MessageRenderer';

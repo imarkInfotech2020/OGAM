@@ -390,9 +390,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     discoveredModels,
     activeRemoteTextModelId,
     activeRemoteImageModelId,
-    setActiveRemoteTextModelId,
     setActiveRemoteImageModelId,
-    setActiveServerId,
   } = useRemoteServerStore();
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
