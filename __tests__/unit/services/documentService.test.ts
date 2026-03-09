@@ -5,10 +5,19 @@
  * Priority: P1 - Document attachment support.
  */
 
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
+import RNFS from 'react-native-fs';
+
+// Mock pdfExtractor - must be defined inline due to Jest hoisting
+jest.mock('../../../src/services/pdfExtractor', () => ({
+  pdfExtractor: {
+    isAvailable: jest.fn(() => false),
+    extractText: jest.fn(),
+  },
+}));
+
 import { documentService } from '../../../src/services/documentService';
 import { pdfExtractor } from '../../../src/services/pdfExtractor';
-import RNFS from 'react-native-fs';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedPdfExtractor = pdfExtractor as jest.Mocked<typeof pdfExtractor>;
@@ -16,8 +25,9 @@ const mockedPdfExtractor = pdfExtractor as jest.Mocked<typeof pdfExtractor>;
 describe('DocumentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Reset pdfExtractor mock to default (available)
-    (mockedPdfExtractor.isAvailable as jest.Mock).mockReturnValue(true);
+    // Reset pdfExtractor mock to default (unavailable)
+    mockedPdfExtractor.isAvailable.mockReturnValue(false);
+    mockedPdfExtractor.extractText.mockReset();
   });
 
   // ========================================================================
@@ -544,71 +554,64 @@ describe('DocumentService', () => {
   // PDF processing (when native module IS available)
   // ========================================================================
   describe('PDF processing with native module', () => {
-    const mockExtractText = jest.fn();
-
     beforeEach(() => {
-      NativeModules.PDFExtractorModule = { extractText: mockExtractText };
-      mockExtractText.mockReset();
+      // Make pdfExtractor available for these tests
+      mockedPdfExtractor.isAvailable.mockReturnValue(true);
+      mockedPdfExtractor.extractText.mockReset();
     });
 
     afterEach(() => {
-      delete NativeModules.PDFExtractorModule;
+      // Reset to unavailable
+      mockedPdfExtractor.isAvailable.mockReturnValue(false);
     });
 
     it('isSupported returns true for .pdf when module available', () => {
-      // Need to re-require to pick up the module change
-      // But since pdfExtractor checks NativeModules at import time, we test via the
-      // documentService which calls pdfExtractor.isAvailable() dynamically
-      // Actually pdfExtractor reads NativeModules.PDFExtractorModule at module load.
-      // Since we set it above, and pdfExtractor caches the reference... let's test:
-      const { pdfExtractor: _pdfExtractor } = require('../../../src/services/pdfExtractor');
-      // The module was cached without PDFExtractorModule, so isAvailable may be false.
-      // This tests the documentService layer which re-checks each call.
+      // When pdfExtractor is available, .pdf should be supported
+      const extensions = documentService.getSupportedExtensions();
+      expect(extensions).toContain('.pdf');
     });
 
     it('processes PDF using native extractor', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
-      mockExtractText.mockResolvedValue('Page 1 text\n\nPage 2 text');
+      mockedPdfExtractor.extractText.mockResolvedValue('Page 1 text\n\nPage 2 text');
 
-      // We need a fresh documentService that sees the native module
-      // Since the module is already loaded and pdfExtractor caches the reference,
-      // we test by calling extractText directly through the mock
-      expect(mockExtractText).toBeDefined();
+      const result = await documentService.processDocumentFromPath('/path/to/doc.pdf');
 
-      // Simulate what documentService would do:
-      const text = await NativeModules.PDFExtractorModule.extractText('/path/to/doc.pdf');
-      expect(text).toBe('Page 1 text\n\nPage 2 text');
+      expect(mockedPdfExtractor.extractText).toHaveBeenCalledWith('/path/to/doc.pdf', expect.any(Number));
+      expect(result!.textContent).toBe('Page 1 text\n\nPage 2 text');
     });
 
     it('truncates large PDF text at 50K chars', async () => {
       const hugePdfText = 'x'.repeat(60000);
-      mockExtractText.mockResolvedValue(hugePdfText);
+      mockedPdfExtractor.extractText.mockResolvedValue(hugePdfText);
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
-      const text = await NativeModules.PDFExtractorModule.extractText('/large.pdf');
-      // DocumentService would truncate this:
-      const maxChars = 50000;
-      const truncated = text.length > maxChars
-        ? `${text.substring(0, maxChars)  }\n\n... [Content truncated due to length]`
-        : text;
+      const result = await documentService.processDocumentFromPath('/large.pdf');
 
-      expect(truncated.length).toBeLessThan(60000);
-      expect(truncated).toContain('truncated');
+      expect(result!.textContent!.length).toBeLessThan(60000);
+      expect(result!.textContent).toContain('truncated');
     });
 
     it('handles PDF extraction errors', async () => {
-      mockExtractText.mockRejectedValue(new Error('Corrupted PDF'));
+      mockedPdfExtractor.extractText.mockRejectedValue(new Error('Corrupted PDF'));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
       await expect(
-        NativeModules.PDFExtractorModule.extractText('/corrupt.pdf')
+        documentService.processDocumentFromPath('/corrupt.pdf')
       ).rejects.toThrow('Corrupted PDF');
     });
 
     it('handles empty PDF (no text content)', async () => {
-      mockExtractText.mockResolvedValue('');
+      mockedPdfExtractor.extractText.mockResolvedValue('');
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
-      const text = await NativeModules.PDFExtractorModule.extractText('/empty.pdf');
-      expect(text).toBe('');
+      const result = await documentService.processDocumentFromPath('/empty.pdf');
+
+      expect(result!.textContent).toBe('');
     });
   });
 

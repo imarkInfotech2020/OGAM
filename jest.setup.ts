@@ -381,29 +381,6 @@ jest.mock('react-native-zip-archive', () => ({
   zip: jest.fn(() => Promise.resolve('/mock/zipped/path')),
 }));
 
-// PDFExtractor module mock - controlled by tests
-const mockPdfExtractor = {
-  isAvailable: jest.fn(() => true),
-  extractText: jest.fn((filePath: string, _maxChars: number = 50000) => {
-    // Simulate PDF extraction based on file path
-    if (filePath.includes('test.pdf')) {
-      return Promise.resolve('This is extracted PDF text content for testing.');
-    }
-    if (filePath.includes('empty.pdf')) {
-      return Promise.resolve('');
-    }
-    if (filePath.includes('error.pdf')) {
-      return Promise.reject(new Error('PDF_ERROR: Could not open PDF file'));
-    }
-    return Promise.resolve('Default PDF content');
-  }),
-};
-
-jest.mock('./src/services/pdfExtractor', () => ({
-  pdfExtractor: mockPdfExtractor,
-}));
-
-export { mockPdfExtractor };
 
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
