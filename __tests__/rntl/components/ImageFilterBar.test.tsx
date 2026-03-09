@@ -17,18 +17,22 @@ import { BACKEND_OPTIONS, SD_VERSION_OPTIONS, STYLE_OPTIONS } from '../../../src
 // Mock useThemedStyles
 jest.mock('../../../src/theme', () => ({
   useThemedStyles: jest.fn((createStyles) => {
-    const mockTheme = {
-      colors: {
-        background: '#fff',
-        surface: '#f5f5f5',
-        text: '#000',
-        textSecondary: '#666',
-        border: '#ddd',
-        primary: '#007AFF',
-        card: '#fff',
-      },
+    const mockColors = {
+      background: '#fff',
+      surface: '#f5f5f5',
+      text: '#000',
+      textSecondary: '#666',
+      textMuted: '#999',
+      border: '#ddd',
+      primary: '#007AFF',
+      card: '#fff',
     };
-    return createStyles(mockTheme);
+    const mockShadows = {
+      small: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2 },
+      medium: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
+      large: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+    };
+    return createStyles(mockColors, mockShadows);
   }),
 }));
 
@@ -178,18 +182,21 @@ describe('ImageFilterBar', () => {
 
     it('shows up arrow when backend filter is expanded', () => {
       const { getByText } = render(<ImageFilterBar {...defaultProps} imageFilterExpanded="backend" />);
-      expect(getByText(/Backend.*▲/)).toBeTruthy();
+      // Unicode \u25B4 = ▴ (small upward triangle)
+      expect(getByText(/Backend.*▴/)).toBeTruthy();
     });
 
     it('shows up arrow when style filter is expanded', () => {
       const { getByText } = render(<ImageFilterBar {...defaultProps} imageFilterExpanded="style" />);
-      expect(getByText(/Style.*▲/)).toBeTruthy();
+      // Unicode \u25B4 = ▴ (small upward triangle)
+      expect(getByText(/Style.*▴/)).toBeTruthy();
     });
 
     it('shows down arrow when filter is collapsed', () => {
       const { getByText } = render(<ImageFilterBar {...defaultProps} />);
-      expect(getByText(/Backend.*▼/)).toBeTruthy();
-      expect(getByText(/Style.*▼/)).toBeTruthy();
+      // Unicode \u25BE = ▾ (small downward triangle)
+      expect(getByText(/Backend.*▾/)).toBeTruthy();
+      expect(getByText(/Style.*▾/)).toBeTruthy();
     });
   });
 
@@ -270,12 +277,14 @@ describe('ImageFilterBar', () => {
 
     it('shows up arrow when sdVersion filter is expanded', () => {
       const { getByText } = render(<ImageFilterBar {...defaultProps} imageFilterExpanded="sdVersion" />);
-      expect(getByText(/Version.*▲/)).toBeTruthy();
+      // Unicode \u25B4 = ▴ (small upward triangle)
+      expect(getByText(/Version.*▴/)).toBeTruthy();
     });
 
     it('shows down arrow when filter is collapsed', () => {
       const { getByText } = render(<ImageFilterBar {...defaultProps} />);
-      expect(getByText(/Version.*▼/)).toBeTruthy();
+      // Unicode \u25BE = ▾ (small downward triangle)
+      expect(getByText(/Version.*▾/)).toBeTruthy();
     });
   });
 
