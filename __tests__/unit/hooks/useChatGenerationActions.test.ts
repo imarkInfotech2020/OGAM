@@ -183,6 +183,8 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
   return {
     activeModelId: 'model-1',
     activeModel: baseModel,
+    activeModelInfo: { isRemote: false, model: baseModel, modelId: 'model-1', modelName: 'Test Model' },
+    hasActiveModel: true,
     activeConversationId: 'conv-1',
     activeConversation: { id: 'conv-1', messages: [] },
     activeProject: null,
@@ -429,7 +431,7 @@ describe('handleSendFn', () => {
   });
 
   it('shows alert when no activeModel', async () => {
-    const deps = makeGenerationDeps({ activeModel: undefined });
+    const deps = makeGenerationDeps({ activeModel: undefined, hasActiveModel: false });
     await handleSendFn(deps, {
       text: 'hello',
       imageMode: 'auto',
@@ -480,7 +482,7 @@ describe('handleStopFn', () => {
 
 describe('startGenerationFn', () => {
   it('returns early when no activeModel', async () => {
-    const deps = makeGenerationDeps({ activeModel: undefined });
+    const deps = makeGenerationDeps({ activeModel: undefined, hasActiveModel: false });
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hi' });
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
@@ -515,7 +517,7 @@ describe('startGenerationFn', () => {
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
-  it('always uses tool loop when tools are enabled (even for greetings)', async () => {
+  it('does not use tool loop for messages that do not match tool patterns', async () => {
     (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
     const deps = makeGenerationDeps({
       settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
@@ -523,8 +525,9 @@ describe('startGenerationFn', () => {
 
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
 
-    expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), { enabledToolIds: ['get_current_datetime'] });
-    expect(mockGenerateResponse).not.toHaveBeenCalled();
+    // 'Hi' doesn't match any tool trigger patterns, so regular generateResponse is used
+    expect(mockGenerateResponse).toHaveBeenCalledWith('conv-1', expect.any(Array));
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
   });
 
   it('uses the tool loop when the message clearly needs a tool', async () => {
