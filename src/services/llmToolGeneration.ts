@@ -64,8 +64,8 @@ export async function generateWithToolsImpl(
       tool_choice: 'auto',
       ...buildThinkingCompletionParams(deps.isThinkingEnabled),
     };
-    console.log('[LLM-Tools] === INPUT ===');
-    console.log(JSON.stringify(completionParams, null, 2));
+    logger.log('[LLM-Tools] === INPUT ===');
+    logger.log(JSON.stringify(completionParams, null, 2));
     const completionResult = await deps.context.completion(completionParams as any, (data: any) => {
       if (!generating) return;
       if (data.tool_calls) {
@@ -79,8 +79,8 @@ export async function generateWithToolsImpl(
       fullResponse += data.token;
       options.onStream?.({ content: data.token });
     });
-    console.log('[LLM-Tools] === OUTPUT ===');
-    console.log(JSON.stringify(completionResult, null, 2));
+    logger.log('[LLM-Tools] === OUTPUT ===');
+    logger.log(JSON.stringify(completionResult, null, 2));
 
     const cr = completionResult;
     logger.log(`[LLM-Tools] Completion done: streamed=${tokenCount} tokens, response="${fullResponse.substring(0, 100)}"`);

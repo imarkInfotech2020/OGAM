@@ -5,6 +5,17 @@ import { Message, Conversation, GenerationMeta } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 
+function nextUpdatedAt(previousUpdatedAt?: string): string {
+  const now = Date.now();
+  if (!previousUpdatedAt) {
+    return new Date(now).toISOString();
+  }
+
+  const previousTime = Date.parse(previousUpdatedAt);
+  const nextTime = Number.isNaN(previousTime) ? now : Math.max(now, previousTime + 1);
+  return new Date(nextTime).toISOString();
+}
+
 /** Update a single message inside a conversation's messages array. */
 function updateMessageInConv(
   conv: Conversation,
@@ -14,7 +25,7 @@ function updateMessageInConv(
   return {
     ...conv,
     messages: conv.messages.map((msg) => (msg.id === messageId ? updater(msg) : msg)),
-    updatedAt: new Date().toISOString(),
+    updatedAt: nextUpdatedAt(conv.updatedAt),
   };
 }
 
@@ -128,11 +139,17 @@ export const useChatStore = create<ChatState>()(
 
       setConversationProject: (conversationId, projectId) => {
         set((state) => ({
-          conversations: state.conversations.map((conv) =>
-            conv.id === conversationId
-              ? { ...conv, projectId: projectId || undefined, updatedAt: new Date().toISOString() }
-              : conv
-          ),
+          conversations: state.conversations.map((conv) => {
+            if (conv.id !== conversationId) {
+              return conv;
+            }
+
+            return {
+              ...conv,
+              projectId: projectId || undefined,
+              updatedAt: nextUpdatedAt(conv.updatedAt),
+            };
+          }),
         }));
       },
 
@@ -149,7 +166,7 @@ export const useChatStore = create<ChatState>()(
               ? {
                   ...conv,
                   messages: [...conv.messages, message],
-                  updatedAt: new Date().toISOString(),
+                  updatedAt: nextUpdatedAt(conv.updatedAt),
                   // Update title from first user message if still default
                   title: (() => {
                     if (conv.title === 'New Conversation' && messageData.role === 'user') {
@@ -187,7 +204,7 @@ export const useChatStore = create<ChatState>()(
           conversations: mapConversation(state.conversations, conversationId, (conv) => ({
             ...conv,
             messages: conv.messages.filter((msg) => msg.id !== messageId),
-            updatedAt: new Date().toISOString(),
+            updatedAt: nextUpdatedAt(conv.updatedAt),
           })),
         }));
       },
@@ -200,7 +217,7 @@ export const useChatStore = create<ChatState>()(
             return {
               ...conv,
               messages: conv.messages.slice(0, messageIndex + 1),
-              updatedAt: new Date().toISOString(),
+              updatedAt: nextUpdatedAt(conv.updatedAt),
             };
           }),
         }));
@@ -292,7 +309,12 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id === conversationId
-              ? { ...conv, compactionSummary: summary, compactionCutoffMessageId: cutoffMessageId, updatedAt: new Date().toISOString() }
+              ? {
+                  ...conv,
+                  compactionSummary: summary,
+                  compactionCutoffMessageId: cutoffMessageId,
+                  updatedAt: nextUpdatedAt(conv.updatedAt),
+                }
               : conv
           ),
         }));

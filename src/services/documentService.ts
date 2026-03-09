@@ -44,17 +44,66 @@ class DocumentService {
   }
 
   /**
-   * Resolve a content:// URI to a local file path by copying to temp cache.
-   * Android document picker returns content:// URIs that RNFS can't read directly.
+   * Resolve a document picker URI to a local file path by copying to temp cache.
+   * - Android: content:// URIs need to be copied to a readable location
+   * - iOS: file:// URIs from document picker are security-scoped and need to be copied
+   * - Note: Files from keepLocalCopy are already in app's Documents directory
    */
   private async resolveContentUri(uri: string, fileName: string): Promise<string> {
-    if (Platform.OS !== 'android' || !uri.startsWith('content://')) {
-      return uri;
+    console.log(`[DocumentService] resolveContentUri input: ${uri}`);
+
+    // Check if this is a file from keepLocalCopy - it would be in our app's Documents directory
+    // keepLocalCopy returns paths like: file:///Users/.../App/Documents/filename
+    // RNFS.DocumentDirectoryPath is the app's Documents directory (without file://)
+    const documentsPath = RNFS.DocumentDirectoryPath;
+
+    // Decode URL-encoded characters (like %20 for spaces) and strip file:// prefix
+    // This is critical because RNFS.exists() needs decoded paths, not URL-encoded
+    const decodedUri = decodeURIComponent(uri);
+    const cleanUri = decodedUri.replace(/^file:\/\//, '');
+    console.log(`[DocumentService] Decoded and cleaned path: ${cleanUri}`);
+    console.log(`[DocumentService] Documents path: ${documentsPath}`);
+
+    // Only skip copying if the file is exactly in our app's Documents directory
+    // This must be a precise match to avoid security-scoped URLs from document picker
+    if (cleanUri.startsWith(documentsPath)) {
+      console.log(`[DocumentService] File is in app Documents directory, using directly`);
+      return cleanUri;
     }
 
-    const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
-    await RNFS.copyFile(uri, tempPath);
-    return tempPath;
+    // Android: content:// URIs
+    if (Platform.OS === 'android' && uri.startsWith('content://')) {
+      const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
+      await RNFS.copyFile(uri, tempPath);
+      console.log(`[DocumentService] Copied Android content:// URI to: ${tempPath}`);
+      return tempPath;
+    }
+
+    // iOS: file:// URIs from document picker are security-scoped
+    // Copy to a temp location that we can access directly
+    if (Platform.OS === 'ios' && uri.startsWith('file://')) {
+      const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
+      try {
+        // RNFS.copyFile can handle file:// URIs by copying the underlying file
+        await RNFS.copyFile(uri, tempPath);
+        console.log(`[DocumentService] Copied iOS file:// URI to: ${tempPath}`);
+        return tempPath;
+      } catch (copyError) {
+        // If direct copy fails, try stripping the file:// prefix
+        const pathWithoutScheme = decodedUri.replace(/^file:\/\//, '');
+        try {
+          await RNFS.copyFile(pathWithoutScheme, tempPath);
+          console.log(`[DocumentService] Copied (fallback) to: ${tempPath}`);
+          return tempPath;
+        } catch {
+          console.error(`[DocumentService] Both copy attempts failed`);
+          throw new Error(`Could not access file. Please try selecting the file again.`);
+        }
+      }
+    }
+
+    console.log(`[DocumentService] Returning URI as-is: ${uri}`);
+    return uri;
   }
 
   private validateFileType(extension: string, isPdf: boolean): void {
@@ -67,13 +116,20 @@ class DocumentService {
   }
 
   private async readContent(resolvedPath: string, isPdf: boolean, maxChars: number): Promise<string> {
-    const raw = isPdf
-      ? await pdfExtractor.extractText(resolvedPath, maxChars)
-      : await RNFS.readFile(resolvedPath, 'utf8');
-    if (raw.length > maxChars) {
-      return `${raw.substring(0, maxChars)}\n\n... [Content truncated due to length]`;
+    console.log(`[DocumentService] readContent called - path: ${resolvedPath}, isPdf: ${isPdf}, maxChars: ${maxChars}`);
+    try {
+      const raw = isPdf
+        ? await pdfExtractor.extractText(resolvedPath, maxChars)
+        : await RNFS.readFile(resolvedPath, 'utf8');
+      console.log(`[DocumentService] Successfully read ${raw.length} characters`);
+      if (raw.length > maxChars) {
+        return `${raw.substring(0, maxChars)}\n\n... [Content truncated due to length]`;
+      }
+      return raw;
+    } catch (error: any) {
+      console.error(`[DocumentService] Error reading content:`, error?.message || error);
+      throw error;
     }
-    return raw;
   }
 
   private async savePersistentCopy(resolvedPath: string, originalPath: string, name: string): Promise<{ id: string; uri: string }> {
@@ -96,14 +152,33 @@ class DocumentService {
    */
   async processDocumentFromPath(filePath: string, fileName?: string): Promise<MediaAttachment | null> {
     try {
+      console.log(`[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`);
       const name = fileName || filePath.split('/').pop() || 'document';
       const extension = `.${name.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
+      console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
       this.validateFileType(extension, isPdf);
 
       const resolvedPath = await this.resolveContentUri(filePath, name);
-      if (!await RNFS.exists(resolvedPath)) { throw new Error('File not found'); }
+      console.log(`[DocumentService] Resolved path: ${resolvedPath}`);
+
+      // Verify the file exists and is accessible
+      let fileExists = false;
+      try {
+        fileExists = await RNFS.exists(resolvedPath);
+        console.log(`[DocumentService] File exists check: ${fileExists}`);
+      } catch (existsError) {
+        // RNFS.exists can fail on security-scoped URLs
+        console.error(`[DocumentService] exists() threw error:`, existsError);
+        throw new Error('Could not access file. Please try selecting the file again.');
+      }
+
+      if (!fileExists) {
+        throw new Error(`File not found: ${name}`);
+      }
+
       const stat = await RNFS.stat(resolvedPath);
+      console.log(`[DocumentService] File size: ${stat.size} bytes`);
       if (stat.size > MAX_FILE_SIZE) {
         throw new Error(`File is too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       }
