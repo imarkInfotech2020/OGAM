@@ -124,7 +124,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
               >
                 <Icon name="image" size={16} color={imageModelLoaded ? colors.text : colors.textMuted} />
                 <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Image Gen</Text>
-                <View style={[popoverStyles.badge, { backgroundColor: imgBadge.bg }]}>
+                <View testID={imageMode === 'force' ? 'image-mode-force-badge' : undefined} style={[popoverStyles.badge, { backgroundColor: imgBadge.bg }]}>
                   <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{imgBadge.label}</Text>
                 </View>
               </TouchableOpacity>
