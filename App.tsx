@@ -11,7 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService, ragService } from './src/services';
+import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
@@ -163,6 +163,13 @@ function App() {
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
+
+      // Initialize remote server providers for any stored servers
+      try {
+        await remoteServerManager.initializeProviders();
+      } catch (err) {
+        logger.error('[App] Failed to initialize remote server providers:', err);
+      }
 
       // Check if passphrase is set and lock app if needed
       const hasPassphrase = await authService.hasPassphrase();
