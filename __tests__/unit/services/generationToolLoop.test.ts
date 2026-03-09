@@ -28,6 +28,20 @@ jest.mock('../../../src/stores', () => ({
       setIsThinking: mockSetIsThinking,
     }),
   },
+  useRemoteServerStore: {
+    getState: () => ({
+      activeServerId: null,
+    }),
+  },
+  useAppStore: {
+    getState: () => ({
+      settings: {
+        temperature: 0.7,
+        maxTokens: 1024,
+        topP: 0.9,
+      },
+    }),
+  },
 }));
 
 jest.mock('../../../src/services/llm', () => ({

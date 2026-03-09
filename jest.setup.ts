@@ -13,6 +13,8 @@ try {
   // Built-in matchers in v12.4+, or no matchers needed for basic tests
 }
 
+const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================
@@ -379,6 +381,30 @@ jest.mock('react-native-zip-archive', () => ({
   zip: jest.fn(() => Promise.resolve('/mock/zipped/path')),
 }));
 
+// PDFExtractor module mock - controlled by tests
+const mockPdfExtractor = {
+  isAvailable: jest.fn(() => true),
+  extractText: jest.fn((filePath: string, maxChars: number = 50000) => {
+    // Simulate PDF extraction based on file path
+    if (filePath.includes('test.pdf')) {
+      return Promise.resolve('This is extracted PDF text content for testing.');
+    }
+    if (filePath.includes('empty.pdf')) {
+      return Promise.resolve('');
+    }
+    if (filePath.includes('error.pdf')) {
+      return Promise.reject(new Error('PDF_ERROR: Could not open PDF file'));
+    }
+    return Promise.resolve('Default PDF content');
+  }),
+};
+
+jest.mock('./src/services/pdfExtractor', () => ({
+  pdfExtractor: mockPdfExtractor,
+}));
+
+export { mockPdfExtractor };
+
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
 
@@ -413,15 +439,64 @@ jest.mock('react-native-safe-area-context', () => {
 // Global Test Utilities
 // ============================================================================
 
-// Silence console during tests (optional - comment out for debugging)
-// global.console = {
-//   ...console,
-//   log: jest.fn(),
-//   debug: jest.fn(),
-//   info: jest.fn(),
-//   warn: jest.fn(),
-//   error: jest.fn(),
-// };
+const { Animated } = require('react-native');
+
+const instantAnimation = (value?: { setValue?: (next: number) => void }, toValue?: number) => ({
+  start: (callback?: (result: { finished: boolean }) => void) => {
+    if (typeof toValue === 'number') {
+      value?.setValue?.(toValue);
+    }
+    callback?.({ finished: true });
+  },
+  stop: jest.fn(),
+  reset: jest.fn(),
+});
+
+jest.spyOn(Animated, 'timing').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
+jest.spyOn(Animated, 'spring').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
+jest.spyOn(Animated, 'delay').mockImplementation(() => instantAnimation() as any);
+jest.spyOn(Animated, 'sequence').mockImplementation((...args: unknown[]) => {
+  const animations = args[0] as any[];
+  return {
+    start: (callback?: (result: { finished: boolean }) => void) => {
+      animations.forEach(animation => animation?.start?.());
+      callback?.({ finished: true });
+    },
+    stop: jest.fn(),
+    reset: jest.fn(),
+  } as any;
+});
+jest.spyOn(Animated, 'parallel').mockImplementation((...args: unknown[]) => {
+  const animations = args[0] as any[];
+  return {
+    start: (callback?: (result: { finished: boolean }) => void) => {
+      animations.forEach(animation => animation?.start?.());
+      callback?.({ finished: true });
+    },
+    stop: jest.fn(),
+    reset: jest.fn(),
+  } as any;
+});
+jest.spyOn(Animated, 'stagger').mockImplementation((...args: unknown[]) => {
+  const animations = args[1] as any[];
+  return Animated.parallel(animations) as any;
+});
+jest.spyOn(Animated, 'loop').mockImplementation((animation: any) => ({
+  start: (callback?: (result: { finished: boolean }) => void) => {
+    animation?.start?.();
+    callback?.({ finished: true });
+  },
+  stop: jest.fn(),
+  reset: jest.fn(),
+}) as any);
+
+if (!shouldPrintJestConsole) {
+  console.log = jest.fn();
+  console.debug = jest.fn();
+  console.info = jest.fn();
+  console.warn = jest.fn();
+  console.error = jest.fn();
+}
 
 // Reset all mocks before each test
 beforeEach(() => {

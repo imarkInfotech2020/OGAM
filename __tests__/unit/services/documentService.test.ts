@@ -7,13 +7,17 @@
 
 import { Platform, NativeModules } from 'react-native';
 import { documentService } from '../../../src/services/documentService';
+import { pdfExtractor } from '../../../src/services/pdfExtractor';
 import RNFS from 'react-native-fs';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
+const mockedPdfExtractor = pdfExtractor as jest.Mocked<typeof pdfExtractor>;
 
 describe('DocumentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset pdfExtractor mock to default (available)
+    (mockedPdfExtractor.isAvailable as jest.Mock).mockReturnValue(true);
   });
 
   // ========================================================================

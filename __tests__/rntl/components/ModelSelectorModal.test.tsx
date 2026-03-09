@@ -37,8 +37,10 @@ jest.mock('../../../src/components/AppSheet', () => ({
 }));
 
 const mockUseAppStore = jest.fn();
+const mockUseRemoteServerStore = jest.fn();
 jest.mock('../../../src/stores', () => ({
   useAppStore: () => mockUseAppStore(),
+  useRemoteServerStore: () => mockUseRemoteServerStore(),
 }));
 
 const mockLoadImageModel = jest.fn().mockResolvedValue(undefined);
@@ -79,6 +81,12 @@ describe('ModelSelectorModal', () => {
       ],
       downloadedImageModels: [],
       activeImageModelId: null,
+    });
+    mockUseRemoteServerStore.mockReturnValue({
+      servers: [],
+      activeServerId: null,
+      discoveredModels: {},
+      setActiveServerId: jest.fn(),
     });
   });
 
