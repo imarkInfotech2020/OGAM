@@ -51,6 +51,17 @@ const createModelCardStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.h3,
     color: colors.text,
   },
+  modelCardNameRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+  },
+  remoteBadge: {
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
   modelCardMeta: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
@@ -296,6 +307,13 @@ const createPickerStyles = (colors: ThemeColors) => ({
   emptyPickerText: {
     ...TYPOGRAPHY.body,
     color: colors.textMuted,
+  },
+  sectionLabel: {
+    ...TYPOGRAPHY.labelSmall,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    marginTop: 12,
+    marginBottom: 8,
   },
   browseMoreButton: {
     flexDirection: 'row' as const,

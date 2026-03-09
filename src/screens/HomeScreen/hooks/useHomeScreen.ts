@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
-import { useAppStore, useChatStore } from '../../../stores';
-import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../../../services';
-import { Conversation } from '../../../types';
+import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
+import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
+import { Conversation, RemoteModel } from '../../../types';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -54,6 +54,15 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   } = useAppStore();
 
   const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
+
+  // Remote server store for remote models
+  const {
+    servers: remoteServers,
+    discoveredModels: remoteDiscoveredModels,
+    activeRemoteTextModelId,
+    activeRemoteImageModelId,
+    activeServerId,
+  } = useRemoteServerStore();
 
   const {
     handleSelectTextModel,
@@ -144,8 +153,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    if (!activeModelId) { return; }
-    const conversationId = createConversation(activeModelId);
+    // Use local model ID if active, otherwise use remote model ID
+    const modelId = activeModelId || activeRemoteTextModelId;
+    if (!modelId) { return; }
+    const conversationId = createConversation(modelId);
     setActiveConversation(conversationId);
     navigation.navigate('Chat', { conversationId });
   };
@@ -173,9 +184,80 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     ));
   };
 
-  const activeTextModel = downloadedModels.find((m) => m.id === activeModelId);
-  const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId);
+  // Compute active remote text model reactively (using selected state, not getter)
+  const activeRemoteTextModel = activeRemoteTextModelId && activeServerId
+    ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteTextModelId)
+    : null;
+
+  const activeRemoteImageModel = activeRemoteImageModelId && activeServerId
+    ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
+    : null;
+
+  const activeTextModel = downloadedModels.find((m) => m.id === activeModelId) || activeRemoteTextModel || null;
+  const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId) || activeRemoteImageModel || null;
   const recentConversations = conversations.slice(0, 4);
+
+  // Get all remote text models (non-vision)
+  const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
+    (remoteDiscoveredModels[server.id] || []).filter(m => !m.capabilities.supportsVision)
+  );
+
+  // Get all remote image models (vision-capable)
+  const remoteImageModels: RemoteModel[] = remoteServers.flatMap(server =>
+    (remoteDiscoveredModels[server.id] || []).filter(m => m.capabilities.supportsVision)
+  );
+
+  // Handlers for remote model selection
+  const handleSelectRemoteTextModel = useCallback(async (model: RemoteModel) => {
+    logger.log('[useHomeScreen] handleSelectRemoteTextModel called:', model.id, model.serverId);
+    setPickerType(null);
+    setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
+    try {
+      await remoteServerManager.setActiveRemoteTextModel(model.serverId, model.id);
+      logger.log('[useHomeScreen] Remote text model set successfully');
+    } catch (error) {
+      logger.error('[useHomeScreen] Failed to set remote text model:', error);
+      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(error as Error).message}`));
+    } finally {
+      setLoadingState({ isLoading: false, type: null, modelName: null });
+    }
+  }, [setPickerType, setLoadingState, setAlertState]);
+
+  const handleUnloadRemoteTextModel = useCallback(async () => {
+    setPickerType(null);
+    setLoadingState({ isLoading: true, type: 'text', modelName: null });
+    try {
+      remoteServerManager.clearActiveRemoteModel();
+    } catch (error) {
+      setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
+    } finally {
+      setLoadingState({ isLoading: false, type: null, modelName: null });
+    }
+  }, [setPickerType, setLoadingState, setAlertState]);
+
+  const handleSelectRemoteImageModel = useCallback(async (model: RemoteModel) => {
+    setPickerType(null);
+    setLoadingState({ isLoading: true, type: 'image', modelName: model.name });
+    try {
+      await remoteServerManager.setActiveRemoteImageModel(model.serverId, model.id);
+    } catch (error) {
+      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(error as Error).message}`));
+    } finally {
+      setLoadingState({ isLoading: false, type: null, modelName: null });
+    }
+  }, [setPickerType, setLoadingState, setAlertState]);
+
+  const handleUnloadRemoteImageModel = useCallback(async () => {
+    setPickerType(null);
+    setLoadingState({ isLoading: true, type: 'image', modelName: null });
+    try {
+      remoteServerManager.clearActiveRemoteModel();
+    } catch (error) {
+      setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
+    } finally {
+      setLoadingState({ isLoading: false, type: null, modelName: null });
+    }
+  }, [setPickerType, setLoadingState, setAlertState]);
 
   return {
     pickerType,
@@ -194,10 +276,20 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     activeTextModel,
     activeImageModel,
     recentConversations,
+    // Remote model state
+    remoteTextModels,
+    remoteImageModels,
+    activeRemoteTextModelId,
+    activeRemoteImageModelId,
     handleSelectTextModel,
     handleUnloadTextModel,
     handleSelectImageModel,
     handleUnloadImageModel,
+    // Remote model handlers
+    handleSelectRemoteTextModel,
+    handleUnloadRemoteTextModel,
+    handleSelectRemoteImageModel,
+    handleUnloadRemoteImageModel,
     handleEjectAll,
     startNewChat,
     continueChat,

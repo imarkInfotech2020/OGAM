@@ -5,13 +5,31 @@ import { AttachStep } from 'react-native-spotlight-tour';
 import { AnimatedPressable } from '../../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
-import { DownloadedModel, ONNXImageModel } from '../../../types';
+import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
 import { LoadingState } from '../hooks/useHomeScreen';
+
+// Union types for models that can be active
+type ActiveTextModel = DownloadedModel | RemoteModel | undefined;
+type ActiveImageModel = ONNXImageModel | RemoteModel | undefined;
+
+// Type guards
+function isDownloadedModel(model: ActiveTextModel): model is DownloadedModel {
+  return model !== undefined && 'filePath' in model;
+}
+
+function isRemoteModel(model: ActiveTextModel | ActiveImageModel): model is RemoteModel {
+  return model !== undefined && 'serverId' in model;
+}
+
+function isOnnxImageModel(model: ActiveImageModel): model is ONNXImageModel {
+  return model !== undefined && 'id' in model && !('serverId' in model);
+}
 
 type TextModelCardProps = {
   loadingState: LoadingState;
-  activeTextModel: DownloadedModel | undefined;
+  activeTextModel: ActiveTextModel;
   downloadedModels: DownloadedModel[];
+  remoteModelsCount: number;
   onPress: () => void;
 };
 
@@ -19,11 +37,13 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
   loadingState,
   activeTextModel,
   downloadedModels,
+  remoteModelsCount,
   onPress,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const isLoading = loadingState.isLoading && loadingState.type === 'text';
+  const totalModels = downloadedModels.length + remoteModelsCount;
 
   return (
     <AnimatedPressable style={styles.modelCard} onPress={onPress} hapticType="selection">
@@ -46,18 +66,34 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
           );
         }
         if (activeTextModel) {
+          const isRemote = isRemoteModel(activeTextModel);
           return (
             <>
-              <Text style={styles.modelCardName} numberOfLines={1}>{activeTextModel.name}</Text>
-              <Text style={styles.modelCardMeta}>
-                {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
-              </Text>
+              <View style={styles.modelCardNameRow}>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {activeTextModel.name}
+                </Text>
+                {isRemote && (
+                  <View style={styles.remoteBadge}>
+                    <Icon name="wifi" size={10} color={colors.primary} />
+                  </View>
+                )}
+              </View>
+              {isDownloadedModel(activeTextModel) ? (
+                <Text style={styles.modelCardMeta}>
+                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                </Text>
+              ) : (
+                <Text style={styles.modelCardMeta}>
+                  Remote
+                </Text>
+              )}
             </>
           );
         }
         return (
           <Text style={styles.modelCardEmpty}>
-            {downloadedModels.length > 0 ? 'Tap to select' : 'No models'}
+            {totalModels > 0 ? 'Tap to select' : 'No models'}
           </Text>
         );
       })()}
@@ -67,8 +103,9 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
 
 type ImageModelCardProps = {
   loadingState: LoadingState;
-  activeImageModel: ONNXImageModel | undefined;
+  activeImageModel: ActiveImageModel;
   downloadedImageModels: ONNXImageModel[];
+  remoteModelsCount: number;
   onPress: () => void;
 };
 
@@ -76,11 +113,13 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
   loadingState,
   activeImageModel,
   downloadedImageModels,
+  remoteModelsCount,
   onPress,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const isLoading = loadingState.isLoading && loadingState.type === 'image';
+  const totalModels = downloadedImageModels.length + remoteModelsCount;
 
   return (
     <AnimatedPressable
@@ -108,18 +147,34 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
           );
         }
         if (activeImageModel) {
+          const isRemote = isRemoteModel(activeImageModel);
           return (
             <>
-              <Text style={styles.modelCardName} numberOfLines={1}>{activeImageModel.name}</Text>
-              <Text style={styles.modelCardMeta}>
-                {activeImageModel.style || 'Ready'} · ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
-              </Text>
+              <View style={styles.modelCardNameRow}>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {activeImageModel.name}
+                </Text>
+                {isRemote && (
+                  <View style={styles.remoteBadge}>
+                    <Icon name="wifi" size={10} color={colors.primary} />
+                  </View>
+                )}
+              </View>
+              {isOnnxImageModel(activeImageModel) ? (
+                <Text style={styles.modelCardMeta}>
+                  {activeImageModel.style || 'Ready'} · ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                </Text>
+              ) : (
+                <Text style={styles.modelCardMeta}>
+                  Remote · Vision
+                </Text>
+              )}
             </>
           );
         }
         return (
           <Text style={styles.modelCardEmpty}>
-            {downloadedImageModels.length > 0 ? 'Tap to select' : 'No models'}
+            {totalModels > 0 ? 'Tap to select' : 'No models'}
           </Text>
         );
       })()}
@@ -129,12 +184,16 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
 
 type Props = {
   loadingState: LoadingState;
-  activeTextModel: DownloadedModel | undefined;
-  activeImageModel: ONNXImageModel | undefined;
+  activeTextModel: ActiveTextModel;
+  activeImageModel: ActiveImageModel;
   downloadedModels: DownloadedModel[];
   downloadedImageModels: ONNXImageModel[];
+  remoteTextModelsCount: number;
+  remoteImageModelsCount: number;
   activeModelId: string | null;
   activeImageModelId: string | null;
+  activeRemoteTextModelId: string | null;
+  activeRemoteImageModelId: string | null;
   isEjecting: boolean;
   onPressTextModel: () => void;
   onPressImageModel: () => void;
@@ -147,8 +206,12 @@ export const ActiveModelsSection: React.FC<Props> = ({
   activeImageModel,
   downloadedModels,
   downloadedImageModels,
+  remoteTextModelsCount,
+  remoteImageModelsCount,
   activeModelId,
   activeImageModelId,
+  activeRemoteTextModelId,
+  activeRemoteImageModelId,
   isEjecting,
   onPressTextModel,
   onPressImageModel,
@@ -156,6 +219,7 @@ export const ActiveModelsSection: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const hasActiveModel = activeModelId || activeImageModelId || activeRemoteTextModelId || activeRemoteImageModelId;
 
   return (
     <>
@@ -165,6 +229,7 @@ export const ActiveModelsSection: React.FC<Props> = ({
             loadingState={loadingState}
             activeTextModel={activeTextModel}
             downloadedModels={downloadedModels}
+            remoteModelsCount={remoteTextModelsCount}
             onPress={onPressTextModel}
           />
         </AttachStep>
@@ -173,11 +238,12 @@ export const ActiveModelsSection: React.FC<Props> = ({
             loadingState={loadingState}
             activeImageModel={activeImageModel}
             downloadedImageModels={downloadedImageModels}
+            remoteModelsCount={remoteImageModelsCount}
             onPress={onPressImageModel}
           />
         </AttachStep>
       </View>
-      {(activeModelId || activeImageModelId) && (
+      {hasActiveModel && (
         <TouchableOpacity
           style={styles.ejectAllButton}
           onPress={onEjectAll}
