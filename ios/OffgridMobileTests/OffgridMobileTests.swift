@@ -6,11 +6,11 @@ import PDFKit
 // MARK: - Test Constants
 
 private enum TestPaths {
-  static let nonexistentPDF = TestPaths.nonexistentPDF
+  static let nonexistentPDF = "/tmp/nonexistent.pdf"
   static let tmpModelBin = "/tmp/model.bin"
-  static let exampleModelURL = TestPaths.exampleModelURL
-  static let tmpTestModelGGUF = TestPaths.tmpTestModelGGUF
-  static let tmpShouldNotExist = TestPaths.tmpShouldNotExist
+  static let exampleModelURL = "https://example.com/model.gguf"
+  static let tmpTestModelGGUF = "/tmp/test-model.gguf"
+  static let tmpShouldNotExist = "/tmp/should-not-exist.gguf"
 }
 
 // MARK: - PDFExtractorModule Tests
