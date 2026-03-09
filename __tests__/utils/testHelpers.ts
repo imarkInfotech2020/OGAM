@@ -87,6 +87,7 @@ export const resetStores = (): void => {
     textGenerationCount: 0,
     imageGenerationCount: 0,
     hasEngagedSharePrompt: false,
+    loadedSettings: null,
     onboardingChecklist: {
       downloadedModel: false,
       loadedModel: false,
@@ -423,7 +424,7 @@ export const simulateGeneration = async (
   const tokens = responseContent.split(' ');
   for (const token of tokens) {
     await flushPromises();
-    chatStore.appendToStreamingMessage(`${token  } `);
+    chatStore.appendToStreamingMessage(`${token} `);
   }
 
   // Finalize
