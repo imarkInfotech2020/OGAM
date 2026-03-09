@@ -85,8 +85,11 @@ describe('ModelSelectorModal', () => {
     mockUseRemoteServerStore.mockReturnValue({
       servers: [],
       activeServerId: null,
+      activeRemoteTextModelId: null,
+      activeRemoteImageModelId: null,
       discoveredModels: {},
       setActiveServerId: jest.fn(),
+      setActiveRemoteImageModelId: jest.fn(),
     });
   });
 

@@ -77,6 +77,68 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeModelId).toBe('test-model-1');
     });
 
+    it('should save loadedSettings when model is loaded', async () => {
+      const model = createDownloadedModel({ id: 'test-model-1' });
+      useAppStore.setState({
+        downloadedModels: [model],
+        settings: {
+          ...useAppStore.getState().settings,
+          nThreads: 8,
+          enableGpu: true,
+          gpuLayers: 50,
+          contextLength: 4096,
+          cacheType: 'f16',
+        },
+      });
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      await activeModelService.loadTextModel('test-model-1');
+
+      // Verify loadedSettings was saved with the correct values
+      const loadedSettings = getAppState().loadedSettings;
+      expect(loadedSettings).not.toBeNull();
+      expect(loadedSettings?.nThreads).toBe(8);
+      expect(loadedSettings?.enableGpu).toBe(true);
+      expect(loadedSettings?.gpuLayers).toBe(50);
+      expect(loadedSettings?.contextLength).toBe(4096);
+      expect(loadedSettings?.cacheType).toBe('f16');
+    });
+
+    it('should save loadedSettings when model is loaded', async () => {
+      const model = createDownloadedModel({ id: 'test-model-1' });
+      useAppStore.setState({
+        downloadedModels: [model],
+        settings: {
+          ...useAppStore.getState().settings,
+          nThreads: 6,
+          nBatch: 256,
+          contextLength: 4096,
+          enableGpu: true,
+          gpuLayers: 50,
+          flashAttn: true,
+          cacheType: 'f16',
+        },
+      });
+
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      await activeModelService.loadTextModel('test-model-1');
+
+      // Verify loadedSettings was saved with current settings
+      const loadedSettings = getAppState().loadedSettings;
+      expect(loadedSettings).not.toBeNull();
+      expect(loadedSettings?.nThreads).toBe(6);
+      expect(loadedSettings?.nBatch).toBe(256);
+      expect(loadedSettings?.contextLength).toBe(4096);
+      expect(loadedSettings?.enableGpu).toBe(true);
+      expect(loadedSettings?.gpuLayers).toBe(50);
+      expect(loadedSettings?.flashAttn).toBe(true);
+      expect(loadedSettings?.cacheType).toBe('f16');
+    });
+
     it('should skip loading if model already loaded', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({ downloadedModels: [model], activeModelId: 'test-model-1' });
@@ -161,6 +223,39 @@ describe('ActiveModelService Integration', () => {
       expect(loadedCall).toBeDefined();
 
       unsubscribe();
+    });
+
+    it('should save loadedSettings when model is loaded', async () => {
+      const model = createDownloadedModel({ id: 'test-model-1' });
+      useAppStore.setState({
+        downloadedModels: [model],
+        settings: {
+          ...useAppStore.getState().settings,
+          nThreads: 6,
+          nBatch: 256,
+          contextLength: 4096,
+          enableGpu: true,
+          gpuLayers: 50,
+          flashAttn: true,
+          cacheType: 'q8_0',
+        },
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+
+      await activeModelService.loadTextModel('test-model-1');
+
+      // Verify loadedSettings was saved with the correct values
+      const loadedSettings = getAppState().loadedSettings;
+      expect(loadedSettings).not.toBeNull();
+      expect(loadedSettings?.nThreads).toBe(6);
+      expect(loadedSettings?.nBatch).toBe(256);
+      expect(loadedSettings?.contextLength).toBe(4096);
+      expect(loadedSettings?.enableGpu).toBe(true);
+      expect(loadedSettings?.gpuLayers).toBe(50);
+      expect(loadedSettings?.flashAttn).toBe(true);
+      expect(loadedSettings?.cacheType).toBe('q8_0');
     });
   });
 
