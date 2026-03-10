@@ -147,6 +147,68 @@ export async function fetchWithTimeout<T = unknown>(
 }
 
 /**
+ * Process parsed event and yield it
+ */
+function yieldSSEvent(currentEvent: Partial<SSEEvent>): SSEEvent {
+  return {
+    event: currentEvent.event,
+    data: currentEvent.data!,
+    id: currentEvent.id,
+  };
+}
+
+/**
+ * Parse a single SSE line into the current event
+ * Returns true if an event should be yielded (empty line received)
+ */
+function parseSSELine(
+  trimmed: string,
+  currentEvent: Partial<SSEEvent>
+): boolean {
+  if (!trimmed) {
+    // Empty line signals end of event - caller should yield
+    return currentEvent.data !== undefined;
+  }
+
+  // Parse SSE field
+  if (trimmed.startsWith('event:')) {
+    currentEvent.event = trimmed.slice(6).trim();
+  } else if (trimmed.startsWith('data:')) {
+    const dataStr = trimmed.slice(5).trim();
+    // Handle multiple data lines for same event
+    if (typeof currentEvent.data === 'string') {
+      currentEvent.data += `\n${dataStr}`;
+    } else {
+      currentEvent.data = dataStr;
+    }
+  } else if (trimmed.startsWith('id:')) {
+    currentEvent.id = trimmed.slice(3).trim();
+  }
+  // Ignore other fields (retry, etc.)
+  return false;
+}
+
+/**
+ * Process SSE lines from text and invoke callback for each event
+ * Used by XHR onprogress and onreadystatechange handlers
+ */
+function processSSELines(
+  newData: string,
+  onEvent: (event: SSEEvent) => void
+): void {
+  const lines = newData.split('\n');
+  let currentEvent: Partial<SSEEvent> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (parseSSELine(trimmed, currentEvent)) {
+      onEvent(yieldSSEvent(currentEvent));
+      currentEvent = {};
+    }
+  }
+}
+
+/**
  * Parse SSE events from a stream
  */
 export async function* parseSSEStream(
@@ -172,34 +234,10 @@ export async function* parseSSEStream(
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimmed) {
-          // Empty line signals end of event
-          if (currentEvent.data !== undefined) {
-            yield {
-              event: currentEvent.event,
-              data: currentEvent.data,
-              id: currentEvent.id,
-            } as SSEEvent;
-            currentEvent = {};
-          }
-          continue;
+        if (parseSSELine(trimmed, currentEvent)) {
+          yield yieldSSEvent(currentEvent);
+          currentEvent = {};
         }
-
-        // Parse SSE field
-        if (trimmed.startsWith('event:')) {
-          currentEvent.event = trimmed.slice(6).trim();
-        } else if (trimmed.startsWith('data:')) {
-          const dataStr = trimmed.slice(5).trim();
-          // Handle multiple data lines for same event
-          if (typeof currentEvent.data === 'string') {
-            currentEvent.data += `\n${dataStr}`;
-          } else {
-            currentEvent.data = dataStr;
-          }
-        } else if (trimmed.startsWith('id:')) {
-          currentEvent.id = trimmed.slice(3).trim();
-        }
-        // Ignore other fields (retry, etc.)
       }
     }
 
@@ -225,42 +263,15 @@ function* _parseSSEFromText(text: string): Generator<SSEEvent, void, unknown> {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) {
-      // Empty line signals end of event
-      if (currentEvent.data !== undefined) {
-        yield {
-          event: currentEvent.event,
-          data: currentEvent.data,
-          id: currentEvent.id,
-        } as SSEEvent;
-        currentEvent = {};
-      }
-      continue;
-    }
-
-    // Parse SSE field
-    if (trimmed.startsWith('event:')) {
-      currentEvent.event = trimmed.slice(6).trim();
-    } else if (trimmed.startsWith('data:')) {
-      const dataStr = trimmed.slice(5).trim();
-      // Handle multiple data lines for same event
-      if (typeof currentEvent.data === 'string') {
-        currentEvent.data += `\n${dataStr}`;
-      } else {
-        currentEvent.data = dataStr;
-      }
-    } else if (trimmed.startsWith('id:')) {
-      currentEvent.id = trimmed.slice(3).trim();
+    if (parseSSELine(trimmed, currentEvent)) {
+      yield yieldSSEvent(currentEvent);
+      currentEvent = {};
     }
   }
 
   // Yield any remaining event
   if (currentEvent.data !== undefined) {
-    yield {
-      event: currentEvent.event,
-      data: currentEvent.data,
-      id: currentEvent.id,
-    } as SSEEvent;
+    yield yieldSSEvent(currentEvent);
   }
 }
 
@@ -291,67 +302,8 @@ export async function createStreamingRequest(
       xhr.setRequestHeader(key, value);
     });
 
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 1) {
-        logger.log('[HttpClient] Request opened');
-      } else if (xhr.readyState === 2) {
-        logger.log('[HttpClient] Headers received, status:', xhr.status);
-      } else if (xhr.readyState === 3) {
-        logger.log('[HttpClient] Loading data...');
-      } else if (xhr.readyState === 4) {
-        logger.log('[HttpClient] Request complete, status:', xhr.status);
-      }
-    };
-
-    xhr.onerror = () => {
-      logger.error('[HttpClient] Network error:', xhr.status, xhr.statusText);
-      reject(new Error(`Network error: ${xhr.status} ${xhr.statusText}`));
-    };
-
-    xhr.ontimeout = () => {
-      logger.error('[HttpClient] Request timeout');
-      reject(new Error('Request timeout'));
-    };
-
     // Track processed length for incremental parsing
     let processedLength = 0;
-
-    const _processChunk = (newData: string) => {
-      // Parse only new data incrementally
-      const lines = newData.split('\n');
-      let currentEvent: Partial<SSEEvent> = {};
-      let _buffer = '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          // Empty line signals end of event
-          if (currentEvent.data !== undefined) {
-            onEvent({
-              event: currentEvent.event,
-              data: currentEvent.data,
-              id: currentEvent.id,
-            } as SSEEvent);
-            currentEvent = {};
-          }
-          continue;
-        }
-
-        // Parse SSE field
-        if (trimmed.startsWith('event:')) {
-          currentEvent.event = trimmed.slice(6).trim();
-        } else if (trimmed.startsWith('data:')) {
-          const dataStr = trimmed.slice(5).trim();
-          if (typeof currentEvent.data === 'string') {
-            currentEvent.data += `\n${dataStr}`;
-          } else {
-            currentEvent.data = dataStr;
-          }
-        } else if (trimmed.startsWith('id:')) {
-          currentEvent.id = trimmed.slice(3).trim();
-        }
-      }
-    };
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
@@ -363,37 +315,7 @@ export async function createStreamingRequest(
             if (responseText.length > processedLength) {
               const newData = responseText.slice(processedLength);
               processedLength = responseText.length;
-              // Parse final chunk
-              const lines = newData.split('\n');
-              let currentEvent: Partial<SSEEvent> = {};
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) {
-                  if (currentEvent.data !== undefined) {
-                    onEvent({
-                      event: currentEvent.event,
-                      data: currentEvent.data,
-                      id: currentEvent.id,
-                    } as SSEEvent);
-                    currentEvent = {};
-                  }
-                  continue;
-                }
-
-                if (trimmed.startsWith('event:')) {
-                  currentEvent.event = trimmed.slice(6).trim();
-                } else if (trimmed.startsWith('data:')) {
-                  const dataStr = trimmed.slice(5).trim();
-                  if (typeof currentEvent.data === 'string') {
-                    currentEvent.data += `\n${dataStr}`;
-                  } else {
-                    currentEvent.data = dataStr;
-                  }
-                } else if (trimmed.startsWith('id:')) {
-                  currentEvent.id = trimmed.slice(3).trim();
-                }
-              }
+              processSSELines(newData, onEvent);
             }
             resolve();
           } catch (err) {
@@ -411,38 +333,7 @@ export async function createStreamingRequest(
       if (responseText.length > processedLength) {
         const newData = responseText.slice(processedLength);
         processedLength = responseText.length;
-
-        // Process new lines
-        const lines = newData.split('\n');
-        let currentEvent: Partial<SSEEvent> = {};
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) {
-            if (currentEvent.data !== undefined) {
-              onEvent({
-                event: currentEvent.event,
-                data: currentEvent.data,
-                id: currentEvent.id,
-              } as SSEEvent);
-              currentEvent = {};
-            }
-            continue;
-          }
-
-          if (trimmed.startsWith('event:')) {
-            currentEvent.event = trimmed.slice(6).trim();
-          } else if (trimmed.startsWith('data:')) {
-            const dataStr = trimmed.slice(5).trim();
-            if (typeof currentEvent.data === 'string') {
-              currentEvent.data += `\n${dataStr}`;
-            } else {
-              currentEvent.data = dataStr;
-            }
-          } else if (trimmed.startsWith('id:')) {
-            currentEvent.id = trimmed.slice(3).trim();
-          }
-        }
+        processSSELines(newData, onEvent);
       }
     };
 
