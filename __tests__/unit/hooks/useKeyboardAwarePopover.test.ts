@@ -39,7 +39,7 @@ beforeEach(() => {
   (Dimensions.get as jest.Mock) = jest.fn(() => ({ height: 800, width: 400 }));
 
   // Mock requestAnimationFrame to execute synchronously
-  global.requestAnimationFrame = (cb: FrameRequestCallback) => {
+  global.requestAnimationFrame = (cb: (time: number) => void) => {
     cb(0);
     return 0;
   };
