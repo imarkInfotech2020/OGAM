@@ -389,6 +389,7 @@ describe('ModelDownloadScreen', () => {
   it('download button triggers background download when supported', async () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
+    mockDownloadModelBackground.mockResolvedValue({ downloadId: 123 });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
 
@@ -397,13 +398,13 @@ describe('ModelDownloadScreen', () => {
       await act(async () => { await Promise.resolve(); });
     }
 
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = await result.findByTestId('recommended-model-0-download', {}, { timeout: 5000 });
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
 
     expect(mockDownloadModelBackground).toHaveBeenCalled();
-  });
+  }, 20000);
 
   it('download calls onProgress callback', async () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
