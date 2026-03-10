@@ -23,17 +23,17 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-const mockGetDocumentsByProject = jest.fn(() => Promise.resolve([]));
-const mockIndexDocument = jest.fn(() => Promise.resolve(1));
-const mockDeleteDocument = jest.fn(() => Promise.resolve());
-const mockToggleDocument = jest.fn(() => Promise.resolve());
+const mockGetDocumentsByProject = jest.fn<Promise<any[]>, [string]>(() => Promise.resolve([]));
+const mockIndexDocument = jest.fn<Promise<number>, [any]>(() => Promise.resolve(1));
+const mockDeleteDocument = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
+const mockToggleDocument = jest.fn<Promise<void>, [number, boolean]>(() => Promise.resolve());
 
 jest.mock('../../../src/services/rag', () => ({
   ragService: {
-    getDocumentsByProject: (...args: any[]) => mockGetDocumentsByProject(...args),
-    indexDocument: (...args: any[]) => mockIndexDocument(...args),
-    deleteDocument: (...args: any[]) => mockDeleteDocument(...args),
-    toggleDocument: (...args: any[]) => mockToggleDocument(...args),
+    getDocumentsByProject: (projectId: string) => mockGetDocumentsByProject(projectId),
+    indexDocument: (params: any) => mockIndexDocument(params),
+    deleteDocument: (docId: number) => mockDeleteDocument(docId),
+    toggleDocument: (docId: number, enabled: boolean) => mockToggleDocument(docId, enabled),
     ensureReady: jest.fn(() => Promise.resolve()),
   },
 }));
@@ -105,7 +105,7 @@ describe('KnowledgeBaseScreen', () => {
   });
 
   describe('with documents', () => {
-    const docs = [
+    const docs: any[] = [
       { id: 1, name: 'readme.txt', path: '/docs/readme.txt', size: 500, enabled: 1, projectId: 'proj1', createdAt: '' },
       { id: 2, name: 'notes.pdf', path: '/docs/notes.pdf', size: 2048 * 1024, enabled: 0, projectId: 'proj1', createdAt: '' },
     ];
@@ -142,9 +142,8 @@ describe('KnowledgeBaseScreen', () => {
 
   describe('file size formatting', () => {
     it('formats KB size', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([
-        { id: 3, name: 'small.txt', path: '/docs/small.txt', size: 2048, enabled: 1, projectId: 'proj1', createdAt: '' },
-      ]);
+      const kbDoc: any[] = [{ id: 3, name: 'small.txt', path: '/docs/small.txt', size: 2048, enabled: 1, projectId: 'proj1', createdAt: '' }];
+      mockGetDocumentsByProject.mockResolvedValue(kbDoc);
       const { getByText } = render(<KnowledgeBaseScreen />);
       await flushPromises();
       expect(getByText('2.0 KB')).toBeTruthy();
@@ -192,7 +191,7 @@ describe('KnowledgeBaseScreen', () => {
     it('handles load error gracefully', async () => {
       mockGetDocumentsByProject.mockRejectedValueOnce(new Error('DB error'));
       const { Alert } = require('react-native');
-      jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+      jest.spyOn(Alert, 'alert').mockImplementation((..._args: unknown[]) => undefined);
       render(<KnowledgeBaseScreen />);
       await flushPromises();
       expect(Alert.alert).toHaveBeenCalledWith('Error', 'DB error');
@@ -201,9 +200,8 @@ describe('KnowledgeBaseScreen', () => {
 
   describe('toggle document', () => {
     it('calls toggleDocument when switch is toggled', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([
-        { id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' },
-      ]);
+      const toggleDoc: any[] = [{ id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' }];
+      mockGetDocumentsByProject.mockResolvedValue(toggleDoc);
       const { UNSAFE_getAllByType } = render(<KnowledgeBaseScreen />);
       await flushPromises();
       const { Switch } = require('react-native');
@@ -216,12 +214,12 @@ describe('KnowledgeBaseScreen', () => {
 
   describe('delete document', () => {
     it('shows Alert when delete is pressed and calls deleteDocument on confirm', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([
-        { id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' },
-      ]);
+      const deleteDoc: any[] = [{ id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' }];
+      mockGetDocumentsByProject.mockResolvedValue(deleteDoc);
       const { Alert } = require('react-native');
       let confirmCallback: (() => void) | undefined;
-      jest.spyOn(Alert, 'alert').mockImplementation((_title: string, _msg: string, buttons: any[]) => {
+      jest.spyOn(Alert, 'alert').mockImplementation((...args: unknown[]) => {
+        const buttons = args[2] as any[];
         const removeBtn = buttons?.find((b: any) => b.style === 'destructive');
         confirmCallback = removeBtn?.onPress;
       });
