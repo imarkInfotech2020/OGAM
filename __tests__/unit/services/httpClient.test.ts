@@ -744,7 +744,7 @@ describe('httpClient', () => {
     });
 
     it('should fetch and encode remote URLs', async () => {
-      const mockBlob = new Blob(['image data'], { type: 'image/png' });
+      const mockBlob = new Blob(['image data']);
       const mockFetch = jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: true,
         blob: () => Promise.resolve(mockBlob),
@@ -783,7 +783,7 @@ describe('httpClient', () => {
     });
 
     it('should throw on FileReader error', async () => {
-      const mockBlob = new Blob(['image data'], { type: 'image/png' });
+      const mockBlob = new Blob(['image data']);
       jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: true,
         blob: () => Promise.resolve(mockBlob),
@@ -1042,7 +1042,7 @@ describe('httpClient', () => {
 
     it('should resolve on successful completion', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1062,7 +1062,7 @@ describe('httpClient', () => {
 
     it('should reject on HTTP error', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1082,7 +1082,7 @@ describe('httpClient', () => {
 
     it('should reject on network error', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1098,7 +1098,7 @@ describe('httpClient', () => {
 
     it('should reject on timeout', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1179,7 +1179,7 @@ describe('httpClient', () => {
 
     it('should process final chunk on completion', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1234,7 +1234,7 @@ describe('httpClient', () => {
 
     it('should handle events with id in final chunk', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1258,7 +1258,7 @@ describe('httpClient', () => {
 
     it('should handle multi-line data in final chunk', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1281,7 +1281,7 @@ describe('httpClient', () => {
 
     it('should handle events with event type in final chunk', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1305,7 +1305,7 @@ describe('httpClient', () => {
 
     it('should handle XHR timeout event', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1321,7 +1321,7 @@ describe('httpClient', () => {
 
     it('should handle XHR timeout via ontimeout', async () => {
       const events: any[] = [];
-      const _promise = createStreamingRequest(
+      const promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
