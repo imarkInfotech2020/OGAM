@@ -566,4 +566,282 @@ describe('remoteServerStore', () => {
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBeNull();
     });
   });
+
+  describe('removeServer clears related data', () => {
+    it('should clear discoveredModels and serverHealth when server is removed', () => {
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Test Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      // Set up discovered models and health status
+      act(() => {
+        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+          { id: 'model1', name: 'Model 1', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+        ]);
+        useRemoteServerStore.getState().updateServerHealth(serverId, true);
+      });
+
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeDefined();
+      expect(useRemoteServerStore.getState().serverHealth[serverId]).toBeDefined();
+
+      act(() => {
+        useRemoteServerStore.getState().removeServer(serverId);
+      });
+
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeUndefined();
+      expect(useRemoteServerStore.getState().serverHealth[serverId]).toBeUndefined();
+    });
+  });
+
+  describe('discoverModels', () => {
+    it('should throw error when server not found', async () => {
+      await expect(
+        useRemoteServerStore.getState().discoverModels('non-existent-id')
+      ).rejects.toThrow('Server not found');
+    });
+
+    it('should discover models and store them', async () => {
+      // Mock global fetch for model discovery
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [
+            { id: 'gpt-4', owned_by: 'openai' },
+          ],
+        }),
+      });
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Test Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      let models: any;
+      await act(async () => {
+        models = await useRemoteServerStore.getState().discoverModels(serverId);
+      });
+
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('gpt-4');
+      expect(useRemoteServerStore.getState().discoveredModels[serverId]).toHaveLength(1);
+    });
+
+    it('should handle fetch failure and return empty array', async () => {
+      // Mock fetch to fail
+      const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Test Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      // discoverModels returns empty array on fetch failure
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(models).toHaveLength(0);
+      expect(useRemoteServerStore.getState().isLoading).toBe(false);
+      expect(useRemoteServerStore.getState().discoveringServerId).toBeNull();
+    });
+  });
+
+  describe('testConnection', () => {
+    it('should return error when server not found', async () => {
+      const result = await useRemoteServerStore.getState().testConnection('non-existent-id');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Server not found');
+    });
+
+    it('should catch errors and return error result', async () => {
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Network failure'));
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Test Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      const result = await useRemoteServerStore.getState().testConnection(serverId);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network failure');
+    });
+  });
+
+  describe('testConnectionByEndpoint', () => {
+    it('should handle network errors', async () => {
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Connection timeout'));
+
+      const result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Connection timeout');
+    });
+
+    it('should handle non-Error exceptions', async () => {
+      (httpClient.testEndpoint as jest.Mock).mockRejectedValue('Unknown failure');
+
+      const result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown error');
+    });
+  });
+
+  describe('updateServerHealth', () => {
+    it('should update server health status', () => {
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Test Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      act(() => {
+        useRemoteServerStore.getState().updateServerHealth(serverId, true);
+      });
+
+      const health = useRemoteServerStore.getState().serverHealth[serverId];
+      expect(health.isHealthy).toBe(true);
+      expect(health.lastCheck).toBeDefined();
+    });
+  });
+
+  describe('fetchModelsFromServer with apiKey', () => {
+    it('should use Authorization header when apiKey is provided', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'model-with-key' }],
+        }),
+      });
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'API Key Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+          apiKey: 'secret-key',
+        });
+      });
+
+      await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(mockFetch).toHaveBeenCalled();
+      const callArgs = mockFetch.mock.calls[0];
+      expect(callArgs[1].headers.Authorization).toBe('Bearer secret-key');
+    });
+  });
+
+  describe('Ollama model format', () => {
+    it('should parse Ollama /v1/models response with models array', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          models: [
+            { name: 'llama2:latest', details: { size: '4GB' } },
+            { name: 'mistral:latest' },
+          ],
+        }),
+      });
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Ollama Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(models).toHaveLength(2);
+      expect(models[0].id).toBe('llama2:latest');
+      expect(models[0].details).toEqual({ size: '4GB' });
+    });
+  });
+
+  describe('Ollama /api/tags endpoint fallback', () => {
+    it('should try /api/tags when /v1/models fails', async () => {
+      let callCount = 0;
+      const mockFetch = jest.fn().mockImplementation((url: string) => {
+        callCount++;
+        if (url.includes('/v1/models')) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({}),
+          });
+        }
+        // /api/tags succeeds
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            models: [{ name: 'ollama-model' }],
+          }),
+        });
+      });
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Ollama Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(callCount).toBe(2); // Both endpoints called
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('ollama-model');
+    });
+
+    it('should return empty array when both endpoints fail', async () => {
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({}),
+      });
+      (global as any).fetch = mockFetch;
+
+      let serverId = '';
+      act(() => {
+        serverId = useRemoteServerStore.getState().addServer({
+          name: 'Failing Server',
+          endpoint: 'http://test:11434',
+          providerType: 'openai-compatible',
+        });
+      });
+
+      const models = await useRemoteServerStore.getState().discoverModels(serverId);
+
+      expect(models).toHaveLength(0);
+    });
+  });
 });
