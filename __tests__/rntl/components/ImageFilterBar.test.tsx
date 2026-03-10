@@ -44,7 +44,7 @@ const defaultProps = {
   setStyleFilter: jest.fn(),
   sdVersionFilter: 'all',
   setSdVersionFilter: jest.fn(),
-  imageFilterExpanded: null as const,
+  imageFilterExpanded: null,
   setImageFilterExpanded: jest.fn(),
   hasActiveImageFilters: false,
   clearImageFilters: jest.fn(),
