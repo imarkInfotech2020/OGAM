@@ -801,7 +801,7 @@ describe('generationService', () => {
         activeServerId: null,
         servers: [],
       });
-      mockedProviderRegistry.getProvider.mockReturnValue(null);
+      mockedProviderRegistry.getProvider.mockReturnValue(undefined);
       mockedProviderRegistry.getActiveProvider.mockReturnValue(mockRemoteProvider as any);
     });
 
@@ -830,7 +830,7 @@ describe('generationService', () => {
     it('throws error when remote provider is not found', async () => {
       const convId = setupWithConversation();
       useRemoteServerStore.setState({ activeServerId: 'missing-remote' });
-      mockedProviderRegistry.getProvider.mockReturnValue(null);
+      mockedProviderRegistry.getProvider.mockReturnValue(undefined);
 
       await expect(
         generationService.generateResponse(convId, [
@@ -978,6 +978,7 @@ describe('generationService', () => {
       mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
         onStream?.('Response');
         onComplete?.('Response');
+        return 'Response';
       });
 
       await generationService.generateResponse(convId, [
@@ -1003,6 +1004,7 @@ describe('generationService', () => {
       mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
         onStream?.('Response');
         onComplete?.('Response');
+        return 'Response';
       });
 
       await generationService.generateResponse(convId, [
