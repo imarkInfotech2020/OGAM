@@ -78,7 +78,7 @@ function createMockServer(overrides: Partial<any> = {}) {
     id: `server-${Date.now()}-${Math.random().toString(36).substring(7)}`,
     name: 'Test Server',
     endpoint: 'http://localhost:11434',
-    providerType: 'ollama' as const,
+    providerType: 'openai-compatible' as const,
     createdAt: new Date().toISOString(),
     ...overrides,
   };
