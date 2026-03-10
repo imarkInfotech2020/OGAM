@@ -22,14 +22,14 @@ describe('generateId', () => {
     let originalCrypto: Crypto | undefined;
 
     beforeEach(() => {
-      originalCrypto = global.crypto;
+      originalCrypto = (global as any).crypto;
       // @ts-ignore - intentionally removing crypto
-      delete global.crypto;
+      delete (global as any).crypto;
     });
 
     afterEach(() => {
       if (originalCrypto) {
-        global.crypto = originalCrypto;
+        (global as any).crypto = originalCrypto;
       }
     });
 
@@ -71,14 +71,14 @@ describe('generateRandomSeed', () => {
     let originalCrypto: Crypto | undefined;
 
     beforeEach(() => {
-      originalCrypto = global.crypto;
+      originalCrypto = (global as any).crypto;
       // @ts-ignore - intentionally removing crypto
-      delete global.crypto;
+      delete (global as any).crypto;
     });
 
     afterEach(() => {
       if (originalCrypto) {
-        global.crypto = originalCrypto;
+        (global as any).crypto = originalCrypto;
       }
     });
 
