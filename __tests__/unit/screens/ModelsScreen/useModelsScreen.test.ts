@@ -358,7 +358,7 @@ describe('useModelsScreen', () => {
 
   describe('handleImportImageModelZip', () => {
     it('imports image model zip successfully on iOS', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
@@ -386,7 +386,7 @@ describe('useModelsScreen', () => {
     });
 
     it('imports image model zip with CoreML mlmodelc', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
@@ -406,7 +406,7 @@ describe('useModelsScreen', () => {
     });
 
     it('imports image model zip with nested mlmodelc directory', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
@@ -428,7 +428,7 @@ describe('useModelsScreen', () => {
     });
 
     it('imports image model with QNN backend (bin files)', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const RNFS = require('react-native-fs');
 
       (Platform as any).OS = 'android';
@@ -447,7 +447,7 @@ describe('useModelsScreen', () => {
     });
 
     it('sets active image model id when none is active', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
@@ -471,7 +471,7 @@ describe('useModelsScreen', () => {
     });
 
     it('does not set active image model id when one is already active', async () => {
-      const { modelManager } = require('../../../../src/services');
+      require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 

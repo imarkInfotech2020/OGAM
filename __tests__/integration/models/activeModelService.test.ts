@@ -106,7 +106,7 @@ describe('ActiveModelService Integration', () => {
       expect(loadedSettings?.cacheType).toBe('f16');
     });
 
-    it('should save loadedSettings when model is loaded', async () => {
+    it('should save loadedSettings with flash attention enabled', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({
         downloadedModels: [model],
@@ -225,7 +225,7 @@ describe('ActiveModelService Integration', () => {
       unsubscribe();
     });
 
-    it('should save loadedSettings when model is loaded', async () => {
+    it('should save loadedSettings with q8_0 cache type', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({
         downloadedModels: [model],

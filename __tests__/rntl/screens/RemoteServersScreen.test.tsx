@@ -59,7 +59,7 @@ jest.mock('../../../src/theme', () => ({
 
 // Mock RemoteServerModal
 jest.mock('../../../src/components/RemoteServerModal', () => ({
-  RemoteServerModal: ({ visible, onClose, onSave }: any) => null,
+  RemoteServerModal: ({ _visible, _onClose, _onSave }: any) => null,
 }));
 
 // Mock remoteServerManager
@@ -356,7 +356,7 @@ describe('RemoteServersScreen', () => {
         setActiveServerId: mockSetActiveServerId,
       });
 
-      const { getByText, getAllByText } = render(<RemoteServersScreen />);
+      const { getAllByText } = render(<RemoteServersScreen />);
       // Delete server-1 (not active) - find by name first
       const deleteButtons = getAllByText('Delete');
       fireEvent.press(deleteButtons[0]);
@@ -417,7 +417,7 @@ describe('RemoteServersScreen', () => {
         activeServerId: server.id,
       });
 
-      const { UNSAFE_getByProps } = render(<RemoteServersScreen />);
+      render(<RemoteServersScreen />);
       // When active, the icon name is 'check'
       // We can verify the active state is set correctly
       expect(useRemoteServerStore.getState().activeServerId).toBe(server.id);
@@ -429,7 +429,7 @@ describe('RemoteServersScreen', () => {
   // ==========================================================================
   describe('navigation', () => {
     it('calls goBack when back button pressed', () => {
-      const { getByTestId } = render(<RemoteServersScreen />);
+      render(<RemoteServersScreen />);
       // Back button calls navigation.goBack()
       // We've mocked goBack, so we can verify it would be called
       expect(mockGoBack).toBeDefined();

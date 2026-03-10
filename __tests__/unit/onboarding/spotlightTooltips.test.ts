@@ -35,7 +35,6 @@ describe('Spotlight Tooltip Content', () => {
       const steps = createSpotlightSteps();
       const step = steps[index];
       const stopFn = jest.fn();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const element = step.render({ stop: stopFn } as any);
 
       // The Tooltip component receives title and description as props
@@ -48,7 +47,6 @@ describe('Spotlight Tooltip Content', () => {
     const steps = createSpotlightSteps();
     steps.forEach((step) => {
       const stopFn = jest.fn();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const element = step.render({ stop: stopFn } as any);
       expect((element as any).props.stop).toBe(stopFn);
     });

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Dev-only logger. All output is suppressed in production builds.
  * Use this instead of console.log/warn/error to satisfy security linters

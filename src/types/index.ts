@@ -1,5 +1,4 @@
 /* eslint-disable max-lines */
-/* eslint-disable max-lines */
 // Model category types
 export type ModelCategory = 'text-generation' | 'image-generation' | 'vision' | 'code';
 // Model source and credibility types

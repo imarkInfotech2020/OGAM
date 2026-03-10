@@ -1,5 +1,4 @@
 /* eslint-disable max-lines */
-/* eslint-disable max-lines */
 /**
  * Remote Server Manager
  *

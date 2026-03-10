@@ -660,7 +660,7 @@ describe('remoteServerStore', () => {
     });
   });
 
-  describe('testConnection', () => {
+  describe('testConnection error cases', () => {
     it('should return error when server not found', async () => {
       const result = await useRemoteServerStore.getState().testConnection('non-existent-id');
       expect(result.success).toBe(false);
@@ -686,7 +686,7 @@ describe('remoteServerStore', () => {
     });
   });
 
-  describe('testConnectionByEndpoint', () => {
+  describe('testConnectionByEndpoint error cases', () => {
     it('should handle network errors', async () => {
       (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Connection timeout'));
 

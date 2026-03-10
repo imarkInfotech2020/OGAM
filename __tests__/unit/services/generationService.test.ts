@@ -873,12 +873,12 @@ describe('generationService', () => {
       useRemoteServerStore.setState({ activeServerId: 'test-remote' });
       mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
 
-      let onFirstTokenCallback: (() => void) | undefined;
+      let _onFirstTokenCallback: (() => void) | undefined;
       mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
         // Simulate delay before first token
         await new Promise(resolve => setTimeout(resolve, 10));
         callbacks.onToken('First');
-        onFirstTokenCallback = callbacks.onFirstToken;
+        _onFirstTokenCallback = callbacks.onFirstToken;
       });
 
       await generationService.generateResponse(convId, [
@@ -994,7 +994,7 @@ describe('generationService', () => {
   // ============================================================================
   describe('share prompt check', () => {
     it('does not trigger share prompt if already engaged', async () => {
-      const { shouldShowSharePrompt, emitSharePrompt } = require('../../../src/utils/sharePrompt');
+      const { emitSharePrompt } = require('../../../src/utils/sharePrompt');
       const convId = setupWithConversation();
       setupWithActiveModel();
 

@@ -1344,7 +1344,7 @@ describe('ModelsScreen', () => {
   // ============================================================================
   // Multiple download badge
   // ============================================================================
-  describe('download badge', () => {
+  describe('download badge for multiple models', () => {
     it('shows badge with count for multiple models', async () => {
       const models = [
         createDownloadedModel({ id: 'model-1' }),

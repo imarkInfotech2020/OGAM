@@ -390,7 +390,7 @@ describe('remoteServerManager', () => {
     });
   });
 
-  describe('detectVisionCapability', () => {
+  describe('detectVisionCapability comprehensive patterns', () => {
     it('should detect all vision model patterns', () => {
       const manager = remoteServerManager as any;
 
@@ -500,7 +500,7 @@ describe('remoteServerManager', () => {
 
   describe('setActiveServer', () => {
     it('should set active server and provider', () => {
-      const mockSetActiveProvider = jest.fn();
+      const _mockSetActiveProvider = jest.fn();
       (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
@@ -721,8 +721,8 @@ describe('remoteServerManager', () => {
     });
 
     it('should warn when provider cannot be created', async () => {
-      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
-      const mockLogger = { warn: jest.fn() };
+      const _mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
+      const _mockLogger = { warn: jest.fn() };
       jest.spyOn(console, 'warn').mockImplementation(() => {});
 
       (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);

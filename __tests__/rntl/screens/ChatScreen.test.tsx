@@ -2707,7 +2707,7 @@ describe('ChatScreen', () => {
   // ============================================================================
   // Delete conversation while streaming — lines 815-816, 821
   // ============================================================================
-  describe('delete conversation', () => {
+  describe('delete conversation while streaming', () => {
     it('shows delete confirmation and deletes conversation', async () => {
       const { conversationId } = setupFullChat();
       mockRoute.params = { conversationId };

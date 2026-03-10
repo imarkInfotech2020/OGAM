@@ -1004,7 +1004,7 @@ describe('httpClient', () => {
 
     it('should make POST request with correct headers', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         { 'Authorization': 'Bearer token' },
@@ -1020,7 +1020,7 @@ describe('httpClient', () => {
 
     it('should parse SSE events on progress', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1042,7 +1042,7 @@ describe('httpClient', () => {
 
     it('should resolve on successful completion', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1062,7 +1062,7 @@ describe('httpClient', () => {
 
     it('should reject on HTTP error', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1082,7 +1082,7 @@ describe('httpClient', () => {
 
     it('should reject on network error', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1098,7 +1098,7 @@ describe('httpClient', () => {
 
     it('should reject on timeout', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1114,7 +1114,7 @@ describe('httpClient', () => {
 
     it('should handle events with event type', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1136,7 +1136,7 @@ describe('httpClient', () => {
 
     it('should handle events with id field', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1158,7 +1158,7 @@ describe('httpClient', () => {
 
     it('should handle multi-line data', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1179,7 +1179,7 @@ describe('httpClient', () => {
 
     it('should process final chunk on completion', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1202,7 +1202,7 @@ describe('httpClient', () => {
 
     it('should handle incremental progress updates', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1234,7 +1234,7 @@ describe('httpClient', () => {
 
     it('should handle events with id in final chunk', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1258,7 +1258,7 @@ describe('httpClient', () => {
 
     it('should handle multi-line data in final chunk', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1281,7 +1281,7 @@ describe('httpClient', () => {
 
     it('should handle events with event type in final chunk', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1305,7 +1305,7 @@ describe('httpClient', () => {
 
     it('should handle XHR timeout event', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},
@@ -1321,7 +1321,7 @@ describe('httpClient', () => {
 
     it('should handle XHR timeout via ontimeout', async () => {
       const events: any[] = [];
-      const promise = createStreamingRequest(
+      const _promise = createStreamingRequest(
         'http://localhost:11434/api/chat',
         { model: 'test' },
         {},

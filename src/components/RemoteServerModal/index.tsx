@@ -223,7 +223,8 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
       newErrors.endpoint = 'Endpoint URL is required';
     } else {
       try {
-        new URL(endpoint);
+        // Validate URL format by parsing it - constructor throws on invalid URLs
+        const _validUrl = new URL(endpoint);
       } catch {
         newErrors.endpoint = 'Invalid URL format';
       }
