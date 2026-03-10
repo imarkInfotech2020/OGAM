@@ -358,7 +358,7 @@ describe('useModelsScreen', () => {
 
   describe('handleImportImageModelZip', () => {
     it('imports image model zip successfully on iOS', async () => {
-      require('../../../../src/services');
+      const { modelManager } = require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
@@ -386,7 +386,7 @@ describe('useModelsScreen', () => {
     });
 
     it('imports image model zip with CoreML mlmodelc', async () => {
-      require('../../../../src/services');
+      const { modelManager } = require('../../../../src/services');
       const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
@@ -524,15 +524,18 @@ describe('useModelsScreen', () => {
 
       const { result } = renderHook(() => useModelsScreen());
 
+      const mockModel: any = { id: 'model-id', name: 'Test', author: 'Test', files: [] };
+      const mockFile: any = { name: 'url', size: 100, quantization: 'Q4', downloadUrl: 'http://test' };
+
       act(() => {
-        result.current.handleDownload('model-id', 'url');
+        result.current.handleDownload(mockModel, mockFile);
       });
 
       expect(mockMaybeShowNotifRationale).toHaveBeenCalled();
       // The callback passed to maybeShowNotifRationale should call handleDownload
       const callback = mockMaybeShowNotifRationale.mock.calls[0][0];
       callback();
-      expect(mockHandleDownload).toHaveBeenCalledWith('model-id', 'url');
+      expect(mockHandleDownload).toHaveBeenCalledWith(mockModel, mockFile);
     });
   });
 
@@ -562,14 +565,24 @@ describe('useModelsScreen', () => {
 
       const { result } = renderHook(() => useModelsScreen());
 
+      const mockImageModel: any = {
+        id: 'img-model',
+        name: 'Test Model',
+        description: 'Test',
+        downloadUrl: 'http://test',
+        size: 100,
+        style: 'default',
+        backend: 'mnn'
+      };
+
       act(() => {
-        result.current.handleDownloadImageModel({ id: 'img-model' });
+        result.current.handleDownloadImageModel(mockImageModel);
       });
 
       expect(mockMaybeShowNotifRationale).toHaveBeenCalled();
       const callback = mockMaybeShowNotifRationale.mock.calls[0][0];
       callback();
-      expect(mockHandleDownloadImageModel).toHaveBeenCalledWith({ id: 'img-model' });
+      expect(mockHandleDownloadImageModel).toHaveBeenCalledWith(mockImageModel);
     });
   });
 
