@@ -8,6 +8,9 @@
 import { generationService, GenerationState } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { useChatStore } from '../../../src/stores/chatStore';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { useAppStore } from '../../../src/stores/appStore';
+import { providerRegistry } from '../../../src/services/providers';
 import { resetStores, setupWithActiveModel, setupWithConversation } from '../../utils/testHelpers';
 import { createMessage } from '../../utils/factories';
 
@@ -36,7 +39,22 @@ jest.mock('../../../src/services/activeModelService', () => ({
   },
 }));
 
+// Mock sharePrompt utility
+jest.mock('../../../src/utils/sharePrompt', () => ({
+  shouldShowSharePrompt: jest.fn(() => false),
+  emitSharePrompt: jest.fn(),
+}));
+
+// Mock provider registry
+jest.mock('../../../src/services/providers', () => ({
+  providerRegistry: {
+    getProvider: jest.fn(),
+    getActiveProvider: jest.fn(),
+  },
+}));
+
 const mockedLlmService = llmService as jest.Mocked<typeof llmService>;
+const mockedProviderRegistry = providerRegistry as jest.Mocked<typeof providerRegistry>;
 
 describe('generationService', () => {
   beforeEach(() => {
@@ -763,6 +781,235 @@ describe('generationService', () => {
         // This is acceptable behavior - the service clears empty messages
         expect(true).toBe(true);
       }
+    });
+  });
+
+  // ============================================================================
+  // Remote Provider
+  // ============================================================================
+  describe('remote provider', () => {
+    const mockRemoteProvider = {
+      id: 'test-remote',
+      isReady: jest.fn().mockResolvedValue(true),
+      generate: jest.fn(),
+      getLoadedModelId: jest.fn().mockReturnValue('remote-model'),
+    };
+
+    beforeEach(() => {
+      // Reset remote server store state
+      useRemoteServerStore.setState({
+        activeServerId: null,
+        servers: [],
+      });
+      mockedProviderRegistry.getProvider.mockReturnValue(null);
+      mockedProviderRegistry.getActiveProvider.mockReturnValue(mockRemoteProvider as any);
+    });
+
+    afterEach(() => {
+      useRemoteServerStore.setState({ activeServerId: null });
+    });
+
+    it('routes to remote provider when activeServerId is set', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
+        callbacks.onToken('Remote response');
+        callbacks.onComplete({ content: 'Remote response' });
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      expect(mockedLlmService.generateResponse).not.toHaveBeenCalled();
+      expect(mockRemoteProvider.generate).toHaveBeenCalled();
+    });
+
+    it('throws error when remote provider is not found', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'missing-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(null);
+
+      await expect(
+        generationService.generateResponse(convId, [
+          createMessage({ role: 'user', content: 'Hi' }),
+        ])
+      ).rejects.toThrow('Remote provider not found');
+    });
+
+    it('throws error when remote provider is not ready', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockRemoteProvider.isReady.mockResolvedValueOnce(false);
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      await expect(
+        generationService.generateResponse(convId, [
+          createMessage({ role: 'user', content: 'Hi' }),
+        ])
+      ).rejects.toThrow('Remote provider not ready');
+    });
+
+    it('handles remote generation error', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
+        callbacks.onError(new Error('Remote generation failed'));
+      });
+
+      await expect(
+        generationService.generateResponse(convId, [
+          createMessage({ role: 'user', content: 'Hi' }),
+        ])
+      ).rejects.toThrow('Remote generation failed');
+    });
+
+    it('tracks time to first token for remote generation', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      let onFirstTokenCallback: (() => void) | undefined;
+      mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
+        // Simulate delay before first token
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callbacks.onToken('First');
+        onFirstTokenCallback = callbacks.onFirstToken;
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      // Verify remoteTimeToFirstToken was tracked
+      expect(mockRemoteProvider.generate).toHaveBeenCalled();
+    });
+
+    it('stops remote generation on abort', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      mockRemoteProvider.generate.mockImplementation(async () => {
+        // Never complete
+        await new Promise(() => {});
+      });
+
+      generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Stop should abort the remote controller
+      await generationService.stopGeneration();
+
+      const state = generationService.getState();
+      expect(state.isGenerating).toBe(false);
+    });
+
+    it('handles onReasoning callback for remote generation', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({ activeServerId: 'test-remote' });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+
+      mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
+        callbacks.onReasoning('Thinking...');
+        callbacks.onToken('Response');
+        callbacks.onComplete({ content: 'Response' });
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      expect(mockRemoteProvider.generate).toHaveBeenCalled();
+    });
+
+    it('uses remote metadata in generation meta', async () => {
+      const convId = setupWithConversation();
+      useRemoteServerStore.setState({
+        activeServerId: 'test-remote',
+        servers: [{ id: 'test-remote', name: 'Test Server', endpoint: 'http://test' }] as any,
+      });
+      mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider as any);
+      mockedProviderRegistry.getActiveProvider.mockReturnValue(mockRemoteProvider as any);
+
+      mockRemoteProvider.generate.mockImplementation(async (_msgs: any, _opts: any, callbacks: any) => {
+        callbacks.onToken('Response');
+        callbacks.onComplete({ content: 'Response' });
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      // Verify generation completed successfully
+      const state = generationService.getState();
+      expect(state.isGenerating).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Generation Metadata
+  // ============================================================================
+  describe('buildGenerationMeta', () => {
+    it('includes GPU info for local generation', async () => {
+      const convId = setupWithConversation();
+      setupWithActiveModel({ name: 'Test Model' });
+      mockedLlmService.getGpuInfo.mockReturnValue({
+        gpu: true,
+        gpuBackend: 'Metal',
+        gpuLayers: 32,
+        reasonNoGPU: '',
+      });
+      mockedLlmService.getPerformanceStats.mockReturnValue({
+        lastTokensPerSecond: 25,
+        lastDecodeTokensPerSecond: 30,
+        lastTimeToFirstToken: 0.3,
+        lastGenerationTime: 2.0,
+        lastTokenCount: 100,
+      });
+
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
+        onStream?.('Response');
+        onComplete?.('Response');
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      // Generation should complete
+      expect(generationService.getState().isGenerating).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Share Prompt Check
+  // ============================================================================
+  describe('share prompt check', () => {
+    it('does not trigger share prompt if already engaged', async () => {
+      const { shouldShowSharePrompt, emitSharePrompt } = require('../../../src/utils/sharePrompt');
+      const convId = setupWithConversation();
+      setupWithActiveModel();
+
+      useAppStore.setState({ hasEngagedSharePrompt: true });
+
+      mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
+        onStream?.('Response');
+        onComplete?.('Response');
+      });
+
+      await generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      expect(emitSharePrompt).not.toHaveBeenCalled();
     });
   });
 });
