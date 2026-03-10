@@ -42,6 +42,7 @@ describe('remoteServerManager', () => {
       const result = await remoteServerManager.addServer({
         name: 'Test',
         endpoint: 'http://localhost:11434',
+        providerType: 'openai-compatible',
       });
 
       expect(result).toEqual(mockServer);
@@ -64,6 +65,7 @@ describe('remoteServerManager', () => {
       const result = await remoteServerManager.addServer({
         name: 'Test',
         endpoint: 'http://localhost:11434',
+        providerType: 'openai-compatible',
         apiKey: 'secret-key',
       });
 
@@ -87,6 +89,7 @@ describe('remoteServerManager', () => {
       await expect(remoteServerManager.addServer({
         name: 'Test',
         endpoint: 'http://localhost:11434',
+        providerType: 'openai-compatible',
       })).rejects.toThrow('Failed to create server');
     });
   });
