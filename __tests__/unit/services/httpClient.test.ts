@@ -29,118 +29,55 @@ describe('httpClient', () => {
   // ─── SSE Parsing Tests ─────────────────────────────────────────────────────
 
   describe('parseSSEStream', () => {
-    it('should parse simple SSE events', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('event: message\ndata: {"text":"hello"}\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
-      expect(events).toHaveLength(1);
-      expect(events[0]).toEqual({
-        event: 'message',
-        data: '{"text":"hello"}',
+    async function parseSSEData(...chunks: string[]): Promise<{ events: any[]; releaseLock: jest.Mock }> {
+      const encoder = new TextEncoder();
+      const readMock = jest.fn();
+      chunks.forEach(chunk => {
+        readMock.mockResolvedValueOnce({ done: false, value: encoder.encode(chunk) });
       });
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      readMock.mockResolvedValueOnce({ done: true, value: undefined });
+      const releaseLock = jest.fn();
+      const mockResp = {
+        body: { getReader: () => ({ read: readMock, releaseLock }) },
+      } as unknown as Response;
+      const collected: any[] = [];
+      for await (const event of parseSSEStream(mockResp)) {
+        collected.push(event);
+      }
+      return { events: collected, releaseLock };
+    }
+
+    it('should parse simple SSE events', async () => {
+      const { events, releaseLock } = await parseSSEData('event: message\ndata: {"text":"hello"}\n\n');
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({ event: 'message', data: '{"text":"hello"}' });
+      expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should parse multiple SSE events', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode(
-              'event: message\ndata: {"text":"first"}\n\n' +
-              'event: message\ndata: {"text":"second"}\n\n'
-            ),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events, releaseLock } = await parseSSEData(
+        'event: message\ndata: {"text":"first"}\n\n' +
+        'event: message\ndata: {"text":"second"}\n\n'
+      );
       expect(events).toHaveLength(2);
       expect(events[0].data).toBe('{"text":"first"}');
       expect(events[1].data).toBe('{"text":"second"}');
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should handle multi-line data', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode(
-              'data: line1\ndata: line2\n\n'
-            ),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events, releaseLock } = await parseSSEData('data: line1\ndata: line2\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('line1\nline2');
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should handle events without explicit event type', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('data: hello\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events, releaseLock } = await parseSSEData('data: hello\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('hello');
       expect(events[0].event).toBeUndefined();
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should throw when body is not readable', async () => {
@@ -156,26 +93,7 @@ describe('httpClient', () => {
     });
 
     it('should handle events with id field', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('id: event-123\nevent: message\ndata: {"text":"hello"}\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('id: event-123\nevent: message\ndata: {"text":"hello"}\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].id).toBe('event-123');
       expect(events[0].event).toBe('message');
@@ -183,81 +101,20 @@ describe('httpClient', () => {
     });
 
     it('should handle data as object type', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('data: first\ndata: second\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('data: first\ndata: second\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('first\nsecond');
     });
 
     it('should handle chunked data correctly', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('event: message\ndata: hel'),
-          })
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('lo\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events, releaseLock } = await parseSSEData('event: message\ndata: hel', 'lo\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('hello');
-      expect(mockReader.releaseLock).toHaveBeenCalled();
+      expect(releaseLock).toHaveBeenCalled();
     });
 
     it('should handle event with id field', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('event: message\nid: 123\ndata: hello\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('event: message\nid: 123\ndata: hello\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].id).toBe('123');
       expect(events[0].event).toBe('message');
@@ -277,26 +134,7 @@ describe('httpClient', () => {
     });
 
     it('should handle events with only data field', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('data: test\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('data: test\n\n');
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('test');
       expect(events[0].event).toBeUndefined();
@@ -304,51 +142,13 @@ describe('httpClient', () => {
     });
 
     it('should skip events without data', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('event: message\n\n'),
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('event: message\n\n');
       // Events without data should not be yielded
       expect(events).toHaveLength(0);
     });
 
     it('should yield remaining event at end of stream', async () => {
-      const mockReader = {
-        read: jest.fn()
-          .mockResolvedValueOnce({
-            done: false,
-            value: new TextEncoder().encode('data: final\n'), // No trailing newline
-          })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: jest.fn(),
-      };
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const events: any[] = [];
-      for await (const event of parseSSEStream(mockResponse)) {
-        events.push(event);
-      }
-
+      const { events } = await parseSSEData('data: final\n'); // No trailing newline
       expect(events).toHaveLength(1);
       expect(events[0].data).toBe('final');
     });
@@ -995,6 +795,7 @@ describe('httpClient', () => {
       (global as any).XMLHttpRequest = jest.fn(() => mockXHR);
 
       jest.useFakeTimers();
+      streamEvents = [];
     });
 
     afterEach(() => {
@@ -1002,16 +803,17 @@ describe('httpClient', () => {
       jest.restoreAllMocks();
     });
 
-    it('should make POST request with correct headers', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        { 'Authorization': 'Bearer token' },
-        (event) => events.push(event)
-      );
+    const TEST_ENDPOINT = 'http://localhost:11434/api/chat';
+    let streamEvents: any[] = [];
 
-      expect(mockXHR.open).toHaveBeenCalledWith('POST', 'http://localhost:11434/api/chat', true);
+    function startStream(headers: Record<string, string> = {}): Promise<void> {
+      return createStreamingRequest(TEST_ENDPOINT, { model: 'test' }, headers, (e) => streamEvents.push(e));
+    }
+
+    it('should make POST request with correct headers', async () => {
+      const _promise = startStream({ 'Authorization': 'Bearer token' });
+
+      expect(mockXHR.open).toHaveBeenCalledWith('POST', TEST_ENDPOINT, true);
       expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
       expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Accept', 'text/event-stream');
       expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer token');
@@ -1019,13 +821,7 @@ describe('httpClient', () => {
     });
 
     it('should parse SSE events on progress', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const _promise = startStream();
 
       // Simulate progress event
       mockXHR.responseText = 'data: {"text":"hello"}\n\n';
@@ -1036,18 +832,12 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toBe('{"text":"hello"}');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].data).toBe('{"text":"hello"}');
     });
 
     it('should resolve on successful completion', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'data: final\n\n';
       mockXHR.status = 200;
@@ -1061,13 +851,7 @@ describe('httpClient', () => {
     });
 
     it('should reject on HTTP error', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'Internal Server Error';
       mockXHR.status = 500;
@@ -1081,13 +865,7 @@ describe('httpClient', () => {
     });
 
     it('should reject on network error', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       if (onError) {
         onError();
@@ -1097,13 +875,7 @@ describe('httpClient', () => {
     });
 
     it('should reject on timeout', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       // Advance timers past timeout
       jest.advanceTimersByTime(300000);
@@ -1113,13 +885,7 @@ describe('httpClient', () => {
     });
 
     it('should handle events with event type', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const _promise = startStream();
 
       mockXHR.responseText = 'event: message\ndata: {"text":"hello"}\n\n';
       mockXHR.status = 200;
@@ -1129,19 +895,13 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(1);
-      expect(events[0].event).toBe('message');
-      expect(events[0].data).toBe('{"text":"hello"}');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].event).toBe('message');
+      expect(streamEvents[0].data).toBe('{"text":"hello"}');
     });
 
     it('should handle events with id field', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const _promise = startStream();
 
       mockXHR.responseText = 'id: 123\ndata: hello\n\n';
       mockXHR.status = 200;
@@ -1151,19 +911,13 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(1);
-      expect(events[0].id).toBe('123');
-      expect(events[0].data).toBe('hello');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].id).toBe('123');
+      expect(streamEvents[0].data).toBe('hello');
     });
 
     it('should handle multi-line data', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const _promise = startStream();
 
       mockXHR.responseText = 'data: line1\ndata: line2\n\n';
       mockXHR.status = 200;
@@ -1173,18 +927,12 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toBe('line1\nline2');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].data).toBe('line1\nline2');
     });
 
     it('should process final chunk on completion', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'data: final\n\n';
       mockXHR.status = 200;
@@ -1196,18 +944,12 @@ describe('httpClient', () => {
 
       await promise;
 
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toBe('final');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].data).toBe('final');
     });
 
     it('should handle incremental progress updates', async () => {
-      const events: any[] = [];
-      const _promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const _promise = startStream();
 
       // First progress event
       mockXHR.responseText = 'data: first\n\n';
@@ -1218,8 +960,8 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toBe('first');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].data).toBe('first');
 
       // Second progress event with more data
       mockXHR.responseText = 'data: first\n\ndata: second\n\n';
@@ -1228,18 +970,12 @@ describe('httpClient', () => {
         onProgress();
       }
 
-      expect(events).toHaveLength(2);
-      expect(events[1].data).toBe('second');
+      expect(streamEvents).toHaveLength(2);
+      expect(streamEvents[1].data).toBe('second');
     });
 
     it('should handle events with id in final chunk', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'id: event-1\ndata: hello\n\n';
       mockXHR.status = 200;
@@ -1251,19 +987,13 @@ describe('httpClient', () => {
 
       await promise;
 
-      expect(events).toHaveLength(1);
-      expect(events[0].id).toBe('event-1');
-      expect(events[0].data).toBe('hello');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].id).toBe('event-1');
+      expect(streamEvents[0].data).toBe('hello');
     });
 
     it('should handle multi-line data in final chunk', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'data: line1\ndata: line2\n\n';
       mockXHR.status = 200;
@@ -1275,18 +1005,12 @@ describe('httpClient', () => {
 
       await promise;
 
-      expect(events).toHaveLength(1);
-      expect(events[0].data).toBe('line1\nline2');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].data).toBe('line1\nline2');
     });
 
     it('should handle events with event type in final chunk', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       mockXHR.responseText = 'event: message\ndata: hello\n\n';
       mockXHR.status = 200;
@@ -1298,19 +1022,13 @@ describe('httpClient', () => {
 
       await promise;
 
-      expect(events).toHaveLength(1);
-      expect(events[0].event).toBe('message');
-      expect(events[0].data).toBe('hello');
+      expect(streamEvents).toHaveLength(1);
+      expect(streamEvents[0].event).toBe('message');
+      expect(streamEvents[0].data).toBe('hello');
     });
 
     it('should handle XHR timeout event', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       if (onTimeout) {
         onTimeout();
@@ -1320,13 +1038,7 @@ describe('httpClient', () => {
     });
 
     it('should handle XHR timeout via ontimeout', async () => {
-      const events: any[] = [];
-      const promise = createStreamingRequest(
-        'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
-        (event) => events.push(event)
-      );
+      const promise = startStream();
 
       // Simulate XHR timeout
       jest.advanceTimersByTime(300000);

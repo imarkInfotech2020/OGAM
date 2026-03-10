@@ -178,7 +178,7 @@ describe('remoteServerManager', () => {
     it('should return API key from keychain', async () => {
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
         username: 'server_server-1',
-        password: 'secret-key',
+        password: 'secret-key', // NOSONAR - test mock value, not a real credential
       });
 
       const key = await remoteServerManager.getApiKey('server-1');
@@ -211,7 +211,7 @@ describe('remoteServerManager', () => {
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
         username: 'server_server-1',
-        password: 'secret-key',
+        password: 'secret-key', // NOSONAR - test mock value, not a real credential
       });
 
       const result = await remoteServerManager.getServerWithApiKey('server-1');
@@ -653,7 +653,7 @@ describe('remoteServerManager', () => {
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
         username: 'server_server-1',
-        password: 'secret-key',
+        password: 'secret-key', // NOSONAR - test mock value, not a real credential
       });
 
       const models = await remoteServerManager.discoverModels('server-1');

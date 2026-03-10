@@ -26,24 +26,14 @@ describe('shouldUseToolsForMessage', () => {
   });
 
   describe('web_search tool', () => {
-    it('triggers on "latest" keyword', () => {
-      expect(shouldUseToolsForMessage('What is the latest news?', ['web_search'])).toBe(true);
-    });
-
-    it('triggers on "current" keyword', () => {
-      expect(shouldUseToolsForMessage('What is the current weather?', ['web_search'])).toBe(true);
-    });
-
-    it('triggers on "news" keyword', () => {
-      expect(shouldUseToolsForMessage('Tell me the news', ['web_search'])).toBe(true);
-    });
-
-    it('triggers on "search" keyword', () => {
-      expect(shouldUseToolsForMessage('Search for cats', ['web_search'])).toBe(true);
-    });
-
-    it('triggers on "look up" keyword', () => {
-      expect(shouldUseToolsForMessage('Look up that topic', ['web_search'])).toBe(true);
+    test.each([
+      ['latest', 'What is the latest news?'],
+      ['current', 'What is the current weather?'],
+      ['news', 'Tell me the news'],
+      ['search', 'Search for cats'],
+      ['look up', 'Look up that topic'],
+    ])('triggers on "%s" keyword', (_keyword, message) => {
+      expect(shouldUseToolsForMessage(message, ['web_search'])).toBe(true);
     });
 
     it('does not trigger without web search keywords', () => {
@@ -52,20 +42,16 @@ describe('shouldUseToolsForMessage', () => {
   });
 
   describe('calculator tool', () => {
-    it('triggers on simple math expression', () => {
-      expect(shouldUseToolsForMessage('2 + 2', ['calculator'])).toBe(true);
-    });
-
-    it('triggers on complex math expression', () => {
-      expect(shouldUseToolsForMessage('(10 + 5) * 3 - 8 / 2', ['calculator'])).toBe(true);
-    });
-
-    it('triggers on "calculate" keyword', () => {
-      expect(shouldUseToolsForMessage('Calculate the total', ['calculator'])).toBe(true);
-    });
-
-    it('triggers on "solve" keyword', () => {
-      expect(shouldUseToolsForMessage('Solve this problem', ['calculator'])).toBe(true);
+    test.each([
+      ['simple math expression', '2 + 2'],
+      ['complex math expression', '(10 + 5) * 3 - 8 / 2'],
+      ['"calculate" keyword', 'Calculate the total'],
+      ['"solve" keyword', 'Solve this problem'],
+      ['decimal numbers', '3.14 * 2'],
+      ['percentages', '100 % 7'],
+      ['power operator', '2 ^ 8'],
+    ])('triggers on %s', (_label, message) => {
+      expect(shouldUseToolsForMessage(message, ['calculator'])).toBe(true);
     });
 
     it('triggers on word math expressions', () => {
@@ -82,39 +68,17 @@ describe('shouldUseToolsForMessage', () => {
     it('does not trigger on math without leading digit', () => {
       expect(shouldUseToolsForMessage('Add these numbers', ['calculator'])).toBe(false);
     });
-
-    it('handles decimal numbers', () => {
-      expect(shouldUseToolsForMessage('3.14 * 2', ['calculator'])).toBe(true);
-    });
-
-    it('handles percentages', () => {
-      expect(shouldUseToolsForMessage('100 % 7', ['calculator'])).toBe(true);
-    });
-
-    it('handles power operator', () => {
-      expect(shouldUseToolsForMessage('2 ^ 8', ['calculator'])).toBe(true);
-    });
   });
 
   describe('get_current_datetime tool', () => {
-    it('triggers on "time" keyword', () => {
-      expect(shouldUseToolsForMessage('What time is it?', ['get_current_datetime'])).toBe(true);
-    });
-
-    it('triggers on "date" keyword', () => {
-      expect(shouldUseToolsForMessage("What's the date today?", ['get_current_datetime'])).toBe(true);
-    });
-
-    it('triggers on "day" keyword', () => {
-      expect(shouldUseToolsForMessage('What day is it?', ['get_current_datetime'])).toBe(true);
-    });
-
-    it('triggers on "what\'s the time" phrase', () => {
-      expect(shouldUseToolsForMessage("What's the time?", ['get_current_datetime'])).toBe(true);
-    });
-
-    it('triggers on "what is the time" phrase', () => {
-      expect(shouldUseToolsForMessage('What is the time?', ['get_current_datetime'])).toBe(true);
+    test.each([
+      ['"time" keyword', 'What time is it?'],
+      ['"date" keyword', "What's the date today?"],
+      ['"day" keyword', 'What day is it?'],
+      ['"what\'s the time" phrase', "What's the time?"],
+      ['"what is the time" phrase', 'What is the time?'],
+    ])('triggers on %s', (_label, message) => {
+      expect(shouldUseToolsForMessage(message, ['get_current_datetime'])).toBe(true);
     });
 
     it('does not trigger without time keywords', () => {
@@ -123,24 +87,14 @@ describe('shouldUseToolsForMessage', () => {
   });
 
   describe('get_device_info tool', () => {
-    it('triggers on "device" keyword', () => {
-      expect(shouldUseToolsForMessage('What device am I using?', ['get_device_info'])).toBe(true);
-    });
-
-    it('triggers on "battery" keyword', () => {
-      expect(shouldUseToolsForMessage('Check my battery level', ['get_device_info'])).toBe(true);
-    });
-
-    it('triggers on "storage" keyword', () => {
-      expect(shouldUseToolsForMessage('How much storage do I have?', ['get_device_info'])).toBe(true);
-    });
-
-    it('triggers on "memory" keyword', () => {
-      expect(shouldUseToolsForMessage('Show memory usage', ['get_device_info'])).toBe(true);
-    });
-
-    it('triggers on "ram" keyword', () => {
-      expect(shouldUseToolsForMessage('How much RAM?', ['get_device_info'])).toBe(true);
+    test.each([
+      ['device', 'What device am I using?'],
+      ['battery', 'Check my battery level'],
+      ['storage', 'How much storage do I have?'],
+      ['memory', 'Show memory usage'],
+      ['ram', 'How much RAM?'],
+    ])('triggers on "%s" keyword', (_keyword, message) => {
+      expect(shouldUseToolsForMessage(message, ['get_device_info'])).toBe(true);
     });
 
     it('does not trigger without device keywords', () => {
@@ -149,24 +103,14 @@ describe('shouldUseToolsForMessage', () => {
   });
 
   describe('read_url tool', () => {
-    it('triggers on URL in message', () => {
-      expect(shouldUseToolsForMessage('Check https://example.com', ['read_url'])).toBe(true);
-    });
-
-    it('triggers on HTTP URL', () => {
-      expect(shouldUseToolsForMessage('Open http://test.org', ['read_url'])).toBe(true);
-    });
-
-    it('triggers on "read this url" phrase', () => {
-      expect(shouldUseToolsForMessage('Read this url please', ['read_url'])).toBe(true);
-    });
-
-    it('triggers on "summarize this link" phrase', () => {
-      expect(shouldUseToolsForMessage('Summarize this link', ['read_url'])).toBe(true);
-    });
-
-    it('triggers on "fetch this page" phrase', () => {
-      expect(shouldUseToolsForMessage('Fetch this page', ['read_url'])).toBe(true);
+    test.each([
+      ['URL in message', 'Check https://example.com'],
+      ['HTTP URL', 'Open http://test.org'],
+      ['"read this url" phrase', 'Read this url please'],
+      ['"summarize this link" phrase', 'Summarize this link'],
+      ['"fetch this page" phrase', 'Fetch this page'],
+    ])('triggers on %s', (_label, message) => {
+      expect(shouldUseToolsForMessage(message, ['read_url'])).toBe(true);
     });
 
     it('does not trigger without URL keywords', () => {
