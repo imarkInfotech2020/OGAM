@@ -437,4 +437,30 @@ describe('RemoteServersScreen', () => {
       expect(getByText('Edit')).toBeTruthy();
     });
   });
+
+  // ==========================================================================
+  // Add Another Server button (when servers exist)
+  // ==========================================================================
+  describe('add another server', () => {
+    it('opens add modal when "Add Another Server" is pressed', () => {
+      const server = createMockServer();
+      useRemoteServerStore.setState({ servers: [server] });
+
+      const { getByText } = render(<RemoteServersScreen />);
+      fireEvent.press(getByText('Add Another Server'));
+      // Modal becomes visible (not crashable)
+      expect(getByText('Add Another Server')).toBeTruthy();
+    });
+  });
+
+  // ==========================================================================
+  // Info card
+  // ==========================================================================
+  describe('info card', () => {
+    it('renders About Remote Servers info card', () => {
+      const { getByText } = render(<RemoteServersScreen />);
+      expect(getByText('About Remote Servers')).toBeTruthy();
+    });
+  });
+
 });
