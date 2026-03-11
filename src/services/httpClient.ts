@@ -291,9 +291,7 @@ export async function createStreamingRequest(
     // XMLHttpRequest is required for SSE streaming in React Native as fetch
     // does not support real-time streaming with progress events.
     // Requests are validated by isPrivateNetworkEndpoint before use.
-    /* eslint-disable no-restricted-globals */
-    const xhr = new XMLHttpRequest();
-    /* eslint-enable no-restricted-globals */
+    const xhr = new XMLHttpRequest(); // NOSONAR
 
     const timeoutId = setTimeout(() => {
       xhr.abort();
