@@ -184,7 +184,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
   // Form state
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [notes, setNotes] = useState('');
 
   // Validation state
@@ -204,7 +203,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
       // Reset form for new server
       setName('');
       setEndpoint('');
-      setApiKey('');
       setNotes('');
     }
     setErrors({});
@@ -242,7 +240,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
     setDiscoveredModels([]);
 
     try {
-      const result = await remoteServerManager.testConnectionByEndpoint(endpoint, apiKey || undefined);
+      const result = await remoteServerManager.testConnectionByEndpoint(endpoint);
 
       if (result.success) {
         setTestResult({ success: true, message: `Connected (${result.latency}ms)` });
@@ -260,7 +258,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
     } finally {
       setIsTesting(false);
     }
-  }, [endpoint, apiKey, validateForm]);
+  }, [endpoint, validateForm]);
 
   const handleSave = useCallback(async () => {
     if (!validateForm()) return;
@@ -289,7 +287,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
           name,
           endpoint,
           notes,
-          ...(apiKey ? { apiKey } : {}),
         });
         // Save discovered models to store
         if (discoveredModels.length > 0) {
@@ -301,7 +298,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         const newServer = await remoteServerManager.addServer({
           name,
           endpoint,
-          apiKey: apiKey || undefined,
           providerType: 'openai-compatible',
           notes: notes || undefined,
         });
@@ -318,7 +314,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         error instanceof Error ? error.message : 'Failed to save server'
       );
     }
-  }, [server, name, endpoint, apiKey, notes, discoveredModels, onSave, onClose]);
+  }, [server, name, endpoint, notes, discoveredModels, onSave, onClose]);
 
   const isPublicNetwork = endpoint && !isPrivateNetworkEndpoint(endpoint);
 
@@ -363,21 +359,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         )}
         <Text style={styles.helperText}>
           Enter the base URL of your LLM server (Ollama, LM Studio, etc.)
-        </Text>
-
-        <Text style={styles.label}>API Key (Optional)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Leave empty for local servers"
-          placeholderTextColor={theme.colors.textMuted}
-          value={apiKey}
-          onChangeText={setApiKey}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-        />
-        <Text style={styles.helperText}>
-          Required for servers that need authentication
         </Text>
 
         <Text style={styles.label}>Notes (Optional)</Text>

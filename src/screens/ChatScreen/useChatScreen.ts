@@ -230,9 +230,18 @@ export const useChatScreen = () => {
 
   useEffect(() => {
     const loaded = llmService.isModelLoaded();
-    setSupportsToolCalling(loaded ? llmService.supportsToolCalling() : false);
-    setSupportsThinking(loaded ? llmService.supportsThinking() : false);
-  }, [activeModelId, isModelLoading]);
+    if (loaded) {
+      setSupportsToolCalling(llmService.supportsToolCalling());
+      setSupportsThinking(llmService.supportsThinking());
+    } else if (activeRemoteTextModelId) {
+      // Remote models support tool calling via OpenAI-compatible API
+      setSupportsToolCalling(true);
+      setSupportsThinking(false);
+    } else {
+      setSupportsToolCalling(false);
+      setSupportsThinking(false);
+    }
+  }, [activeModelId, isModelLoading, activeRemoteTextModelId]);
 
   const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation });
 

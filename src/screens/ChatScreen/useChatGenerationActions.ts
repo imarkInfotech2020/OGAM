@@ -22,7 +22,7 @@ import {
   retrievalService,
 } from '../../services';
 import { embeddingService } from '../../services/rag/embedding';
-import { useChatStore, useProjectStore } from '../../stores';
+import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
 import { shouldUseToolsForMessage } from './toolUsage';
@@ -224,8 +224,10 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
 }
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabledTools: string[]; rawPrompt: string } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
-  let enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
-  if (conversation?.projectId && llmService.supportsToolCalling() && !enabledTools.includes('search_knowledge_base')) {
+  const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+  const canUseTools = llmService.supportsToolCalling() || !!(activeServerId && activeRemoteTextModelId);
+  let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
+  if (conversation?.projectId && canUseTools && !enabledTools.includes('search_knowledge_base')) {
     enabledTools = [...enabledTools, 'search_knowledge_base'];
   }
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
@@ -257,8 +259,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  const activeTools = shouldUseToolsForMessage(messageText, enabledTools) ? enabledTools : [];
-  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  // Remote models use native tool_choice: 'auto' — skip heuristic gate and always pass enabled tools
+  const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
+  const activeTools = (isRemote || shouldUseToolsForMessage(messageText, enabledTools)) ? enabledTools : [];
+  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
@@ -336,9 +340,10 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const messages = (conversation?.messages || []).filter((m: Message) => !m.isSystemInfo);
   const messagesUpToUser = messages.slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
-  const activeTools = shouldUseToolsForMessage(userMessage.content, enabledTools) ? enabledTools : [];
+  const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
+  const activeTools = (isRemote || shouldUseToolsForMessage(userMessage.content, enabledTools)) ? enabledTools : [];
   const basePrompt = await injectRagContext(conversation?.projectId, userMessage.content, rawPrompt);
-  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);

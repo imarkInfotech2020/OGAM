@@ -50,6 +50,7 @@ jest.mock('../../../src/services/providers', () => ({
   providerRegistry: {
     getProvider: jest.fn(),
     getActiveProvider: jest.fn(),
+    hasProvider: jest.fn(() => false),
   },
 }));
 
@@ -803,6 +804,8 @@ describe('generationService', () => {
       });
       mockedProviderRegistry.getProvider.mockReturnValue(undefined);
       mockedProviderRegistry.getActiveProvider.mockReturnValue(mockRemoteProvider as any);
+      (mockedProviderRegistry as any).hasProvider = jest.fn(() => true);
+      mockedLlmService.isModelLoaded.mockReturnValue(false);
     });
 
     afterEach(() => {
