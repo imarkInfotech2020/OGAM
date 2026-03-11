@@ -184,6 +184,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       let fullReasoningContent = '';
       let toolCalls: OpenAIToolCall[] = [];
       let currentToolCall: Partial<OpenAIToolCall> | null = null;
+      let completeCalled = false;
 
       await createStreamingRequest(
         url,
@@ -254,6 +255,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
             // Check for finish reason
             if (choice.finish_reason === 'stop' || choice.finish_reason === 'tool_calls') {
               // Generation complete
+              completeCalled = true;
               callbacks.onComplete({
                 content: fullContent,
                 reasoningContent: fullReasoningContent || undefined,
@@ -272,6 +274,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
         },
         300000 // 5 minute timeout
       );
+
+      // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
+      // 'content_filter', null), ensure the generation is finalised.
+      if (!completeCalled) {
+        callbacks.onComplete({
+          content: fullContent,
+          reasoningContent: fullReasoningContent || undefined,
+          meta: { gpu: false, gpuBackend: 'Remote' },
+          toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
+            id: tc.id,
+            name: tc.function.name,
+            arguments: tc.function.arguments,
+          })) : undefined,
+        });
+      }
     } catch (error) {
       if (this.abortController?.signal.aborted) {
         // Cancelled by user

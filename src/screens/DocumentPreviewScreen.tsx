@@ -16,23 +16,24 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { documentService } from '../services';
 import { RootStackParamList } from '../navigation/types';
+import logger from '../utils/logger';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'DocumentPreview'>;
 
 // Decode URL-encoded file paths (e.g., %20 -> space)
 const decodeFilePath = (path: string): string => {
-  console.log('[decodeFilePath] Input:', path);
+  logger.log('[decodeFilePath] Input:', path);
   try {
     // First decode URL encoding
     let decoded = decodeURIComponent(path);
-    console.log('[decodeFilePath] After decodeURIComponent:', decoded);
+    logger.log('[decodeFilePath] After decodeURIComponent:', decoded);
     // Then strip file:// prefix if present (RNFS needs a plain path)
     decoded = decoded.replace(/^file:\/\//, '');
-    console.log('[decodeFilePath] After stripping file://:', decoded);
+    logger.log('[decodeFilePath] After stripping file://:', decoded);
     return decoded;
   } catch {
-    console.log('[decodeFilePath] Decode failed, returning original:', path);
+    logger.log('[decodeFilePath] Decode failed, returning original:', path);
     return path;
   }
 };
@@ -115,14 +116,14 @@ export const DocumentPreviewScreen: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      console.log('[DocumentPreview] ===== Loading document =====');
-      console.log('[DocumentPreview] Original filePath param:', filePath);
-      console.log('[DocumentPreview] fileName:', fileName);
-      console.log('[DocumentPreview] RNFS.DocumentDirectoryPath:', RNFS.DocumentDirectoryPath);
+      logger.log('[DocumentPreview] ===== Loading document =====');
+      logger.log('[DocumentPreview] Original filePath param:', filePath);
+      logger.log('[DocumentPreview] fileName:', fileName);
+      logger.log('[DocumentPreview] RNFS.DocumentDirectoryPath:', RNFS.DocumentDirectoryPath);
 
       // Decode URL-encoded path (e.g., %20 -> space)
       const decodedPath = decodeFilePath(filePath);
-      console.log('[DocumentPreview] Decoded path:', decodedPath);
+      logger.log('[DocumentPreview] Decoded path:', decodedPath);
 
       // Build potential paths to try
       const pathsToTry: string[] = [decodedPath];
@@ -141,43 +142,43 @@ export const DocumentPreviewScreen: React.FC = () => {
         pathsToTry.push(`${documentsPath}/${strippedName}`);
       }
 
-      console.log('[DocumentPreview] Paths to try:', pathsToTry);
+      logger.log('[DocumentPreview] Paths to try:', pathsToTry);
 
       let foundPath: string | null = null;
       for (const tryPath of pathsToTry) {
         try {
           const exists = await RNFS.exists(tryPath);
-          console.log(`[DocumentPreview] Checking ${tryPath}: ${exists}`);
+          logger.log(`[DocumentPreview] Checking ${tryPath}: ${exists}`);
           if (exists) {
             foundPath = tryPath;
             break;
           }
         } catch (e) {
-          console.log(`[DocumentPreview] Error checking path ${tryPath}:`, e);
+          logger.log(`[DocumentPreview] Error checking path ${tryPath}:`, e);
         }
       }
 
       if (!foundPath) {
-        console.error('[DocumentPreview] File not found in any location');
+        logger.error('[DocumentPreview] File not found in any location');
         setError('File not found. The document may have been stored in a previous app installation. Please re-upload the document.');
         return;
       }
 
-      console.log('[DocumentPreview] Found file at:', foundPath);
+      logger.log('[DocumentPreview] Found file at:', foundPath);
       const attachment = await documentService.processDocumentFromPath(foundPath, fileName);
-      console.log('[DocumentPreview] Attachment result:', attachment ? 'success' : 'null');
+      logger.log('[DocumentPreview] Attachment result:', attachment ? 'success' : 'null');
 
       if (attachment?.textContent) {
-        console.log('[DocumentPreview] Text content length:', attachment.textContent.length);
+        logger.log('[DocumentPreview] Text content length:', attachment.textContent.length);
         setContent(attachment.textContent);
       } else {
-        console.log('[DocumentPreview] No text content in attachment');
+        logger.log('[DocumentPreview] No text content in attachment');
         setError('Could not extract text from this document');
       }
     } catch (err: any) {
-      console.error('[DocumentPreview] ===== Error loading document =====');
-      console.error('[DocumentPreview] Error message:', err?.message);
-      console.error('[DocumentPreview] Error stack:', err?.stack);
+      logger.error('[DocumentPreview] ===== Error loading document =====');
+      logger.error('[DocumentPreview] Error message:', err?.message);
+      logger.error('[DocumentPreview] Error stack:', err?.stack);
       setError(err?.message || 'Failed to load document');
     } finally {
       setIsLoading(false);

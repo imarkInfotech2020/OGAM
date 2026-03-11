@@ -1,5 +1,5 @@
-/* eslint-disable max-lines, max-lines-per-function */
-import { useCallback, useEffect, useRef, useState } from 'react';
+/* eslint-disable max-lines-per-function */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, showAlert, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
@@ -87,7 +87,7 @@ export const useChatScreen = () => {
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
   // Compute active model from either local or remote source
-  const getActiveModelInfo = useCallback((): ActiveModelInfo => {
+  const activeModelInfo = useMemo((): ActiveModelInfo => {
     // Check for remote model first
     if (activeServerId && activeRemoteTextModelId) {
       const serverModels = discoveredModels[activeServerId] || [];
@@ -100,12 +100,7 @@ export const useChatScreen = () => {
           modelName: remoteModel.name,
         };
       }
-      // Debug: remote model not found
-      console.log('[ChatScreen] Remote model not found:', {
-        activeServerId,
-        activeRemoteTextModelId,
-        availableModels: serverModels.map(m => ({ id: m.id, name: m.name })),
-      });
+      logger.warn('[ChatScreen] Remote model not found:', activeServerId, activeRemoteTextModelId);
     }
     // Fall back to local model
     const localModel = downloadedModels.find(m => m.id === activeModelId);
@@ -117,19 +112,9 @@ export const useChatScreen = () => {
         modelName: localModel.name,
       };
     }
-    // Debug: no model found
-    console.log('[ChatScreen] No active model found:', {
-      activeServerId,
-      activeRemoteTextModelId,
-      activeModelId,
-      discoveredModelsKeys: Object.keys(discoveredModels),
-    });
     return { isRemote: false, model: null, modelId: null, modelName: 'Unknown' };
   }, [activeServerId, activeRemoteTextModelId, discoveredModels, activeModelId, downloadedModels]);
 
-  const activeModelInfo = getActiveModelInfo();
-  // Debug: log active model info
-  console.log('[ChatScreen] activeModelInfo:', { modelId: activeModelInfo.modelId, isRemote: activeModelInfo.isRemote, modelName: activeModelInfo.modelName });
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote ? undefined : (activeModelInfo.model as DownloadedModel | undefined);
   const activeRemoteModel = activeModelInfo.isRemote ? (activeModelInfo.model as RemoteModel | null) : null;

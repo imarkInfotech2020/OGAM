@@ -335,7 +335,7 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
 
 async function handleSearchKnowledgeBase(query: string, projectId?: string): Promise<string> {
   if (!projectId) return 'No project context. Knowledge base requires an active project.';
-  const { ragService } = require('../rag');
+  const { ragService } = require('../rag'); // NOSONAR
   const result = await ragService.searchProject(projectId, query);
   if (result.chunks.length === 0) return `No results found for "${query}" in the knowledge base.`;
   return result.chunks

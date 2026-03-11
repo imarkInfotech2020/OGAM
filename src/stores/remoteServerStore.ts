@@ -122,7 +122,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             Object.entries(prev.discoveredModels).filter(([key]) => key !== id)
           ),
           serverHealth: Object.fromEntries(
-            Object.entries(state.serverHealth).filter(([key]) => key !== id)
+            Object.entries(prev.serverHealth).filter(([key]) => key !== id)
           ),
         }));
         logger.log('[RemoteServer] Removed server:', id);
