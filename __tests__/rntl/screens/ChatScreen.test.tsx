@@ -1367,7 +1367,8 @@ describe('ChatScreen', () => {
       expect(queryByTestId('model-selector-modal')).toBeNull();
     });
 
-    it('handles model selection with memory check', async () => {
+    // Shared setup: two models in store, first one active, for model-switching tests
+    function setupTwoModelChat() {
       const model1 = createDownloadedModel({ id: 'model-1', name: 'Model A' });
       const model2 = createDownloadedModel({ id: 'model-2', name: 'Model B' });
       useAppStore.setState({
@@ -1378,6 +1379,11 @@ describe('ChatScreen', () => {
       const conv = createConversation({ modelId: model1.id });
       useChatStore.setState({ conversations: [conv], activeConversationId: conv.id });
       mockRoute.params = { conversationId: conv.id };
+      return { model1, model2, conv };
+    }
+
+    it('handles model selection with memory check', async () => {
+      setupTwoModelChat();
 
       (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
         canLoad: true,
@@ -1398,16 +1404,7 @@ describe('ChatScreen', () => {
     });
 
     it('shows alert when memory check fails', async () => {
-      const model1 = createDownloadedModel({ id: 'model-1', name: 'Model A' });
-      const model2 = createDownloadedModel({ id: 'model-2', name: 'Model B' });
-      useAppStore.setState({
-        downloadedModels: [model1, model2],
-        activeModelId: model1.id,
-        hasCompletedOnboarding: true,
-      });
-      const conv = createConversation({ modelId: model1.id });
-      useChatStore.setState({ conversations: [conv], activeConversationId: conv.id });
-      mockRoute.params = { conversationId: conv.id };
+      setupTwoModelChat();
 
       (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
         canLoad: false,
@@ -1428,16 +1425,7 @@ describe('ChatScreen', () => {
     });
 
     it('shows warning alert with Load Anyway option for low memory', async () => {
-      const model1 = createDownloadedModel({ id: 'model-1', name: 'Model A' });
-      const model2 = createDownloadedModel({ id: 'model-2', name: 'Model B' });
-      useAppStore.setState({
-        downloadedModels: [model1, model2],
-        activeModelId: model1.id,
-        hasCompletedOnboarding: true,
-      });
-      const conv = createConversation({ modelId: model1.id });
-      useChatStore.setState({ conversations: [conv], activeConversationId: conv.id });
-      mockRoute.params = { conversationId: conv.id };
+      setupTwoModelChat();
 
       (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
         canLoad: true,
@@ -1539,7 +1527,8 @@ describe('ChatScreen', () => {
   // Conversation with Images
   // ============================================================================
   describe('conversation with images', () => {
-    it('counts images in conversation messages', () => {
+    // Shared setup: conversation with an assistant image attachment
+    function setupChatWithAssistantImage() {
       const { modelId, conversationId } = setupFullChat();
       const imageAttachment = createImageAttachment({ uri: 'file:///img1.png' });
       useChatStore.setState({
@@ -1548,14 +1537,17 @@ describe('ChatScreen', () => {
           modelId,
           messages: [
             createUserMessage('Draw a cat'),
-            createAssistantMessage('Here is your image', {
-              attachments: [imageAttachment],
-            }),
+            createAssistantMessage('Here is your image', { attachments: [imageAttachment] }),
           ],
         })],
         activeConversationId: conversationId,
       });
       mockRoute.params = { conversationId };
+      return { modelId, conversationId };
+    }
+
+    it('counts images in conversation messages', () => {
+      setupChatWithAssistantImage();
 
       const { getByTestId } = renderChatScreen();
       fireEvent.press(getByTestId('chat-settings-icon'));
@@ -1646,10 +1638,12 @@ describe('ChatScreen', () => {
   // Retry and Edit Messages
   // ============================================================================
   describe('retry and edit messages', () => {
-    it('retries a user message - deletes subsequent messages', async () => {
+    // Shared setup for retry/edit tests: loads a conversation with two messages into the store
+    // and configures llmService to report the model as loaded.
+    function setupRetryEditChat(userMsgText: string, assistantMsgText: string) {
       const { modelId, conversationId } = setupFullChat();
-      const userMsg = createUserMessage('Tell me a joke');
-      const assistantMsg = createAssistantMessage('Why did the chicken...');
+      const userMsg = createUserMessage(userMsgText);
+      const assistantMsg = createAssistantMessage(assistantMsgText);
       useChatStore.setState({
         conversations: [createConversation({
           id: conversationId,
@@ -1659,13 +1653,16 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
       mockRoute.params = { conversationId };
-
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(
         useAppStore.getState().downloadedModels[0].filePath
       );
       (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
-
       const { getByTestId } = renderChatScreen();
+      return { userMsg, assistantMsg, conversationId, getByTestId };
+    }
+
+    it('retries a user message - deletes subsequent messages', async () => {
+      const { userMsg, assistantMsg, conversationId, getByTestId } = setupRetryEditChat('Tell me a joke', 'Why did the chicken...');
 
       await act(async () => {
         fireEvent.press(getByTestId(`retry-${userMsg.id}`));
@@ -1678,25 +1675,7 @@ describe('ChatScreen', () => {
     });
 
     it('retries an assistant message by finding previous user message', async () => {
-      const { modelId, conversationId } = setupFullChat();
-      const userMsg = createUserMessage('Tell me a joke');
-      const assistantMsg = createAssistantMessage('Why did the chicken...');
-      useChatStore.setState({
-        conversations: [createConversation({
-          id: conversationId,
-          modelId,
-          messages: [userMsg, assistantMsg],
-        })],
-        activeConversationId: conversationId,
-      });
-      mockRoute.params = { conversationId };
-
-      (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(
-        useAppStore.getState().downloadedModels[0].filePath
-      );
-      (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
-
-      const { getByTestId } = renderChatScreen();
+      const { assistantMsg, conversationId, getByTestId } = setupRetryEditChat('Tell me a joke', 'Why did the chicken...');
 
       await act(async () => {
         fireEvent.press(getByTestId(`retry-${assistantMsg.id}`));
@@ -1711,25 +1690,7 @@ describe('ChatScreen', () => {
     });
 
     it('edits a message and updates its content', async () => {
-      const { modelId, conversationId } = setupFullChat();
-      const userMsg = createUserMessage('Original content');
-      const assistantMsg = createAssistantMessage('Original response');
-      useChatStore.setState({
-        conversations: [createConversation({
-          id: conversationId,
-          modelId,
-          messages: [userMsg, assistantMsg],
-        })],
-        activeConversationId: conversationId,
-      });
-      mockRoute.params = { conversationId };
-
-      (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(
-        useAppStore.getState().downloadedModels[0].filePath
-      );
-      (llmService.isModelLoaded as jest.Mock).mockReturnValue(true);
-
-      const { getByTestId } = renderChatScreen();
+      const { userMsg, conversationId, getByTestId } = setupRetryEditChat('Original content', 'Original response');
 
       await act(async () => {
         fireEvent.press(getByTestId(`edit-${userMsg.id}`));
@@ -1747,34 +1708,8 @@ describe('ChatScreen', () => {
   // Image Viewer
   // ============================================================================
   describe('image viewer', () => {
-    it('opens fullscreen image viewer when image is pressed', async () => {
-      const { modelId, conversationId } = setupFullChat();
-      const imageAttachment = createImageAttachment({ uri: 'file:///test.png' });
-      const userMsg = createUserMessage('Image', { attachments: [imageAttachment] });
-      useChatStore.setState({
-        conversations: [createConversation({
-          id: conversationId,
-          modelId,
-          messages: [userMsg],
-        })],
-        activeConversationId: conversationId,
-      });
-      mockRoute.params = { conversationId };
-
-      const { getByTestId, getByText } = renderChatScreen();
-
-      await act(async () => {
-        fireEvent.press(getByTestId(`image-press-${userMsg.id}`));
-      });
-
-      // Image viewer should show Save and Close buttons
-      await waitFor(() => {
-        expect(getByText('Save')).toBeTruthy();
-        expect(getByText('Close')).toBeTruthy();
-      });
-    });
-
-    it('closes image viewer when Close is pressed', async () => {
+    // Shared setup: conversation with a single image-attachment message, model loaded
+    function setupImageViewerChat() {
       const { modelId, conversationId } = setupFullChat();
       const model = useAppStore.getState().downloadedModels[0];
       (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(model.filePath);
@@ -1789,7 +1724,26 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
       mockRoute.params = { conversationId };
+      return { userMsg, modelId, conversationId };
+    }
 
+    it('opens fullscreen image viewer when image is pressed', async () => {
+      const { userMsg } = setupImageViewerChat();
+      const { getByTestId, getByText } = renderChatScreen();
+
+      await act(async () => {
+        fireEvent.press(getByTestId(`image-press-${userMsg.id}`));
+      });
+
+      // Image viewer should show Save and Close buttons
+      await waitFor(() => {
+        expect(getByText('Save')).toBeTruthy();
+        expect(getByText('Close')).toBeTruthy();
+      });
+    });
+
+    it('closes image viewer when Close is pressed', async () => {
+      const { userMsg } = setupImageViewerChat();
       const { getByTestId, getByText, queryByText } = renderChatScreen();
 
       await act(async () => {
@@ -1810,21 +1764,7 @@ describe('ChatScreen', () => {
 
     it('saves image when Save is pressed', async () => {
       const RNFS = require('react-native-fs');
-      const { modelId, conversationId } = setupFullChat();
-      const model = useAppStore.getState().downloadedModels[0];
-      (llmService.getLoadedModelPath as jest.Mock).mockReturnValue(model.filePath);
-      const imageAttachment = createImageAttachment({ uri: 'file:///test.png' });
-      const userMsg = createUserMessage('Image', { attachments: [imageAttachment] });
-      useChatStore.setState({
-        conversations: [createConversation({
-          id: conversationId,
-          modelId,
-          messages: [userMsg],
-        })],
-        activeConversationId: conversationId,
-      });
-      mockRoute.params = { conversationId };
-
+      const { userMsg } = setupImageViewerChat();
       const { getByTestId, getByText } = renderChatScreen();
 
       await act(async () => {

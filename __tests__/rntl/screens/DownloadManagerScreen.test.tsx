@@ -132,6 +132,18 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({
 
 import { DownloadManagerScreen } from '../../../src/screens/DownloadManagerScreen';
 
+// Standard model fixture used across many tests
+const standardModel = {
+  id: 'model-1',
+  name: 'Model',
+  author: 'author',
+  fileName: 'model.gguf',
+  filePath: '/path',
+  fileSize: 1024,
+  quantization: 'Q4_K_M',
+  downloadedAt: '2026-01-15T00:00:00.000Z',
+};
+
 // Default store state
 const createDefaultState = (overrides: any = {}) => ({
   downloadedModels: [],
@@ -148,6 +160,20 @@ const createDefaultState = (overrides: any = {}) => ({
   themeMode: 'system',
   ...overrides,
 });
+
+// Helper: set up store with a single standard model and mock hardware service
+const setupSingleModelState = (extras: any = {}, modelSize = 1024) => {
+  const state = createDefaultState({
+    downloadedModels: [{ ...standardModel, ...extras.modelOverrides }],
+    ...extras,
+  });
+  delete state.modelOverrides;
+  mockUseAppStore.mockImplementation((selector?: any) => {
+    return selector ? selector(state) : state;
+  });
+  mockHardwareService.getModelTotalSize.mockReturnValue(modelSize);
+  return state;
+};
 
 describe('DownloadManagerScreen', () => {
   beforeEach(() => {
@@ -270,48 +296,14 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('shows storage total when models exist', () => {
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024 * 1024 * 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024 * 1024 * 1024);
+    setupSingleModelState({ modelOverrides: { fileSize: 1024 * 1024 * 1024 } }, 1024 * 1024 * 1024);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText(/Total storage used/)).toBeTruthy();
   });
 
   it('shows count badges for active and completed sections', () => {
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState();
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('0')).toBeTruthy();
@@ -320,25 +312,7 @@ describe('DownloadManagerScreen', () => {
 
   it('pressing delete button on completed model shows confirmation alert', () => {
     const removeDownloadedModel = jest.fn();
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-      removeDownloadedModel,
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState({ removeDownloadedModel });
 
     const { getAllByTestId } = render(<DownloadManagerScreen />);
     const deleteButtons = getAllByTestId('delete-model-button');
@@ -719,25 +693,7 @@ describe('DownloadManagerScreen', () => {
 
   it('confirming delete model calls deleteModel and removeDownloadedModel', async () => {
     const removeDownloadedModel = jest.fn();
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-      removeDownloadedModel,
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState({ removeDownloadedModel });
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
 
@@ -757,25 +713,7 @@ describe('DownloadManagerScreen', () => {
 
   it('delete model error shows error alert', async () => {
     const removeDownloadedModel = jest.fn();
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-      removeDownloadedModel,
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState({ removeDownloadedModel });
     mockModelManager.deleteModel.mockRejectedValueOnce(new Error('fail'));
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
@@ -1015,24 +953,7 @@ describe('DownloadManagerScreen', () => {
 
   it('alert onClose calls hideAlert', () => {
     // Need to trigger an alert first
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState();
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     const deleteButtons = getAllByTestId('delete-model-button');
@@ -1044,24 +965,7 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('pressing Cancel on delete model alert does nothing (cancel style)', () => {
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState();
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     const deleteButtons = getAllByTestId('delete-model-button');
@@ -1236,24 +1140,7 @@ describe('DownloadManagerScreen', () => {
   it('pressing delete on text model when model id does not match store does nothing (covers if(model) false branch at line 413-414)', () => {
     // Similarly for text models: render with model present (confirming the guard works when model IS found),
     // then verify no buttons exist when model is absent.
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-1',
-          name: 'Model',
-          author: 'author',
-          fileName: 'model.gguf',
-          filePath: '/path',
-          fileSize: 1024,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(1024);
+    setupSingleModelState();
 
     const { getAllByTestId } = render(<DownloadManagerScreen />);
     const deleteButtons = getAllByTestId('delete-model-button');
@@ -1274,24 +1161,7 @@ describe('DownloadManagerScreen', () => {
 
   it('formatBytes returns "0 B" for zero bytes (covers line 545 branch)', () => {
     // A completed model with fileSize of 0 triggers formatBytes(0) which returns '0 B'
-    const state = createDefaultState({
-      downloadedModels: [
-        {
-          id: 'model-zero',
-          name: 'Zero Model',
-          author: 'author',
-          fileName: 'zero-model.gguf',
-          filePath: '/path',
-          fileSize: 0,
-          quantization: 'Q4_K_M',
-          downloadedAt: '2026-01-15T00:00:00.000Z',
-        },
-      ],
-    });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
-    mockHardwareService.getModelTotalSize.mockReturnValue(0);
+    setupSingleModelState({ modelOverrides: { id: 'model-zero', name: 'Zero Model', fileName: 'zero-model.gguf', fileSize: 0 } }, 0);
 
     const { getByText } = render(<DownloadManagerScreen />);
     // The size display for a 0-byte model shows '0 B'

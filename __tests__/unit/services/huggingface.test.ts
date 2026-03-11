@@ -350,17 +350,18 @@ describe('HuggingFaceService', () => {
   // searchModels (with fetch mock)
   // ============================================================================
   describe('searchModels', () => {
+    let mockFetch: jest.Mock;
+
     beforeEach(() => {
       jest.clearAllMocks();
-    });
-
-    it('sends request with gguf filter', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
+      mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve([]),
       });
       global.fetch = mockFetch;
+    });
 
+    it('sends request with gguf filter', async () => {
       await huggingFaceService.searchModels();
 
       const url = mockFetch.mock.calls[0][0];
@@ -368,12 +369,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('appends search param when query provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('llama');
 
       const url = mockFetch.mock.calls[0][0];
@@ -381,12 +376,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('does not append search param for empty query', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('');
 
       const url = mockFetch.mock.calls[0][0];
@@ -403,12 +392,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('respects limit option', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('', { limit: 10 });
 
       const url = mockFetch.mock.calls[0][0];
@@ -416,12 +399,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('appends pipeline_tag when pipelineTag option is provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('', { pipelineTag: 'image-text-to-text' });
 
       const url = mockFetch.mock.calls[0][0];
@@ -429,12 +406,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('does not append pipeline_tag when option is not provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('test');
 
       const url = mockFetch.mock.calls[0][0];
@@ -442,12 +413,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('combines query and pipeline_tag in the same request', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      global.fetch = mockFetch;
-
       await huggingFaceService.searchModels('qwen', { pipelineTag: 'image-text-to-text' });
 
       const url = mockFetch.mock.calls[0][0];

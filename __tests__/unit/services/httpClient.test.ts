@@ -477,6 +477,39 @@ describe('httpClient', () => {
   describe('imageToBase64DataUrl', () => {
     const RNFS = require('react-native-fs');
 
+    // Helper: mock the FileReader global with a success result
+    function mockFileReaderSuccess(result = 'data:image/png;base64,encoded') {
+      const mockReader = {
+        readAsDataURL: jest.fn(function(this: any) {
+          setTimeout(() => {
+            this.result = result;
+            if (this.onload) this.onload({ target: this });
+          }, 0);
+        }),
+        onload: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        result: null as string | null,
+      };
+      (global as any).FileReader = jest.fn(() => mockReader);
+      return mockReader;
+    }
+
+    // Helper: mock the FileReader global to trigger an error
+    function mockFileReaderError() {
+      const mockReader = {
+        readAsDataURL: jest.fn(function(this: any) {
+          setTimeout(() => {
+            if (this.onerror) this.onerror({ target: this });
+          }, 0);
+        }),
+        onload: null as ((event: any) => void) | null,
+        onerror: null as ((event: any) => void) | null,
+        result: null as string | null,
+      };
+      (global as any).FileReader = jest.fn(() => mockReader);
+      return mockReader;
+    }
+
     beforeEach(() => {
       jest.clearAllMocks();
     });
@@ -550,20 +583,7 @@ describe('httpClient', () => {
         blob: () => Promise.resolve(mockBlob),
       } as unknown as Response);
 
-      // Mock FileReader with proper event handling
-      const mockReader = {
-        readAsDataURL: jest.fn(function(this: any) {
-          // Simulate async completion
-          setTimeout(() => {
-            this.result = 'data:image/png;base64,encoded';
-            if (this.onload) this.onload({ target: this });
-          }, 0);
-        }),
-        onload: null as ((event: any) => void) | null,
-        onerror: null as ((event: any) => void) | null,
-        result: null as string | null,
-      };
-      (global as any).FileReader = jest.fn(() => mockReader);
+      mockFileReaderSuccess();
 
       const result = await imageToBase64DataUrl('http://example.com/image.png');
 
@@ -589,18 +609,7 @@ describe('httpClient', () => {
         blob: () => Promise.resolve(mockBlob),
       } as unknown as Response);
 
-      // Mock FileReader with error
-      const mockReader = {
-        readAsDataURL: jest.fn(function(this: any) {
-          setTimeout(() => {
-            if (this.onerror) this.onerror({ target: this });
-          }, 0);
-        }),
-        onload: null as ((event: any) => void) | null,
-        onerror: null as ((event: any) => void) | null,
-        result: null as string | null,
-      };
-      (global as any).FileReader = jest.fn(() => mockReader);
+      mockFileReaderError();
 
       await expect(imageToBase64DataUrl('http://example.com/image.png')).rejects.toThrow('Failed to read image as base64');
     });
@@ -810,6 +819,22 @@ describe('httpClient', () => {
       return createStreamingRequest(TEST_ENDPOINT, { model: 'test' }, headers, (e) => streamEvents.push(e));
     }
 
+    // Helper: simulate a progress event with given SSE response text
+    function simulateProgress(responseText: string) {
+      mockXHR.responseText = responseText;
+      mockXHR.status = 200;
+      mockXHR.readyState = 3;
+      if (onProgress) onProgress();
+    }
+
+    // Helper: simulate request completion with given SSE response text
+    function simulateComplete(responseText: string) {
+      mockXHR.responseText = responseText;
+      mockXHR.status = 200;
+      mockXHR.readyState = 4;
+      if (onReadyStateChange) onReadyStateChange();
+    }
+
     it('should make POST request with correct headers', async () => {
       const _promise = startStream({ 'Authorization': 'Bearer token' });
 
@@ -823,14 +848,7 @@ describe('httpClient', () => {
     it('should parse SSE events on progress', async () => {
       const _promise = startStream();
 
-      // Simulate progress event
-      mockXHR.responseText = 'data: {"text":"hello"}\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 3;
-
-      if (onProgress) {
-        onProgress();
-      }
+      simulateProgress('data: {"text":"hello"}\n\n');
 
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].data).toBe('{"text":"hello"}');
@@ -839,13 +857,7 @@ describe('httpClient', () => {
     it('should resolve on successful completion', async () => {
       const promise = startStream();
 
-      mockXHR.responseText = 'data: final\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
+      simulateComplete('data: final\n\n');
 
       await expect(promise).resolves.toBeUndefined();
     });
@@ -856,10 +868,7 @@ describe('httpClient', () => {
       mockXHR.responseText = 'Internal Server Error';
       mockXHR.status = 500;
       mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
+      if (onReadyStateChange) onReadyStateChange();
 
       await expect(promise).rejects.toThrow('HTTP 500');
     });
@@ -886,15 +895,7 @@ describe('httpClient', () => {
 
     it('should handle events with event type', async () => {
       const _promise = startStream();
-
-      mockXHR.responseText = 'event: message\ndata: {"text":"hello"}\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 3;
-
-      if (onProgress) {
-        onProgress();
-      }
-
+      simulateProgress('event: message\ndata: {"text":"hello"}\n\n');
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].event).toBe('message');
       expect(streamEvents[0].data).toBe('{"text":"hello"}');
@@ -902,15 +903,7 @@ describe('httpClient', () => {
 
     it('should handle events with id field', async () => {
       const _promise = startStream();
-
-      mockXHR.responseText = 'id: 123\ndata: hello\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 3;
-
-      if (onProgress) {
-        onProgress();
-      }
-
+      simulateProgress('id: 123\ndata: hello\n\n');
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].id).toBe('123');
       expect(streamEvents[0].data).toBe('hello');
@@ -918,32 +911,15 @@ describe('httpClient', () => {
 
     it('should handle multi-line data', async () => {
       const _promise = startStream();
-
-      mockXHR.responseText = 'data: line1\ndata: line2\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 3;
-
-      if (onProgress) {
-        onProgress();
-      }
-
+      simulateProgress('data: line1\ndata: line2\n\n');
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].data).toBe('line1\nline2');
     });
 
     it('should process final chunk on completion', async () => {
       const promise = startStream();
-
-      mockXHR.responseText = 'data: final\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
-
+      simulateComplete('data: final\n\n');
       await promise;
-
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].data).toBe('final');
     });
@@ -951,24 +927,13 @@ describe('httpClient', () => {
     it('should handle incremental progress updates', async () => {
       const _promise = startStream();
 
-      // First progress event
-      mockXHR.responseText = 'data: first\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 3;
-
-      if (onProgress) {
-        onProgress();
-      }
-
+      simulateProgress('data: first\n\n');
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].data).toBe('first');
 
       // Second progress event with more data
       mockXHR.responseText = 'data: first\n\ndata: second\n\n';
-
-      if (onProgress) {
-        onProgress();
-      }
+      if (onProgress) onProgress();
 
       expect(streamEvents).toHaveLength(2);
       expect(streamEvents[1].data).toBe('second');
@@ -976,17 +941,8 @@ describe('httpClient', () => {
 
     it('should handle events with id in final chunk', async () => {
       const promise = startStream();
-
-      mockXHR.responseText = 'id: event-1\ndata: hello\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
-
+      simulateComplete('id: event-1\ndata: hello\n\n');
       await promise;
-
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].id).toBe('event-1');
       expect(streamEvents[0].data).toBe('hello');
@@ -994,34 +950,16 @@ describe('httpClient', () => {
 
     it('should handle multi-line data in final chunk', async () => {
       const promise = startStream();
-
-      mockXHR.responseText = 'data: line1\ndata: line2\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
-
+      simulateComplete('data: line1\ndata: line2\n\n');
       await promise;
-
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].data).toBe('line1\nline2');
     });
 
     it('should handle events with event type in final chunk', async () => {
       const promise = startStream();
-
-      mockXHR.responseText = 'event: message\ndata: hello\n\n';
-      mockXHR.status = 200;
-      mockXHR.readyState = 4;
-
-      if (onReadyStateChange) {
-        onReadyStateChange();
-      }
-
+      simulateComplete('event: message\ndata: hello\n\n');
       await promise;
-
       expect(streamEvents).toHaveLength(1);
       expect(streamEvents[0].event).toBe('message');
       expect(streamEvents[0].data).toBe('hello');
