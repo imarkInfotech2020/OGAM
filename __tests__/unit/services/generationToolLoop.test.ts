@@ -28,6 +28,20 @@ jest.mock('../../../src/stores', () => ({
       setIsThinking: mockSetIsThinking,
     }),
   },
+  useRemoteServerStore: {
+    getState: () => ({
+      activeServerId: null,
+    }),
+  },
+  useAppStore: {
+    getState: () => ({
+      settings: {
+        temperature: 0.7,
+        maxTokens: 1024,
+        topP: 0.9,
+      },
+    }),
+  },
 }));
 
 jest.mock('../../../src/services/llm', () => ({
@@ -956,7 +970,7 @@ describe('runToolLoop – token streaming', () => {
     expect(ctx.onStream).toHaveBeenNthCalledWith(1, 'Hello');
     expect(ctx.onStream).toHaveBeenNthCalledWith(2, ' world');
     expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
-    expect(ctx.callbacks!.onFirstToken).toHaveBeenCalledTimes(1);
+    expect(ctx.callbacks?.onFirstToken).toHaveBeenCalledTimes(1);
   });
 
   it('skips onFinalResponse when content was already streamed', async () => {
@@ -1028,7 +1042,7 @@ describe('runToolLoop – token streaming', () => {
     const ctx = createStreamingContext();
     await runToolLoop(ctx);
 
-    expect(ctx.callbacks!.onFirstToken).toHaveBeenCalledTimes(1);
+    expect(ctx.callbacks?.onFirstToken).toHaveBeenCalledTimes(1);
     expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,6 +10,7 @@ import { useChatStore } from '../../src/stores/chatStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useProjectStore } from '../../src/stores/projectStore';
 import { useWhisperStore } from '../../src/stores/whisperStore';
+import { useRemoteServerStore } from '../../src/stores/remoteServerStore';
 import {
   createConversation,
   createMessage,
@@ -86,6 +87,7 @@ export const resetStores = (): void => {
     textGenerationCount: 0,
     imageGenerationCount: 0,
     hasEngagedSharePrompt: false,
+    loadedSettings: null,
     onboardingChecklist: {
       downloadedModel: false,
       loadedModel: false,
@@ -129,6 +131,19 @@ export const resetStores = (): void => {
     isModelLoading: false,
     isModelLoaded: false,
     error: null,
+  });
+
+  // Reset remote server store
+  useRemoteServerStore.setState({
+    servers: [],
+    activeServerId: null,
+    discoveredModels: {},
+    serverHealth: {},
+    isLoading: false,
+    testingServerId: null,
+    discoveringServerId: null,
+    activeRemoteTextModelId: null,
+    activeRemoteImageModelId: null,
   });
 };
 
@@ -409,7 +424,7 @@ export const simulateGeneration = async (
   const tokens = responseContent.split(' ');
   for (const token of tokens) {
     await flushPromises();
-    chatStore.appendToStreamingMessage(`${token  } `);
+    chatStore.appendToStreamingMessage(`${token} `);
   }
 
   // Finalize

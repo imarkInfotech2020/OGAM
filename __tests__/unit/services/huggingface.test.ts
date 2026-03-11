@@ -350,17 +350,18 @@ describe('HuggingFaceService', () => {
   // searchModels (with fetch mock)
   // ============================================================================
   describe('searchModels', () => {
+    let mockFetch: jest.Mock;
+
     beforeEach(() => {
       jest.clearAllMocks();
-    });
-
-    it('sends request with gguf filter', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
+      mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve([]),
       });
-      (global as any).fetch = mockFetch;
+      global.fetch = mockFetch;
+    });
 
+    it('sends request with gguf filter', async () => {
       await huggingFaceService.searchModels();
 
       const url = mockFetch.mock.calls[0][0];
@@ -368,12 +369,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('appends search param when query provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('llama');
 
       const url = mockFetch.mock.calls[0][0];
@@ -381,12 +376,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('does not append search param for empty query', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('');
 
       const url = mockFetch.mock.calls[0][0];
@@ -394,7 +383,7 @@ describe('HuggingFaceService', () => {
     });
 
     it('throws on API error', async () => {
-      (global as any).fetch = jest.fn().mockResolvedValue({
+      global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 500,
       });
@@ -403,12 +392,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('respects limit option', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('', { limit: 10 });
 
       const url = mockFetch.mock.calls[0][0];
@@ -416,12 +399,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('appends pipeline_tag when pipelineTag option is provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('', { pipelineTag: 'image-text-to-text' });
 
       const url = mockFetch.mock.calls[0][0];
@@ -429,12 +406,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('does not append pipeline_tag when option is not provided', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('test');
 
       const url = mockFetch.mock.calls[0][0];
@@ -442,12 +413,6 @@ describe('HuggingFaceService', () => {
     });
 
     it('combines query and pipeline_tag in the same request', async () => {
-      const mockFetch = jest.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve([]),
-      });
-      (global as any).fetch = mockFetch;
-
       await huggingFaceService.searchModels('qwen', { pipelineTag: 'image-text-to-text' });
 
       const url = mockFetch.mock.calls[0][0];
@@ -461,7 +426,7 @@ describe('HuggingFaceService', () => {
   // ============================================================================
   describe('getModelFiles', () => {
     it('separates mmproj files from model files', async () => {
-      (global as any).fetch = jest.fn().mockResolvedValue({
+      global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve([
           { type: 'file', path: 'model-Q4_K_M.gguf', size: 4000000000 },
@@ -481,7 +446,7 @@ describe('HuggingFaceService', () => {
     });
 
     it('sorts files by size ascending', async () => {
-      (global as any).fetch = jest.fn().mockResolvedValue({
+      global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve([
           { type: 'file', path: 'model-Q8_0.gguf', size: 8000000000 },
@@ -497,7 +462,7 @@ describe('HuggingFaceService', () => {
     });
 
     it('falls back to siblings when tree endpoint fails', async () => {
-      (global as any).fetch = jest.fn()
+      global.fetch = jest.fn()
         .mockResolvedValueOnce({ ok: false, status: 404 }) // tree fails
         .mockResolvedValueOnce({
           ok: true,
@@ -532,7 +497,7 @@ describe('HuggingFaceService', () => {
           siblings: [{ rfilename: 'model-Q4_K_M.gguf', size: 4000000000 }],
         }),
       });
-      (global as any).fetch = mockFetch;
+      global.fetch = mockFetch;
 
       const result = await huggingFaceService.getModelDetails('org/test-model');
 
@@ -541,7 +506,7 @@ describe('HuggingFaceService', () => {
     });
 
     it('throws on API error', async () => {
-      (global as any).fetch = jest.fn().mockResolvedValue({
+      global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 404,
       });
@@ -586,7 +551,7 @@ describe('HuggingFaceService', () => {
 
   describe('getModelFilesFromSiblings with no siblings', () => {
     it('returns empty array when siblings is null', async () => {
-      (global as any).fetch = jest.fn()
+      global.fetch = jest.fn()
         .mockResolvedValueOnce({ ok: false, status: 404 }) // tree fails
         .mockResolvedValueOnce({
           ok: true,

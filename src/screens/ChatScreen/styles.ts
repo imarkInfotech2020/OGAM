@@ -29,6 +29,7 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   headerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 2 },
   headerSubtitle: { ...TYPOGRAPHY.h3, color: colors.textMuted },
   modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const },
+  remoteIcon: { marginRight: 4 },
   modelSelectorArrow: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginLeft: SPACING.xs },
   headerImageBadge: {
     width: 18,
@@ -155,6 +156,17 @@ const createIndicatorStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.background,
   },
   classifyingText: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
+  pendingSettingsBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceLight,
+  },
+  pendingSettingsText: { ...TYPOGRAPHY.meta, color: colors.warning },
   imageProgressContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,

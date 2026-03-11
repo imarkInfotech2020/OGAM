@@ -365,6 +365,86 @@ describe('appStore', () => {
   });
 
   // ============================================================================
+  // Loaded Settings (for detecting pending changes)
+  // ============================================================================
+  describe('loadedSettings', () => {
+    it('starts with null loadedSettings', () => {
+      expect(getAppState().loadedSettings).toBeNull();
+    });
+
+    it('setLoadedSettings stores settings that require reload', () => {
+      const { setLoadedSettings } = useAppStore.getState();
+
+      setLoadedSettings({
+        nThreads: 4,
+        nBatch: 512,
+        contextLength: 4096,
+        enableGpu: true,
+        gpuLayers: 99,
+        flashAttn: true,
+        cacheType: 'q8_0',
+      });
+
+      const loaded = getAppState().loadedSettings;
+      expect(loaded).not.toBeNull();
+      expect(loaded?.nThreads).toBe(4);
+      expect(loaded?.contextLength).toBe(4096);
+      expect(loaded?.enableGpu).toBe(true);
+      expect(loaded?.gpuLayers).toBe(99);
+      expect(loaded?.cacheType).toBe('q8_0');
+    });
+
+    it('setLoadedSettings can be cleared with null', () => {
+      const { setLoadedSettings } = useAppStore.getState();
+
+      setLoadedSettings({ nThreads: 4, enableGpu: true } as any);
+      expect(getAppState().loadedSettings).not.toBeNull();
+
+      setLoadedSettings(null);
+      expect(getAppState().loadedSettings).toBeNull();
+    });
+
+    it('loadedSettings is separate from current settings', () => {
+      const { updateSettings, setLoadedSettings } = useAppStore.getState();
+
+      // Set initial settings
+      updateSettings({ nThreads: 4, enableGpu: true });
+
+      // Save loaded settings
+      setLoadedSettings({
+        nThreads: 4,
+        enableGpu: true,
+        nBatch: 512,
+        contextLength: 2048,
+        flashAttn: true,
+        cacheType: 'q8_0',
+        gpuLayers: 99,
+      });
+
+      // Change current settings
+      updateSettings({ nThreads: 8 });
+
+      // loadedSettings should still have old value
+      expect(getAppState().loadedSettings?.nThreads).toBe(4);
+      expect(getAppState().settings.nThreads).toBe(8);
+    });
+
+    it('loadedSettings can be partial', () => {
+      const { setLoadedSettings } = useAppStore.getState();
+
+      setLoadedSettings({
+        enableGpu: false,
+        gpuLayers: 50,
+      });
+
+      const loaded = getAppState().loadedSettings;
+      expect(loaded?.enableGpu).toBe(false);
+      expect(loaded?.gpuLayers).toBe(50);
+      expect(loaded?.nThreads).toBeUndefined();
+    });
+  });
+
+  // ============================================================================
   // Image Models (ONNX)
   // ============================================================================
   describe('imageModels', () => {
@@ -826,7 +906,7 @@ describe('appStore', () => {
       const merged = {
         ...currentState,
         ...oldPersistedState,
-      } as any;
+      };
 
       // Apply the same logic as the merge function
       if (typeof merged.imageModelDownloadId === 'number') {

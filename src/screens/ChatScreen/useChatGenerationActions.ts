@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 let _msgIdSeq = 0;
 const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
@@ -17,16 +18,22 @@ import {
   ImageGenerationState,
   buildToolSystemPromptHint,
   contextCompactionService,
+  ragService,
+  retrievalService,
 } from '../../services';
+import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore } from '../../stores';
-import { Message, MediaAttachment, Project, DownloadedModel, ModelLoadingStrategy, CacheType } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
+import { shouldUseToolsForMessage } from './toolUsage';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
 type GenerationDeps = {
   activeModelId: string | null;
-  activeModel: DownloadedModel | undefined;
+  activeModel: DownloadedModel | null | undefined;
+  activeModelInfo?: { isRemote: boolean; model: DownloadedModel | RemoteModel | null; modelId: string | null; modelName: string };
+  hasActiveModel?: boolean;
   activeConversationId: string | null | undefined;
   activeConversation: any;
   activeProject: any;
@@ -73,7 +80,6 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
   }
   return { prefix, filtered };
 }
-
 function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   const allMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
@@ -82,7 +88,6 @@ function buildMessagesForContext(conversationId: string, messageText: string, sy
   const userMessageForContext = (lastMsg?.role === 'user' ? { ...lastMsg, content: messageText } : lastMsg) as Message;
   return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
 }
-
 export async function shouldRouteToImageGenerationFn(
   deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'imageModelLoaded' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage'>,
   text: string,
@@ -119,13 +124,11 @@ export async function shouldRouteToImageGenerationFn(
     return false;
   }
 }
-
 export type ImageGenCall = {
   prompt: string;
   conversationId: string;
   skipUserMessage?: boolean;
 };
-
 export async function handleImageGenerationFn(
   deps: Pick<GenerationDeps, 'activeImageModel' | 'settings' | 'imageGenState' | 'setAlertState' | 'addMessage'>,
   call: ImageGenCall,
@@ -149,15 +152,16 @@ export async function handleImageGenerationFn(
     deps.setAlertState(showAlert('Error', `Image generation failed: ${deps.imageGenState.error}`));
   }
 }
-
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
+  // Remote models don't need local loading
+  if (deps.activeModelInfo?.isRemote) return true;
+  // Local models need to be loaded
   const loadedPath = llmService.getLoadedModelPath();
   if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
   await deps.ensureModelLoaded();
   return llmService.isModelLoaded() && llmService.getLoadedModelPath() === deps.activeModel!.filePath;
 }
-
 async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string, messages: Message[]): Promise<void> {
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
@@ -168,14 +172,14 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
     }
   } catch (e) { logger.log('Debug info error:', e); }
 }
-
 /** Run generation; if context is full, compact old messages and retry once. */
 async function generateWithCompactionRetry(
   opts: { id: string; prompt: string; messages: Message[] },
-  activeTools: string[],
+  enabledTools: string[],
+  projectId?: string,
 ): Promise<void> {
-  const gen = (msgs: Message[]) => activeTools.length > 0
-    ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: activeTools })
+  const gen = (msgs: Message[]) => enabledTools.length > 0
+    ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
   try { await gen(opts.messages); } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
@@ -192,26 +196,73 @@ async function generateWithCompactionRetry(
     await gen(compacted);
   }
 }
+async function injectRagContext(projectId: string | undefined, query: string, prompt: string): Promise<string> {
+  if (!projectId) return prompt;
+  try {
+    const docs = await ragService.getDocumentsByProject(projectId);
+    const enabledDocs = docs.filter((d: import('../../services/rag').RagDocument) => d.enabled);
+    if (enabledDocs.length === 0) return prompt;
 
+    // Warm up embedding model in background (non-blocking)
+    if (!embeddingService.isLoaded()) {
+      embeddingService.load().catch(err => logger.error('[RAG] Embedding warmup failed', err));
+    }
+
+    const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
+    let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
+    kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
+
+    const r = await ragService.searchProject(projectId, query);
+    if (r.chunks.length > 0) {
+      kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
+    }
+    return prompt + kbPrompt;
+  } catch (err) {
+    logger.error('[RAG] Context injection failed', err);
+  }
+  return prompt;
+}
+function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabledTools: string[]; rawPrompt: string } {
+  const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
+  let enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
+  if (conversation?.projectId && llmService.supportsToolCalling() && !enabledTools.includes('search_knowledge_base')) {
+    enabledTools = [...enabledTools, 'search_knowledge_base'];
+  }
+  const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  return { enabledTools, rawPrompt };
+}
+function maybeCacheTypeNudge(deps: GenerationDeps): void {
+  const appState = useAppStore.getState();
+  if (!appState.hasSeenCacheTypeNudge && deps.settings.cacheType === 'q8_0') {
+    appState.setHasSeenCacheTypeNudge(true);
+    deps.setAlertState(showAlert(
+      'Improve Output Quality',
+      'You can improve response quality by changing the KV cache type to f16 in Model Settings. This uses more memory but produces better outputs. Requires a model reload.',
+      [{ text: 'Go to Settings', onPress: () => { deps.setAlertState(hideAlert()); deps.setShowSettingsPanel?.(true); } }, { text: 'Got it', style: 'cancel' }],
+    ));
+  }
+}
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
-  if (!deps.activeModel) return;
+  if (!deps.hasActiveModel) return;
   deps.generatingForConversationRef.current = targetConversationId;
-  if (!(await ensureModelReady(deps))) {
-    deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
-    deps.generatingForConversationRef.current = null;
-    return;
+  // For remote models, skip local model loading
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel) {
+    if (!(await ensureModelReady(deps))) {
+      deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
+      deps.generatingForConversationRef.current = null;
+      return;
+    }
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
-  const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
-  const enabledTools = llmService.supportsToolCalling() ? (deps.settings.enabledTools || []) : [];
-  const activeTools = enabledTools;
-  const basePrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
-  const systemPrompt = activeTools.length > 0 ? basePrompt + buildToolSystemPromptHint(activeTools) : basePrompt;
+  const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
+  const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+  const activeTools = shouldUseToolsForMessage(messageText, enabledTools) ? enabledTools : [];
+  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
-    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools);
+    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
@@ -220,86 +271,47 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     return;
   }
   deps.generatingForConversationRef.current = null;
-
-  const appState = useAppStore.getState();
-  if (!appState.hasSeenCacheTypeNudge && deps.settings.cacheType === 'q8_0') {
-    appState.setHasSeenCacheTypeNudge(true);
-    deps.setAlertState(showAlert(
-      'Improve Output Quality',
-      'You can improve response quality by changing the KV cache type to f16 in Model Settings. This uses more memory but produces better outputs. Requires a model reload.',
-      [
-        {
-          text: 'Go to Settings',
-          onPress: () => { deps.setAlertState(hideAlert()); deps.setShowSettingsPanel?.(true); },
-        },
-        { text: 'Got it', style: 'cancel' },
-      ],
-    ));
-  }
+  maybeCacheTypeNudge(deps);
 }
-
-export type SendCall = {
-  text: string;
-  attachments?: MediaAttachment[];
-  imageMode?: 'auto' | 'force' | 'disabled';
-  startGeneration: (convId: string, text: string) => Promise<void>;
-  setDebugInfo: SetState<any>;
-};
-
+export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
   const { text, attachments, imageMode, startGeneration } = call;
-  const forceImageMode = imageMode === 'force';
-  if (!deps.activeConversationId || !deps.activeModel) {
+  if (!deps.activeConversationId || !deps.hasActiveModel) {
     deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
     return;
   }
   const targetConversationId = deps.activeConversationId;
   let messageText = text;
   if (attachments) {
-    const documentAttachments = attachments.filter(a => a.type === 'document' && a.textContent);
-    for (const doc of documentAttachments) {
-      const fileName = doc.fileName || 'document';
-      messageText += `\n\n---\n📄 **Attached Document: ${fileName}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`;
+    for (const doc of attachments.filter(a => a.type === 'document' && a.textContent)) {
+      messageText += `\n\n---\n📄 **Attached Document: ${doc.fileName || 'document'}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`;
     }
   }
-  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, forceImageMode);
+  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
   if (shouldGenerateImage && deps.activeImageModel) {
     await handleImageGenerationFn(deps, { prompt: text, conversationId: targetConversationId });
     return;
   }
-  if (shouldGenerateImage && !deps.activeImageModel) {
-    messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
-  }
+  if (shouldGenerateImage && !deps.activeImageModel) messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
   if (generationService.getState().isGenerating) {
-    generationService.enqueueMessage({
-      id: nextMsgId(),
-      conversationId: targetConversationId,
-      text,
-      attachments,
-      messageText,
-    });
+    generationService.enqueueMessage({ id: nextMsgId(), conversationId: targetConversationId, text, attachments, messageText });
     return;
   }
   deps.addMessage(targetConversationId, { role: 'user', content: text, attachments });
   await startGeneration(targetConversationId, messageText);
 }
-
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'generatingForConversationRef'>): Promise<void> {
   deps.generatingForConversationRef.current = null;
   try { await generationService.stopGeneration().catch(() => { }); }
   catch (e) { logger.error('Error stopping generation:', e); }
   if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => { });
 }
-
 export async function executeDeleteConversationFn(
   deps: Pick<GenerationDeps, 'activeConversationId' | 'isStreaming' | 'clearStreamingMessage' | 'removeImagesByConversationId' | 'deleteConversation' | 'setActiveConversation' | 'navigation' | 'setAlertState'>,
 ): Promise<void> {
   if (!deps.activeConversationId) return;
   deps.setAlertState(hideAlert());
-  if (deps.isStreaming) {
-    await llmService.stopGeneration();
-    deps.clearStreamingMessage();
-  }
+  if (deps.isStreaming) { await llmService.stopGeneration(); deps.clearStreamingMessage(); }
   const imageIds = deps.removeImagesByConversationId(deps.activeConversationId);
   for (const id of imageIds) await onnxImageGeneratorService.deleteGeneratedImage(id);
   contextCompactionService.clearSummary(deps.activeConversationId);
@@ -307,43 +319,36 @@ export async function executeDeleteConversationFn(
   deps.setActiveConversation(null);
   deps.navigation.goBack();
 }
-
 export type RegenerateCall = { setDebugInfo: SetState<any>; userMessage: Message };
-
 export async function regenerateResponseFn(deps: GenerationDeps, call: RegenerateCall): Promise<void> {
   const { userMessage } = call;
-  if (!deps.activeConversationId || !deps.activeModel) return;
+  if (!deps.activeConversationId || !deps.hasActiveModel) return;
   const targetConversationId = deps.activeConversationId;
   const shouldGenerateImage = await shouldRouteToImageGenerationFn(deps, userMessage.content);
   if (shouldGenerateImage && deps.activeImageModel) {
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }
-  if (!llmService.isModelLoaded()) return;
+  // For local models, check if model is loaded
+  if (!deps.activeModelInfo?.isRemote && !llmService.isModelLoaded()) return;
   deps.generatingForConversationRef.current = targetConversationId;
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const messages = (conversation?.messages || []).filter((m: Message) => !m.isSystemInfo);
   const messagesUpToUser = messages.slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1);
-  const systemPrompt = deps.activeProject?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
+  const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
+  const activeTools = shouldUseToolsForMessage(userMessage.content, enabledTools) ? enabledTools : [];
+  const basePrompt = await injectRagContext(conversation?.projectId, userMessage.content, rawPrompt);
+  const systemPrompt = activeTools.length > 0 ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
-  const messagesForContext = [...prefix, ...filtered];
   try {
-    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, []);
+    await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);
   } catch (error: any) {
     deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
   }
   deps.generatingForConversationRef.current = null;
 }
-
-export type SelectProjectDeps = {
-  activeConversationId: string | null | undefined;
-  setConversationProject: (convId: string, projectId: string | null) => void;
-  setShowProjectSelector: SetState<boolean>;
-};
-
+export type SelectProjectDeps = { activeConversationId: string | null | undefined; setConversationProject: (convId: string, projectId: string | null) => void; setShowProjectSelector: SetState<boolean> };
 export function handleSelectProjectFn(deps: SelectProjectDeps, project: Project | null): void {
-  if (deps.activeConversationId) {
-    deps.setConversationProject(deps.activeConversationId, project?.id || null);
-  }
+  if (deps.activeConversationId) deps.setConversationProject(deps.activeConversationId, project?.id || null);
   deps.setShowProjectSelector(false);
 }

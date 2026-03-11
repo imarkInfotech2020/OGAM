@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -22,7 +23,6 @@ import logger from '../utils/logger';
 export type StreamToken = { content?: string; reasoningContent?: string };
 type StreamCallback = (data: StreamToken) => void;
 type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
-
 class LLMService {
   private context: LlamaContext | null = null;
   private currentModelPath: string | null = null;
@@ -71,8 +71,7 @@ class LLMService {
       Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
       logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
       this.currentModelPath = modelPath;
-      this.multimodalSupport = null;
-      this.multimodalInitialized = false;
+      this.multimodalSupport = null; this.multimodalInitialized = false;
       logger.log('[LLM] mmProjPath:', mmProjPath || 'none');
       if (mmProjPath) await this.initializeMultimodal(mmProjPath);
       else await this.checkMultimodalSupport();
@@ -286,8 +285,16 @@ class LLMService {
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
   getGpuInfo() {
-    const backend = !this.gpuEnabled ? 'CPU' : Platform.OS === 'ios' ? 'Metal'
-      : this.gpuDevices.length > 0 ? this.gpuDevices.join(', ') : 'OpenCL';
+    let backend: string;
+    if (!this.gpuEnabled) {
+      backend = 'CPU';
+    } else if (Platform.OS === 'ios') {
+      backend = 'Metal';
+    } else if (this.gpuDevices.length > 0) {
+      backend = this.gpuDevices.join(', ');
+    } else {
+      backend = 'OpenCL';
+    }
     return { gpu: this.gpuEnabled, gpuBackend: backend, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }

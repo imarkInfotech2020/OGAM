@@ -1,3 +1,4 @@
+/* eslint-disable max-lines-per-function */
 import React, { useCallback, useEffect } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,10 +50,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     activeTextModel,
     activeImageModel,
     recentConversations,
+    // Remote model state
+    remoteTextModels,
+    remoteImageModels,
+    activeRemoteTextModelId,
+    activeRemoteImageModelId,
     handleSelectTextModel,
     handleUnloadTextModel,
     handleSelectImageModel,
     handleUnloadImageModel,
+    // Remote model handlers
+    handleSelectRemoteTextModel,
+    handleUnloadRemoteTextModel,
+    handleSelectRemoteImageModel,
+    handleUnloadRemoteImageModel,
     handleEjectAll,
     startNewChat,
     continueChat,
@@ -140,12 +151,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
             <ActiveModelsSection
               loadingState={loadingState}
-              activeTextModel={activeTextModel}
-              activeImageModel={activeImageModel}
+              activeTextModel={activeTextModel ?? undefined}
+              activeImageModel={activeImageModel ?? undefined}
               downloadedModels={downloadedModels}
               downloadedImageModels={downloadedImageModels}
+              remoteTextModelsCount={remoteTextModels.length}
+              remoteImageModelsCount={remoteImageModels.length}
               activeModelId={activeModelId}
               activeImageModelId={activeImageModelId}
+              activeRemoteTextModelId={activeRemoteTextModelId}
+              activeRemoteImageModelId={activeRemoteImageModelId}
               isEjecting={isEjecting}
               onPressTextModel={() => setPickerType('text')}
               onPressImageModel={() => setPickerType('image')}
@@ -164,15 +179,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           ) : (
             <Card style={styles.setupCard} testID="setup-card">
               <Text style={styles.setupText}>
-                {downloadedModels.length > 0
+                {downloadedModels.length > 0 || remoteTextModels.length > 0
                   ? 'Select a text model to start chatting'
                   : 'Download a text model to start chatting'}
               </Text>
               <Button
-                title={downloadedModels.length > 0 ? 'Select Model' : 'Browse Models'}
+                title={downloadedModels.length > 0 || remoteTextModels.length > 0 ? 'Select Model' : 'Browse Models'}
                 variant="outline"
                 size="small"
-                onPress={() => downloadedModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab')}
+                onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab')}
                 testID="browse-models-button"
               />
             </Card>
@@ -194,7 +209,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           {/* Image Gallery */}
           <AnimatedPressable
             style={styles.galleryCard}
-            onPress={() => (navigation as any).navigate('Gallery')}
+            onPress={() => navigation.navigate('Gallery')}
             hapticType="selection"
           >
             <Icon name="grid" size={18} color={colors.primary} />
@@ -238,11 +253,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         activeModelId={activeModelId}
         activeImageModelId={activeImageModelId}
         memoryInfo={memoryInfo}
+        remoteTextModels={remoteTextModels}
+        remoteImageModels={remoteImageModels}
+        activeRemoteTextModelId={activeRemoteTextModelId}
+        activeRemoteImageModelId={activeRemoteImageModelId}
         onClose={() => setPickerType(null)}
         onSelectTextModel={handleSelectTextModel}
         onUnloadTextModel={handleUnloadTextModel}
         onSelectImageModel={handleSelectImageModel}
         onUnloadImageModel={handleUnloadImageModel}
+        onSelectRemoteTextModel={handleSelectRemoteTextModel}
+        onUnloadRemoteTextModel={handleUnloadRemoteTextModel}
+        onSelectRemoteImageModel={handleSelectRemoteImageModel}
+        onUnloadRemoteImageModel={handleUnloadRemoteImageModel}
         onBrowseModels={() => {
           setPickerType(null);
           navigation.navigate('ModelsTab');

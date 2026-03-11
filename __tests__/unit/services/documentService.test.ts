@@ -5,15 +5,29 @@
  * Priority: P1 - Document attachment support.
  */
 
-import { Platform, NativeModules } from 'react-native';
-import { documentService } from '../../../src/services/documentService';
+import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
+// Mock pdfExtractor - must be defined inline due to Jest hoisting
+jest.mock('../../../src/services/pdfExtractor', () => ({
+  pdfExtractor: {
+    isAvailable: jest.fn(() => false),
+    extractText: jest.fn(),
+  },
+}));
+
+import { documentService } from '../../../src/services/documentService';
+import { pdfExtractor } from '../../../src/services/pdfExtractor';
+
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
+const mockedPdfExtractor = pdfExtractor as jest.Mocked<typeof pdfExtractor>;
 
 describe('DocumentService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset pdfExtractor mock to default (unavailable)
+    mockedPdfExtractor.isAvailable.mockReturnValue(false);
+    mockedPdfExtractor.extractText.mockReset();
   });
 
   // ========================================================================
@@ -540,71 +554,64 @@ describe('DocumentService', () => {
   // PDF processing (when native module IS available)
   // ========================================================================
   describe('PDF processing with native module', () => {
-    const mockExtractText = jest.fn();
-
     beforeEach(() => {
-      NativeModules.PDFExtractorModule = { extractText: mockExtractText };
-      mockExtractText.mockReset();
+      // Make pdfExtractor available for these tests
+      mockedPdfExtractor.isAvailable.mockReturnValue(true);
+      mockedPdfExtractor.extractText.mockReset();
     });
 
     afterEach(() => {
-      delete NativeModules.PDFExtractorModule;
+      // Reset to unavailable
+      mockedPdfExtractor.isAvailable.mockReturnValue(false);
     });
 
     it('isSupported returns true for .pdf when module available', () => {
-      // Need to re-require to pick up the module change
-      // But since pdfExtractor checks NativeModules at import time, we test via the
-      // documentService which calls pdfExtractor.isAvailable() dynamically
-      // Actually pdfExtractor reads NativeModules.PDFExtractorModule at module load.
-      // Since we set it above, and pdfExtractor caches the reference... let's test:
-      const { pdfExtractor: _pdfExtractor } = require('../../../src/services/pdfExtractor');
-      // The module was cached without PDFExtractorModule, so isAvailable may be false.
-      // This tests the documentService layer which re-checks each call.
+      // When pdfExtractor is available, .pdf should be supported
+      const extensions = documentService.getSupportedExtensions();
+      expect(extensions).toContain('.pdf');
     });
 
     it('processes PDF using native extractor', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
-      mockExtractText.mockResolvedValue('Page 1 text\n\nPage 2 text');
+      mockedPdfExtractor.extractText.mockResolvedValue('Page 1 text\n\nPage 2 text');
 
-      // We need a fresh documentService that sees the native module
-      // Since the module is already loaded and pdfExtractor caches the reference,
-      // we test by calling extractText directly through the mock
-      expect(mockExtractText).toBeDefined();
+      const result = await documentService.processDocumentFromPath('/path/to/doc.pdf');
 
-      // Simulate what documentService would do:
-      const text = await NativeModules.PDFExtractorModule.extractText('/path/to/doc.pdf');
-      expect(text).toBe('Page 1 text\n\nPage 2 text');
+      expect(mockedPdfExtractor.extractText).toHaveBeenCalledWith('/path/to/doc.pdf', expect.any(Number));
+      expect(result!.textContent).toBe('Page 1 text\n\nPage 2 text');
     });
 
     it('truncates large PDF text at 50K chars', async () => {
       const hugePdfText = 'x'.repeat(60000);
-      mockExtractText.mockResolvedValue(hugePdfText);
+      mockedPdfExtractor.extractText.mockResolvedValue(hugePdfText);
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
-      const text = await NativeModules.PDFExtractorModule.extractText('/large.pdf');
-      // DocumentService would truncate this:
-      const maxChars = 50000;
-      const truncated = text.length > maxChars
-        ? `${text.substring(0, maxChars)  }\n\n... [Content truncated due to length]`
-        : text;
+      const result = await documentService.processDocumentFromPath('/large.pdf');
 
-      expect(truncated.length).toBeLessThan(60000);
-      expect(truncated).toContain('truncated');
+      expect(result!.textContent!.length).toBeLessThan(60000);
+      expect(result!.textContent).toContain('truncated');
     });
 
     it('handles PDF extraction errors', async () => {
-      mockExtractText.mockRejectedValue(new Error('Corrupted PDF'));
+      mockedPdfExtractor.extractText.mockRejectedValue(new Error('Corrupted PDF'));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
       await expect(
-        NativeModules.PDFExtractorModule.extractText('/corrupt.pdf')
+        documentService.processDocumentFromPath('/corrupt.pdf')
       ).rejects.toThrow('Corrupted PDF');
     });
 
     it('handles empty PDF (no text content)', async () => {
-      mockExtractText.mockResolvedValue('');
+      mockedPdfExtractor.extractText.mockResolvedValue('');
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 2000, isFile: () => true } as any);
 
-      const text = await NativeModules.PDFExtractorModule.extractText('/empty.pdf');
-      expect(text).toBe('');
+      const result = await documentService.processDocumentFromPath('/empty.pdf');
+
+      expect(result!.textContent).toBe('');
     });
   });
 
@@ -649,6 +656,114 @@ describe('DocumentService', () => {
 
       // Empty string is falsy, so formatForContext returns ''
       expect(documentService.formatForContext(attachment)).toBe('');
+    });
+  });
+
+  // ========================================================================
+  // iOS file:// URI fallback paths
+  // ========================================================================
+  describe('iOS file:// URI resolution', () => {
+    beforeEach(() => {
+      Object.defineProperty(Platform, 'OS', { value: 'ios' });
+    });
+
+    it('copies iOS file:// URI to temp location on success', async () => {
+      mockedRNFS.copyFile.mockResolvedValue(undefined as any);
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 100, isFile: () => true } as any);
+      mockedRNFS.readFile.mockResolvedValue('hello');
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      const result = await documentService.processDocumentFromPath('file:///tmp/doc.txt', 'doc.txt');
+
+      expect(mockedRNFS.copyFile).toHaveBeenCalledWith('file:///tmp/doc.txt', expect.stringContaining('doc.txt'));
+      expect(result).not.toBeNull();
+    });
+
+    it('falls back to stripped scheme when direct iOS copy fails', async () => {
+      mockedRNFS.copyFile
+        .mockRejectedValueOnce(new Error('security-scoped access denied'))
+        .mockResolvedValue(undefined as any);
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 50, isFile: () => true } as any);
+      mockedRNFS.readFile.mockResolvedValue('fallback content');
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      const result = await documentService.processDocumentFromPath('file:///tmp/note.txt', 'note.txt');
+
+      expect(result).not.toBeNull();
+      expect(result!.textContent).toBe('fallback content');
+      // Two iOS copy attempts + one savePersistentCopy call = 3 total
+      expect(mockedRNFS.copyFile).toHaveBeenCalledTimes(3);
+    });
+
+    it('throws when both iOS copy attempts fail', async () => {
+      mockedRNFS.copyFile.mockRejectedValue(new Error('access denied'));
+
+      await expect(
+        documentService.processDocumentFromPath('file:///restricted/secret.txt', 'secret.txt'),
+      ).rejects.toThrow('Could not access file. Please try selecting the file again.');
+    });
+  });
+
+  // ========================================================================
+  // exists() error handling
+  // ========================================================================
+  describe('file existence error handling', () => {
+    it('throws when exists() raises an error (security-scoped URL)', async () => {
+      Object.defineProperty(Platform, 'OS', { value: 'ios' });
+
+      mockedRNFS.copyFile.mockResolvedValue(undefined as any);
+      mockedRNFS.exists.mockRejectedValue(new Error('Cannot stat security-scoped URL'));
+
+      await expect(
+        documentService.processDocumentFromPath('file:///private/doc.txt', 'doc.txt'),
+      ).rejects.toThrow('Could not access file. Please try selecting the file again.');
+    });
+  });
+
+  // ========================================================================
+  // savePersistentCopy fallback
+  // ========================================================================
+  describe('persistent copy fallback', () => {
+    it('returns resolvedPath when persistent copy fails', async () => {
+      Object.defineProperty(Platform, 'OS', { value: 'android' });
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)  // attachments dir check
+        .mockResolvedValueOnce(false); // persistent file check after failed copy
+      mockedRNFS.stat.mockResolvedValue({ size: 100, isFile: () => true } as any);
+      mockedRNFS.readFile.mockResolvedValue('content');
+      // First copyFile for content:// → temp, second for temp → persistent (fails)
+      mockedRNFS.copyFile
+        .mockResolvedValueOnce(undefined as any)
+        .mockRejectedValueOnce(new Error('disk full'));
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      const result = await documentService.processDocumentFromPath(
+        'content://provider/file.txt',
+        'file.txt',
+      );
+
+      // Falls back to the resolved (temp) path since persistent copy failed
+      expect(result).not.toBeNull();
+      expect(result!.uri).toContain(RNFS.CachesDirectoryPath);
+    });
+  });
+
+  // ========================================================================
+  // createFromText error handling
+  // ========================================================================
+  describe('createFromText writeFile failure', () => {
+    it('returns empty uri when writeFile fails', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.writeFile.mockRejectedValue(new Error('no space'));
+
+      const result = await documentService.createFromText('some text', 'note.txt');
+
+      expect(result.uri).toBe('');
+      expect(result.textContent).toBe('some text');
+      expect(result.fileName).toBe('note.txt');
     });
   });
 });

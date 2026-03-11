@@ -13,6 +13,8 @@ try {
   // Built-in matchers in v12.4+, or no matchers needed for basic tests
 }
 
+const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================
@@ -110,6 +112,9 @@ jest.mock('llama.rn', () => ({
     })),
     initMultimodal: jest.fn(() => Promise.resolve(true)),
     getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: false, audio: false })),
+    embedding: jest.fn((text: string) => Promise.resolve({
+      embedding: new Array(384).fill(0).map((_, i) => Math.sin(i + text.length * 0.1)),
+    })),
   })),
   releaseContext: jest.fn(() => Promise.resolve()),
   completion: jest.fn(() => Promise.resolve({
@@ -149,6 +154,7 @@ jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/mock/documents',
   CachesDirectoryPath: '/mock/caches',
   ExternalDirectoryPath: '/mock/external',
+  MainBundlePath: '/mock/bundle',
   downloadFile: jest.fn(() => ({
     jobId: 1,
     promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
@@ -162,6 +168,7 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn(() => Promise.resolve()),
   stat: jest.fn(() => Promise.resolve({ size: 1000, isFile: () => true })),
   copyFile: jest.fn(() => Promise.resolve()),
+  copyFileAssets: jest.fn(() => Promise.resolve()),
   moveFile: jest.fn(() => Promise.resolve()),
   hash: jest.fn(() => Promise.resolve('mockhash')),
 }));
@@ -354,11 +361,26 @@ jest.mock('moti', () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }), { virtual: true });
 
+// @op-engineering/op-sqlite mock
+jest.mock('@op-engineering/op-sqlite', () => {
+  const mockResults = { rows: [], insertId: 0, rowsAffected: 0 };
+  const mockDb = {
+    executeSync: jest.fn(() => mockResults),
+    execute: jest.fn(() => Promise.resolve(mockResults)),
+    close: jest.fn(),
+    delete: jest.fn(),
+  };
+  return {
+    open: jest.fn(() => mockDb),
+  };
+});
+
 // react-native-zip-archive mock
 jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(() => Promise.resolve('/mock/unzipped/path')),
   zip: jest.fn(() => Promise.resolve('/mock/zipped/path')),
 }));
+
 
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
@@ -394,15 +416,58 @@ jest.mock('react-native-safe-area-context', () => {
 // Global Test Utilities
 // ============================================================================
 
-// Silence console during tests (optional - comment out for debugging)
-// global.console = {
-//   ...console,
-//   log: jest.fn(),
-//   debug: jest.fn(),
-//   info: jest.fn(),
-//   warn: jest.fn(),
-//   error: jest.fn(),
-// };
+const { Animated } = require('react-native');
+
+const instantAnimation = (value?: { setValue?: (next: number) => void }, toValue?: number) => ({
+  start: (callback?: (result: { finished: boolean }) => void) => {
+    if (typeof toValue === 'number') {
+      value?.setValue?.(toValue);
+    }
+    callback?.({ finished: true });
+  },
+  stop: jest.fn(),
+  reset: jest.fn(),
+});
+
+jest.spyOn(Animated, 'timing').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
+jest.spyOn(Animated, 'spring').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
+jest.spyOn(Animated, 'delay').mockImplementation(() => instantAnimation() as any);
+function makeGroupAnimation(animations: any[]) {
+  return {
+    start: (callback?: (result: { finished: boolean }) => void) => {
+      animations.forEach(animation => animation?.start?.());
+      callback?.({ finished: true });
+    },
+    stop: jest.fn(),
+    reset: jest.fn(),
+  } as any;
+}
+jest.spyOn(Animated, 'sequence').mockImplementation((...args: unknown[]) =>
+  makeGroupAnimation(args[0] as any[])
+);
+jest.spyOn(Animated, 'parallel').mockImplementation((...args: unknown[]) =>
+  makeGroupAnimation(args[0] as any[])
+);
+jest.spyOn(Animated, 'stagger').mockImplementation((...args: unknown[]) => {
+  const animations = args[1] as any[];
+  return Animated.parallel(animations) as any;
+});
+jest.spyOn(Animated, 'loop').mockImplementation((animation: any) => ({
+  start: (callback?: (result: { finished: boolean }) => void) => {
+    animation?.start?.();
+    callback?.({ finished: true });
+  },
+  stop: jest.fn(),
+  reset: jest.fn(),
+}) as any);
+
+if (!shouldPrintJestConsole) {
+  console.log = jest.fn();
+  console.debug = jest.fn();
+  console.info = jest.fn();
+  console.warn = jest.fn();
+  console.error = jest.fn();
+}
 
 // Reset all mocks before each test
 beforeEach(() => {

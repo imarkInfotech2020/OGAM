@@ -152,6 +152,30 @@ jest.mock('react-native-vector-icons/Feather', () => {
   return ({ name }: any) => <Text>{name}</Text>;
 });
 
+const mockGetDocumentsByProject = jest.fn<Promise<any[]>, [string]>(() => Promise.resolve([]));
+const mockIndexDocument = jest.fn<Promise<number>, [any]>(() => Promise.resolve(1));
+const mockDeleteDocumentRag = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
+const mockToggleDocument = jest.fn<Promise<void>, [number, boolean]>(() => Promise.resolve());
+
+jest.mock('../../../src/services/rag', () => ({
+  ragService: {
+    getDocumentsByProject: (projectId: string) => mockGetDocumentsByProject(projectId),
+    indexDocument: (params: any) => mockIndexDocument(params),
+    deleteDocument: (docId: number) => mockDeleteDocumentRag(docId),
+    toggleDocument: (docId: number, enabled: boolean) => mockToggleDocument(docId, enabled),
+    deleteProjectDocuments: jest.fn(() => Promise.resolve()),
+    ensureReady: jest.fn(() => Promise.resolve()),
+  },
+}));
+
+jest.mock('@react-native-documents/picker', () => ({
+  pick: jest.fn(() => Promise.resolve([{
+    uri: 'file:///mock/doc.pdf',
+    name: 'doc.pdf',
+    size: 5000,
+  }])),
+}));
+
 jest.mock('react-native-gesture-handler/Swipeable', () => {
   const { View } = require('react-native');
   return ({ children, renderRightActions }: any) => (
@@ -189,9 +213,10 @@ describe('ProjectDetailScreen', () => {
       expect(getByText('Test Project')).toBeTruthy();
     });
 
-    it('shows project description', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('A test project description')).toBeTruthy();
+    it('does not show project description in header', () => {
+      const { queryByText } = render(<ProjectDetailScreen />);
+      // Project description is not displayed in the detail screen header
+      expect(queryByText('A test project description')).toBeNull();
     });
 
     it('shows project initial in icon', () => {
@@ -200,8 +225,9 @@ describe('ProjectDetailScreen', () => {
     });
 
     it('shows chat count stat', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('0 chats')).toBeTruthy();
+      const { queryByText } = render(<ProjectDetailScreen />);
+      // When there are 0 chats, no count is shown (only shows when > 0)
+      expect(queryByText('0 chats')).toBeNull();
     });
 
     it('shows Chats section title', () => {
@@ -238,7 +264,7 @@ describe('ProjectDetailScreen', () => {
   describe('empty chats state', () => {
     it('shows empty chats message', () => {
       const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('No chats in this project yet')).toBeTruthy();
+      expect(getByText('No chats yet')).toBeTruthy();
     });
 
     it('shows "Start a Chat" button when models available', () => {
@@ -290,7 +316,7 @@ describe('ProjectDetailScreen', () => {
       const { queryByText, getByText } = render(<ProjectDetailScreen />);
       expect(queryByText('Other Project Chat')).toBeNull();
       // Still shows empty state
-      expect(getByText('No chats in this project yet')).toBeTruthy();
+      expect(getByText('No chats yet')).toBeTruthy();
     });
 
     it('shows last message preview in conversation item', () => {
@@ -345,7 +371,8 @@ describe('ProjectDetailScreen', () => {
       ];
 
       const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('2 chats')).toBeTruthy();
+      // Component shows just the count number, not "2 chats"
+      expect(getByText('2')).toBeTruthy();
     });
 
     it('navigates to chat when conversation is tapped', () => {
@@ -368,25 +395,25 @@ describe('ProjectDetailScreen', () => {
   // New Chat
   // ============================================================================
   describe('new chat', () => {
-    it('creates new conversation and navigates when "New Chat" is pressed', () => {
+    it('creates new conversation and navigates when "New" button is pressed', () => {
       const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New Chat'));
+      fireEvent.press(getByText('New'));
 
       expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
       expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'new-conv-1', projectId: 'proj1' });
     });
 
-    it('disables New Chat button when no models available', () => {
+    it('disables New button when no models available', () => {
       mockDownloadedModels = [];
       const { getByTestId } = render(<ProjectDetailScreen />);
-      const newChatButton = getByTestId('button-New Chat');
-      expect(newChatButton.props.accessibilityState?.disabled || newChatButton.props.disabled).toBeTruthy();
+      const newButton = getByTestId('button-New');
+      expect(newButton.props.accessibilityState?.disabled || newButton.props.disabled).toBeTruthy();
     });
 
     it('uses active model ID for new conversation', () => {
       mockActiveModelId = 'model1';
       const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New Chat'));
+      fireEvent.press(getByText('New'));
 
       expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
     });
@@ -395,7 +422,7 @@ describe('ProjectDetailScreen', () => {
       mockActiveModelId = null;
       mockDownloadedModels = [{ id: 'fallback-model', name: 'Fallback' }];
       const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New Chat'));
+      fireEvent.press(getByText('New'));
 
       expect(mockCreateConversation).toHaveBeenCalledWith('fallback-model', undefined, 'proj1');
     });
@@ -505,6 +532,44 @@ describe('ProjectDetailScreen', () => {
   });
 
   // ============================================================================
+  // Knowledge Base
+  // ============================================================================
+  describe('knowledge base', () => {
+    it('shows Knowledge Base section title', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Knowledge Base')).toBeTruthy();
+    });
+
+    it('shows empty state when no documents', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('No documents added')).toBeTruthy();
+    });
+
+    it('shows Add button', () => {
+      const { getByText } = render(<ProjectDetailScreen />);
+      expect(getByText('Add')).toBeTruthy();
+    });
+
+    it('shows documents when loaded', async () => {
+      mockGetDocumentsByProject.mockResolvedValue([
+        { id: 1, project_id: 'proj1', name: 'readme.pdf', path: '/p', size: 2048, created_at: '2024-01-01', enabled: 1 },
+      ]);
+
+      const { findByText } = render(<ProjectDetailScreen />);
+      expect(await findByText('readme.pdf')).toBeTruthy();
+    });
+
+    it('shows formatted file size', async () => {
+      mockGetDocumentsByProject.mockResolvedValue([
+        { id: 1, project_id: 'proj1', name: 'big.pdf', path: '/p', size: 1048576, created_at: '2024-01-01', enabled: 1 },
+      ]);
+
+      const { findByText } = render(<ProjectDetailScreen />);
+      expect(await findByText('1.0 MB')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
   // Project Without Description
   // ============================================================================
   describe('project without description', () => {
@@ -536,7 +601,7 @@ describe('ProjectDetailScreen', () => {
 
       // Call onPress directly — exercises the !hasModels branch
       act(() => {
-        getByTestId('button-New Chat').props.onPress?.();
+        getByTestId('button-New').props.onPress?.();
       });
 
       // createConversation should NOT have been called (no models = early return)

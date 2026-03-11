@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -16,6 +17,7 @@ import { parseThinkingContent, formatTime, formatDuration } from './utils';
 import { ThinkingBlock } from './components/ThinkingBlock';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
+import type { ParsedContent } from './types';
 
 function getToolIcon(toolName?: string): string {
   switch (toolName) {
@@ -30,7 +32,7 @@ function getToolIcon(toolName?: string): string {
 function getToolLabel(toolName?: string, content?: string): string {
   switch (toolName) {
     case 'web_search': {
-      const queryMatch = content?.match(/^No results found for "([^"]+)"/);
+      const queryMatch = content ? /^No results found for "([^"]+)"/.exec(content) : null;
       if (queryMatch) return `Searched: "${queryMatch[1]}" (no results)`;
       return 'Web search result';
     }
@@ -41,23 +43,33 @@ function getToolLabel(toolName?: string, content?: string): string {
   }
 }
 
-function buildMessageData(message: Message) {
-  const displayContent = message.role === 'assistant'
-    ? stripControlTokens(message.content)
-    : message.content;
-  const responseContent = message.reasoningContent
-    ? displayContent.replaceAll(/<\/?think>/gi, '').trim()
-    : displayContent;
-  // Use reasoningContent from llama.rn if available, fall back to parsing <think> tags for old messages
-  let parsedContent;
+function buildMessageData(message: Message): { displayContent: string; parsedContent: ParsedContent } {
+  // Use reasoningContent from llama.rn if available
+  if (message.reasoningContent) {
+    const displayContent = message.role === 'assistant'
+      ? stripControlTokens(message.content).replaceAll(/<\/?think>/gi, '').trim()
+      : message.content;
+    return {
+      displayContent,
+      parsedContent: { thinking: message.reasoningContent, response: displayContent, isThinkingComplete: true },
+    };
+  }
+
+  // Parse thinking content from raw message (before stripping control tokens)
+  // This handles both HLSL HLSL and <|channel|>analysis<|message|> formats
+  let parsedContent: ParsedContent;
   if (message.role === 'assistant') {
-    parsedContent = message.reasoningContent
-      ? { thinking: message.reasoningContent, response: responseContent, isThinkingComplete: true }
-      : parseThinkingContent(displayContent);
+    parsedContent = parseThinkingContent(message.content);
   } else {
     parsedContent = { thinking: null, response: message.content, isThinkingComplete: true };
   }
-  return { displayContent: responseContent, parsedContent };
+
+  // Strip control tokens for display
+  const displayContent = parsedContent.response
+    ? stripControlTokens(parsedContent.response)
+    : stripControlTokens(message.content);
+
+  return { displayContent, parsedContent };
 }
 
 type ToolResultBubbleProps = {
@@ -107,7 +119,7 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
 const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => {
   const toolIcon = getToolIcon(message.toolName);
   const toolLabel = getToolLabel(message.toolName, message.content);
-  const durationLabel = message.generationTimeMs != null ? ` (${message.generationTimeMs}ms)` : '';
+  const durationLabel = message.generationTimeMs == null ? '' : ` (${message.generationTimeMs}ms)`;
   const hasDetails = !!(message.content && message.content.length > 0 && !message.content.startsWith('No results'));
   return <ToolResultBubble toolIcon={toolIcon} toolLabel={toolLabel} toolName={message.toolName || 'unknown'} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
 };

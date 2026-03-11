@@ -410,7 +410,7 @@ describe('ChatInput', () => {
     });
 
     it('shows ON badge when image mode is forced', () => {
-      const { getByTestId, getByText } = render(
+      const { getByTestId } = render(
         <ChatInput {...defaultProps} imageModelLoaded={true} />
       );
 
@@ -418,8 +418,7 @@ describe('ChatInput', () => {
       openQuickSettings({ getByTestId });
       fireEvent.press(getByTestId('quick-image-mode'));
 
-      // Should show ON badge text in popover
-      expect(getByText('ON')).toBeTruthy();
+      expect(getByTestId('image-mode-force-badge')).toBeTruthy();
     });
 
     it('passes imageMode=force to onSend when in force mode', () => {

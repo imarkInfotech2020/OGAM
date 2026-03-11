@@ -515,7 +515,7 @@ describe('generateWithToolsImpl', () => {
       const deps = createMockDeps();
       const onStream = jest.fn();
 
-      (deps.context as any).completion = jest.fn(async (_params: any, cb: any) => {
+      deps.context.completion = jest.fn(async (_params: any, cb: any) => {
         cb({ token: 'First' });
         cb({ token: ' Second' });
         return {};

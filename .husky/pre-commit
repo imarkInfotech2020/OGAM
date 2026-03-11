@@ -1,4 +1,0 @@
-#!/usr/bin/env sh
-
-# Quality gates moved to pre-push to keep commit latency low.
-exit 0

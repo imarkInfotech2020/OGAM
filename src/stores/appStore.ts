@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
@@ -24,9 +25,11 @@ type AppSettings = {
   thinkingEnabled: boolean;
 };
 
+type ThemeMode = 'system' | 'light' | 'dark';
+
 interface AppState {
-  themeMode: 'system' | 'light' | 'dark';
-  setThemeMode: (mode: 'system' | 'light' | 'dark') => void;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
   hasCompletedOnboarding: boolean;
   setOnboardingComplete: (complete: boolean) => void;
   onboardingChecklist: OnboardingChecklist;
@@ -92,6 +95,8 @@ interface AppState {
   incrementImageGenerationCount: () => number;
   hasEngagedSharePrompt: boolean;
   setHasEngagedSharePrompt: (v: boolean) => void;
+  loadedSettings: Partial<AppSettings> | null;
+  setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
 
 const DEFAULT_CHECKLIST: OnboardingChecklist = {
@@ -130,7 +135,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      themeMode: 'system' as 'system' | 'light' | 'dark',
+      themeMode: 'system' as ThemeMode,
       setThemeMode: (mode) => set({ themeMode: mode }),
       hasCompletedOnboarding: false,
       setOnboardingComplete: (complete) =>
@@ -286,10 +291,12 @@ export const useAppStore = create<AppState>()(
       resetShownSpotlights: () => set({ shownSpotlights: {} }),
       textGenerationCount: 0,
       imageGenerationCount: 0,
-      incrementTextGenerationCount: () => { let c = 0; set(state => ({ textGenerationCount: c = state.textGenerationCount + 1 })); return c; },
-      incrementImageGenerationCount: () => { let c = 0; set(state => ({ imageGenerationCount: c = state.imageGenerationCount + 1 })); return c; },
+      incrementTextGenerationCount: () => { const c = get().textGenerationCount + 1; set({ textGenerationCount: c }); return c; },
+      incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
       hasEngagedSharePrompt: false,
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
+      loadedSettings: null,
+      setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),
     {
       name: 'local-llm-app-storage',
@@ -305,12 +312,12 @@ export const useAppStore = create<AppState>()(
         // Migrate default modelLoadingStrategy from 'memory' → 'performance'
         // Only migrate if the settings object itself was persisted (i.e. came from storage)
         // and the value matches the old default exactly, indicating the user never changed it.
-        if (persistedState && (persistedState as any).settings?.modelLoadingStrategy === 'memory') {
+        if (persistedState && persistedState.settings?.modelLoadingStrategy === 'memory') {
           merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
         }
         // Migrate: add cacheType if missing, derive from old flashAttn value
-        if (persistedState && (persistedState as any).settings && !((persistedState as any).settings.cacheType)) {
-          const oldFlashAttn = (persistedState as any).settings.flashAttn;
+        if (persistedState && persistedState.settings && !(persistedState.settings.cacheType)) {
+          const oldFlashAttn = persistedState.settings.flashAttn;
           const derivedCacheType = oldFlashAttn ? 'q8_0' : 'f16';
           merged.settings = { ...merged.settings, cacheType: derivedCacheType, flashAttn: true };
         }
@@ -341,8 +348,7 @@ export const useAppStore = create<AppState>()(
         generatedImages: state.generatedImages,
         shownSpotlights: state.shownSpotlights,
         hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
-        textGenerationCount: state.textGenerationCount,
-        imageGenerationCount: state.imageGenerationCount,
+        textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
       }),
     }

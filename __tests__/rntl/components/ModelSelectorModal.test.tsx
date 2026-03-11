@@ -37,23 +37,30 @@ jest.mock('../../../src/components/AppSheet', () => ({
 }));
 
 const mockUseAppStore = jest.fn();
+const mockUseRemoteServerStore = jest.fn();
 jest.mock('../../../src/stores', () => ({
   useAppStore: () => mockUseAppStore(),
+  useRemoteServerStore: () => mockUseRemoteServerStore(),
 }));
-
-const mockLoadImageModel = jest.fn().mockResolvedValue(undefined);
-const mockUnloadImageModel = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('../../../src/services', () => ({
   activeModelService: {
-    loadImageModel: (...args: any[]) => mockLoadImageModel(...args),
-    unloadImageModel: (...args: any[]) => mockUnloadImageModel(...args),
+    loadImageModel: jest.fn().mockResolvedValue(undefined),
+    unloadImageModel: jest.fn().mockResolvedValue(undefined),
   },
   hardwareService: {
     formatModelSize: jest.fn(() => '4.0 GB'),
     formatBytes: jest.fn(() => '2.0 GB'),
   },
+  remoteServerManager: {
+    clearActiveRemoteModel: jest.fn(),
+    setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
+    setActiveRemoteImageModel: jest.fn().mockResolvedValue(undefined),
+  },
 }));
+
+// Import mocked functions after the mock is defined
+const { activeModelService } = require('../../../src/services');
 
 describe('ModelSelectorModal', () => {
   const defaultProps = {
@@ -79,6 +86,15 @@ describe('ModelSelectorModal', () => {
       ],
       downloadedImageModels: [],
       activeImageModelId: null,
+    });
+    mockUseRemoteServerStore.mockReturnValue({
+      servers: [],
+      activeServerId: null,
+      activeRemoteTextModelId: null,
+      activeRemoteImageModelId: null,
+      discoveredModels: {},
+      setActiveServerId: jest.fn(),
+      setActiveRemoteImageModelId: jest.fn(),
     });
   });
 
@@ -558,7 +574,7 @@ describe('ModelSelectorModal', () => {
         fireEvent.press(getByText('SD Model'));
       });
 
-      expect(mockLoadImageModel).toHaveBeenCalledWith('img1');
+      expect(activeModelService.loadImageModel).toHaveBeenCalledWith('img1');
     });
 
     it('does not call loadImageModel when pressing the currently active image model', async () => {
@@ -585,7 +601,7 @@ describe('ModelSelectorModal', () => {
         modelTexts.forEach(el => fireEvent.press(el));
       });
 
-      expect(mockLoadImageModel).not.toHaveBeenCalled();
+      expect(activeModelService.loadImageModel).not.toHaveBeenCalled();
     });
 
     it('shows currently loaded image model info', () => {
@@ -638,7 +654,7 @@ describe('ModelSelectorModal', () => {
         fireEvent.press(getByText('Unload'));
       });
 
-      expect(mockUnloadImageModel).toHaveBeenCalled();
+      expect(activeModelService.unloadImageModel).toHaveBeenCalled();
     });
 
     it('shows "Switch Model" in image tab when image model is loaded', () => {

@@ -7,8 +7,12 @@ export type RootStackParamList = {
   // Former ProjectsStack
   ProjectDetail: { projectId: string };
   ProjectEdit: { projectId?: string };
+  ProjectChats: { projectId: string };
+  KnowledgeBase: { projectId: string };
+  DocumentPreview: { filePath: string; fileName: string; fileSize: number };
   // Former SettingsStack
   ModelSettings: undefined;
+  RemoteServers: undefined;
   VoiceSettings: undefined;
   DeviceInfo: undefined;
   StorageSettings: undefined;
