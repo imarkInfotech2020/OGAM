@@ -410,7 +410,8 @@ describe('RemoteServerModal', () => {
       );
       await setupPublicEndpointWithTest(getByText, getByPlaceholderText);
       await act(async () => { fireEvent.press(getByText('Add Server')); });
-      const continueBtn = mockAlert.mock.calls[0][2].find((b: any) => b.text === 'Continue');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const continueBtn = (mockAlert.mock.calls as any)[0][2].find((b: any) => b.text === 'Continue');
       await act(async () => { continueBtn.onPress(); });
       expect(mockAddServer).toHaveBeenCalled();
     });

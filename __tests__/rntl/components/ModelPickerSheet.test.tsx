@@ -151,14 +151,31 @@ const makeRemoteModel = (overrides: Partial<RemoteModel> = {}): RemoteModel => (
   ...overrides,
 } as RemoteModel);
 
+const idleLoading = { isLoading: false, type: null as 'text' | 'image' | null, modelName: null as string | null };
+const busyLoading = { isLoading: true, type: 'text' as const, modelName: null as string | null };
+const fullMemoryInfo = {
+  memoryAvailable: 8 * 1024 * 1024 * 1024,
+  memoryUsed: 2 * 1024 * 1024 * 1024,
+  memoryTotal: 16 * 1024 * 1024 * 1024,
+  memoryUsagePercent: 12.5,
+  estimatedModelMemory: 0,
+};
+const tightMemoryInfo = {
+  memoryAvailable: 4 * 1024 * 1024 * 1024,
+  memoryUsed: 12 * 1024 * 1024 * 1024,
+  memoryTotal: 16 * 1024 * 1024 * 1024,
+  memoryUsagePercent: 75,
+  estimatedModelMemory: 0,
+};
+
 const defaultProps = {
-  pickerType: 'text' as const,
-  loadingState: { isLoading: false },
-  downloadedModels: [],
-  downloadedImageModels: [],
+  pickerType: 'text' as 'text' | 'image' | null,
+  loadingState: idleLoading,
+  downloadedModels: [] as DownloadedModel[],
+  downloadedImageModels: [] as ONNXImageModel[],
   activeModelId: null as string | null,
   activeImageModelId: null as string | null,
-  memoryInfo: null,
+  memoryInfo: null as typeof fullMemoryInfo | null,
   remoteTextModels: [] as RemoteModel[],
   remoteImageModels: [] as RemoteModel[],
   activeRemoteTextModelId: null as string | null,
@@ -295,7 +312,7 @@ describe('ModelPickerSheet', () => {
         <ModelPickerSheet
           {...defaultProps}
           downloadedModels={[model]}
-          loadingState={{ isLoading: true }}
+          loadingState={busyLoading}
           onSelectTextModel={onSelectTextModel}
         />
       );
@@ -304,14 +321,8 @@ describe('ModelPickerSheet', () => {
 
     it('shows memory warning when model does not fit', () => {
       const bigModel = makeTextModel({ fileSize: 30 * 1024 * 1024 * 1024 });
-      const memoryInfo = {
-        memoryAvailable: 4 * 1024 * 1024 * 1024,
-        textModelMemory: 0,
-        imageModelMemory: 0,
-        totalMemory: 8 * 1024 * 1024 * 1024,
-      };
       const { getByText } = render(
-        <ModelPickerSheet {...defaultProps} downloadedModels={[bigModel]} memoryInfo={memoryInfo} />
+        <ModelPickerSheet {...defaultProps} downloadedModels={[bigModel]} memoryInfo={tightMemoryInfo} />
       );
       expect(getByText(/may not fit/)).toBeTruthy();
     });
@@ -378,7 +389,7 @@ describe('ModelPickerSheet', () => {
           {...defaultProps}
           downloadedModels={[model]}
           activeModelId="model1"
-          loadingState={{ isLoading: true }}
+          loadingState={busyLoading}
           onUnloadTextModel={onUnloadTextModel}
         />
       );
@@ -457,7 +468,7 @@ describe('ModelPickerSheet', () => {
         <ModelPickerSheet
           {...defaultProps}
           remoteTextModels={[remoteModel]}
-          loadingState={{ isLoading: true }}
+          loadingState={busyLoading}
           onSelectRemoteTextModel={onSelectRemoteTextModel}
         />
       );
@@ -532,18 +543,12 @@ describe('ModelPickerSheet', () => {
 
     it('shows memory warning for image model that does not fit', () => {
       const bigImgModel = makeImageModel({ size: 30 * 1024 * 1024 * 1024 });
-      const memoryInfo = {
-        memoryAvailable: 4 * 1024 * 1024 * 1024,
-        textModelMemory: 0,
-        imageModelMemory: 0,
-        totalMemory: 8 * 1024 * 1024 * 1024,
-      };
       const { getByText } = render(
         <ModelPickerSheet
           {...defaultProps}
           pickerType="image"
           downloadedImageModels={[bigImgModel]}
-          memoryInfo={memoryInfo}
+          memoryInfo={tightMemoryInfo}
         />
       );
       expect(getByText(/may not fit/)).toBeTruthy();
@@ -556,7 +561,7 @@ describe('ModelPickerSheet', () => {
           {...defaultProps}
           pickerType="image"
           downloadedImageModels={[imgModel]}
-          loadingState={{ isLoading: true }}
+          loadingState={busyLoading}
           onSelectImageModel={onSelectImageModel}
         />
       );
