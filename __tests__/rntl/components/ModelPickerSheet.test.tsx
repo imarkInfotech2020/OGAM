@@ -153,13 +153,6 @@ const makeRemoteModel = (overrides: Partial<RemoteModel> = {}): RemoteModel => (
 
 const idleLoading = { isLoading: false, type: null as 'text' | 'image' | null, modelName: null as string | null };
 const busyLoading = { isLoading: true, type: 'text' as const, modelName: null as string | null };
-const fullMemoryInfo = {
-  memoryAvailable: 8 * 1024 * 1024 * 1024,
-  memoryUsed: 2 * 1024 * 1024 * 1024,
-  memoryTotal: 16 * 1024 * 1024 * 1024,
-  memoryUsagePercent: 12.5,
-  estimatedModelMemory: 0,
-};
 const tightMemoryInfo = {
   memoryAvailable: 4 * 1024 * 1024 * 1024,
   memoryUsed: 12 * 1024 * 1024 * 1024,
@@ -175,7 +168,7 @@ const defaultProps = {
   downloadedImageModels: [] as ONNXImageModel[],
   activeModelId: null as string | null,
   activeImageModelId: null as string | null,
-  memoryInfo: null as typeof fullMemoryInfo | null,
+  memoryInfo: null as typeof tightMemoryInfo | null,
   remoteTextModels: [] as RemoteModel[],
   remoteImageModels: [] as RemoteModel[],
   activeRemoteTextModelId: null as string | null,
