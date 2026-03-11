@@ -69,7 +69,7 @@ interface RemoteServerState {
 
 // Generate unique ID
 function generateId(): string {
-  return `server_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  return `server_${Date.now()}_${Math.random().toString(16).slice(2, 11)}`;
 }
 
 export const useRemoteServerStore = create<RemoteServerState>()(
@@ -405,7 +405,7 @@ async function testEndpointAndGetModels(
 }
 
 async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
-  const url = server.endpoint.replace(/\/+$/, '');
+  const url = server.endpoint.replace(/[\/]+$/, '');
 
   // Headers for authentication
   const headers: Record<string, string> = {

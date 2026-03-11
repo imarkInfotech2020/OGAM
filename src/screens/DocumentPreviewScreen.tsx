@@ -135,7 +135,7 @@ export const DocumentPreviewScreen: React.FC = () => {
 
       // Also try with the UUID prefix stripped from filename (keepLocalCopy format)
       // Format: UUID-filename.ext -> filename.ext
-      const uuidMatch = fileName.match(/^[a-f0-9-]+-(.+)$/);
+      const uuidMatch = fileName.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-(.+)$/i);
       if (uuidMatch) {
         const strippedName = uuidMatch[1];
         pathsToTry.push(`${documentsPath}/${strippedName}`);

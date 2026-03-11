@@ -469,12 +469,12 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // Private IP ranges
     // 10.0.0.0 - 10.255.255.255
-    if (hostname.startsWith('10.') || hostname.match(/^10\.\d+\.\d+\.\d+$/)) {
+    if (hostname.startsWith('10.') || hostname.match(/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
       return true;
     }
 
     // 172.16.0.0 - 172.31.255.255
-    const match = hostname.match(/^172\.(\d+)\.\d+\.\d+$/);
+    const match = hostname.match(/^172\.(\d{1,2})\.\d{1,3}\.\d{1,3}$/);
     if (match) {
       const second = parseInt(match[1], 10);
       if (second >= 16 && second <= 31) {

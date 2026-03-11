@@ -174,7 +174,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       // Make the streaming request
-      const url = `${this.config.endpoint.replace(/\/+$/, '')}/v1/chat/completions`;
+      const baseUrl = this.config.endpoint.endsWith('/')
+    ? this.config.endpoint.slice(0, -1).replace(/[\/]+$/, '')
+    : this.config.endpoint;
+      const url = `${baseUrl}/v1/chat/completions`;
       logger.log('[OpenAIProvider] Making request to:', url, 'with model:', this.config.modelId);
 
       let fullContent = '';
@@ -363,7 +366,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           role: 'assistant',
           content: msg.content || '',
           tool_calls: msg.toolCalls.map(tc => ({
-            id: tc.id || `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: tc.id || `call_${Date.now()}_${(Math.random() * 1e9).toFixed(0)}`,
             type: 'function' as const,
             function: {
               name: tc.name,
