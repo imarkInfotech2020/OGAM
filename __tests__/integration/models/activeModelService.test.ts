@@ -31,6 +31,14 @@ const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
 const mockHardwareService = hardwareService as jest.Mocked<typeof hardwareService>;
 
+function expectLoadedSettings(expected: Record<string, unknown>) {
+  const loadedSettings = getAppState().loadedSettings;
+  expect(loadedSettings).not.toBeNull();
+  Object.entries(expected).forEach(([key, value]) => {
+    expect((loadedSettings as any)?.[key]).toBe(value);
+  });
+}
+
 describe('ActiveModelService Integration', () => {
   beforeEach(async () => {
     resetStores();
@@ -128,15 +136,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('test-model-1');
 
       // Verify loadedSettings was saved with current settings
-      const loadedSettings = getAppState().loadedSettings;
-      expect(loadedSettings).not.toBeNull();
-      expect(loadedSettings?.nThreads).toBe(6);
-      expect(loadedSettings?.nBatch).toBe(256);
-      expect(loadedSettings?.contextLength).toBe(4096);
-      expect(loadedSettings?.enableGpu).toBe(true);
-      expect(loadedSettings?.gpuLayers).toBe(50);
-      expect(loadedSettings?.flashAttn).toBe(true);
-      expect(loadedSettings?.cacheType).toBe('f16');
+      expectLoadedSettings({ nThreads: 6, nBatch: 256, contextLength: 4096, enableGpu: true, gpuLayers: 50, flashAttn: true, cacheType: 'f16' });
     });
 
     it('should skip loading if model already loaded', async () => {
@@ -247,15 +247,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('test-model-1');
 
       // Verify loadedSettings was saved with the correct values
-      const loadedSettings = getAppState().loadedSettings;
-      expect(loadedSettings).not.toBeNull();
-      expect(loadedSettings?.nThreads).toBe(6);
-      expect(loadedSettings?.nBatch).toBe(256);
-      expect(loadedSettings?.contextLength).toBe(4096);
-      expect(loadedSettings?.enableGpu).toBe(true);
-      expect(loadedSettings?.gpuLayers).toBe(50);
-      expect(loadedSettings?.flashAttn).toBe(true);
-      expect(loadedSettings?.cacheType).toBe('q8_0');
+      expectLoadedSettings({ nThreads: 6, nBatch: 256, contextLength: 4096, enableGpu: true, gpuLayers: 50, flashAttn: true, cacheType: 'q8_0' });
     });
   });
 
@@ -357,21 +349,38 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
-  // Helper: set up store and load both a text model and an image model
-  async function setupAndLoadBothModels() {
-    const textModel = createDownloadedModel({ id: 'text-model', fileSize: 1 * 1024 * 1024 * 1024 });
-    const imageModel = createONNXImageModel({ id: 'img-model', size: 512 * 1024 * 1024 });
+  // Helper: load both models without marking them active in the store
+  async function loadBothModelsWithSizes(textId: string, imageId: string) {
+    const textModel = createDownloadedModel({ id: textId, fileSize: 1 * 1024 * 1024 * 1024 });
+    const imageModel = createONNXImageModel({ id: imageId, size: 512 * 1024 * 1024 });
     useAppStore.setState({
       downloadedModels: [textModel],
-      activeModelId: 'text-model',
       downloadedImageModels: [imageModel],
-      activeImageModelId: 'img-model',
+      settings: { imageThreads: 4 } as any,
+    });
+    mockLlmService.isModelLoaded.mockReturnValue(true);
+    await activeModelService.loadTextModel(textId);
+    mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+    mockLocalDreamService.loadModel.mockResolvedValue(true);
+    await activeModelService.loadImageModel(imageId);
+    return { textModel, imageModel };
+  }
+
+  // Helper: set up store and load both a text model and an image model
+  async function setupAndLoadBothModels(textId = 'text-model', imageId = 'img-model') {
+    const textModel = createDownloadedModel({ id: textId, fileSize: 1 * 1024 * 1024 * 1024 });
+    const imageModel = createONNXImageModel({ id: imageId, size: 512 * 1024 * 1024 });
+    useAppStore.setState({
+      downloadedModels: [textModel],
+      activeModelId: textId,
+      downloadedImageModels: [imageModel],
+      activeImageModelId: imageId,
       settings: { imageThreads: 4 } as any,
     });
     mockLlmService.isModelLoaded.mockReturnValue(true);
     mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
-    await activeModelService.loadTextModel('text-model');
-    await activeModelService.loadImageModel('img-model');
+    await activeModelService.loadTextModel(textId);
+    await activeModelService.loadImageModel(imageId);
     return { textModel, imageModel };
   }
 
@@ -1377,21 +1386,7 @@ describe('ActiveModelService Integration', () => {
 
   describe('unloadAllModels error handling - image unload fails', () => {
     it('handles image unload error gracefully', async () => {
-      const textModel = createDownloadedModel({ id: 'text-ok', fileSize: 1 * 1024 * 1024 * 1024 });
-      const imageModel = createONNXImageModel({ id: 'img-fail', size: 512 * 1024 * 1024 });
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        activeModelId: 'text-ok',
-        downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-fail',
-        settings: { imageThreads: 4 } as any,
-      });
-
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
-
-      await activeModelService.loadTextModel('text-ok');
-      await activeModelService.loadImageModel('img-fail');
+      await setupAndLoadBothModels('text-ok', 'img-fail');
 
       // Make image unload fail
       mockLocalDreamService.unloadModel.mockRejectedValueOnce(new Error('Image unload failed'));
@@ -1522,20 +1517,7 @@ describe('ActiveModelService Integration', () => {
     });
 
     it('sums text and image model memory when both are loaded', async () => {
-      const textModel = createDownloadedModel({ id: 'mem-text-2', fileSize: 1 * 1024 * 1024 * 1024 });
-      const imageModel = createONNXImageModel({ id: 'mem-img-2', size: 512 * 1024 * 1024 });
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        downloadedImageModels: [imageModel],
-        settings: { imageThreads: 4 } as any,
-      });
-
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-      await activeModelService.loadTextModel('mem-text-2');
-
-      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
-      mockLocalDreamService.loadModel.mockResolvedValue(true);
-      await activeModelService.loadImageModel('mem-img-2');
+      await loadBothModelsWithSizes('mem-text-2', 'mem-img-2');
 
       const textOnly = (activeModelService as any).getCurrentlyLoadedMemoryGB();
       // Both models loaded → sum > either alone
@@ -1682,21 +1664,7 @@ describe('ActiveModelService Integration', () => {
 
     it('does not auto-unload text model', async () => {
       setupHighMemDevice();
-
-      const textModel = createDownloadedModel({ id: 'txt-hi', fileSize: 1 * 1024 * 1024 * 1024 });
-      const imageModel = createONNXImageModel({ id: 'img-hi', size: 512 * 1024 * 1024 });
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        downloadedImageModels: [imageModel],
-        settings: { imageThreads: 4 } as any,
-      });
-
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-      await activeModelService.loadTextModel('txt-hi');
-
-      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
-      mockLocalDreamService.loadModel.mockResolvedValue(true);
-      await activeModelService.loadImageModel('img-hi');
+      await loadBothModelsWithSizes('txt-hi', 'img-hi');
 
       // Text model should NOT be unloaded on high-mem device
       // unloadModel is called once during loadTextModel (to unload previous), but not during loadImageModel

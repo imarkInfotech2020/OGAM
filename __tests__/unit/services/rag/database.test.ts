@@ -20,6 +20,16 @@ jest.mock('../../../../src/utils/logger', () => ({
 // Import after mocks
 import { ragDatabase } from '../../../../src/services/rag/database';
 
+function expectDeleteCascade() {
+  const deleteCalls = mockExecuteSync.mock.calls.filter(
+    (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
+  );
+  expect(deleteCalls).toHaveLength(3);
+  expect(deleteCalls[0][0]).toContain('rag_embeddings');
+  expect(deleteCalls[1][0]).toContain('rag_chunks');
+  expect(deleteCalls[2][0]).toContain('rag_documents');
+}
+
 describe('RagDatabase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -147,13 +157,7 @@ describe('RagDatabase', () => {
     it('deletes embeddings, chunks and document', async () => {
       await ragDatabase.ensureReady();
       ragDatabase.deleteDocument(42);
-      const deleteCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
-      );
-      expect(deleteCalls).toHaveLength(3);
-      expect(deleteCalls[0][0]).toContain('rag_embeddings');
-      expect(deleteCalls[1][0]).toContain('rag_chunks');
-      expect(deleteCalls[2][0]).toContain('rag_documents');
+      expectDeleteCascade();
     });
   });
 
@@ -200,15 +204,7 @@ describe('RagDatabase', () => {
       await ragDatabase.ensureReady();
 
       ragDatabase.deleteDocumentsByProject('proj1');
-
-      const deleteCalls = mockExecuteSync.mock.calls.filter(
-        (c: any[]) => typeof c[0] === 'string' && c[0].includes('DELETE')
-      );
-      // 1 embeddings delete + 1 chunks delete + 1 docs delete
-      expect(deleteCalls).toHaveLength(3);
-      expect(deleteCalls[0][0]).toContain('rag_embeddings');
-      expect(deleteCalls[1][0]).toContain('rag_chunks');
-      expect(deleteCalls[2][0]).toContain('rag_documents');
+      expectDeleteCascade();
     });
   });
 

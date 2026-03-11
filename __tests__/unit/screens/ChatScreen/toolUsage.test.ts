@@ -25,19 +25,58 @@ describe('shouldUseToolsForMessage', () => {
     });
   });
 
-  describe('web_search tool', () => {
-    test.each([
-      ['latest', 'What is the latest news?'],
-      ['current', 'What is the current weather?'],
-      ['news', 'Tell me the news'],
-      ['search', 'Search for cats'],
-      ['look up', 'Look up that topic'],
-    ])('triggers on "%s" keyword', (_keyword, message) => {
-      expect(shouldUseToolsForMessage(message, ['web_search'])).toBe(true);
+  describe.each([
+    [
+      'web_search',
+      [
+        ['latest', 'What is the latest news?'],
+        ['current', 'What is the current weather?'],
+        ['news', 'Tell me the news'],
+        ['search', 'Search for cats'],
+        ['look up', 'Look up that topic'],
+      ],
+      'What is 2 + 2?',
+    ],
+    [
+      'get_current_datetime',
+      [
+        ['"time" keyword', 'What time is it?'],
+        ['"date" keyword', "What's the date today?"],
+        ['"day" keyword', 'What day is it?'],
+        ['"what\'s the time" phrase', "What's the time?"],
+        ['"what is the time" phrase', 'What is the time?'],
+      ],
+      'Hello world',
+    ],
+    [
+      'get_device_info',
+      [
+        ['device', 'What device am I using?'],
+        ['battery', 'Check my battery level'],
+        ['storage', 'How much storage do I have?'],
+        ['memory', 'Show memory usage'],
+        ['ram', 'How much RAM?'],
+      ],
+      'Hello world',
+    ],
+    [
+      'read_url',
+      [
+        ['URL in message', 'Check https://example.com'],
+        ['HTTP URL', 'Open http://test.org'],
+        ['"read this url" phrase', 'Read this url please'],
+        ['"summarize this link" phrase', 'Summarize this link'],
+        ['"fetch this page" phrase', 'Fetch this page'],
+      ],
+      'Hello world',
+    ],
+  ])('%s tool', (toolId, triggerCases, noTriggerMessage) => {
+    test.each(triggerCases)('triggers on %s', (_label, message) => {
+      expect(shouldUseToolsForMessage(message, [toolId])).toBe(true);
     });
 
-    it('does not trigger without web search keywords', () => {
-      expect(shouldUseToolsForMessage('What is 2 + 2?', ['web_search'])).toBe(false);
+    it('does not trigger without keywords', () => {
+      expect(shouldUseToolsForMessage(noTriggerMessage, [toolId])).toBe(false);
     });
   });
 
@@ -67,54 +106,6 @@ describe('shouldUseToolsForMessage', () => {
 
     it('does not trigger on math without leading digit', () => {
       expect(shouldUseToolsForMessage('Add these numbers', ['calculator'])).toBe(false);
-    });
-  });
-
-  describe('get_current_datetime tool', () => {
-    test.each([
-      ['"time" keyword', 'What time is it?'],
-      ['"date" keyword', "What's the date today?"],
-      ['"day" keyword', 'What day is it?'],
-      ['"what\'s the time" phrase', "What's the time?"],
-      ['"what is the time" phrase', 'What is the time?'],
-    ])('triggers on %s', (_label, message) => {
-      expect(shouldUseToolsForMessage(message, ['get_current_datetime'])).toBe(true);
-    });
-
-    it('does not trigger without time keywords', () => {
-      expect(shouldUseToolsForMessage('Hello world', ['get_current_datetime'])).toBe(false);
-    });
-  });
-
-  describe('get_device_info tool', () => {
-    test.each([
-      ['device', 'What device am I using?'],
-      ['battery', 'Check my battery level'],
-      ['storage', 'How much storage do I have?'],
-      ['memory', 'Show memory usage'],
-      ['ram', 'How much RAM?'],
-    ])('triggers on "%s" keyword', (_keyword, message) => {
-      expect(shouldUseToolsForMessage(message, ['get_device_info'])).toBe(true);
-    });
-
-    it('does not trigger without device keywords', () => {
-      expect(shouldUseToolsForMessage('Hello world', ['get_device_info'])).toBe(false);
-    });
-  });
-
-  describe('read_url tool', () => {
-    test.each([
-      ['URL in message', 'Check https://example.com'],
-      ['HTTP URL', 'Open http://test.org'],
-      ['"read this url" phrase', 'Read this url please'],
-      ['"summarize this link" phrase', 'Summarize this link'],
-      ['"fetch this page" phrase', 'Fetch this page'],
-    ])('triggers on %s', (_label, message) => {
-      expect(shouldUseToolsForMessage(message, ['read_url'])).toBe(true);
-    });
-
-    it('does not trigger without URL keywords', () => {
-      expect(shouldUseToolsForMessage('Hello world', ['read_url'])).toBe(false);
     });
   });
 
