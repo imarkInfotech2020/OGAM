@@ -288,7 +288,12 @@ export async function createStreamingRequest(
 ): Promise<void> {
   logger.log('[HttpClient] Creating streaming request to:', url);
   return new Promise((resolve, reject) => {
+    // XMLHttpRequest is required for SSE streaming in React Native as fetch
+    // does not support real-time streaming with progress events.
+    // Requests are validated by isPrivateNetworkEndpoint before use.
+    /* eslint-disable no-restricted-globals */
     const xhr = new XMLHttpRequest();
+    /* eslint-enable no-restricted-globals */
 
     const timeoutId = setTimeout(() => {
       xhr.abort();
