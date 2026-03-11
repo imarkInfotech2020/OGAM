@@ -204,7 +204,8 @@ describe('OpenAICompatibleProvider', () => {
           Accept: 'text/event-stream',
         }),
         expect.any(Function),
-        expect.any(Number)
+        expect.any(Number),
+        expect.any(AbortSignal)
       );
 
       expect(onToken).toHaveBeenCalledWith('Hello');
@@ -236,7 +237,8 @@ describe('OpenAICompatibleProvider', () => {
           Authorization: 'Bearer secret-key',
         }),
         expect.any(Function),
-        expect.any(Number)
+        expect.any(Number),
+        expect.any(AbortSignal)
       );
     });
 
