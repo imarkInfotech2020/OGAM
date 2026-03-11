@@ -8,6 +8,17 @@ import { createStyles } from '../styles';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
 import { LoadingState } from '../hooks/useHomeScreen';
 
+function ModelLoadingState({ loadingState, styles }: { loadingState: LoadingState; styles: ReturnType<typeof createStyles> }) {
+  return (
+    <>
+      <Text style={styles.modelCardName} numberOfLines={1}>
+        {loadingState.modelName || 'Unloading...'}
+      </Text>
+      <Text style={styles.modelCardLoading}>Loading...</Text>
+    </>
+  );
+}
+
 // Union types for models that can be active
 type ActiveTextModel = DownloadedModel | RemoteModel | undefined;
 type ActiveImageModel = ONNXImageModel | RemoteModel | undefined;
@@ -56,14 +67,7 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
       </View>
       {(() => {
         if (isLoading) {
-          return (
-            <>
-              <Text style={styles.modelCardName} numberOfLines={1}>
-                {loadingState.modelName || 'Unloading...'}
-              </Text>
-              <Text style={styles.modelCardLoading}>Loading...</Text>
-            </>
-          );
+          return <ModelLoadingState loadingState={loadingState} styles={styles} />;
         }
         if (activeTextModel) {
           const isRemote = isRemoteModel(activeTextModel);
@@ -137,14 +141,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
       </View>
       {(() => {
         if (isLoading) {
-          return (
-            <>
-              <Text style={styles.modelCardName} numberOfLines={1}>
-                {loadingState.modelName || 'Unloading...'}
-              </Text>
-              <Text style={styles.modelCardLoading}>Loading...</Text>
-            </>
-          );
+          return <ModelLoadingState loadingState={loadingState} styles={styles} />;
         }
         if (activeImageModel) {
           const isRemote = isRemoteModel(activeImageModel);

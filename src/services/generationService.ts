@@ -117,6 +117,39 @@ class GenerationService {
     if (shouldShowSharePrompt(s.incrementTextGenerationCount())) setTimeout(() => emitSharePrompt('text'), delayMs);
   }
 
+  private buildToolLoopHandlers() {
+    return {
+      isAborted: () => this.abortRequested,
+      onThinkingDone: () => this.updateState({ isThinking: false }),
+      onStream: (data: StreamChunk) => {
+        if (this.abortRequested) return;
+        const chunk = this.normalizeStreamChunk(data);
+        if (chunk.content) {
+          this.state.streamingContent += chunk.content;
+          this.tokenBuffer += chunk.content;
+        }
+        if (chunk.reasoningContent) {
+          this.reasoningBuffer += chunk.reasoningContent;
+        }
+        if (!this.flushTimer) {
+          this.flushTimer = setTimeout(
+            () => this.flushTokenBuffer(),
+            GenerationService.FLUSH_INTERVAL_MS,
+          );
+        }
+      },
+      onStreamReset: () => {
+        this.forceFlushTokens();
+        this.state.streamingContent = '';
+        this.tokenBuffer = '';
+      },
+      onFinalResponse: (content: string) => {
+        this.state.streamingContent = content;
+        useChatStore.getState().appendToStreamingMessage(content);
+      },
+    };
+  }
+
   private buildGenerationMeta(): GenerationMeta {
     // For remote providers, return basic metadata with token estimation
     if (this.isUsingRemoteProvider()) {
@@ -296,34 +329,7 @@ class GenerationService {
         enabledToolIds,
         projectId,
         callbacks,
-        isAborted: () => this.abortRequested,
-        onThinkingDone: () => this.updateState({ isThinking: false }),
-        onStream: (data) => {
-          if (this.abortRequested) return;
-          const chunk = this.normalizeStreamChunk(data);
-          if (chunk.content) {
-            this.state.streamingContent += chunk.content;
-            this.tokenBuffer += chunk.content;
-          }
-          if (chunk.reasoningContent) {
-            this.reasoningBuffer += chunk.reasoningContent;
-          }
-          if (!this.flushTimer) {
-            this.flushTimer = setTimeout(
-              () => this.flushTokenBuffer(),
-              GenerationService.FLUSH_INTERVAL_MS,
-            );
-          }
-        },
-        onStreamReset: () => {
-          this.forceFlushTokens();
-          this.state.streamingContent = '';
-          this.tokenBuffer = '';
-        },
-        onFinalResponse: (content) => {
-          this.state.streamingContent = content;
-          useChatStore.getState().appendToStreamingMessage(content);
-        },
+        ...this.buildToolLoopHandlers(),
       });
 
       // If aborted, stopGeneration() already handled cleanup.
@@ -533,35 +539,7 @@ class GenerationService {
       enabledToolIds,
       projectId,
       callbacks,
-      isAborted: () => this.abortRequested,
-      onThinkingDone: () => this.updateState({ isThinking: false }),
-      onStream: (data) => {
-        if (this.abortRequested) return;
-        const chunk = this.normalizeStreamChunk(data);
-        if (chunk.content) {
-          this.state.streamingContent += chunk.content;
-          this.tokenBuffer += chunk.content;
-        }
-        if (chunk.reasoningContent) {
-          this.reasoningBuffer += chunk.reasoningContent;
-        }
-        if (!this.flushTimer) {
-          this.flushTimer = setTimeout(
-            () => this.flushTokenBuffer(),
-            GenerationService.FLUSH_INTERVAL_MS,
-          );
-        }
-      },
-      onStreamReset: () => {
-        this.forceFlushTokens();
-        this.state.streamingContent = '';
-        this.tokenBuffer = '';
-      },
-      onFinalResponse: (content) => {
-        this.state.streamingContent = content;
-        useChatStore.getState().appendToStreamingMessage(content);
-      },
-      // Force remote mode for the tool loop
+      ...this.buildToolLoopHandlers(),
       forceRemote: true,
     });
 
