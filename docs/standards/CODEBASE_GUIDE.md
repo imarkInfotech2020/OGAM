@@ -29,13 +29,15 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 
 **Core capabilities:**
 - Text chat with streaming LLM inference (llama.cpp via `llama.rn`)
-- Tool calling with automatic tool loop (web search, URL reader, calculator, date/time, device info)
+- Remote LLM server support (connect to Ollama, LM Studio, LocalAI, or any OpenAI-compatible server on the local network)
+- Tool calling with automatic tool loop (web search, URL reader, calculator, date/time, device info, knowledge base search)
+- Project-scoped RAG knowledge base (upload documents, embed on-device with MiniLM, retrieve via cosine similarity)
 - Image generation with Stable Diffusion (MNN/QNN backends via LocalDream)
 - Voice input via Whisper speech-to-text (whisper.cpp via `whisper.rn`)
 - Vision model support (multimodal LLMs with image understanding)
 - Document attachment and analysis
 - Markdown rendering in chat messages
-- Project-based system prompt presets
+- Project-based system prompt presets with scoped conversations and knowledge bases
 - Generated image gallery with metadata
 - Passphrase lock with lockout protection
 - Model browsing and download from Hugging Face
@@ -60,8 +62,11 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 | Capability | Library | Native Backend |
 |------------|---------|----------------|
 | Text LLM | `llama.rn` ^0.11 | llama.cpp (C++) — Metal (iOS), CPU (Android) |
+| Embeddings (RAG) | `llama.rn` embedding mode | llama.cpp — bundled `all-MiniLM-L6-v2-Q8_0.gguf` |
+| RAG Storage | `@op-engineering/op-sqlite` | Native SQLite |
 | Image Gen | Custom `LocalDreamModule` | `libstable_diffusion_core.so` subprocess on localhost:18081 |
 | Speech-to-Text | `whisper.rn` ^0.5 | whisper.cpp (C++) |
+| Remote LLM | `OpenAICompatibleProvider` | XHR SSE → OpenAI-compatible server |
 
 ### Platform Services
 | Service | Library |
@@ -153,9 +158,11 @@ OffgridMobile/
 │   │   │   ├── ImageQualitySliders.tsx  # Image quality slider controls
 │   │   │   ├── ConversationActionsSection.tsx # Conversation actions (clear, etc.)
 │   │   │   └── styles.ts               # Settings modal styles
-│   │   ├── ModelSelectorModal/          # Model picker modal (text + image models)
+│   │   ├── ModelSelectorModal/          # Model picker modal (text + image models, local + remote)
 │   │   │   ├── index.tsx                # Main modal component
 │   │   │   └── styles.ts               # Modal styles
+│   │   ├── RemoteServerModal/           # Add/edit remote LLM server form
+│   │   │   └── index.tsx                # Server config, connection test, model discovery
 │   │   ├── VoiceRecordButton/           # Long-press voice recording with waveform
 │   │   │   ├── index.tsx                # Main button component
 │   │   │   ├── states.tsx               # Recording state UI variants
@@ -171,7 +178,7 @@ OffgridMobile/
 │   │   ├── ToolPickerSheet.tsx          # Tool selection bottom sheet (enable/disable tools)
 │   │   └── index.ts                     # Component exports
 │   │
-│   ├── screens/                         # Screen components (19 screens)
+│   ├── screens/                         # Screen components
 │   │   ├── OnboardingScreen.tsx         # Welcome slides
 │   │   ├── ModelDownloadScreen.tsx      # First model download during onboarding
 │   │   ├── HomeScreen/                  # Dashboard: active models, memory, recent chats
@@ -233,9 +240,14 @@ OffgridMobile/
 │   │   │   ├── useDownloadManager.ts    # Download manager hook
 │   │   │   └── styles.ts               # DownloadManagerScreen styles
 │   │   ├── ProjectsScreen.tsx           # Projects list
-│   │   ├── ProjectDetailScreen.tsx      # View project + linked chats
+│   │   ├── ProjectDetailScreen.tsx      # View project + linked chats + knowledge base entry
 │   │   ├── ProjectDetailScreen.styles.ts # ProjectDetailScreen styles
+│   │   ├── ProjectChatsScreen.tsx       # Conversations scoped to a project
+│   │   ├── KnowledgeBaseScreen.tsx      # Project knowledge base (upload, delete, view documents)
+│   │   ├── KnowledgeBaseScreen.styles.ts # KnowledgeBaseScreen styles
+│   │   ├── DocumentPreviewScreen.tsx    # Full-text preview of an ingested document
 │   │   ├── ProjectEditScreen.tsx        # Create/edit project
+│   │   ├── RemoteServersScreen.tsx      # Remote LLM server list (add, edit, delete, set active)
 │   │   ├── SettingsScreen.tsx           # Settings hub
 │   │   ├── VoiceSettingsScreen.tsx      # Whisper model management
 │   │   ├── DeviceInfoScreen.tsx         # Hardware specs
@@ -257,6 +269,7 @@ OffgridMobile/
 │   │   ├── chatStore.ts                 # Conversations + messages + streaming
 │   │   ├── authStore.ts                 # Auth state + lockout
 │   │   ├── projectStore.ts             # Projects (system prompt presets)
+│   │   ├── remoteServerStore.ts        # Remote servers, discovered models, active server/model
 │   │   └── whisperStore.ts             # Whisper model state
 │   │
 │   ├── services/                        # Business logic & native bridges
@@ -279,7 +292,20 @@ OffgridMobile/
 │   │   │   ├── imageSync.ts            # Image model download sync/recovery
 │   │   │   ├── restore.ts              # Download restore after app kill
 │   │   │   └── types.ts                # Service types
-│   │   ├── generationService.ts        # Lifecycle-independent text generation
+│   │   ├── providers/                  # LLM provider abstraction layer
+│   │   │   ├── types.ts                # LLMProvider interface, GenerationOptions, StreamCallbacks
+│   │   │   ├── localProvider.ts        # Local GGUF provider — delegates to llmService
+│   │   │   ├── openAICompatibleProvider.ts # Remote server provider — XHR SSE streaming
+│   │   │   ├── registry.ts             # ProviderRegistry singleton with listener support
+│   │   │   └── index.ts                # Provider exports
+│   │   ├── rag/                        # Project-scoped RAG knowledge base
+│   │   │   ├── chunking.ts             # Paragraph-aware text chunking with sliding-window overflow
+│   │   │   ├── database.ts             # op-sqlite schema + CRUD for chunks and documents
+│   │   │   ├── embedding.ts            # On-device MiniLM embeddings via llama.rn embedding mode
+│   │   │   ├── retrieval.ts            # Cosine similarity ranking + XML-safe prompt formatting
+│   │   │   ├── vectorMath.ts           # Dot product, magnitude, cosine similarity (pure TS)
+│   │   │   └── index.ts                # ragService singleton
+│   │   ├── generationService.ts        # Lifecycle-independent text generation (local + remote routing)
 │   │   ├── imageGenerationService.ts   # Lifecycle-independent image generation
 │   │   ├── localDreamGenerator.ts      # ONNX SD wrapper (native subprocess)
 │   │   ├── imageGenerator.ts           # Image generator helper
@@ -292,14 +318,16 @@ OffgridMobile/
 │   │   ├── authService.ts              # Passphrase hash + keychain
 │   │   ├── hardware.ts                 # Device info, RAM, recommendations
 │   │   ├── backgroundDownloadService.ts # DownloadManager bridge (Android + iOS)
-│   │   ├── documentService.ts          # Document text extraction
+│   │   ├── documentService.ts          # Document text extraction + RAG knowledge base ingestion
 │   │   ├── pdfExtractor.ts             # Native PDF text extraction
+│   │   ├── httpClient.ts               # XHR/SSE streaming, endpoint testing, server type detection
+│   │   ├── remoteServerManager.ts      # Remote server CRUD, keychain API key storage, provider lifecycle
 │   │   ├── generationToolLoop.ts       # Multi-turn tool loop orchestration (max 3 iterations, retry with backoff)
 │   │   ├── llmToolGeneration.ts        # Tool-aware LLM generation with schema injection
 │   │   └── tools/                      # Tool calling subsystem
 │   │       ├── index.ts                # Public exports
 │   │       ├── registry.ts             # Tool definitions, OpenAI schema conversion
-│   │       ├── handlers.ts             # Tool execution (web search, URL reader, calculator, datetime, device info)
+│   │       ├── handlers.ts             # Tool execution (web search, URL reader, calculator, datetime, device info, knowledge base)
 │   │       └── types.ts                # ToolDefinition, ToolCall, ToolResult types
 │   │
 │   ├── hooks/
@@ -446,6 +474,9 @@ MainTabs
 ├── ProjectsTab (Stack)
 │   ├── ProjectsScreen
 │   ├── ProjectDetailScreen
+│   ├── ProjectChatsScreen
+│   ├── KnowledgeBaseScreen
+│   ├── DocumentPreviewScreen
 │   └── ProjectEditScreen (modal presentation)
 │
 ├── ModelsTab
@@ -457,7 +488,8 @@ MainTabs
     ├── VoiceSettingsScreen
     ├── DeviceInfoScreen
     ├── StorageSettingsScreen
-    └── SecuritySettingsScreen
+    ├── SecuritySettingsScreen
+    └── RemoteServersScreen
 ```
 
 ### Screen Descriptions
@@ -471,8 +503,12 @@ MainTabs
 | **ChatsListScreen** | Sorted conversation list with compact items. Shows title, last message preview snippet, project badge, timestamp. Swipe-to-delete. | `conversation-list` |
 | **ModelsScreen** | Two sections: Text Models and Image Models. Curated recommendations by RAM, search bar, advanced filters (org, size, quantization, type, credibility). Local .gguf import. Download progress, pause/cancel. Compact card layout with icon actions. | `models-screen`, `model-list` |
 | **ProjectsScreen** | List of system prompt presets. Shows name, description snippet, linked chat count. Default projects: General Assistant, Spanish Learning, Code Review, Writing Helper. | `projects-screen` |
-| **ProjectDetailScreen** | Full project view: name, system prompt, description, linked conversations list. | |
+| **ProjectDetailScreen** | Full project view: name, system prompt, description, entry points to project chats and knowledge base. | |
+| **ProjectChatsScreen** | Conversations scoped to a specific project. | |
+| **KnowledgeBaseScreen** | Upload, view, and delete documents in a project's knowledge base. Shows ingestion status per document. | |
+| **DocumentPreviewScreen** | Full-text preview of an ingested document retrieved from the RAG database. | |
 | **ProjectEditScreen** | Create/edit form: name, description, system prompt, icon selection. | |
+| **RemoteServersScreen** | List of configured remote LLM servers. Add, edit, delete, and set the active server. | |
 | **GalleryScreen** | 3-column image grid. Filter by conversation. Multi-select for batch delete. Save to device. View metadata (prompt, steps, seed, model). | `gallery-screen` |
 | **SettingsScreen** | Hub with sections: Model Settings, Voice Settings, Security, Storage, Device Info. | `settings-screen` |
 | **ModelSettingsScreen** | Sliders/inputs for: system prompt, temperature (0–2), top-p (0–1), repeat penalty (1–2), max tokens, context length, threads, batch size, GPU toggle + layers, image gen steps/guidance/resolution, loading strategy, generation details toggle. | |
@@ -534,6 +570,18 @@ All stores use `zustand/middleware` `persist` with AsyncStorage. Only serializab
 | `projects[]` | Array of Project objects |
 | Default projects | General Assistant, Spanish Learning, Code Review, Writing Helper |
 | Actions | `createProject()`, `updateProject()`, `deleteProject()`, `duplicateProject()` |
+
+### remoteServerStore (`remote-server-storage`)
+
+| State Group | Fields | Notes |
+|-------------|--------|-------|
+| **Servers** | `servers[]` | Persisted. API keys are NOT stored here — kept in system keychain by `remoteServerManager` |
+| **Active** | `activeServerId` | Which server is currently selected (null = local-only) |
+| **Models** | `discoveredModels{}` | Map of serverId → `RemoteModel[]`. Persisted |
+| **Health** | `serverHealth{}` | Map of serverId → `{ isHealthy, lastCheck }`. Persisted |
+| **Active Model** | `activeRemoteTextModelId`, `activeRemoteImageModelId` | Currently selected remote models |
+| **Loading** | `isLoading`, `testingServerId`, `discoveringServerId` | Transient |
+| Actions | `addServer()`, `updateServer()`, `removeServer()`, `setActiveServerId()`, `discoverModels()`, `testConnection()`, `testConnectionByEndpoint()` | |
 
 ### whisperStore (`local-llm-whisper-storage`)
 
@@ -612,6 +660,26 @@ GeneratedImage
 Project
 ├── id, name, description, systemPrompt
 ├── icon?, createdAt, updatedAt
+
+RemoteServer
+├── id, name, endpoint, providerType ('openai-compatible' | 'anthropic')
+├── createdAt, lastHealthCheck?, isHealthy?, notes?
+└── apiKey is NOT stored here — kept in system keychain
+
+RemoteModel
+├── id, name, serverId
+├── capabilities: { supportsVision, supportsToolCalling, supportsThinking, maxContextLength?, family? }
+├── details?, lastUpdated
+
+RagDocument                  # A document ingested into a project knowledge base
+├── id, projectId, name, filePath
+├── fileSize, mimeType, createdAt
+└── chunkCount
+
+RagChunk                     # A chunk of text with its embedding vector
+├── id, documentId, projectId
+├── content, position (chunk index within document)
+└── embedding: number[]      (384-dim MiniLM vector, stored as JSON)
 ```
 
 ### Enums & Aliases
@@ -813,6 +881,7 @@ On-device function calling for compatible models.
 - `get_current_datetime` — Formatted date/time with optional timezone
 - `get_device_info` — Battery, storage, memory via `react-native-device-info`
 - `read_url` — Fetches and reads web page content, strips HTML, truncates to 80% of context window
+- `search_knowledge_base` — Semantic search over a project's RAG document store; only available in project conversations that have documents ingested
 
 **Tool Loop (`generationToolLoop.ts`):**
 - Orchestrates multi-turn tool execution: LLM → parse → execute → inject → repeat
@@ -831,6 +900,77 @@ On-device function calling for compatible models.
 - Prefers `completionResult.tool_calls` over streamed tool calls — streaming may deliver partial tool calls (name only, no arguments) while the final result contains complete data
 - **`completionResult.text` fallback**: If streaming produced no tokens but the completion result has a `.text` field (can happen with thinking models), uses that as the response
 - **Thinking model support**: For models with `<think>` Jinja templates, injects `<think>` tag into stream for UI display while keeping `fullResponse` clean for tool call parsing
+
+### Remote LLM Providers (`src/services/providers/`)
+
+A provider abstraction that allows `generationService` to route text generation to either a local GGUF model or a remote OpenAI-compatible server transparently.
+
+**`LLMProvider` interface** (all providers implement):
+- `generate(messages, options, callbacks)` — streaming generation
+- `loadModel(modelId)` / `unloadModel()` / `isModelLoaded()` / `getLoadedModelId()`
+- `capabilities` — `{ supportsVision, supportsToolCalling, supportsThinking }`
+
+**`LocalProvider`** wraps `llmService`. Generation delegates to llama.rn. Model loading state is tracked separately from `llmService` (which is managed by `activeModelService`).
+
+**`OpenAICompatibleProvider`** streams from a remote server:
+- Builds OpenAI-format `messages` array (including base64 image parts for vision)
+- Streams via `XMLHttpRequest` `onprogress` with incremental SSE parsing
+- Accumulates tool call deltas across chunks and delivers complete calls at `finish_reason`
+- Guarantees `onComplete` is called even for `finish_reason: 'length'` or absent finish reasons
+- Calls `this.abortController.abort()` on API error to immediately stop the XHR
+
+**`ProviderRegistry`** singleton:
+- Maintains `Map<id, LLMProvider>` + `activeProviderId`
+- `generationService` reads `activeServerId` from `remoteServerStore` and calls `providerRegistry.getProvider(activeServerId)` for each generation
+- Notifies subscribers on provider change (used to keep `activeServerId` store in sync)
+
+### Remote Server Manager (`src/services/remoteServerManager.ts`)
+
+Singleton that owns the lifecycle of remote server configurations and their providers.
+
+- **Add/update/remove** servers, creating/destroying the corresponding `OpenAICompatibleProvider`
+- **API key storage**: keys stored via `react-native-keychain` under service name `ai.offgridmobile.servers`; never written to `AsyncStorage` or the Zustand store
+- **Model discovery**: calls `/v1/models` and maps results to `RemoteModel` with capability heuristics
+- **Connection testing**: `testConnectionByEndpoint()` — pings health endpoints in order (Ollama, generic OpenAI)
+- **Active model selection**: `setActiveRemoteTextModel(serverId, modelId)` loads the model on the provider and updates `remoteServerStore`
+- **App startup**: `initializeProviders()` must be called in `App.tsx` to re-register providers and re-discover models for all persisted servers
+
+### HTTP Client (`src/services/httpClient.ts`)
+
+Low-level HTTP utilities for remote server communication.
+
+- **`createStreamingRequest(url, body, headers, onEvent, timeout, signal?)`** — XHR-based SSE streaming. `AbortSignal` wires directly to `xhr.abort()` so cancellations propagate immediately.
+- **`processSSELines(data, onEvent)`** — incremental SSE line parser that handles partial lines across `onprogress` calls
+- **`testEndpoint(endpoint, apiKey?)`** — tries Ollama `/api/tags`, then OpenAI `/v1/models`; returns `ServerTestResult`
+- **`detectServerType(endpoint)`** — heuristic detection of server software (Ollama, LM Studio, LocalAI)
+- **`isPrivateNetworkEndpoint(endpoint)`** — returns false for public internet IPs/hostnames; used to warn users
+- **`imageToBase64DataUrl(uri)`** — converts a `file://` image URI to a base64 data URL for vision requests
+
+### RAG Knowledge Base (`src/services/rag/`)
+
+Project-scoped retrieval-augmented generation pipeline running entirely on-device.
+
+**Ingestion flow:**
+1. `documentService.ingestDocumentToKnowledgeBase(projectId, attachment)` — called from `KnowledgeBaseScreen`
+2. `ragService.ingestDocument(projectId, filePath, name, mimeType)` — orchestrates chunking + embedding + storage
+3. `chunking.chunkText(text)` — splits by paragraph; oversized paragraphs use sliding-window with overlap
+4. `embedding.embedText(text)` — calls llama.rn in embedding mode with the bundled `all-MiniLM-L6-v2-Q8_0.gguf`; returns a 384-dim float vector
+5. `database.insertChunks(chunks)` — stores text + JSON-serialised vector in `op-sqlite`
+
+**Retrieval flow (called by `search_knowledge_base` tool):**
+1. `ragService.searchProject(projectId, query, topK=5)`
+2. Query text is embedded with the same MiniLM model
+3. All chunks for the project are loaded from SQLite and cosine-similarity scored against the query vector
+4. Top-K chunks are returned sorted by score
+5. `retrieval.formatForPrompt(chunks)` wraps them in `<knowledge_base>…</knowledge_base>` XML for the LLM
+
+**`vectorMath.ts`:** Pure TypeScript cosine similarity — no native dependency, fully testable.
+
+**Database schema (op-sqlite):**
+```sql
+documents(id, project_id, name, file_path, file_size, mime_type, created_at)
+chunks(id, document_id, project_id, content, position, embedding TEXT)
+```
 
 ---
 

@@ -9,12 +9,14 @@
 | Feature | Android | iOS |
 |---------|---------|-----|
 | Text Generation (GGUF) | llama.cpp (CPU + OpenCL GPU) | llama.cpp (CPU + Metal) |
+| Remote LLM Servers | OpenAI-compatible via SSE/XHR | OpenAI-compatible via SSE/XHR |
 | Vision AI | llama.rn multimodal | llama.rn multimodal |
 | Image Generation | local-dream (MNN/QNN) | Core ML (ANE + CPU) |
 | Voice Transcription | whisper.cpp | whisper.cpp |
 | PDF Extraction | PdfRenderer (Kotlin) | PDFKit (Swift) |
 | Document Viewer | Intent.ACTION_VIEW | QuickLook |
 | Tool Calling | llama.rn (model-dependent) | llama.rn (model-dependent) |
+| RAG Knowledge Base | op-sqlite + on-device MiniLM | op-sqlite + on-device MiniLM |
 | Background Downloads | Native DownloadManager | RNFS / URLSession |
 
 ---
@@ -186,6 +188,79 @@ Attach documents to chat messages for context-aware conversations. Documents are
 - iOS: Opens in QuickLook preview
 - Android: Opens with `Intent.ACTION_VIEW` using the appropriate system app
 
+### Remote LLM Servers
+
+Connect to any OpenAI-compatible server on the local network (Ollama, LM Studio, LocalAI, vLLM, etc.) and use its models exactly like local GGUF models.
+
+- **Automatic model discovery** — Lists all models available on the server via `/v1/models`
+- **SSE streaming** — Real-time token streaming via `XMLHttpRequest` with incremental SSE parsing (required for React Native, which doesn't support `fetch` streaming progress events)
+- **Secure API key storage** — Keys stored in the system keychain via `react-native-keychain`, never in AsyncStorage
+- **Private network detection** — Warns users before connecting to public internet endpoints
+- **Capability heuristics** — Vision and tool calling support detected from model name patterns
+- **Graceful streaming finalisation** — `onComplete` is guaranteed even when servers send `finish_reason: 'length'` or omit it entirely; partial tool calls are filtered before delivery
+
+**Provider abstraction:**
+
+```
+LLMProvider (interface)
+├── LocalProvider          wraps llmService (local GGUF via llama.rn)
+└── OpenAICompatibleProvider  streams from remote server via XHR/SSE
+
+ProviderRegistry (singleton)
+└── routes generation to the active provider (local or remote)
+```
+
+**Implementation:**
+- `src/services/providers/types.ts` — `LLMProvider` interface, `GenerationOptions`, `StreamCallbacks`
+- `src/services/providers/localProvider.ts` — wraps `llmService`
+- `src/services/providers/openAICompatibleProvider.ts` — XHR SSE streaming, vision, tool calling
+- `src/services/providers/registry.ts` — `ProviderRegistry` singleton with listener support
+- `src/services/remoteServerManager.ts` — CRUD for server configs, keychain API key management, provider lifecycle
+- `src/services/httpClient.ts` — `createStreamingRequest`, `testEndpoint`, `detectServerType`, `isPrivateNetworkEndpoint`
+- `src/stores/remoteServerStore.ts` — Zustand store: servers, active server, discovered models, health status
+- `src/screens/RemoteServersScreen.tsx` — Server list UI
+- `src/components/RemoteServerModal/` — Add/edit server form with connection test and model discovery
+
+---
+
+### Project-Scoped RAG Knowledge Base
+
+Each project can have a personal knowledge base of uploaded documents (PDF, text). Documents are processed entirely on-device using a bundled embedding model, stored in SQLite, and retrieved via cosine similarity at conversation time.
+
+**Pipeline:**
+
+```
+Document upload
+  → Text extraction (documentService)
+  → Chunking (paragraph-aware, sliding-window fallback for large paragraphs)
+  → Embedding (all-MiniLM-L6-v2-Q8_0.gguf via llama.rn embedding mode)
+  → SQLite storage (op-sqlite: chunks table with vector JSON column)
+
+At query time:
+  → Query embedded with same model
+  → Cosine similarity scored against all project chunks
+  → Top-K chunks formatted and returned as tool result
+```
+
+**Bundled embedding model:** `all-MiniLM-L6-v2-Q8_0.gguf` (~24MB) ships with the app binary — no download required.
+
+**`search_knowledge_base` tool** is automatically injected into the tool registry for project conversations when the project has documents. The LLM calls it to retrieve relevant context before answering.
+
+**Implementation:**
+- `src/services/rag/chunking.ts` — Paragraph-aware chunking with sliding-window overflow handling
+- `src/services/rag/embedding.ts` — llama.rn embedding mode wrapper
+- `src/services/rag/database.ts` — `op-sqlite` schema management and CRUD
+- `src/services/rag/retrieval.ts` — Cosine similarity ranking, prompt formatting, XML injection-safe output
+- `src/services/rag/vectorMath.ts` — Pure-TS dot product, magnitude, cosine similarity
+- `src/services/rag/index.ts` — `ragService` singleton orchestrating all of the above
+- `src/services/documentService.ts` — Document text extraction and ingestion into RAG
+- `src/screens/KnowledgeBaseScreen.tsx` — Document list for a project (upload, delete, view)
+- `src/screens/DocumentPreviewScreen.tsx` — Full-text preview of an ingested document
+- `src/screens/ProjectChatsScreen.tsx` — Conversations scoped to a project
+- Native assets: `android/app/src/main/assets/models/all-MiniLM-L6-v2-Q8_0.gguf`, `ios/all-MiniLM-L6-v2-Q8_0.gguf`
+
+---
+
 ### Tool Calling
 
 On-device function calling for models that support it. The system automatically detects tool calling capability from the model's jinja chat template at load time.
@@ -195,6 +270,7 @@ On-device function calling for models that support it. The system automatically 
 - **Calculator** — Safe recursive descent parser supporting `+, -, *, /, %, ^, ()`. No `eval()`.
 - **Date/Time** — Returns formatted date/time with optional timezone support.
 - **Device Info** — Battery level, storage usage, and memory stats via `react-native-device-info`.
+- **Knowledge Base Search** — Semantic search over a project's uploaded documents. Automatically injected into project conversations when documents are present. Returns ranked chunks with source attribution.
 
 **Tool Loop:**
 - Max 3 iterations per generation (prevents runaway loops)
@@ -561,6 +637,14 @@ Application state managed via Zustand with AsyncStorage persistence:
 **projectStore** (`src/stores/projectStore.ts`):
 - Projects (custom system prompts)
 - Active project selection
+
+**remoteServerStore** (`src/stores/remoteServerStore.ts`):
+- Configured remote server list
+- Active server ID (null = local-only mode)
+- Discovered models per server
+- Server health status
+- Active remote text and image model IDs
+- Note: API keys are NOT persisted here — stored securely via keychain in `remoteServerManager`
 
 **authStore** (`src/stores/authStore.ts`):
 - Passphrase lock state
@@ -1107,12 +1191,12 @@ OffgridMobile/
 │   │   ├── llm.ts                 # Text LLM inference
 │   │   ├── activeModelService.ts  # Model lifecycle management
 │   │   ├── modelManager.ts        # Download and storage
-│   │   ├── generationService.ts   # Text generation orchestration
+│   │   ├── generationService.ts   # Text generation orchestration (local + remote)
 │   │   ├── imageGenerationService.ts # Image generation orchestration
 │   │   ├── localDreamGenerator.ts # local-dream bridge
 │   │   ├── imageGenerator.ts      # Image generation utilities
 │   │   ├── hardware.ts            # Device info and memory
-│   │   ├── documentService.ts     # Document attachment processing
+│   │   ├── documentService.ts     # Document attachment processing + RAG ingestion
 │   │   ├── pdfExtractor.ts       # Native PDF text extraction bridge
 │   │   ├── authService.ts         # Passphrase authentication
 │   │   ├── voiceService.ts        # Voice recording
@@ -1122,6 +1206,21 @@ OffgridMobile/
 │   │   ├── huggingface.ts         # HF API utilities
 │   │   ├── coreMLModelBrowser.ts  # iOS Core ML model browsing
 │   │   ├── backgroundDownloadService.ts # Background download management
+│   │   ├── httpClient.ts          # XHR/SSE streaming, endpoint testing, server type detection
+│   │   ├── remoteServerManager.ts # Remote server CRUD + keychain API key storage
+│   │   ├── providers/             # LLM provider abstraction
+│   │   │   ├── types.ts           # LLMProvider interface, GenerationOptions, StreamCallbacks
+│   │   │   ├── localProvider.ts   # Local GGUF provider (wraps llmService)
+│   │   │   ├── openAICompatibleProvider.ts # Remote server provider (XHR SSE)
+│   │   │   ├── registry.ts        # ProviderRegistry singleton
+│   │   │   └── index.ts           # Provider exports
+│   │   ├── rag/                   # Project-scoped RAG knowledge base
+│   │   │   ├── chunking.ts        # Paragraph-aware text chunking
+│   │   │   ├── database.ts        # SQLite schema + CRUD (op-sqlite)
+│   │   │   ├── embedding.ts       # On-device MiniLM embeddings via llama.rn
+│   │   │   ├── retrieval.ts       # Cosine similarity ranking + prompt formatting
+│   │   │   ├── vectorMath.ts      # Dot product, magnitude, cosine similarity
+│   │   │   └── index.ts           # ragService singleton
 │   │   └── index.ts               # Service exports
 │   ├── stores/              # Zustand state management
 │   │   ├── appStore.ts            # Global app state
@@ -1129,6 +1228,7 @@ OffgridMobile/
 │   │   ├── authStore.ts           # Authentication state
 │   │   ├── projectStore.ts        # Projects state
 │   │   ├── whisperStore.ts        # Whisper model state
+│   │   ├── remoteServerStore.ts   # Remote server configs, discovered models, active server
 │   │   └── index.ts               # Store exports
 │   ├── theme/               # Dynamic light/dark theme system
 │   │   ├── index.ts               # useTheme() hook, getTheme(), exports
