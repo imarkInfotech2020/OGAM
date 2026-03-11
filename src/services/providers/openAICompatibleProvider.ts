@@ -21,6 +21,7 @@ import {
 } from '../httpClient';
 import { useAppStore } from '../../stores';
 import logger from '../../utils/logger';
+import { generateId } from '../../utils/generateId';
 
 /** OpenAI model info */
 interface _OpenAIModel {
@@ -174,9 +175,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       // Make the streaming request
-      const baseUrl = this.config.endpoint.endsWith('/')
-    ? this.config.endpoint.slice(0, -1).replace(/[\/]+$/, '')
-    : this.config.endpoint;
+      let baseUrl = this.config.endpoint;
+      while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
       const url = `${baseUrl}/v1/chat/completions`;
       logger.log('[OpenAIProvider] Making request to:', url, 'with model:', this.config.modelId);
 
@@ -366,7 +366,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           role: 'assistant',
           content: msg.content || '',
           tool_calls: msg.toolCalls.map(tc => ({
-            id: tc.id || `call_${Date.now()}_${(Math.random() * 1e9).toFixed(0)}`,
+            id: tc.id || `call_${generateId()}`,
             type: 'function' as const,
             function: {
               name: tc.name,

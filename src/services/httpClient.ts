@@ -514,8 +514,9 @@ export async function testEndpoint(
   const startTime = Date.now();
 
   try {
-    // Normalize endpoint (remove trailing slash)
-    const url = endpoint.replace(/\/+$/, '');
+    // Normalize endpoint (remove trailing slashes)
+    let url = endpoint;
+    while (url.endsWith('/')) url = url.slice(0, -1);
 
     // Try to reach the base URL first
     const controller = new AbortController();
@@ -575,7 +576,8 @@ export async function detectServerType(
   timeout: number = 5000
 ): Promise<{ type: string; version?: string } | null> {
   try {
-    const url = endpoint.replace(/\/+$/, '');
+    let url = endpoint;
+    while (url.endsWith('/')) url = url.slice(0, -1);
 
     // Try OpenAI-style version endpoint
     const controller = new AbortController();

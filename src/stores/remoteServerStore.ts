@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
+import { generateId } from '../utils/generateId';
 
 interface RemoteServerState {
   /** Configured remote servers */
@@ -67,10 +68,6 @@ interface RemoteServerState {
   clearAllServers: () => void;
 }
 
-// Generate unique ID
-function generateId(): string {
-  return `server_${Date.now()}_${Math.random().toString(16).slice(2, 11)}`;
-}
 
 export const useRemoteServerStore = create<RemoteServerState>()(
   persist(
@@ -405,7 +402,8 @@ async function testEndpointAndGetModels(
 }
 
 async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
-  const url = server.endpoint.replace(/[\/]+$/, '');
+  let url = server.endpoint;
+  while (url.endsWith('/')) url = url.slice(0, -1);
 
   // Headers for authentication
   const headers: Record<string, string> = {
