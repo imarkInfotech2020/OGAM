@@ -351,6 +351,50 @@ describe('useHomeScreen', () => {
     });
   });
 
+
+  // ==========================================================================
+  // Error paths in unload handlers
+  // ==========================================================================
+  describe('handleUnloadRemoteTextModel error path', () => {
+    it('shows error alert when clearActiveRemoteModel throws', async () => {
+      (remoteServerManager.clearActiveRemoteModel as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('Clear failed');
+      });
+      const { result } = renderHook(() => useHomeScreen(mockNavigation));
+      await act(async () => { await result.current.handleUnloadRemoteTextModel(); });
+      expect(showAlert).toHaveBeenCalledWith('Error', 'Failed to disconnect remote model');
+    });
+  });
+
+  describe('handleUnloadRemoteImageModel error path', () => {
+    it('shows error alert when clearActiveRemoteModel throws', async () => {
+      (remoteServerManager.clearActiveRemoteModel as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('Clear failed');
+      });
+      const { result } = renderHook(() => useHomeScreen(mockNavigation));
+      await act(async () => { await result.current.handleUnloadRemoteImageModel(); });
+      expect(showAlert).toHaveBeenCalledWith('Error', 'Failed to disconnect remote model');
+    });
+  });
+
+  // ==========================================================================
+  // activeRemoteImageModel computation
+  // ==========================================================================
+  describe('activeImageModel computation with remote image model', () => {
+    it('returns remote image model when active', () => {
+      const remoteImgModel = { id: 'img-remote-1', serverId: 'server-1', name: 'Vision', capabilities: { supportsVision: true } } as any;
+      (useRemoteServerStore as jest.Mock).mockReturnValue({
+        servers: [{ id: 'server-1' }],
+        discoveredModels: { 'server-1': [remoteImgModel] },
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: 'img-remote-1',
+        activeServerId: 'server-1',
+      });
+      const { result } = renderHook(() => useHomeScreen(mockNavigation));
+      expect(result.current.activeImageModel).toEqual(remoteImgModel);
+    });
+  });
+
   describe('remoteTextModels / remoteImageModels filtering', () => {
     it('separates remote models by vision capability', () => {
       const textModel = { id: 't1', serverId: 's1', name: 'Text', capabilities: { supportsVision: false } } as any;
