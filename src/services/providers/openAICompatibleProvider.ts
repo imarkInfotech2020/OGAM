@@ -185,6 +185,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       let toolCalls: OpenAIToolCall[] = [];
       let currentToolCall: Partial<OpenAIToolCall> | null = null;
       let completeCalled = false;
+      let streamErrorOccurred = false;
 
       await createStreamingRequest(
         url,
@@ -199,9 +200,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
           const message = parseOpenAIMessage(event);
           if (!message) return;
 
-          // Handle errors
+          // Handle errors — abort the XHR so no further events arrive
           if (message.error) {
+            streamErrorOccurred = true;
             callbacks.onError(new Error(message.error.message || 'API error'));
+            this.abortController?.abort();
             return;
           }
 
@@ -263,26 +266,30 @@ export class OpenAICompatibleProvider implements LLMProvider {
                   gpu: false,
                   gpuBackend: 'Remote',
                 },
-                toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
-                  id: tc.id,
-                  name: tc.function.name,
-                  arguments: tc.function.arguments,
-                })) : undefined,
+                toolCalls: toolCalls.filter(tc => tc.function?.name).length > 0
+                  ? toolCalls.filter(tc => tc.function?.name).map(tc => ({
+                    id: tc.id,
+                    name: tc.function.name,
+                    arguments: tc.function.arguments,
+                  })) : undefined,
               });
             }
           }
         },
-        300000 // 5 minute timeout
+        300000, // 5 minute timeout
+        this.abortController.signal
       );
 
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
       // 'content_filter', null), ensure the generation is finalised.
-      if (!completeCalled) {
+      // Skip if an error was already reported or the stream was aborted by the user.
+      const completedToolCalls = toolCalls.filter(tc => tc.function?.name);
+      if (!completeCalled && !streamErrorOccurred) {
         callbacks.onComplete({
           content: fullContent,
           reasoningContent: fullReasoningContent || undefined,
           meta: { gpu: false, gpuBackend: 'Remote' },
-          toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
+          toolCalls: completedToolCalls.length > 0 ? completedToolCalls.map(tc => ({
             id: tc.id,
             name: tc.function.name,
             arguments: tc.function.arguments,

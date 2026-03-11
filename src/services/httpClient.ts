@@ -284,7 +284,8 @@ export async function createStreamingRequest(
   body: unknown,
   headers: Record<string, string> = {},
   onEvent: (event: SSEEvent) => void,
-  timeout: number = 300000 // 5 minutes default
+  timeout: number = 300000, // 5 minutes default
+  signal?: AbortSignal
 ): Promise<void> {
   logger.log('[HttpClient] Creating streaming request to:', url);
   return new Promise((resolve, reject) => {
@@ -292,6 +293,13 @@ export async function createStreamingRequest(
     // does not support real-time streaming with progress events.
     // Requests are validated by isPrivateNetworkEndpoint before use.
     const xhr = new XMLHttpRequest(); // NOSONAR
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        resolve();
+      });
+    }
 
     const timeoutId = setTimeout(() => {
       xhr.abort();
