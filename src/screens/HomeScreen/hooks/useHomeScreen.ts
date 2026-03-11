@@ -4,6 +4,7 @@ import { InteractionManager } from 'react-native';
 import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
+import { discoverLANServers } from '../../../services/networkDiscovery';
 import { Conversation, RemoteModel } from '../../../types';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -27,6 +28,7 @@ export type LoadingState = {
 
 // Track if we've synced native state to avoid repeated calls
 let hasInitializedNativeSync = false;
+let hasRunLANDiscovery = false;
 
 export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
@@ -66,8 +68,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   } = useRemoteServerStore();
 
   const {
-    handleSelectTextModel,
-    handleUnloadTextModel,
+    handleSelectTextModel: _handleSelectTextModel,
+    handleUnloadTextModel: _handleUnloadTextModel,
     handleSelectImageModel,
     handleUnloadImageModel,
   } = useModelLoading({
@@ -76,12 +78,33 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setAlertState,
   });
 
+  // Wrap local model handlers to clear any active remote server first
+  const handleSelectTextModel = useCallback(
+    (model: Parameters<typeof _handleSelectTextModel>[0]) => {
+      remoteServerManager.clearActiveRemoteModel();
+      return _handleSelectTextModel(model);
+    },
+    [_handleSelectTextModel],
+  );
+
+  const handleUnloadTextModel = useCallback(
+    () => {
+      remoteServerManager.clearActiveRemoteModel();
+      return _handleUnloadTextModel();
+    },
+    [_handleUnloadTextModel],
+  );
+
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
       if (!hasInitializedNativeSync) {
         hasInitializedNativeSync = true;
         activeModelService.syncWithNativeState();
+      }
+      if (!hasRunLANDiscovery) {
+        hasRunLANDiscovery = true;
+        runLANDiscovery();
       }
     });
     isFirstMount.current = false;
@@ -103,6 +126,45 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     const unsubscribe = activeModelService.subscribe(() => { refreshMemoryInfo(); });
     return () => unsubscribe();
   }, [refreshMemoryInfo]);
+
+  const runLANDiscovery = async () => {
+    const discovered = await discoverLANServers();
+    if (discovered.length === 0) return;
+
+    const existingEndpoints = new Set(
+      useRemoteServerStore.getState().servers.map(s => s.endpoint.replace(/\/$/, ''))
+    );
+
+    const newServers = discovered.filter(
+      s => !existingEndpoints.has(s.endpoint.replace(/\/$/, ''))
+    );
+    if (newServers.length === 0) return;
+
+    for (const server of newServers) {
+      logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
+      await remoteServerManager.addServer({
+        name: server.name,
+        endpoint: server.endpoint,
+        providerType: 'openai-compatible',
+      });
+    }
+
+    const names = newServers.map(s => s.name).join(', ');
+    const title = newServers.length === 1
+      ? 'LLM Server Found'
+      : `${newServers.length} LLM Servers Found`;
+    setAlertState(showAlert(
+      title,
+      `Discovered on your network: ${names}. You can select a model from the model picker.`,
+      [
+        { text: 'Dismiss', style: 'cancel' },
+        { text: 'View Servers', onPress: () => {
+          setAlertState(hideAlert());
+          navigation.navigate('RemoteServers');
+        }},
+      ],
+    ));
+  };
 
   const loadData = async () => {
     if (!deviceInfo) {

@@ -257,8 +257,14 @@ async function callLLMWithRetry(
   onStream?: (data: StreamToken) => void,
   forceRemote?: boolean,
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
-  // Use remote provider if forced or if active server is set
-  const useRemote = forceRemote || useRemoteServerStore.getState().activeServerId !== null;
+  // Use remote provider only if forced, OR if activeServerId is set AND the provider
+  // is actually registered AND no local model is currently loaded.
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  const useRemote = forceRemote || (
+    !!activeServerId &&
+    providerRegistry.hasProvider(activeServerId) &&
+    !llmService.isModelLoaded()
+  );
 
   if (useRemote) {
     // Remote providers don't retry in the same way - errors are network-related

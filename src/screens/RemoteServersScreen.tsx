@@ -5,7 +5,7 @@
  * Manage connections to remote LLM servers (Ollama, LM Studio, etc.)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -203,10 +203,18 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, activeServerId, setActiveServerId, testConnection } = useRemoteServerStore();
+  const { servers, serverHealth, testConnection } = useRemoteServerStore();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+
+  // Auto-check all server statuses when screen opens
+  useEffect(() => {
+    servers.forEach(server => {
+      testConnection(server.id).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTestServer = useCallback(async (serverId: string) => {
     setTestingId(serverId);
@@ -234,23 +242,12 @@ export const RemoteServersScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            if (activeServerId === server.id) {
-              setActiveServerId(null);
-            }
             await remoteServerManager.removeServer(server.id);
           },
         },
       ]
     );
-  }, [activeServerId, setActiveServerId]);
-
-  const handleSelectServer = useCallback((serverId: string) => {
-    if (activeServerId === serverId) {
-      setActiveServerId(null);
-    } else {
-      setActiveServerId(serverId);
-    }
-  }, [activeServerId, setActiveServerId]);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -279,11 +276,11 @@ export const RemoteServersScreen: React.FC = () => {
         ) : (
           <>
             {servers.map((server) => {
-              const isActive = activeServerId === server.id;
               const isTesting = testingId === server.id;
-              const statusColor = server.isHealthy
+              const health = serverHealth[server.id];
+              const statusColor = health?.isHealthy
                 ? styles.statusDotActive
-                : server.isHealthy === false
+                : health?.isHealthy === false
                   ? styles.statusDotInactive
                   : styles.statusDotUnknown;
 
@@ -294,19 +291,6 @@ export const RemoteServersScreen: React.FC = () => {
                       <Text style={styles.serverName}>{server.name}</Text>
                       <Text style={styles.serverEndpoint}>{server.endpoint}</Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleSelectServer(server.id)}
-                      style={[
-                        styles.selectButton,
-                        isActive && styles.selectButtonActive,
-                      ]}
-                    >
-                      <Icon
-                        name={isActive ? 'check' : 'circle'}
-                        size={20}
-                        color={isActive ? theme.colors.background : theme.colors.textMuted}
-                      />
-                    </TouchableOpacity>
                   </View>
 
                   <View style={styles.statusContainer}>
@@ -314,9 +298,9 @@ export const RemoteServersScreen: React.FC = () => {
                     <Text style={styles.statusText}>
                       {isTesting
                         ? 'Testing...'
-                        : server.isHealthy
+                        : health?.isHealthy
                           ? 'Connected'
-                          : server.isHealthy === false
+                          : health?.isHealthy === false
                             ? 'Offline'
                             : 'Unknown'}
                     </Text>

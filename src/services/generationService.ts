@@ -64,9 +64,13 @@ class GenerationService {
   /** Check if using a remote provider */
   private isUsingRemoteProvider(): boolean {
     const activeServerId = useRemoteServerStore.getState().activeServerId;
-    const isRemote = activeServerId !== null;
-    logger.log('[GenerationService] isUsingRemoteProvider:', isRemote, 'activeServerId:', activeServerId);
-    return isRemote;
+    if (!activeServerId) return false;
+    // Provider must be registered (not just persisted from a previous session)
+    if (!providerRegistry.hasProvider(activeServerId)) return false;
+    // If a local model is loaded, prefer it over the remote server
+    if (llmService.isModelLoaded()) return false;
+    logger.log('[GenerationService] isUsingRemoteProvider: true, activeServerId:', activeServerId);
+    return true;
   }
 
   private flushTokenBuffer(): void {
@@ -492,6 +496,11 @@ class GenerationService {
     } catch (error) {
       if (this.abortRequested) return;
       logger.error('[GenerationService] Remote generation error:', error);
+      // Mark server as offline so the Remote Servers screen reflects the failure
+      const failedServerId = useRemoteServerStore.getState().activeServerId;
+      if (failedServerId) {
+        useRemoteServerStore.getState().updateServerHealth(failedServerId, false);
+      }
       if (this.flushTimer) {
         clearTimeout(this.flushTimer);
         this.flushTimer = null;
