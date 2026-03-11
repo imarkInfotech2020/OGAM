@@ -18,6 +18,16 @@ export function parseThinkingContent(content: string): ParsedContent {
     if (channelFinalMatch) {
       // We have both analysis and final markers
       const finalStart = channelFinalMatch.index!;
+
+      // Guard against out-of-order markers (final before analysis)
+      if (finalStart < analysisStart) {
+        return {
+          thinking: content.slice(analysisStart).trim(),
+          response: '',
+          isThinkingComplete: false,
+        };
+      }
+
       const thinkingContent = content.slice(analysisStart, finalStart).trim();
       const responseContent = content.slice(finalStart + channelFinalMatch[0].length).trim();
 
