@@ -21,7 +21,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(),
 }));
 
-function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string {
+function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string { // NOSONAR
   let serverId = '';
   act(() => {
     serverId = useRemoteServerStore.getState().addServer({
@@ -164,7 +164,7 @@ describe('remoteServerStore', () => {
     });
 
     it('should clear activeServerId if removed server was active', () => {
-      const serverId = addTestServer('Active Server', 'http://active:11434');
+      const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
       act(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
@@ -202,7 +202,7 @@ describe('remoteServerStore', () => {
 
   describe('getActiveServer', () => {
     it('should return active server', () => {
-      const serverId = addTestServer('Active Server', 'http://active:11434');
+      const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
       act(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
