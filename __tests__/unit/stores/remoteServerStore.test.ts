@@ -21,6 +21,28 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(),
 }));
 
+function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string {
+  let serverId = '';
+  act(() => {
+    serverId = useRemoteServerStore.getState().addServer({
+      name,
+      endpoint,
+      providerType: 'openai-compatible',
+    });
+  });
+  return serverId;
+}
+
+function addServerWithModel(modelId = 'model1', modelName = 'Model 1'): string {
+  const serverId = addTestServer();
+  act(() => {
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+      { id: modelId, name: modelName, serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
+    ]);
+  });
+  return serverId;
+}
+
 describe('remoteServerStore', () => {
   beforeEach(() => {
     // Reset store before each test
@@ -142,14 +164,7 @@ describe('remoteServerStore', () => {
     });
 
     it('should clear activeServerId if removed server was active', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Active Server',
-          endpoint: 'http://active:11434',
-          providerType: 'openai-compatible',
-        });
-      });
+      const serverId = addTestServer('Active Server', 'http://active:11434');
 
       act(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
@@ -167,14 +182,7 @@ describe('remoteServerStore', () => {
 
   describe('setActiveServerId', () => {
     it('should set active server', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Test Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-        });
-      });
+      const serverId = addTestServer();
 
       act(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
@@ -194,14 +202,7 @@ describe('remoteServerStore', () => {
 
   describe('getActiveServer', () => {
     it('should return active server', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Active Server',
-          endpoint: 'http://active:11434',
-          providerType: 'openai-compatible',
-        });
-      });
+      const serverId = addTestServer('Active Server', 'http://active:11434');
 
       act(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
@@ -221,14 +222,7 @@ describe('remoteServerStore', () => {
 
   describe('setDiscoveredModels', () => {
     it('should store discovered models for a server', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Test Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-        });
-      });
+      const serverId = addTestServer();
 
       act(() => {
         useRemoteServerStore.getState().setDiscoveredModels(serverId, [
@@ -246,20 +240,7 @@ describe('remoteServerStore', () => {
 
   describe('clearDiscoveredModels', () => {
     it('should clear models for a server', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Test Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-        });
-      });
-
-      act(() => {
-        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
-          { id: 'model1', name: 'Model 1', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
-        ]);
-      });
+      const serverId = addServerWithModel();
 
       act(() => {
         useRemoteServerStore.getState().clearDiscoveredModels(serverId);
@@ -362,20 +343,7 @@ describe('remoteServerStore', () => {
 
   describe('getModelById', () => {
     it('should return model by ID', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Test Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-        });
-      });
-
-      act(() => {
-        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
-          { id: 'model1', name: 'Model 1', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
-        ]);
-      });
+      const serverId = addServerWithModel();
 
       const model = useRemoteServerStore.getState().getModelById(serverId, 'model1');
 
@@ -569,20 +537,10 @@ describe('remoteServerStore', () => {
 
   describe('removeServer clears related data', () => {
     it('should clear discoveredModels and serverHealth when server is removed', () => {
-      let serverId = '';
-      act(() => {
-        serverId = useRemoteServerStore.getState().addServer({
-          name: 'Test Server',
-          endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
-        });
-      });
+      const serverId = addServerWithModel();
 
-      // Set up discovered models and health status
+      // Set up health status
       act(() => {
-        useRemoteServerStore.getState().setDiscoveredModels(serverId, [
-          { id: 'model1', name: 'Model 1', serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
-        ]);
         useRemoteServerStore.getState().updateServerHealth(serverId, true);
       });
 

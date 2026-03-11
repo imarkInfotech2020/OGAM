@@ -192,28 +192,12 @@ describe('RemoteServersScreen', () => {
   // Server Actions
   // ==========================================================================
   describe('server actions', () => {
-    it('renders Test button', () => {
+    test.each(['Test', 'Edit', 'Delete'])('renders %s button', (label) => {
       const server = createMockServer();
       useRemoteServerStore.setState({ servers: [server] });
 
       const { getByText } = render(<RemoteServersScreen />);
-      expect(getByText('Test')).toBeTruthy();
-    });
-
-    it('renders Edit button', () => {
-      const server = createMockServer();
-      useRemoteServerStore.setState({ servers: [server] });
-
-      const { getByText } = render(<RemoteServersScreen />);
-      expect(getByText('Edit')).toBeTruthy();
-    });
-
-    it('renders Delete button', () => {
-      const server = createMockServer();
-      useRemoteServerStore.setState({ servers: [server] });
-
-      const { getByText } = render(<RemoteServersScreen />);
-      expect(getByText('Delete')).toBeTruthy();
+      expect(getByText(label)).toBeTruthy();
     });
   });
 

@@ -56,6 +56,16 @@ afterAll(() => {
 // Import after mocks are set up
 import { useKeyboardAwarePopover } from '../../../src/components/ChatInput/useKeyboardAwarePopover';
 
+function showPopoverWithKeyboard() {
+  const { result } = renderHook(() => useKeyboardAwarePopover());
+  act(() => { keyboardShowHandler?.(); });
+  act(() => { result.current.show(); });
+  expect(result.current.visible).toBe(false);
+  act(() => { keyboardHideHandler?.(); });
+  expect(result.current.visible).toBe(true);
+  return result;
+}
+
 describe('useKeyboardAwarePopover', () => {
   describe('initial state', () => {
     it('returns initial anchor at origin', () => {
@@ -186,27 +196,7 @@ describe('useKeyboardAwarePopover', () => {
     });
 
     it('waits for keyboard to hide before showing popover', () => {
-      const { result } = renderHook(() => useKeyboardAwarePopover());
-
-      // Simulate keyboard showing
-      act(() => {
-        keyboardShowHandler?.();
-      });
-
-      act(() => {
-        result.current.show();
-      });
-
-      // Popover should not be visible yet
-      expect(result.current.visible).toBe(false);
-
-      // Simulate keyboard hiding
-      act(() => {
-        keyboardHideHandler?.();
-      });
-
-      // Now popover should be visible
-      expect(result.current.visible).toBe(true);
+      showPopoverWithKeyboard();
     });
 
     it('does not call show again if already waiting for keyboard', () => {
@@ -367,25 +357,7 @@ describe('useKeyboardAwarePopover', () => {
     });
 
     it('updates visibility when keyboard hides', () => {
-      const { result } = renderHook(() => useKeyboardAwarePopover());
-
-      // Show keyboard
-      act(() => {
-        keyboardShowHandler?.();
-      });
-
-      act(() => {
-        result.current.show();
-      });
-
-      expect(result.current.visible).toBe(false);
-
-      // Hide keyboard
-      act(() => {
-        keyboardHideHandler?.();
-      });
-
-      expect(result.current.visible).toBe(true);
+      showPopoverWithKeyboard();
     });
   });
 

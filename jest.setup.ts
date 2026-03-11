@@ -432,8 +432,7 @@ const instantAnimation = (value?: { setValue?: (next: number) => void }, toValue
 jest.spyOn(Animated, 'timing').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
 jest.spyOn(Animated, 'spring').mockImplementation((value: any, config: any) => instantAnimation(value, config?.toValue) as any);
 jest.spyOn(Animated, 'delay').mockImplementation(() => instantAnimation() as any);
-jest.spyOn(Animated, 'sequence').mockImplementation((...args: unknown[]) => {
-  const animations = args[0] as any[];
+function makeGroupAnimation(animations: any[]) {
   return {
     start: (callback?: (result: { finished: boolean }) => void) => {
       animations.forEach(animation => animation?.start?.());
@@ -442,18 +441,13 @@ jest.spyOn(Animated, 'sequence').mockImplementation((...args: unknown[]) => {
     stop: jest.fn(),
     reset: jest.fn(),
   } as any;
-});
-jest.spyOn(Animated, 'parallel').mockImplementation((...args: unknown[]) => {
-  const animations = args[0] as any[];
-  return {
-    start: (callback?: (result: { finished: boolean }) => void) => {
-      animations.forEach(animation => animation?.start?.());
-      callback?.({ finished: true });
-    },
-    stop: jest.fn(),
-    reset: jest.fn(),
-  } as any;
-});
+}
+jest.spyOn(Animated, 'sequence').mockImplementation((...args: unknown[]) =>
+  makeGroupAnimation(args[0] as any[])
+);
+jest.spyOn(Animated, 'parallel').mockImplementation((...args: unknown[]) =>
+  makeGroupAnimation(args[0] as any[])
+);
 jest.spyOn(Animated, 'stagger').mockImplementation((...args: unknown[]) => {
   const animations = args[1] as any[];
   return Animated.parallel(animations) as any;
