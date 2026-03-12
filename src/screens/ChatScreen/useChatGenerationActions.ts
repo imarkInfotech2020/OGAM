@@ -178,7 +178,6 @@ async function generateWithCompactionRetry(
   enabledTools: string[],
   projectId?: string,
 ): Promise<void> {
-  logger.log('[ToolDebug] generateWithCompactionRetry — enabledTools:', enabledTools, '| will use generateWithTools:', enabledTools.length > 0);
   const gen = (msgs: Message[]) => enabledTools.length > 0
     ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
@@ -229,12 +228,10 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabl
   const localToolCalling = llmService.supportsToolCalling();
   const isRemoteActive = !!(activeServerId && activeRemoteTextModelId);
   const canUseTools = localToolCalling || isRemoteActive;
-  logger.log('[ToolDebug] resolveToolsAndPrompt — localToolCalling:', localToolCalling, '| isRemoteActive:', isRemoteActive, '| activeServerId:', activeServerId, '| activeRemoteTextModelId:', activeRemoteTextModelId, '| canUseTools:', canUseTools, '| settings.enabledTools:', deps.settings.enabledTools);
   let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
   if (conversation?.projectId && canUseTools && !enabledTools.includes('search_knowledge_base')) {
     enabledTools = [...enabledTools, 'search_knowledge_base'];
   }
-  logger.log('[ToolDebug] resolveToolsAndPrompt — final enabledTools:', enabledTools);
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   return { enabledTools, rawPrompt };
 }
@@ -268,7 +265,6 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const heuristicMatch = shouldUseToolsForMessage(messageText, enabledTools);
   const activeTools = (isRemote || heuristicMatch) ? enabledTools : [];
-  logger.log('[ToolDebug] startGenerationFn — isRemote:', isRemote, '| heuristicMatch:', heuristicMatch, '| enabledTools:', enabledTools, '| activeTools:', activeTools, '| messageText:', messageText);
   const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);

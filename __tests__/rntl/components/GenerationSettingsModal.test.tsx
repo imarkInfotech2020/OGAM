@@ -738,7 +738,7 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText(/Project:/));
 
     expect(onClose).toHaveBeenCalled();
-    jest.advanceTimersByTime(400);
+    jest.advanceTimersByTime(350);
     expect(onOpenProject).toHaveBeenCalled();
 
     jest.useRealTimers();
