@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -270,7 +270,13 @@ type ChatMessageAreaProps = {
 
 const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
-}) => (
+}) => {
+  const [inputHeight, setInputHeight] = useState(84);
+  const scrollToBottomStyle = useMemo(
+    () => [styles.scrollToBottomContainer, { bottom: inputHeight + 8 }],
+    [styles.scrollToBottomContainer, inputHeight],
+  );
+  return (
   <>
     {chat.displayMessages.length === 0 ? (
       <EmptyChat
@@ -299,7 +305,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       />
     )}
     {chat.showScrollToBottom && chat.displayMessages.length > 0 && (
-      <Animated.View entering={FadeIn.duration(150)} style={styles.scrollToBottomContainer}>
+      <Animated.View entering={FadeIn.duration(150)} style={scrollToBottomStyle}>
         <AnimatedPressable hapticType="impactLight" style={styles.scrollToBottomButton} onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}>
           <Icon name="chevron-down" size={20} color={colors.textSecondary} />
         </AnimatedPressable>
@@ -338,6 +344,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
     )}
     {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
          Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
+    <View onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}>
     <AttachStep index={[3, 15]} fill>
       <ChatInput
         onSend={chat.handleSend}
@@ -359,6 +366,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
       />
     </AttachStep>
+    </View>
     <ToolPickerSheet
       visible={chat.showToolPicker}
       onClose={() => chat.setShowToolPicker(false)}
@@ -366,4 +374,5 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       onToggleTool={chat.handleToggleTool}
     />
   </>
-);
+  );
+};

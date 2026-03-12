@@ -62,7 +62,6 @@ const createHeaderStyles = (colors: ThemeColors) => ({
 const createScrollStyles = (colors: ThemeColors) => ({
   scrollToBottomContainer: {
     position: 'absolute' as const,
-    bottom: 84,
     right: 16,
     zIndex: 10,
   },
