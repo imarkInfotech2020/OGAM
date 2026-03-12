@@ -1039,6 +1039,7 @@ describe('generationService', () => {
       ) => {
         onStream?.({ content: 'answer', reasoningContent: 'thinking step' });
         onComplete?.('answer');
+        return 'answer';
       });
 
       await generationService.generateResponse(convId, [
@@ -1182,6 +1183,7 @@ describe('generationService', () => {
 
       mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, _onStream: any, onComplete: any) => {
         onComplete?.('done');
+        return 'done';
       });
 
       // Start and finish generation
@@ -1209,8 +1211,9 @@ describe('generationService', () => {
       setupWithActiveModel();
 
       mockedLlmService.generateResponse.mockImplementation(async (_msgs: any, onStream: any, onComplete: any) => {
-        onStream?.('Hi');
+        onStream?.({ content: 'Hi' });
         onComplete?.('Hi');
+        return 'Hi';
       });
 
       await generationService.generateResponse(convId, [
@@ -1600,7 +1603,8 @@ describe('generationService', () => {
     it('uses local LLM when local model is loaded even if remote server is configured', async () => {
       const convId = setupWithConversation();
       mockedLlmService.generateResponse.mockImplementation(async (_msgs, cb) => {
-        cb('hello');
+        cb?.({ content: 'hello' });
+        return 'hello';
       });
 
       await generationService.generateResponse(convId, [
@@ -1675,7 +1679,7 @@ describe('generationService', () => {
     it('getCurrentProvider returns local provider fallback when no activeServerId', () => {
       // Test line 61: getCurrentProvider when activeServerId is null
       useRemoteServerStore.setState({ activeServerId: null });
-      mockedProviderRegistry.getProvider.mockReturnValue(null);
+      mockedProviderRegistry.getProvider.mockReturnValue(undefined);
       const _result = (generationService as any).getCurrentProvider();
       expect(mockedProviderRegistry.getProvider).toHaveBeenCalledWith('local');
     });

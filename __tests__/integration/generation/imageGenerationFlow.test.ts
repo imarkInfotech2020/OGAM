@@ -1489,7 +1489,6 @@ describe('Image Generation Flow Integration', () => {
 
 
       mockLocalDreamService.generateImage.mockImplementation(async (_params, progressCb) => {
-        onProgress = progressCb;
         progressCb?.({ step: 5, totalSteps: 20, progress: 0.25 });
         return {
           id: 'img-1', prompt: 'test', imagePath: '/path/img.png',
