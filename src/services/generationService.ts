@@ -63,13 +63,16 @@ class GenerationService {
 
   /** Check if using a remote provider */
   private isUsingRemoteProvider(): boolean {
-    const activeServerId = useRemoteServerStore.getState().activeServerId;
+    const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+    const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
+    const localLoaded = llmService.isModelLoaded();
+    logger.log('[ToolDebug] isUsingRemoteProvider — activeServerId:', activeServerId, '| activeRemoteTextModelId:', activeRemoteTextModelId, '| hasProvider:', hasProvider, '| localLoaded:', localLoaded);
     if (!activeServerId) return false;
     // Provider must be registered (not just persisted from a previous session)
-    if (!providerRegistry.hasProvider(activeServerId)) return false;
+    if (!hasProvider) return false;
     // If a local model is loaded, prefer it over the remote server
-    if (llmService.isModelLoaded()) return false;
-    logger.log('[GenerationService] isUsingRemoteProvider: true, activeServerId:', activeServerId);
+    if (localLoaded) return false;
+    logger.log('[ToolDebug] isUsingRemoteProvider: TRUE');
     return true;
   }
 
@@ -316,11 +319,13 @@ class GenerationService {
       onFirstToken?: () => void;
     },
   ): Promise<void> {
+    logger.log('[ToolDebug] generateWithTools called — checking isUsingRemoteProvider...');
     // Route to remote provider if active
     if (this.isUsingRemoteProvider()) {
+      logger.log('[ToolDebug] generateWithTools → routing to REMOTE');
       return this.generateRemoteWithTools(conversationId, messages, options);
     }
-
+    logger.log('[ToolDebug] generateWithTools → routing to LOCAL');
     // Local generation with tools
     const { enabledToolIds, projectId, ...callbacks } = options;
     if (!(await this.prepareGeneration(conversationId))) return;

@@ -229,17 +229,24 @@ export const useChatScreen = () => {
   }, [activeModel?.mmProjPath]);
 
   useEffect(() => {
-    const loaded = llmService.isModelLoaded();
-    if (loaded) {
-      setSupportsToolCalling(llmService.supportsToolCalling());
-      setSupportsThinking(llmService.supportsThinking());
-    } else if (activeRemoteTextModelId) {
-      // Remote models support tool calling via OpenAI-compatible API
+    logger.log('[ToolDebug] supportsToolCalling effect fired — activeRemoteTextModelId:', activeRemoteTextModelId, '| activeModelId:', activeModelId, '| isModelLoading:', isModelLoading, '| llmService.isModelLoaded():', llmService.isModelLoaded());
+    if (activeRemoteTextModelId) {
+      // Remote models always support tool calling via OpenAI-compatible API
+      logger.log('[ToolDebug] → remote model active, setting supportsToolCalling=true');
       setSupportsToolCalling(true);
       setSupportsThinking(false);
     } else {
-      setSupportsToolCalling(false);
-      setSupportsThinking(false);
+      const loaded = llmService.isModelLoaded();
+      if (loaded) {
+        const tc = llmService.supportsToolCalling();
+        logger.log('[ToolDebug] → local model loaded, supportsToolCalling from llmService:', tc);
+        setSupportsToolCalling(tc);
+        setSupportsThinking(llmService.supportsThinking());
+      } else {
+        logger.log('[ToolDebug] → no model active, setting supportsToolCalling=false');
+        setSupportsToolCalling(false);
+        setSupportsThinking(false);
+      }
     }
   }, [activeModelId, isModelLoading, activeRemoteTextModelId]);
 

@@ -163,7 +163,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
         ...(options.temperature !== undefined && { temperature: options.temperature }),
         ...(options.maxTokens !== undefined && { max_tokens: options.maxTokens }),
         ...(options.topP !== undefined && { top_p: options.topP }),
+        ...(options.tools && options.tools.length > 0 && { tools: options.tools, tool_choice: 'auto' }),
       };
+      logger.log('[OpenAIProvider] Request body tools count:', options.tools?.length ?? 0, '| tool_choice included:', !!(options.tools && options.tools.length > 0));
 
       // Build headers
       const headers: Record<string, string> = {
