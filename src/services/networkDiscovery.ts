@@ -65,7 +65,7 @@ function isIPv6(ip: string): boolean {
 }
 
 /** Common home/office subnets to try when IPv4 detection fails (e.g. device returns IPv6) */
-const FALLBACK_SUBNETS = ['192.168.1', '192.168.0', '10.0.0', '10.0.1', '172.16.0'];
+const FALLBACK_SUBNETS = ['192.168.1', '192.168.0', '10.0.0', '10.0.1', '10.0.2', '172.16.0'];
 
 /**
  * Scan the local subnet for LLM servers.
