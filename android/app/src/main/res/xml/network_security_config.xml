@@ -6,8 +6,9 @@
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>
-    <!-- All other domains require HTTPS (default for Android 9+) -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Allow cleartext (HTTP) to local network LLM servers (Ollama, LM Studio, LocalAI).
+         LAN servers run on HTTP — HTTPS is not practical for self-hosted local services. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
