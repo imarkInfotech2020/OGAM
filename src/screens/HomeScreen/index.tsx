@@ -266,9 +266,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         onUnloadRemoteTextModel={handleUnloadRemoteTextModel}
         onSelectRemoteImageModel={handleSelectRemoteImageModel}
         onUnloadRemoteImageModel={handleUnloadRemoteImageModel}
-        onBrowseModels={() => {
+        onBrowseModels={(tab) => {
           setPickerType(null);
-          navigation.navigate('ModelsTab');
+          navigation.navigate('ModelsTab', { initialTab: tab });
         }}
       />
 

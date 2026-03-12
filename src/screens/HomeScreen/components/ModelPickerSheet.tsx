@@ -36,7 +36,7 @@ type Props = {
   onUnloadRemoteTextModel: () => void;
   onSelectRemoteImageModel: (model: RemoteModel) => void;
   onUnloadRemoteImageModel: () => void;
-  onBrowseModels: () => void;
+  onBrowseModels: (tab: 'text' | 'image') => void;
 };
 
 export const ModelPickerSheet: React.FC<Props> = ({
@@ -119,7 +119,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                   title="Browse Models"
                   variant="outline"
                   size="small"
-                  onPress={onBrowseModels}
+                  onPress={() => onBrowseModels('text')}
                 />
               </View>
             ) : (
@@ -244,7 +244,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                   title="Browse Models"
                   variant="outline"
                   size="small"
-                  onPress={onBrowseModels}
+                  onPress={() => onBrowseModels('image')}
                 />
               </View>
             ) : (
@@ -342,7 +342,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
 
       <TouchableOpacity
         style={styles.browseMoreButton}
-        onPress={onBrowseModels}
+        onPress={() => onBrowseModels(pickerType ?? 'text')}
       >
         <Text style={styles.browseMoreText}>Browse more models</Text>
         <Icon name="arrow-right" size={16} color={colors.textMuted} />

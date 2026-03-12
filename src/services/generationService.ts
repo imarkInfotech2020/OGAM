@@ -46,6 +46,7 @@ class GenerationService {
   // Token batching — collect tokens and flush to UI at a controlled rate
   private tokenBuffer: string = '';
   private reasoningBuffer: string = '';
+  private totalReasoningLength: number = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
@@ -130,11 +131,15 @@ class GenerationService {
         if (this.abortRequested) return;
         const chunk = this.normalizeStreamChunk(data);
         if (chunk.content) {
+          if (!this.state.streamingContent && this.remoteTimeToFirstToken === undefined) {
+            this.remoteTimeToFirstToken = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : undefined;
+          }
           this.state.streamingContent += chunk.content;
           this.tokenBuffer += chunk.content;
         }
         if (chunk.reasoningContent) {
           this.reasoningBuffer += chunk.reasoningContent;
+          this.totalReasoningLength += chunk.reasoningContent.length;
         }
         if (!this.flushTimer) {
           this.flushTimer = setTimeout(
@@ -162,8 +167,8 @@ class GenerationService {
       const activeServer = remoteStore.getActiveServer();
       const _modelId = providerRegistry.getActiveProvider().getLoadedModelId();
 
-      // Estimate token count from streaming content (roughly 4 chars per token)
-      const contentLength = this.state.streamingContent.length;
+      // Estimate token count from streaming content (roughly 4 chars per token), including reasoning tokens
+      const contentLength = this.state.streamingContent.length + this.totalReasoningLength;
       const estimatedTokens = Math.ceil(contentLength / 4);
       const generationTime = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : 0;
       const tokensPerSecond = generationTime > 0 ? estimatedTokens / generationTime : undefined;
@@ -233,6 +238,8 @@ class GenerationService {
 
     this.tokenBuffer = '';
     this.reasoningBuffer = '';
+    this.totalReasoningLength = 0;
+    this.remoteTimeToFirstToken = undefined;
     return true;
   }
 
@@ -431,11 +438,13 @@ class GenerationService {
 
     this.currentRemoteAbortController = new AbortController();
 
+    const { temperature, maxTokens, topP, thinkingEnabled } = useAppStore.getState().settings;
     const options: GenerationOptions = {
-      temperature: useAppStore.getState().settings.temperature,
-      maxTokens: useAppStore.getState().settings.maxTokens,
-      topP: useAppStore.getState().settings.topP,
+      temperature,
+      maxTokens,
+      topP,
       stopSequences: [],
+      enableThinking: thinkingEnabled,
     };
 
     try {
@@ -447,7 +456,7 @@ class GenerationService {
             if (this.abortRequested) return;
             if (!firstTokenReceived) {
               firstTokenReceived = true;
-              this.remoteTimeToFirstToken = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+              this.remoteTimeToFirstToken = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : undefined;
               this.updateState({ isThinking: false });
               onFirstToken?.();
             }
@@ -463,6 +472,7 @@ class GenerationService {
           onReasoning: (content: string) => {
             if (this.abortRequested) return;
             this.reasoningBuffer += content;
+            this.totalReasoningLength += content.length;
             if (!this.flushTimer) {
               this.flushTimer = setTimeout(
                 () => this.flushTokenBuffer(),
@@ -555,12 +565,7 @@ class GenerationService {
     if (!this.abortRequested) {
       this.forceFlushTokens();
       const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-      const meta: GenerationMeta = {
-        gpu: false,
-        gpuBackend: 'Remote',
-        modelName: provider.getLoadedModelId() || 'Remote Model',
-      };
-      useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, meta);
+      useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
       this.checkSharePrompt();
       this.resetState();
     }
@@ -602,6 +607,8 @@ class GenerationService {
     }
     this.tokenBuffer = '';
     this.reasoningBuffer = '';
+    this.totalReasoningLength = 0;
+    this.remoteTimeToFirstToken = undefined;
     this.updateState({
       isGenerating: false,
       isThinking: false,

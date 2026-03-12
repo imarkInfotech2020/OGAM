@@ -232,7 +232,7 @@ export const useChatScreen = () => {
     if (activeRemoteTextModelId) {
       // Remote models always support tool calling via OpenAI-compatible API
       setSupportsToolCalling(true);
-      setSupportsThinking(false);
+      setSupportsThinking(true);
     } else {
       const loaded = llmService.isModelLoaded();
       if (loaded) {

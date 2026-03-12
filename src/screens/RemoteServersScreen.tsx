@@ -275,7 +275,8 @@ export const RemoteServersScreen: React.FC = () => {
       );
       Alert.alert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
     } catch (error) {
-      Alert.alert('Scan Failed', error instanceof Error ? error.message : 'Unknown error');
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      Alert.alert('Scan Failed', message);
     } finally {
       setIsScanning(false);
     }

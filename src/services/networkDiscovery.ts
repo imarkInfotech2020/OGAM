@@ -20,7 +20,7 @@ const PROVIDERS = [
   { port: 8080,  type: 'localai' as const,  name: 'LocalAI',   probePath: '/v1/models'    },
 ];
 
-const TIMEOUT_MS = 300;
+const TIMEOUT_MS = 500;
 const BATCH_SIZE = 50;
 
 /** Probe a single host:port — resolves true if it responds with an HTTP status */
@@ -45,11 +45,10 @@ async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
   return results;
 }
 
-/** Parse subnet base from IP, e.g. "192.168.1.42" → "192.168.1" */
+/** Parse subnet base from IPv4, e.g. "192.168.1.42" → "192.168.1". Returns null if not a private IPv4. */
 function subnetBase(ip: string): string | null {
   const parts = ip.split('.');
   if (parts.length !== 4) return null;
-  // Reject loopback, unspecified, or non-private addresses
   const first = parseInt(parts[0], 10);
   const second = parseInt(parts[1], 10);
   const isPrivate =
@@ -60,51 +59,72 @@ function subnetBase(ip: string): string | null {
   return parts.slice(0, 3).join('.');
 }
 
+/** Returns true if the string looks like an IPv6 address */
+function isIPv6(ip: string): boolean {
+  return ip.includes(':');
+}
+
+/** Common home/office subnets to try when IPv4 detection fails (e.g. device returns IPv6) */
+const FALLBACK_SUBNETS = ['192.168.1', '192.168.0', '10.0.0', '10.0.1', '172.16.0'];
+
 /**
  * Scan the local subnet for LLM servers.
  * Returns discovered servers sorted by IP.
- * Safe to call in the background — never throws.
+ * Throws with a human-readable message if setup fails (no WiFi IP, non-private network).
+ * Errors during probing are swallowed — only setup errors propagate.
  */
 export async function discoverLANServers(): Promise<DiscoveredServer[]> {
-  try {
-    const ip = await getIpAddress();
-    if (!ip) {
-      logger.warn('[Discovery] Could not get device IP');
-      return [];
-    }
+  const ip = await getIpAddress();
 
+  let subnetsToScan: string[];
+
+  if (!ip || ip === '0.0.0.0' || ip === '127.0.0.1') {
+    logger.warn('[Discovery] Could not get device WiFi IP (got:', ip || 'null', '), trying common subnets');
+    subnetsToScan = FALLBACK_SUBNETS;
+  } else if (isIPv6(ip)) {
+    // iOS 26+ may return IPv6 as the primary address — fall back to common subnets
+    logger.warn('[Discovery] Got IPv6 address:', ip, '— falling back to common subnets');
+    subnetsToScan = FALLBACK_SUBNETS;
+  } else {
     const base = subnetBase(ip);
     if (!base) {
-      logger.warn('[Discovery] Could not parse subnet from IP:', ip);
-      return [];
+      logger.warn('[Discovery] IP is not on a private network:', ip, '— trying common subnets');
+      subnetsToScan = FALLBACK_SUBNETS;
+    } else {
+      subnetsToScan = [base];
     }
+  }
 
-    logger.log('[Discovery] Scanning subnet:', `${base}.0/24`);
+  logger.log('[Discovery] Scanning subnets:', subnetsToScan.map(s => `${s}.0/24`).join(', '));
 
+  try {
     const discovered: DiscoveredServer[] = [];
+    const seenEndpoints = new Set<string>();
 
-    for (const provider of PROVIDERS) {
-      const tasks = Array.from({ length: 254 }, (_, i) => {
-        const target = `${base}.${i + 1}`;
-        return () => probe(target, provider.port, provider.probePath).then(found => {
-          if (found) {
-            logger.log(`[Discovery] Found ${provider.name} at ${target}:${provider.port}`);
-            discovered.push({
-              endpoint: `http://${target}:${provider.port}`,
-              type: provider.type,
-              name: `${provider.name} (${target})`,
-            });
-          }
+    // Scan all subnets in parallel — each subnet is independent
+    await Promise.all(subnetsToScan.map(async (base) => {
+      for (const provider of PROVIDERS) {
+        const tasks = Array.from({ length: 254 }, (_, i) => {
+          const target = `${base}.${i + 1}`;
+          return () => probe(target, provider.port, provider.probePath).then(found => {
+            if (found) {
+              const endpoint = `http://${target}:${provider.port}`;
+              if (!seenEndpoints.has(endpoint)) {
+                seenEndpoints.add(endpoint);
+                logger.log(`[Discovery] Found ${provider.name} at ${target}:${provider.port}`);
+                discovered.push({ endpoint, type: provider.type, name: `${provider.name} (${target})` });
+              }
+            }
+          });
         });
-      });
-
-      await runBatch(tasks);
-    }
+        await runBatch(tasks);
+      }
+    }));
 
     logger.log('[Discovery] Scan complete, found:', discovered.length, 'servers');
     return discovered;
   } catch (error) {
-    logger.warn('[Discovery] Scan failed:', error);
+    logger.warn('[Discovery] Scan error during probing:', error);
     return [];
   }
 }

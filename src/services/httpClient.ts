@@ -371,6 +371,84 @@ export async function createStreamingRequest(
 }
 
 /**
+ * Stream NDJSON responses (Ollama /api/chat format).
+ * Each line is a complete JSON object — no SSE "data:" prefix.
+ */
+export async function createNDJSONStreamingRequest(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+  onLine: (parsed: Record<string, unknown>) => void,
+  timeout: number = 300000,
+  signal?: AbortSignal
+): Promise<void> {
+  logger.log('[HttpClient] Creating NDJSON streaming request to:', url);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest(); // NOSONAR
+
+    if (signal) {
+      signal.addEventListener('abort', () => { xhr.abort(); resolve(); });
+    }
+
+    const timeoutId = setTimeout(() => { xhr.abort(); reject(new Error('Request timeout')); }, timeout);
+
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+
+    let processedLength = 0;
+
+    const processChunk = (text: string) => {
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          onLine(JSON.parse(trimmed) as Record<string, unknown>);
+        } catch {
+          logger.warn('[HttpClient] Failed to parse NDJSON line:', trimmed.substring(0, 100));
+        }
+      }
+    };
+
+    xhr.onprogress = () => {
+      const text = xhr.responseText;
+      if (text.length > processedLength) {
+        processChunk(text.slice(processedLength));
+        processedLength = text.length;
+      }
+    };
+
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 4) {
+        clearTimeout(timeoutId);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const text = xhr.responseText;
+          if (text.length > processedLength) {
+            processChunk(text.slice(processedLength));
+          }
+          resolve();
+        } else {
+          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
+        }
+      }
+    };
+
+    xhr.onerror = () => { clearTimeout(timeoutId); reject(new Error('Network error')); };
+    xhr.ontimeout = () => { clearTimeout(timeoutId); reject(new Error('Request timeout')); };
+
+    try {
+      const bodyStr = JSON.stringify(body);
+      logger.log('[HttpClient] Sending request body, length:', bodyStr.length);
+      xhr.send(bodyStr);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      reject(err);
+    }
+  });
+}
+
+/**
  * Parse OpenAI streaming message from SSE event
  */
 export function parseOpenAIMessage(event: SSEEvent): OpenAIStreamMessage | null {

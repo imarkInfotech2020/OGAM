@@ -128,7 +128,13 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   }, [refreshMemoryInfo]);
 
   const runLANDiscovery = async () => {
-    const discovered = await discoverLANServers();
+    let discovered: Awaited<ReturnType<typeof discoverLANServers>>;
+    try {
+      discovered = await discoverLANServers();
+    } catch (error) {
+      logger.warn('[HomeScreen] LAN discovery skipped:', (error as Error).message);
+      return;
+    }
     if (discovered.length === 0) return;
 
     const store = useRemoteServerStore.getState();
@@ -296,8 +302,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
     : null;
 
-  const activeTextModel = downloadedModels.find((m) => m.id === activeModelId) || activeRemoteTextModel || null;
-  const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId) || activeRemoteImageModel || null;
+  const activeTextModel = activeRemoteTextModel || downloadedModels.find((m) => m.id === activeModelId) || null;
+  const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
   const recentConversations = conversations.slice(0, 4);
 
   // Get all remote text models (non-vision)
@@ -316,6 +322,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
     try {
+      // Unload any active local model first — only one active model at a time
+      if (activeModelId) {
+        await activeModelService.unloadTextModel();
+      }
       await remoteServerManager.setActiveRemoteTextModel(model.serverId, model.id);
       logger.log('[useHomeScreen] Remote text model set successfully');
     } catch (_error) {
@@ -324,7 +334,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
-  }, [setPickerType, setLoadingState, setAlertState]);
+  }, [activeModelId, setPickerType, setLoadingState, setAlertState]);
 
   const handleUnloadRemoteTextModel = useCallback(async () => {
     setPickerType(null);
