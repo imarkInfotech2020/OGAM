@@ -250,33 +250,23 @@ async function callRemoteLLMWithTools(
   });
 }
 
-/** Call LLM with retry+backoff for transient native context errors. */
-async function callLLMWithRetry(
+async function callRemoteWithErrorHandling(
   messages: Message[],
   tools: any[],
   onStream?: (data: StreamToken) => void,
-  forceRemote?: boolean,
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
-  // Use remote provider only if forced, OR if activeServerId is set AND the provider
-  // is actually registered AND no local model is currently loaded.
-  const activeServerId = useRemoteServerStore.getState().activeServerId;
-  const useRemote = forceRemote || (
-    !!activeServerId &&
-    providerRegistry.hasProvider(activeServerId) &&
-    !llmService.isModelLoaded()
-  );
-
-  if (useRemote) {
-    // Remote providers don't retry in the same way - errors are network-related
-    try {
-      return await callRemoteLLMWithTools(messages, tools, onStream);
-    } catch (e: any) {
-      const errMsg = e?.message || String(e) || 'Remote LLM error';
-      throw new Error(errMsg);
-    }
+  try {
+    return await callRemoteLLMWithTools(messages, tools, onStream);
+  } catch (e: any) {
+    throw new Error(e?.message || String(e) || 'Remote LLM error');
   }
+}
 
-  // Local provider with retry logic
+async function callLocalWithRetry(
+  messages: Message[],
+  tools: any[],
+  onStream?: (data: StreamToken) => void,
+): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
   let lastError: any;
   for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt++) {
     try {
@@ -284,21 +274,33 @@ async function callLLMWithRetry(
     } catch (e: any) {
       lastError = e;
       const msg = e?.message || String(e) || '';
-      // Fail fast on errors that won't resolve with a retry
       if (isNonRetryableError(msg) || attempt >= MAX_LLM_RETRIES - 1) {
         break;
       }
-      // Force-stop native context and reset isGenerating before retrying —
-      // the native context may be stuck in a busy state after an error
       logger.log(`[ToolLoop] Error: "${msg.substring(0, 120) || '(no message)'}", stopping context and retrying (attempt ${attempt + 1}/${MAX_LLM_RETRIES})`);
       await llmService.stopGeneration().catch(() => {});
-      const delayMs = (attempt + 1) * RETRY_BACKOFF_MS;
-      await new Promise<void>(resolve => setTimeout(resolve, delayMs));
+      await new Promise<void>(resolve => setTimeout(resolve, (attempt + 1) * RETRY_BACKOFF_MS));
     }
   }
-  // Preserve a meaningful error message for the UI
-  const errMsg = lastError?.message || String(lastError) || 'Unknown LLM error after tool execution';
-  throw new Error(errMsg);
+  throw new Error(lastError?.message || String(lastError) || 'Unknown LLM error after tool execution');
+}
+
+/** Call LLM with retry+backoff for transient native context errors. */
+async function callLLMWithRetry(
+  messages: Message[],
+  tools: any[],
+  onStream?: (data: StreamToken) => void,
+  forceRemote?: boolean,
+): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  const useRemote = forceRemote || (
+    !!activeServerId &&
+    providerRegistry.hasProvider(activeServerId) &&
+    !llmService.isModelLoaded()
+  );
+  return useRemote
+    ? callRemoteWithErrorHandling(messages, tools, onStream)
+    : callLocalWithRetry(messages, tools, onStream);
 }
 
 /** If no structured tool calls, try parsing <tool_call> tags from text. */
