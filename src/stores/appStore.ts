@@ -350,6 +350,7 @@ export const useAppStore = create<AppState>()(
         hasSeenCacheTypeNudge: state.hasSeenCacheTypeNudge,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
+        loadedSettings: state.loadedSettings,
       }),
     }
   )
