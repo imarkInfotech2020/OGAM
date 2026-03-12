@@ -868,9 +868,9 @@ describe('remoteServerStore', () => {
     });
 
     it('applies filter to Ollama /api/tags format', async () => {
-      let callCount = 0;
+      let _callCount = 0;
       const mockFetch = jest.fn().mockImplementation((url: string) => {
-        callCount++;
+        _callCount++;
         if (url.includes('/v1/models')) {
           return Promise.resolve({ ok: false, json: async () => ({}) });
         }
