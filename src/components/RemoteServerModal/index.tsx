@@ -128,23 +128,24 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       marginTop: 8,
     },
     modelScroll: {
-      maxHeight: 156,
+      maxHeight: 108,
     },
     modelItem: {
       backgroundColor: colors.surfaceLight,
-      borderRadius: 8,
-      padding: 10,
-      marginBottom: 6,
+      borderRadius: 6,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      marginBottom: 4,
     },
     modelName: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '500' as const,
       color: colors.text,
     },
     modelCapabilities: {
-      fontSize: 12,
+      fontSize: 11,
       color: colors.textSecondary,
-      marginTop: 4,
+      marginTop: 2,
     },
     statusContainer: {
       flexDirection: 'row' as const,
