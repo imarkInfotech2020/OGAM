@@ -69,6 +69,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
 
   // Get server info for remote models
   const servers = useRemoteServerStore((s) => s.servers);
+  const activeServerId = useRemoteServerStore((s) => s.activeServerId);
   const getServerName = (serverId: string): string => {
     const server = servers.find((s) => s.id === serverId);
     return server?.name || 'Remote Server';
@@ -221,7 +222,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             {model.capabilities.supportsToolCalling && ' · Tools'}
                           </Text>
                         </View>
-                        {activeRemoteTextModelId === model.id && (
+                        {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
                           <Icon name="check" size={18} color={colors.text} />
                         )}
                       </TouchableOpacity>
@@ -326,7 +327,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             {model.capabilities.supportsVision && ' · Vision'}
                           </Text>
                         </View>
-                        {activeRemoteImageModelId === model.id && (
+                        {activeRemoteImageModelId === model.id && activeServerId === model.serverId && (
                           <Icon name="check" size={18} color={colors.text} />
                         )}
                       </TouchableOpacity>

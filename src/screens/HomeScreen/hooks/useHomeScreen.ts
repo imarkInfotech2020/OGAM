@@ -131,16 +131,43 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     const discovered = await discoverLANServers();
     if (discovered.length === 0) return;
 
-    const existingEndpoints = new Set(
-      useRemoteServerStore.getState().servers.map(s => s.endpoint.replace(/\/$/, ''))
-    );
+    const store = useRemoteServerStore.getState();
+    const existingServers = store.servers;
+    const existingEndpoints = new Set(existingServers.map(s => s.endpoint.replace(/\/$/, '')));
 
-    const newServers = discovered.filter(
-      s => !existingEndpoints.has(s.endpoint.replace(/\/$/, ''))
-    );
-    if (newServers.length === 0) return;
+    const getPort = (endpoint: string): string | null => {
+      try { return new URL(endpoint).port; } catch { return null; }
+    };
 
-    for (const server of newServers) {
+    const newServersToAdd: typeof discovered = [];
+
+    for (const d of discovered) {
+      if (existingEndpoints.has(d.endpoint.replace(/\/$/, ''))) continue;
+
+      // Check if a server of the same type (same port) already exists at a different IP.
+      // This handles the case where the laptop switched networks and got a new IP.
+      const dPort = getPort(d.endpoint);
+      const samePortServer = dPort
+        ? existingServers.find(s => getPort(s.endpoint) === dPort)
+        : null;
+
+      if (samePortServer) {
+        logger.log('[HomeScreen] Server moved to new IP, updating:', samePortServer.name, '->', d.endpoint);
+        await remoteServerManager.updateServer(samePortServer.id, { endpoint: d.endpoint, name: d.name });
+        // Re-discover models at the new endpoint
+        try { await useRemoteServerStore.getState().discoverModels(samePortServer.id); } catch { /* offline */ }
+        // If this was the active server, reconnect to the active model
+        if (store.activeServerId === samePortServer.id && store.activeRemoteTextModelId) {
+          try {
+            await remoteServerManager.setActiveRemoteTextModel(samePortServer.id, store.activeRemoteTextModelId);
+          } catch { /* user can re-select */ }
+        }
+      } else {
+        newServersToAdd.push(d);
+      }
+    }
+
+    for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
       await remoteServerManager.addServer({
         name: server.name,
@@ -149,10 +176,12 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       });
     }
 
-    const names = newServers.map(s => s.name).join(', ');
-    const title = newServers.length === 1
+    if (newServersToAdd.length === 0) return;
+
+    const names = newServersToAdd.map(s => s.name).join(', ');
+    const title = newServersToAdd.length === 1
       ? 'LLM Server Found'
-      : `${newServers.length} LLM Servers Found`;
+      : `${newServersToAdd.length} LLM Servers Found`;
     setAlertState(showAlert(
       title,
       `Discovered on your network: ${names}. You can select a model from the model picker.`,
