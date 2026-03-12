@@ -247,6 +247,7 @@ export const ChatScreen: React.FC = () => {
           viewerImageUri={chat.viewerImageUri}
           setViewerImageUri={chat.setViewerImageUri}
           handleSaveImage={chat.handleSaveImage}
+          isRemote={chat.activeModelInfo?.isRemote}
         />
       </KeyboardAvoidingView>
       {alertEl}
@@ -324,7 +325,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         <ThinkingIndicator text="Compacting your conversation..." />
       </Animated.View>
     )}
-    {chat.hasPendingSettings && !chat.isCompacting && (
+    {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
       <Animated.View entering={FadeIn.duration(200)} style={styles.pendingSettingsBar}>
         <Icon name="alert-circle" size={16} color={colors.warning} />
         <Text style={styles.pendingSettingsText}>
