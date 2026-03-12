@@ -60,55 +60,22 @@ describe('discoverLANServers', () => {
     expect(result).toEqual([]);
   });
 
-  it('discovers an Ollama server on port 11434', async () => {
+  it.each([
+    ['ollama',   '192.168.1.10', 11434, 'Ollama (192.168.1.10)'],
+    ['lmstudio', '192.168.1.20', 1234,  'LM Studio (192.168.1.20)'],
+    ['localai',  '192.168.1.30', 8080,  'LocalAI (192.168.1.30)'],
+  ])('discovers a %s server', async (type, ip, port, name) => {
     mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
-
-    mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.10:11434/v1/models') { // NOSONAR
-        return Promise.resolve({ status: 200 });
-      }
-      return Promise.resolve({ status: 503 });
-    });
+    const probeUrl = `http://${ip}:${port}/v1/models`; // NOSONAR
+    mockFetch.mockImplementation((url: string) =>
+      Promise.resolve({ status: url === probeUrl ? 200 : 503 }),
+    );
 
     const result = await discoverLANServers();
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('ollama');
-    expect(result[0].endpoint).toBe('http://192.168.1.10:11434'); // NOSONAR
-    expect(result[0].name).toBe('Ollama (192.168.1.10)');
-  });
-
-  it('discovers an LM Studio server on port 1234', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
-
-    mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.20:1234/v1/models') { // NOSONAR
-        return Promise.resolve({ status: 200 });
-      }
-      return Promise.resolve({ status: 503 });
-    });
-
-    const result = await discoverLANServers();
-    expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('lmstudio');
-    expect(result[0].endpoint).toBe('http://192.168.1.20:1234'); // NOSONAR
-    expect(result[0].name).toBe('LM Studio (192.168.1.20)');
-  });
-
-  it('discovers a LocalAI server on port 8080', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
-
-    mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.30:8080/v1/models') { // NOSONAR
-        return Promise.resolve({ status: 200 });
-      }
-      return Promise.resolve({ status: 503 });
-    });
-
-    const result = await discoverLANServers();
-    expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('localai');
-    expect(result[0].endpoint).toBe('http://192.168.1.30:8080'); // NOSONAR
-    expect(result[0].name).toBe('LocalAI (192.168.1.30)');
+    expect(result[0].type).toBe(type);
+    expect(result[0].endpoint).toBe(`http://${ip}:${port}`); // NOSONAR
+    expect(result[0].name).toBe(name);
   });
 
   it('discovers multiple servers across different providers', async () => {
@@ -126,7 +93,7 @@ describe('discoverLANServers', () => {
 
     const result = await discoverLANServers();
     expect(result).toHaveLength(2);
-    const types = result.map(s => s.type).sort();
+    const types = result.map(s => s.type).sort((a, b) => a.localeCompare(b));
     expect(types).toEqual(['lmstudio', 'ollama']);
   });
 
