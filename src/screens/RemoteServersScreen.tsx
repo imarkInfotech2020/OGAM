@@ -264,7 +264,7 @@ export const RemoteServersScreen: React.FC = () => {
         Alert.alert('Already Added', 'All discovered servers are already in your list.');
         return;
       }
-      await Promise.all(
+      const added = await Promise.all(
         newServers.map(d =>
           remoteServerManager.addServer({
             name: d.name,
@@ -273,6 +273,7 @@ export const RemoteServersScreen: React.FC = () => {
           })
         )
       );
+      added.forEach(s => remoteServerManager.testConnection(s.id).catch(() => {}));
       Alert.alert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

@@ -305,6 +305,8 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(newServer.id, discoveredModels);
         }
+        // Silently probe health so status shows immediately instead of "Unknown"
+        remoteServerManager.testConnection(newServer.id).catch(() => {});
         onSave?.(newServer);
       }
       onClose();
