@@ -203,7 +203,7 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, testConnection } = useRemoteServerStore();
+  const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } = useRemoteServerStore();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -242,12 +242,13 @@ export const RemoteServersScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            if (activeServerId === server.id) setActiveServerId(null);
             await remoteServerManager.removeServer(server.id);
           },
         },
       ]
     );
-  }, []);
+  }, [activeServerId, setActiveServerId]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

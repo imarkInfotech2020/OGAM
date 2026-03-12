@@ -144,16 +144,22 @@ describe('RemoteServersScreen', () => {
     });
 
     it('shows "Connected" status for healthy server', () => {
-      const server = createMockServer({ isHealthy: true });
-      useRemoteServerStore.setState({ servers: [server] });
+      const server = createMockServer();
+      useRemoteServerStore.setState({
+        servers: [server],
+        serverHealth: { [server.id]: { isHealthy: true, lastCheck: new Date().toISOString() } },
+      });
 
       const { getByText } = render(<RemoteServersScreen />);
       expect(getByText('Connected')).toBeTruthy();
     });
 
     it('shows "Offline" status for unhealthy server', () => {
-      const server = createMockServer({ isHealthy: false });
-      useRemoteServerStore.setState({ servers: [server] });
+      const server = createMockServer();
+      useRemoteServerStore.setState({
+        servers: [server],
+        serverHealth: { [server.id]: { isHealthy: false, lastCheck: new Date().toISOString() } },
+      });
 
       const { getByText } = render(<RemoteServersScreen />);
       expect(getByText('Offline')).toBeTruthy();
