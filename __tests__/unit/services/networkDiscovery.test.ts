@@ -52,6 +52,12 @@ describe('discoverLANServers', () => {
     expect(result).toEqual([]);
   });
 
+  it('returns empty array when IP is 0.0.0.0 (simulator/unspecified)', async () => {
+    mockGetIpAddress.mockResolvedValue('0.0.0.0'); // NOSONAR
+    const result = await discoverLANServers();
+    expect(result).toEqual([]);
+  });
+
   it('returns empty array when no servers are discovered', async () => {
     mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
     // All probes return error/503
@@ -61,12 +67,12 @@ describe('discoverLANServers', () => {
   });
 
   it.each([
-    ['ollama',   '192.168.1.10', 11434, 'Ollama (192.168.1.10)'],   // NOSONAR
-    ['lmstudio', '192.168.1.20', 1234,  'LM Studio (192.168.1.20)'], // NOSONAR
-    ['localai',  '192.168.1.30', 8080,  'LocalAI (192.168.1.30)'],  // NOSONAR
-  ])('discovers a %s server', async (type, ip, port, name) => {
+    ['ollama',   '192.168.1.10', 11434, 'Ollama (192.168.1.10)',    '/api/tags'     ],   // NOSONAR
+    ['lmstudio', '192.168.1.20', 1234,  'LM Studio (192.168.1.20)', '/api/v1/models'],   // NOSONAR
+    ['localai',  '192.168.1.30', 8080,  'LocalAI (192.168.1.30)',   '/v1/models'    ],   // NOSONAR
+  ])('discovers a %s server', async (type, ip, port, name, probePath) => {
     mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
-    const probeUrl = `http://${ip}:${port}/v1/models`; // NOSONAR
+    const probeUrl = `http://${ip}:${port}${probePath}`; // NOSONAR
     mockFetch.mockImplementation((url: string) =>
       Promise.resolve({ status: url === probeUrl ? 200 : 503 }),
     );
@@ -83,8 +89,8 @@ describe('discoverLANServers', () => {
 
     mockFetch.mockImplementation((url: string) => {
       if (
-        url === 'http://192.168.1.10:11434/v1/models' || // NOSONAR
-        url === 'http://192.168.1.20:1234/v1/models' // NOSONAR
+        url === 'http://192.168.1.10:11434/api/tags' || // NOSONAR
+        url === 'http://192.168.1.20:1234/api/v1/models' // NOSONAR
       ) {
         return Promise.resolve({ status: 200 });
       }
@@ -101,7 +107,7 @@ describe('discoverLANServers', () => {
     mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.5:11434/v1/models') { // NOSONAR
+      if (url === 'http://192.168.1.5:11434/api/tags') { // NOSONAR
         return Promise.resolve({ status: 401 }); // Unauthorized but server is there
       }
       return Promise.resolve({ status: 503 });

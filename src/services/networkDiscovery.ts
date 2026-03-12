@@ -15,21 +15,21 @@ export interface DiscoveredServer {
 }
 
 const PROVIDERS = [
-  { port: 11434, type: 'ollama' as const,   name: 'Ollama'    },
-  { port: 1234,  type: 'lmstudio' as const, name: 'LM Studio' },
-  { port: 8080,  type: 'localai' as const,  name: 'LocalAI'   },
+  { port: 11434, type: 'ollama' as const,   name: 'Ollama',    probePath: '/api/tags'     },
+  { port: 1234,  type: 'lmstudio' as const, name: 'LM Studio', probePath: '/api/v1/models' },
+  { port: 8080,  type: 'localai' as const,  name: 'LocalAI',   probePath: '/v1/models'    },
 ];
 
 const TIMEOUT_MS = 300;
 const BATCH_SIZE = 50;
 
 /** Probe a single host:port — resolves true if it responds with an HTTP status */
-async function probe(ip: string, port: number): Promise<boolean> {
+async function probe(ip: string, port: number, path: string): Promise<boolean> {
   return new Promise(resolve => {
     const controller = new AbortController();
     const timer = setTimeout(() => { controller.abort(); resolve(false); }, TIMEOUT_MS);
 
-    fetch(`http://${ip}:${port}/v1/models`, { signal: controller.signal })
+    fetch(`http://${ip}:${port}${path}`, { signal: controller.signal })
       .then(res => { clearTimeout(timer); resolve(res.status < 500); })
       .catch(() => { clearTimeout(timer); resolve(false); });
   });
@@ -49,6 +49,14 @@ async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
 function subnetBase(ip: string): string | null {
   const parts = ip.split('.');
   if (parts.length !== 4) return null;
+  // Reject loopback, unspecified, or non-private addresses
+  const first = parseInt(parts[0], 10);
+  const second = parseInt(parts[1], 10);
+  const isPrivate =
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168);
+  if (!isPrivate) return null;
   return parts.slice(0, 3).join('.');
 }
 
@@ -78,7 +86,7 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
     for (const provider of PROVIDERS) {
       const tasks = Array.from({ length: 254 }, (_, i) => {
         const target = `${base}.${i + 1}`;
-        return () => probe(target, provider.port).then(found => {
+        return () => probe(target, provider.port, provider.probePath).then(found => {
           if (found) {
             logger.log(`[Discovery] Found ${provider.name} at ${target}:${provider.port}`);
             discovered.push({
