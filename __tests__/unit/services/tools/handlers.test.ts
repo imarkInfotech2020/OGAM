@@ -20,11 +20,12 @@ jest.mock('../../../../src/utils/logger', () => ({
   log: jest.fn(),
 }));
 
+const mockRagSearchProject = jest.fn();
 jest.mock('../../../../src/services/rag', () => ({
   ragService: {
-    searchProject: jest.fn(),
+    searchProject: (...args: any[]) => mockRagSearchProject(...args),
   },
-}), { virtual: true });
+}));
 
 // ============================================================================
 // Helpers
@@ -389,14 +390,17 @@ describe('Tool Handlers', () => {
   // search_knowledge_base
   // ==========================================================================
   describe('search_knowledge_base', () => {
+    beforeEach(() => {
+      mockRagSearchProject.mockReset();
+    });
+
     it('returns no-project message when no projectId', async () => {
       const result = await runTool('search_knowledge_base', { query: 'test' });
       expect(result.content).toContain('No project context');
     });
 
     it('returns no-results message when search returns empty', async () => {
-      const { ragService } = require('../../../../src/services/rag');
-      (ragService.searchProject as jest.Mock).mockResolvedValue({ chunks: [] });
+      mockRagSearchProject.mockResolvedValue({ chunks: [] });
 
       const call = { id: 'c1', name: 'search_knowledge_base', arguments: { query: 'nothing' }, context: { projectId: 'proj-1' } };
       const result = await executeToolCall(call as any);
@@ -404,8 +408,7 @@ describe('Tool Handlers', () => {
     });
 
     it('returns formatted chunks when results found', async () => {
-      const { ragService } = require('../../../../src/services/rag');
-      (ragService.searchProject as jest.Mock).mockResolvedValue({
+      mockRagSearchProject.mockResolvedValue({
         chunks: [
           { name: 'doc1.txt', position: 0, content: 'Important information here' },
           { name: 'doc2.txt', position: 1, content: 'More details' },
