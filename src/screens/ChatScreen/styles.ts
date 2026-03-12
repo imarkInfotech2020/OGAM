@@ -30,7 +30,7 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   headerSubtitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, overflow: 'hidden' as const },
   headerSubtitleDivider: { ...TYPOGRAPHY.meta, color: colors.textMuted, flexShrink: 0 },
   headerProjectRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, flexShrink: 0 },
-  headerSubtitle: { ...TYPOGRAPHY.h3, color: colors.textMuted },
+  headerSubtitle: { ...TYPOGRAPHY.h3, color: colors.textMuted, flexShrink: 1 },
   modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 1, overflow: 'hidden' as const },
   remoteIcon: { marginRight: 4 },
   modelSelectorArrow: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginLeft: SPACING.xs },
