@@ -63,7 +63,7 @@ class GenerationService {
 
   /** Check if using a remote provider */
   private isUsingRemoteProvider(): boolean {
-    const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+    const { activeServerId } = useRemoteServerStore.getState();
     const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
     const localLoaded = llmService.isModelLoaded();
     if (!activeServerId) return false;
