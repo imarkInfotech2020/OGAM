@@ -108,20 +108,30 @@ export const ChatHeader: React.FC<{
   activeModel: any;
   activeModelName?: string;
   activeImageModel: any;
+  activeProject: any;
   navigation: any;
   setShowModelSelector: (v: boolean) => void;
   setShowSettingsPanel: (v: boolean) => void;
+  setShowProjectSelector: (v: boolean) => void;
   isRemote?: boolean;
-}> = ({ styles, colors, activeConversation, activeModel, activeModelName, activeImageModel, navigation, setShowModelSelector, setShowSettingsPanel, isRemote }) => (
+}> = ({ styles, colors, activeConversation, activeModel, activeModelName, activeImageModel, activeProject, navigation, setShowModelSelector, setShowSettingsPanel, setShowProjectSelector, isRemote }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Icon name="arrow-left" size={20} color={colors.text} />
       </TouchableOpacity>
       <View style={styles.headerLeft}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {activeConversation?.title || 'New Chat'}
-        </Text>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {activeConversation?.title || 'New Chat'}
+          </Text>
+          {activeProject && (
+            <TouchableOpacity style={styles.headerProjectBadge} onPress={() => setShowProjectSelector(true)}>
+              <Icon name="folder" size={10} color={colors.primary} />
+              <Text style={styles.headerProjectBadgeText} numberOfLines={1}>{activeProject.name}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity style={styles.modelSelector} onPress={() => setShowModelSelector(true)} testID="model-selector">
           {isRemote && (
             <Icon name="cloud" size={12} color={colors.primary} style={styles.remoteIcon} />

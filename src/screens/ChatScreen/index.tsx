@@ -204,9 +204,11 @@ export const ChatScreen: React.FC = () => {
           activeModel={chat.activeModel}
           activeModelName={chat.activeModelName}
           activeImageModel={chat.activeImageModel}
+          activeProject={chat.activeProject}
           navigation={chat.navigation}
           setShowModelSelector={chat.setShowModelSelector}
           setShowSettingsPanel={chat.setShowSettingsPanel}
+          setShowProjectSelector={chat.setShowProjectSelector}
           isRemote={chat.activeModelInfo?.isRemote}
         />
         <ChatMessageArea
