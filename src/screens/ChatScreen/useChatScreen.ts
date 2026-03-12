@@ -284,6 +284,11 @@ export const useChatScreen = () => {
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
+    // Must unload first — loadTextModel skips if the same model ID is already loaded,
+    // which means setLoadedSettings would never run and the banner would persist.
+    if (llmService.isModelLoaded()) {
+      await activeModelService.unloadTextModel();
+    }
     await initiateModelLoad(modelDeps, false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelInfo.modelId, activeModelInfo.isRemote]);
