@@ -128,24 +128,19 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       marginTop: 8,
     },
     modelScroll: {
-      maxHeight: 108,
+      maxHeight: 81,
     },
     modelItem: {
       backgroundColor: colors.surfaceLight,
       borderRadius: 6,
-      paddingVertical: 6,
-      paddingHorizontal: 10,
-      marginBottom: 4,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      marginBottom: 3,
     },
     modelName: {
       fontSize: 13,
       fontWeight: '500' as const,
       color: colors.text,
-    },
-    modelCapabilities: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      marginTop: 2,
     },
     statusContainer: {
       flexDirection: 'row' as const,
@@ -403,11 +398,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
               {discoveredModels.map((model) => (
                 <View key={model.id} style={styles.modelItem}>
                   <Text style={styles.modelName}>{model.name}</Text>
-                  <Text style={styles.modelCapabilities}>
-                    {model.capabilities.supportsVision ? '📷 Vision ' : ''}
-                    {model.capabilities.supportsToolCalling ? '🔧 Tools ' : ''}
-                    {model.capabilities.supportsThinking ? '💭 Thinking ' : ''}
-                  </Text>
                 </View>
               ))}
             </ScrollView>
