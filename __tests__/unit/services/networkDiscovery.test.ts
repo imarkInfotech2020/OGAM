@@ -53,7 +53,7 @@ describe('discoverLANServers', () => {
   });
 
   it('returns empty array when no servers are discovered', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
     // All probes return error/503
     mockFetch.mockResolvedValue({ status: 503 });
     const result = await discoverLANServers();
@@ -61,10 +61,10 @@ describe('discoverLANServers', () => {
   });
 
   it('discovers an Ollama server on port 11434', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.10:11434/v1/models') {
+      if (url === 'http://192.168.1.10:11434/v1/models') { // NOSONAR
         return Promise.resolve({ status: 200 });
       }
       return Promise.resolve({ status: 503 });
@@ -73,15 +73,15 @@ describe('discoverLANServers', () => {
     const result = await discoverLANServers();
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('ollama');
-    expect(result[0].endpoint).toBe('http://192.168.1.10:11434');
+    expect(result[0].endpoint).toBe('http://192.168.1.10:11434'); // NOSONAR
     expect(result[0].name).toBe('Ollama (192.168.1.10)');
   });
 
   it('discovers an LM Studio server on port 1234', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.20:1234/v1/models') {
+      if (url === 'http://192.168.1.20:1234/v1/models') { // NOSONAR
         return Promise.resolve({ status: 200 });
       }
       return Promise.resolve({ status: 503 });
@@ -90,15 +90,15 @@ describe('discoverLANServers', () => {
     const result = await discoverLANServers();
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('lmstudio');
-    expect(result[0].endpoint).toBe('http://192.168.1.20:1234');
+    expect(result[0].endpoint).toBe('http://192.168.1.20:1234'); // NOSONAR
     expect(result[0].name).toBe('LM Studio (192.168.1.20)');
   });
 
   it('discovers a LocalAI server on port 8080', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.30:8080/v1/models') {
+      if (url === 'http://192.168.1.30:8080/v1/models') { // NOSONAR
         return Promise.resolve({ status: 200 });
       }
       return Promise.resolve({ status: 503 });
@@ -107,17 +107,17 @@ describe('discoverLANServers', () => {
     const result = await discoverLANServers();
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('localai');
-    expect(result[0].endpoint).toBe('http://192.168.1.30:8080');
+    expect(result[0].endpoint).toBe('http://192.168.1.30:8080'); // NOSONAR
     expect(result[0].name).toBe('LocalAI (192.168.1.30)');
   });
 
   it('discovers multiple servers across different providers', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
       if (
-        url === 'http://192.168.1.10:11434/v1/models' ||
-        url === 'http://192.168.1.20:1234/v1/models'
+        url === 'http://192.168.1.10:11434/v1/models' || // NOSONAR
+        url === 'http://192.168.1.20:1234/v1/models' // NOSONAR
       ) {
         return Promise.resolve({ status: 200 });
       }
@@ -131,10 +131,10 @@ describe('discoverLANServers', () => {
   });
 
   it('accepts any HTTP status < 500 as a valid server response', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.1');
+    mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
-      if (url === 'http://192.168.1.5:11434/v1/models') {
+      if (url === 'http://192.168.1.5:11434/v1/models') { // NOSONAR
         return Promise.resolve({ status: 401 }); // Unauthorized but server is there
       }
       return Promise.resolve({ status: 503 });
@@ -142,11 +142,11 @@ describe('discoverLANServers', () => {
 
     const result = await discoverLANServers();
     expect(result).toHaveLength(1);
-    expect(result[0].endpoint).toBe('http://192.168.1.5:11434');
+    expect(result[0].endpoint).toBe('http://192.168.1.5:11434'); // NOSONAR
   });
 
   it('does not include servers with status >= 500', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.1');
+    mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
 
     mockFetch.mockResolvedValue({ status: 500 });
 
@@ -155,7 +155,7 @@ describe('discoverLANServers', () => {
   });
 
   it('handles fetch rejection (timeout/abort) gracefully', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.1');
+    mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
     mockFetch.mockRejectedValue(new Error('AbortError'));
 
     const result = await discoverLANServers();
@@ -170,7 +170,7 @@ describe('discoverLANServers', () => {
   });
 
   it('uses the correct subnet base from device IP', async () => {
-    mockGetIpAddress.mockResolvedValue('10.0.0.15');
+    mockGetIpAddress.mockResolvedValue('10.0.0.15'); // NOSONAR
 
     const probed: string[] = [];
     mockFetch.mockImplementation((url: string) => {
@@ -181,12 +181,12 @@ describe('discoverLANServers', () => {
     await discoverLANServers();
 
     // Should probe 10.0.0.x addresses, not 192.168.x.x
-    expect(probed.some(u => u.startsWith('http://10.0.0.'))).toBe(true);
-    expect(probed.some(u => u.startsWith('http://192.168.'))).toBe(false);
+    expect(probed.some(u => u.startsWith('http://10.0.0.'))).toBe(true); // NOSONAR
+    expect(probed.some(u => u.startsWith('http://192.168.'))).toBe(false); // NOSONAR
   });
 
   it('probes all 254 addresses for each provider', async () => {
-    mockGetIpAddress.mockResolvedValue('192.168.1.42');
+    mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
 
     const ollamaProbes: string[] = [];
     mockFetch.mockImplementation((url: string) => {

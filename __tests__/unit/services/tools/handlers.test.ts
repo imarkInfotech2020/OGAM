@@ -361,7 +361,7 @@ describe('Tool Handlers', () => {
     });
 
     it('blocks 192.168.x.x addresses', async () => {
-      const result = await runTool('read_url', { url: 'http://192.168.1.1' });
+      const result = await runTool('read_url', { url: 'http://192.168.1.1' }); // NOSONAR
       expect(result.error).toContain('Blocked');
     });
 
@@ -493,17 +493,17 @@ describe('Tool Handlers', () => {
   // ==========================================================================
   describe('read_url — private URL patterns', () => {
     it('blocks 10.x.x.x addresses', async () => {
-      const result = await runTool('read_url', { url: 'http://10.0.0.1/api' });
+      const result = await runTool('read_url', { url: 'http://10.0.0.1/api' }); // NOSONAR
       expect(result.error).toContain('Blocked');
     });
 
     it('blocks 172.16.x.x addresses', async () => {
-      const result = await runTool('read_url', { url: 'http://172.16.0.1/api' });
+      const result = await runTool('read_url', { url: 'http://172.16.0.1/api' }); // NOSONAR
       expect(result.error).toContain('Blocked');
     });
 
     it('blocks 169.254.x.x link-local addresses', async () => {
-      const result = await runTool('read_url', { url: 'http://169.254.1.1/meta' });
+      const result = await runTool('read_url', { url: 'http://169.254.1.1/meta' }); // NOSONAR
       expect(result.error).toContain('Blocked');
     });
 

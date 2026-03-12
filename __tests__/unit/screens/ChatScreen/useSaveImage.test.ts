@@ -55,7 +55,7 @@ describe('saveImageToGallery', () => {
   it('copies file to iOS documents directory', async () => {
     await saveImageToGallery('file:///tmp/image.png', setAlertState);
     expect(mockCopyFile).toHaveBeenCalledWith(
-      '/tmp/image.png',
+      '/tmp/image.png', // NOSONAR
       expect.stringContaining('/docs/OffgridMobile_Images/'),
     );
   });

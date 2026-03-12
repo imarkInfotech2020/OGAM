@@ -1364,7 +1364,7 @@ describe('generationService', () => {
     beforeEach(() => {
       useRemoteServerStore.setState({
         activeServerId: 'failing-server',
-        servers: [{ id: 'failing-server', name: 'Failing Server', endpoint: 'http://fail' }] as any,
+        servers: [{ id: 'failing-server', name: 'Failing Server', endpoint: 'http://fail' }] as any, // NOSONAR
       });
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => true);
       mockedLlmService.isModelLoaded.mockReturnValue(false);
@@ -1587,7 +1587,7 @@ describe('generationService', () => {
       useRemoteServerStore.setState({
         activeServerId: 'remote-srv',
         activeRemoteTextModelId: 'gpt-4',
-        servers: [{ id: 'remote-srv', name: 'Remote', endpoint: 'http://remote' }] as any,
+        servers: [{ id: 'remote-srv', name: 'Remote', endpoint: 'http://remote' }] as any, // NOSONAR
       });
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => true);
       mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider4 as any);

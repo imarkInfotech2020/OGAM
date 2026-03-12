@@ -818,7 +818,7 @@ describe('remoteServerStore', () => {
       act(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
-          endpoint: 'http://test:11434',
+          endpoint: 'http://test:11434', // NOSONAR
           providerType: 'openai-compatible',
         });
       });
@@ -890,7 +890,7 @@ describe('remoteServerStore', () => {
       act(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama',
-          endpoint: 'http://test:11434',
+          endpoint: 'http://test:11434', // NOSONAR
           providerType: 'openai-compatible',
         });
       });
