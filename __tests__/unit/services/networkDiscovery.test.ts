@@ -104,14 +104,14 @@ describe('discoverLANServers', () => {
     expect(types).toEqual(['lmstudio', 'ollama']);
   });
 
-  it('accepts any HTTP status < 500 as a valid server response', async () => {
+  it('only accepts HTTP 200 as a valid server response', async () => {
     mockGetIpAddress.mockResolvedValue('192.168.1.1'); // NOSONAR
 
     mockFetch.mockImplementation((url: string) => {
       if (url === 'http://192.168.1.5:11434/api/tags') { // NOSONAR
-        return Promise.resolve({ status: 401 }); // Unauthorized but server is there
+        return Promise.resolve({ status: 200 }); // Explicit 200 required
       }
-      return Promise.resolve({ status: 503 });
+      return Promise.resolve({ status: 401 }); // 4xx (e.g. router admin page) should not match
     });
 
     const result = await discoverLANServers();
