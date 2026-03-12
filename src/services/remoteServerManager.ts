@@ -27,9 +27,10 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
 
     // Deduplicate: if a server with the same endpoint already exists, return it
-    const normalizedEndpoint = config.endpoint.replace(/\/+$/, '').toLowerCase();
+    const trimSlashes = (url: string) => { let s = url.toLowerCase(); while (s.endsWith('/')) s = s.slice(0, -1); return s; };
+    const normalizedEndpoint = trimSlashes(config.endpoint);
     const existing = store.servers.find(
-      (s) => s.endpoint.replace(/\/+$/, '').toLowerCase() === normalizedEndpoint
+      (s) => trimSlashes(s.endpoint) === normalizedEndpoint
     );
     if (existing) {
       logger.log('[RemoteServerManager] Server already exists:', existing.name);
