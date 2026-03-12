@@ -125,13 +125,16 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       color: colors.textMuted,
     },
     modelList: {
-      marginTop: 16,
+      marginTop: 8,
+    },
+    modelScroll: {
+      maxHeight: 156,
     },
     modelItem: {
       backgroundColor: colors.surfaceLight,
       borderRadius: 8,
-      padding: 12,
-      marginBottom: 8,
+      padding: 10,
+      marginBottom: 6,
     },
     modelName: {
       fontSize: 14,
@@ -146,7 +149,7 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     statusContainer: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      marginTop: 12,
+      marginTop: 8,
     },
     statusDot: {
       width: 8,
@@ -395,16 +398,18 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         {discoveredModels.length > 0 && (
           <View style={styles.modelList}>
             <Text style={styles.sectionHeader}>Discovered Models</Text>
-            {discoveredModels.map((model) => (
-              <View key={model.id} style={styles.modelItem}>
-                <Text style={styles.modelName}>{model.name}</Text>
-                <Text style={styles.modelCapabilities}>
-                  {model.capabilities.supportsVision ? '📷 Vision ' : ''}
-                  {model.capabilities.supportsToolCalling ? '🔧 Tools ' : ''}
-                  {model.capabilities.supportsThinking ? '💭 Thinking ' : ''}
-                </Text>
-              </View>
-            ))}
+            <ScrollView style={styles.modelScroll} nestedScrollEnabled>
+              {discoveredModels.map((model) => (
+                <View key={model.id} style={styles.modelItem}>
+                  <Text style={styles.modelName}>{model.name}</Text>
+                  <Text style={styles.modelCapabilities}>
+                    {model.capabilities.supportsVision ? '📷 Vision ' : ''}
+                    {model.capabilities.supportsToolCalling ? '🔧 Tools ' : ''}
+                    {model.capabilities.supportsThinking ? '💭 Thinking ' : ''}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         )}
 
