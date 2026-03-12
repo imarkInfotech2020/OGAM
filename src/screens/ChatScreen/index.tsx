@@ -326,11 +326,14 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       </Animated.View>
     )}
     {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
-      <Animated.View entering={FadeIn.duration(200)} style={styles.pendingSettingsBar}>
-        <Icon name="alert-circle" size={16} color={colors.warning} />
-        <Text style={styles.pendingSettingsText}>
-          Settings changed — reload model to apply
-        </Text>
+      <Animated.View entering={FadeIn.duration(200)}>
+        <AnimatedPressable style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
+          <Icon name="alert-circle" size={16} color={colors.warning} />
+          <Text style={styles.pendingSettingsText}>
+            Settings changed — tap to reload model
+          </Text>
+          <Icon name="refresh-cw" size={14} color={colors.warning} />
+        </AnimatedPressable>
       </Animated.View>
     )}
     {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).

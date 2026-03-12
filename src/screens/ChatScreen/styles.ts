@@ -169,7 +169,7 @@ const createIndicatorStyles = (colors: ThemeColors) => ({
     borderTopColor: colors.border,
     backgroundColor: colors.surfaceLight,
   },
-  pendingSettingsText: { ...TYPOGRAPHY.meta, color: colors.warning },
+  pendingSettingsText: { ...TYPOGRAPHY.meta, color: colors.warning, flex: 1 },
   imageProgressContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,

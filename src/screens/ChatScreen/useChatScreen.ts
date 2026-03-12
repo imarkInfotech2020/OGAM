@@ -11,7 +11,7 @@ import {
 } from '../../services';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn } from './useChatModelActions';
+import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad } from './useChatModelActions';
 import {
   startGenerationFn, handleSendFn, handleStopFn, executeDeleteConversationFn,
   regenerateResponseFn, handleImageGenerationFn, handleSelectProjectFn,
@@ -270,9 +270,7 @@ export const useChatScreen = () => {
   };
   // Check if there are pending settings that require model reload
   const hasPendingSettings = (() => {
-    // No pending settings if no model is loaded
     if (!loadedSettings) return false;
-    // Compare settings that require reload
     return (
       settings.nThreads !== loadedSettings.nThreads ||
       settings.nBatch !== loadedSettings.nBatch ||
@@ -283,6 +281,12 @@ export const useChatScreen = () => {
       settings.cacheType !== loadedSettings.cacheType
     );
   })();
+
+  const handleReloadTextModel = useCallback(async () => {
+    if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
+    await initiateModelLoad(modelDeps, false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModelInfo.modelId, activeModelInfo.isRemote]);
 
   return {
     isModelLoading, loadingModel, supportsVision,
@@ -302,7 +306,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, hasPendingSettings, displayMessages, downloadedModels, projects, settings,
+    isStreaming, isThinking, isCompacting, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, projects, settings,
     navigation, hardwareService,
     handleSend: (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
       handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo }),
