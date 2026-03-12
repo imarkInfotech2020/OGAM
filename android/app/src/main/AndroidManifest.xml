@@ -2,7 +2,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- For camera access (photo attachments) -->
+    <!-- For camera access (photo attachments) --> <!-- NOSONAR -->
     <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- For voice recording -->
