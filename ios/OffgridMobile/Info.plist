@@ -30,8 +30,6 @@
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Off Grid scans your local network to automatically discover LLM servers such as Ollama and LM Studio.</string>
