@@ -175,11 +175,13 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
     for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
-      await remoteServerManager.addServer({
+      const added = await remoteServerManager.addServer({
         name: server.name,
         endpoint: server.endpoint,
         providerType: 'openai-compatible',
       });
+      // Silently probe the server to populate health status and model list
+      remoteServerManager.testConnection(added.id).catch(() => {});
     }
 
     if (newServersToAdd.length === 0) return;

@@ -801,6 +801,7 @@ describe('generationService', () => {
       id: 'test-remote',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('remote-model'),
     };
 
@@ -1289,6 +1290,7 @@ describe('generationService', () => {
       id: 'remote-tools',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('remote-model'),
     };
 
@@ -1358,6 +1360,7 @@ describe('generationService', () => {
       id: 'failing-server',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('model'),
     };
 
@@ -1461,6 +1464,7 @@ describe('generationService', () => {
       id: 'remote-abort',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('model'),
     };
 
@@ -1580,6 +1584,7 @@ describe('generationService', () => {
       id: 'remote-srv',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('gpt-4'),
     };
 
@@ -1715,6 +1720,7 @@ describe('generationService', () => {
       id: 'remote-flush',
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
+      stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('model-flush'),
     };
 

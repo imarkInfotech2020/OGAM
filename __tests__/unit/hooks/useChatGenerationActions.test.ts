@@ -122,16 +122,6 @@ const mockSearchProject = ragService.searchProject as jest.Mock;
 const mockGetDocsByProject = ragService.getDocumentsByProject as jest.Mock;
 const mockFormatForPrompt = retrievalService.formatForPrompt as jest.Mock;
 
-const mockSetHasSeenCacheTypeNudge = jest.fn();
-
-jest.mock('../../../src/stores/appStore', () => ({
-  useAppStore: {
-    getState: jest.fn(() => ({
-      hasSeenCacheTypeNudge: true,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    })),
-  },
-}));
 
 const mockChatStoreGetState = jest.fn(() => ({ conversations: [] as any[], updateCompactionState: jest.fn() }));
 jest.mock('../../../src/stores/chatStore', () => ({
@@ -554,92 +544,6 @@ describe('startGenerationFn', () => {
   });
 });
 
-// ─────────────────────────────────────────────
-// cache type nudge
-// ─────────────────────────────────────────────
-
-const { useAppStore: mockAppStore } = require('../../../src/stores/appStore');
-const { showAlert: mockShowAlert } = require('../../../src/components');
-
-describe('cache type nudge after generation', () => {
-  it('shows nudge when hasSeenCacheTypeNudge=false and cacheType=q8_0', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: false,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Improve Output Quality', visible: true }));
-    expect(mockSetHasSeenCacheTypeNudge).toHaveBeenCalledWith(true);
-  });
-
-  it('does NOT show nudge when hasSeenCacheTypeNudge is already true', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: true,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    expect(mockSetHasSeenCacheTypeNudge).not.toHaveBeenCalled();
-    expect(deps.setAlertState).not.toHaveBeenCalled();
-  });
-
-  it('does NOT show nudge when cacheType is f16', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: false,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'f16' } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    expect(mockSetHasSeenCacheTypeNudge).not.toHaveBeenCalled();
-    expect(deps.setAlertState).not.toHaveBeenCalled();
-  });
-
-  it('does NOT show nudge on generation error', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: false,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    mockGenerateResponse.mockRejectedValueOnce(new Error('fail'));
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Generation Error' }));
-    expect(mockSetHasSeenCacheTypeNudge).not.toHaveBeenCalled();
-  });
-
-  it('"Go to Settings" opens the in-chat settings panel', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: false,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    const setShowSettingsPanel = jest.fn();
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' }, setShowSettingsPanel });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    const alertCall = (mockShowAlert as jest.Mock).mock.calls.find((args: any[]) => args[0] === 'Improve Output Quality');
-    const goToSettings = alertCall![2].find((b: any) => b.text === 'Go to Settings');
-    goToSettings.onPress();
-    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ visible: false }));
-    expect(setShowSettingsPanel).toHaveBeenCalledWith(true);
-  });
-
-  it('"Got it" button has cancel style', async () => {
-    (mockAppStore.getState as jest.Mock).mockReturnValue({
-      hasSeenCacheTypeNudge: false,
-      setHasSeenCacheTypeNudge: mockSetHasSeenCacheTypeNudge,
-    });
-    const deps = makeGenerationDeps({ settings: { ...makeGenerationDeps().settings, cacheType: 'q8_0' } });
-    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hello' });
-
-    const alertCall = (mockShowAlert as jest.Mock).mock.calls.find((args: any[]) => args[0] === 'Improve Output Quality');
-    const gotIt = alertCall![2].find((b: any) => b.text === 'Got it');
-    expect(gotIt.style).toBe('cancel');
-  });
-});
 
 // ─────────────────────────────────────────────
 // RAG context injection

@@ -187,7 +187,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 title={downloadedModels.length > 0 || remoteTextModels.length > 0 ? 'Select Model' : 'Browse Models'}
                 variant="outline"
                 size="small"
-                onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab')}
+                onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab', { initialTab: 'text' })}
                 testID="browse-models-button"
               />
             </Card>

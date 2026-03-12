@@ -221,6 +221,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
 
     this.abortController = new AbortController();
+    // Capture signal in closure so abort checks remain valid even after
+    // this.abortController is nulled by stopGeneration().
+    const { signal } = this.abortController;
 
     try {
       // Build the API request
@@ -231,7 +234,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
       // Route Ollama through its native /api/chat which supports think: true/false
       if (isOllama) {
-        return this.generateOllamaChat(openaiMessages, options, callbacks);
+        return this.generateOllamaChat(openaiMessages, options, callbacks, signal);
       }
 
       const requestBody: Record<string, unknown> = {
@@ -275,10 +278,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         requestBody,
         headers,
         (event) => {
-          // Check if aborted
-          if (this.abortController?.signal.aborted) {
-            return;
-          }
+          if (signal.aborted) return;
 
           const message = parseOpenAIMessage(event);
           if (!message) return;
@@ -373,7 +373,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           }
         },
         300000, // 5 minute timeout
-        this.abortController.signal
+        signal
       );
 
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
@@ -393,7 +393,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         });
       }
     } catch (error) {
-      if (this.abortController?.signal.aborted) {
+      if (signal.aborted) {
         // Cancelled by user
         callbacks.onComplete({
           content: '',
@@ -416,7 +416,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private async generateOllamaChat(
     openaiMessages: OpenAIChatMessage[],
     options: GenerationOptions,
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
+    signal: AbortSignal
   ): Promise<void> {
     const thinkingEnabled = options.enableThinking !== false;
     logger.log(`[OpenAIProvider] Ollama /api/chat — think: ${thinkingEnabled}`);
@@ -463,7 +464,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         requestBody,
         {},
         (line) => {
-          if (this.abortController?.signal.aborted) return;
+          if (signal.aborted) return;
 
           if (line.error) {
             streamErrorOccurred = true;
@@ -500,7 +501,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           }
         },
         300000,
-        this.abortController?.signal
+        signal
       );
 
       if (!completeCalled && !streamErrorOccurred) {
@@ -511,7 +512,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         });
       }
     } catch (error) {
-      if (this.abortController?.signal.aborted) {
+      if (signal.aborted) {
         callbacks.onComplete({ content: '', meta: { gpu: false } });
         return;
       }

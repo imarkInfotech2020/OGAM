@@ -5,7 +5,7 @@
  * (Ollama, LM Studio, LocalAI) using their default ports.
  */
 
-import { getIpAddress } from 'react-native-device-info';
+import { getIpAddress, isEmulator } from 'react-native-device-info';
 import logger from '../utils/logger';
 
 export interface DiscoveredServer {
@@ -22,6 +22,7 @@ const PROVIDERS = [
 
 const TIMEOUT_MS = 500;
 const BATCH_SIZE = 50;
+const BATCH_DELAY_MS = 50;
 
 /** Probe a single host:port — resolves true if it responds with an HTTP status */
 async function probe(ip: string, port: number, path: string): Promise<boolean> {
@@ -35,12 +36,15 @@ async function probe(ip: string, port: number, path: string): Promise<boolean> {
   });
 }
 
-/** Run up to BATCH_SIZE probes concurrently */
+/** Run up to BATCH_SIZE probes concurrently with a small delay between batches */
 async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
   const results: T[] = [];
   for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
     const batch = tasks.slice(i, i + BATCH_SIZE).map(t => t());
     results.push(...await Promise.all(batch));
+    if (i + BATCH_SIZE < tasks.length) {
+      await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+    }
   }
   return results;
 }
@@ -74,6 +78,12 @@ const FALLBACK_SUBNETS = ['192.168.1', '192.168.0', '10.0.0', '10.0.1', '10.0.2'
  * Errors during probing are swallowed — only setup errors propagate.
  */
 export async function discoverLANServers(): Promise<DiscoveredServer[]> {
+  const runningOnEmulator = await isEmulator();
+  if (runningOnEmulator) {
+    logger.warn('[Discovery] Running on emulator — skipping LAN scan (emulator network stack cannot handle concurrent probes)');
+    return [];
+  }
+
   const ip = await getIpAddress();
 
   let subnetsToScan: string[];

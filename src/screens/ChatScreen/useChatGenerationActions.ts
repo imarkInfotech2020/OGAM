@@ -8,7 +8,6 @@ import {
   hideAlert,
 } from '../../components';
 import { APP_CONFIG } from '../../constants';
-import { useAppStore } from '../../stores/appStore';
 import {
   llmService,
   intentClassifier,
@@ -235,17 +234,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabl
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   return { enabledTools, rawPrompt };
 }
-function maybeCacheTypeNudge(deps: GenerationDeps): void {
-  const appState = useAppStore.getState();
-  if (!appState.hasSeenCacheTypeNudge && deps.settings.cacheType === 'q8_0') {
-    appState.setHasSeenCacheTypeNudge(true);
-    deps.setAlertState(showAlert(
-      'Improve Output Quality',
-      'You can improve response quality by changing the KV cache type to f16 in Model Settings. This uses more memory but produces better outputs. Requires a model reload.',
-      [{ text: 'Go to Settings', onPress: () => { deps.setAlertState(hideAlert()); deps.setShowSettingsPanel?.(true); } }, { text: 'Got it', style: 'cancel' }],
-    ));
-  }
-}
+
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.hasActiveModel) return;
@@ -278,7 +267,6 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     return;
   }
   deps.generatingForConversationRef.current = null;
-  maybeCacheTypeNudge(deps);
 }
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {

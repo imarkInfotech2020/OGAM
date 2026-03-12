@@ -370,6 +370,8 @@ class GenerationService {
     if (!this.state.isGenerating) {
       // Stop both local and remote
       await llmService.stopGeneration().catch(() => {});
+      const provider = this.getCurrentProvider();
+      if (provider) provider.stopGeneration().catch(() => {});
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -397,6 +399,9 @@ class GenerationService {
 
     // Stop both local and remote
     if (this.isUsingRemoteProvider()) {
+      // Abort the provider's XHR so the server connection is closed immediately
+      const provider = this.getCurrentProvider();
+      if (provider) provider.stopGeneration().catch(() => {});
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -437,6 +442,9 @@ class GenerationService {
     this.remoteTimeToFirstToken = undefined;
 
     this.currentRemoteAbortController = new AbortController();
+    // Capture signal per-generation so callbacks stay guarded even after
+    // abortRequested is reset by the next generation's prepareGeneration().
+    const { signal: generationSignal } = this.currentRemoteAbortController;
 
     const { temperature, maxTokens, topP, thinkingEnabled } = useAppStore.getState().settings;
     const options: GenerationOptions = {
@@ -453,7 +461,7 @@ class GenerationService {
         options,
         {
           onToken: (token: string) => {
-            if (this.abortRequested) return;
+            if (generationSignal.aborted) return;
             if (!firstTokenReceived) {
               firstTokenReceived = true;
               this.remoteTimeToFirstToken = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : undefined;
@@ -470,7 +478,7 @@ class GenerationService {
             }
           },
           onReasoning: (content: string) => {
-            if (this.abortRequested) return;
+            if (generationSignal.aborted) return;
             this.reasoningBuffer += content;
             this.totalReasoningLength += content.length;
             if (!this.flushTimer) {
@@ -481,7 +489,7 @@ class GenerationService {
             }
           },
           onComplete: (_result: CompletionResult) => {
-            if (this.abortRequested) return;
+            if (generationSignal.aborted) return;
             logger.log('[GenerationService] Remote text generation completed');
             this.forceFlushTokens();
             const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
@@ -490,7 +498,7 @@ class GenerationService {
             this.resetState();
           },
           onError: (error: Error) => {
-            if (this.abortRequested) return;
+            if (generationSignal.aborted) return;
             logger.error('[GenerationService] Remote generation error:', error);
             if (this.flushTimer) {
               clearTimeout(this.flushTimer);
@@ -504,7 +512,7 @@ class GenerationService {
         }
       );
     } catch (error) {
-      if (this.abortRequested) return;
+      if (generationSignal.aborted) return;
       logger.error('[GenerationService] Remote generation error:', error);
       // Mark server as offline so the Remote Servers screen reflects the failure
       const failedServerId = useRemoteServerStore.getState().activeServerId;

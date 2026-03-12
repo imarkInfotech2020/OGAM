@@ -7,6 +7,7 @@
 // Mock react-native-device-info
 jest.mock('react-native-device-info', () => ({
   getIpAddress: jest.fn(),
+  isEmulator: jest.fn().mockResolvedValue(false),
 }));
 
 // Mock logger

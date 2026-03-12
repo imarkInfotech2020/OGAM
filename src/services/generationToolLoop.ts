@@ -385,7 +385,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     const assistantMsg: Message = {
       id: `tool-assist-${Date.now()}-${iteration}`, role: 'assistant',
-      content: displayResponse || '', timestamp: Date.now(),
+      content: displayResponse || state.streamedContent || '', timestamp: Date.now(),
       toolCalls: cappedToolCalls.map(tc => ({ id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments) })),
     };
     loopMessages.push(assistantMsg);
