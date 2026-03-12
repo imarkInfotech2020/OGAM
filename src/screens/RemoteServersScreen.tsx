@@ -24,6 +24,7 @@ import { useRemoteServerStore } from '../stores';
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
+import { discoverLANServers } from '../services/networkDiscovery';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'RemoteServers'>;
 
@@ -179,6 +180,22 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       fontWeight: '600' as const,
       color: colors.background,
     },
+    scanButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      backgroundColor: colors.surfaceLight,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginTop: 12,
+      gap: 8,
+    },
+    scanButtonText: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.text,
+    },
     infoCard: {
       backgroundColor: colors.surfaceLight,
       borderRadius: 12,
@@ -207,6 +224,7 @@ export const RemoteServersScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   // Auto-check all server statuses when screen opens
   useEffect(() => {
@@ -231,6 +249,37 @@ export const RemoteServersScreen: React.FC = () => {
       setTestingId(null);
     }
   }, [testConnection]);
+
+  const handleScanNetwork = useCallback(async () => {
+    setIsScanning(true);
+    try {
+      const discovered = await discoverLANServers();
+      if (discovered.length === 0) {
+        Alert.alert('No Servers Found', 'No LLM servers were found on your local network.');
+        return;
+      }
+      const existingEndpoints = new Set(servers.map(s => s.endpoint));
+      const newServers = discovered.filter(d => !existingEndpoints.has(d.endpoint));
+      if (newServers.length === 0) {
+        Alert.alert('Already Added', 'All discovered servers are already in your list.');
+        return;
+      }
+      await Promise.all(
+        newServers.map(d =>
+          remoteServerManager.addServer({
+            name: d.name,
+            endpoint: d.endpoint,
+            providerType: 'openai-compatible',
+          })
+        )
+      );
+      Alert.alert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
+    } catch (error) {
+      Alert.alert('Scan Failed', error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsScanning(false);
+    }
+  }, [servers]);
 
   const handleDeleteServer = useCallback((server: typeof servers[0]) => {
     Alert.alert(
@@ -272,6 +321,14 @@ export const RemoteServersScreen: React.FC = () => {
             <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
               <Icon name="plus" size={20} color={theme.colors.background} />
               <Text style={styles.addButtonText}>Add Server</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.scanButton} onPress={handleScanNetwork} disabled={isScanning}>
+              {isScanning ? (
+                <ActivityIndicator size="small" color={theme.colors.text} />
+              ) : (
+                <Icon name="wifi" size={20} color={theme.colors.text} />
+              )}
+              <Text style={styles.scanButtonText}>{isScanning ? 'Scanning...' : 'Scan Network'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -344,6 +401,14 @@ export const RemoteServersScreen: React.FC = () => {
             <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
               <Icon name="plus" size={20} color={theme.colors.background} />
               <Text style={styles.addButtonText}>Add Another Server</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.scanButton} onPress={handleScanNetwork} disabled={isScanning}>
+              {isScanning ? (
+                <ActivityIndicator size="small" color={theme.colors.text} />
+              ) : (
+                <Icon name="wifi" size={20} color={theme.colors.text} />
+              )}
+              <Text style={styles.scanButtonText}>{isScanning ? 'Scanning...' : 'Scan Network'}</Text>
             </TouchableOpacity>
           </>
         )}
