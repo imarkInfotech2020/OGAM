@@ -81,7 +81,7 @@ function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     buttonRow: {
       flexDirection: 'row' as const,
       gap: 10,
-      marginTop: 24,
+      marginTop: 16,
     },
     testButton: {
       flex: 1,
@@ -380,32 +380,6 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
           numberOfLines={3}
         />
 
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.testButton, isTesting && styles.testButtonDisabled]}
-            onPress={handleTestConnection}
-            disabled={isTesting}
-          >
-            {isTesting ? (
-              <ActivityIndicator size="small" color={theme.colors.background} />
-            ) : (
-              <Text style={[styles.testButtonText, isTesting && styles.testButtonTextDisabled]}>
-                Test Connection
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.saveButton, !testResult?.success && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={!testResult?.success}
-          >
-            <Text style={[styles.saveButtonText, !testResult?.success && styles.saveButtonTextDisabled]}>
-              {server ? 'Update Server' : 'Add Server'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {testResult && (
           <View style={styles.statusContainer}>
             <View
@@ -433,6 +407,32 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
             ))}
           </View>
         )}
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.testButton, isTesting && styles.testButtonDisabled]}
+            onPress={handleTestConnection}
+            disabled={isTesting}
+          >
+            {isTesting ? (
+              <ActivityIndicator size="small" color={theme.colors.background} />
+            ) : (
+              <Text style={[styles.testButtonText, isTesting && styles.testButtonTextDisabled]}>
+                Test Connection
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveButton, !testResult?.success && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={!testResult?.success}
+          >
+            <Text style={[styles.saveButtonText, !testResult?.success && styles.saveButtonTextDisabled]}>
+              {server ? 'Update Server' : 'Add Server'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </AppSheet>
   );
