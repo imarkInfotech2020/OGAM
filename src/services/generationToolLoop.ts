@@ -345,9 +345,8 @@ function emitFinalResponse(ctx: ToolLoopContext, displayResponse: string, stream
     ctx.onThinkingDone();
     ctx.callbacks?.onFirstToken?.();
     ctx.onFinalResponse(displayResponse);
-  } else if (streamedContent) {
-    ctx.onThinkingDone();
   }
+  // If streamedContent is set, onThinkingDone was already called by buildStreamHandler on first token
 }
 
 /**
@@ -363,6 +362,18 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     if (ctx.isAborted()) break;
+
+    // Hit iteration or total-call cap — force one final text-only generation (no tools)
+    if (iteration === MAX_TOOL_ITERATIONS - 1 || totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
+      logger.log(`[ToolLoop] Hit cap after ${totalToolCalls} calls — forcing final text response`);
+      state.streamedContent = '';
+      state.firstTokenFired = false;
+      const forcedOnStream = buildStreamHandler(ctx, state);
+      const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], forcedOnStream, ctx.forceRemote);
+      emitFinalResponse(ctx, forcedResponse, state.streamedContent);
+      return;
+    }
+
     state.streamedContent = '';
     logger.log(`[ToolLoop] Iteration ${iteration}, messages: ${loopMessages.length}, tools: ${toolSchemas.length}, totalCalls: ${totalToolCalls}`);
 
@@ -380,7 +391,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
       return;
     }
 
-    // Always execute the tool calls
+    // Execute the tool calls
     if (state.streamedContent) { ctx.onStreamReset?.(); chatStore.setStreamingMessage(''); }
 
     const assistantMsg: Message = {
@@ -395,17 +406,5 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     chatStore.setIsThinking(true);
     await new Promise<void>(resolve => setTimeout(resolve, CONTEXT_RELEASE_PAUSE_MS));
-
-    // Hit iteration or total-call cap — force one final text-only generation (no tools)
-    if (iteration === MAX_TOOL_ITERATIONS - 1 || totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
-      logger.log(`[ToolLoop] Hit cap after ${totalToolCalls} calls — forcing final text response`);
-      if (ctx.isAborted()) return;
-      state.streamedContent = '';
-      state.firstTokenFired = false;
-      const forcedOnStream = buildStreamHandler(ctx, state);
-      const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], forcedOnStream, ctx.forceRemote);
-      emitFinalResponse(ctx, forcedResponse, state.streamedContent);
-      return;
-    }
   }
 }

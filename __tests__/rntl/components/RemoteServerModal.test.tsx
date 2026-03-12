@@ -33,6 +33,7 @@ jest.mock('../../../src/components/AppSheet', () => ({
 jest.mock('../../../src/services/remoteServerManager', () => ({
   remoteServerManager: {
     testConnectionByEndpoint: jest.fn(),
+    testConnection: jest.fn().mockResolvedValue({ success: true, latency: 10 }),
     addServer: jest.fn(),
     updateServer: jest.fn(),
   },

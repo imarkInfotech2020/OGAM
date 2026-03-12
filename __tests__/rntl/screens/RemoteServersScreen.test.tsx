@@ -67,7 +67,8 @@ jest.mock('../../../src/components/RemoteServerModal', () => ({
 jest.mock('../../../src/services/remoteServerManager', () => ({
   remoteServerManager: {
     removeServer: jest.fn().mockResolvedValue(undefined),
-    addServer: jest.fn().mockResolvedValue(undefined),
+    addServer: jest.fn().mockResolvedValue({ id: 'discovered-1' }),
+    testConnection: jest.fn().mockResolvedValue({ success: true, latency: 10 }),
   },
 }));
 

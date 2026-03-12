@@ -84,7 +84,13 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
     return [];
   }
 
-  const ip = await getIpAddress();
+  let ip: string | null;
+  try {
+    ip = await getIpAddress();
+  } catch (err) {
+    logger.warn('[Discovery] getIpAddress threw:', (err as Error).message, '— trying common subnets');
+    ip = null;
+  }
 
   let subnetsToScan: string[];
 

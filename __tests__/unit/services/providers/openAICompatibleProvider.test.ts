@@ -44,7 +44,7 @@ describe('OpenAICompatibleProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     provider = new OpenAICompatibleProvider('test-server', {
-      endpoint: 'http://192.168.1.50:11434',
+      endpoint: 'http://192.168.1.50:1234',
       modelId: 'llama2',
     });
   });
@@ -193,7 +193,7 @@ describe('OpenAICompatibleProvider', () => {
       );
 
       expect(mockCreateStreamingRequest).toHaveBeenCalledWith(
-        'http://192.168.1.50:11434/v1/chat/completions',
+        'http://192.168.1.50:1234/v1/chat/completions',
         expect.objectContaining({
           model: 'test-model',
           stream: true,
@@ -561,7 +561,7 @@ describe('OpenAICompatibleProvider', () => {
         { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() }
       );
 
-      expect(capturedBody.messages[0]).toEqual({ role: 'system', content: 'You are helpful' });
+      expect(capturedBody.messages[0]).toEqual({ role: 'system', content: [{ type: 'text', text: 'You are helpful' }] });
     });
 
     it('does not duplicate system message when already in messages', async () => {
@@ -584,7 +584,7 @@ describe('OpenAICompatibleProvider', () => {
 
       const systemMessages = capturedBody.messages.filter((m: any) => m.role === 'system');
       expect(systemMessages).toHaveLength(1);
-      expect(systemMessages[0].content).toBe('Custom system');
+      expect(systemMessages[0].content).toEqual([{ type: 'text', text: 'Custom system' }]);
     });
 
     it('includes tool result message for role=tool', async () => {
@@ -607,7 +607,7 @@ describe('OpenAICompatibleProvider', () => {
 
       const toolMsg = capturedBody.messages.find((m: any) => m.role === 'tool');
       expect(toolMsg).toBeDefined();
-      expect(toolMsg.content).toBe('result data');
+      expect(toolMsg.content).toEqual([{ type: 'text', text: 'result data' }]);
       expect(toolMsg.tool_call_id).toBe('call_abc');
     });
 
