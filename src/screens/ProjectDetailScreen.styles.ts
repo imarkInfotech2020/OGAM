@@ -1,4 +1,3 @@
-/* eslint-disable max-lines-per-function */
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 
@@ -7,9 +6,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
     backgroundColor: colors.background,
   },
-  swipeableContainer: {
-    overflow: 'visible' as const,
-  },
+  swipeableContainer: { overflow: 'visible' as const },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

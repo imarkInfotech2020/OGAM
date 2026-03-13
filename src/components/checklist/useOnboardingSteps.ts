@@ -25,7 +25,7 @@ export function useOnboardingSteps() {
     { id: 'triedImageGen', title: 'Try image generation', subtitle: 'Generate your first image', completed: onboardingChecklist.triedImageGen, disabled: activeModelId === null },
     { id: 'exploredSettings', title: 'Explore settings', subtitle: 'Configure your experience', completed: onboardingChecklist.exploredSettings },
     { id: 'createdProject', title: 'Create a project', subtitle: 'Organize chats by topic', completed: projects.length > 4 },
-  ], [hasAnyModel, hasActiveModel, conversations, onboardingChecklist.exploredSettings, onboardingChecklist.triedImageGen, projects.length]);
+  ], [hasAnyModel, hasActiveModel, conversations, onboardingChecklist.exploredSettings, onboardingChecklist.triedImageGen, projects.length, activeModelId]);
 
   const completedCount = steps.filter(s => s.completed).length;
 
