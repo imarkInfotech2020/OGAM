@@ -153,9 +153,8 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
     if (!base) {
       logger.warn('[Discovery] IP is not on a private network:', ip, '— skipping LAN scan');
       return [];
-    } else {
-      subnetsToScan = [base];
     }
+    subnetsToScan = [base];
   }
 
   logger.log('[Discovery] Scanning subnets:', subnetsToScan.map(s => `${s}.0/24`).join(', '));
