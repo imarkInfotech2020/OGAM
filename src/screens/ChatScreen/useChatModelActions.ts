@@ -92,13 +92,15 @@ export async function initiateModelLoad(
         `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Load Anyway', style: 'destructive', onPress: () => {
-            deps.setAlertState(hideAlert());
-            deps.setIsModelLoading(true);
-            deps.setLoadingModel(activeModel);
-            deps.modelLoadStartTimeRef.current = Date.now();
-            waitForRenderFrame().then(() => doLoadTextModel(deps));
-          }},
+          {
+            text: 'Load Anyway', style: 'destructive', onPress: () => {
+              deps.setAlertState(hideAlert());
+              deps.setIsModelLoading(true);
+              deps.setLoadingModel(activeModel);
+              deps.modelLoadStartTimeRef.current = Date.now();
+              waitForRenderFrame().then(() => doLoadTextModel(deps));
+            }
+          },
         ],
       ));
       return;
@@ -194,10 +196,12 @@ export async function handleModelSelectFn(
   if (!memoryCheck.canLoad) {
     deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Load Anyway', style: 'destructive', onPress: () => {
-        deps.setAlertState(hideAlert());
-        proceedWithModelLoadFn(deps, model);
-      }},
+      {
+        text: 'Load Anyway', style: 'destructive', onPress: () => {
+          deps.setAlertState(hideAlert());
+          proceedWithModelLoadFn(deps, model);
+        }
+      },
     ]));
     return;
   }
@@ -263,7 +267,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
       }
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
   useEffect(() => {
     const preload = async () => {
@@ -279,7 +283,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
       }
     };
     preload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
 }
 
@@ -300,7 +304,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   useEffect(() => {
     if (activeModelInfo.isRemote) return;
     if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeModelId]);
   useEffect(() => {
     if (activeModelInfo.isRemote) {
@@ -310,7 +314,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     } else {
       setSupportsVision(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModel?.mmProjPath]);
   useEffect(() => {
     if (activeRemoteTextModelId) {
@@ -323,6 +327,6 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
       setSupportsToolCalling(false);
       setSupportsThinking(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeModelId, isModelLoading, activeRemoteTextModelId]);
 }

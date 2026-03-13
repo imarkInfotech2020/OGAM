@@ -42,7 +42,7 @@ export const SettingsScreen: React.FC = () => {
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const handleResetOnboarding = () => {
@@ -95,34 +95,34 @@ export const SettingsScreen: React.FC = () => {
 
         {/* Navigation Items */}
         <AttachStep index={5} fill>
-        <View style={styles.navSection}>
-          {[
-            { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
-            { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
-            { icon: 'mic', title: 'Voice Transcription', desc: 'On-device speech to text', screen: 'VoiceSettings' as const },
-            { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
-            { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
-            { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
-          ].map((item, index, arr) => (
-            <AnimatedListItem
-              key={item.screen}
-              index={index + 1}
-              staggerMs={40}
-              trigger={focusTrigger}
-              style={[styles.navItem, index === arr.length - 1 && styles.navItemLast]}
-              onPress={() => navigation.navigate(item.screen)}
-            >
-              <View style={styles.navItemIcon}>
-                <Icon name={item.icon} size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>{item.title}</Text>
-                <Text style={styles.navItemDesc}>{item.desc}</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.textMuted} />
-            </AnimatedListItem>
-          ))}
-        </View>
+          <View style={styles.navSection}>
+            {[
+              { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
+              { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
+              { icon: 'mic', title: 'Voice Transcription', desc: 'On-device speech to text', screen: 'VoiceSettings' as const },
+              { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
+              { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
+              { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
+            ].map((item, index, arr) => (
+              <AnimatedListItem
+                key={item.screen}
+                index={index + 1}
+                staggerMs={40}
+                trigger={focusTrigger}
+                style={[styles.navItem, index === arr.length - 1 && styles.navItemLast]}
+                onPress={() => navigation.navigate(item.screen)}
+              >
+                <View style={styles.navItemIcon}>
+                  <Icon name={item.icon} size={16} color={colors.textSecondary} />
+                </View>
+                <View style={styles.navItemContent}>
+                  <Text style={styles.navItemTitle}>{item.title}</Text>
+                  <Text style={styles.navItemDesc}>{item.desc}</Text>
+                </View>
+                <Icon name="chevron-right" size={16} color={colors.textMuted} />
+              </AnimatedListItem>
+            ))}
+          </View>
         </AttachStep>
 
         {/* Community */}

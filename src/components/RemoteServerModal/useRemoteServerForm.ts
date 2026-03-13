@@ -118,7 +118,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     } else {
       saveServer();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [validateForm, endpoint]);
 
   return {

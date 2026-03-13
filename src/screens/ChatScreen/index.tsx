@@ -55,7 +55,7 @@ export const ChatScreen: React.FC = () => {
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const chainingRef = useRef(false);
   // When the spotlight tour stops after step 3, fire the chained step 12
   useEffect(() => {

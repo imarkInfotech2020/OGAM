@@ -126,8 +126,8 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const sheetMaxHeight = enableDynamicSizing
     ? SCREEN_HEIGHT * 0.85
     : resolveSnapPoint(
-        snapPoints?.[snapPoints.length - 1] || '50%',
-      );
+      snapPoints?.[snapPoints.length - 1] || '50%',
+    );
 
   const levelTokens = elevationTokens[elevation];
 
@@ -204,13 +204,13 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           clearTimeout(timeout);
           sub.remove();
         };
-      } 
-        setModalVisible(true);
-      
+      }
+      setModalVisible(true);
+
     } else if (modalVisible) {
       animateOut(() => setModalVisible(false));
     }
-  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   // Track keyboard height so the sheet lifts above the keyboard
   useEffect(() => {

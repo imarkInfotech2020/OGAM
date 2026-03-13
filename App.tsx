@@ -60,7 +60,7 @@ function App() {
 
   useEffect(() => {
     initializeApp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const ensureAppStoreHydrated = async () => {

@@ -41,7 +41,7 @@ async function handleCompletedImageDownload(opts: {
     const resolvedModelDir = metadata.imageModelBackend === 'coreml'
       ? await resolveCoreMLModelDir(modelDir) : modelDir;
     deps.updateModelProgress(modelId, 0.95);
-    await RNFS.unlink(zipPath).catch(() => {});
+    await RNFS.unlink(zipPath).catch(() => { });
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
       modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
@@ -217,7 +217,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   useEffect(() => {
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   useEffect(() => {
@@ -234,7 +234,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
       }
     });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const clearImageFilters = useCallback(() => {

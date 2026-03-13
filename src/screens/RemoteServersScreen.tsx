@@ -42,7 +42,7 @@ export const RemoteServersScreen: React.FC = () => {
     servers.forEach(server => {
       testConnection(server.id).catch(() => { });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const handleTestServer = useCallback(async (serverId: string) => {

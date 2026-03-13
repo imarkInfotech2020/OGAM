@@ -40,85 +40,85 @@ const SlideContent: React.FC<{
   styles,
   accentColor,
 }) => {
-  const keywordOpacity = useSharedValue(0);
-  const keywordTranslateY = useSharedValue(24);
-  const titleOpacity = useSharedValue(0);
-  const titleTranslateY = useSharedValue(16);
-  const descOpacity = useSharedValue(0);
-  const descTranslateY = useSharedValue(12);
-  const lineWidth = useSharedValue(0);
+    const keywordOpacity = useSharedValue(0);
+    const keywordTranslateY = useSharedValue(24);
+    const titleOpacity = useSharedValue(0);
+    const titleTranslateY = useSharedValue(16);
+    const descOpacity = useSharedValue(0);
+    const descTranslateY = useSharedValue(12);
+    const lineWidth = useSharedValue(0);
 
-  useEffect(() => {
-    if (isActive) {
-      // Reset
-      keywordOpacity.value = 0;
-      keywordTranslateY.value = 24;
-      titleOpacity.value = 0;
-      titleTranslateY.value = 16;
-      descOpacity.value = 0;
-      descTranslateY.value = 12;
-      lineWidth.value = 0;
+    useEffect(() => {
+      if (isActive) {
+        // Reset
+        keywordOpacity.value = 0;
+        keywordTranslateY.value = 24;
+        titleOpacity.value = 0;
+        titleTranslateY.value = 16;
+        descOpacity.value = 0;
+        descTranslateY.value = 12;
+        lineWidth.value = 0;
 
-      const ease = Easing.out(Easing.cubic);
+        const ease = Easing.out(Easing.cubic);
 
-      // Stagger: keyword → line → title → description
-      keywordOpacity.value = withTiming(1, { duration: 500, easing: ease });
-      keywordTranslateY.value = withTiming(0, { duration: 500, easing: ease });
-      lineWidth.value = withDelay(250, withTiming(1, { duration: 400, easing: ease }));
-      titleOpacity.value = withDelay(350, withTiming(1, { duration: 400, easing: ease }));
-      titleTranslateY.value = withDelay(350, withTiming(0, { duration: 400, easing: ease }));
-      descOpacity.value = withDelay(550, withTiming(1, { duration: 400, easing: ease }));
-      descTranslateY.value = withDelay(550, withTiming(0, { duration: 400, easing: ease }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]);
+        // Stagger: keyword → line → title → description
+        keywordOpacity.value = withTiming(1, { duration: 500, easing: ease });
+        keywordTranslateY.value = withTiming(0, { duration: 500, easing: ease });
+        lineWidth.value = withDelay(250, withTiming(1, { duration: 400, easing: ease }));
+        titleOpacity.value = withDelay(350, withTiming(1, { duration: 400, easing: ease }));
+        titleTranslateY.value = withDelay(350, withTiming(0, { duration: 400, easing: ease }));
+        descOpacity.value = withDelay(550, withTiming(1, { duration: 400, easing: ease }));
+        descTranslateY.value = withDelay(550, withTiming(0, { duration: 400, easing: ease }));
+      }
 
-  const keywordStyle = useAnimatedStyle(() => ({
-    opacity: keywordOpacity.value,
-    transform: [{ translateY: keywordTranslateY.value }],
-  }));
+    }, [isActive]);
 
-  const lineStyle = useAnimatedStyle(() => ({
-    transform: [{ scaleX: lineWidth.value }],
-    opacity: lineWidth.value,
-  }));
+    const keywordStyle = useAnimatedStyle(() => ({
+      opacity: keywordOpacity.value,
+      transform: [{ translateY: keywordTranslateY.value }],
+    }));
 
-  const titleStyle = useAnimatedStyle(() => ({
-    opacity: titleOpacity.value,
-    transform: [{ translateY: titleTranslateY.value }],
-  }));
+    const lineStyle = useAnimatedStyle(() => ({
+      transform: [{ scaleX: lineWidth.value }],
+      opacity: lineWidth.value,
+    }));
 
-  const descStyle = useAnimatedStyle(() => ({
-    opacity: descOpacity.value,
-    transform: [{ translateY: descTranslateY.value }],
-  }));
+    const titleStyle = useAnimatedStyle(() => ({
+      opacity: titleOpacity.value,
+      transform: [{ translateY: titleTranslateY.value }],
+    }));
 
-  return (
-    <View style={styles.slide}>
-      <View style={styles.slideInner}>
-        {/* Hero keyword */}
-        <ReanimatedAnimated.View style={keywordStyle}>
-          <Text style={[styles.keyword, { color: accentColor }]}>
-            {item.keyword}
-          </Text>
-        </ReanimatedAnimated.View>
+    const descStyle = useAnimatedStyle(() => ({
+      opacity: descOpacity.value,
+      transform: [{ translateY: descTranslateY.value }],
+    }));
 
-        {/* Accent line */}
-        <ReanimatedAnimated.View style={[styles.accentLine, { backgroundColor: accentColor }, lineStyle]} />
+    return (
+      <View style={styles.slide}>
+        <View style={styles.slideInner}>
+          {/* Hero keyword */}
+          <ReanimatedAnimated.View style={keywordStyle}>
+            <Text style={[styles.keyword, { color: accentColor }]}>
+              {item.keyword}
+            </Text>
+          </ReanimatedAnimated.View>
 
-        {/* Title */}
-        <ReanimatedAnimated.View style={titleStyle}>
-          <Text style={styles.title}>{item.title}</Text>
-        </ReanimatedAnimated.View>
+          {/* Accent line */}
+          <ReanimatedAnimated.View style={[styles.accentLine, { backgroundColor: accentColor }, lineStyle]} />
 
-        {/* Description */}
-        <ReanimatedAnimated.View style={descStyle}>
-          <Text style={styles.description}>{item.description}</Text>
-        </ReanimatedAnimated.View>
+          {/* Title */}
+          <ReanimatedAnimated.View style={titleStyle}>
+            <Text style={styles.title}>{item.title}</Text>
+          </ReanimatedAnimated.View>
+
+          {/* Description */}
+          <ReanimatedAnimated.View style={descStyle}>
+            <Text style={styles.description}>{item.description}</Text>
+          </ReanimatedAnimated.View>
+        </View>
       </View>
-    </View>
-  );
-};
+    );
+  };
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
@@ -190,46 +190,46 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       <View testID="onboarding-screen" style={styles.container}>
-      <View style={styles.header}>
-        {!isLastSlide && (
-          <Button
-            title="Skip"
-            variant="ghost"
-            onPress={handleSkip}
-            testID="onboarding-skip"
-          />
-        )}
-      </View>
+        <View style={styles.header}>
+          {!isLastSlide && (
+            <Button
+              title="Skip"
+              variant="ghost"
+              onPress={handleSkip}
+              testID="onboarding-skip"
+            />
+          )}
+        </View>
 
-      <FlatList
-        ref={flatListRef}
-        data={ONBOARDING_SLIDES}
-        renderItem={renderSlide}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.id}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
-        )}
-        onMomentumScrollEnd={(e) => {
-          const index = Math.round(e.nativeEvent.contentOffset.x / width);
-          setCurrentIndex(index);
-        }}
-      />
-
-      {renderDots()}
-
-      <View style={styles.footer}>
-        <Button
-          title={isLastSlide ? 'Get Started' : 'Next'}
-          onPress={handleNext}
-          size="large"
-          style={styles.nextButton}
-          testID="onboarding-next"
+        <FlatList
+          ref={flatListRef}
+          data={ONBOARDING_SLIDES}
+          renderItem={renderSlide}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => item.id}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: false }
+          )}
+          onMomentumScrollEnd={(e) => {
+            const index = Math.round(e.nativeEvent.contentOffset.x / width);
+            setCurrentIndex(index);
+          }}
         />
-      </View>
+
+        {renderDots()}
+
+        <View style={styles.footer}>
+          <Button
+            title={isLastSlide ? 'Get Started' : 'Next'}
+            onPress={handleNext}
+            size="large"
+            style={styles.nextButton}
+            testID="onboarding-next"
+          />
+        </View>
       </View>
     </SafeAreaView>
   );

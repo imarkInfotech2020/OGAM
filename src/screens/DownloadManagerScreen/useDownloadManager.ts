@@ -98,7 +98,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       unsubComplete();
       unsubError();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const loadActiveDownloads = async () => {
@@ -117,7 +117,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const imageModels = await modelManager.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const executeRemoveDownload = async (item: DownloadItem) => {

@@ -140,7 +140,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     });
     isFirstMount.current = false;
     return () => task.cancel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const refreshMemoryInfo = useCallback(async () => {

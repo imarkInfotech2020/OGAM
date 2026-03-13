@@ -43,7 +43,7 @@ export const ProjectEditScreen: React.FC = () => {
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const [formData, setFormData] = useState({
     name: '',

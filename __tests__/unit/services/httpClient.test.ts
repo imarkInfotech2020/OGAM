@@ -816,7 +816,7 @@ describe('httpClient', () => {
     let streamEvents: any[] = [];
 
     function startStream(headers: Record<string, string> = {}): Promise<void> {
-      return createStreamingRequest(TEST_ENDPOINT, { model: 'test' }, headers, (e) => streamEvents.push(e));
+      return createStreamingRequest(TEST_ENDPOINT, { body: { model: 'test' }, headers }, (e) => streamEvents.push(e));
     }
 
     // Helper: simulate a progress event with given SSE response text
@@ -1000,8 +1000,7 @@ describe('httpClient', () => {
 
       await expect(createStreamingRequest(
         'http://localhost:11434/api/chat',
-        { model: 'test' },
-        {},
+        { body: { model: 'test' }, headers: {} },
         () => {}
       )).rejects.toThrow('Send failed');
     });
@@ -1010,11 +1009,8 @@ describe('httpClient', () => {
       const controller = new AbortController();
       const promise = createStreamingRequest(
         TEST_ENDPOINT,
-        { model: 'test' },
-        {},
+        { body: { model: 'test' }, headers: {}, timeout: 300000, signal: controller.signal },
         (e) => streamEvents.push(e),
-        300000,
-        controller.signal,
       );
 
       controller.abort();
