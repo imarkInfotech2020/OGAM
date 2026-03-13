@@ -16,6 +16,10 @@ import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 
+function resolveGpuBackend(enabled: boolean, devices: string[]): string {
+  if (!enabled) return 'CPU';
+  return Platform.OS === 'ios' ? 'Metal' : (devices.length > 0 ? devices.join(', ') : 'OpenCL');
+}
 export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
@@ -284,10 +288,7 @@ class LLMService {
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
   getGpuInfo() {
-    const backend = this.gpuEnabled
-      ? (Platform.OS === 'ios' ? 'Metal' : (this.gpuDevices.length > 0 ? this.gpuDevices.join(', ') : 'OpenCL'))
-      : 'CPU';
-    return { gpu: this.gpuEnabled, gpuBackend: backend, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
+    return { gpu: this.gpuEnabled, gpuBackend: resolveGpuBackend(this.gpuEnabled, this.gpuDevices), gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision()); }
