@@ -1,4 +1,3 @@
-/* eslint-disable max-lines, max-params, complexity */
 /**
  * OpenAI-Compatible Provider
  *
@@ -291,8 +290,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
       await createStreamingRequest(
         url,
-        requestBody,
-        headers,
+        { body: requestBody, headers, timeout: 300000, signal },
         (event) => {
           if (signal.aborted) return;
 
@@ -385,8 +383,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
             }
           }
         },
-        300000, // 5 minute timeout
-        signal
       );
 
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
@@ -489,7 +485,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     try {
       await createNDJSONStreamingRequest(
         url,
-        requestBody,
+        { body: requestBody, headers: {}, timeout: 300000, signal },
         (line) => {
           if (signal.aborted) return;
 
@@ -526,10 +522,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
               })) : undefined,
             });
           }
-        },
-        {},
-        300000,
-        signal
+        }
       );
 
       if (!completeCalled && !streamErrorOccurred) {
