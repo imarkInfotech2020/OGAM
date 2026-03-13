@@ -2,7 +2,7 @@
 /**
  * OpenAI-Compatible Provider
  *
- * Provider implementation for OpenAI-compatible servers (Ollama, LM Studio, LocalAI, etc.)
+ * Provider implementation for OpenAI-compatible servers (Ollama, LM Studio, etc.)
  * Handles model discovery, streaming generation, vision, and tool calling.
  */
 
@@ -193,28 +193,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
   async loadModel(modelId: string): Promise<void> {
     this.config.modelId = modelId;
-
-    // For remote providers, "loading" just means setting the model ID
-    // The actual model selection happens on the server
-
-    // Try to detect capabilities from model name
-    this.modelCapabilities = {
-      ...this.modelCapabilities,
-      supportsVision: this.detectVisionCapability(modelId),
-    };
+    // Capabilities are set via updateCapabilities() after discovery results are applied
   }
 
   /**
-   * Detect if model supports vision based on name patterns
+   * Apply authoritative capabilities from server discovery results
    */
-  private detectVisionCapability(modelId: string): boolean {
-    const visionPatterns = [
-      'vision', 'llava', 'bakllava', 'moondream', 'cogvlm',
-      'cogagent', 'fuyu', 'idefics', 'qwen-vl', 'gpt-4-vision',
-      'gpt-4o', 'claude-3', 'gemini', 'pixtral', 'phi-3.5-vision',
-    ];
-    const lowerModelId = modelId.toLowerCase();
-    return visionPatterns.some(pattern => lowerModelId.includes(pattern));
+  updateCapabilities(capabilities: Partial<ProviderCapabilities>): void {
+    this.modelCapabilities = { ...this.modelCapabilities, ...capabilities };
   }
 
   async unloadModel(): Promise<void> {
@@ -448,14 +434,31 @@ export class OpenAICompatibleProvider implements LLMProvider {
   ): Promise<void> {
     const thinkingEnabled = options.enableThinking !== false;
 
-    // Convert to Ollama message format (plain string content)
+    // Convert to Ollama message format
+    // Images go in a top-level `images` array as raw base64 (strip data:...;base64, prefix)
     const ollamaMessages = openaiMessages.map(m => {
-      const content = typeof m.content === 'string'
-        ? m.content
-        : (m.content as OpenAIContentPart[]).find(p => p.type === 'text')?.text ?? '';
+      if (typeof m.content === 'string') {
+        return {
+          role: m.role,
+          content: m.content,
+          ...(m.tool_calls && { tool_calls: m.tool_calls }),
+          ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
+        };
+      }
+      const parts = m.content as OpenAIContentPart[];
+      const text = parts.find(p => p.type === 'text')?.text ?? '';
+      const images = parts
+        .filter(p => p.type === 'image_url')
+        .map(p => {
+          const url = (p as { type: 'image_url'; image_url: { url: string } }).image_url.url;
+          // Strip data:image/...;base64, prefix — Ollama expects raw base64
+          const b64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+          return b64Match ? b64Match[1] : url;
+        });
       return {
         role: m.role,
-        content,
+        content: text,
+        ...(images.length > 0 && { images }),
         ...(m.tool_calls && { tool_calls: m.tool_calls }),
         ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
       };

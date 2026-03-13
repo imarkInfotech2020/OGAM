@@ -251,6 +251,12 @@ class RemoteServerManager {
     if (provider) {
       logger.log('[RemoteServerManager] Loading model on provider:', modelId);
       await provider.loadModel(modelId);
+      // Apply authoritative vision capability from discovery results (overrides name-pattern detection)
+      const discoveredModel = store.getModelById(serverId, modelId);
+      if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
+        provider.updateCapabilities({ supportsVision: discoveredModel.capabilities.supportsVision });
+        logger.log('[RemoteServerManager] Applied discovered capabilities for', modelId, '— supportsVision:', discoveredModel.capabilities.supportsVision);
+      }
       providerRegistry.setActiveProvider(serverId);
       logger.log('[RemoteServerManager] Provider ready:', await provider.isReady());
     } else {
@@ -380,6 +386,7 @@ class RemoteServerManager {
    */
   private detectVisionCapability(modelId: string): boolean {
     const patterns = [
+      '-vl', 'vl-', ':vl',   // common VL naming (qwen3-vl, llava, etc.)
       'vision', 'llava', 'bakllava', 'moondream', 'cogvlm',
       'cogagent', 'fuyu', 'idefics', 'qwen-vl', 'gpt-4-vision',
       'gpt-4o', 'claude-3', 'gemini', 'pixtral', 'phi-3.5-vision',
