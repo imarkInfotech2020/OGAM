@@ -19,6 +19,14 @@ import { useAppState } from './src/hooks/useAppState';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
+const ensureRemoteServerStoreHydrated = async () => {
+  const persistApi = useRemoteServerStore.persist;
+  if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
+  if (!persistApi.hasHydrated()) {
+    await persistApi.rehydrate();
+  }
+};
+
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
@@ -57,14 +65,6 @@ function App() {
 
   const ensureAppStoreHydrated = async () => {
     const persistApi = useAppStore.persist;
-    if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
-    if (!persistApi.hasHydrated()) {
-      await persistApi.rehydrate();
-    }
-  };
-
-  const ensureRemoteServerStoreHydrated = async () => {
-    const persistApi = useRemoteServerStore.persist;
     if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
     if (!persistApi.hasHydrated()) {
       await persistApi.rehydrate();
