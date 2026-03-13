@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
@@ -196,7 +195,6 @@ export const useAppStore = create<AppState>()(
         }),
       clearBackgroundDownloads: () =>
         set({ activeBackgroundDownloads: {} }),
-      // Settings
       settings: { ...DEFAULT_SETTINGS },
       updateSettings: (newSettings) =>
         set((state) => ({
@@ -280,7 +278,6 @@ export const useAppStore = create<AppState>()(
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
 
-
       // Reactive spotlight tracking
       shownSpotlights: {},
       markSpotlightShown: (key) =>
@@ -344,7 +341,6 @@ export const useAppStore = create<AppState>()(
         imageModelDownloadIds: state.imageModelDownloadIds,
         generatedImages: state.generatedImages,
         shownSpotlights: state.shownSpotlights,
-
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         loadedSettings: state.loadedSettings,
