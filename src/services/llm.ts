@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -208,7 +207,7 @@ class LLMService {
       onComplete?.(result);
       return result.content;
     })();
-    this.activeCompletionPromise = completionWork.then(() => {}, () => {});
+    this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try {
       return await completionWork;
     } finally {
@@ -234,7 +233,7 @@ class LLMService {
       onComplete: options.onComplete
         ? ((onComplete) => (fullResponse: string) => onComplete({ content: fullResponse, reasoningContent: '' }))(options.onComplete) : undefined,
     });
-    this.activeCompletionPromise = work.then(() => {}, () => {});
+    this.activeCompletionPromise = work.then(() => { }, () => { });
     try {
       return await work;
     } finally {
@@ -259,7 +258,7 @@ class LLMService {
       { messages: oaiMessages, ...buildCompletionParams(settings), n_predict: maxTokens },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     );
-    this.activeCompletionPromise = completionWork.then(() => {}, () => {});
+    this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try {
       await completionWork;
       return fullResponse.trim();
@@ -285,16 +284,7 @@ class LLMService {
     return { contextMemoryMB, totalEstimatedMB: contextMemoryMB };
   }
   getGpuInfo() {
-    let backend: string;
-    if (!this.gpuEnabled) {
-      backend = 'CPU';
-    } else if (Platform.OS === 'ios') {
-      backend = 'Metal';
-    } else if (this.gpuDevices.length > 0) {
-      backend = this.gpuDevices.join(', ');
-    } else {
-      backend = 'OpenCL';
-    }
+    const backend = !this.gpuEnabled ? 'CPU' : Platform.OS === 'ios' ? 'Metal' : this.gpuDevices.length > 0 ? this.gpuDevices.join(', ') : 'OpenCL';
     return { gpu: this.gpuEnabled, gpuBackend: backend, gpuLayers: this.activeGpuLayers, reasonNoGPU: this.gpuReason };
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
@@ -323,9 +313,11 @@ class LLMService {
     catch { tokens = Math.ceil(fmt.length / 4); }
     const sys = (m: Message[]) => m.filter(x => x.role === 'system').length;
     const ctx = this.currentSettings.contextLength || APP_CONFIG.maxContextLength;
-    return { originalMessageCount: messages.length, managedMessageCount: managed.length,
+    return {
+      originalMessageCount: messages.length, managedMessageCount: managed.length,
       truncatedCount: (messages.length - sys(messages)) - (managed.length - sys(managed)),
-      formattedPrompt: fmt, estimatedTokens: tokens, maxContextLength: ctx, contextUsagePercent: (tokens / ctx) * 100 };
+      formattedPrompt: fmt, estimatedTokens: tokens, maxContextLength: ctx, contextUsagePercent: (tokens / ctx) * 100
+    };
   }
   updatePerformanceSettings(settings: Partial<LLMPerformanceSettings>): void {
     this.currentSettings = { ...this.currentSettings, ...settings };
