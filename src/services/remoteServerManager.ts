@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 /**
  * Remote Server Manager
  *
@@ -195,8 +194,7 @@ class RemoteServerManager {
     const tempProvider = createOpenAIProvider(
       'temp',
       server.endpoint,
-      apiKey || undefined,
-      'temp'
+      { apiKey: apiKey || undefined, modelId: 'temp' }
     );
 
     try {
@@ -325,8 +323,7 @@ class RemoteServerManager {
     const provider = createOpenAIProvider(
       server.id,
       server.endpoint,
-      apiKey || undefined,
-      undefined
+      { apiKey: apiKey || undefined }
     );
 
     providerRegistry.registerProvider(server.id, provider);

@@ -60,7 +60,7 @@ describe('OpenAICompatibleProvider', () => {
     });
 
     it('should create using factory function', () => {
-      const p = createOpenAIProvider('my-server', 'http://localhost:1234', 'my-key', 'model-id');
+      const p = createOpenAIProvider('my-server', 'http://localhost:1234', { apiKey: 'my-key', modelId: 'model-id' });
       expect(p.id).toBe('my-server');
     });
   });
@@ -195,7 +195,7 @@ describe('OpenAICompatibleProvider', () => {
       await provider.loadModel('test-model');
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
-      mockCreateStreamingRequest.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockCreateStreamingRequest.mockImplementation((_url, _req, onEvent) => {
         // Simulate SSE events
         onEvent({ data: '{"choices":[{"delta":{"content":"Hello"}}]}' });
         onEvent({ data: '{"choices":[{"delta":{"content":" world"}}]}' });
@@ -215,17 +215,11 @@ describe('OpenAICompatibleProvider', () => {
       expect(mockCreateStreamingRequest).toHaveBeenCalledWith(
         'http://192.168.1.50:1234/v1/chat/completions',
         expect.objectContaining({
-          model: 'test-model',
-          stream: true,
-          temperature: 0.5,
+          body: expect.objectContaining({ model: 'test-model', stream: true, temperature: 0.5 }),
+          headers: expect.objectContaining({ 'Content-Type': 'application/json', Accept: 'text/event-stream' }),
+          signal: expect.any(AbortSignal),
         }),
-        expect.objectContaining({
-          'Content-Type': 'application/json',
-          Accept: 'text/event-stream',
-        }),
-        expect.any(Function),
-        expect.any(Number),
-        expect.any(AbortSignal)
+        expect.any(Function)
       );
 
       expect(onToken).toHaveBeenCalledWith('Hello');
@@ -252,13 +246,10 @@ describe('OpenAICompatibleProvider', () => {
 
       expect(mockCreateStreamingRequest).toHaveBeenCalledWith(
         expect.any(String),
-        expect.any(Object),
         expect.objectContaining({
-          Authorization: 'Bearer secret-key',
+          headers: expect.objectContaining({ Authorization: 'Bearer secret-key' }),
         }),
-        expect.any(Function),
-        expect.any(Number),
-        expect.any(AbortSignal)
+        expect.any(Function)
       );
     });
 
@@ -266,7 +257,7 @@ describe('OpenAICompatibleProvider', () => {
       await provider.loadModel('test-model');
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
-      mockCreateStreamingRequest.mockImplementation(async (_url, _body, _headers, onEvent) => {
+      mockCreateStreamingRequest.mockImplementation(async (_url, _req, onEvent) => {
         // Stream content then finish
         onEvent({ data: '{"choices":[{"delta":{"content":"Test"}}]}' });
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
@@ -291,7 +282,7 @@ describe('OpenAICompatibleProvider', () => {
       await provider.loadModel('test-model');
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
-      mockCreateStreamingRequest.mockImplementation(async (_url, _body, _headers, onEvent) => {
+      mockCreateStreamingRequest.mockImplementation(async (_url, _req, onEvent) => {
         // Tool call - streaming chunks that build up arguments
         onEvent({ data: '{"choices":[{"delta":{"tool_calls":[{"id":"call_123","function":{"name":"web_search","arguments":""}}]}}]}' });
         onEvent({ data: '{"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{\\"query\\":\\"test\\"}"}}]}}]}' });
@@ -323,7 +314,7 @@ describe('OpenAICompatibleProvider', () => {
 
       const mockCreateStreamingRequest = httpClient.createStreamingRequest as jest.Mock;
       // Mock that simulates generation followed by stop
-      mockCreateStreamingRequest.mockImplementation(async (_url, _body, _headers, onEvent) => {
+      mockCreateStreamingRequest.mockImplementation(async (_url, _req, onEvent) => {
         onEvent({ data: '{"choices":[{"delta":{"content":"Hello"}}]}' });
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
       });
@@ -355,7 +346,8 @@ describe('OpenAICompatibleProvider', () => {
       let wasAborted = false;
 
       (httpClient.createStreamingRequest as jest.Mock).mockImplementation(
-        async (_url, _body, _headers, _onEvent, _timeout, signal) => {
+        async (_url, _req, _onEvent) => {
+          const signal = (_req as any).signal;
           // Simulate abort via signal
           if (signal) {
             // Check if already aborted
@@ -431,7 +423,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('handles stream error message and calls onError', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         onEvent({ data: '{"error":{"message":"rate limit exceeded"}}' });
         return Promise.resolve();
       });
@@ -450,7 +442,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('handles [DONE] message (object=done) without calling onComplete twice', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         onEvent({ data: '{"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}' });
         onEvent({ data: '[DONE]' }); // parsed to {object:'done'}
         return Promise.resolve();
@@ -468,7 +460,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('handles reasoning_content in delta and calls onReasoning', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         onEvent({ data: '{"choices":[{"delta":{"content":"answer","reasoning_content":"thinking step"},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -486,7 +478,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('calls fallback onComplete when stream ends without finish_reason', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         onEvent({ data: '{"choices":[{"delta":{"content":"partial"}}]}' });
         // No finish_reason — stream just ends
         return Promise.resolve();
@@ -504,8 +496,9 @@ describe('OpenAICompatibleProvider', () => {
 
     it('calls onComplete with empty content when aborted (catch branch)', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation(async (_url, _body, _headers, _onEvent, _timeout, signal) => {
+      mockStream.mockImplementation(async (_url, _req, _onEvent) => {
         // Abort mid-request
+        const signal = (_req as any).signal;
         signal.dispatchEvent(new Event('abort'));
         const err = new DOMException('aborted', 'AbortError');
         Object.defineProperty(err, 'name', { value: 'AbortError' });
@@ -543,7 +536,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('skips event when signal is already aborted', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent, _timeout, _signal) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         // Abort the controller before triggering event
         (provider as any).abortController?.abort();
         onEvent({ data: '{"choices":[{"delta":{"content":"should be ignored"}}]}' });
@@ -569,8 +562,8 @@ describe('OpenAICompatibleProvider', () => {
     it('includes system prompt when provided in options', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
-      mockStream.mockImplementation((_url, body, _headers, onEvent) => {
-        capturedBody = body;
+      mockStream.mockImplementation((_url, _req, onEvent) => {
+        capturedBody = (_req as any).body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -587,8 +580,8 @@ describe('OpenAICompatibleProvider', () => {
     it('does not duplicate system message when already in messages', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
-      mockStream.mockImplementation((_url, body, _headers, onEvent) => {
-        capturedBody = body;
+      mockStream.mockImplementation((_url, _req, onEvent) => {
+        capturedBody = (_req as any).body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -610,8 +603,8 @@ describe('OpenAICompatibleProvider', () => {
     it('includes tool result message for role=tool', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
-      mockStream.mockImplementation((_url, body, _headers, onEvent) => {
-        capturedBody = body;
+      mockStream.mockImplementation((_url, _req, onEvent) => {
+        capturedBody = (_req as any).body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -634,8 +627,8 @@ describe('OpenAICompatibleProvider', () => {
     it('includes assistant message with tool_calls when present', async () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
-      mockStream.mockImplementation((_url, body, _headers, onEvent) => {
-        capturedBody = body;
+      mockStream.mockImplementation((_url, _req, onEvent) => {
+        capturedBody = (_req as any).body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -669,7 +662,7 @@ describe('OpenAICompatibleProvider', () => {
     it('does not throw when onReasoning callback is not provided', async () => {
       await provider.loadModel('test-model');
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation((_url, _body, _headers, onEvent) => {
+      mockStream.mockImplementation((_url, _req, onEvent) => {
         onEvent({ data: '{"choices":[{"delta":{"reasoning_content":"thinking..."},"finish_reason":null}]}' });
         onEvent({ data: '{"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}' });
         return Promise.resolve();
@@ -722,7 +715,7 @@ describe('OpenAICompatibleProvider', () => {
       await provider.loadModel('test-model');
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
 
-      mockStream.mockImplementation(async (_url: string, _body: unknown, _headers: unknown, onEvent: Function) => {
+      mockStream.mockImplementation(async (_url: string, _req: unknown, onEvent: Function) => {
         // Send tool call data but no finish_reason
         onEvent({ data: '{"choices":[{"delta":{"tool_calls":[{"id":"tc-1","function":{"name":"web_search","arguments":"{\\"q\\":\\"test\\"}"}}]}}]}' });
         // No finish_reason event - stream just ends
@@ -755,7 +748,7 @@ describe('OpenAICompatibleProvider', () => {
       mockImageUrl.mockResolvedValue('data:image/png;base64,abc123');
 
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
-      mockStream.mockImplementation(async (_url: string, _body: unknown, _headers: unknown, onEvent: Function) => {
+      mockStream.mockImplementation(async (_url: string, _req: unknown, onEvent: Function) => {
         onEvent({ data: '{"choices":[{"delta":{"content":"I see an image"},"finish_reason":"stop"}]}' });
       });
 
@@ -777,7 +770,7 @@ describe('OpenAICompatibleProvider', () => {
 
       // The content passed to createStreamingRequest should include image_url type
       const streamCall = mockStream.mock.calls[0];
-      const requestBody = streamCall[1] as any;
+      const requestBody = (streamCall[1] as any).body;
       const userMessage = requestBody.messages.find((m: any) => m.role === 'user');
       expect(Array.isArray(userMessage?.content)).toBe(true);
       expect(userMessage.content.some((c: any) => c.type === 'image_url')).toBe(true);
@@ -800,8 +793,8 @@ describe('OpenAICompatibleProvider', () => {
       const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockNDJSON.mockImplementation(
-        (_url: string, body: unknown, onLine: Function) => {
-          capturedBody = body;
+        (_url: string, _req: unknown, onLine: Function) => {
+          capturedBody = (_req as any).body;
           onLine({ message: { content: 'I see it.' }, done: true });
           return Promise.resolve();
         }
@@ -838,8 +831,8 @@ describe('OpenAICompatibleProvider', () => {
       const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockNDJSON.mockImplementation(
-        (_url: string, body: unknown, onLine: Function) => {
-          capturedBody = body;
+        (_url: string, _req: unknown, onLine: Function) => {
+          capturedBody = (_req as any).body;
           onLine({ message: { content: 'Hello.' }, done: true });
           return Promise.resolve();
         }

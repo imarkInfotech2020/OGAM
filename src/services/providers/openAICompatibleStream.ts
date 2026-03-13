@@ -1,0 +1,263 @@
+/**
+ * OpenAI-Compatible Provider — streaming utilities
+ * ThinkTagParser, processDelta, generateOllamaChatImpl
+ */
+import { createNDJSONStreamingRequest } from '../httpClient';
+import type { StreamCallbacks } from './types';
+import type {
+  OpenAIChatMessage,
+  OpenAIToolCall,
+  OpenAIStreamState,
+  OllamaChatRequest,
+} from './openAICompatibleTypes';
+
+/**
+ * Streaming parser for <think>...</think> tags embedded in delta.content.
+ * Routes thinking content to onReasoning and regular content to onToken.
+ * Handles tags split across multiple streaming chunks.
+ */
+export class ThinkTagParser {
+  private inThinkBlock = false;
+  private buffer = '';
+
+  process(content: string, onToken: (t: string) => void, onReasoning: (t: string) => void): void {
+    this.buffer += content;
+    this.flush(onToken, onReasoning);
+  }
+
+  /**
+   * Handle one iteration of the while loop when we are outside a think block.
+   * Returns true if the while loop should break (buffer needs more data).
+   */
+  private handleOutsideThink(openTag: string, onToken: (t: string) => void): boolean {
+    const idx = this.buffer.indexOf(openTag);
+    if (idx === -1) {
+      const partial = this.partialSuffix(this.buffer, openTag);
+      if (partial > 0) {
+        onToken(this.buffer.slice(0, this.buffer.length - partial));
+        this.buffer = this.buffer.slice(this.buffer.length - partial);
+        return true;
+      }
+      onToken(this.buffer);
+      this.buffer = '';
+      return true;
+    }
+    if (idx > 0) onToken(this.buffer.slice(0, idx));
+    this.buffer = this.buffer.slice(idx + openTag.length);
+    this.inThinkBlock = true;
+    return false;
+  }
+
+  /**
+   * Handle one iteration of the while loop when we are inside a think block.
+   * Returns true if the while loop should break (buffer needs more data).
+   */
+  private handleInsideThink(closeTag: string, onReasoning: (t: string) => void): boolean {
+    const idx = this.buffer.indexOf(closeTag);
+    if (idx === -1) {
+      const partial = this.partialSuffix(this.buffer, closeTag);
+      if (partial > 0) {
+        onReasoning(this.buffer.slice(0, this.buffer.length - partial));
+        this.buffer = this.buffer.slice(this.buffer.length - partial);
+        return true;
+      }
+      onReasoning(this.buffer);
+      this.buffer = '';
+      return true;
+    }
+    if (idx > 0) onReasoning(this.buffer.slice(0, idx));
+    this.buffer = this.buffer.slice(idx + closeTag.length);
+    this.inThinkBlock = false;
+    return false;
+  }
+
+  private flush(onToken: (t: string) => void, onReasoning: (t: string) => void): void {
+    const openTag = '<think>';
+    const closeTag = '</think>';
+    while (this.buffer.length > 0) {
+      if (!this.inThinkBlock) {
+        if (this.handleOutsideThink(openTag, onToken)) break;
+      } else {
+        if (this.handleInsideThink(closeTag, onReasoning)) break;
+      }
+    }
+  }
+
+  /** Length of the longest suffix of text that is a prefix of tag. */
+  private partialSuffix(text: string, tag: string): number {
+    for (let len = Math.min(tag.length - 1, text.length); len > 0; len--) {
+      if (text.endsWith(tag.slice(0, len))) return len;
+    }
+    return 0;
+  }
+}
+
+/** Context passed to processDelta */
+interface DeltaCtx {
+  thinkingEnabled: boolean;
+  callbacks: StreamCallbacks;
+  thinkTagParser: ThinkTagParser;
+}
+
+type DeltaShape = {
+  content?: string;
+  reasoning_content?: string;
+  reasoning?: string;
+  thinking?: string;
+  tool_calls?: Array<{
+    index?: number; id?: string; type?: string;
+    function?: { name?: string; arguments?: string };
+  }>;
+};
+
+/**
+ * Process a streaming delta — extracted to reduce complexity of the SSE event handler.
+ * Mutates state.fullContent, state.fullReasoningContent, state.toolCalls, state.currentToolCall.
+ */
+export function processDelta(
+  delta: DeltaShape,
+  state: OpenAIStreamState,
+  ctx: DeltaCtx,
+): void {
+  if (delta.content) {
+    ctx.thinkTagParser.process(
+      delta.content,
+      (text) => { state.fullContent += text; ctx.callbacks.onToken(text); },
+      (reasoning) => {
+        if (ctx.thinkingEnabled) {
+          state.fullReasoningContent += reasoning;
+          ctx.callbacks.onReasoning?.(reasoning);
+        }
+      },
+    );
+  }
+
+  // Reasoning content — check all known field names across providers:
+  // - delta.reasoning_content (LM Studio)
+  // - delta.reasoning         (Ollama /v1/chat/completions)
+  // - delta.thinking          (kept as fallback)
+  const reasoningDelta = delta.reasoning_content || delta.reasoning || delta.thinking;
+  if (reasoningDelta && ctx.thinkingEnabled) {
+    state.fullReasoningContent += reasoningDelta;
+    ctx.callbacks.onReasoning?.(reasoningDelta);
+  }
+
+  if (delta.tool_calls) {
+    for (const tc of delta.tool_calls) {
+      if (tc.id) {
+        state.currentToolCall = { id: tc.id, type: 'function', function: { name: '', arguments: '' } };
+        state.toolCalls.push(state.currentToolCall as OpenAIToolCall);
+      }
+      if (tc.function?.name && state.currentToolCall) {
+        state.currentToolCall.function!.name = tc.function.name;
+      }
+      if (tc.function?.arguments && state.currentToolCall) {
+        state.currentToolCall.function!.arguments += tc.function.arguments;
+      }
+    }
+  }
+}
+
+/**
+ * Generate using Ollama's native /api/chat endpoint (NDJSON streaming).
+ * Supports think: true/false for reasoning control.
+ */
+export async function generateOllamaChatImpl(
+  openaiMessages: OpenAIChatMessage[],
+  req: OllamaChatRequest,
+): Promise<void> {
+  const { options, callbacks, signal, endpoint, modelId, abort } = req;
+  const thinkingEnabled = options.enableThinking !== false;
+
+  // Convert to Ollama message format
+  // Images go in a top-level `images` array as raw base64 (strip data:...;base64, prefix)
+  const ollamaMessages = openaiMessages.map(m => {
+    if (typeof m.content === 'string') {
+      return {
+        role: m.role, content: m.content,
+        ...(m.tool_calls && { tool_calls: m.tool_calls }),
+        ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
+      };
+    }
+    const parts = m.content as Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    const text = parts.find(p => p.type === 'text')?.text ?? '';
+    const images = parts
+      .filter(p => p.type === 'image_url')
+      .map(p => {
+        const url = p.image_url?.url ?? '';
+        // Strip data:image/...;base64, prefix — Ollama expects raw base64
+        const b64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+        return b64Match ? b64Match[1] : url;
+      });
+    return {
+      role: m.role, content: text,
+      ...(images.length > 0 && { images }),
+      ...(m.tool_calls && { tool_calls: m.tool_calls }),
+      ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
+    };
+  });
+
+  const requestBody: Record<string, unknown> = {
+    model: modelId, messages: ollamaMessages, stream: true, think: thinkingEnabled,
+    ...(options.tools && options.tools.length > 0 && { tools: options.tools }),
+    options: {
+      ...(options.temperature !== undefined && { temperature: options.temperature }),
+      ...(options.maxTokens !== undefined && { num_predict: options.maxTokens }),
+      ...(options.topP !== undefined && { top_p: options.topP }),
+    },
+  };
+
+  let baseUrl = endpoint;
+  while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+  const url = `${baseUrl}/api/chat`;
+
+  let fullContent = '';
+  let fullReasoningContent = '';
+  let completeCalled = false;
+  let streamErrorOccurred = false;
+
+  try {
+    await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, timeout: 300000, signal }, (line) => {
+      if (signal.aborted) return;
+
+      if (line.error) {
+        streamErrorOccurred = true;
+        callbacks.onError(new Error(String(line.error)));
+        abort();
+        return;
+      }
+
+      const msg = line.message as {
+        role?: string; content?: string; thinking?: string; tool_calls?: OpenAIToolCall[]
+      } | undefined;
+      if (msg) {
+        if (msg.thinking) { fullReasoningContent += msg.thinking; callbacks.onReasoning?.(msg.thinking); }
+        if (msg.content) { fullContent += msg.content; callbacks.onToken(msg.content); }
+      }
+
+      if (line.done) {
+        completeCalled = true;
+        const toolCalls = (msg?.tool_calls ?? []).filter(tc => tc.function?.name);
+        callbacks.onComplete({
+          content: fullContent,
+          reasoningContent: fullReasoningContent || undefined,
+          meta: { gpu: false, gpuBackend: 'Remote' },
+          toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
+            id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
+          })) : undefined,
+        });
+      }
+    });
+
+    if (!completeCalled && !streamErrorOccurred) {
+      callbacks.onComplete({
+        content: fullContent,
+        reasoningContent: fullReasoningContent || undefined,
+        meta: { gpu: false, gpuBackend: 'Remote' },
+      });
+    }
+  } catch (error) {
+    if (signal.aborted) { callbacks.onComplete({ content: '', meta: { gpu: false } }); return; }
+    callbacks.onError(error instanceof Error ? error : new Error(String(error)));
+  }
+}
