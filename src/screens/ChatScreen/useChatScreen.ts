@@ -222,11 +222,15 @@ export const useChatScreen = () => {
   }, [activeModelId]);
 
   useEffect(() => {
-    if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
+    if (activeModelInfo.isRemote) {
+      setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
+    } else if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
       const support = llmService.getMultimodalSupport();
-      if (support?.vision) setSupportsVision(true);
-    } else if (!activeModel?.mmProjPath) { setSupportsVision(false); }
-  }, [activeModel?.mmProjPath]);
+      setSupportsVision(support?.vision ?? false);
+    } else {
+      setSupportsVision(false);
+    }
+  }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModel?.mmProjPath]);
 
   useEffect(() => {
     if (activeRemoteTextModelId) {
