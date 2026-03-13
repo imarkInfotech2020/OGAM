@@ -75,6 +75,43 @@ function isIPv6(ip: string): boolean {
 const FALLBACK_SUBNETS = ['192.168.1', '192.168.0'];
 
 /**
+ * Quick-probe gateway IPs (.1) on candidate subnets to see if any respond.
+ * Returns the first reachable subnet base, or null if none respond.
+ * Uses a short timeout so we bail fast when on cellular.
+ */
+async function findReachableSubnet(subnets: string[]): Promise<string | null> {
+  const GATEWAY_TIMEOUT_MS = 800;
+  const results = await Promise.all(
+    subnets.map(async (base) => {
+      const gateway = `${base}.1`;
+      // Try any HTTP connection to the gateway — we don't care about the response,
+      // just that something is listening on the local network.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
+      try {
+        await fetch(`http://${gateway}:80/`, { signal: controller.signal });
+        clearTimeout(timer);
+        return base;
+      } catch {
+        clearTimeout(timer);
+        // Also try the Ollama port since routers may not serve HTTP on :80
+        const controller2 = new AbortController();
+        const timer2 = setTimeout(() => controller2.abort(), GATEWAY_TIMEOUT_MS);
+        try {
+          await fetch(`http://${gateway}:11434/`, { signal: controller2.signal });
+          clearTimeout(timer2);
+          return base;
+        } catch {
+          clearTimeout(timer2);
+          return null;
+        }
+      }
+    }),
+  );
+  return results.find(r => r !== null) ?? null;
+}
+
+/**
  * Scan the local subnet for LLM servers.
  * Returns discovered servers sorted by IP.
  * Throws with a human-readable message if setup fails (no WiFi IP, non-private network).
@@ -91,24 +128,31 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
   try {
     ip = await getIpAddress();
   } catch (err) {
-    logger.warn('[Discovery] getIpAddress threw:', (err as Error).message, '— trying common subnets');
+    logger.warn('[Discovery] getIpAddress threw:', (err as Error).message);
     ip = null;
   }
 
   let subnetsToScan: string[];
 
   if (!ip || ip === '0.0.0.0' || ip === '127.0.0.1') {
-    logger.warn('[Discovery] Could not get device WiFi IP (got:', ip || 'null', '), trying common subnets');
-    subnetsToScan = FALLBACK_SUBNETS;
+    logger.warn('[Discovery] No WiFi IP (got:', ip || 'null', ') — skipping LAN scan');
+    return [];
   } else if (isIPv6(ip)) {
-    // iOS 26+ may return IPv6 as the primary address — fall back to common subnets
-    logger.warn('[Discovery] Got IPv6 address:', ip, '— falling back to common subnets');
-    subnetsToScan = FALLBACK_SUBNETS;
+    // IPv6 primary address — could be WiFi or cellular, but we can't scan IPv4 subnets
+    // without a real IP. Quick-probe the two most common gateways before committing to a
+    // full subnet scan so we don't waste time on cellular.
+    logger.warn('[Discovery] Got IPv6 address:', ip, '— quick-probing common gateways');
+    const reachableSubnet = await findReachableSubnet(FALLBACK_SUBNETS);
+    if (!reachableSubnet) {
+      logger.warn('[Discovery] No gateway responded — likely not on WiFi, skipping scan');
+      return [];
+    }
+    subnetsToScan = [reachableSubnet];
   } else {
     const base = subnetBase(ip);
     if (!base) {
-      logger.warn('[Discovery] IP is not on a private network:', ip, '— trying common subnets');
-      subnetsToScan = FALLBACK_SUBNETS;
+      logger.warn('[Discovery] IP is not on a private network:', ip, '— skipping LAN scan');
+      return [];
     } else {
       subnetsToScan = [base];
     }
