@@ -67,7 +67,8 @@ yarn-error.log
 /coverage
 
 # Yarn
-.yarn!.yarn/patches
+.yarn
+!.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/sdks
