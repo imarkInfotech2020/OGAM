@@ -37,7 +37,7 @@ export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadin
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
       remoteServerManager.clearActiveRemoteModel();
-    } catch (_error) {
+    } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
@@ -61,7 +61,7 @@ export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadin
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
       remoteServerManager.clearActiveRemoteModel();
-    } catch (_error) {
+    } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });

@@ -75,11 +75,10 @@ export class ThinkTagParser {
     const openTag = '<think>';
     const closeTag = '</think>';
     while (this.buffer.length > 0) {
-      if (!this.inThinkBlock) {
-        if (this.handleOutsideThink(openTag, onToken)) break;
-      } else {
-        if (this.handleInsideThink(closeTag, onReasoning)) break;
-      }
+      const shouldBreak = this.inThinkBlock
+        ? this.handleInsideThink(closeTag, onReasoning)
+        : this.handleOutsideThink(openTag, onToken);
+      if (shouldBreak) break;
     }
   }
 
@@ -109,6 +108,22 @@ type DeltaShape = {
     function?: { name?: string; arguments?: string };
   }>;
 };
+
+function processToolCallChunk(
+  tc: NonNullable<DeltaShape['tool_calls']>[0],
+  state: OpenAIStreamState,
+): void {
+  if (tc.id) {
+    state.currentToolCall = { id: tc.id, type: 'function', function: { name: '', arguments: '' } };
+    state.toolCalls.push(state.currentToolCall as OpenAIToolCall);
+  }
+  if (tc.function?.name && state.currentToolCall?.function) {
+    state.currentToolCall.function.name = tc.function.name;
+  }
+  if (tc.function?.arguments && state.currentToolCall?.function) {
+    state.currentToolCall.function.arguments += tc.function.arguments;
+  }
+}
 
 /**
  * Process a streaming delta — extracted to reduce complexity of the SSE event handler.
@@ -144,16 +159,7 @@ export function processDelta(
 
   if (delta.tool_calls) {
     for (const tc of delta.tool_calls) {
-      if (tc.id) {
-        state.currentToolCall = { id: tc.id, type: 'function', function: { name: '', arguments: '' } };
-        state.toolCalls.push(state.currentToolCall as OpenAIToolCall);
-      }
-      if (tc.function?.name && state.currentToolCall) {
-        state.currentToolCall.function!.name = tc.function.name;
-      }
-      if (tc.function?.arguments && state.currentToolCall) {
-        state.currentToolCall.function!.arguments += tc.function.arguments;
-      }
+      processToolCallChunk(tc, state);
     }
   }
 }
@@ -186,7 +192,7 @@ export async function generateOllamaChatImpl(
       .map(p => {
         const url = p.image_url?.url ?? '';
         // Strip data:image/...;base64, prefix — Ollama expects raw base64
-        const b64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+        const b64Match = /^data:[^;]+;base64,(.+)$/.exec(url);
         return b64Match ? b64Match[1] : url;
       });
     return {
@@ -222,7 +228,7 @@ export async function generateOllamaChatImpl(
 
       if (line.error) {
         streamErrorOccurred = true;
-        callbacks.onError(new Error(String(line.error)));
+        callbacks.onError(new Error(typeof line.error === 'string' ? line.error : JSON.stringify(line.error)));
         abort();
         return;
       }

@@ -79,7 +79,7 @@ describe('remoteServerDiscovery integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch = jest.fn();
-    (global as any).fetch = mockFetch;
+    (globalThis as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
     // Reset servers and discovered models between tests
     useRemoteServerStore.setState({ servers: [], discoveredModels: {} });
   });

@@ -145,8 +145,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const hasLoadedImageModel = !!activeImageModelId || activeRemoteImageModelId !== null;
 
   return (
-    <>
-      <AppSheet visible={visible} onClose={onClose} snapPoints={['40%', '75%']} title="Select Model">
+    <AppSheet visible={visible} onClose={onClose} snapPoints={['40%', '75%']} title="Select Model">
         <View style={styles.tabBar}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'text' && styles.tabActive]}
@@ -213,7 +212,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             />
           )}
         </ScrollView>
-      </AppSheet>
-    </>
+    </AppSheet>
   );
 };

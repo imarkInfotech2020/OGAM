@@ -11,7 +11,7 @@ import type { SSEEvent, OpenAIStreamMessage, AnthropicStreamMessage } from './ht
 export function yieldSSEvent(currentEvent: Partial<SSEEvent>): SSEEvent {
   return {
     event: currentEvent.event,
-    data: currentEvent.data!,
+    data: currentEvent.data as string,
     id: currentEvent.id,
   };
 }

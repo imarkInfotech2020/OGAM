@@ -11,6 +11,38 @@ export interface OllamaModelInfo {
   supportsVision: boolean;
 }
 
+function extractOllamaCapabilities(data: unknown): OllamaModelInfo {
+  let contextLength = 4096;
+  let supportsVision = false;
+
+  const typed = data as Record<string, unknown>;
+
+  if (typed?.model_info && typeof typed.model_info === 'object') {
+    for (const key of Object.keys(typed.model_info as object)) {
+      if (key.endsWith('.context_length')) {
+        const val = (typed.model_info as Record<string, unknown>)[key];
+        if (typeof val === 'number' && val > 0) contextLength = val;
+      }
+      // Ollama sets keys like "clip.vision.block_count" or "llava.image_token_index"
+      // for multimodal models — presence of any vision/clip key means vision support
+      if (key.includes('vision') || key.includes('clip')) {
+        supportsVision = true;
+      }
+    }
+  }
+
+  // Fallback context length from parameters string
+  if (contextLength === 4096 && typeof typed?.parameters === 'string') {
+    const match = /num_ctx\s+(\d+)/.exec(typed.parameters);
+    if (match) {
+      const val = Number.parseInt(match[1], 10);
+      if (val > 0) contextLength = val;
+    }
+  }
+
+  return { contextLength, supportsVision };
+}
+
 /**
  * Fetches model capabilities for an Ollama model via POST /api/show.
  * Vision is detected by inspecting model_info keys for "vision" or "clip" —
@@ -37,34 +69,7 @@ export async function fetchOllamaModelInfo(
     if (!response.ok) return { contextLength: 4096, supportsVision: false };
 
     const data = await response.json();
-
-    let contextLength = 4096;
-    let supportsVision = false;
-
-    if (data?.model_info && typeof data.model_info === 'object') {
-      for (const key of Object.keys(data.model_info)) {
-        if (key.endsWith('.context_length')) {
-          const val = data.model_info[key];
-          if (typeof val === 'number' && val > 0) contextLength = val;
-        }
-        // Ollama sets keys like "clip.vision.block_count" or "llava.image_token_index"
-        // for multimodal models — presence of any vision/clip key means vision support
-        if (key.includes('vision') || key.includes('clip')) {
-          supportsVision = true;
-        }
-      }
-    }
-
-    // Fallback context length from parameters string
-    if (contextLength === 4096 && typeof data?.parameters === 'string') {
-      const match = data.parameters.match(/num_ctx\s+(\d+)/);
-      if (match) {
-        const val = parseInt(match[1], 10);
-        if (val > 0) contextLength = val;
-      }
-    }
-
-    return { contextLength, supportsVision };
+    return extractOllamaCapabilities(data);
   } catch {
     // Timeout, network error, parse error
   }

@@ -4,6 +4,7 @@ import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
 import type { HomeScreenNavigationProp } from './useHomeScreen';
+import type { RemoteServer } from '../../../types';
 import logger from '../../../utils/logger';
 
 const getPort = (endpoint: string): string | null => {
@@ -13,6 +14,21 @@ const getPort = (endpoint: string): string | null => {
 interface LANDiscoveryParams {
   navigation: HomeScreenNavigationProp;
   setAlertState: (state: any) => void;
+}
+
+async function updateMovedServer(
+  samePortServer: RemoteServer,
+  d: { endpoint: string; name: string },
+  store: ReturnType<typeof useRemoteServerStore.getState>,
+): Promise<void> {
+  logger.log('[HomeScreen] Server moved to new IP, updating:', samePortServer.name, '->', d.endpoint);
+  await remoteServerManager.updateServer(samePortServer.id, { endpoint: d.endpoint, name: d.name });
+  try { await store.discoverModels(samePortServer.id); } catch { /* offline */ }
+  if (store.activeServerId === samePortServer.id && store.activeRemoteTextModelId) {
+    try {
+      await remoteServerManager.setActiveRemoteTextModel(samePortServer.id, store.activeRemoteTextModelId);
+    } catch { /* user can re-select */ }
+  }
 }
 
 export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParams) {
@@ -75,14 +91,7 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
         : null;
 
       if (samePortServer) {
-        logger.log('[HomeScreen] Server moved to new IP, updating:', samePortServer.name, '->', d.endpoint);
-        await remoteServerManager.updateServer(samePortServer.id, { endpoint: d.endpoint, name: d.name });
-        try { await useRemoteServerStore.getState().discoverModels(samePortServer.id); } catch { /* offline */ }
-        if (store.activeServerId === samePortServer.id && store.activeRemoteTextModelId) {
-          try {
-            await remoteServerManager.setActiveRemoteTextModel(samePortServer.id, store.activeRemoteTextModelId);
-          } catch { /* user can re-select */ }
-        }
+        await updateMovedServer(samePortServer, d, store);
       } else {
         newServersToAdd.push(d);
       }

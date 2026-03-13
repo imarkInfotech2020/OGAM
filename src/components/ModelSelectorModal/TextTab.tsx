@@ -52,9 +52,7 @@ export const TextTab: React.FC<TextTabProps> = ({
               <Text style={styles.loadedModelMeta}>
                 {activeLocalModel
                   ? `${activeLocalModel.quantization} • ${hardwareService.formatModelSize(activeLocalModel)}`
-                  : activeRemoteModelInfo
-                    ? `Remote • ${activeRemoteModelInfo.serverName}`
-                    : 'Remote Model'}
+                  : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
             <TouchableOpacity style={styles.unloadButton} onPress={onUnloadModel} disabled={isAnyLoading}>

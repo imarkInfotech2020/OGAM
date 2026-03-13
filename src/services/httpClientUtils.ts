@@ -2,6 +2,27 @@
  * HTTP Client Utilities - image conversion, network validation, endpoint testing
  */
 
+function mimeTypeFromExtension(ext: string | undefined): string {
+  if (ext === 'png') return 'image/png';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+async function fetchBlobAsBase64(uri: string): Promise<string> {
+  const response = await fetch(uri);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.status}`);
+  }
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read image as base64'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Convert image URI to base64 data URL
  */
@@ -20,43 +41,18 @@ export async function imageToBase64DataUrl(uri: string): Promise<string> {
       throw new Error(`Image file not found: ${filePath}`);
     }
     const base64 = await RNFS.readFile(filePath, 'base64');
-    // Detect MIME type from extension
     const ext = filePath.split('.').pop()?.toLowerCase();
-    const mimeType = ext === 'png' ? 'image/png'
-      : ext === 'gif' ? 'image/gif'
-      : ext === 'webp' ? 'image/webp'
-      : 'image/jpeg';
-    return `data:${mimeType};base64,${base64}`;
+    return `data:${mimeTypeFromExtension(ext)};base64,${base64}`;
   }
 
   // Handle http:// or https:// URIs — download and convert
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
-    const response = await fetch(uri);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`);
-    }
-    const blob = await response.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to read image as base64'));
-      reader.readAsDataURL(blob);
-    });
+    return fetchBlobAsBase64(uri);
   }
 
   // For other URIs (content://, ph://, etc.), try fetch
   try {
-    const response = await fetch(uri);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`);
-    }
-    const blob = await response.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Failed to read image as base64'));
-      reader.readAsDataURL(blob);
-    });
+    return await fetchBlobAsBase64(uri);
   } catch {
     throw new Error(`Unsupported image URI: ${uri}`);
   }
@@ -83,14 +79,14 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // Private IP ranges
     // 10.0.0.0 - 10.255.255.255
-    if (hostname.startsWith('10.') || hostname.match(/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+    if (hostname.startsWith('10.') || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
       return true;
     }
 
     // 172.16.0.0 - 172.31.255.255
-    const match = hostname.match(/^172\.(\d{1,2})\.\d{1,3}\.\d{1,3}$/);
+    const match = /^172\.(\d{1,2})\.\d{1,3}\.\d{1,3}$/.exec(hostname);
     if (match) {
-      const second = parseInt(match[1], 10);
+      const second = Number.parseInt(match[1], 10);
       if (second >= 16 && second <= 31) {
         return true;
       }
@@ -182,6 +178,43 @@ export async function testEndpoint(
   }
 }
 
+async function checkOllamaEndpoint(
+  url: string,
+  timeout: number
+): Promise<{ type: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(`${url}/api/tags`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (response.ok) return { type: 'ollama' };
+  } catch {
+    // Not Ollama
+  }
+  return null;
+}
+
+async function checkLmStudioEndpoint(
+  url: string,
+  timeout: number
+): Promise<{ type: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(`${url}/v1/models`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.data?.some?.((m: { id: string }) => m.id?.includes('gguf'))) {
+        return { type: 'lmstudio' };
+      }
+    }
+  } catch {
+    // Not LM Studio
+  }
+  return null;
+}
+
 /**
  * Detect server type from endpoint
  */
@@ -198,23 +231,17 @@ export async function detectServerType(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(`${url}/v1/models`, {
-        signal: controller.signal,
-      });
+      const response = await fetch(`${url}/v1/models`, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        // Check for Ollama-specific headers
         const server = response.headers.get('server') || '';
         if (server.toLowerCase().includes('ollama')) {
           return { type: 'ollama' };
         }
-
-        // Try to get version from response
         try {
           const data = await response.json();
           if (data?.object === 'list' || Array.isArray(data?.data)) {
-            // OpenAI-compatible, assume generic
             return { type: 'openai-compatible' };
           }
         } catch {
@@ -225,41 +252,10 @@ export async function detectServerType(
       clearTimeout(timeoutId);
     }
 
-    // Try Ollama-specific endpoint
-    try {
-      const ollamaController = new AbortController();
-      const ollamaTimeoutId = setTimeout(() => ollamaController.abort(), timeout);
-      const ollamaResponse = await fetch(`${url}/api/tags`, {
-        signal: ollamaController.signal,
-      });
-      clearTimeout(ollamaTimeoutId);
-      if (ollamaResponse.ok) {
-        return { type: 'ollama' };
-      }
-    } catch {
-      // Not Ollama
-    }
+    const ollamaResult = await checkOllamaEndpoint(url, timeout);
+    if (ollamaResult) return ollamaResult;
 
-    // Try LM Studio endpoint
-    try {
-      const lmstudioController = new AbortController();
-      const lmstudioTimeoutId = setTimeout(() => lmstudioController.abort(), timeout);
-      const lmstudioResponse = await fetch(`${url}/v1/models`, {
-        signal: lmstudioController.signal,
-      });
-      clearTimeout(lmstudioTimeoutId);
-      if (lmstudioResponse.ok) {
-        const data = await lmstudioResponse.json();
-        // LM Studio typically returns model list with specific structure
-        if (data?.data?.some?.((m: { id: string }) => m.id?.includes('gguf'))) {
-          return { type: 'lmstudio' };
-        }
-      }
-    } catch {
-      // Not LM Studio
-    }
-
-    return null;
+    return await checkLmStudioEndpoint(url, timeout);
   } catch {
     return null;
   }

@@ -347,7 +347,7 @@ describe('OpenAICompatibleProvider', () => {
 
       (httpClient.createStreamingRequest as jest.Mock).mockImplementation(
         async (_url, _req, _onEvent) => {
-          const signal = (_req as any).signal;
+          const signal = _req.signal;
           // Simulate abort via signal
           if (signal) {
             // Check if already aborted
@@ -498,7 +498,7 @@ describe('OpenAICompatibleProvider', () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       mockStream.mockImplementation(async (_url, _req, _onEvent) => {
         // Abort mid-request
-        const signal = (_req as any).signal;
+        const signal = _req.signal;
         signal.dispatchEvent(new Event('abort'));
         const err = new DOMException('aborted', 'AbortError');
         Object.defineProperty(err, 'name', { value: 'AbortError' });
@@ -563,7 +563,7 @@ describe('OpenAICompatibleProvider', () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockStream.mockImplementation((_url, _req, onEvent) => {
-        capturedBody = (_req as any).body;
+        capturedBody = _req.body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -581,7 +581,7 @@ describe('OpenAICompatibleProvider', () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockStream.mockImplementation((_url, _req, onEvent) => {
-        capturedBody = (_req as any).body;
+        capturedBody = _req.body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -604,7 +604,7 @@ describe('OpenAICompatibleProvider', () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockStream.mockImplementation((_url, _req, onEvent) => {
-        capturedBody = (_req as any).body;
+        capturedBody = _req.body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -628,7 +628,7 @@ describe('OpenAICompatibleProvider', () => {
       const mockStream = httpClient.createStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockStream.mockImplementation((_url, _req, onEvent) => {
-        capturedBody = (_req as any).body;
+        capturedBody = _req.body;
         onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
         return Promise.resolve();
       });
@@ -793,8 +793,8 @@ describe('OpenAICompatibleProvider', () => {
       const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockNDJSON.mockImplementation(
-        (_url: string, _req: unknown, onLine: Function) => {
-          capturedBody = (_req as any).body;
+        (_url: string, _req: any, onLine: Function) => {
+          capturedBody = _req.body;
           onLine({ message: { content: 'I see it.' }, done: true });
           return Promise.resolve();
         }
@@ -831,8 +831,8 @@ describe('OpenAICompatibleProvider', () => {
       const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
       let capturedBody: any;
       mockNDJSON.mockImplementation(
-        (_url: string, _req: unknown, onLine: Function) => {
-          capturedBody = (_req as any).body;
+        (_url: string, _req: any, onLine: Function) => {
+          capturedBody = _req.body;
           onLine({ message: { content: 'Hello.' }, done: true });
           return Promise.resolve();
         }

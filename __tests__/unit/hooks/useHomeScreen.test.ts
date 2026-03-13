@@ -34,6 +34,9 @@ jest.mock('../../../src/services', () => ({
     setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
     setActiveRemoteImageModel: jest.fn().mockResolvedValue(undefined),
     clearActiveRemoteModel: jest.fn(),
+    addServer: jest.fn().mockResolvedValue({ id: 'mock-id', name: 'mock', endpoint: 'http://mock' }),
+    updateServer: jest.fn().mockResolvedValue(undefined),
+    testConnection: jest.fn().mockResolvedValue({ success: true }),
   },
   ResourceUsage: {},
 }));

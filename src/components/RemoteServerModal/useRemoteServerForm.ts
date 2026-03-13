@@ -44,15 +44,15 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     if (!name.trim()) {
       newErrors.name = 'Server name is required';
     }
-    if (!endpoint.trim()) {
-      newErrors.endpoint = 'Endpoint URL is required';
-    } else {
+    if (endpoint.trim()) {
       try {
         // Validate URL format by parsing it - constructor throws on invalid URLs
-        const _validUrl = new URL(endpoint);
+        new URL(endpoint); // eslint-disable-line no-new
       } catch {
         newErrors.endpoint = 'Invalid URL format';
       }
+    } else {
+      newErrors.endpoint = 'Endpoint URL is required';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;

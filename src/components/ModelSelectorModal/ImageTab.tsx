@@ -53,9 +53,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
               <Text style={styles.loadedModelMeta}>
                 {activeModel
                   ? `${activeModel.style || 'Image'} • ${hardwareService.formatBytes(activeModel.size ?? 0)}`
-                  : activeRemoteModelInfo
-                    ? `Remote • ${activeRemoteModelInfo.serverName}`
-                    : 'Remote Model'}
+                  : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
             <TouchableOpacity style={styles.unloadButton} onPress={onUnloadImageModel} disabled={isAnyLoading}>

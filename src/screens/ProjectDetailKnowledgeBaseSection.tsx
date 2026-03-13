@@ -7,6 +7,29 @@ import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 
+async function copyFileLocally(uri: string, fileName: string): Promise<string> {
+  try {
+    const copyResult = await keepLocalCopy({
+      files: [{ uri, fileName }],
+      destination: 'documentDirectory',
+    });
+    if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+      return copyResult[0].localUri;
+    }
+  } catch {
+    // Fall through and return original URI
+  }
+  return uri;
+}
+
+function decodeFilePath(filePath: string): string {
+  try {
+    return decodeURIComponent(filePath).replace(/^file:\/\//, '');
+  } catch {
+    return filePath;
+  }
+}
+
 export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -42,40 +65,12 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        console.log('[DocumentPicker] Original URI:', file.uri);
-        console.log('[DocumentPicker] File name:', fileName, 'Size:', file.size);
+        const localUri = await copyFileLocally(file.uri, fileName);
+        const pathForDb = decodeFilePath(localUri);
 
-        let filePath = file.uri;
-        try {
-          const copyResult = await keepLocalCopy({
-            files: [{ uri: file.uri, fileName }],
-            destination: 'documentDirectory',
-          });
-          console.log('[DocumentPicker] keepLocalCopy result:', JSON.stringify(copyResult));
-          if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-            filePath = copyResult[0].localUri;
-            console.log('[DocumentPicker] Using localUri:', filePath);
-          } else if (copyResult[0]?.status === 'error') {
-            console.warn('[DocumentPicker] keepLocalCopy failed:', copyResult[0].copyError);
-          }
-        } catch (copyErr: any) {
-          console.warn('[DocumentPicker] keepLocalCopy error:', copyErr?.message);
-        }
-
-        let pathForDb = filePath;
-        try {
-          pathForDb = decodeURIComponent(filePath).replace(/^file:\/\//, '');
-          console.log('[DocumentPicker] Path for DB storage:', pathForDb);
-        } catch (e) {
-          console.warn('[DocumentPicker] Could not decode path:', e);
-        }
-
-        console.log('[DocumentPicker] Final filePath for indexing:', pathForDb);
         await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
         await loadKbDocs();
       }
-
-      await loadKbDocs();
     } catch (err: any) {
       if (err && !err.message?.includes('cancel')) {
         setAlertState(showAlert('Error', err.message || 'Failed to index document'));
