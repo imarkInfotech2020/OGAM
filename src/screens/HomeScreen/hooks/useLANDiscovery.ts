@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert } from '../../../components';
-import { useRemoteServerStore } from '../../../stores';
+import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
 import type { HomeScreenNavigationProp } from './useHomeScreen';

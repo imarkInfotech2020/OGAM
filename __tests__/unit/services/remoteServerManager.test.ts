@@ -531,13 +531,14 @@ describe('remoteServerManager', () => {
   });
 
   describe('testConnection', () => {
-    it('should return result with detected capabilities', async () => {
+    it('should return store result as-is (capabilities come from server API, not name patterns)', async () => {
+      const mockModels = [
+        { id: 'llava-v1.6', name: 'LLaVA', capabilities: { supportsVision: true } },
+        { id: 'llama-3-70b', name: 'Llama 3', capabilities: { supportsToolCalling: false } },
+      ];
       const mockTestConnection = jest.fn().mockResolvedValue({
         success: true,
-        models: [
-          { id: 'llava-v1.6', name: 'LLaVA', capabilities: {} },
-          { id: 'llama-3-70b', name: 'Llama 3', capabilities: {} },
-        ],
+        models: mockModels,
       });
 
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
@@ -548,10 +549,9 @@ describe('remoteServerManager', () => {
 
       expect(result.success).toBe(true);
       expect(result.models).toHaveLength(2);
-      // llava should have vision capability detected
+      // Capabilities are returned as-is from the store (server-API-derived), not overwritten
       expect(result.models?.[0].capabilities.supportsVision).toBe(true);
-      // llama-3-70b should have tool calling capability (llama-3 matches)
-      expect(result.models?.[1].capabilities.supportsToolCalling).toBe(true);
+      expect(result.models?.[1].capabilities.supportsToolCalling).toBe(false);
     });
 
     it('should return result without models when test fails', async () => {

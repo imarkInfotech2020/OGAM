@@ -172,8 +172,8 @@ export async function initializeProvidersImpl(
   for (const server of servers) {
     try {
       await createProviderForServerImpl(server);
-      // Re-discover models to populate discoveredModels in the store
-      // This is needed because discoveredModels is not persisted
+      // Re-discover models on startup to refresh capability data from the server
+      // (persisted data may be stale if models were added/removed while offline)
       try {
         const models = await store.discoverModels(server.id);
         logger.log('[RemoteServerManager] Discovered', models.length, 'models for', server.name);

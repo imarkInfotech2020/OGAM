@@ -20,7 +20,6 @@ import {
   setActiveRemoteTextModelImpl,
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
-  enrichModelsWithCapabilities,
 } from './remoteServerManagerUtils';
 
 class RemoteServerManager {
@@ -126,13 +125,7 @@ class RemoteServerManager {
     id: string
   ): Promise<{ success: boolean; error?: string; models?: RemoteModel[] }> {
     const store = useRemoteServerStore.getState();
-    const result = await store.testConnection(id);
-
-    if (result.success && result.models) {
-      result.models = enrichModelsWithCapabilities(result.models);
-    }
-
-    return result;
+    return store.testConnection(id);
   }
 
   /** Test connection to a server by endpoint (before adding) */
