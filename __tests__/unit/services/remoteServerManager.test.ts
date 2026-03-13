@@ -331,8 +331,6 @@ describe('remoteServerManager', () => {
 
   describe('detectVisionCapability', () => {
     it('should detect vision models from model name', () => {
-      // Using the private method via reflection
-      const manager = remoteServerManager as any;
 
       const visionModels = [
         'llava-v1.6-mistral-7b',
@@ -361,7 +359,6 @@ describe('remoteServerManager', () => {
 
   describe('detectToolCallingCapability', () => {
     it('should detect tool-capable models from model name', () => {
-      const manager = remoteServerManager as any;
 
       const toolCapableModels = [
         'gpt-4-turbo',
@@ -378,7 +375,6 @@ describe('remoteServerManager', () => {
     });
 
     it('should return false for non-tool-capable models', () => {
-      const manager = remoteServerManager as any;
 
       // These should NOT match the tool capability patterns
       const nonToolModels = [
@@ -392,7 +388,6 @@ describe('remoteServerManager', () => {
     });
 
     it('should detect models with tool/function keywords', () => {
-      const manager = remoteServerManager as any;
 
       expect(detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
       expect(detectToolCallingCapability('mistral-function-call')).toBe(true);
@@ -404,7 +399,6 @@ describe('remoteServerManager', () => {
 
   describe('detectVisionCapability comprehensive patterns', () => {
     it('should detect all vision model patterns', () => {
-      const manager = remoteServerManager as any;
 
       const visionModels = [
         'llava-v1.6-mistral-7b',
@@ -432,7 +426,6 @@ describe('remoteServerManager', () => {
     });
 
     it('should return false for non-vision models', () => {
-      const manager = remoteServerManager as any;
 
       const nonVisionModels = [
         'llama-2-7b',
