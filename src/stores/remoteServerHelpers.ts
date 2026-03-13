@@ -143,7 +143,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
           capabilities: {
             supportsVision: modelInfos[i].supportsVision,
             supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.id),
-            supportsThinking: false,
+            supportsThinking: true,
             maxContextLength: modelInfos[i].contextLength,
           },
           lastUpdated: new Date().toISOString(),
@@ -168,7 +168,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
               supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
-              supportsThinking: false,
+              supportsThinking: true,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,
@@ -215,7 +215,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
               supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
-              supportsThinking: false,
+              supportsThinking: true,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,

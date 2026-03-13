@@ -52,7 +52,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.modelCapabilities = {
       supportsVision: false,
       supportsToolCalling: true, // Assume true for OpenAI-compatible
-      supportsThinking: false,
+      supportsThinking: true,
     };
   }
 

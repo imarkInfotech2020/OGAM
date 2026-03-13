@@ -119,8 +119,11 @@ export async function setActiveRemoteTextModelImpl(
     // Apply authoritative vision capability from discovery results
     const discoveredModel = store.getModelById(serverId, modelId);
     if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
-      provider.updateCapabilities({ supportsVision: discoveredModel.capabilities.supportsVision });
-      logger.log('[RemoteServerManager] Applied discovered capabilities for', modelId, '— supportsVision:', discoveredModel.capabilities.supportsVision);
+      provider.updateCapabilities({
+        supportsVision: discoveredModel.capabilities.supportsVision,
+        supportsThinking: discoveredModel.capabilities.supportsThinking,
+      });
+      logger.log('[RemoteServerManager] Applied discovered capabilities for', modelId, '— supportsVision:', discoveredModel.capabilities.supportsVision, 'supportsThinking:', discoveredModel.capabilities.supportsThinking);
     }
     providerRegistry.setActiveProvider(serverId);
     logger.log('[RemoteServerManager] Provider ready:', await provider.isReady());
