@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 let _msgIdSeq = 0;
 const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
@@ -28,7 +27,7 @@ import { shouldUseToolsForMessage } from './toolUsage';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
-type GenerationDeps = {
+export type GenerationDeps = {
   activeModelId: string | null;
   activeModel: DownloadedModel | null | undefined;
   activeModelInfo?: { isRemote: boolean; model: DownloadedModel | RemoteModel | null; modelId: string | null; modelName: string };
