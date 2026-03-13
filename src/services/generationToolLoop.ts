@@ -188,7 +188,7 @@ async function callRemoteLLMWithTools(
     maxTokens: settings.maxTokens,
     topP: settings.topP,
     tools,
-    enableThinking: settings.thinkingEnabled,
+    enableThinking: settings.thinkingEnabled && provider.capabilities.supportsThinking,
   };
 
   let _fullContent = '';

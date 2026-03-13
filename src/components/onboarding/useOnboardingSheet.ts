@@ -1,27 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { useOnboardingSteps } from '../checklist';
 
 export function useOnboardingSheet() {
   const { steps, completedCount, totalCount } = useOnboardingSteps();
   const allComplete = completedCount === totalCount && totalCount > 0;
-  const checklistDismissed = useAppStore(s => s.checklistDismissed);
   const [sheetVisible, setSheetVisible] = useState(false);
-  const hasAutoOpened = useRef(false);
-
-  // Auto-open only on the very first app launch (never again once dismissed or all complete)
-  useEffect(() => {
-    if (!allComplete && !checklistDismissed && !hasAutoOpened.current) {
-      hasAutoOpened.current = true;
-      const timer = setTimeout(() => setSheetVisible(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [allComplete, checklistDismissed]);
-
-  const dismissChecklist = useAppStore(s => s.dismissChecklist);
 
   const openSheet = () => setSheetVisible(true);
-  const closeSheet = () => { setSheetVisible(false); dismissChecklist(); };
+  const closeSheet = () => setSheetVisible(false);
+  const dismissChecklist = useAppStore(s => s.dismissChecklist);
+  const checklistDismissed = useAppStore(s => s.checklistDismissed);
+
+  // Auto-dismiss checklist 3s after all steps are complete
+  useEffect(() => {
+    if (allComplete) {
+      const timer = setTimeout(dismissChecklist, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [allComplete, dismissChecklist]);
+
+  // Blinking dot visible until all steps complete or user explicitly dismisses
   const showIcon = !allComplete && !checklistDismissed && !sheetVisible;
 
   return { sheetVisible, openSheet, closeSheet, showIcon, allComplete, steps, completedCount, totalCount };

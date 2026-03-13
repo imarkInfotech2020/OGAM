@@ -206,7 +206,7 @@ export async function generateRemoteResponseImpl(
   const options: GenerationOptions = {
     temperature, maxTokens, topP,
     stopSequences: [],
-    enableThinking: thinkingEnabled,
+    enableThinking: thinkingEnabled && provider.capabilities.supportsThinking,
   };
 
   try {

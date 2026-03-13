@@ -1276,6 +1276,7 @@ describe('callRemoteLLMWithTools via forceRemote', () => {
     jest.clearAllMocks();
     mockProvider = {
       generate: jest.fn(),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
     };
     (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
     useRemoteServerStore.getState = () => ({ activeServerId: 'srv-remote' });

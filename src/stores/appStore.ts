@@ -130,6 +130,36 @@ const DEFAULT_SETTINGS: AppSettings = {
   enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url'],
   thinkingEnabled: true,
 };
+
+function migratePersistedState(persistedState: any, currentState: AppState): AppState {
+  const merged = { ...currentState, ...persistedState };
+  if (typeof merged.imageModelDownloading === 'string') {
+    merged.imageModelDownloading = [merged.imageModelDownloading];
+  } else if (!Array.isArray(merged.imageModelDownloading)) {
+    merged.imageModelDownloading = [];
+  }
+  if (persistedState?.settings?.modelLoadingStrategy === 'memory') {
+    merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+  }
+  if (persistedState?.settings && !persistedState.settings.cacheType) {
+    merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };
+  }
+  if (typeof merged.imageModelDownloadId === 'number') {
+    const ids: Record<string, number> = {};
+    if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
+      ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
+    }
+    merged.imageModelDownloadIds = ids;
+    delete merged.imageModelDownloadId;
+  } else if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
+    merged.imageModelDownloadIds = {};
+  }
+  // Reset checklistDismissed if onboarding isn't actually complete (old bug persisted it too early)
+  if (merged.checklistDismissed && merged.onboardingChecklist &&
+    !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
+  return merged as AppState;
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -295,39 +325,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'local-llm-app-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      merge: (persistedState: any, currentState) => {
-        const merged = { ...currentState, ...persistedState };
-        // Migrate old string|null → string[]
-        if (typeof merged.imageModelDownloading === 'string') {
-          merged.imageModelDownloading = [merged.imageModelDownloading];
-        } else if (!Array.isArray(merged.imageModelDownloading)) {
-          merged.imageModelDownloading = [];
-        }
-        // Migrate default modelLoadingStrategy from 'memory' → 'performance'
-        // Only migrate if the settings object itself was persisted (i.e. came from storage)
-        // and the value matches the old default exactly, indicating the user never changed it.
-        if (persistedState && persistedState.settings?.modelLoadingStrategy === 'memory') {
-          merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
-        }
-        // Migrate: add cacheType if missing, derive from old flashAttn value
-        if (persistedState && persistedState.settings && !(persistedState.settings.cacheType)) {
-          const oldFlashAttn = persistedState.settings.flashAttn;
-          const derivedCacheType = oldFlashAttn ? 'q8_0' : 'f16';
-          merged.settings = { ...merged.settings, cacheType: derivedCacheType, flashAttn: true };
-        }
-        // Migrate old number|null → Record
-        if (typeof merged.imageModelDownloadId === 'number') {
-          const ids: Record<string, number> = {};
-          if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
-            ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
-          }
-          merged.imageModelDownloadIds = ids;
-          delete merged.imageModelDownloadId;
-        } else if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
-          merged.imageModelDownloadIds = {};
-        }
-        return merged as AppState;
-      },
+      merge: migratePersistedState,
       partialize: (state) => ({
         themeMode: state.themeMode,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
