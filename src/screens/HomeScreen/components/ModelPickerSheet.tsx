@@ -37,6 +37,7 @@ type Props = {
   onSelectRemoteImageModel: (model: RemoteModel) => void;
   onUnloadRemoteImageModel: () => void;
   onBrowseModels: (tab: 'text' | 'image') => void;
+  onAddServer?: () => void;
 };
 
 export const ModelPickerSheet: React.FC<Props> = ({
@@ -61,6 +62,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
   onSelectRemoteImageModel,
   onUnloadRemoteImageModel,
   onBrowseModels,
+  onAddServer,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -124,19 +126,29 @@ export const ModelPickerSheet: React.FC<Props> = ({
               </View>
             ) : (
               <>
-                {/* Active Model Unload Button */}
-                {(activeModelId || activeRemoteTextModelId) && (
+                {/* Active Model Unload Button + Add Remote Server row */}
+                <View style={localStyles.actionRow}>
+                  {(activeModelId || activeRemoteTextModelId) ? (
+                    <TouchableOpacity
+                      testID="unload-text-model-button"
+                      style={[styles.unloadButton, localStyles.actionRowButton, localStyles.iconOnlyButton]}
+                      onPress={activeRemoteTextModelId ? onUnloadRemoteTextModel : onUnloadTextModel}
+                      disabled={loadingState.isLoading}
+                    >
+                      <Icon name="power" size={16} color={colors.error} />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={localStyles.iconOnlyButton} />
+                  )}
                   <TouchableOpacity
-                    style={styles.unloadButton}
-                    onPress={activeRemoteTextModelId ? onUnloadRemoteTextModel : onUnloadTextModel}
-                    disabled={loadingState.isLoading}
+                    testID="add-server-button"
+                    style={[styles.unloadButton, localStyles.actionRowButton, localStyles.addServerButton]}
+                    onPress={() => { onClose(); onAddServer?.(); }}
                   >
-                    <Icon name="power" size={16} color={colors.error} />
-                    <Text style={styles.unloadButtonText}>
-                      {activeRemoteTextModelId ? 'Disconnect remote model' : 'Unload current model'}
-                    </Text>
+                    <Icon name="plus" size={16} color={colors.primary} />
+                    <Text style={[styles.unloadButtonText, { color: colors.primary }]}>Add Remote Server</Text>
                   </TouchableOpacity>
-                )}
+                </View>
 
                 {/* Local Models */}
                 {downloadedModels.length > 0 && (
@@ -229,6 +241,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                     ))}
                   </>
                 )}
+
               </>
             )}
           </>
@@ -236,8 +249,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
 
         {pickerType === 'image' && (
           <>
-            {/* Local Image Models Section */}
-            {downloadedImageModels.length === 0 && remoteImageModels.length === 0 ? (
+            {downloadedImageModels.length === 0 ? (
               <View style={styles.emptyPicker}>
                 <Text style={styles.emptyPickerText}>No image models available</Text>
                 <Button
@@ -249,91 +261,48 @@ export const ModelPickerSheet: React.FC<Props> = ({
               </View>
             ) : (
               <>
-                {/* Active Model Unload Button */}
-                {(activeImageModelId || activeRemoteImageModelId) && (
+                {activeImageModelId && (
                   <TouchableOpacity
-                    style={styles.unloadButton}
-                    onPress={activeRemoteImageModelId ? onUnloadRemoteImageModel : onUnloadImageModel}
+                    style={[styles.unloadButton, { marginBottom: 12 }]}
+                    onPress={onUnloadImageModel}
                     disabled={loadingState.isLoading}
                   >
                     <Icon name="power" size={16} color={colors.error} />
-                    <Text style={styles.unloadButtonText}>
-                      {activeRemoteImageModelId ? 'Disconnect remote model' : 'Unload current model'}
-                    </Text>
+                    <Text style={styles.unloadButtonText}>Unload current model</Text>
                   </TouchableOpacity>
                 )}
-
-                {/* Local Image Models */}
-                {downloadedImageModels.length > 0 && (
-                  <>
-                    <Text style={styles.sectionLabel}>Local Models</Text>
-                    {downloadedImageModels.map((model) => {
-                      const estimatedMemoryGB = (model.size * 1.8) / (1024 * 1024 * 1024);
-                      const memoryFits = memoryInfo
-                        ? estimatedMemoryGB < memoryInfo.memoryAvailable / (1024 * 1024 * 1024) - 1.5
-                        : true;
-                      return (
-                        <TouchableOpacity
-                          key={model.id}
-                          testID="model-item"
-                          style={[
-                            styles.pickerItem,
-                            activeImageModelId === model.id && styles.pickerItemActive,
-                            !memoryFits && styles.pickerItemWarning,
-                          ]}
-                          onPress={() => onSelectImageModel(model)}
-                          disabled={loadingState.isLoading}
-                        >
-                          <View style={styles.pickerItemInfo}>
-                            <Text style={styles.pickerItemName}>{model.name}</Text>
-                            <Text style={styles.pickerItemMeta}>
-                              {model.style || 'Image'} · {hardwareService.formatBytes(model.size)}
-                            </Text>
-                            <Text style={[styles.pickerItemMemory, !memoryFits && styles.pickerItemMemoryWarning]}>
-                              ~{estimatedMemoryGB.toFixed(1)} GB RAM {!memoryFits && '(may not fit)'}
-                            </Text>
-                          </View>
-                          {activeImageModelId === model.id && (
-                            <Icon name="check" size={18} color={colors.text} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </>
-                )}
-
-                {/* Remote Image Models */}
-                {remoteImageModels.length > 0 && (
-                  <>
-                    <Text style={styles.sectionLabel}>Remote Models</Text>
-                    {remoteImageModels.map((model) => (
-                      <TouchableOpacity
-                        key={`${model.serverId}-${model.id}`}
-                        testID="remote-model-item"
-                        style={[
-                          styles.pickerItem,
-                          activeRemoteImageModelId === model.id && styles.pickerItemActive,
-                        ]}
-                        onPress={() => onSelectRemoteImageModel(model)}
-                        disabled={loadingState.isLoading}
-                      >
-                        <View style={styles.pickerItemInfo}>
-                          <Text style={styles.pickerItemName}>
-                            {model.name}{' '}
-                            <Icon name="cloud" size={14} color={colors.primary} />
-                          </Text>
-                          <Text style={styles.pickerItemMeta}>
-                            {getServerName(model.serverId)}
-                            {model.capabilities.supportsVision && ' · Vision'}
-                          </Text>
-                        </View>
-                        {activeRemoteImageModelId === model.id && activeServerId === model.serverId && (
-                          <Icon name="check" size={18} color={colors.text} />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </>
-                )}
+                {downloadedImageModels.map((model) => {
+                  const estimatedMemoryGB = (model.size * 1.8) / (1024 * 1024 * 1024);
+                  const memoryFits = memoryInfo
+                    ? estimatedMemoryGB < memoryInfo.memoryAvailable / (1024 * 1024 * 1024) - 1.5
+                    : true;
+                  return (
+                    <TouchableOpacity
+                      key={model.id}
+                      testID="model-item"
+                      style={[
+                        styles.pickerItem,
+                        activeImageModelId === model.id && styles.pickerItemActive,
+                        !memoryFits && styles.pickerItemWarning,
+                      ]}
+                      onPress={() => onSelectImageModel(model)}
+                      disabled={loadingState.isLoading}
+                    >
+                      <View style={styles.pickerItemInfo}>
+                        <Text style={styles.pickerItemName}>{model.name}</Text>
+                        <Text style={styles.pickerItemMeta}>
+                          {model.style || 'Image'} · {hardwareService.formatBytes(model.size)}
+                        </Text>
+                        <Text style={[styles.pickerItemMemory, !memoryFits && styles.pickerItemMemoryWarning]}>
+                          ~{estimatedMemoryGB.toFixed(1)} GB RAM {!memoryFits && '(may not fit)'}
+                        </Text>
+                      </View>
+                      {activeImageModelId === model.id && (
+                        <Icon name="check" size={18} color={colors.text} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </>
             )}
           </>
@@ -361,5 +330,19 @@ const localStyles = StyleSheet.create({
     fontStyle: 'italic',
     paddingHorizontal: 12,
     paddingBottom: 4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  actionRowButton: {
+    flex: 1,
+  },
+  iconOnlyButton: {
+    flex: 1,
+  },
+  addServerButton: {
+    borderColor: 'transparent',
   },
 });

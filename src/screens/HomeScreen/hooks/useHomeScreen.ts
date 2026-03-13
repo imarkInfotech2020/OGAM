@@ -317,15 +317,14 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
   const recentConversations = conversations.slice(0, 4);
 
-  // Get all remote text models (non-vision)
+  // Get all remote text models — includes vision-language models since they do text generation too
   const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
-    (remoteDiscoveredModels[server.id] || []).filter(m => !m.capabilities.supportsVision)
+    remoteDiscoveredModels[server.id] || []
   );
 
-  // Get all remote image models (vision-capable)
-  const remoteImageModels: RemoteModel[] = remoteServers.flatMap(server =>
-    (remoteDiscoveredModels[server.id] || []).filter(m => m.capabilities.supportsVision)
-  );
+  // Remote image generation models — Ollama/LM Studio don't serve image gen models,
+  // so this is intentionally empty. Vision-language models belong in remoteTextModels.
+  const remoteImageModels: RemoteModel[] = [];
 
   // Handlers for remote model selection
   const handleSelectRemoteTextModel = useCallback(async (model: RemoteModel) => {

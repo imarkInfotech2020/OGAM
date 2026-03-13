@@ -270,6 +270,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           setPickerType(null);
           navigation.navigate('ModelsTab', { initialTab: tab });
         }}
+        onAddServer={() => navigation.navigate('RemoteServers')}
       />
 
       {/* Full-screen loading overlay */}

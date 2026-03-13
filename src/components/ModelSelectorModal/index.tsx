@@ -29,6 +29,7 @@ interface ModelSelectorModalProps {
   isLoading: boolean;
   currentModelPath: string | null;
   initialTab?: TabType;
+  onAddServer?: () => void;
 }
 
 // ─── Text tab ────────────────────────────────────────────────────────────────
@@ -92,7 +93,13 @@ const TextTab: React.FC<TextTabProps> = ({
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>{hasLoaded ? 'Switch Model' : 'Available Models'}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <Text style={styles.sectionTitle}>{hasLoaded ? 'Switch Model' : 'Available Models'}</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingLeft: 8 }} onPress={onAddServer} disabled={isAnyLoading}>
+          <Icon name="plus" size={14} color={colors.primary} />
+          <Text style={{ fontSize: 13, color: colors.primary }}>Add Server</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Empty state when no models at all */}
       {downloadedModels.length === 0 && remoteModels.length === 0 && (
@@ -205,11 +212,6 @@ const TextTab: React.FC<TextTabProps> = ({
         </View>
       ))}
 
-      {/* Add Server Button */}
-      <TouchableOpacity style={styles.addServerButton} onPress={onAddServer}>
-        <Icon name="plus" size={16} color={colors.primary} />
-        <Text style={styles.addServerButtonText}>Add Remote Server</Text>
-      </TouchableOpacity>
     </>
   );
 };
@@ -382,6 +384,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   isLoading,
   currentModelPath,
   initialTab = 'text',
+  onAddServer,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -397,7 +400,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
-  const [showAddServerModal, setShowAddServerModal] = useState(false);
 
   useEffect(() => {
     if (visible) setActiveTab(initialTab);
@@ -414,16 +416,9 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       })).filter(group => group.models.length > 0);
   }, [servers, discoveredModels, serverHealth]);
 
-  // Group remote vision models by server for ImageTab — exclude servers known to be offline
-  const remoteVisionModels = useMemo(() => {
-    return servers
-      .filter(server => serverHealth[server.id]?.isHealthy !== false)
-      .map(server => ({
-        serverId: server.id,
-        serverName: server.name,
-        models: (discoveredModels[server.id] || []).filter(m => m.capabilities.supportsVision),
-      })).filter(group => group.models.length > 0);
-  }, [servers, discoveredModels, serverHealth]);
+  // Remote image generation models — Ollama/LM Studio don't serve image gen models.
+  // Vision-language models (supportsVision) are text models and belong in the text tab.
+  const remoteVisionModels = useMemo(() => [], []);
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
@@ -543,7 +538,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               onSelectModel={handleSelectLocalModel}
               onSelectRemoteModel={handleSelectRemoteTextModel}
               onUnloadModel={handleUnloadModel}
-              onAddServer={() => setShowAddServerModal(true)}
+              onAddServer={() => { onClose(); onAddServer?.(); }}
             />
           ) : (
             <ImageTab
@@ -561,12 +556,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
         </ScrollView>
       </AppSheet>
 
-      {/* Add Server Modal - will be implemented in separate component */}
-      {showAddServerModal && (
-        <View>
-          {/* RemoteServerModal will be added here */}
-        </View>
-      )}
     </>
   );
 };
