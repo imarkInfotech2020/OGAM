@@ -9,6 +9,7 @@
 export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
+  supportsToolCalling?: boolean;
 }
 
 function parseModelInfoKeys(modelInfo: Record<string, unknown>): { contextLength: number; supportsVision: boolean } {
@@ -123,22 +124,55 @@ export async function fetchLmStudioModelInfo(
 
     // LM Studio capabilities: { vision: bool, trained_for_tool_use: bool }
     // Note: type is always "llm" even for VL models — use capabilities.vision instead
-    const supportsVision =
-      typeof model.capabilities === 'object' &&
-      model.capabilities !== null &&
-      (model.capabilities as Record<string, unknown>).vision === true;
+    const caps = typeof model.capabilities === 'object' && model.capabilities !== null
+      ? model.capabilities as Record<string, unknown>
+      : {};
 
     const contextLength =
       typeof model.max_context_length === 'number' && model.max_context_length > 0
         ? model.max_context_length
         : 4096;
 
-    return { contextLength, supportsVision: Boolean(supportsVision) };
+    return {
+      contextLength,
+      supportsVision: caps.vision === true,
+      supportsToolCalling: caps.trained_for_tool_use === true,
+    };
   } catch {
     // Timeout, network error, parse error
   }
 
   return { contextLength: 4096, supportsVision: false };
+}
+
+function hasRealData(info: RemoteModelInfo): boolean {
+  return info.supportsVision || info.contextLength !== 4096 || info.supportsToolCalling === true;
+}
+
+/**
+ * Fetch model capabilities by trying both Ollama and LM Studio APIs in parallel.
+ * Falls back to name-based detection when neither API returns real data.
+ * Works regardless of the port the server runs on.
+ */
+export async function fetchModelCapabilities(
+  endpoint: string,
+  modelId: string,
+  nameBasedDetect: { vision: (id: string) => boolean; toolCalling: (id: string) => boolean },
+): Promise<RemoteModelInfo> {
+  const [ollamaInfo, lmInfo] = await Promise.all([
+    fetchRemoteModelInfo(endpoint, modelId),
+    fetchLmStudioModelInfo(endpoint, modelId),
+  ]);
+
+  if (hasRealData(ollamaInfo)) return ollamaInfo;
+  if (hasRealData(lmInfo)) return lmInfo;
+
+  // Neither API returned real data — fall back to name-based detection
+  return {
+    contextLength: 4096,
+    supportsVision: nameBasedDetect.vision(modelId),
+    supportsToolCalling: nameBasedDetect.toolCalling(modelId),
+  };
 }
 
 /** Returns true for models that generate text/images — filters out embedding, reranker, etc. */

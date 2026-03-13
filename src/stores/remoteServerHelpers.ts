@@ -10,10 +10,13 @@ import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import {
-  fetchRemoteModelInfo,
-  fetchLmStudioModelInfo,
+  fetchModelCapabilities,
   isGenerativeModel,
 } from './remoteModelCapabilities';
+import {
+  detectVisionCapability,
+  detectToolCallingCapability,
+} from '../services/remoteServerManagerUtils';
 
 export async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
   try {
@@ -123,17 +126,15 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     if (response.ok) {
       const data = await response.json();
 
+      const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
+
       // OpenAI format: { object: "list", data: [{ id, object, owned_by, ... }] }
       if (data?.object === 'list' && Array.isArray(data.data)) {
-        const isLmStudio = url.includes(':1234');
-        const isOllama = url.includes(':11434');
         const generativeModels = data.data.filter((model: { id: string }) => isGenerativeModel(model.id));
         const modelInfos = await Promise.all(
-          generativeModels.map((model: { id: string }) => {
-            if (isOllama) return fetchRemoteModelInfo(url, model.id);
-            if (isLmStudio) return fetchLmStudioModelInfo(url, model.id);
-            return Promise.resolve({ contextLength: 4096, supportsVision: false });
-          })
+          generativeModels.map((model: { id: string }) =>
+            fetchModelCapabilities(url, model.id, nameDetect)
+          )
         );
         return generativeModels.map((model: { id: string; owned_by?: string; max_context_length?: number }, i: number) => ({
           id: model.id,
@@ -141,7 +142,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
           serverId: server.id,
           capabilities: {
             supportsVision: modelInfos[i].supportsVision,
-            supportsToolCalling: false,
+            supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.id),
             supportsThinking: false,
             maxContextLength: modelInfos[i].contextLength,
           },
@@ -151,13 +152,12 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
 
       // Ollama format via /v1/models: { models: [{ name, ... }] }
       if (Array.isArray(data.models)) {
-        const isOllama = url.includes(':11434');
         const generativeModels = data.models.filter(
           (model: { name: string }) => isGenerativeModel(model.name)
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            isOllama ? fetchRemoteModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
+            fetchModelCapabilities(url, model.name, nameDetect)
           )
         );
         return generativeModels.map(
@@ -167,7 +167,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling: false,
+              supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
               supportsThinking: false,
               maxContextLength: modelInfos[i].contextLength,
             },
@@ -198,13 +198,13 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
       const data = await response.json();
 
       if (Array.isArray(data.models)) {
-        const isOllama = url.includes(':11434');
+        const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
         const generativeModels = data.models.filter(
           (model: { name: string }) => isGenerativeModel(model.name)
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            isOllama ? fetchRemoteModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
+            fetchModelCapabilities(url, model.name, nameDetect)
           )
         );
         return generativeModels.map(
@@ -214,7 +214,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling: false,
+              supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
               supportsThinking: false,
               maxContextLength: modelInfos[i].contextLength,
             },
