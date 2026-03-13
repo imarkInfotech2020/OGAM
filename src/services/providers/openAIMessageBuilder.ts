@@ -6,7 +6,7 @@ import type { Message } from '../../types';
 import type { GenerationOptions, ProviderCapabilities } from './types';
 import type { OpenAIChatMessage, OpenAIContentPart, OpenAIToolCall } from './openAICompatibleTypes';
 import { imageToBase64DataUrl } from '../httpClient';
-import { useAppStore } from '../../stores';
+import { useAppStore } from '../../stores/appStore';
 import logger from '../../utils/logger';
 import { generateId } from '../../utils/generateId';
 

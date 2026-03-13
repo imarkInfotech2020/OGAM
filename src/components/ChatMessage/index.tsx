@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -13,11 +12,10 @@ import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
 import { ActionMenuSheet, EditSheet } from './components/ActionMenuSheet';
 import { MarkdownText } from '../MarkdownText';
-import { parseThinkingContent, formatTime, formatDuration } from './utils';
+import { parseThinkingContent, formatTime, formatDuration, buildMessageData } from './utils';
 import { ThinkingBlock } from './components/ThinkingBlock';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
-import type { ParsedContent } from './types';
 
 function getToolIcon(toolName?: string): string {
   switch (toolName) {
@@ -43,34 +41,6 @@ function getToolLabel(toolName?: string, content?: string): string {
   }
 }
 
-function buildMessageData(message: Message): { displayContent: string; parsedContent: ParsedContent } {
-  // Use reasoningContent from llama.rn if available
-  if (message.reasoningContent) {
-    const displayContent = message.role === 'assistant'
-      ? stripControlTokens(message.content).replaceAll(/<\/?think>/gi, '').trim()
-      : message.content;
-    return {
-      displayContent,
-      parsedContent: { thinking: message.reasoningContent, response: displayContent, isThinkingComplete: true },
-    };
-  }
-
-  // Parse thinking content from raw message (before stripping control tokens)
-  // This handles both HLSL HLSL and <|channel|>analysis<|message|> formats
-  let parsedContent: ParsedContent;
-  if (message.role === 'assistant') {
-    parsedContent = parseThinkingContent(message.content);
-  } else {
-    parsedContent = { thinking: null, response: message.content, isThinkingComplete: true };
-  }
-
-  // Strip control tokens for display
-  const displayContent = parsedContent.response
-    ? stripControlTokens(parsedContent.response)
-    : stripControlTokens(message.content);
-
-  return { displayContent, parsedContent };
-}
 
 type ToolResultBubbleProps = {
   toolIcon: string;
