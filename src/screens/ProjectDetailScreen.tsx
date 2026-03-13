@@ -94,6 +94,7 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
 
         console.log('[DocumentPicker] Final filePath for indexing:', pathForDb);
         await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
+        await loadKbDocs();
       }
 
       await loadKbDocs();
@@ -140,8 +141,7 @@ const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, sty
             variant="primary"
             size="small"
             onPress={handleAddDocument}
-            disabled={!!indexingFile}
-            icon={<Icon name="plus" size={16} color={indexingFile ? colors.textDisabled : colors.primary} />}
+            icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
           <Icon
             name="chevron-right"
