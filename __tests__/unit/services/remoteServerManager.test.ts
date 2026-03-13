@@ -5,6 +5,7 @@
  */
 
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import { detectVisionCapability, detectToolCallingCapability } from '../../../src/services/remoteServerManagerUtils';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/providers/registry';
 import * as Keychain from 'react-native-keychain';
@@ -12,6 +13,10 @@ import * as Keychain from 'react-native-keychain';
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/providers/registry');
+jest.mock('../../../src/services/providers/openAICompatibleProvider', () => ({
+  createOpenAIProvider: jest.fn().mockReturnValue({ dispose: jest.fn().mockResolvedValue(undefined) }),
+  OpenAICompatibleProvider: jest.fn(),
+}));
 jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn().mockResolvedValue(true),
   getGenericPassword: jest.fn().mockResolvedValue(null),
@@ -345,11 +350,11 @@ describe('remoteServerManager', () => {
       ];
 
       visionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(true);
+        expect(detectVisionCapability(modelId)).toBe(true);
       });
 
       nonVisionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(false);
+        expect(detectVisionCapability(modelId)).toBe(false);
       });
     });
   });
@@ -368,7 +373,7 @@ describe('remoteServerManager', () => {
       ];
 
       toolCapableModels.forEach(modelId => {
-        expect(manager.detectToolCallingCapability(modelId)).toBe(true);
+        expect(detectToolCallingCapability(modelId)).toBe(true);
       });
     });
 
@@ -382,18 +387,18 @@ describe('remoteServerManager', () => {
       ];
 
       nonToolModels.forEach(modelId => {
-        expect(manager.detectToolCallingCapability(modelId)).toBe(false);
+        expect(detectToolCallingCapability(modelId)).toBe(false);
       });
     });
 
     it('should detect models with tool/function keywords', () => {
       const manager = remoteServerManager as any;
 
-      expect(manager.detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
-      expect(manager.detectToolCallingCapability('mistral-function-call')).toBe(true);
-      expect(manager.detectToolCallingCapability('firefunction-v1')).toBe(true);
-      expect(manager.detectToolCallingCapability('dbrx-instruct')).toBe(true);
-      expect(manager.detectToolCallingCapability('command-r')).toBe(true);
+      expect(detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
+      expect(detectToolCallingCapability('mistral-function-call')).toBe(true);
+      expect(detectToolCallingCapability('firefunction-v1')).toBe(true);
+      expect(detectToolCallingCapability('dbrx-instruct')).toBe(true);
+      expect(detectToolCallingCapability('command-r')).toBe(true);
     });
   });
 
@@ -422,7 +427,7 @@ describe('remoteServerManager', () => {
       ];
 
       visionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(true);
+        expect(detectVisionCapability(modelId)).toBe(true);
       });
     });
 
@@ -438,7 +443,7 @@ describe('remoteServerManager', () => {
       ];
 
       nonVisionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(false);
+        expect(detectVisionCapability(modelId)).toBe(false);
       });
     });
   });
