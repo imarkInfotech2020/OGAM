@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 // Model category types
 export type ModelCategory = 'text-generation' | 'image-generation' | 'vision' | 'code';
 // Model source and credibility types
@@ -314,8 +313,6 @@ export interface ImageGenerationProgress {
   totalSteps: number;
   progress: number;
 }
-
-// Project types - context presets for grouping related chats
 export interface Project {
   id: string;
   name: string;
@@ -348,16 +345,6 @@ export interface DebugInfo {
   maxContextLength: number; contextUsagePercent: number;
 }
 export type AppScreen = 'onboarding' | 'home' | 'models' | 'chat' | 'settings' | 'generate' | 'model-download';
-
 // Remote server types
-export type {
-  RemoteProviderType,
-  RemoteServer,
-  RemoteModel,
-  RemoteModelCapabilities,
-  ServerTestResult,
-  ServerInfo,
-  RemoteGenerationSettings,
-  SelectableModel,
-} from './remoteServer';
+export type { RemoteProviderType, RemoteServer, RemoteModel, RemoteModelCapabilities, ServerTestResult, ServerInfo, RemoteGenerationSettings, SelectableModel } from './remoteServer';
 export { DEFAULT_REMOTE_GENERATION_SETTINGS } from './remoteServer';

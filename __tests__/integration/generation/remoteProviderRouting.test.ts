@@ -293,14 +293,17 @@ describe('Generation Service Provider Routing', () => {
   });
 
   describe('Remote Provider Capabilities', () => {
-    it('should detect vision capability from model name', async () => {
+    it('sets vision capability via updateCapabilities, not model name', async () => {
       const provider = new OpenAICompatibleProvider('test', {
         endpoint: 'http://test:11434',
         modelId: 'llava-v1.6',
       });
 
       await provider.loadModel('llava-v1.6');
+      // loadModel no longer infers vision from name — stays false until discovery applies it
+      expect(provider.capabilities.supportsVision).toBe(false);
 
+      provider.updateCapabilities({ supportsVision: true });
       expect(provider.capabilities.supportsVision).toBe(true);
     });
 

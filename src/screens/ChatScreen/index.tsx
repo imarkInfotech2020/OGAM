@@ -1,33 +1,26 @@
-/* eslint-disable max-lines */
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { View, Text, FlatList, Keyboard, KeyboardAvoidingView, ActivityIndicator, InteractionManager } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FlatList, KeyboardAvoidingView, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { ChatInput, CustomAlert, hideAlert, ToolPickerSheet, ThinkingIndicator, SharePromptSheet } from '../../components';
-import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { useSpotlightTour } from 'react-native-spotlight-tour';
+import { CustomAlert, hideAlert, SharePromptSheet } from '../../components';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
-import { generationService } from '../../services';
 import { createStyles } from './styles';
-import { useChatScreen, getPlaceholderText } from './useChatScreen';
+import { useChatScreen } from './useChatScreen';
 import { MessageRenderer } from './MessageRenderer';
-import {
-  NoModelScreen, LoadingScreen, ChatHeader, EmptyChat, ImageProgressIndicator,
-} from './ChatScreenComponents';
+import { NoModelScreen, LoadingScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
+import { ChatMessageArea } from './ChatMessageArea';
 
 function countConversationImages(conv: Conversation | undefined): number {
   return (conv?.messages || []).reduce((n: number, m: Message) =>
     n + (m.attachments?.filter((a) => a.type === 'image').length || 0), 0);
 }
-
 export const ChatScreen: React.FC = () => {
   const flatListRef = React.useRef<FlatList>(null);
   const isNearBottomRef = React.useRef(true);
@@ -37,22 +30,15 @@ export const ChatScreen: React.FC = () => {
   const { goTo, current } = useSpotlightTour();
   const pendingNextRef = useRef<number | null>(null);
 
-  // Share prompt sheet
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
   useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
-
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
   // chatSpotlight controls which index is active (3, 12, 15, or 16).
   const [chatSpotlight, setChatSpotlight] = useState<number | null>(null);
-
-  // Reactive spotlight state
   const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
   const shownSpotlights = useAppStore(s => s.shownSpotlights);
   const markSpotlightShown = useAppStore(s => s.markSpotlightShown);
-
-  // Track whether step 3 has been shown so we know when it stops
   const step3ShownRef = useRef(false);
-
   // If user arrived here via onboarding spotlight flow, show input spotlight
   useEffect(() => {
     const pending = consumePendingSpotlight();
@@ -69,11 +55,8 @@ export const ChatScreen: React.FC = () => {
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Track whether we're in the middle of chaining to avoid premature cleanup
+  }, []);
   const chainingRef = useRef(false);
-
   // When the spotlight tour stops after step 3, fire the chained step 12
   useEffect(() => {
     if (current === undefined && step3ShownRef.current && pendingNextRef.current !== null) {
@@ -92,9 +75,6 @@ export const ChatScreen: React.FC = () => {
       setChatSpotlight(null);
     }
   }, [current, goTo]);
-
-  // Consume pending spotlights on focus (handles reused screen instances where
-  // the mount-only useEffect above won't re-fire after navigation).
   useFocusEffect(
     useCallback(() => {
       const pending = consumePendingSpotlight();
@@ -104,8 +84,6 @@ export const ChatScreen: React.FC = () => {
       }
     }, [goTo]),
   );
-
-  // Reactive: after first image generated → spotlight image mode toggle (step 16)
   const generatedImages = useAppStore(s => s.generatedImages);
   useEffect(() => {
     if (
@@ -114,8 +92,6 @@ export const ChatScreen: React.FC = () => {
       onboardingChecklist.triedImageGen
     ) {
       markSpotlightShown('imageSettings');
-      // No cleanup — markSpotlightShown guards against double-firing, and returning
-      // a cleanup here would cancel the task when the store update re-triggers the effect.
       InteractionManager.runAfterInteractions(() => goTo(IMAGE_SETTINGS_STEP_INDEX));
     }
   }, [generatedImages.length, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
@@ -125,7 +101,6 @@ export const ChatScreen: React.FC = () => {
       setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
     }
   }, [chat.activeConversation?.messages.length]);
-
   const alertEl = (
     <CustomAlert
       visible={chat.alertState.visible}
@@ -253,126 +228,5 @@ export const ChatScreen: React.FC = () => {
       {alertEl}
       <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
     </SafeAreaView>
-  );
-};
-
-/** Conditionally wraps children in AttachStep. When index is null, renders children directly. */
-type ChatMessageAreaProps = {
-  flatListRef: React.RefObject<FlatList | null>;
-  isNearBottomRef: React.MutableRefObject<boolean>;
-  chat: ReturnType<typeof useChatScreen>;
-  styles: ReturnType<typeof createStyles>;
-  colors: ReturnType<typeof useTheme>['colors'];
-  handleScroll: (event: any) => void;
-  renderItem: (info: { item: any; index: number }) => React.JSX.Element;
-  chatSpotlight: number | null;
-};
-
-const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
-  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
-}) => {
-  const [inputHeight, setInputHeight] = useState(84);
-  const scrollToBottomStyle = useMemo(
-    () => [styles.scrollToBottomContainer, { bottom: inputHeight + 8 }],
-    [styles.scrollToBottomContainer, inputHeight],
-  );
-  return (
-  <>
-    {chat.displayMessages.length === 0 ? (
-      <EmptyChat
-        styles={styles} colors={colors}
-        activeModel={chat.activeModel}
-        activeModelName={chat.activeModelName}
-        activeProject={chat.activeProject}
-        setShowProjectSelector={chat.setShowProjectSelector}
-        isRemote={chat.activeModelInfo?.isRemote}
-      />
-    ) : (
-      <FlatList
-        ref={flatListRef}
-        data={chat.displayMessages}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messageList}
-        onScroll={handleScroll}
-        onContentSizeChange={(_w, _h) => { if (isNearBottomRef.current) flatListRef.current?.scrollToEnd({ animated: false }); }}
-        onLayout={() => { }}
-        scrollEventThrottle={16}
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        onTouchStart={() => Keyboard.dismiss()}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 100 }}
-      />
-    )}
-    {chat.showScrollToBottom && chat.displayMessages.length > 0 && (
-      <Animated.View entering={FadeIn.duration(150)} style={scrollToBottomStyle}>
-        <AnimatedPressable hapticType="impactLight" style={styles.scrollToBottomButton} onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}>
-          <Icon name="chevron-down" size={20} color={colors.textSecondary} />
-        </AnimatedPressable>
-      </Animated.View>
-    )}
-    {chat.isGeneratingImage && (
-      <ImageProgressIndicator
-        styles={styles} colors={colors}
-        imagePreviewPath={chat.imagePreviewPath}
-        imageGenerationStatus={chat.imageGenerationStatus}
-        imageGenerationProgress={chat.imageGenerationProgress}
-        onStop={chat.handleStop}
-      />
-    )}
-    {chat.isClassifying && (
-      <View style={styles.classifyingBar}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.classifyingText}>Understanding your request...</Text>
-      </View>
-    )}
-    {chat.isCompacting && (
-      <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>
-        <ThinkingIndicator text="Compacting your conversation..." />
-      </Animated.View>
-    )}
-    {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
-      <Animated.View entering={FadeIn.duration(200)}>
-        <AnimatedPressable style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
-          <Icon name="alert-circle" size={16} color={colors.warning} />
-          <Text style={styles.pendingSettingsText}>
-            Settings changed — tap to reload model
-          </Text>
-          <Icon name="refresh-cw" size={14} color={colors.warning} />
-        </AnimatedPressable>
-      </Animated.View>
-    )}
-    {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
-         Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
-    <View onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}>
-    <AttachStep index={[3, 15]} fill>
-      <ChatInput
-        onSend={chat.handleSend}
-        onStop={chat.handleStop}
-        disabled={!chat.hasActiveModel}
-        isGenerating={chat.isStreaming || chat.isThinking}
-        supportsVision={chat.supportsVision}
-        conversationId={chat.activeConversationId}
-        imageModelLoaded={chat.imageModelLoaded}
-        onOpenSettings={() => chat.setShowSettingsPanel(true)}
-        queueCount={chat.queueCount}
-        queuedTexts={chat.queuedTexts}
-        onClearQueue={() => generationService.clearQueue()}
-        placeholder={getPlaceholderText(chat.hasActiveModel, chat.supportsVision)}
-        onToolsPress={() => chat.setShowToolPicker(true)}
-        enabledToolCount={chat.enabledTools.length}
-        supportsToolCalling={chat.supportsToolCalling}
-        supportsThinking={chat.supportsThinking}
-        activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
-      />
-    </AttachStep>
-    </View>
-    <ToolPickerSheet
-      visible={chat.showToolPicker}
-      onClose={() => chat.setShowToolPicker(false)}
-      enabledTools={chat.enabledTools}
-      onToggleTool={chat.handleToggleTool}
-    />
-  </>
   );
 };

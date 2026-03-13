@@ -13,11 +13,19 @@ import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
-import { useAppStore, useAuthStore } from './src/stores';
+import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
+
+const ensureRemoteServerStoreHydrated = async () => {
+  const persistApi = useRemoteServerStore.persist;
+  if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
+  if (!persistApi.hasHydrated()) {
+    await persistApi.rehydrate();
+  }
+};
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -52,7 +60,7 @@ function App() {
 
   useEffect(() => {
     initializeApp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const ensureAppStoreHydrated = async () => {
@@ -163,6 +171,10 @@ function App() {
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
+
+      // Ensure remote server store is hydrated before initializing providers,
+      // so getServers() / activeServerId reads see persisted data.
+      await ensureRemoteServerStoreHydrated();
 
       // Initialize remote server providers for any stored servers
       try {

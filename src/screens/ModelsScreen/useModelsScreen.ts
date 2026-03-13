@@ -43,7 +43,7 @@ export function useModelsScreen() {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
       image.loadHFModels();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeTab]);
 
   const setActiveTab = (tab: ModelTab) => {
@@ -90,7 +90,7 @@ export function useModelsScreen() {
       if (hasMNN) backend = 'mnn';
       else if (hasQNN) backend = 'qnn';
     }
-    await RNFS.unlink(zipPath).catch(() => {});
+    await RNFS.unlink(zipPath).catch(() => { });
     const totalSize = await getDirectorySize(resolvedModelDir);
     setImportProgress({ fraction: 0.95, fileName });
     const modelName = fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[_-]/g, ' ');

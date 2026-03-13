@@ -155,7 +155,7 @@ describe('runToolLoop', () => {
       expect(onFirstToken).toHaveBeenCalledTimes(1);
     });
 
-    it('does not call onFinalResponse when fullResponse is empty and no tool calls', async () => {
+    it('calls onFinalResponse with "_(No response)_" when fullResponse is empty and no tokens were streamed', async () => {
       mockedGenerateResponseWithTools.mockResolvedValue({
         fullResponse: '',
         toolCalls: [],
@@ -164,8 +164,10 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      expect(ctx.onFinalResponse).not.toHaveBeenCalled();
-      expect(ctx.onThinkingDone).not.toHaveBeenCalled();
+      // emitFinalResponse now always calls onFinalResponse when nothing was streamed —
+      // empty displayResponse falls back to the "_(No response)_" sentinel value
+      expect(ctx.onFinalResponse).toHaveBeenCalledWith('_(No response)_');
+      expect(ctx.onThinkingDone).toHaveBeenCalledTimes(1);
     });
 
     it('does not add any messages to chat store when no tool calls', async () => {

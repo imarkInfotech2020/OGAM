@@ -78,7 +78,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     const downloadKey = `${selectedModel.id}/${item.name}`;

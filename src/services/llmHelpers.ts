@@ -43,9 +43,9 @@ export function hashString(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.codePointAt(i) ?? 0;
-    // eslint-disable-next-line no-bitwise
+
     hash = ((hash << 5) - hash) + char;
-    // eslint-disable-next-line no-bitwise
+
     hash = hash & hash;
   }
   return hash.toString(16);

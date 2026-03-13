@@ -47,7 +47,7 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
       sequence2.stop();
       sequence3.stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   return (

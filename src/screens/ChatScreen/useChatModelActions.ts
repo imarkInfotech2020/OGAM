@@ -1,11 +1,12 @@
-import { Dispatch, SetStateAction } from 'react';
+import { Dispatch, SetStateAction, useEffect } from 'react';
 import {
   AlertState,
   showAlert,
   hideAlert,
 } from '../../components';
-import { llmService, activeModelService } from '../../services';
-import { DownloadedModel, RemoteModel } from '../../types';
+import { llmService, activeModelService, modelManager } from '../../services';
+import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
+import logger from '../../utils/logger';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -91,13 +92,15 @@ export async function initiateModelLoad(
         `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Load Anyway', style: 'destructive', onPress: () => {
-            deps.setAlertState(hideAlert());
-            deps.setIsModelLoading(true);
-            deps.setLoadingModel(activeModel);
-            deps.modelLoadStartTimeRef.current = Date.now();
-            waitForRenderFrame().then(() => doLoadTextModel(deps));
-          }},
+          {
+            text: 'Load Anyway', style: 'destructive', onPress: () => {
+              deps.setAlertState(hideAlert());
+              deps.setIsModelLoading(true);
+              deps.setLoadingModel(activeModel);
+              deps.modelLoadStartTimeRef.current = Date.now();
+              waitForRenderFrame().then(() => doLoadTextModel(deps));
+            }
+          },
         ],
       ));
       return;
@@ -193,10 +196,12 @@ export async function handleModelSelectFn(
   if (!memoryCheck.canLoad) {
     deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Load Anyway', style: 'destructive', onPress: () => {
-        deps.setAlertState(hideAlert());
-        proceedWithModelLoadFn(deps, model);
-      }},
+      {
+        text: 'Load Anyway', style: 'destructive', onPress: () => {
+          deps.setAlertState(hideAlert());
+          proceedWithModelLoadFn(deps, model);
+        }
+      },
     ]));
     return;
   }
@@ -243,4 +248,85 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
     deps.setLoadingModel(null);
     deps.setShowModelSelector(false);
   }
+}
+
+type ImageModelEffectsDeps = {
+  setDownloadedImageModels: (models: ONNXImageModel[]) => void;
+  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined; modelLoadingStrategy: string };
+  activeImageModelId: string | null;
+  downloadedModels: DownloadedModel[];
+};
+export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
+  const { setDownloadedImageModels, settings, activeImageModelId, downloadedModels } = deps;
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (!cancelled) {
+        const models = await modelManager.getDownloadedImageModels();
+        if (!cancelled) setDownloadedImageModels(models);
+      }
+    }, 0);
+    return () => { cancelled = true; clearTimeout(timer); };
+
+  }, []);
+  useEffect(() => {
+    const preload = async () => {
+      if (
+        settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
+        settings.classifierModelId && activeImageModelId && settings.modelLoadingStrategy === 'performance'
+      ) {
+        const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
+        if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
+          try { await activeModelService.loadTextModel(settings.classifierModelId); }
+          catch (error) { logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
+        }
+      }
+    };
+    preload();
+
+  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
+}
+
+type ModelStateSyncDeps = {
+  activeModelInfo: { isRemote: boolean };
+  activeModelId: string | null;
+  activeModel: DownloadedModel | undefined;
+  modelDeps: any;
+  activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } } | null;
+  activeRemoteTextModelId: string | null;
+  isModelLoading: boolean;
+  setSupportsVision: (v: boolean) => void;
+  setSupportsToolCalling: (v: boolean) => void;
+  setSupportsThinking: (v: boolean) => void;
+};
+export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
+  const { activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
+  useEffect(() => {
+    if (activeModelInfo.isRemote) return;
+    if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
+
+  }, [activeModelId]);
+  useEffect(() => {
+    if (activeModelInfo.isRemote) {
+      setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
+    } else if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
+      setSupportsVision(llmService.getMultimodalSupport()?.vision ?? false);
+    } else {
+      setSupportsVision(false);
+    }
+
+  }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModel?.mmProjPath]);
+  useEffect(() => {
+    if (activeRemoteTextModelId) {
+      setSupportsToolCalling(activeRemoteModel?.capabilities?.supportsToolCalling ?? false);
+      setSupportsThinking(activeRemoteModel?.capabilities?.supportsThinking ?? false);
+    } else if (llmService.isModelLoaded()) {
+      setSupportsToolCalling(llmService.supportsToolCalling());
+      setSupportsThinking(llmService.supportsThinking());
+    } else {
+      setSupportsToolCalling(false);
+      setSupportsThinking(false);
+    }
+
+  }, [activeModelId, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
 }

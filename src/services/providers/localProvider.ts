@@ -1,4 +1,3 @@
-/* eslint-disable max-params */
 /**
  * Local Provider
  *
@@ -94,10 +93,11 @@ export class LocalProvider implements LLMProvider {
 
     try {
       // Use the tool-enabled generation path if tools are provided
+      const ctx = { callbacks, buildMeta: buildGenerationMeta };
       if (options.tools && options.tools.length > 0) {
-        await this.generateWithTools(messages, options, callbacks, buildGenerationMeta);
+        await this.generateWithTools(messages, options, ctx);
       } else {
-        await this.generateSimple(messages, options, callbacks, buildGenerationMeta);
+        await this.generateSimple(messages, options, ctx);
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -108,9 +108,9 @@ export class LocalProvider implements LLMProvider {
   private async generateSimple(
     messages: Message[],
     _options: GenerationOptions,
-    callbacks: StreamCallbacks,
-    buildMeta: () => GenerationMeta
+    ctx: { callbacks: StreamCallbacks; buildMeta: () => GenerationMeta }
   ): Promise<void> {
+    const { callbacks, buildMeta } = ctx;
     let fullContent = '';
     let fullReasoningContent = '';
 
@@ -142,9 +142,9 @@ export class LocalProvider implements LLMProvider {
   private async generateWithTools(
     messages: Message[],
     options: GenerationOptions,
-    callbacks: StreamCallbacks,
-    buildMeta: () => GenerationMeta
+    ctx: { callbacks: StreamCallbacks; buildMeta: () => GenerationMeta }
   ): Promise<void> {
+    const { callbacks, buildMeta } = ctx;
     let fullContent = '';
     let fullReasoningContent = '';
 

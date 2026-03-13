@@ -872,17 +872,17 @@ describe('HomeScreen', () => {
       expect(getByText('SD Turbo')).toBeTruthy();
     });
 
-    it('shows "Unload current model" when text model is active', () => {
+    it('shows unload button when text model is active', () => {
       const model = createDownloadedModel({ name: 'Active Model' });
       useAppStore.setState({
         downloadedModels: [model],
         activeModelId: model.id,
       });
 
-      const { getByText, queryByText } = renderHomeScreen();
+      const { getByText, queryByTestId } = renderHomeScreen();
       fireEvent.press(getByText('Active Model'));
 
-      expect(queryByText('Unload current model')).toBeTruthy();
+      expect(queryByTestId('unload-text-model-button')).toBeTruthy();
     });
 
     it('shows "Unload current model" when image model is active', () => {
@@ -1153,11 +1153,11 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByText } = renderHomeScreen();
+      const { getByText, getByTestId } = renderHomeScreen();
       fireEvent.press(getByText('Unload Me'));
 
       await act(async () => {
-        fireEvent.press(getByText('Unload current model'));
+        fireEvent.press(getByTestId('unload-text-model-button'));
       });
 
       await waitFor(() => {
@@ -1193,11 +1193,11 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByText, queryByText } = renderHomeScreen();
+      const { getByText, getByTestId, queryByText } = renderHomeScreen();
       fireEvent.press(getByText('Fail Unload'));
 
       await act(async () => {
-        fireEvent.press(getByText('Unload current model'));
+        fireEvent.press(getByTestId('unload-text-model-button'));
       });
 
       await waitFor(() => {
@@ -1384,11 +1384,11 @@ describe('HomeScreen', () => {
       // Make unload hang
       mockUnloadTextModel.mockImplementation(() => new Promise(() => {}));
 
-      const { getByText, queryByText } = renderHomeScreen();
+      const { getByText, getByTestId, queryByText } = renderHomeScreen();
       fireEvent.press(getByText('To Unload'));
 
       await act(async () => {
-        fireEvent.press(getByText('Unload current model'));
+        fireEvent.press(getByTestId('unload-text-model-button'));
       });
 
       // Card should show "Unloading..." since modelName is null during unload

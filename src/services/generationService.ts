@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
@@ -6,9 +5,17 @@ import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
-import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+import {
+  buildGenerationMetaImpl,
+  buildToolLoopHandlersImpl,
+  prepareGenerationImpl,
+  generateResponseImpl,
+  generateRemoteResponseImpl,
+  generateRemoteWithToolsImpl,
+  type GenerationWithToolsRequest,
+} from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };
@@ -48,7 +55,6 @@ class GenerationService {
   private reasoningBuffer: string = '';
   private totalReasoningLength: number = 0;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
   /** Get the current provider (local or remote) */
   private getCurrentProvider() {
@@ -124,182 +130,23 @@ class GenerationService {
     if (shouldShowSharePrompt(s.incrementTextGenerationCount())) setTimeout(() => emitSharePrompt('text'), delayMs);
   }
 
-  private buildToolLoopHandlers() {
-    return {
-      isAborted: () => this.abortRequested,
-      onThinkingDone: () => this.updateState({ isThinking: false }),
-      onStream: (data: StreamChunk) => {
-        if (this.abortRequested) return;
-        const chunk = this.normalizeStreamChunk(data);
-        if (chunk.content) {
-          if (!this.state.streamingContent && this.remoteTimeToFirstToken === undefined) {
-            this.remoteTimeToFirstToken = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : undefined;
-          }
-          this.state.streamingContent += chunk.content;
-          this.tokenBuffer += chunk.content;
-        }
-        if (chunk.reasoningContent) {
-          this.reasoningBuffer += chunk.reasoningContent;
-          this.totalReasoningLength += chunk.reasoningContent.length;
-        }
-        if (!this.flushTimer) {
-          this.flushTimer = setTimeout(
-            () => this.flushTokenBuffer(),
-            GenerationService.FLUSH_INTERVAL_MS,
-          );
-        }
-      },
-      onStreamReset: () => {
-        this.forceFlushTokens();
-        this.state.streamingContent = '';
-        this.tokenBuffer = '';
-      },
-      onFinalResponse: (content: string) => {
-        this.state.streamingContent = content;
-        useChatStore.getState().appendToStreamingMessage(content);
-      },
-    };
-  }
-
-  private buildGenerationMeta(): GenerationMeta {
-    // For remote providers, return basic metadata with token estimation
-    if (this.isUsingRemoteProvider()) {
-      const remoteStore = useRemoteServerStore.getState();
-      const activeServer = remoteStore.getActiveServer();
-      const _modelId = providerRegistry.getActiveProvider().getLoadedModelId();
-
-      // Estimate token count from streaming content (roughly 4 chars per token), including reasoning tokens
-      const contentLength = this.state.streamingContent.length + this.totalReasoningLength;
-      const estimatedTokens = Math.ceil(contentLength / 4);
-      const generationTime = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : 0;
-      const tokensPerSecond = generationTime > 0 ? estimatedTokens / generationTime : undefined;
-
-      return {
-        gpu: false,
-        gpuBackend: 'Remote',
-        modelName: activeServer?.name || 'Remote Model',
-        tokenCount: estimatedTokens,
-        tokensPerSecond,
-        timeToFirstToken: this.remoteTimeToFirstToken,
-      };
-    }
-
-    // Local provider metadata
-    const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo();
-    const perf = llmService.getPerformanceStats();
-    const { downloadedModels, activeModelId, settings } = useAppStore.getState();
-    return {
-      gpu, gpuBackend, gpuLayers,
-      modelName: downloadedModels.find(m => m.id === activeModelId)?.name,
-      tokensPerSecond: perf.lastTokensPerSecond,
-      decodeTokensPerSecond: perf.lastDecodeTokensPerSecond,
-      timeToFirstToken: perf.lastTimeToFirstToken,
-      tokenCount: perf.lastTokenCount,
-      cacheType: settings.cacheType,
-    };
-  }
-
-  /** Shared pre-generation setup: guard, state init, drain pending stop, validate provider. */
+  private buildToolLoopHandlers() { return buildToolLoopHandlersImpl(this); }
+  private buildGenerationMeta(): GenerationMeta { return buildGenerationMetaImpl(this); }
   private async prepareGeneration(conversationId: string): Promise<boolean> {
-    if (this.state.isGenerating) {
-      return false;
-    }
-    this.updateState({
-      isGenerating: true, isThinking: true, conversationId,
-      streamingContent: '', startTime: Date.now(),
-    });
-    useChatStore.getState().startStreaming(conversationId);
-    // Drain pending native stop so LLM is idle before we start.
-    if (this.pendingStop !== null) await this.pendingStop;
-    if (!this.state.isGenerating) return false; // stop called during drain
-    this.abortRequested = false;
-
-    // Check provider readiness
-    if (this.isUsingRemoteProvider()) {
-      const provider = this.getCurrentProvider();
-      if (!provider) {
-        this.resetState();
-        throw new Error('Remote provider not found');
-      }
-      const ready = await provider.isReady();
-      if (!ready) {
-        this.resetState();
-        throw new Error('Remote provider not ready');
-      }
-    } else {
-      if (!llmService.isModelLoaded()) { this.resetState(); throw new Error('No model loaded'); }
-      if (llmService.isCurrentlyGenerating()) { this.resetState(); throw new Error('LLM service busy'); }
-    }
-
-    this.tokenBuffer = '';
-    this.reasoningBuffer = '';
-    this.totalReasoningLength = 0;
-    this.remoteTimeToFirstToken = undefined;
-    return true;
+    return prepareGenerationImpl(this, conversationId);
   }
 
   /** Generate a response for a conversation. Runs independently of UI lifecycle. */
   async generateResponse(
     conversationId: string,
     messages: Message[],
-    onFirstToken?: () => void
+    onFirstToken?: () => void,
   ): Promise<void> {
     // Route to remote provider if active
     if (this.isUsingRemoteProvider()) {
       return this.generateRemoteResponse(conversationId, messages, onFirstToken);
     }
-
-    if (!(await this.prepareGeneration(conversationId))) return;
-    const chatStore = useChatStore.getState();
-    let firstTokenReceived = false;
-
-    try {
-      await llmService.generateResponse(
-        messages,
-        (data) => {
-          if (this.abortRequested) return;
-          const chunk = this.normalizeStreamChunk(data);
-          if (!firstTokenReceived) {
-            firstTokenReceived = true;
-            this.updateState({ isThinking: false });
-            onFirstToken?.();
-          }
-          if (chunk.content) {
-            this.state.streamingContent += chunk.content;
-            this.tokenBuffer += chunk.content;
-          }
-          if (chunk.reasoningContent) {
-            this.reasoningBuffer += chunk.reasoningContent;
-          }
-          if (!this.flushTimer) {
-            this.flushTimer = setTimeout(
-              () => this.flushTokenBuffer(),
-              GenerationService.FLUSH_INTERVAL_MS,
-            );
-          }
-        },
-        () => {
-          // If aborted, stopGeneration() already handled cleanup — don't clobber new generation state.
-          if (this.abortRequested) return;
-          this.forceFlushTokens();
-          const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-          chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
-          this.checkSharePrompt();
-          this.resetState();
-        },
-      );
-    } catch (error) {
-      if (this.abortRequested) return;
-      logger.error('[GenerationService] Generation error:', error);
-      if (this.flushTimer) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
-      this.tokenBuffer = '';
-      chatStore.clearStreamingMessage();
-      this.resetState();
-      throw error;
-    }
+    return generateResponseImpl(this, { conversationId, messages, onFirstToken });
   }
 
   /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
@@ -359,9 +206,9 @@ class GenerationService {
   async stopGeneration(): Promise<string> {
     if (!this.state.isGenerating) {
       // Stop both local and remote
-      await llmService.stopGeneration().catch(() => {});
+      await llmService.stopGeneration().catch(() => { });
       const provider = this.getCurrentProvider();
-      if (provider) provider.stopGeneration().catch(() => {});
+      if (provider) provider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -391,7 +238,7 @@ class GenerationService {
     if (this.isUsingRemoteProvider()) {
       // Abort the provider's XHR so the server connection is closed immediately
       const provider = this.getCurrentProvider();
-      if (provider) provider.stopGeneration().catch(() => {});
+      if (provider) provider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
@@ -402,7 +249,7 @@ class GenerationService {
     // Stop the native completion after we've already updated UI state,
     // so the user sees immediate feedback. Store the promise so new
     // generations can drain it before starting.
-    this.pendingStop = llmService.stopGeneration().catch(() => {}).finally(() => {
+    this.pendingStop = llmService.stopGeneration().catch(() => { }).finally(() => {
       this.pendingStop = null;
     });
 
@@ -413,153 +260,18 @@ class GenerationService {
   async generateRemoteResponse(
     conversationId: string,
     messages: Message[],
-    onFirstToken?: () => void
+    onFirstToken?: () => void,
   ): Promise<void> {
-    if (!(await this.prepareGeneration(conversationId))) return;
-    const chatStore = useChatStore.getState();
-    const provider = this.getCurrentProvider();
-
-    if (!provider) {
-      this.resetState();
-      throw new Error('No remote provider available');
-    }
-    let firstTokenReceived = false;
-    this.remoteTimeToFirstToken = undefined;
-
-    this.currentRemoteAbortController = new AbortController();
-    // Capture signal per-generation so callbacks stay guarded even after
-    // abortRequested is reset by the next generation's prepareGeneration().
-    const { signal: generationSignal } = this.currentRemoteAbortController;
-
-    const { temperature, maxTokens, topP, thinkingEnabled } = useAppStore.getState().settings;
-    const options: GenerationOptions = {
-      temperature,
-      maxTokens,
-      topP,
-      stopSequences: [],
-      enableThinking: thinkingEnabled,
-    };
-
-    try {
-      await provider.generate(
-        messages,
-        options,
-        {
-          onToken: (token: string) => {
-            if (generationSignal.aborted) return;
-            if (!firstTokenReceived) {
-              firstTokenReceived = true;
-              this.remoteTimeToFirstToken = this.state.startTime ? (Date.now() - this.state.startTime) / 1000 : undefined;
-              this.updateState({ isThinking: false });
-              onFirstToken?.();
-            }
-            this.state.streamingContent += token;
-            this.tokenBuffer += token;
-            if (!this.flushTimer) {
-              this.flushTimer = setTimeout(
-                () => this.flushTokenBuffer(),
-                GenerationService.FLUSH_INTERVAL_MS,
-              );
-            }
-          },
-          onReasoning: (content: string) => {
-            if (generationSignal.aborted) return;
-            this.reasoningBuffer += content;
-            this.totalReasoningLength += content.length;
-            if (!this.flushTimer) {
-              this.flushTimer = setTimeout(
-                () => this.flushTokenBuffer(),
-                GenerationService.FLUSH_INTERVAL_MS,
-              );
-            }
-          },
-          onComplete: (_result: CompletionResult) => {
-            if (generationSignal.aborted) return;
-            this.forceFlushTokens();
-            const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-            chatStore.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
-            this.checkSharePrompt();
-            this.resetState();
-          },
-          onError: (error: Error) => {
-            if (generationSignal.aborted) return;
-            logger.error('[GenerationService] Remote generation error:', error);
-            if (this.flushTimer) {
-              clearTimeout(this.flushTimer);
-              this.flushTimer = null;
-            }
-            this.tokenBuffer = '';
-            chatStore.clearStreamingMessage();
-            this.resetState();
-            throw error;
-          },
-        }
-      );
-    } catch (error) {
-      if (generationSignal.aborted) return;
-      logger.error('[GenerationService] Remote generation error:', error);
-      // Mark server as offline so the Remote Servers screen reflects the failure
-      const failedServerId = useRemoteServerStore.getState().activeServerId;
-      if (failedServerId) {
-        useRemoteServerStore.getState().updateServerHealth(failedServerId, false);
-      }
-      if (this.flushTimer) {
-        clearTimeout(this.flushTimer);
-        this.flushTimer = null;
-      }
-      this.tokenBuffer = '';
-      chatStore.clearStreamingMessage();
-      this.resetState();
-      throw error;
-    } finally {
-      this.currentRemoteAbortController = null;
-    }
+    return generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken });
   }
 
   /** Generate a response with tools using a remote provider */
   async generateRemoteWithTools(
     conversationId: string,
     messages: Message[],
-    options: {
-      enabledToolIds: string[];
-      projectId?: string;
-      onToolCallStart?: (name: string, args: Record<string, any>) => void;
-      onToolCallComplete?: (name: string, result: ToolResult) => void;
-      onFirstToken?: () => void;
-    },
+    options: GenerationWithToolsRequest['options'],
   ): Promise<void> {
-    // For remote providers with tools, we delegate to the provider
-    // The provider handles the tool calling format (OpenAI-style)
-    // and we use runToolLoop for tool execution
-
-    if (!(await this.prepareGeneration(conversationId))) return;
-    const provider = this.getCurrentProvider();
-
-    if (!provider) {
-      this.resetState();
-      throw new Error('No remote provider available');
-    }
-
-    const { enabledToolIds, projectId, ...callbacks } = options;
-
-    // Use the same tool loop but with remote provider
-    await runToolLoop({
-      conversationId,
-      messages,
-      enabledToolIds,
-      projectId,
-      callbacks,
-      ...this.buildToolLoopHandlers(),
-      forceRemote: true,
-    });
-
-    if (!this.abortRequested) {
-      this.forceFlushTokens();
-      const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-      useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
-      this.checkSharePrompt();
-      this.resetState();
-    }
+    return generateRemoteWithToolsImpl(this, { conversationId, messages, options });
   }
 
   enqueueMessage(entry: QueuedMessage): void {

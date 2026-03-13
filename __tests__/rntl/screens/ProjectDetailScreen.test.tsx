@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 
 const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
@@ -174,6 +174,7 @@ jest.mock('@react-native-documents/picker', () => ({
     name: 'doc.pdf',
     size: 5000,
   }])),
+  keepLocalCopy: jest.fn(() => Promise.resolve([{ status: 'success', localUri: 'file:///mock/doc.pdf' }])),
 }));
 
 jest.mock('react-native-gesture-handler/Swipeable', () => {
@@ -646,6 +647,116 @@ describe('ProjectDetailScreen', () => {
       const { toJSON } = render(<ProjectDetailScreen />);
       // toLocaleDateString with { month: 'short', day: 'numeric' }
       expect(toJSON()).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Knowledge Base file indexing fixes
+  // ============================================================================
+  describe('Knowledge Base file indexing fixes', () => {
+    // Grab the mocked pick function so we can reconfigure it per test
+    const DocumentPicker = require('@react-native-documents/picker');
+
+    beforeEach(() => {
+      // Reset pick to a single-file result by default
+      DocumentPicker.pick.mockResolvedValue([{
+        uri: 'file:///mock/doc.pdf',
+        name: 'doc.pdf',
+        size: 5000,
+      }]);
+      DocumentPicker.keepLocalCopy.mockResolvedValue([{ status: 'success', localUri: 'file:///mock/doc.pdf' }]);
+    });
+
+    it('Add button is enabled before any indexing', () => {
+      const { getByTestId } = render(<ProjectDetailScreen />);
+      const addButton = getByTestId('button-Add');
+      // disabled should be falsy — the button is not disabled at rest
+      expect(addButton.props.disabled).toBeFalsy();
+    });
+
+    it('Add button is enabled while indexing is in progress', async () => {
+      // Make indexDocument hang indefinitely so we can inspect state mid-flight
+      let resolveIndex!: () => void;
+      mockIndexDocument.mockReturnValue(new Promise<number>((resolve) => {
+        resolveIndex = () => resolve(1);
+      }));
+
+      const { getByTestId } = render(<ProjectDetailScreen />);
+      const addButton = getByTestId('button-Add');
+
+      // Button starts enabled
+      expect(addButton.props.disabled).toBeFalsy();
+
+      // Trigger the add flow (starts indexing but doesn't finish yet)
+      act(() => {
+        fireEvent.press(addButton);
+      });
+
+      // Even while indexing is in progress the button must remain enabled
+      expect(addButton.props.disabled).toBeFalsy();
+
+      // Resolve the pending index so React can flush and we avoid act() warnings
+      await act(async () => {
+        resolveIndex();
+      });
+    });
+
+    it('File count updates after each file is indexed', async () => {
+      // First call (mount): no documents; second call (after indexing): one document
+      mockGetDocumentsByProject
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 1, name: 'doc1.pdf', path: '/p', size: 1000, enabled: 1, project_id: 'proj1', created_at: '2024-01-01' }]);
+
+      DocumentPicker.pick.mockResolvedValue([{
+        uri: 'file:///mock/doc1.pdf',
+        name: 'doc1.pdf',
+        size: 1000,
+      }]);
+
+      mockIndexDocument.mockResolvedValue(1);
+
+      const { getByTestId } = render(<ProjectDetailScreen />);
+
+      // Wait for the initial load to complete
+      await waitFor(() => expect(mockGetDocumentsByProject).toHaveBeenCalledTimes(1));
+
+      // Press Add and wait for the full indexing cycle to complete
+      await act(async () => {
+        fireEvent.press(getByTestId('button-Add'));
+      });
+
+      // loadKbDocs must have been called at least twice:
+      // once on mount + at least once inside the loop after indexing the file
+      await waitFor(() => expect(mockGetDocumentsByProject.mock.calls.length).toBeGreaterThanOrEqual(2));
+    });
+
+    it('loadKbDocs is called per file during multi-file indexing', async () => {
+      // First call: mount; subsequent calls: after each file indexed
+      mockGetDocumentsByProject.mockResolvedValue([]);
+      mockIndexDocument.mockResolvedValue(1);
+
+      // Return two files from the picker
+      DocumentPicker.pick.mockResolvedValue([
+        { uri: 'file:///mock/file1.pdf', name: 'file1.pdf', size: 1000 },
+        { uri: 'file:///mock/file2.pdf', name: 'file2.pdf', size: 2000 },
+      ]);
+      DocumentPicker.keepLocalCopy
+        .mockResolvedValueOnce([{ status: 'success', localUri: 'file:///mock/file1.pdf' }])
+        .mockResolvedValueOnce([{ status: 'success', localUri: 'file:///mock/file2.pdf' }]);
+
+      const { getByTestId } = render(<ProjectDetailScreen />);
+
+      // Wait for initial mount load
+      await waitFor(() => expect(mockGetDocumentsByProject).toHaveBeenCalledTimes(1));
+
+      // Press Add and wait for both files to be indexed
+      await act(async () => {
+        fireEvent.press(getByTestId('button-Add'));
+      });
+
+      // Expect: 1 (mount) + 1 (after file1) + 1 (after file2) + 1 (final after loop) = 4
+      // At minimum: 1 (mount) + 2 (one per file inside loop) = 3
+      await waitFor(() => expect(mockGetDocumentsByProject.mock.calls.length).toBeGreaterThanOrEqual(3));
     });
   });
 });

@@ -5,6 +5,7 @@
  */
 
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import { detectVisionCapability, detectToolCallingCapability } from '../../../src/services/remoteServerManagerUtils';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/providers/registry';
 import * as Keychain from 'react-native-keychain';
@@ -12,6 +13,10 @@ import * as Keychain from 'react-native-keychain';
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/providers/registry');
+jest.mock('../../../src/services/providers/openAICompatibleProvider', () => ({
+  createOpenAIProvider: jest.fn().mockReturnValue({ dispose: jest.fn().mockResolvedValue(undefined) }),
+  OpenAICompatibleProvider: jest.fn(),
+}));
 jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn().mockResolvedValue(true),
   getGenericPassword: jest.fn().mockResolvedValue(null),
@@ -251,6 +256,7 @@ describe('remoteServerManager', () => {
         setActiveRemoteTextModelId: jest.fn(),
         setActiveRemoteImageModelId: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
+        getModelById: jest.fn().mockReturnValue(null),
       });
 
       await remoteServerManager.setActiveRemoteTextModel('server-123', 'llama2');
@@ -325,8 +331,6 @@ describe('remoteServerManager', () => {
 
   describe('detectVisionCapability', () => {
     it('should detect vision models from model name', () => {
-      // Using the private method via reflection
-      const manager = remoteServerManager as any;
 
       const visionModels = [
         'llava-v1.6-mistral-7b',
@@ -344,18 +348,17 @@ describe('remoteServerManager', () => {
       ];
 
       visionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(true);
+        expect(detectVisionCapability(modelId)).toBe(true);
       });
 
       nonVisionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(false);
+        expect(detectVisionCapability(modelId)).toBe(false);
       });
     });
   });
 
   describe('detectToolCallingCapability', () => {
     it('should detect tool-capable models from model name', () => {
-      const manager = remoteServerManager as any;
 
       const toolCapableModels = [
         'gpt-4-turbo',
@@ -367,12 +370,11 @@ describe('remoteServerManager', () => {
       ];
 
       toolCapableModels.forEach(modelId => {
-        expect(manager.detectToolCallingCapability(modelId)).toBe(true);
+        expect(detectToolCallingCapability(modelId)).toBe(true);
       });
     });
 
     it('should return false for non-tool-capable models', () => {
-      const manager = remoteServerManager as any;
 
       // These should NOT match the tool capability patterns
       const nonToolModels = [
@@ -381,24 +383,22 @@ describe('remoteServerManager', () => {
       ];
 
       nonToolModels.forEach(modelId => {
-        expect(manager.detectToolCallingCapability(modelId)).toBe(false);
+        expect(detectToolCallingCapability(modelId)).toBe(false);
       });
     });
 
     it('should detect models with tool/function keywords', () => {
-      const manager = remoteServerManager as any;
 
-      expect(manager.detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
-      expect(manager.detectToolCallingCapability('mistral-function-call')).toBe(true);
-      expect(manager.detectToolCallingCapability('firefunction-v1')).toBe(true);
-      expect(manager.detectToolCallingCapability('dbrx-instruct')).toBe(true);
-      expect(manager.detectToolCallingCapability('command-r')).toBe(true);
+      expect(detectToolCallingCapability('llama-2-70b-tool')).toBe(true);
+      expect(detectToolCallingCapability('mistral-function-call')).toBe(true);
+      expect(detectToolCallingCapability('firefunction-v1')).toBe(true);
+      expect(detectToolCallingCapability('dbrx-instruct')).toBe(true);
+      expect(detectToolCallingCapability('command-r')).toBe(true);
     });
   });
 
   describe('detectVisionCapability comprehensive patterns', () => {
     it('should detect all vision model patterns', () => {
-      const manager = remoteServerManager as any;
 
       const visionModels = [
         'llava-v1.6-mistral-7b',
@@ -421,12 +421,11 @@ describe('remoteServerManager', () => {
       ];
 
       visionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(true);
+        expect(detectVisionCapability(modelId)).toBe(true);
       });
     });
 
     it('should return false for non-vision models', () => {
-      const manager = remoteServerManager as any;
 
       const nonVisionModels = [
         'llama-2-7b',
@@ -437,7 +436,7 @@ describe('remoteServerManager', () => {
       ];
 
       nonVisionModels.forEach(modelId => {
-        expect(manager.detectVisionCapability(modelId)).toBe(false);
+        expect(detectVisionCapability(modelId)).toBe(false);
       });
     });
   });
@@ -532,13 +531,14 @@ describe('remoteServerManager', () => {
   });
 
   describe('testConnection', () => {
-    it('should return result with detected capabilities', async () => {
+    it('should return store result as-is (capabilities come from server API, not name patterns)', async () => {
+      const mockModels = [
+        { id: 'llava-v1.6', name: 'LLaVA', capabilities: { supportsVision: true } },
+        { id: 'llama-3-70b', name: 'Llama 3', capabilities: { supportsToolCalling: false } },
+      ];
       const mockTestConnection = jest.fn().mockResolvedValue({
         success: true,
-        models: [
-          { id: 'llava-v1.6', name: 'LLaVA', capabilities: {} },
-          { id: 'llama-3-70b', name: 'Llama 3', capabilities: {} },
-        ],
+        models: mockModels,
       });
 
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
@@ -549,10 +549,9 @@ describe('remoteServerManager', () => {
 
       expect(result.success).toBe(true);
       expect(result.models).toHaveLength(2);
-      // llava should have vision capability detected
+      // Capabilities are returned as-is from the store (server-API-derived), not overwritten
       expect(result.models?.[0].capabilities.supportsVision).toBe(true);
-      // llama-3-70b should have tool calling capability (llama-3 matches)
-      expect(result.models?.[1].capabilities.supportsToolCalling).toBe(true);
+      expect(result.models?.[1].capabilities.supportsToolCalling).toBe(false);
     });
 
     it('should return result without models when test fails', async () => {
@@ -687,6 +686,7 @@ describe('remoteServerManager', () => {
         setActiveRemoteTextModelId: jest.fn(),
         setActiveRemoteImageModelId: jest.fn(),
         getServerById: jest.fn().mockReturnValue(mockServer),
+        getModelById: jest.fn().mockReturnValue(null),
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
 

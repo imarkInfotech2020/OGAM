@@ -1,24 +1,20 @@
-/* eslint-disable max-lines-per-function, max-lines */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AlertState, showAlert, initialAlertState } from '../../components';
+import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import logger from '../../utils/logger';
 import {
-  llmService, modelManager, activeModelService,
-  generationService, imageGenerationService,
+  llmService, generationService, imageGenerationService, activeModelService,
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad } from './useChatModelActions';
-import {
-  startGenerationFn, handleSendFn, handleStopFn, executeDeleteConversationFn,
-  regenerateResponseFn, handleImageGenerationFn, handleSelectProjectFn,
-} from './useChatGenerationActions';
+import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn } from './useChatGenerationActions';
+import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
 import { saveImageToGallery } from './useSaveImage';
-import logger from '../../utils/logger';
 
 export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
@@ -180,71 +176,13 @@ export const useChatScreen = () => {
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      if (!cancelled && llmService.isModelLoaded()) { llmService.clearKVCache(false).catch(() => {}); }
+      if (!cancelled && llmService.isModelLoaded()) { llmService.clearKVCache(false).catch(() => { }); }
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [activeConversationId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      if (!cancelled) {
-        const models = await modelManager.getDownloadedImageModels();
-        if (!cancelled) setDownloadedImageModels(models);
-      }
-    }, 0);
-    return () => { cancelled = true; clearTimeout(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const preload = async () => {
-      if (
-        settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
-        settings.classifierModelId && activeImageModelId && settings.modelLoadingStrategy === 'performance'
-      ) {
-        const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
-        if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
-          try { await activeModelService.loadTextModel(settings.classifierModelId); }
-          catch (error) { logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
-        }
-      }
-    };
-    preload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
-
-  useEffect(() => {
-    // Skip model loading for remote models - they don't need local loading
-    if (activeModelInfo.isRemote) return;
-    if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelId]);
-
-  useEffect(() => {
-    if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
-      const support = llmService.getMultimodalSupport();
-      if (support?.vision) setSupportsVision(true);
-    } else if (!activeModel?.mmProjPath) { setSupportsVision(false); }
-  }, [activeModel?.mmProjPath]);
-
-  useEffect(() => {
-    if (activeRemoteTextModelId) {
-      // Remote models always support tool calling via OpenAI-compatible API
-      setSupportsToolCalling(true);
-      setSupportsThinking(true);
-    } else {
-      const loaded = llmService.isModelLoaded();
-      if (loaded) {
-        const tc = llmService.supportsToolCalling();
-        setSupportsToolCalling(tc);
-        setSupportsThinking(llmService.supportsThinking());
-      } else {
-        setSupportsToolCalling(false);
-        setSupportsThinking(false);
-      }
-    }
-  }, [activeModelId, isModelLoading, activeRemoteTextModelId]);
+  useChatImageModelEffects({ setDownloadedImageModels, settings, activeImageModelId, downloadedModels });
+  useChatModelStateSync({ activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking });
 
   const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation });
 
@@ -286,7 +224,7 @@ export const useChatScreen = () => {
       await activeModelService.unloadTextModel();
     }
     await initiateModelLoad(modelDeps, false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings]);
 
   return {
@@ -314,52 +252,17 @@ export const useChatScreen = () => {
     handleStop: () => handleStopFn(genDeps),
     handleModelSelect: (model: DownloadedModel) => handleModelSelectFn(modelDeps, model),
     handleUnloadModel: () => handleUnloadModelFn(modelDeps),
-    handleDeleteConversation: () => {
-      if (!activeConversationId || !activeConversation) return;
-      setAlertState(showAlert(
-        'Delete Conversation',
-        'Are you sure you want to delete this conversation? This will also delete all images generated in this chat.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: () => { executeDeleteConversationFn(genDeps).catch(() => {}); } },
-        ],
-      ));
-    },
-    handleCopyMessage: (_content: string) => {},
-    handleRetryMessage: async (message: Message) => {
-      if (!activeConversationId || !hasActiveModel) return;
-      if (message.role === 'user') {
-        const msgs = activeConversation?.messages || [];
-        const idx = msgs.findIndex((m: Message) => m.id === message.id);
-        if (idx !== -1 && idx < msgs.length - 1) deleteMessagesAfter(activeConversationId, message.id);
-        await regenerateResponseFn(genDeps, { setDebugInfo, userMessage: message });
-      } else {
-        const msgs = activeConversation?.messages || [];
-        const idx = msgs.findIndex((m: Message) => m.id === message.id);
-        if (idx > 0) {
-          const prevUserMsg = msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user');
-          if (prevUserMsg) {
-            deleteMessagesAfter(activeConversationId, prevUserMsg.id);
-            await regenerateResponseFn(genDeps, { setDebugInfo, userMessage: prevUserMsg });
-          }
-        }
-      }
-    },
-    handleEditMessage: async (message: Message, newContent: string) => {
-      if (!activeConversationId || !hasActiveModel) return;
-      updateMessageContent(activeConversationId, message.id, newContent);
-      deleteMessagesAfter(activeConversationId, message.id);
-      await regenerateResponseFn(genDeps, { setDebugInfo, userMessage: { ...message, content: newContent } });
-    },
+    handleDeleteConversation: () =>
+      handleDeleteConversationFn(genDeps, { activeConversationId, activeConversation, setAlertState }),
+    handleCopyMessage: (_content: string) => { },
+    handleRetryMessage: (message: Message) =>
+      handleRetryMessageFn(message, genDeps, { activeConversationId, hasActiveModel, activeConversation, deleteMessagesAfter, setDebugInfo }),
+    handleEditMessage: (message: Message, newContent: string) =>
+      handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
     handleSelectProject: (project: Project | null) =>
       handleSelectProjectFn({ activeConversationId, setConversationProject, setShowProjectSelector }, project),
-    handleGenerateImageFromMessage: async (prompt: string) => {
-      if (!activeConversationId || !activeImageModel) {
-        setAlertState(showAlert('No Image Model', 'Please load an image model first from the Models screen.'));
-        return;
-      }
-      await handleImageGenerationFn(genDeps, { prompt, conversationId: activeConversationId, skipUserMessage: true });
-    },
+    handleGenerateImageFromMessage: (prompt: string) =>
+      handleGenerateImageFromMsgFn(prompt, genDeps, { activeConversationId, activeImageModel, setAlertState }),
     handleImagePress: (uri: string) => setViewerImageUri(uri),
     handleSaveImage: () => saveImageToGallery(viewerImageUri, setAlertState),
   };

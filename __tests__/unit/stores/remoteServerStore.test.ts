@@ -776,7 +776,7 @@ describe('remoteServerStore', () => {
 
       const models = await useRemoteServerStore.getState().discoverModels(serverId);
 
-      expect(callCount).toBe(2); // Both endpoints called
+      expect(callCount).toBeGreaterThanOrEqual(2); // /v1/models + /api/tags (+ optional /api/show per model)
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('ollama-model');
     });

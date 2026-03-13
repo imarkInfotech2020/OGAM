@@ -46,7 +46,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
 
   useEffect(() => {
     initializeHardwareAndModels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const initializeHardwareAndModels = async () => {
@@ -113,7 +113,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     const downloadKey = `${modelId}/${file.name}`;
     setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
 
-    const onProgress = (progress: {progress: number; bytesDownloaded: number; totalBytes: number}) => {
+    const onProgress = (progress: { progress: number; bytesDownloaded: number; totalBytes: number }) => {
       setDownloadProgress(downloadKey, {
         progress: progress.progress,
         bytesDownloaded: progress.bytesDownloaded,
@@ -170,92 +170,92 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       <View testID="model-download-screen" style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Download Your First Model</Text>
-          <Text style={styles.subtitle}>
-            Based on your device ({totalRamGB.toFixed(1)}GB RAM), we recommend
-            these models for the best experience:
-          </Text>
-        </View>
-
-        <Card style={styles.deviceCard}>
-          <View style={styles.deviceInfo}>
-            <Text style={styles.deviceLabel}>Your Device</Text>
-            <Text style={styles.deviceValue}>{deviceInfo?.deviceModel}</Text>
-          </View>
-          <View style={styles.deviceInfo}>
-            <Text style={styles.deviceLabel}>Available Memory</Text>
-            <Text style={styles.deviceValue}>
-              {hardwareService.formatBytes(deviceInfo?.availableMemory || 0)}
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Download Your First Model</Text>
+            <Text style={styles.subtitle}>
+              Based on your device ({totalRamGB.toFixed(1)}GB RAM), we recommend
+              these models for the best experience:
             </Text>
           </View>
-        </Card>
 
-        <Text style={styles.sectionTitle}>Recommended Models</Text>
-
-        {recommendedModels.map((model, index) => {
-          const files = modelFiles[model.id] || [];
-          const recommendedFile = files[0]; // First file is usually the recommended one
-          const downloadKey = recommendedFile
-            ? `${model.id}/${recommendedFile.name}`
-            : '';
-          const progress = downloadProgress[downloadKey];
-          const isDownloading = !!progress;
-
-          return (
-            <ModelCard
-              key={model.id}
-              testID={`recommended-model-${index}`}
-              compact
-              model={{
-                id: model.id,
-                name: model.name,
-                author: model.id.split('/')[0],
-                description: model.description,
-                modelType: model.type,
-                paramCount: model.params,
-                minRamGB: model.minRam,
-              }}
-              file={recommendedFile}
-              isDownloading={isDownloading}
-              downloadProgress={progress?.progress}
-              isCompatible={model.minRam <= totalRamGB}
-              onPress={() => handleSelectModel(model.id)}
-              onDownload={
-                recommendedFile
-                  ? () => handleDownload(model.id, recommendedFile)
-                  : undefined
-              }
-            />
-          );
-        })}
-
-        {recommendedModels.length === 0 && (
-          <Card style={styles.warningCard}>
-            <Text style={styles.warningTitle}>Limited Compatibility</Text>
-            <Text style={styles.warningText}>
-              Your device has limited memory. You can still browse and download
-              smaller models from the model browser.
-            </Text>
+          <Card style={styles.deviceCard}>
+            <View style={styles.deviceInfo}>
+              <Text style={styles.deviceLabel}>Your Device</Text>
+              <Text style={styles.deviceValue}>{deviceInfo?.deviceModel}</Text>
+            </View>
+            <View style={styles.deviceInfo}>
+              <Text style={styles.deviceLabel}>Available Memory</Text>
+              <Text style={styles.deviceValue}>
+                {hardwareService.formatBytes(deviceInfo?.availableMemory || 0)}
+              </Text>
+            </View>
           </Card>
-        )}
-      </ScrollView>
-      <View style={styles.footer}>
-        <Button
-          title="Skip for Now"
-          variant="ghost"
-          onPress={handleSkip}
-          testID="model-download-skip"
+
+          <Text style={styles.sectionTitle}>Recommended Models</Text>
+
+          {recommendedModels.map((model, index) => {
+            const files = modelFiles[model.id] || [];
+            const recommendedFile = files[0]; // First file is usually the recommended one
+            const downloadKey = recommendedFile
+              ? `${model.id}/${recommendedFile.name}`
+              : '';
+            const progress = downloadProgress[downloadKey];
+            const isDownloading = !!progress;
+
+            return (
+              <ModelCard
+                key={model.id}
+                testID={`recommended-model-${index}`}
+                compact
+                model={{
+                  id: model.id,
+                  name: model.name,
+                  author: model.id.split('/')[0],
+                  description: model.description,
+                  modelType: model.type,
+                  paramCount: model.params,
+                  minRamGB: model.minRam,
+                }}
+                file={recommendedFile}
+                isDownloading={isDownloading}
+                downloadProgress={progress?.progress}
+                isCompatible={model.minRam <= totalRamGB}
+                onPress={() => handleSelectModel(model.id)}
+                onDownload={
+                  recommendedFile
+                    ? () => handleDownload(model.id, recommendedFile)
+                    : undefined
+                }
+              />
+            );
+          })}
+
+          {recommendedModels.length === 0 && (
+            <Card style={styles.warningCard}>
+              <Text style={styles.warningTitle}>Limited Compatibility</Text>
+              <Text style={styles.warningText}>
+                Your device has limited memory. You can still browse and download
+                smaller models from the model browser.
+              </Text>
+            </Card>
+          )}
+        </ScrollView>
+        <View style={styles.footer}>
+          <Button
+            title="Skip for Now"
+            variant="ghost"
+            onPress={handleSkip}
+            testID="model-download-skip"
+          />
+        </View>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
         />
-      </View>
-      <CustomAlert
-        visible={alertState.visible}
-        title={alertState.title}
-        message={alertState.message}
-        buttons={alertState.buttons}
-        onClose={() => setAlertState(hideAlert())}
-      />
       </View>
     </SafeAreaView>
   );
@@ -318,7 +318,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     marginBottom: 16,
   },
   warningCard: {
-    backgroundColor: `${colors.warning  }20`,
+    backgroundColor: `${colors.warning}20`,
     borderWidth: 1,
     borderColor: colors.warning,
   },

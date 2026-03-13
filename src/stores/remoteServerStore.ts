@@ -1,4 +1,4 @@
-/* eslint-disable max-lines */
+
 /**
  * Remote Server Store
  *
@@ -14,9 +14,13 @@ import {
   RemoteModel,
   ServerTestResult,
 } from '../types';
-import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
+import {
+  testServerConnection,
+  testEndpointAndGetModels,
+  fetchModelsFromServer,
+} from './remoteServerHelpers';
 
 interface RemoteServerState {
   /** Configured remote servers */
@@ -319,202 +323,3 @@ export const useRemoteServerStore = create<RemoteServerState>()(
   )
 );
 
-// Helper functions
-
-async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
-  try {
-    const testResult = await testEndpoint(server.endpoint, 10000);
-
-    if (!testResult.success) {
-      return {
-        success: false,
-        error: testResult.error,
-        latency: testResult.latency,
-      };
-    }
-
-    // Try to discover models
-    const models = await fetchModelsFromServer(server);
-
-    // Detect server type
-    const serverType = await detectServerType(server.endpoint);
-
-    return {
-      success: true,
-      latency: testResult.latency,
-      models,
-      serverInfo: {
-        name: serverType?.type,
-        version: serverType?.version,
-      },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-async function testEndpointAndGetModels(
-  endpoint: string,
-  apiKey?: string
-): Promise<ServerTestResult> {
-  try {
-    const testResult = await testEndpoint(endpoint, 10000);
-
-    if (!testResult.success) {
-      return {
-        success: false,
-        error: testResult.error,
-        latency: testResult.latency,
-      };
-    }
-
-    // Try to discover models with a temporary server config
-    const tempServer: RemoteServer = {
-      id: 'temp',
-      name: 'temp',
-      endpoint,
-      providerType: 'openai-compatible',
-      createdAt: new Date().toISOString(),
-      apiKey,
-    };
-
-    const models = await fetchModelsFromServer(tempServer);
-    const serverType = await detectServerType(endpoint);
-
-    return {
-      success: true,
-      latency: testResult.latency,
-      models,
-      serverInfo: {
-        name: serverType?.type,
-        version: serverType?.version,
-      },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/** Returns true for models that generate text/images — filters out embedding, reranker, etc. */
-function isGenerativeModel(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  const nonGenerativePatterns = [
-    'embed', 'embedding', 'rerank', 'reranker', 'classifier',
-    'bge-', 'e5-', 'gte-', 'minilm', 'arctic-embed',
-  ];
-  return !nonGenerativePatterns.some(p => id.includes(p));
-}
-
-async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
-  let url = server.endpoint;
-  while (url.endsWith('/')) url = url.slice(0, -1);
-
-  // Headers for authentication
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-  if (server.apiKey) {
-    headers.Authorization = `Bearer ${server.apiKey}`;
-  }
-
-  // Try OpenAI-compatible endpoint first
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const response = await fetch(`${url}/v1/models`, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const data = await response.json();
-
-      // OpenAI format: { object: "list", data: [{ id, object, owned_by, ... }] }
-      if (data?.object === 'list' && Array.isArray(data.data)) {
-        return data.data
-          .filter((model: { id: string }) => isGenerativeModel(model.id))
-          .map((model: { id: string; owned_by?: string }) => ({
-            id: model.id,
-            name: model.id,
-            serverId: server.id,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: false,
-              supportsThinking: false,
-            },
-            lastUpdated: new Date().toISOString(),
-          }));
-      }
-
-      // Ollama format: { models: [{ name, ... }] }
-      if (Array.isArray(data.models)) {
-        return data.models
-          .filter((model: { name: string }) => isGenerativeModel(model.name))
-          .map((model: { name: string; details?: Record<string, unknown> }) => ({
-            id: model.name,
-            name: model.name,
-            serverId: server.id,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: false,
-              supportsThinking: false,
-            },
-            details: model.details,
-            lastUpdated: new Date().toISOString(),
-          }));
-      }
-    }
-  } catch (error) {
-    logger.warn('[RemoteServer] Failed to fetch from /v1/models:', error);
-  }
-
-  // Try Ollama-specific endpoint
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const response = await fetch(`${url}/api/tags`, {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const data = await response.json();
-
-      if (Array.isArray(data.models)) {
-        return data.models
-          .filter((model: { name: string }) => isGenerativeModel(model.name))
-          .map((model: { name: string; details?: Record<string, unknown> }) => ({
-            id: model.name,
-            name: model.name,
-            serverId: server.id,
-            capabilities: {
-              supportsVision: false,
-              supportsToolCalling: false,
-              supportsThinking: false,
-            },
-            details: model.details,
-            lastUpdated: new Date().toISOString(),
-          }));
-      }
-    }
-  } catch (error) {
-    logger.warn('[RemoteServer] Failed to fetch from /api/tags:', error);
-  }
-
-  // No models found
-  return [];
-}

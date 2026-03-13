@@ -1,4 +1,3 @@
-/* eslint-disable complexity */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -60,7 +59,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
   const handleAddDocument = async () => {
     try {
       const files = await pick({ mode: 'open', allowMultiSelection: true });
-      if (!files || files.length === 0) return;
+      if (!files?.length) return;
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];

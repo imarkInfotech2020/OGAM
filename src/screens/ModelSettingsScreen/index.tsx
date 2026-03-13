@@ -33,7 +33,7 @@ export const ModelSettingsScreen: React.FC = () => {
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleReset = () => {
     setAlertState(showAlert(

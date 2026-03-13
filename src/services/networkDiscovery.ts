@@ -2,7 +2,7 @@
  * LAN LLM Server Discovery
  *
  * Scans the device's local subnet for running LLM servers
- * (Ollama, LM Studio, LocalAI) using their default ports.
+ * (Ollama, LM Studio) using their default ports.
  */
 
 import { getIpAddress, isEmulator } from 'react-native-device-info';
@@ -10,14 +10,13 @@ import logger from '../utils/logger';
 
 export interface DiscoveredServer {
   endpoint: string;
-  type: 'ollama' | 'lmstudio' | 'localai';
+  type: 'ollama' | 'lmstudio';
   name: string;
 }
 
 const PROVIDERS = [
   { port: 11434, type: 'ollama' as const,   name: 'Ollama',    probePath: '/api/tags'     },
   { port: 1234,  type: 'lmstudio' as const, name: 'LM Studio', probePath: '/api/v1/models' },
-  { port: 8080,  type: 'localai' as const,  name: 'LocalAI',   probePath: '/v1/models'    },
 ];
 
 const TIMEOUT_MS = 500;
