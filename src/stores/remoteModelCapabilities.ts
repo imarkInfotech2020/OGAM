@@ -10,6 +10,7 @@ export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
   supportsToolCalling?: boolean;
+  supportsThinking?: boolean;
 }
 
 function parseModelInfoKeys(modelInfo: Record<string, unknown>): { contextLength: number; supportsVision: boolean } {
@@ -51,7 +52,16 @@ function extractOllamaCapabilities(data: Record<string, unknown>): RemoteModelIn
     if (numCtx > 0) contextLength = numCtx;
   }
 
-  return { contextLength, supportsVision };
+  // Thinking support detection:
+  // - Older models: template contains .Think / .Thinking / .IsThinkSet
+  // - Newer models (qwen3.5+): use RENDERER/PARSER in modelfile instead of template logic
+  const template = typeof data.template === 'string' ? data.template : '';
+  const modelfile = typeof data.modelfile === 'string' ? data.modelfile : '';
+  const supportsThinking =
+    /\.Think|\.Thinking|\.IsThinkSet/.test(template) ||
+    /^RENDERER\s/m.test(modelfile);
+
+  return { contextLength, supportsVision, supportsThinking };
 }
 
 /**
@@ -133,10 +143,15 @@ export async function fetchLmStudioModelInfo(
         ? model.max_context_length
         : 4096;
 
+    // LM Studio doesn't expose thinking capability in /api/v1/models.
+    // Probe via a 1-token streaming request — thinking models emit <think> as the first chunk.
+    const supportsThinking = await probeLmStudioThinking(endpoint, modelId);
+
     return {
       contextLength,
       supportsVision: caps.vision === true,
       supportsToolCalling: caps.trained_for_tool_use === true,
+      supportsThinking,
     };
   } catch {
     // Timeout, network error, parse error
@@ -145,8 +160,57 @@ export async function fetchLmStudioModelInfo(
   return { contextLength: 4096, supportsVision: false };
 }
 
+/**
+ * Probe an LM Studio model for thinking support by sending a 1-token streaming
+ * request and checking if the first content delta is `<think>`.
+ */
+async function probeLmStudioThinking(endpoint: string, modelId: string): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(`${endpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 1,
+        stream: true,
+        chat_template_kwargs: { enable_thinking: true },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    if (!response.ok || !response.body) return false;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      // Parse first SSE data line
+      const match = /^data: ({.+})$/m.exec(buf);
+      if (match) {
+        reader.cancel();
+        const chunk = JSON.parse(match[1]);
+        const content = chunk?.choices?.[0]?.delta?.content ?? '';
+        return content.includes('<think>');
+      }
+    }
+  } catch {
+    // Timeout, network error, model not loaded — not a thinking model or can't determine
+  }
+  return false;
+}
+
 function hasRealData(info: RemoteModelInfo): boolean {
-  return info.supportsVision || info.contextLength !== 4096 || info.supportsToolCalling === true;
+  return info.supportsVision || info.contextLength !== 4096 || info.supportsToolCalling === true || info.supportsThinking === true;
 }
 
 /**

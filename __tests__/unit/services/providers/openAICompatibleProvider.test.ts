@@ -71,7 +71,7 @@ describe('OpenAICompatibleProvider', () => {
 
       expect(caps.supportsVision).toBe(false);
       expect(caps.supportsToolCalling).toBe(true);
-      expect(caps.supportsThinking).toBe(true);
+      expect(caps.supportsThinking).toBe(false);
     });
 
     it('loadModel() does NOT set supportsVision — stays false until updateCapabilities is called', async () => {

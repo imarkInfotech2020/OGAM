@@ -803,6 +803,7 @@ describe('generationService', () => {
       generate: jest.fn(),
       stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('remote-model'),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
     };
 
     beforeEach(() => {
@@ -1362,6 +1363,7 @@ describe('generationService', () => {
       generate: jest.fn(),
       stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('model'),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
     };
 
     beforeEach(() => {
@@ -1722,6 +1724,7 @@ describe('generationService', () => {
       generate: jest.fn(),
       stopGeneration: jest.fn().mockResolvedValue(undefined),
       getLoadedModelId: jest.fn().mockReturnValue('model-flush'),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
     };
 
     beforeEach(() => {

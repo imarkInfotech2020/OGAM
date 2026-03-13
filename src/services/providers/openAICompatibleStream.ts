@@ -3,6 +3,7 @@
  * ThinkTagParser, processDelta, generateOllamaChatImpl
  */
 import { createNDJSONStreamingRequest } from '../httpClient';
+import logger from '../../utils/logger';
 import type { StreamCallbacks } from './types';
 import type {
   OpenAIChatMessage,
@@ -233,15 +234,18 @@ export async function generateOllamaChatImpl(
         return;
       }
 
+      logger.log('[OllamaChat] raw line:', JSON.stringify(line));
       const msg = line.message as {
         role?: string; content?: string; thinking?: string; tool_calls?: OpenAIToolCall[]
       } | undefined;
+      logger.log('[OllamaChat] parsed msg:', JSON.stringify(msg), 'done:', line.done);
       if (msg) {
         if (msg.thinking) { fullReasoningContent += msg.thinking; callbacks.onReasoning?.(msg.thinking); }
         if (msg.content) { fullContent += msg.content; callbacks.onToken(msg.content); }
       }
 
       if (line.done) {
+        logger.log('[OllamaChat] stream done — fullContent length:', fullContent.length, 'fullReasoningContent length:', fullReasoningContent.length);
         completeCalled = true;
         const toolCalls = (msg?.tool_calls ?? []).filter(tc => tc.function?.name);
         callbacks.onComplete({
