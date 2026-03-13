@@ -38,7 +38,7 @@ type Props = {
 };
 
 type ImageTabColors = ReturnType<typeof useTheme>['colors'];
-type ImageTabStyles = ReturnType<typeof useThemedStyles<typeof createStyles>>;
+type ImageTabStyles = ReturnType<typeof createStyles>;
 type ImageTabProps = Pick<Props, 'downloadedImageModels' | 'activeImageModelId' | 'memoryInfo' | 'loadingState' | 'onUnloadImageModel' | 'onSelectImageModel' | 'onBrowseModels'> & { colors: ImageTabColors; styles: ImageTabStyles };
 
 const ImageTabContent: React.FC<ImageTabProps> = ({ downloadedImageModels, activeImageModelId, memoryInfo, loadingState, onUnloadImageModel, onSelectImageModel, onBrowseModels, colors, styles }) => {

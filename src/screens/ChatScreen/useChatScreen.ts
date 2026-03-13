@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import logger from '../../utils/logger';
 import {
-  llmService, generationService, imageGenerationService,
+  llmService, generationService, imageGenerationService, activeModelService,
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
