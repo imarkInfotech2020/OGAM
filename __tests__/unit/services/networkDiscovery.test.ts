@@ -1,7 +1,7 @@
 /**
  * Network Discovery Unit Tests
  *
- * Tests for LAN LLM server discovery (Ollama, LM Studio, LocalAI).
+ * Tests for LAN LLM server discovery (Ollama, LM Studio).
  */
 
 // Mock react-native-device-info
@@ -70,7 +70,6 @@ describe('discoverLANServers', () => {
   it.each([
     ['ollama',   '192.168.1.10', 11434, 'Ollama (192.168.1.10)',    '/api/tags'     ],   // NOSONAR
     ['lmstudio', '192.168.1.20', 1234,  'LM Studio (192.168.1.20)', '/api/v1/models'],   // NOSONAR
-    ['localai',  '192.168.1.30', 8080,  'LocalAI (192.168.1.30)',   '/v1/models'    ],   // NOSONAR
   ])('discovers a %s server', async (type, ip, port, name, probePath) => {
     mockGetIpAddress.mockResolvedValue('192.168.1.42'); // NOSONAR
     const probeUrl = `http://${ip}:${port}${probePath}`; // NOSONAR

@@ -772,4 +772,232 @@ describe('ModelSelectorModal', () => {
       expect(getByText('Test Model')).toBeTruthy();
     });
   });
+
+  // ============================================================================
+  // Add Server button
+  // ============================================================================
+  describe('Add Server button', () => {
+    it('renders Add Server link in text tab', () => {
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
+      );
+
+      expect(getByText('Add Server')).toBeTruthy();
+    });
+
+    it('Add Server link calls onClose and onAddServer when pressed', () => {
+      const onClose = jest.fn();
+      const onAddServer = jest.fn();
+
+      const { getByText } = render(
+        <ModelSelectorModal
+          {...defaultProps}
+          onClose={onClose}
+          onAddServer={onAddServer}
+        />
+      );
+
+      fireEvent.press(getByText('Add Server'));
+
+      expect(onClose).toHaveBeenCalled();
+      expect(onAddServer).toHaveBeenCalled();
+    });
+
+    it('Add Server link is disabled when isLoading is true', () => {
+      const onClose = jest.fn();
+      const onAddServer = jest.fn();
+
+      const { getByText } = render(
+        <ModelSelectorModal
+          {...defaultProps}
+          onClose={onClose}
+          onAddServer={onAddServer}
+          isLoading={true}
+        />
+      );
+
+      fireEvent.press(getByText('Add Server'));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onAddServer).not.toHaveBeenCalled();
+    });
+
+    it('Add Server link visible even when no models are downloaded', () => {
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
+      );
+
+      expect(getByText('Add Server')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Remote text models
+  // ============================================================================
+  describe('remote text models', () => {
+    beforeEach(() => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {
+          srv1: [
+            {
+              id: 'llama3',
+              name: 'llama3',
+              serverId: 'srv1',
+              capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+              lastUpdated: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+        serverHealth: { srv1: { isHealthy: true, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+    });
+
+    it('shows remote text model in text tab', () => {
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      expect(getByText('llama3')).toBeTruthy();
+    });
+
+    it('shows VLM model with cloud icon indicator', () => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {
+          srv1: [
+            {
+              id: 'llava',
+              name: 'llava',
+              serverId: 'srv1',
+              capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false },
+              lastUpdated: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+        serverHealth: { srv1: { isHealthy: true, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      // The server name section header should appear (rendered via wifi icon + server name)
+      expect(getByText('My Ollama')).toBeTruthy();
+      expect(getByText('llava')).toBeTruthy();
+    });
+
+    it('shows vision capability badge for VLM remote model', () => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {
+          srv1: [
+            {
+              id: 'llava',
+              name: 'llava',
+              serverId: 'srv1',
+              capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false },
+              lastUpdated: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+        serverHealth: { srv1: { isHealthy: true, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      expect(getByText('Vision')).toBeTruthy();
+    });
+
+    it('calls setActiveRemoteTextModel when remote model pressed', async () => {
+      const { remoteServerManager } = require('../../../src/services');
+
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      await act(async () => {
+        fireEvent.press(getByText('llama3'));
+      });
+
+      expect(remoteServerManager.setActiveRemoteTextModel).toHaveBeenCalledWith(
+        'srv1',
+        'llama3'
+      );
+    });
+
+    it('remote model shows server name as subtitle', () => {
+      const { getByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      // Server name appears as a section header in the grouped remote models list
+      expect(getByText('My Ollama')).toBeTruthy();
+    });
+  });
+
+  // ============================================================================
+  // Image tab remote models
+  // ============================================================================
+  describe('image tab remote models', () => {
+    it('image tab shows no remote models section even if discoveredModels has vision models', () => {
+      mockUseRemoteServerStore.mockReturnValue({
+        servers: [{ id: 'srv1', name: 'My Ollama', endpoint: 'http://192.168.1.10:11434' }],
+        activeServerId: 'srv1',
+        activeRemoteTextModelId: null,
+        activeRemoteImageModelId: null,
+        discoveredModels: {
+          srv1: [
+            {
+              id: 'llava',
+              name: 'llava',
+              serverId: 'srv1',
+              capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false },
+              lastUpdated: '2026-01-01T00:00:00Z',
+            },
+          ],
+        },
+        serverHealth: { srv1: { isHealthy: true, lastCheck: '2026-01-01T00:00:00Z' } },
+        setActiveServerId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+      });
+
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+
+      const { queryByTestId, getByText } = render(
+        <ModelSelectorModal {...defaultProps} initialTab="image" />
+      );
+
+      // Image tab should show empty state — no remote model items
+      expect(getByText('No Image Models')).toBeTruthy();
+      expect(queryByTestId('remote-model-item')).toBeNull();
+    });
+  });
 });

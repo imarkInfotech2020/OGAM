@@ -251,6 +251,7 @@ describe('remoteServerManager', () => {
         setActiveRemoteTextModelId: jest.fn(),
         setActiveRemoteImageModelId: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
+        getModelById: jest.fn().mockReturnValue(null),
       });
 
       await remoteServerManager.setActiveRemoteTextModel('server-123', 'llama2');
@@ -687,6 +688,7 @@ describe('remoteServerManager', () => {
         setActiveRemoteTextModelId: jest.fn(),
         setActiveRemoteImageModelId: jest.fn(),
         getServerById: jest.fn().mockReturnValue(mockServer),
+        getModelById: jest.fn().mockReturnValue(null),
       });
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
 

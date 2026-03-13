@@ -2,7 +2,7 @@
  * OpenAI-Compatible Provider Unit Tests
  *
  * Tests for the OpenAI-compatible provider that communicates with
- * remote LLM servers like Ollama, LM Studio, LocalAI, etc.
+ * remote LLM servers like Ollama, LM Studio, etc.
  */
 
 import { OpenAICompatibleProvider, createOpenAIProvider } from '../../../../src/services/providers/openAICompatibleProvider';
@@ -11,6 +11,7 @@ import * as httpClient from '../../../../src/services/httpClient';
 // Mock httpClient
 jest.mock('../../../../src/services/httpClient', () => ({
   createStreamingRequest: jest.fn(),
+  createNDJSONStreamingRequest: jest.fn(),
   imageToBase64DataUrl: jest.fn(),
   fetchWithTimeout: jest.fn(),
   parseOpenAIMessage: jest.fn((event: { data: string }) => {
@@ -73,22 +74,41 @@ describe('OpenAICompatibleProvider', () => {
       expect(caps.supportsThinking).toBe(false);
     });
 
-    it('should detect vision capability from model name', async () => {
+    it('loadModel() does NOT set supportsVision — stays false until updateCapabilities is called', async () => {
+      // Even vision-named models stay false after loadModel — capabilities come from discovery
       await provider.loadModel('llava-v1.6-7b');
+      expect(provider.capabilities.supportsVision).toBe(false);
 
-      expect(provider.capabilities.supportsVision).toBe(true);
-    });
-
-    it('should detect vision for GPT-4 Vision', async () => {
       await provider.loadModel('gpt-4-vision-preview');
+      expect(provider.capabilities.supportsVision).toBe(false);
+
+      await provider.loadModel('claude-3-opus');
+      expect(provider.capabilities.supportsVision).toBe(false);
+    });
+
+    it('updateCapabilities() sets supportsVision to true', () => {
+      expect(provider.capabilities.supportsVision).toBe(false);
+
+      provider.updateCapabilities({ supportsVision: true });
 
       expect(provider.capabilities.supportsVision).toBe(true);
     });
 
-    it('should detect vision for Claude', async () => {
-      await provider.loadModel('claude-3-opus');
+    it('updateCapabilities() merges partial updates without overwriting other capabilities', () => {
+      provider.updateCapabilities({ supportsVision: true });
+      provider.updateCapabilities({ supportsThinking: true });
 
       expect(provider.capabilities.supportsVision).toBe(true);
+      expect(provider.capabilities.supportsThinking).toBe(true);
+      expect(provider.capabilities.supportsToolCalling).toBe(true);
+    });
+
+    it('updateCapabilities() can set supportsVision back to false', () => {
+      provider.updateCapabilities({ supportsVision: true });
+      expect(provider.capabilities.supportsVision).toBe(true);
+
+      provider.updateCapabilities({ supportsVision: false });
+      expect(provider.capabilities.supportsVision).toBe(false);
     });
   });
 
@@ -728,8 +748,9 @@ describe('OpenAICompatibleProvider', () => {
 
   describe('generate — vision/image multimodal content', () => {
     it('builds multimodal content when message has image attachment and supportsVision=true', async () => {
-      // Load a vision model
-      await provider.loadModel('llava-v1.6-7b'); // triggers supportsVision=true
+      // Load a model and explicitly enable vision via updateCapabilities (as remoteServerManager does)
+      await provider.loadModel('llava-v1.6-7b');
+      provider.updateCapabilities({ supportsVision: true });
       const mockImageUrl = httpClient.imageToBase64DataUrl as jest.Mock;
       mockImageUrl.mockResolvedValue('data:image/png;base64,abc123');
 
@@ -760,6 +781,79 @@ describe('OpenAICompatibleProvider', () => {
       const userMessage = requestBody.messages.find((m: any) => m.role === 'user');
       expect(Array.isArray(userMessage?.content)).toBe(true);
       expect(userMessage.content.some((c: any) => c.type === 'image_url')).toBe(true);
+    });
+  });
+
+  describe('generateOllamaChat — image handling', () => {
+    it('places raw base64 (no data: prefix) in images array on the Ollama message', async () => {
+      // Ollama provider (port 11434)
+      const ollamaProvider = new OpenAICompatibleProvider('ollama-server', {
+        endpoint: 'http://192.168.1.10:11434',
+        modelId: 'llava-v1.6',
+      });
+      await ollamaProvider.loadModel('llava-v1.6');
+      ollamaProvider.updateCapabilities({ supportsVision: true });
+
+      const mockImageUrl = httpClient.imageToBase64DataUrl as jest.Mock;
+      mockImageUrl.mockResolvedValue('data:image/png;base64,abc123rawbase64');
+
+      const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
+      let capturedBody: any;
+      mockNDJSON.mockImplementation(
+        (_url: string, body: unknown, onLine: Function) => {
+          capturedBody = body;
+          onLine({ message: { content: 'I see it.' }, done: true });
+          return Promise.resolve();
+        }
+      );
+
+      await ollamaProvider.generate(
+        [{
+          id: '1',
+          role: 'user',
+          content: 'Describe this image',
+          timestamp: 0,
+          attachments: [{ type: 'image', uri: 'file:///path/to/photo.png' }],
+        } as any],
+        {},
+        { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() }
+      );
+
+      expect(mockNDJSON).toHaveBeenCalled();
+      const userMsg = capturedBody.messages.find((m: any) => m.role === 'user');
+      expect(userMsg).toBeDefined();
+      // images array must contain raw base64 — no 'data:image/...' prefix
+      expect(Array.isArray(userMsg.images)).toBe(true);
+      expect(userMsg.images[0]).toBe('abc123rawbase64');
+      expect(userMsg.images[0]).not.toMatch(/^data:/);
+    });
+
+    it('omits images array when message has no image attachments', async () => {
+      const ollamaProvider = new OpenAICompatibleProvider('ollama-server', {
+        endpoint: 'http://192.168.1.10:11434',
+        modelId: 'llava-v1.6',
+      });
+      await ollamaProvider.loadModel('llava-v1.6');
+
+      const mockNDJSON = httpClient.createNDJSONStreamingRequest as jest.Mock;
+      let capturedBody: any;
+      mockNDJSON.mockImplementation(
+        (_url: string, body: unknown, onLine: Function) => {
+          capturedBody = body;
+          onLine({ message: { content: 'Hello.' }, done: true });
+          return Promise.resolve();
+        }
+      );
+
+      await ollamaProvider.generate(
+        [{ id: '1', role: 'user', content: 'Hello', timestamp: 0 }],
+        {},
+        { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() }
+      );
+
+      const userMsg = capturedBody.messages.find((m: any) => m.role === 'user');
+      expect(userMsg).toBeDefined();
+      expect(userMsg.images).toBeUndefined();
     });
   });
 

@@ -8,8 +8,8 @@
  * - Local text models rendering and selection
  * - Remote text models rendering and selection
  * - Local image models rendering and selection
- * - Remote image models rendering and selection
  * - Unload buttons (local vs remote)
+ * - Add Remote Server button
  * - Memory warning display
  * - Server name lookup
  * - Browse more button
@@ -118,6 +118,8 @@ jest.mock('../../../src/stores', () => ({
     return selector ? selector(state) : state;
   },
 }));
+
+jest.mock('react-native-vector-icons/Feather', () => 'Icon');
 
 // Factories
 const makeTextModel = (overrides: Partial<DownloadedModel> = {}): DownloadedModel => ({
@@ -327,16 +329,23 @@ describe('ModelPickerSheet', () => {
   describe('text models unload button', () => {
     const model = makeTextModel();
 
-    it('shows unload button when local model is active', () => {
-      const { getByText } = render(
+    it('shows unload button when local model is active (icon only, no text label)', () => {
+      const { getByTestId } = render(
         <ModelPickerSheet {...defaultProps} downloadedModels={[model]} activeModelId="model1" />
       );
-      expect(getByText('Unload current model')).toBeTruthy();
+      expect(getByTestId('unload-text-model-button')).toBeTruthy();
     });
 
-    it('calls onUnloadTextModel when pressing unload for local model', () => {
+    it('shows placeholder view (no unload button) when no model is active', () => {
+      const { queryByTestId } = render(
+        <ModelPickerSheet {...defaultProps} downloadedModels={[model]} />
+      );
+      expect(queryByTestId('unload-text-model-button')).toBeNull();
+    });
+
+    it('calls onUnloadTextModel when pressing unload button for local model', () => {
       const onUnloadTextModel = jest.fn();
-      const { getByText } = render(
+      const { getByTestId } = render(
         <ModelPickerSheet
           {...defaultProps}
           downloadedModels={[model]}
@@ -344,26 +353,14 @@ describe('ModelPickerSheet', () => {
           onUnloadTextModel={onUnloadTextModel}
         />
       );
-      fireEvent.press(getByText('Unload current model'));
+      fireEvent.press(getByTestId('unload-text-model-button'));
       expect(onUnloadTextModel).toHaveBeenCalledTimes(1);
     });
 
-    it('shows "Disconnect remote model" when remote model is active', () => {
-      const remoteModel = makeRemoteModel();
-      const { getByText } = render(
-        <ModelPickerSheet
-          {...defaultProps}
-          remoteTextModels={[remoteModel]}
-          activeRemoteTextModelId="llama3"
-        />
-      );
-      expect(getByText('Disconnect remote model')).toBeTruthy();
-    });
-
-    it('calls onUnloadRemoteTextModel when disconnecting remote model', () => {
+    it('calls onUnloadRemoteTextModel when remote model is active and unload pressed', () => {
       const onUnloadRemoteTextModel = jest.fn();
       const remoteModel = makeRemoteModel();
-      const { getByText } = render(
+      const { getByTestId } = render(
         <ModelPickerSheet
           {...defaultProps}
           remoteTextModels={[remoteModel]}
@@ -371,13 +368,13 @@ describe('ModelPickerSheet', () => {
           onUnloadRemoteTextModel={onUnloadRemoteTextModel}
         />
       );
-      fireEvent.press(getByText('Disconnect remote model'));
+      fireEvent.press(getByTestId('unload-text-model-button'));
       expect(onUnloadRemoteTextModel).toHaveBeenCalledTimes(1);
     });
 
-    it('does not call onUnloadTextModel when unload button pressed while loading', () => {
+    it('unload button is disabled during loading', () => {
       const onUnloadTextModel = jest.fn();
-      const { getByText } = render(
+      const { getByTestId } = render(
         <ModelPickerSheet
           {...defaultProps}
           downloadedModels={[model]}
@@ -386,8 +383,74 @@ describe('ModelPickerSheet', () => {
           onUnloadTextModel={onUnloadTextModel}
         />
       );
-      fireEvent.press(getByText('Unload current model'));
+      expect(getByTestId('unload-text-model-button').props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it('does not call onUnloadTextModel when unload button pressed while loading', () => {
+      const onUnloadTextModel = jest.fn();
+      const { getByTestId } = render(
+        <ModelPickerSheet
+          {...defaultProps}
+          downloadedModels={[model]}
+          activeModelId="model1"
+          loadingState={busyLoading}
+          onUnloadTextModel={onUnloadTextModel}
+        />
+      );
+      fireEvent.press(getByTestId('unload-text-model-button'));
       expect(onUnloadTextModel).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // Add Remote Server Button
+  // ============================================================================
+  describe('Add Remote Server button', () => {
+    const model = makeTextModel();
+    const remoteModel = makeRemoteModel();
+
+    it('always shows Add Remote Server button when text models exist', () => {
+      const { getByTestId } = render(
+        <ModelPickerSheet {...defaultProps} downloadedModels={[model]} />
+      );
+      expect(getByTestId('add-server-button')).toBeTruthy();
+    });
+
+    it('always shows Add Remote Server button when remote text models exist', () => {
+      const { getByTestId } = render(
+        <ModelPickerSheet {...defaultProps} remoteTextModels={[remoteModel]} />
+      );
+      expect(getByTestId('add-server-button')).toBeTruthy();
+    });
+
+    it('Add Remote Server button calls onClose and onAddServer when pressed', () => {
+      const onClose = jest.fn();
+      const onAddServer = jest.fn();
+      const { getByTestId } = render(
+        <ModelPickerSheet
+          {...defaultProps}
+          downloadedModels={[model]}
+          onClose={onClose}
+          onAddServer={onAddServer}
+        />
+      );
+      fireEvent.press(getByTestId('add-server-button'));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onAddServer).toHaveBeenCalledTimes(1);
+    });
+
+    it('Add Remote Server button appears even when no model is active', () => {
+      const { getByTestId } = render(
+        <ModelPickerSheet {...defaultProps} downloadedModels={[model]} activeModelId={null} />
+      );
+      expect(getByTestId('add-server-button')).toBeTruthy();
+    });
+
+    it('Add Remote Server button text is visible', () => {
+      const { getByText } = render(
+        <ModelPickerSheet {...defaultProps} downloadedModels={[model]} />
+      );
+      expect(getByText('Add Remote Server')).toBeTruthy();
     });
   });
 
@@ -487,6 +550,34 @@ describe('ModelPickerSheet', () => {
       );
       fireEvent.press(getByText('Browse Models'));
       expect(onBrowseModels).toHaveBeenCalledTimes(1);
+    });
+
+    it('image tab empty state based only on downloadedImageModels being empty', () => {
+      // Even when remoteImageModels are provided, image tab shows empty state
+      // if there are no downloadedImageModels
+      const remoteImg = makeRemoteModel({ id: 'clip-remote', name: 'clip-vision' });
+      const { getByText } = render(
+        <ModelPickerSheet
+          {...defaultProps}
+          pickerType="image"
+          remoteImageModels={[remoteImg]}
+          downloadedImageModels={[]}
+        />
+      );
+      expect(getByText('No image models available')).toBeTruthy();
+    });
+
+    it('image tab does not show remote image models section', () => {
+      const remoteImg = makeRemoteModel({ id: 'clip-remote', name: 'clip-vision' });
+      const { queryByTestId } = render(
+        <ModelPickerSheet
+          {...defaultProps}
+          pickerType="image"
+          remoteImageModels={[remoteImg]}
+          downloadedImageModels={[]}
+        />
+      );
+      expect(queryByTestId('remote-model-item')).toBeNull();
     });
   });
 
@@ -593,81 +684,6 @@ describe('ModelPickerSheet', () => {
       );
       fireEvent.press(getByText('Unload current model'));
       expect(onUnloadImageModel).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows "Disconnect remote model" when remote image model active', () => {
-      const remoteImg = makeRemoteModel({ id: 'clip-remote', capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false } });
-      const { getByText } = render(
-        <ModelPickerSheet
-          {...defaultProps}
-          pickerType="image"
-          remoteImageModels={[remoteImg]}
-          activeRemoteImageModelId="clip-remote"
-        />
-      );
-      expect(getByText('Disconnect remote model')).toBeTruthy();
-    });
-
-    it('calls onUnloadRemoteImageModel when disconnecting remote image model', () => {
-      const onUnloadRemoteImageModel = jest.fn();
-      const remoteImg = makeRemoteModel({ id: 'clip-remote', capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false } });
-      const { getByText } = render(
-        <ModelPickerSheet
-          {...defaultProps}
-          pickerType="image"
-          remoteImageModels={[remoteImg]}
-          activeRemoteImageModelId="clip-remote"
-          onUnloadRemoteImageModel={onUnloadRemoteImageModel}
-        />
-      );
-      fireEvent.press(getByText('Disconnect remote model'));
-      expect(onUnloadRemoteImageModel).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // ============================================================================
-  // Remote Image Models
-  // ============================================================================
-  describe('remote image models', () => {
-    const remoteImg = makeRemoteModel({
-      id: 'clip-remote',
-      name: 'clip-vision',
-      capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false },
-    });
-
-    it('renders remote image model name', () => {
-      const { getByText } = render(
-        <ModelPickerSheet {...defaultProps} pickerType="image" remoteImageModels={[remoteImg]} />
-      );
-      expect(getByText('clip-vision')).toBeTruthy();
-    });
-
-    it('calls onSelectRemoteImageModel when remote image model pressed', () => {
-      const onSelectRemoteImageModel = jest.fn();
-      const { getByTestId } = render(
-        <ModelPickerSheet
-          {...defaultProps}
-          pickerType="image"
-          remoteImageModels={[remoteImg]}
-          onSelectRemoteImageModel={onSelectRemoteImageModel}
-        />
-      );
-      fireEvent.press(getByTestId('remote-model-item'));
-      expect(onSelectRemoteImageModel).toHaveBeenCalledWith(remoteImg);
-    });
-
-    it('shows server name for remote image model', () => {
-      const { getByText } = render(
-        <ModelPickerSheet {...defaultProps} pickerType="image" remoteImageModels={[remoteImg]} />
-      );
-      expect(getByText(/My Ollama/)).toBeTruthy();
-    });
-
-    it('shows Vision capability label for remote image model', () => {
-      const { getByText } = render(
-        <ModelPickerSheet {...defaultProps} pickerType="image" remoteImageModels={[remoteImg]} />
-      );
-      expect(getByText(/· Vision/)).toBeTruthy();
     });
   });
 

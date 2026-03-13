@@ -396,19 +396,20 @@ describe('useHomeScreen', () => {
   });
 
   describe('remoteTextModels / remoteImageModels filtering', () => {
-    it('separates remote models by vision capability', () => {
+    it('includes all remote models (including VL) in remoteTextModels', () => {
       const textModel = { id: 't1', serverId: 's1', name: 'Text', capabilities: { supportsVision: false } } as any;
-      const imageModel = { id: 'i1', serverId: 's1', name: 'Vision', capabilities: { supportsVision: true } } as any;
+      const vlModel = { id: 'i1', serverId: 's1', name: 'Vision', capabilities: { supportsVision: true } } as any;
       (useRemoteServerStore as unknown as jest.Mock).mockReturnValue({
         servers: [{ id: 's1' }],
-        discoveredModels: { s1: [textModel, imageModel] },
+        discoveredModels: { s1: [textModel, vlModel] },
         activeRemoteTextModelId: null,
         activeRemoteImageModelId: null,
         activeServerId: null,
       });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      expect(result.current.remoteTextModels).toEqual([textModel]);
-      expect(result.current.remoteImageModels).toEqual([imageModel]);
+      // All remote models (including VL) go into remoteTextModels — remote image gen not supported
+      expect(result.current.remoteTextModels).toEqual([textModel, vlModel]);
+      expect(result.current.remoteImageModels).toEqual([]);
     });
 
     it('returns empty arrays when no servers', () => {
