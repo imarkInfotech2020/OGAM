@@ -10,7 +10,7 @@ import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import {
-  fetchOllamaModelInfo,
+  fetchRemoteModelInfo,
   fetchLmStudioModelInfo,
   isGenerativeModel,
 } from './remoteModelCapabilities';
@@ -130,7 +130,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         const generativeModels = data.data.filter((model: { id: string }) => isGenerativeModel(model.id));
         const modelInfos = await Promise.all(
           generativeModels.map((model: { id: string }) => {
-            if (isOllama) return fetchOllamaModelInfo(url, model.id);
+            if (isOllama) return fetchRemoteModelInfo(url, model.id);
             if (isLmStudio) return fetchLmStudioModelInfo(url, model.id);
             return Promise.resolve({ contextLength: 4096, supportsVision: false });
           })
@@ -157,7 +157,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            isOllama ? fetchOllamaModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
+            isOllama ? fetchRemoteModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
           )
         );
         return generativeModels.map(
@@ -204,7 +204,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            isOllama ? fetchOllamaModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
+            isOllama ? fetchRemoteModelInfo(url, model.name) : Promise.resolve({ contextLength: 4096, supportsVision: false })
           )
         );
         return generativeModels.map(

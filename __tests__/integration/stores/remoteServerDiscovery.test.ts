@@ -2,7 +2,7 @@
  * Integration Tests: Remote Server Model Discovery
  *
  * Tests the model discovery flow in remoteServerStore, specifically:
- * - Vision detection via fetchOllamaModelInfo (POST /api/show)
+ * - Vision detection via fetchRemoteModelInfo (POST /api/show)
  * - Vision detection via fetchLmStudioModelInfo (GET /api/v1/models)
  * - End-to-end through the store's discoverModels action
  */

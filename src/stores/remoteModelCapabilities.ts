@@ -6,38 +6,48 @@
  * from Ollama and LM Studio servers.
  */
 
-export interface OllamaModelInfo {
+export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
 }
 
-function extractOllamaCapabilities(data: unknown): OllamaModelInfo {
+function parseModelInfoKeys(modelInfo: Record<string, unknown>): { contextLength: number; supportsVision: boolean } {
+  let contextLength = 0;
+  let supportsVision = false;
+  for (const key of Object.keys(modelInfo)) {
+    if (key.endsWith('.context_length')) {
+      const val = modelInfo[key];
+      if (typeof val === 'number' && val > 0) contextLength = val;
+    }
+    if (key.includes('vision') || key.includes('clip')) {
+      supportsVision = true;
+    }
+  }
+  return { contextLength, supportsVision };
+}
+
+function parseNumCtx(parameters: string): number {
+  const match = /num_ctx\s+(\d+)/.exec(parameters);
+  if (match) {
+    const val = Number.parseInt(match[1], 10);
+    if (val > 0) return val;
+  }
+  return 0;
+}
+
+function extractOllamaCapabilities(data: Record<string, unknown>): RemoteModelInfo {
   let contextLength = 4096;
   let supportsVision = false;
 
-  const typed = data as Record<string, unknown>;
-
-  if (typed?.model_info && typeof typed.model_info === 'object') {
-    for (const key of Object.keys(typed.model_info as object)) {
-      if (key.endsWith('.context_length')) {
-        const val = (typed.model_info as Record<string, unknown>)[key];
-        if (typeof val === 'number' && val > 0) contextLength = val;
-      }
-      // Ollama sets keys like "clip.vision.block_count" or "llava.image_token_index"
-      // for multimodal models — presence of any vision/clip key means vision support
-      if (key.includes('vision') || key.includes('clip')) {
-        supportsVision = true;
-      }
-    }
+  if (data.model_info && typeof data.model_info === 'object') {
+    const parsed = parseModelInfoKeys(data.model_info as Record<string, unknown>);
+    if (parsed.contextLength > 0) contextLength = parsed.contextLength;
+    supportsVision = parsed.supportsVision;
   }
 
-  // Fallback context length from parameters string
-  if (contextLength === 4096 && typeof typed?.parameters === 'string') {
-    const match = /num_ctx\s+(\d+)/.exec(typed.parameters);
-    if (match) {
-      const val = Number.parseInt(match[1], 10);
-      if (val > 0) contextLength = val;
-    }
+  if (contextLength === 4096 && typeof data.parameters === 'string') {
+    const numCtx = parseNumCtx(data.parameters);
+    if (numCtx > 0) contextLength = numCtx;
   }
 
   return { contextLength, supportsVision };
@@ -49,10 +59,10 @@ function extractOllamaCapabilities(data: unknown): OllamaModelInfo {
  * Ollama populates these for multimodal models (e.g. clip.vision.block_count).
  * Falls back to contextLength=4096, supportsVision=false on any failure.
  */
-export async function fetchOllamaModelInfo(
+export async function fetchRemoteModelInfo(
   endpoint: string,
   modelName: string,
-): Promise<OllamaModelInfo> {
+): Promise<RemoteModelInfo> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -85,7 +95,7 @@ export async function fetchOllamaModelInfo(
 export async function fetchLmStudioModelInfo(
   endpoint: string,
   modelId: string,
-): Promise<OllamaModelInfo> {
+): Promise<RemoteModelInfo> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
