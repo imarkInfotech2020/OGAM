@@ -1,7 +1,7 @@
 /**
  * Remote LLM Server Types
  *
- * Types for managing remote LLM servers (Ollama, LM Studio, LocalAI, etc.)
+ * Types for managing remote LLM servers (Ollama, LM Studio, etc.)
  * that expose OpenAI-compatible or Anthropic-compatible APIs.
  */
 
@@ -76,7 +76,7 @@ export interface ServerTestResult {
 
 /** Server information returned from health check */
 export interface ServerInfo {
-  /** Server software name (e.g., "ollama", "lmstudio", "localai") */
+  /** Server software name (e.g., "ollama", "lmstudio") */
   name?: string;
   /** Server version */
   version?: string;

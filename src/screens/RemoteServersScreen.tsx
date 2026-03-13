@@ -414,7 +414,7 @@ export const RemoteServersScreen: React.FC = () => {
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>About Remote Servers</Text>
           <Text style={styles.infoText}>
-            Connect to LLM servers running on your local network, such as Ollama, LM Studio, or LocalAI.{'\n\n'}
+            Connect to LLM servers running on your local network, such as Ollama or LM Studio.{'\n\n'}
             Make sure your server is running and accessible from your device. For security, only connect to servers on trusted networks.
           </Text>
         </View>
