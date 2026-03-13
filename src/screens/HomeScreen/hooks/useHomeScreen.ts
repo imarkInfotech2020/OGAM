@@ -135,7 +135,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       }
       if (!hasRunLANDiscovery) {
         hasRunLANDiscovery = true;
-        runLANDiscovery();
+        // Delay LAN scan so the home screen is fully rendered and interactive first
+        setTimeout(runLANDiscovery, 3000);
       }
     });
     isFirstMount.current = false;
