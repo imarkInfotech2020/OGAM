@@ -3,7 +3,7 @@
  * Keychain helpers, capability detectors, provider creation, and long methods.
  */
 import * as Keychain from 'react-native-keychain';
-import type { RemoteServer, RemoteModel } from '../types';
+import type { RemoteServer } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
@@ -200,17 +200,3 @@ export async function initializeProvidersImpl(
   }
 }
 
-// ---------------------------------------------------------------------------
-// testConnection capability enrichment
-// ---------------------------------------------------------------------------
-
-export function enrichModelsWithCapabilities(models: RemoteModel[]): RemoteModel[] {
-  return models.map(model => ({
-    ...model,
-    capabilities: {
-      ...model.capabilities,
-      supportsVision: detectVisionCapability(model.id),
-      supportsToolCalling: detectToolCallingCapability(model.id),
-    },
-  }));
-}

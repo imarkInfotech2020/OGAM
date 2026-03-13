@@ -9,7 +9,7 @@
 
 import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
+import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
 import {
@@ -144,17 +144,7 @@ class RemoteServerManager {
     const server = store.getServerById(id);
     if (!server) throw new Error(`Server not found: ${id}`);
 
-    // Temporary provider created for discovery — disposed after use
-    const apiKey = await this.getApiKey(id);
-    const tempProvider = createOpenAIProvider(
-      'temp', server.endpoint, { apiKey: apiKey || undefined, modelId: 'temp' }
-    );
-
-    try {
-      return await store.discoverModels(id);
-    } finally {
-      await tempProvider.dispose();
-    }
+    return store.discoverModels(id);
   }
 
   /**
