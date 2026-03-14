@@ -81,6 +81,7 @@ const defaultNetworkProps = {
   servers: [] as RemoteServer[],
   discoveredModels: {},
   connectingServerId: null,
+  connectedServerId: null,
   isCheckingNetwork: false,
   isScanning: false,
   onConnectServer: jest.fn(),
@@ -213,6 +214,7 @@ describe('ServerCard', () => {
     server: mockServer,
     modelCount: 3,
     isConnecting: false,
+    isConnected: false,
     onConnect: jest.fn(),
     colors: mockColors as any,
   };
