@@ -121,8 +121,8 @@ export const ONBOARDING_SLIDES = [
   {
     id: 'hardware',
     keyword: 'READY',
-    title: 'Tuned for\nYour Hardware.',
-    description: 'Accelerated for Metal, NPU, and Neural Engine. We\u2019ll recommend the perfect model for your phone \u2014 so it flies from the start.',
+    title: 'Powered\nYour Way.',
+    description: 'Run models on your phone with Metal and Neural Engine acceleration \u2014 or connect to powerful models already on your home network. We\u2019ll find the best setup for you.',
   },
 ];
 

@@ -72,6 +72,30 @@ jest.mock('../../../src/constants', () => ({
   ],
 }));
 
+const mockDiscoverLANServers = jest.fn().mockResolvedValue([]);
+jest.mock('../../../src/services/networkDiscovery', () => ({
+  discoverLANServers: (...args: any[]) => mockDiscoverLANServers(...args),
+}));
+
+const mockAddServer = jest.fn().mockResolvedValue({ id: 'new-server' });
+jest.mock('../../../src/services', () => ({
+  remoteServerManager: {
+    addServer: (...args: any[]) => mockAddServer(...args),
+  },
+}));
+
+jest.mock('../../../src/stores/remoteServerStore', () => ({
+  useRemoteServerStore: Object.assign(
+    jest.fn((selector?: any) => {
+      const state = { servers: [] };
+      return selector ? selector(state) : state;
+    }),
+    {
+      getState: jest.fn(() => ({ servers: [] })),
+    },
+  ),
+}));
+
 import { OnboardingScreen } from '../../../src/screens/OnboardingScreen';
 
 const mockNavigate = jest.fn();
@@ -155,6 +179,62 @@ describe('OnboardingScreen', () => {
   it('shows onboarding-next testID', () => {
     const { getByTestId } = render(<OnboardingScreen navigation={navigation} />);
     expect(getByTestId('onboarding-next')).toBeTruthy();
+  });
+
+  it('kicks off LAN discovery on mount', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    mockDiscoverLANServers.mockResolvedValue([
+      { endpoint: 'http://192.168.1.10:11434', type: 'ollama', name: 'Ollama (192.168.1.10)' },
+    ]);
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockDiscoverLANServers).toHaveBeenCalled();
+    expect(mockAddServer).toHaveBeenCalledWith({
+      name: 'Ollama (192.168.1.10)',
+      endpoint: 'http://192.168.1.10:11434',
+      providerType: 'openai-compatible',
+    });
+  });
+
+  it('does not add duplicate servers during LAN discovery', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    const { useRemoteServerStore } = require('../../../src/stores/remoteServerStore');
+    useRemoteServerStore.getState.mockReturnValue({
+      servers: [{ endpoint: 'http://192.168.1.10:11434' }],
+    });
+    mockDiscoverLANServers.mockResolvedValue([
+      { endpoint: 'http://192.168.1.10:11434', type: 'ollama', name: 'Ollama' },
+    ]);
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockAddServer).not.toHaveBeenCalled();
+  });
+
+  it('handles LAN discovery errors gracefully', async () => {
+    const { act: reactAct } = require('@testing-library/react-native');
+    mockDiscoverLANServers.mockRejectedValue(new Error('Network error'));
+
+    render(<OnboardingScreen navigation={navigation} />);
+
+    await reactAct(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Should not throw — error is caught
+    expect(mockDiscoverLANServers).toHaveBeenCalled();
   });
 
   it('completes onboarding when Get Started pressed on last slide', async () => {

@@ -4,17 +4,12 @@
  * Tests for LAN LLM server discovery (Ollama, LM Studio).
  */
 
-// Mock react-native-device-info
-jest.mock('react-native-device-info', () => ({
-  getIpAddress: jest.fn(),
-  isEmulator: jest.fn().mockResolvedValue(false),
-}));
-
-// Mock logger
-jest.mock('../../../src/utils/logger', () => ({
-  __esModule: true,
-  default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}));
+jest.mock('react-native-device-info', () =>
+  require('../../helpers/mockNetworkDeps').deviceInfoMock,
+);
+jest.mock('../../../src/utils/logger', () =>
+  require('../../helpers/mockNetworkDeps').loggerMock,
+);
 
 import { getIpAddress } from 'react-native-device-info';
 import { discoverLANServers } from '../../../src/services/networkDiscovery';

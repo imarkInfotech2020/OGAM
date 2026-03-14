@@ -10,7 +10,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +22,7 @@ import { RemoteServerModal } from '../components/RemoteServerModal';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
 import { discoverLANServers } from '../services/networkDiscovery';
+import { CustomAlert, AlertState, initialAlertState, showAlert } from '../components/CustomAlert';
 import { createStyles } from './RemoteServersScreen.styles';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'RemoteServers'>;
@@ -36,6 +36,7 @@ export const RemoteServersScreen: React.FC = () => {
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Auto-check all server statuses when screen opens
   useEffect(() => {
@@ -50,12 +51,12 @@ export const RemoteServersScreen: React.FC = () => {
     try {
       const result = await testConnection(serverId);
       if (result.success) {
-        Alert.alert('Success', `Connected successfully (${result.latency}ms)`);
+        setAlertState(showAlert('Success', `Connected successfully (${result.latency}ms)`));
       } else {
-        Alert.alert('Connection Failed', result.error || 'Unknown error');
+        setAlertState(showAlert('Connection Failed', result.error || 'Unknown error'));
       }
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Unknown error');
+      setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setTestingId(null);
     }
@@ -66,13 +67,13 @@ export const RemoteServersScreen: React.FC = () => {
     try {
       const discovered = await discoverLANServers();
       if (discovered.length === 0) {
-        Alert.alert('No Servers Found', 'No LLM servers were found on your local network.');
+        setAlertState(showAlert('No Servers Found', 'No LLM servers were found on your local network.'));
         return;
       }
       const existingEndpoints = new Set(servers.map(s => s.endpoint));
       const newServers = discovered.filter(d => !existingEndpoints.has(d.endpoint));
       if (newServers.length === 0) {
-        Alert.alert('Already Added', 'All discovered servers are already in your list.');
+        setAlertState(showAlert('Already Added', 'All discovered servers are already in your list.'));
         return;
       }
       const added = await Promise.all(
@@ -85,17 +86,17 @@ export const RemoteServersScreen: React.FC = () => {
         )
       );
       added.forEach(s => remoteServerManager.testConnection(s.id).catch(() => { }));
-      Alert.alert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
+      setAlertState(showAlert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      Alert.alert('Scan Failed', message);
+      setAlertState(showAlert('Scan Failed', message));
     } finally {
       setIsScanning(false);
     }
   }, [servers]);
 
   const handleDeleteServer = useCallback((server: typeof servers[0]) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Server',
       `Are you sure you want to delete "${server.name}"?`,
       [
@@ -109,7 +110,7 @@ export const RemoteServersScreen: React.FC = () => {
           },
         },
       ]
-    );
+    ));
   }, [activeServerId, setActiveServerId]);
 
   return (
@@ -242,6 +243,11 @@ export const RemoteServersScreen: React.FC = () => {
           setShowAddModal(false);
           setEditingServer(null);
         }}
+      />
+
+      <CustomAlert
+        {...alertState}
+        onClose={() => setAlertState(initialAlertState)}
       />
     </SafeAreaView>
   );

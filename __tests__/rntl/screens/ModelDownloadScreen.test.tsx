@@ -5,10 +5,10 @@
  * - Screen rendering (loading state)
  * - Loaded state with recommended models
  * - Skip button
- * - Model selection and file fetching
  * - Download flow (foreground and background)
  * - Error handling
  * - Warning card for limited compatibility
+ * - Network section integration (scan, connect, add server)
  */
 
 import React from 'react';
@@ -55,6 +55,23 @@ jest.mock('../../../src/stores', () => ({
   }),
 }));
 
+const mockRemoteServerState = {
+  servers: [] as any[],
+  discoveredModels: {} as Record<string, any[]>,
+  testConnection: jest.fn().mockResolvedValue({ success: false }),
+};
+
+jest.mock('../../../src/stores/remoteServerStore', () => ({
+  useRemoteServerStore: Object.assign(
+    jest.fn((selector?: any) => {
+      return selector ? selector(mockRemoteServerState) : mockRemoteServerState;
+    }),
+    {
+      getState: jest.fn(() => mockRemoteServerState),
+    },
+  ),
+}));
+
 const mockGetModelFiles = jest.fn<Promise<any[]>, any[]>(() => Promise.resolve([]));
 const mockDownloadModel = jest.fn();
 const mockDownloadModelBackground = jest.fn();
@@ -75,16 +92,23 @@ jest.mock('../../../src/services', () => ({
     downloadModelBackground: jest.fn((...args: any[]) => mockDownloadModelBackground(...args)),
     watchDownload: jest.fn(),
   },
+  remoteServerManager: {
+    addServer: jest.fn().mockResolvedValue({ id: 'new-server' }),
+    testConnection: jest.fn().mockResolvedValue({ success: false }),
+    setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+jest.mock('../../../src/services/networkDiscovery', () => ({
+  discoverLANServers: jest.fn().mockResolvedValue([]),
 }));
 
 const { hardwareService: mockHardwareService, modelManager: mockModelManager, huggingFaceService: mockHuggingFaceService } = jest.requireMock('../../../src/services');
 
-const mockShowAlert = jest.fn((_t: string, _m: string, _b?: any) => ({
-  visible: true,
-  title: _t,
-  message: _m,
-  buttons: _b || [],
-}));
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../helpers/mockCustomAlert').customAlertMock,
+);
+const { mockShowAlert } = require('../../helpers/mockCustomAlert');
 
 jest.mock('../../../src/components', () => ({
   Card: ({ children, style }: any) => {
@@ -131,28 +155,12 @@ jest.mock('../../../src/components/Button', () => ({
   },
 }));
 
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
+jest.mock('../../../src/components/RemoteServerModal', () => ({
+  RemoteServerModal: ({ visible }: any) => {
     if (!visible) return null;
-    const { View, Text, TouchableOpacity: TO } = require('react-native');
-    return (
-      <View testID="custom-alert">
-        <Text testID="alert-title">{title}</Text>
-        <Text testID="alert-message">{message}</Text>
-        {buttons && buttons.map((btn: any, i: number) => (
-          <TO key={i} testID={`alert-button-${btn.text}`} onPress={btn.onPress}>
-            <Text>{btn.text}</Text>
-          </TO>
-        ))}
-        <TO testID="alert-close" onPress={onClose}>
-          <Text>CloseAlert</Text>
-        </TO>
-      </View>
-    );
+    const { View, Text } = require('react-native');
+    return <View testID="remote-server-modal"><Text>Add Remote Server</Text></View>;
   },
-  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
 }));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
@@ -169,6 +177,38 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
   return ({ name }: any) => <Text>{name}</Text>;
+});
+
+// Mock the NetworkSection component to simplify screen-level tests
+const mockOnScanNetwork = jest.fn();
+const mockOnAddManually = jest.fn();
+jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
+  const actual = jest.requireActual('../../../src/screens/ModelDownloadHelpers');
+  return {
+    ...actual,
+    NetworkSection: ({ onScanNetwork, onAddManually, servers, isCheckingNetwork, isScanning }: any) => {
+      const { View, Text, TouchableOpacity } = require('react-native');
+      // Store refs so tests can call them
+      mockOnScanNetwork.mockImplementation(onScanNetwork);
+      mockOnAddManually.mockImplementation(onAddManually);
+      return (
+        <View testID="network-section">
+          <Text>Network Models</Text>
+          {isCheckingNetwork && <Text testID="network-checking">Scanning...</Text>}
+          {isScanning && <Text testID="network-scanning">Scanning network...</Text>}
+          {servers && servers.map((s: any) => (
+            <Text key={s.id} testID={`network-server-${s.id}`}>{s.name}</Text>
+          ))}
+          <TouchableOpacity testID="scan-network-btn" onPress={onScanNetwork}>
+            <Text>Scan Network</Text>
+          </TouchableOpacity>
+          <TouchableOpacity testID="add-server-btn" onPress={onAddManually}>
+            <Text>Add Server</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    },
+  };
 });
 
 import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
@@ -188,10 +228,19 @@ const mockNavigation: any = {
   addListener: jest.fn(() => jest.fn()),
 };
 
+async function flushPromises(count = 10) {
+  for (let i = 0; i < count; i++) {
+    await act(async () => { await Promise.resolve(); });
+  }
+}
+
 describe('ModelDownloadScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAppState.downloadProgress = {};
+    mockRemoteServerState.servers = [];
+    mockRemoteServerState.discoveredModels = {};
+    mockRemoteServerState.testConnection.mockResolvedValue({ success: false });
     mockGetModelFiles.mockResolvedValue([]);
     mockDownloadModel.mockResolvedValue(undefined);
     mockDownloadModelBackground.mockResolvedValue(undefined);
@@ -205,11 +254,14 @@ describe('ModelDownloadScreen', () => {
     mockHuggingFaceService.getModelFiles.mockImplementation((...args: any[]) => (mockGetModelFiles as any)(...args));
   });
 
+  // ===========================================================================
+  // Loading state
+  // ===========================================================================
   it('renders the loading state initially', () => {
     const { getByText } = render(
       <ModelDownloadScreen navigation={mockNavigation} />,
     );
-    expect(getByText('Analyzing your device...')).toBeTruthy();
+    expect(getByText(/Analyzing your device/)).toBeTruthy();
   });
 
   it('renders with testID for loading state', () => {
@@ -219,71 +271,64 @@ describe('ModelDownloadScreen', () => {
     expect(getByTestId('model-download-loading')).toBeTruthy();
   });
 
-  it('renders the loaded state with recommended models', async () => {
-    mockGetModelFiles.mockResolvedValue([
-      {
-        name: 'model-Q4_K_M.gguf',
-        size: 4000000000,
-        quantization: 'Q4_K_M',
-        downloadUrl: 'https://example.com/model.gguf',
-      },
-    ]);
+  // ===========================================================================
+  // Loaded state
+  // ===========================================================================
+  it('renders the loaded state with "Set Up Your AI" title', async () => {
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     expect(result.getByTestId('model-download-screen')).toBeTruthy();
-    expect(result.getByText('Download Your First Model')).toBeTruthy();
-    expect(result.getByText(/Based on your device/)).toBeTruthy();
-    expect(result.getByText('Recommended Models')).toBeTruthy();
+    expect(result.getByText('Set Up Your AI')).toBeTruthy();
+    expect(result.getByText(/Connect to a model server/)).toBeTruthy();
   });
 
   it('renders device info card after loading', async () => {
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     expect(result.getByText('Your Device')).toBeTruthy();
     expect(result.getByText('Test Device')).toBeTruthy();
     expect(result.getByText('Available Memory')).toBeTruthy();
   });
 
+  it('renders the NetworkSection', async () => {
+    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    expect(result.getByTestId('network-section')).toBeTruthy();
+    expect(result.getByText('Network Models')).toBeTruthy();
+  });
+
+  it('renders "Download to Your Device" section title', async () => {
+    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    expect(result.getByText('Download to Your Device')).toBeTruthy();
+  });
+
+  // ===========================================================================
+  // Skip button
+  // ===========================================================================
   it('skip button navigates to Main', async () => {
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     const skipButton = result.getByTestId('model-download-skip');
     fireEvent.press(skipButton);
     expect(mockReplace).toHaveBeenCalledWith('Main');
   });
 
+  // ===========================================================================
+  // Model rendering + download
+  // ===========================================================================
   it('renders recommended models based on device RAM', async () => {
-    mockGetModelFiles.mockResolvedValue([
-      {
-        name: 'model-Q4_K_M.gguf',
-        size: 4000000000,
-        quantization: 'Q4_K_M',
-        downloadUrl: 'https://example.com/model.gguf',
-      },
-    ]);
+    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     expect(result.getByTestId('recommended-model-0')).toBeTruthy();
   });
@@ -292,84 +337,9 @@ describe('ModelDownloadScreen', () => {
     mockHardwareService.getTotalMemoryGB.mockReturnValue(1);
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     expect(result.getByText('Limited Compatibility')).toBeTruthy();
-  });
-
-  it('pressing model card calls handleSelectModel which fetches files', async () => {
-    mockGetModelFiles.mockResolvedValue([
-      {
-        name: 'model-Q4_K_M.gguf',
-        size: 4000000000,
-        quantization: 'Q4_K_M',
-        downloadUrl: 'https://example.com/model.gguf',
-      },
-    ]);
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const modelPress = result.getByTestId('recommended-model-0-press');
-    await act(async () => {
-      fireEvent.press(modelPress);
-    });
-
-    expect(mockGetModelFiles).toHaveBeenCalled();
-  });
-
-  it('handleSelectModel fetches files for unloaded model', async () => {
-    mockGetModelFiles.mockResolvedValue([]);
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const modelPress = result.getByTestId('recommended-model-0-press');
-    await act(async () => {
-      fireEvent.press(modelPress);
-    });
-
-    expect(mockGetModelFiles).toHaveBeenCalled();
-  });
-
-  it('handleSelectModel shows error alert on failure', async () => {
-    // During init, the 4th model's fetch fails (silently caught).
-    // After init, handleSelectModel retries and also fails → shows alert.
-    mockGetModelFiles
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
-      .mockRejectedValueOnce(new Error('Network error'));
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    // Model index 3 failed during init, so it has no files.
-    // Queue another rejection for the handleSelectModel retry.
-    mockGetModelFiles.mockRejectedValueOnce(new Error('Network error'));
-
-    const modelPress = result.getByTestId('recommended-model-3-press');
-    await act(async () => {
-      fireEvent.press(modelPress);
-    });
-
-    expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to fetch model files.');
   });
 
   it('download button triggers handleDownload via background download', async () => {
@@ -392,11 +362,7 @@ describe('ModelDownloadScreen', () => {
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 123 });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     const downloadBtn = await result.findByTestId('recommended-model-0-download', {}, { timeout: 5000 });
     await act(async () => {
@@ -405,29 +371,6 @@ describe('ModelDownloadScreen', () => {
 
     expect(mockDownloadModelBackground).toHaveBeenCalled();
   }, 20000);
-
-  it('download calls onProgress callback', async () => {
-    mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
-
-    mockDownloadModel.mockImplementation((_modelId: string, _file: any, onProgress: any) => {
-      onProgress({ progress: 0.5, bytesDownloaded: 2000000000, totalBytes: 4000000000 });
-      return Promise.resolve();
-    });
-
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    // Flush all promises (getDeviceInfo + Promise.all of getModelFiles + state updates)
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
-
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
-    await act(async () => {
-      fireEvent.press(downloadBtn);
-    });
-
-    expect(mockAppState.setDownloadProgress).toHaveBeenCalled();
-  });
 
   async function setupDownloadCompletion() {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
@@ -443,9 +386,7 @@ describe('ModelDownloadScreen', () => {
       capturedOnComplete = onComplete;
     });
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => { fireEvent.press(downloadBtn); });
     await act(async () => { capturedOnComplete?.(completedModel); });
@@ -473,10 +414,7 @@ describe('ModelDownloadScreen', () => {
     });
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => {
@@ -496,10 +434,7 @@ describe('ModelDownloadScreen', () => {
     mockDownloadModelBackground.mockRejectedValue(new Error('Unexpected error'));
 
     const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
-
-    for (let i = 0; i < 10; i++) {
-      await act(async () => { await Promise.resolve(); });
-    }
+    await flushPromises();
 
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => {

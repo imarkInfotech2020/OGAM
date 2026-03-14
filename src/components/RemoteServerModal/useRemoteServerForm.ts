@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Alert } from 'react-native';
 import { remoteServerManager } from '../../services/remoteServerManager';
 import { useRemoteServerStore } from '../../stores';
 import { RemoteServer, RemoteModel } from '../../types';
 import { isPrivateNetworkEndpoint } from '../../services/httpClient';
+import { AlertState, initialAlertState, showAlert } from '../CustomAlert';
 
 interface FormOptions {
   server?: RemoteServer;
@@ -20,6 +20,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<RemoteModel[]>([]);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Initialize form when editing existing server
   useEffect(() => {
@@ -99,7 +100,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       }
       onClose();
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save server');
+      setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Failed to save server'));
     }
   }, [server, name, endpoint, notes, discoveredModels, onSave, onClose]);
 
@@ -107,14 +108,14 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     if (!validateForm()) return;
     // Warn if connecting to public internet
     if (endpoint && !isPrivateNetworkEndpoint(endpoint)) {
-      Alert.alert(
+      setAlertState(showAlert(
         'Public Network Warning',
         'This endpoint appears to be on the public internet. Your data will be sent to a remote server. Continue?',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Continue', onPress: () => saveServer() },
         ]
-      );
+      ));
     } else {
       saveServer();
     }
@@ -132,5 +133,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     handleTestConnection,
     handleSave,
     isPublicNetwork: !!(endpoint && !isPrivateNetworkEndpoint(endpoint)),
+    alertState,
+    dismissAlert: () => setAlertState(initialAlertState),
   };
 }

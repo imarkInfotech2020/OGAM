@@ -115,6 +115,20 @@ export const createRemoteStyles = (colors: ThemeColors, _shadows: ThemeShadows) 
     borderRadius: 4,
     gap: 4,
   },
+  thinkingBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#8B5CF620',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  thinkingBadgeText: {
+    ...TYPOGRAPHY.bodySmall,
+    fontSize: 10,
+    color: '#8B5CF6',
+  },
   switchModelRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

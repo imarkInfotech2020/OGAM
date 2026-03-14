@@ -13,7 +13,6 @@
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { discoverLANServers } from '../../../src/services/networkDiscovery';
@@ -54,6 +53,24 @@ jest.mock('../../../src/theme', () => ({
       error: '#f44336',
       errorBackground: '#ffebee',
     },
+    elevation: {
+      level0: { backgroundColor: '#1a1a2e', borderWidth: 0, borderColor: 'transparent' },
+      level1: { backgroundColor: '#252540', borderWidth: 1, borderColor: '#3d3d5c' },
+      level2: { backgroundColor: '#2d2d4a', borderWidth: 1, borderColor: '#3d3d5c' },
+      level3: {
+        backgroundColor: '#2d2d4aF2',
+        borderTopWidth: 1,
+        borderColor: '#3d3d5c',
+        borderRadius: 16,
+      },
+      level4: {
+        backgroundColor: '#2d2d4aFA',
+        borderTopWidth: 1,
+        borderColor: '#4a90d9',
+        borderRadius: 16,
+      },
+      handle: { width: 36, height: 5, backgroundColor: '#3d3d5c', borderRadius: 2.5 },
+    },
   }),
   useThemedStyles: (fn: any) => fn({ background: '#1a1a2e', text: '#ffffff' }, {}),
 }));
@@ -79,8 +96,10 @@ jest.mock('../../../src/services/networkDiscovery', () => ({
 
 const mockDiscoverLANServers = discoverLANServers as jest.Mock;
 
-// Mock Alert.alert
-const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../helpers/mockCustomAlert').customAlertMock,
+);
+const { mockShowAlert } = require('../../helpers/mockCustomAlert');
 
 // Helper to create mock server
 function createMockServer(overrides: Partial<any> = {}) {
@@ -249,7 +268,7 @@ describe('RemoteServersScreen', () => {
       fireEvent.press(getByText('Test'));
 
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Success', expect.stringContaining('100ms'));
+        expect(mockShowAlert).toHaveBeenCalledWith('Success', expect.stringContaining('100ms'));
       });
     });
 
@@ -268,7 +287,7 @@ describe('RemoteServersScreen', () => {
       fireEvent.press(getByText('Test'));
 
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Connection Failed', 'Connection refused');
+        expect(mockShowAlert).toHaveBeenCalledWith('Connection Failed', 'Connection refused');
       });
     });
 
@@ -284,7 +303,7 @@ describe('RemoteServersScreen', () => {
       fireEvent.press(getByText('Test'));
 
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Error', 'Network error');
+        expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Network error');
       });
     });
   });
@@ -300,7 +319,7 @@ describe('RemoteServersScreen', () => {
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Delete'));
 
-      expect(mockAlert).toHaveBeenCalledWith(
+      expect(mockShowAlert).toHaveBeenCalledWith(
         'Delete Server',
         expect.stringContaining('My Server'),
         expect.arrayContaining([
@@ -318,7 +337,7 @@ describe('RemoteServersScreen', () => {
       fireEvent.press(getByText('Delete'));
 
       // Get the delete callback from the alert
-      const alertCall = mockAlert.mock.calls[0];
+      const alertCall = mockShowAlert.mock.calls[0];
       const deleteButton = alertCall[2]!.find((btn: any) => btn.text === 'Delete');
 
       // Execute the delete callback
@@ -339,7 +358,7 @@ describe('RemoteServersScreen', () => {
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Delete'));
 
-      const alertCall = mockAlert.mock.calls[0];
+      const alertCall = mockShowAlert.mock.calls[0];
       const deleteButton = alertCall[2]!.find((btn: any) => btn.text === 'Delete');
       await deleteButton!.onPress!();
 
@@ -361,7 +380,7 @@ describe('RemoteServersScreen', () => {
       const deleteButtons = getAllByText('Delete');
       fireEvent.press(deleteButtons[0]);
 
-      const alertCall = mockAlert.mock.calls[0];
+      const alertCall = mockShowAlert.mock.calls[0];
       const deleteButton = alertCall[2]!.find((btn: any) => btn.text === 'Delete');
       await deleteButton!.onPress!();
 
@@ -500,7 +519,7 @@ describe('RemoteServersScreen', () => {
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Scan Network'));
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('No Servers Found', expect.any(String));
+        expect(mockShowAlert).toHaveBeenCalledWith('No Servers Found', expect.any(String));
       });
     });
 
@@ -514,7 +533,7 @@ describe('RemoteServersScreen', () => {
         expect(remoteServerManager.addServer).toHaveBeenCalledWith(
           expect.objectContaining({ endpoint: 'http://192.168.1.10:11434' }), // NOSONAR
         );
-        expect(mockAlert).toHaveBeenCalledWith('Discovery Complete', expect.stringContaining('1 server'));
+        expect(mockShowAlert).toHaveBeenCalledWith('Discovery Complete', expect.stringContaining('1 server'));
       });
     });
 
@@ -527,7 +546,7 @@ describe('RemoteServersScreen', () => {
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Scan Network'));
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Already Added', expect.any(String));
+        expect(mockShowAlert).toHaveBeenCalledWith('Already Added', expect.any(String));
       });
     });
 
@@ -536,7 +555,7 @@ describe('RemoteServersScreen', () => {
       const { getByText } = render(<RemoteServersScreen />);
       fireEvent.press(getByText('Scan Network'));
       await waitFor(() => {
-        expect(mockAlert).toHaveBeenCalledWith('Scan Failed', 'Permission denied');
+        expect(mockShowAlert).toHaveBeenCalledWith('Scan Failed', 'Permission denied');
       });
     });
   });

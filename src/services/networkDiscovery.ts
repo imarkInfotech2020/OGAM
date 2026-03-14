@@ -6,6 +6,7 @@
  */
 
 import { getIpAddress, isEmulator } from 'react-native-device-info';
+import { isPrivateIPv4, isIPv6 } from '../utils/network';
 import logger from '../utils/logger';
 
 export interface DiscoveredServer {
@@ -29,7 +30,7 @@ async function probe(ip: string, port: number, path: string): Promise<boolean> {
     const controller = new AbortController();
     const timer = setTimeout(() => { controller.abort(); resolve(false); }, TIMEOUT_MS);
 
-    fetch(`http://${ip}:${port}${path}`, { signal: controller.signal })
+    fetch(`http://${ip}:${port}${path}`, { signal: controller.signal }) // NOSONAR — LAN-only probe; HTTPS requires certs on private IPs
       .then(res => { clearTimeout(timer); resolve(res.status === 200); })
       .catch(() => { clearTimeout(timer); resolve(false); });
   });
@@ -52,19 +53,8 @@ async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
 function subnetBase(ip: string): string | null {
   const parts = ip.split('.');
   if (parts.length !== 4) return null;
-  const first = parseInt(parts[0], 10);
-  const second = parseInt(parts[1], 10);
-  const isPrivate =
-    first === 10 ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168);
-  if (!isPrivate) return null;
+  if (!isPrivateIPv4(ip)) return null;
   return parts.slice(0, 3).join('.');
-}
-
-/** Returns true if the string looks like an IPv6 address */
-function isIPv6(ip: string): boolean {
-  return ip.includes(':');
 }
 
 /**
@@ -89,7 +79,7 @@ async function findReachableSubnet(subnets: string[]): Promise<string | null> {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
       try {
-        await fetch(`http://${gateway}:80/`, { signal: controller.signal });
+        await fetch(`http://${gateway}:80/`, { signal: controller.signal }); // NOSONAR — LAN gateway probe
         clearTimeout(timer);
         return base;
       } catch {
@@ -98,7 +88,7 @@ async function findReachableSubnet(subnets: string[]): Promise<string | null> {
         const controller2 = new AbortController();
         const timer2 = setTimeout(() => controller2.abort(), GATEWAY_TIMEOUT_MS);
         try {
-          await fetch(`http://${gateway}:11434/`, { signal: controller2.signal });
+          await fetch(`http://${gateway}:11434/`, { signal: controller2.signal }); // NOSONAR — LAN Ollama probe
           clearTimeout(timer2);
           return base;
         } catch {
@@ -171,7 +161,7 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
 
     const recordIfFound = (target: string, provider: typeof PROVIDERS[0]) => (found: boolean) => {
       if (!found) return;
-      const endpoint = `http://${target}:${provider.port}`;
+      const endpoint = `http://${target}:${provider.port}`; // NOSONAR — LAN endpoint
       if (!seenEndpoints.has(endpoint)) {
         seenEndpoints.add(endpoint);
         logger.log(`[Discovery] Found ${provider.name} at ${target}:${provider.port}`);
