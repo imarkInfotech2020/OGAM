@@ -127,7 +127,7 @@ class BackgroundDownloadService {
     }
     try {
       await DownloadManagerModule.cancelDownload(downloadId);
-    } catch (e) {
+    } catch (_e) {
       // Native bridge may be torn down — treat as successful cancellation
     }
   }
@@ -347,5 +347,4 @@ class BackgroundDownloadService {
     }));
   }
 }
-
 export const backgroundDownloadService = new BackgroundDownloadService();

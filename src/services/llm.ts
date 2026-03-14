@@ -44,52 +44,46 @@ class LLMService {
   private thinkingSupported: boolean = false;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
 
-  private hashString(value: string): string {
-    return hashString(value);
+  private hashString(value: string): string { return hashString(value); }
+  private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
+  private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
+  private async validateAndPrepareModel(modelPath: string): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
+    if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
+    const validation = await validateModelFile(modelPath);
+    if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
+    const params = buildModelParams(modelPath, useAppStore.getState().settings);
+    const fileStat = await RNFS.stat(modelPath);
+    const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
+    const memCheck = await checkMemoryForModel(fileSize, params.ctxLen, () => hardwareService.getAppMemoryUsage());
+    if (!memCheck.safe) logger.warn(`[LLM] Memory warning: ${memCheck.reason}`);
+    return { fileSize, memCheck, params };
   }
-
-  private ensureSessionCacheDir(): Promise<void> {
-    return ensureSessionCacheDir(this.sessionCacheDir);
+  private async applyLoadedContext(opts: { context: LlamaContext; actualLength: number; gpuAttemptFailed: boolean; nGpuLayers: number; modelPath: string; mmProjPath?: string }): Promise<void> {
+    const { context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath } = opts;
+    this.context = context;
+    if (actualLength !== this.currentSettings.contextLength) this.currentSettings.contextLength = actualLength;
+    logContextMetadata(context, actualLength);
+    useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
+    Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+    logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
+    this.currentModelPath = modelPath;
+    this.multimodalSupport = null; this.multimodalInitialized = false;
+    if (mmProjPath) await this.initializeMultimodal(mmProjPath);
+    else await this.checkMultimodalSupport();
+    this.detectToolCallingSupport(); this.detectThinkingSupport();
+    logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
-
-  private getSessionPath(promptHash: string): string {
-    return getSessionPath(this.sessionCacheDir, promptHash);
-  }
-
   async loadModel(modelPath: string, mmProjPath?: string): Promise<void> {
     if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
     if (this.context && this.currentModelPath === modelPath) return;
-    if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
-    // Validate GGUF file integrity before attempting native load
-    const validation = await validateModelFile(modelPath);
-    if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
+    const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath);
     if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
-    const { settings } = useAppStore.getState();
-    const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = buildModelParams(modelPath, settings);
-    // Check available memory before loading
-    const fileStat = await RNFS.stat(modelPath);
-    const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
-    const memCheck = await checkMemoryForModel(fileSize, ctxLen, () => hardwareService.getAppMemoryUsage());
-    if (!memCheck.safe) logger.warn(`[LLM] Memory warning: ${memCheck.reason}`);
+    const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
     this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
     logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
     try {
-      const result = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
-      const { context, gpuAttemptFailed, actualLength } = result;
-      this.context = context;
-      if (actualLength !== ctxLen) this.currentSettings.contextLength = actualLength;
-      logContextMetadata(context, actualLength);
-      useAppStore.getState().setModelMaxContext(getModelMaxContext(context));
-      Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
-      logger.log(`[LLM] Native lib: ${(context as any).androidLib || 'N/A'}`);
-      this.currentModelPath = modelPath;
-      this.multimodalSupport = null; this.multimodalInitialized = false;
-      logger.log('[LLM] mmProjPath:', mmProjPath || 'none');
-      if (mmProjPath) await this.initializeMultimodal(mmProjPath);
-      else await this.checkMultimodalSupport();
-      this.detectToolCallingSupport();
-      this.detectThinkingSupport();
-      logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
+      const { context, gpuAttemptFailed, actualLength } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
+      await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath });
     } catch (error: any) {
       this.context = null; this.currentModelPath = null; this.multimodalSupport = null;
       this.toolCallingSupported = false; this.thinkingSupported = false;
@@ -152,24 +146,15 @@ class LLMService {
   }
 
   async unloadModel(): Promise<void> {
-    if (this.context) {
-      if (this.isGenerating) {
-        try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
-        this.isGenerating = false;
-      }
-      if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
-      try {
-        await this.context.release();
-      } catch (e) {
-        logger.warn('[LLM] Error releasing context (bridge may be torn down):', e);
-      }
-      useAppStore.getState().setModelMaxContext(null);
-      Object.assign(this, {
-        context: null, currentModelPath: null, multimodalSupport: null,
-        multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false,
-        gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0,
-      });
+    if (!this.context) return;
+    if (this.isGenerating) {
+      try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
+      this.isGenerating = false;
     }
+    if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
+    try { await this.context.release(); } catch (e) { logger.warn('[LLM] Error releasing context (bridge may be torn down):', e); }
+    useAppStore.getState().setModelMaxContext(null);
+    Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0 });
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }

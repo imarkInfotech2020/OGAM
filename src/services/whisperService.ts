@@ -9,46 +9,14 @@ export interface TranscriptionResult {
   processTime: number;
   recordingTime: number;
 }
-
 export type TranscriptionCallback = (result: TranscriptionResult) => void;
 
-// Whisper models info
 export const WHISPER_MODELS = [
-  {
-    id: 'tiny.en',
-    name: 'Whisper Tiny (English)',
-    size: 75, // MB
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
-    description: 'Fastest, English only, good for basic transcription',
-  },
-  {
-    id: 'tiny',
-    name: 'Whisper Tiny (Multilingual)',
-    size: 75,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
-    description: 'Fast, supports multiple languages',
-  },
-  {
-    id: 'base.en',
-    name: 'Whisper Base (English)',
-    size: 142,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
-    description: 'Better accuracy, English only',
-  },
-  {
-    id: 'base',
-    name: 'Whisper Base (Multilingual)',
-    size: 142,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-    description: 'Better accuracy, multiple languages',
-  },
-  {
-    id: 'small.en',
-    name: 'Whisper Small (English)',
-    size: 466,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin',
-    description: 'High accuracy, English only, needs more RAM',
-  },
+  { id: 'tiny.en', name: 'Whisper Tiny (English)', size: 75, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin', description: 'Fastest, English only, good for basic transcription' },
+  { id: 'tiny', name: 'Whisper Tiny (Multilingual)', size: 75, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', description: 'Fast, supports multiple languages' },
+  { id: 'base.en', name: 'Whisper Base (English)', size: 142, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin', description: 'Better accuracy, English only' },
+  { id: 'base', name: 'Whisper Base (Multilingual)', size: 142, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', description: 'Better accuracy, multiple languages' },
+  { id: 'small.en', name: 'Whisper Small (English)', size: 466, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin', description: 'High accuracy, English only, needs more RAM' },
 ];
 
 class WhisperService {
@@ -59,97 +27,48 @@ class WhisperService {
   private isReleasingContext: boolean = false;
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
 
-  getModelsDir(): string {
-    return `${RNFS.DocumentDirectoryPath}/whisper-models`;
-  }
-
+  getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
   async ensureModelsDirExists(): Promise<void> {
     const dir = this.getModelsDir();
-    const exists = await RNFS.exists(dir);
-    if (!exists) {
-      await RNFS.mkdir(dir);
-    }
+    if (!await RNFS.exists(dir)) await RNFS.mkdir(dir);
   }
+  getModelPath(modelId: string): string { return `${this.getModelsDir()}/ggml-${modelId}.bin`; }
+  async isModelDownloaded(modelId: string): Promise<boolean> { return RNFS.exists(this.getModelPath(modelId)); }
 
-  getModelPath(modelId: string): string {
-    return `${this.getModelsDir()}/ggml-${modelId}.bin`;
-  }
-
-  async isModelDownloaded(modelId: string): Promise<boolean> {
-    const path = this.getModelPath(modelId);
-    return await RNFS.exists(path);
-  }
-
-  async downloadModel(
-    modelId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<string> {
+  async downloadModel(modelId: string, onProgress?: (progress: number) => void): Promise<string> {
     const model = WHISPER_MODELS.find(m => m.id === modelId);
-    if (!model) {
-      throw new Error(`Unknown model: ${modelId}`);
-    }
-
+    if (!model) throw new Error(`Unknown model: ${modelId}`);
     await this.ensureModelsDirExists();
     const destPath = this.getModelPath(modelId);
-
-    // Check if already exists
-    if (await RNFS.exists(destPath)) {
-      return destPath;
-    }
-
+    if (await RNFS.exists(destPath)) return destPath;
     logger.log(`[Whisper] Downloading ${model.name}...`);
-
     const download = RNFS.downloadFile({
-      fromUrl: model.url,
-      toFile: destPath,
-      progress: (res) => {
-        const progress = res.bytesWritten / res.contentLength;
-        onProgress?.(progress);
-      },
-      progressDivider: 1,
+      fromUrl: model.url, toFile: destPath, progressDivider: 1,
+      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
     });
-
     const result = await download.promise;
-
     if (result.statusCode !== 200) {
       await RNFS.unlink(destPath).catch(() => {});
       throw new Error(`Download failed with status ${result.statusCode}`);
     }
-
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
-
   async deleteModel(modelId: string): Promise<void> {
     const path = this.getModelPath(modelId);
-    if (await RNFS.exists(path)) {
-      await RNFS.unlink(path);
-    }
+    if (await RNFS.exists(path)) await RNFS.unlink(path);
   }
 
   async loadModel(modelPath: string): Promise<void> {
-    // Unload if different model (unloadModel now safely stops transcription first)
-    if (this.context && this.currentModelPath !== modelPath) {
-      await this.unloadModel();
-    }
-
-    // Skip if already loaded
-    if (this.context && this.currentModelPath === modelPath) {
-      return;
-    }
-
-    // If context is being released, wait for it
+    if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
+    if (this.context && this.currentModelPath === modelPath) return;
     if (this.isReleasingContext) {
       logger.log('[WhisperService] Waiting for context release to finish before loading');
       await new Promise<void>(resolve => setTimeout(resolve, 300));
     }
-
     logger.log(`[Whisper] Loading model: ${modelPath}`);
-
     try {
-      this.context = await initWhisper({
-        filePath: modelPath,
-      });
+      this.context = await initWhisper({ filePath: modelPath });
       this.currentModelPath = modelPath;
       logger.log('[Whisper] Model loaded successfully');
     } catch (error) {
@@ -159,43 +78,21 @@ class WhisperService {
   }
 
   async unloadModel(): Promise<void> {
-    if (this.context) {
-      // Stop any active transcription before releasing the context
-      // This prevents SIGSEGV from finishRealtimeTranscribeJob on a freed context
-      if (this.isTranscribing || this.stopFn) {
-        logger.log('[WhisperService] Stopping active transcription before unloading model');
-        await this.stopTranscription();
-        // Wait for the native side to fully finish processing
-        await this.transcriptionFullyStopped;
-        // Extra safety delay for native cleanup
-        await new Promise<void>(resolve => setTimeout(resolve, 200));
-      }
-
-      if (this.isReleasingContext) {
-        logger.log('[WhisperService] Context release already in progress, skipping');
-        return;
-      }
-
-      this.isReleasingContext = true;
-      try {
-        await this.context.release();
-      } catch (error) {
-        logger.error('[WhisperService] Error releasing context:', error);
-      } finally {
-        this.context = null;
-        this.currentModelPath = null;
-        this.isReleasingContext = false;
-      }
+    if (!this.context) return;
+    // Stop active transcription to prevent SIGSEGV on freed context
+    if (this.isTranscribing || this.stopFn) {
+      logger.log('[WhisperService] Stopping active transcription before unloading model');
+      await this.stopTranscription();
+      await this.transcriptionFullyStopped;
+      await new Promise<void>(resolve => setTimeout(resolve, 200));
     }
+    if (this.isReleasingContext) { logger.log('[WhisperService] Context release already in progress, skipping'); return; }
+    this.isReleasingContext = true;
+    try { await this.context.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
+    finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
   }
-
-  isModelLoaded(): boolean {
-    return this.context !== null;
-  }
-
-  getLoadedModelPath(): string | null {
-    return this.currentModelPath;
-  }
+  isModelLoaded(): boolean { return this.context !== null; }
+  getLoadedModelPath(): string | null { return this.currentModelPath; }
 
   async requestPermissions(): Promise<boolean> {
     if (Platform.OS === 'android') {
