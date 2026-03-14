@@ -6,6 +6,7 @@
  */
 
 import { getIpAddress, isEmulator } from 'react-native-device-info';
+import { isPrivateIPv4, isIPv6 } from '../utils/network';
 import logger from '../utils/logger';
 
 export interface DiscoveredServer {
@@ -52,19 +53,8 @@ async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
 function subnetBase(ip: string): string | null {
   const parts = ip.split('.');
   if (parts.length !== 4) return null;
-  const first = parseInt(parts[0], 10);
-  const second = parseInt(parts[1], 10);
-  const isPrivate =
-    first === 10 ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168);
-  if (!isPrivate) return null;
+  if (!isPrivateIPv4(ip)) return null;
   return parts.slice(0, 3).join('.');
-}
-
-/** Returns true if the string looks like an IPv6 address */
-function isIPv6(ip: string): boolean {
-  return ip.includes(':');
 }
 
 /**
