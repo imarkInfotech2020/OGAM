@@ -140,7 +140,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       const requestBody = this.buildRequestBody(openaiMessages, options, thinkingEnabled);
-      logger.log(`[Provider][DEBUG] OpenAI request — hasTools=${!!requestBody.tools}, toolChoice=${requestBody.tool_choice || 'none'}`);
+      logger.log(`[Provider][DEBUG] OpenAI request — hasTools=${!!requestBody.tools}, toolChoice=${typeof requestBody.tool_choice === 'string' ? requestBody.tool_choice : JSON.stringify(requestBody.tool_choice) || 'none'}`);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',

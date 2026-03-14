@@ -293,7 +293,9 @@ export async function generateRemoteWithToolsImpl(
     forceRemote: true,
   });
 
-  if (!svc.abortRequested) {
+  if (svc.abortRequested) {
+    logger.log(`[GenService][DEBUG] Generation was aborted, skipping finalize`);
+  } else {
     svc.forceFlushTokens();
     const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
     logger.log(`[GenService][DEBUG] Finalizing — streamingContent length=${svc.state.streamingContent?.length || 0}, generationTime=${generationTime}ms`);
@@ -302,7 +304,5 @@ export async function generateRemoteWithToolsImpl(
     );
     svc.checkSharePrompt();
     svc.resetState();
-  } else {
-    logger.log(`[GenService][DEBUG] Generation was aborted, skipping finalize`);
   }
 }

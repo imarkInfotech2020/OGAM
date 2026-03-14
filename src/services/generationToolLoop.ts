@@ -42,7 +42,7 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
     else { logger.log(`[ToolLoop] Failed to parse tool_call tag: ${match[1].trim().substring(0, 100)}`); }
   }
   // Also match unclosed <tool_call> at end of text (model hit EOS without closing tag)
-  const unclosedMatch = text.match(/<tool_call>([\s\S]+)$/);
+  const unclosedMatch = /<tool_call>([\s\S]+)$/.exec(text);
   if (unclosedMatch) {
     const unclosedStart = text.lastIndexOf(unclosedMatch[0]);
     const alreadyMatched = matchedRanges.some(([s, e]) => unclosedStart >= s && unclosedStart < e);
@@ -235,14 +235,27 @@ function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data:
 function emitFinalResponse(ctx: ToolLoopContext, displayResponse: string, streamedContent: string): void {
   logger.log(`[ToolLoop][DEBUG] emitFinalResponse — displayResponse length=${displayResponse.length}, streamedContent length=${streamedContent.length}, displayPreview="${displayResponse.substring(0, 100) || '(empty)'}"`);
   // If streamedContent is set, tokens were already streamed; otherwise deliver now.
-  if (!streamedContent) {
+  if (streamedContent) {
+    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — content was already streamed (${streamedContent.length} chars), not delivering again`);
+  } else {
     logger.log(`[ToolLoop][DEBUG] emitFinalResponse — no streamed content, delivering: "${(displayResponse || '_(No response)_').substring(0, 100)}"`);
     ctx.onThinkingDone();
     ctx.callbacks?.onFirstToken?.();
     ctx.onFinalResponse(displayResponse || '_(No response)_');
-  } else {
-    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — content was already streamed (${streamedContent.length} chars), not delivering again`);
   }
+}
+
+/** Force a final text-only generation (no tools) when iteration/call caps are hit. */
+async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState, loopMessages: Message[]): Promise<void> {
+  logger.log(`[ToolLoop] Hit cap — forcing final text response`);
+  state.streamedContent = '';
+  state.reasoningContent = '';
+  state.firstTokenFired = false;
+  const forcedOnStream = buildStreamHandler(ctx, state);
+  // Disable thinking so the model spends all tokens on actual content
+  const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true });
+  logger.log(`[ToolLoop][DEBUG] Forced response — length=${forcedResponse.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
+  emitFinalResponse(ctx, forcedResponse, state.streamedContent);
 }
 
 /**
@@ -266,15 +279,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     // Hit iteration or total-call cap — force one final text-only generation (no tools)
     if (iteration === MAX_TOOL_ITERATIONS - 1 || totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
-      logger.log(`[ToolLoop] Hit cap after ${totalToolCalls} calls — forcing final text response`);
-      state.streamedContent = '';
-      state.reasoningContent = '';
-      state.firstTokenFired = false;
-      const forcedOnStream = buildStreamHandler(ctx, state);
-      // Disable thinking so the model spends all tokens on actual content
-      const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true });
-      logger.log(`[ToolLoop][DEBUG] Forced response — length=${forcedResponse.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
-      emitFinalResponse(ctx, forcedResponse, state.streamedContent);
+      await forceFinalTextResponse(ctx, state, loopMessages);
       return;
     }
 
