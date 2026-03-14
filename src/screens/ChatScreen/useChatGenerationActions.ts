@@ -259,7 +259,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, heuristicMatch=${heuristicMatch}, enabledTools=[${enabledTools.join(', ')}], activeTools=[${activeTools.join(', ')}]`);
   logger.log(`[ChatGen][DEBUG] Will use path: ${activeTools.length > 0 ? 'generateWithTools' : 'generateResponse'}, projectId=${conversation?.projectId || 'none'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
-  logger.log(`[ChatGen][DEBUG] messagesForContext count=${messagesForContext.length}, roles: ${messagesForContext.map(m => m.role).join(', ')}`);
+  logger.log(`[ChatGen][DEBUG] messagesForContext count=${messagesForContext?.length ?? 0}`);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);
