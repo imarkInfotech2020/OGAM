@@ -6,7 +6,7 @@
 import { useAppStore } from '../stores';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion } from './llmHelpers';
 import type { StreamToken } from './llm';
 import logger from '../utils/logger';
 
@@ -66,7 +66,7 @@ export async function generateWithToolsImpl(
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));
-    const completionResult = await deps.context.completion(completionParams as any, (data: any) => {
+    const completionResult = await safeCompletion(deps.context, () => deps.context.completion(completionParams as any, (data: any) => {
       if (!generating) return;
       if (data.tool_calls) {
         for (const tc of data.tool_calls) {
@@ -78,7 +78,7 @@ export async function generateWithToolsImpl(
       tokenCount++;
       fullResponse += data.token;
       options.onStream?.({ content: data.token });
-    });
+    }), 'generateWithTools');
     logger.log('[LLM-Tools] === OUTPUT ===');
     logger.log(JSON.stringify(completionResult, null, 2));
 
