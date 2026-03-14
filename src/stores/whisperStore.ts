@@ -74,10 +74,16 @@ export const useWhisperStore = create<WhisperState>()(
           await whisperService.loadModel(modelPath);
           set({ isModelLoaded: true, isModelLoading: false, error: null });
         } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
+          // If the model file is missing or corrupted, clear the downloaded state
+          // so the user is prompted to re-download instead of repeatedly crashing
+          const isFileError = errorMsg.includes('not found') || errorMsg.includes('corrupted') || errorMsg.includes('too small');
           set({
             isModelLoaded: false,
             isModelLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to load model',
+            downloadedModelId: isFileError ? null : downloadedModelId,
+            downloadProgress: isFileError ? 0 : get().downloadProgress,
+            error: errorMsg,
           });
         }
       },

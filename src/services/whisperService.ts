@@ -51,12 +51,56 @@ class WhisperService {
       await RNFS.unlink(destPath).catch(() => {});
       throw new Error(`Download failed with status ${result.statusCode}`);
     }
+    // Verify the downloaded file is not truncated/corrupted
+    try {
+      await this.validateModelFile(destPath);
+    } catch (validationError) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
+    }
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
   async deleteModel(modelId: string): Promise<void> {
     const path = this.getModelPath(modelId);
     if (await RNFS.exists(path)) await RNFS.unlink(path);
+  }
+
+  /**
+   * Minimum valid model file size in bytes (10 MB).
+   * The smallest whisper model (tiny) is ~75 MB, so anything under 10 MB
+   * is almost certainly a corrupted or incomplete download.
+   */
+  private static readonly MIN_MODEL_FILE_SIZE = 10 * 1024 * 1024;
+
+  /**
+   * Validate that a whisper model file exists and has a reasonable size
+   * before passing it to the native layer. The native initWithModelPath
+   * calls abort() on invalid files, which kills the process without
+   * giving JS a chance to handle the error.
+   */
+  async validateModelFile(modelPath: string): Promise<void> {
+    if (!modelPath) {
+      throw new Error('Whisper model path is empty or undefined');
+    }
+
+    const exists = await RNFS.exists(modelPath);
+    if (!exists) {
+      throw new Error(`Whisper model file not found at: ${modelPath}`);
+    }
+
+    const stat = await RNFS.stat(modelPath);
+    const fileSize = Number(stat.size);
+    if (isNaN(fileSize) || fileSize < WhisperService.MIN_MODEL_FILE_SIZE) {
+      // Remove the corrupted file so the user can re-download
+      await RNFS.unlink(modelPath).catch(() => {});
+      throw new Error(
+        `Whisper model file is too small (${Math.round(fileSize / 1024)} KB) and likely corrupted. ` +
+        'The file has been removed. Please re-download the model.'
+      );
+    }
+
+    logger.log(`[Whisper] Model file validated: ${modelPath} (${Math.round(fileSize / (1024 * 1024))} MB)`);
   }
 
   async loadModel(modelPath: string): Promise<void> {
@@ -66,6 +110,11 @@ class WhisperService {
       logger.log('[WhisperService] Waiting for context release to finish before loading');
       await new Promise<void>(resolve => setTimeout(resolve, 300));
     }
+
+    // Validate model file before passing to native layer.
+    // Native initWithModelPath calls abort() on invalid files, crashing the app.
+    await this.validateModelFile(modelPath);
+
     logger.log(`[Whisper] Loading model: ${modelPath}`);
     try {
       this.context = await initWhisper({ filePath: modelPath });
@@ -73,6 +122,8 @@ class WhisperService {
       logger.log('[Whisper] Model loaded successfully');
     } catch (error) {
       logger.error('[Whisper] Failed to load model:', error);
+      this.context = null;
+      this.currentModelPath = null;
       throw error;
     }
   }
