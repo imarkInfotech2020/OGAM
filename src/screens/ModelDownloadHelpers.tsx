@@ -49,11 +49,13 @@ export const ServerCard: React.FC<{
   onConnect: () => void;
   colors: ThemeColors;
 }> = ({ server, modelCount, isConnecting, onConnect, colors }) => {
-  const serverType = server.endpoint.includes(':11434') ? 'Ollama' : 'LM Studio';
+  const serverType = server.endpoint.includes(':11434') ? 'Ollama'
+    : server.endpoint.includes(':1234') ? 'LM Studio'
+    : 'AI Server';
   const styles = serverCardStyles(colors);
 
   return (
-    <Card style={styles.serverCard} onPress={onConnect} testID={`discovered-server-${server.id}`}>
+    <Card style={styles.serverCard} testID={`discovered-server-${server.id}`}>
       <View style={styles.serverCardContent}>
         <View style={styles.serverInfo}>
           <Text style={styles.serverName}>{server.name}</Text>
@@ -64,7 +66,7 @@ export const ServerCard: React.FC<{
         {isConnecting ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
-          <TouchableOpacity style={[styles.connectButton, { borderColor: colors.primary }]} onPress={onConnect}>
+          <TouchableOpacity style={[styles.connectButton, { borderColor: colors.primary }]} onPress={onConnect} testID={`discovered-server-${server.id}-connect`}>
             <Text style={[styles.connectButtonText, { color: colors.primary }]}>Connect</Text>
           </TouchableOpacity>
         )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
   const [showServerModal, setShowServerModal] = useState(false);
+  const healthCheckInFlight = useRef(false);
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -71,6 +72,8 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
   // Health-check persisted servers — only show reachable ones
   const refreshServerHealth = useCallback(async (): Promise<Set<string>> => {
+    if (healthCheckInFlight.current) return new Set<string>();
+    healthCheckInFlight.current = true;
     setIsCheckingNetwork(true);
     const store = useRemoteServerStore.getState();
     const reachable = new Set<string>();
@@ -84,10 +87,11 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     );
     setReachableServerIds(reachable);
     setIsCheckingNetwork(false);
+    healthCheckInFlight.current = false;
     return reachable;
   }, []);
 
-  useEffect(() => { refreshServerHealth(); }, [servers.length]);
+  useEffect(() => { refreshServerHealth(); }, [servers.length, refreshServerHealth]);
 
   // Scan network handler
   const handleScanNetwork = useCallback(async () => {
@@ -133,6 +137,13 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       const result = await remoteServerManager.testConnection(server.id);
       if (result.success) {
         const models = discoveredModels[server.id] || result.models || [];
+        if (models.length === 0) {
+          setAlertState(showAlert(
+            'Connected — No Models Found',
+            `${server.name} is reachable but has no models loaded. Start a model in Ollama/LM Studio, then reconnect.`,
+          ));
+          return;
+        }
         const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
         if (textModel) await remoteServerManager.setActiveRemoteTextModel(server.id, textModel.id);
         setAlertState(showAlert(
@@ -163,7 +174,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       <SafeAreaView style={styles.container}>
         <View testID="model-download-loading" style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Analyzing your device and scanning your network...</Text>
+          <Text style={styles.loadingText}>Analyzing your device...</Text>
         </View>
       </SafeAreaView>
     );

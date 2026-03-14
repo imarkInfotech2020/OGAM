@@ -40,7 +40,7 @@
 
 | # | Step | Expected |
 |---|------|----------|
-| 1 | Observe screen | "Download Your First Model". Device info (RAM, tier). Recommended models filtered by device RAM (only models < 60% of RAM shown) |
+| 1 | Observe screen | "Set Up Your AI". Device info (RAM, tier). Recommended models filtered by device RAM (only models < 60% of RAM shown) |
 | 2 | Tap "Skip for Now" | Home screen. Setup card: "Download a text model to start chatting" |
 
 ### 1.4 Download first model from this screen (P0)

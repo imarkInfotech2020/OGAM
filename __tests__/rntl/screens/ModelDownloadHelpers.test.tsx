@@ -199,7 +199,7 @@ describe('NetworkSection', () => {
         onConnectServer={onConnect}
       />,
     );
-    fireEvent.press(getByTestId('discovered-server-server-1'));
+    fireEvent.press(getByTestId('discovered-server-server-1-connect'));
     expect(onConnect).toHaveBeenCalledWith(mockServer);
   });
 });
