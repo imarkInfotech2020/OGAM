@@ -467,11 +467,11 @@ describe('ModelPickerSheet', () => {
       expect(getByText('llama3')).toBeTruthy();
     });
 
-    it('shows Remote Models section label', () => {
+    it('shows server name as section header for remote models', () => {
       const { getByText } = render(
         <ModelPickerSheet {...defaultProps} remoteTextModels={[remoteModel]} />
       );
-      expect(getByText('Remote Models')).toBeTruthy();
+      expect(getByText('My Ollama')).toBeTruthy();
     });
 
     it('shows server name for remote model', () => {
@@ -507,7 +507,7 @@ describe('ModelPickerSheet', () => {
       const { getByText } = render(
         <ModelPickerSheet {...defaultProps} remoteTextModels={[visionRemote]} />
       );
-      expect(getByText(/· Vision/)).toBeTruthy();
+      expect(getByText(/Vision/)).toBeTruthy();
     });
 
     it('shows Tools capability label for tool-capable remote model', () => {
@@ -515,7 +515,7 @@ describe('ModelPickerSheet', () => {
       const { getByText } = render(
         <ModelPickerSheet {...defaultProps} remoteTextModels={[toolRemote]} />
       );
-      expect(getByText(/· Tools/)).toBeTruthy();
+      expect(getByText(/Tools/)).toBeTruthy();
     });
 
     it('remote model is disabled during loading', () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../../components/AppSheet';
@@ -115,10 +115,17 @@ export const ModelPickerSheet: React.FC<Props> = ({
 
   const servers = useRemoteServerStore((s) => s.servers);
   const activeServerId = useRemoteServerStore((s) => s.activeServerId);
-  const getServerName = (serverId: string): string => {
-    const server = servers.find((s) => s.id === serverId);
-    return server?.name || 'Remote Server';
-  };
+  const remoteModelGroups = useMemo(() => {
+    const groups: Record<string, { serverId: string; serverName: string; models: RemoteModel[] }> = {};
+    for (const model of remoteTextModels) {
+      if (!groups[model.serverId]) {
+        const server = servers.find((s) => s.id === model.serverId);
+        groups[model.serverId] = { serverId: model.serverId, serverName: server?.name || 'Remote Server', models: [] };
+      }
+      groups[model.serverId].models.push(model);
+    }
+    return Object.values(groups);
+  }, [remoteTextModels, servers]);
 
   // NOTE: Can't use AttachStep/spotlight-tour inside Modal (separate view hierarchy).
   // Pulse the first model's border as a visual hint instead.
@@ -152,7 +159,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
       title={pickerType === 'text' ? 'Text Models' : 'Image Models'}
       snapPoints={['70%']}
     >
-      <ScrollView style={styles.modalScroll}>
+      <ScrollView style={styles.modalScroll} contentContainerStyle={localStyles.scrollContent}>
         {pickerType === 'text' && (
           <>
             {downloadedModels.length === 0 && remoteTextModels.length === 0 ? (
@@ -233,10 +240,13 @@ export const ModelPickerSheet: React.FC<Props> = ({
                   </>
                 )}
 
-                {remoteTextModels.length > 0 && (
-                  <>
-                    <Text style={styles.sectionLabel}>Remote Models</Text>
-                    {remoteTextModels.map((model) => (
+                {remoteModelGroups.map(({ serverId, serverName, models }) => (
+                  <View key={serverId}>
+                    <View style={localStyles.serverHeaderRow}>
+                      <Icon name="wifi" size={14} color={colors.textMuted} />
+                      <Text style={styles.sectionLabel}>{serverName}</Text>
+                    </View>
+                    {models.map((model) => (
                       <TouchableOpacity
                         key={`${model.serverId}-${model.id}`}
                         testID="remote-model-item"
@@ -250,9 +260,9 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             <Icon name="cloud" size={14} color={colors.primary} />
                           </Text>
                           <Text style={styles.pickerItemMeta}>
-                            {getServerName(model.serverId)}
-                            {model.capabilities.supportsVision && ' · Vision'}
-                            {model.capabilities.supportsToolCalling && ' · Tools'}
+                            {model.capabilities.supportsVision && 'Vision'}
+                            {model.capabilities.supportsVision && model.capabilities.supportsToolCalling && ' · '}
+                            {model.capabilities.supportsToolCalling && 'Tools'}
                           </Text>
                         </View>
                         {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
@@ -260,8 +270,8 @@ export const ModelPickerSheet: React.FC<Props> = ({
                         )}
                       </TouchableOpacity>
                     ))}
-                  </>
-                )}
+                  </View>
+                ))}
               </>
             )}
           </>
@@ -300,4 +310,6 @@ const localStyles = StyleSheet.create({
   iconOnlyButton: { flex: 1 },
   addServerButton: { borderColor: TRANSPARENT },
   unloadButtonMargin: { marginBottom: 12 },
+  scrollContent: { paddingBottom: 16 },
+  serverHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 8 },
 });
