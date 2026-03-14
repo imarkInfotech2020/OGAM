@@ -24,7 +24,15 @@ class PDFExtractor {
       throw new Error('PDF extraction is not available on this platform');
     }
 
-    return await PDFExtractorModule.extractText(filePath, maxChars);
+    try {
+      return await PDFExtractorModule.extractText(filePath, maxChars);
+    } catch (error: any) {
+      // Guard against NullPointerException when bridge promise is rejected after teardown
+      if (error?.message?.includes('NullPointerException') || error?.code === 'BRIDGE_DESTROYED') {
+        throw new Error('PDF extraction failed: native bridge unavailable');
+      }
+      throw error;
+    }
   }
 }
 

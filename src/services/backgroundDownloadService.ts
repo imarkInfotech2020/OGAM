@@ -1,6 +1,6 @@
 import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
-
+import logger from '../utils/logger';
 const { DownloadManagerModule } = NativeModules;
 
 interface DownloadParams {
@@ -125,7 +125,11 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
-    await DownloadManagerModule.cancelDownload(downloadId);
+    try {
+      await DownloadManagerModule.cancelDownload(downloadId);
+    } catch (e) {
+      logger.log('[BackgroundDownload] cancelDownload failed (bridge may be torn down):', e);
+    }
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
@@ -343,5 +347,4 @@ class BackgroundDownloadService {
     }));
   }
 }
-
 export const backgroundDownloadService = new BackgroundDownloadService();

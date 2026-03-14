@@ -626,7 +626,13 @@ describe('ActiveModelService Integration', () => {
       mockLlmService.loadModel.mockImplementation(() => {
         loadCount++;
         if (loadCount === 1) {
-          return new Promise((resolve) => { resolveFirst = resolve; });
+          return new Promise((resolve) => {
+            resolveFirst = () => {
+              // After first load completes, model is loaded
+              mockLlmService.isModelLoaded.mockReturnValue(true);
+              resolve();
+            };
+          });
         }
         return Promise.resolve();
       });

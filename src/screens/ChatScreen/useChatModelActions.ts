@@ -270,6 +270,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
 
   }, []);
   useEffect(() => {
+    let cancelled = false;
     const preload = async () => {
       if (
         settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
@@ -277,12 +278,15 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
       ) {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
         if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
-          try { await activeModelService.loadTextModel(settings.classifierModelId); }
-          catch (error) { logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
+          try {
+            if (!cancelled) await activeModelService.loadTextModel(settings.classifierModelId);
+          }
+          catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
         }
       }
     };
     preload();
+    return () => { cancelled = true; };
 
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
 }

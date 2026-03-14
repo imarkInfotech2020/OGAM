@@ -18,6 +18,26 @@ import { ModelFile, DownloadedModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import logger from '../utils/logger';
 
+const RECOMMENDED_QUANTS = ['Q4_K_M', 'Q4_K_S', 'Q4_0'];
+const isRecommendedQuant = (f: ModelFile) =>
+  RECOMMENDED_QUANTS.some((q) => f.quantization.toUpperCase().includes(q.replace('_', '')));
+
+async function fetchModelFiles(models: typeof RECOMMENDED_MODELS): Promise<Record<string, ModelFile[]>> {
+  const filesMap: Record<string, ModelFile[]> = {};
+  await Promise.all(
+    models.map(async (model) => {
+      try {
+        const files = await huggingFaceService.getModelFiles(model.id);
+        const recommended = files.filter(isRecommendedQuant);
+        filesMap[model.id] = recommended.length > 0 ? recommended : files.slice(0, 2);
+      } catch (error) {
+        logger.error(`Error fetching files for ${model.id}:`, error);
+      }
+    })
+  );
+  return filesMap;
+}
+
 type ModelDownloadScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'>;
 };
@@ -41,58 +61,45 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     downloadProgress,
     setDownloadProgress,
     addDownloadedModel,
-    setActiveModelId,
   } = useAppStore();
 
   useEffect(() => {
+    let cancelled = false;
+
+    const initializeHardwareAndModels = async () => {
+      try {
+        // Get device info
+        const info = await hardwareService.getDeviceInfo();
+        if (cancelled) return;
+        setDeviceInfo(info);
+
+        const recommendation = hardwareService.getModelRecommendation();
+        if (cancelled) return;
+        setModelRecommendation(recommendation);
+
+        // Filter recommended models based on device capability
+        const totalRamGB = hardwareService.getTotalMemoryGB();
+        const compatibleModels = RECOMMENDED_MODELS.filter(
+          (m) => m.minRam <= totalRamGB
+        );
+        if (cancelled) return;
+        setRecommendedModels(compatibleModels);
+
+        if (cancelled) return;
+        const filesMap = await fetchModelFiles(compatibleModels);
+        if (cancelled) return;
+        setModelFiles(filesMap);
+      } catch (error) {
+        logger.error('Error initializing:', error);
+        if (!cancelled) setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
     initializeHardwareAndModels();
-
+    return () => { cancelled = true; };
   }, []);
-
-  const initializeHardwareAndModels = async () => {
-    try {
-      // Get device info
-      const info = await hardwareService.getDeviceInfo();
-      setDeviceInfo(info);
-
-      const recommendation = hardwareService.getModelRecommendation();
-      setModelRecommendation(recommendation);
-
-      // Filter recommended models based on device capability
-      const totalRamGB = hardwareService.getTotalMemoryGB();
-      const compatibleModels = RECOMMENDED_MODELS.filter(
-        (m) => m.minRam <= totalRamGB
-      );
-      setRecommendedModels(compatibleModels);
-
-      // Fetch files for all compatible models
-      const filesToFetch = compatibleModels;
-      const filesMap: Record<string, ModelFile[]> = {};
-
-      const RECOMMENDED_QUANTS = ['Q4_K_M', 'Q4_K_S', 'Q4_0'];
-      const isRecommendedQuant = (f: ModelFile) =>
-        RECOMMENDED_QUANTS.some((q) => f.quantization.toUpperCase().includes(q.replace('_', '')));
-
-      await Promise.all(
-        filesToFetch.map(async (model) => {
-          try {
-            const files = await huggingFaceService.getModelFiles(model.id);
-            const recommendedFiles = files.filter(isRecommendedQuant);
-            filesMap[model.id] = recommendedFiles.length > 0 ? recommendedFiles : files.slice(0, 2);
-          } catch (error) {
-            logger.error(`Error fetching files for ${model.id}:`, error);
-          }
-        })
-      );
-
-      setModelFiles(filesMap);
-    } catch (error) {
-      logger.error('Error initializing:', error);
-      setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSelectModel = async (modelId: string) => {
     setSelectedModel(modelId);
@@ -123,16 +130,13 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     const onComplete = (model: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
       addDownloadedModel(model);
-      setActiveModelId(model.id);
 
-      // Navigate to home/chat
       setAlertState(showAlert(
         'Download Complete!',
-        `${model.name} is ready to use. Let's start chatting!`,
+        `${model.name} has been downloaded successfully.`,
         [
           {
-            text: 'Start Chatting',
-            onPress: () => navigation.replace('Main'),
+            text: 'OK',
           },
         ]
       ));

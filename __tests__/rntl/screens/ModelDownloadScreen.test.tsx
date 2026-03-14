@@ -456,21 +456,11 @@ describe('ModelDownloadScreen', () => {
     const { completedModel } = await setupDownloadCompletion();
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
-    expect(mockAppState.setActiveModelId).toHaveBeenCalledWith('test-model');
     expect(mockShowAlert).toHaveBeenCalledWith(
       'Download Complete!',
-      expect.stringContaining('Test Model'),
+      expect.stringContaining('downloaded successfully'),
       expect.any(Array),
     );
-  });
-
-  it('download complete alert Start Chatting navigates to Main', async () => {
-    const { result } = await setupDownloadCompletion();
-
-    const startChatBtn = result.getByTestId('alert-button-Start Chatting');
-    fireEvent.press(startChatBtn);
-
-    expect(mockReplace).toHaveBeenCalledWith('Main');
   });
 
   it('download calls onError callback and shows error alert', async () => {

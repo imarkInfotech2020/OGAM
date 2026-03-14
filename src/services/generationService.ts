@@ -213,6 +213,9 @@ class GenerationService {
         this.currentRemoteAbortController.abort();
         this.currentRemoteAbortController = null;
       }
+      // Ensure chat store streaming state is cleared even if generation
+      // service already reset — prevents stuck stop button.
+      useChatStore.getState().clearStreamingMessage();
       return '';
     }
 

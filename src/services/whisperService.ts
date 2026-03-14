@@ -9,46 +9,14 @@ export interface TranscriptionResult {
   processTime: number;
   recordingTime: number;
 }
-
 export type TranscriptionCallback = (result: TranscriptionResult) => void;
 
-// Whisper models info
 export const WHISPER_MODELS = [
-  {
-    id: 'tiny.en',
-    name: 'Whisper Tiny (English)',
-    size: 75, // MB
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
-    description: 'Fastest, English only, good for basic transcription',
-  },
-  {
-    id: 'tiny',
-    name: 'Whisper Tiny (Multilingual)',
-    size: 75,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
-    description: 'Fast, supports multiple languages',
-  },
-  {
-    id: 'base.en',
-    name: 'Whisper Base (English)',
-    size: 142,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
-    description: 'Better accuracy, English only',
-  },
-  {
-    id: 'base',
-    name: 'Whisper Base (Multilingual)',
-    size: 142,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-    description: 'Better accuracy, multiple languages',
-  },
-  {
-    id: 'small.en',
-    name: 'Whisper Small (English)',
-    size: 466,
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin',
-    description: 'High accuracy, English only, needs more RAM',
-  },
+  { id: 'tiny.en', name: 'Whisper Tiny (English)', size: 75, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin', description: 'Fastest, English only, good for basic transcription' },
+  { id: 'tiny', name: 'Whisper Tiny (Multilingual)', size: 75, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', description: 'Fast, supports multiple languages' },
+  { id: 'base.en', name: 'Whisper Base (English)', size: 142, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin', description: 'Better accuracy, English only' },
+  { id: 'base', name: 'Whisper Base (Multilingual)', size: 142, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', description: 'Better accuracy, multiple languages' },
+  { id: 'small.en', name: 'Whisper Small (English)', size: 466, url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin', description: 'High accuracy, English only, needs more RAM' },
 ];
 
 class WhisperService {
@@ -56,115 +24,129 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
+  private isReleasingContext: boolean = false;
+  private contextReleasePromise: Promise<void> = Promise.resolve();
+  private transcriptionFullyStopped: Promise<void> = Promise.resolve();
 
-  getModelsDir(): string {
-    return `${RNFS.DocumentDirectoryPath}/whisper-models`;
-  }
-
+  getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
   async ensureModelsDirExists(): Promise<void> {
     const dir = this.getModelsDir();
-    const exists = await RNFS.exists(dir);
-    if (!exists) {
-      await RNFS.mkdir(dir);
-    }
+    if (!await RNFS.exists(dir)) await RNFS.mkdir(dir);
   }
+  getModelPath(modelId: string): string { return `${this.getModelsDir()}/ggml-${modelId}.bin`; }
+  async isModelDownloaded(modelId: string): Promise<boolean> { return RNFS.exists(this.getModelPath(modelId)); }
 
-  getModelPath(modelId: string): string {
-    return `${this.getModelsDir()}/ggml-${modelId}.bin`;
-  }
-
-  async isModelDownloaded(modelId: string): Promise<boolean> {
-    const path = this.getModelPath(modelId);
-    return await RNFS.exists(path);
-  }
-
-  async downloadModel(
-    modelId: string,
-    onProgress?: (progress: number) => void
-  ): Promise<string> {
+  async downloadModel(modelId: string, onProgress?: (progress: number) => void): Promise<string> {
     const model = WHISPER_MODELS.find(m => m.id === modelId);
-    if (!model) {
-      throw new Error(`Unknown model: ${modelId}`);
-    }
-
+    if (!model) throw new Error(`Unknown model: ${modelId}`);
     await this.ensureModelsDirExists();
     const destPath = this.getModelPath(modelId);
-
-    // Check if already exists
-    if (await RNFS.exists(destPath)) {
-      return destPath;
-    }
-
+    if (await RNFS.exists(destPath)) return destPath;
     logger.log(`[Whisper] Downloading ${model.name}...`);
-
     const download = RNFS.downloadFile({
-      fromUrl: model.url,
-      toFile: destPath,
-      progress: (res) => {
-        const progress = res.bytesWritten / res.contentLength;
-        onProgress?.(progress);
-      },
-      progressDivider: 1,
+      fromUrl: model.url, toFile: destPath, progressDivider: 1,
+      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
     });
-
     const result = await download.promise;
-
     if (result.statusCode !== 200) {
       await RNFS.unlink(destPath).catch(() => {});
       throw new Error(`Download failed with status ${result.statusCode}`);
     }
-
+    // Verify the downloaded file is not truncated/corrupted
+    try {
+      await this.validateModelFile(destPath);
+    } catch (validationError) {
+      await RNFS.unlink(destPath).catch(() => {});
+      throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
+    }
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
-
   async deleteModel(modelId: string): Promise<void> {
     const path = this.getModelPath(modelId);
-    if (await RNFS.exists(path)) {
-      await RNFS.unlink(path);
+    if (await RNFS.exists(path)) await RNFS.unlink(path);
+  }
+
+  /**
+   * Minimum valid model file size in bytes (10 MB).
+   * The smallest whisper model (tiny) is ~75 MB, so anything under 10 MB
+   * is almost certainly a corrupted or incomplete download.
+   */
+  private static readonly MIN_MODEL_FILE_SIZE = 10 * 1024 * 1024;
+
+  /**
+   * Validate that a whisper model file exists and has a reasonable size
+   * before passing it to the native layer. The native initWithModelPath
+   * calls abort() on invalid files, which kills the process without
+   * giving JS a chance to handle the error.
+   */
+  async validateModelFile(modelPath: string): Promise<void> {
+    if (!modelPath) {
+      throw new Error('Whisper model path is empty or undefined');
     }
+
+    const exists = await RNFS.exists(modelPath);
+    if (!exists) {
+      throw new Error(`Whisper model file not found at: ${modelPath}`);
+    }
+
+    const stat = await RNFS.stat(modelPath);
+    const fileSize = Number(stat.size);
+    if (Number.isNaN(fileSize) || fileSize < WhisperService.MIN_MODEL_FILE_SIZE) {
+      // Remove the corrupted file so the user can re-download
+      await RNFS.unlink(modelPath).catch(() => {});
+      throw new Error(
+        `Whisper model file is too small (${Math.round(fileSize / 1024)} KB) and likely corrupted. ` +
+        'The file has been removed. Please re-download the model.'
+      );
+    }
+
+    logger.log(`[Whisper] Model file validated: ${modelPath} (${Math.round(fileSize / (1024 * 1024))} MB)`);
   }
 
   async loadModel(modelPath: string): Promise<void> {
-    // Unload if different model
-    if (this.context && this.currentModelPath !== modelPath) {
-      await this.unloadModel();
+    if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
+    if (this.context && this.currentModelPath === modelPath) return;
+    if (this.isReleasingContext) {
+      logger.log('[WhisperService] Waiting for context release to finish before loading');
+      await this.contextReleasePromise;
     }
 
-    // Skip if already loaded
-    if (this.context && this.currentModelPath === modelPath) {
-      return;
-    }
+    // Validate model file before passing to native layer.
+    // Native initWithModelPath calls abort() on invalid files, crashing the app.
+    await this.validateModelFile(modelPath);
 
     logger.log(`[Whisper] Loading model: ${modelPath}`);
-
     try {
-      this.context = await initWhisper({
-        filePath: modelPath,
-      });
+      this.context = await initWhisper({ filePath: modelPath });
       this.currentModelPath = modelPath;
       logger.log('[Whisper] Model loaded successfully');
     } catch (error) {
       logger.error('[Whisper] Failed to load model:', error);
+      this.context = null;
+      this.currentModelPath = null;
       throw error;
     }
   }
 
   async unloadModel(): Promise<void> {
-    if (this.context) {
-      await this.context.release();
-      this.context = null;
-      this.currentModelPath = null;
+    if (!this.context) return;
+    // Stop active transcription to prevent SIGSEGV on freed context
+    if (this.isTranscribing || this.stopFn) {
+      logger.log('[WhisperService] Stopping active transcription before unloading model');
+      await this.stopTranscription();
+      await this.transcriptionFullyStopped;
     }
+    if (this.isReleasingContext) { logger.log('[WhisperService] Context release already in progress, skipping'); return; }
+    this.isReleasingContext = true;
+    this.contextReleasePromise = (async () => {
+      try { await this.context!.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
+      finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
+    })()
+    await this.contextReleasePromise;
   }
-
-  isModelLoaded(): boolean {
-    return this.context !== null;
-  }
-
-  getLoadedModelPath(): string | null {
-    return this.currentModelPath;
-  }
+  isModelLoaded(): boolean { return this.context !== null; }
+  getLoadedModelPath(): string | null { return this.currentModelPath; }
 
   async requestPermissions(): Promise<boolean> {
     if (Platform.OS === 'android') {
@@ -232,7 +214,20 @@ class WhisperService {
 
     this.isTranscribing = true;
 
+    // Create a promise that resolves when the native side fully finishes
+    let resolveTranscriptionStopped: () => void = () => {};
+    this.transcriptionFullyStopped = new Promise<void>(resolve => {
+      resolveTranscriptionStopped = resolve;
+    });
+
     try {
+      // Guard: context could have been released during the async permission check
+      if (!this.context) {
+        this.isTranscribing = false;
+        resolveTranscriptionStopped();
+        throw new Error('Whisper context was released before transcription could start');
+      }
+
       logger.log('[WhisperService] Calling transcribeRealtime...');
       // Use the transcribeRealtime API
       const { stop, subscribe } = await this.context.transcribeRealtime({
@@ -272,12 +267,15 @@ class WhisperService {
           logger.log('[WhisperService] Recording finished');
           this.isTranscribing = false;
           this.stopFn = null;
+          // Signal that native processing is complete - safe to release context
+          resolveTranscriptionStopped();
         }
       });
     } catch (error) {
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
       this.stopFn = null;
+      resolveTranscriptionStopped();
       throw error;
     }
   }
@@ -286,7 +284,13 @@ class WhisperService {
     logger.log('[WhisperService] stopTranscription called');
     try {
       if (this.stopFn) {
-        this.stopFn();
+        // Guard: only call stop if context still exists
+        // Calling stop on a freed context causes SIGSEGV
+        if (this.context) {
+          this.stopFn();
+        } else {
+          logger.log('[WhisperService] Context already released, skipping stopFn call');
+        }
         this.stopFn = null;
       }
     } catch (error) {
@@ -301,6 +305,8 @@ class WhisperService {
     logger.log('[WhisperService] Force resetting state');
     this.isTranscribing = false;
     this.stopFn = null;
+    // Resolve any pending transcription stop promise so unloadModel won't hang
+    this.transcriptionFullyStopped = Promise.resolve();
   }
 
   isCurrentlyTranscribing(): boolean {

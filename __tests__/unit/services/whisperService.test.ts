@@ -15,6 +15,12 @@ const mockedAudioSessionIos = AudioSessionIos as jest.Mocked<typeof AudioSession
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedInitWhisper = initWhisper as jest.MockedFunction<typeof initWhisper>;
 
+  /** Mock RNFS to report a valid model file (exists + large enough) */
+const mockValidModelFile = () => {
+  mockedRNFS.exists.mockResolvedValue(true);
+  mockedRNFS.stat.mockResolvedValue({ size: 75 * 1024 * 1024, isFile: () => true } as any);
+};
+
 describe('WhisperService', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
@@ -24,6 +30,8 @@ describe('WhisperService', () => {
     (whisperService as any).currentModelPath = null;
     (whisperService as any).isTranscribing = false;
     (whisperService as any).stopFn = null;
+    (whisperService as any).isReleasingContext = false;
+    (whisperService as any).transcriptionFullyStopped = Promise.resolve();
     // Re-establish default AudioSessionIos mock implementations
     // (previous tests may have set mockRejectedValue which clearAllMocks doesn't reset)
     mockedAudioSessionIos.setCategory.mockResolvedValue(undefined as any);
@@ -81,10 +89,13 @@ describe('WhisperService', () => {
     });
 
     it('downloads via RNFS when not present', async () => {
-      // First exists check (ensureModelsDirExists) = true, second (destPath) = false
+      // First exists check (ensureModelsDirExists) = true, second (destPath) = false,
+      // third (validateModelFile) = true
       mockedRNFS.exists
         .mockResolvedValueOnce(true) // dir exists
-        .mockResolvedValueOnce(false); // model not yet downloaded
+        .mockResolvedValueOnce(false) // model not yet downloaded
+        .mockResolvedValueOnce(true); // validation: file exists after download
+      mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
 
       mockedRNFS.downloadFile.mockReturnValue({
         jobId: 1,
@@ -102,7 +113,9 @@ describe('WhisperService', () => {
     it('calls progress callback', async () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true) // dir exists
-        .mockResolvedValueOnce(false); // model doesn't exist
+        .mockResolvedValueOnce(false) // model doesn't exist
+        .mockResolvedValueOnce(true); // validation: file exists after download
+      mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
 
       let capturedProgressFn: any;
       mockedRNFS.downloadFile.mockImplementation((opts: any) => {
@@ -162,10 +175,42 @@ describe('WhisperService', () => {
   });
 
   // ========================================================================
+  // validateModelFile
+  // ========================================================================
+  describe('validateModelFile', () => {
+    it('throws when path is empty', async () => {
+      await expect(whisperService.validateModelFile('')).rejects.toThrow('empty or undefined');
+    });
+
+    it('throws when file does not exist', async () => {
+      mockedRNFS.exists.mockResolvedValue(false);
+
+      await expect(whisperService.validateModelFile('/missing/model.bin')).rejects.toThrow('not found');
+    });
+
+    it('throws and deletes file when file is too small (corrupted)', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 1000, isFile: () => true } as any);
+      mockedRNFS.unlink.mockResolvedValue(undefined as any);
+
+      await expect(whisperService.validateModelFile('/path/model.bin')).rejects.toThrow('too small');
+      expect(RNFS.unlink).toHaveBeenCalledWith('/path/model.bin');
+    });
+
+    it('passes for valid file with sufficient size', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 75 * 1024 * 1024, isFile: () => true } as any);
+
+      await expect(whisperService.validateModelFile('/path/model.bin')).resolves.toBeUndefined();
+    });
+  });
+
+  // ========================================================================
   // loadModel
   // ========================================================================
   describe('loadModel', () => {
     it('calls initWhisper with file path', async () => {
+      mockValidModelFile();
       const mockContext = {
         id: 'test-whisper',
         release: jest.fn(),
@@ -182,6 +227,7 @@ describe('WhisperService', () => {
     });
 
     it('unloads different model before loading new one', async () => {
+      mockValidModelFile();
       const mockContext1 = {
         id: 'ctx1',
         release: jest.fn(() => Promise.resolve()),
@@ -206,6 +252,7 @@ describe('WhisperService', () => {
     });
 
     it('skips loading if same model already loaded', async () => {
+      mockValidModelFile();
       const mockContext = {
         id: 'ctx',
         release: jest.fn(),
@@ -220,10 +267,29 @@ describe('WhisperService', () => {
       expect(initWhisper).toHaveBeenCalledTimes(1);
     });
 
-    it('throws on initWhisper failure', async () => {
+    it('throws on initWhisper failure and clears context', async () => {
+      mockValidModelFile();
       mockedInitWhisper.mockRejectedValue(new Error('Load failed'));
 
       await expect(whisperService.loadModel('/bad/model.bin')).rejects.toThrow('Load failed');
+      expect(whisperService.isModelLoaded()).toBe(false);
+      expect(whisperService.getLoadedModelPath()).toBeNull();
+    });
+
+    it('throws when model file is missing (prevents native crash)', async () => {
+      mockedRNFS.exists.mockResolvedValue(false);
+
+      await expect(whisperService.loadModel('/missing/model.bin')).rejects.toThrow('not found');
+      expect(initWhisper).not.toHaveBeenCalled();
+    });
+
+    it('throws when model file is corrupted/too small (prevents native crash)', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.stat.mockResolvedValue({ size: 500, isFile: () => true } as any);
+      mockedRNFS.unlink.mockResolvedValue(undefined as any);
+
+      await expect(whisperService.loadModel('/corrupted/model.bin')).rejects.toThrow('too small');
+      expect(initWhisper).not.toHaveBeenCalled();
     });
   });
 
@@ -232,6 +298,7 @@ describe('WhisperService', () => {
   // ========================================================================
   describe('unloadModel', () => {
     it('releases context and clears state', async () => {
+      mockValidModelFile();
       const mockContext = {
         id: 'ctx',
         release: jest.fn(() => Promise.resolve()),
@@ -374,6 +441,11 @@ describe('WhisperService', () => {
   // ========================================================================
   describe('startRealtimeTranscription', () => {
     const originalOS = Platform.OS;
+
+    beforeEach(() => {
+      // Most tests in this block need a loaded model, which requires valid file mocks
+      mockValidModelFile();
+    });
 
     afterEach(() => {
       Object.defineProperty(Platform, 'OS', { get: () => originalOS });
@@ -555,6 +627,8 @@ describe('WhisperService', () => {
       const mockStopFn = jest.fn();
       (whisperService as any).stopFn = mockStopFn;
       (whisperService as any).isTranscribing = true;
+      // Context must exist for stopFn to be called (guard against SIGSEGV on freed context)
+      (whisperService as any).context = { release: jest.fn() };
 
       await whisperService.stopTranscription();
 
@@ -562,9 +636,22 @@ describe('WhisperService', () => {
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
+    it('skips stopFn when context is already released', async () => {
+      const mockStopFn = jest.fn();
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).context = null; // Context already freed
+
+      await whisperService.stopTranscription();
+
+      expect(mockStopFn).not.toHaveBeenCalled();
+      expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+
     it('handles error in stop function gracefully', async () => {
       (whisperService as any).stopFn = () => { throw new Error('stop error'); };
       (whisperService as any).isTranscribing = true;
+      (whisperService as any).context = { release: jest.fn() };
 
       await whisperService.stopTranscription(); // Should not throw
 
@@ -588,6 +675,7 @@ describe('WhisperService', () => {
     });
 
     it('returns transcription result', async () => {
+      mockValidModelFile();
       const mockContext = {
         id: 'ctx',
         release: jest.fn(),

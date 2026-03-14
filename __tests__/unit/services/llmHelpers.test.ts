@@ -12,6 +12,7 @@ import {
   captureGpuInfo,
   logContextMetadata,
 } from '../../../src/services/llmHelpers';
+import { Platform } from 'react-native';
 
 jest.mock('../../../src/utils/logger', () => ({
   __esModule: true,
@@ -59,17 +60,57 @@ describe('getGpuLayersForDevice', () => {
     expect(getGpuLayersForDevice(4 * GB, 99)).toBe(0);
   });
 
-  it('keeps requested GPU layers on 6GB RAM device', () => {
+  it('keeps requested GPU layers on 6GB iOS device', () => {
     expect(getGpuLayersForDevice(6 * GB, 99)).toBe(99);
   });
 
-  it('keeps requested GPU layers on 8GB RAM device', () => {
+  it('keeps requested GPU layers on 8GB iOS device', () => {
     expect(getGpuLayersForDevice(8 * GB, 99)).toBe(99);
   });
 
   it('passes through 0 GPU layers unchanged', () => {
     expect(getGpuLayersForDevice(4 * GB, 0)).toBe(0);
     expect(getGpuLayersForDevice(8 * GB, 0)).toBe(0);
+  });
+
+  describe('Android Adreno GPU caps', () => {
+    const origPlatform = Platform.OS;
+
+    beforeEach(() => {
+      (Platform as any).OS = 'android';
+    });
+
+    afterEach(() => {
+      (Platform as any).OS = origPlatform;
+    });
+
+    it('disables GPU on Android with 4GB RAM', () => {
+      expect(getGpuLayersForDevice(4 * GB, 99)).toBe(0);
+    });
+
+    it('disables GPU on Android with 6GB RAM', () => {
+      expect(getGpuLayersForDevice(6 * GB, 99)).toBe(0);
+    });
+
+    it('caps GPU layers to 12 on Android with 8GB RAM', () => {
+      expect(getGpuLayersForDevice(8 * GB, 99)).toBe(12);
+    });
+
+    it('caps GPU layers to 12 on Android with 7GB RAM', () => {
+      expect(getGpuLayersForDevice(7 * GB, 99)).toBe(12);
+    });
+
+    it('caps GPU layers to 24 on Android with 12GB RAM', () => {
+      expect(getGpuLayersForDevice(12 * GB, 99)).toBe(24);
+    });
+
+    it('returns requested layers when under cap on Android 12GB', () => {
+      expect(getGpuLayersForDevice(12 * GB, 16)).toBe(16);
+    });
+
+    it('passes through 0 GPU layers unchanged on Android', () => {
+      expect(getGpuLayersForDevice(8 * GB, 0)).toBe(0);
+    });
   });
 });
 

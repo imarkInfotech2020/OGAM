@@ -1658,7 +1658,11 @@ describe('LLMService', () => {
 
     it('handles stat error for mmproj file', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockRejectedValue(new Error('stat failed'));
+      // First stat call (validateModelFile) and second (checkMemoryForModel) succeed; third (initializeMultimodal) fails
+      mockedRNFS.stat
+        .mockResolvedValueOnce({ size: 1000000, isFile: () => true } as any)
+        .mockResolvedValueOnce({ size: 1000000, isFile: () => true } as any)
+        .mockRejectedValue(new Error('stat failed'));
 
       const ctx = createMockLlamaContext({
         initMultimodal: jest.fn(() => Promise.resolve(true)),
@@ -1994,7 +1998,7 @@ describe('LLMService', () => {
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
-        .rejects.toThrow('Unknown error loading model');
+        .rejects.toThrow('Failed to load model even at minimum context');
     });
   });
 

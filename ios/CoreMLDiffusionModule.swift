@@ -66,6 +66,33 @@ class CoreMLDiffusionModule: RCTEventEmitter {
     return FileManager.default.fileExists(atPath: te2.path)
   }
 
+  // MARK: - Model integrity validation
+
+  /// Validates that the required model sub-components exist on disk before
+  /// attempting to run the pipeline.  A missing TextEncoder.mlmodelc is the
+  /// most common cause of the "Unexpectedly found nil" crash in
+  /// TextEncoder.encode(ids:).
+  private func validateModelFiles(at url: URL, isXL: Bool) -> String? {
+    let requiredComponents = [
+      "TextEncoder.mlmodelc",
+      "Unet.mlmodelc",
+      "VAEDecoder.mlmodelc",
+    ]
+    for component in requiredComponents {
+      let path = url.appendingPathComponent(component)
+      if !FileManager.default.fileExists(atPath: path.path) {
+        return "Missing required model component: \(component)"
+      }
+    }
+    if isXL {
+      let te2 = url.appendingPathComponent("TextEncoder2.mlmodelc")
+      if !FileManager.default.fileExists(atPath: te2.path) {
+        return "Missing required SDXL component: TextEncoder2.mlmodelc"
+      }
+    }
+    return nil
+  }
+
   // MARK: - loadModel
 
   @objc func loadModel(_ params: NSDictionary,
@@ -88,6 +115,13 @@ class CoreMLDiffusionModule: RCTEventEmitter {
       do {
         let url = URL(fileURLWithPath: modelPath)
 
+        // Validate model files exist before attempting to load
+        let xl = self.isXLModel(at: url)
+        if let validationError = self.validateModelFiles(at: url, isXL: xl) {
+          reject("ERR_INVALID_MODEL", validationError, nil)
+          return
+        }
+
         let cpuOnly = params["cpuOnly"] as? Bool ?? false
         let config = MLModelConfiguration()
         let attentionVariant = params["attentionVariant"] as? String ?? "split_einsum"
@@ -97,7 +131,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
         let pipe: StableDiffusionPipelineProtocol
 
-        if self.isXLModel(at: url) {
+        if xl {
           // SDXL models need the XL pipeline which uses TextEncoderXL
           // (expects "hidden_embeds" output instead of "last_hidden_state")
           pipe = try StableDiffusionXLPipeline(
@@ -171,11 +205,18 @@ class CoreMLDiffusionModule: RCTEventEmitter {
       return
     }
 
-    let prompt = params["prompt"] as? String ?? ""
+    let prompt = (params["prompt"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let negativePrompt = params["negativePrompt"] as? String ?? ""
     let steps = params["steps"] as? Int ?? 20
     let guidanceScale = params["guidanceScale"] as? Double ?? 7.5
     let seed = params["seed"] as? UInt32 ?? UInt32.random(in: 0..<UInt32.max)
+
+    // Validate prompt before sending to the pipeline — an empty prompt causes
+    // TextEncoder.encode(ids:) to force-unwrap a nil value and crash.
+    guard !prompt.isEmpty else {
+      reject("ERR_INVALID_PROMPT", "Prompt cannot be empty", nil)
+      return
+    }
 
     generating = true
     cancelRequested = false
@@ -185,24 +226,47 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
       defer { self.generating = false }
 
+      // Re-check that pipeline hasn't been released (e.g. by a memory warning)
+      guard self.pipeline != nil else {
+        reject("ERR_NO_MODEL", "Model was unloaded (possibly due to low memory). Please reload and try again.", nil)
+        return
+      }
+
       do {
         var pipelineConfig = PipelineConfiguration(prompt: prompt)
         pipelineConfig.negativePrompt = negativePrompt
-        pipelineConfig.stepCount = steps
+        pipelineConfig.stepCount = max(1, steps)
         pipelineConfig.guidanceScale = Float(guidanceScale)
         pipelineConfig.seed = seed
 
-        let images = try pipe.generateImages(configuration: pipelineConfig) { progress in
-          if self.cancelRequested { return false }
+        let images: [CGImage?]
+        do {
+          images = try pipe.generateImages(configuration: pipelineConfig) { progress in
+            if self.cancelRequested { return false }
 
-          let progressValue = Double(progress.step) / Double(progress.stepCount)
-          self.sendEvent(withName: "LocalDreamProgress", body: [
-            "step": progress.step,
-            "totalSteps": progress.stepCount,
-            "progress": progressValue
-          ])
+            let progressValue = Double(progress.step) / Double(progress.stepCount)
+            self.sendEvent(withName: "LocalDreamProgress", body: [
+              "step": progress.step,
+              "totalSteps": progress.stepCount,
+              "progress": progressValue
+            ])
 
-          return true // continue
+            return true // continue
+          }
+        } catch {
+          // Catch errors from the pipeline (including TextEncoder failures)
+          // and convert them to a JS-visible rejection instead of crashing.
+          let msg = "Pipeline failed during image generation: \(error.localizedDescription)"
+          NSLog("[CoreMLDiffusion] %@", msg)
+          self.sendEvent(withName: "LocalDreamError", body: ["error": msg])
+
+          // If the error may indicate a corrupted model state, release it so
+          // the next attempt triggers a fresh load.
+          self.pipeline = nil
+          self.loadedModelPath = nil
+
+          reject("ERR_GENERATION", msg, error)
+          return
         }
 
         if self.cancelRequested {

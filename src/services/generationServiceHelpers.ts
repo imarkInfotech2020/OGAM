@@ -115,14 +115,19 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
   svc.abortRequested = false;
 
   // Check provider readiness
+  const failPrepare = (msg: string) => {
+    svc.resetState();
+    useChatStore.getState().clearStreamingMessage();
+    throw new Error(msg);
+  };
   if (svc.isUsingRemoteProvider()) {
     const provider = svc.getCurrentProvider();
-    if (!provider) { svc.resetState(); throw new Error('Remote provider not found'); }
+    if (!provider) failPrepare('Remote provider not found');
     const ready = await provider.isReady();
-    if (!ready) { svc.resetState(); throw new Error('Remote provider not ready'); }
+    if (!ready) failPrepare('Remote provider not ready');
   } else {
-    if (!llmService.isModelLoaded()) { svc.resetState(); throw new Error('No model loaded'); }
-    if (llmService.isCurrentlyGenerating()) { svc.resetState(); throw new Error('LLM service busy'); }
+    if (!llmService.isModelLoaded()) failPrepare('No model loaded');
+    if (llmService.isCurrentlyGenerating()) failPrepare('LLM service busy');
   }
 
   svc.tokenBuffer = '';

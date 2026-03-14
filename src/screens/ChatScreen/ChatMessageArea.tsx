@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, FlatList, Text, Keyboard, ActivityIndicator } from 'react-native';
+import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -56,6 +56,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           keyboardShouldPersistTaps="handled"
           onTouchStart={() => Keyboard.dismiss()}
           maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 100 }}
+          removeClippedSubviews={Platform.OS !== 'android'}
         />
       )}
       {chat.showScrollToBottom && chat.displayMessages.length > 0 && (
