@@ -41,7 +41,6 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     downloadProgress,
     setDownloadProgress,
     addDownloadedModel,
-    setActiveModelId,
   } = useAppStore();
 
   useEffect(() => {
@@ -123,16 +122,13 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     const onComplete = (model: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
       addDownloadedModel(model);
-      setActiveModelId(model.id);
 
-      // Navigate to home/chat
       setAlertState(showAlert(
         'Download Complete!',
-        `${model.name} is ready to use. Let's start chatting!`,
+        `${model.name} has been downloaded successfully.`,
         [
           {
-            text: 'Start Chatting',
-            onPress: () => navigation.replace('Main'),
+            text: 'OK',
           },
         ]
       ));
