@@ -169,6 +169,15 @@ export const TextTab: React.FC<TextTabProps> = ({
                         </View>
                       </>
                     )}
+                    {model.capabilities.supportsThinking && (
+                      <>
+                        <Text style={styles.metaSeparator}>•</Text>
+                        <View style={styles.thinkingBadge}>
+                          <Icon name="zap" size={10} color="#8B5CF6" />
+                          <Text style={styles.thinkingBadgeText}>Thinking</Text>
+                        </View>
+                      </>
+                    )}
                   </View>
                 </View>
                 {isCurrent && (

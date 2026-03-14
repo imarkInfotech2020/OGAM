@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 import UIKit
 import CoreML
@@ -76,7 +77,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
     let requiredComponents = [
       "TextEncoder.mlmodelc",
       "Unet.mlmodelc",
-      "VAEDecoder.mlmodelc",
+      "VAEDecoder.mlmodelc"
     ]
     for component in requiredComponents {
       let path = url.appendingPathComponent(component)
@@ -116,8 +117,8 @@ class CoreMLDiffusionModule: RCTEventEmitter {
         let url = URL(fileURLWithPath: modelPath)
 
         // Validate model files exist before attempting to load
-        let xl = self.isXLModel(at: url)
-        if let validationError = self.validateModelFiles(at: url, isXL: xl) {
+        let isXL = self.isXLModel(at: url)
+        if let validationError = self.validateModelFiles(at: url, isXL: isXL) {
           reject("ERR_INVALID_MODEL", validationError, nil)
           return
         }
@@ -131,7 +132,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
         let pipe: StableDiffusionPipelineProtocol
 
-        if xl {
+        if isXL {
           // SDXL models need the XL pipeline which uses TextEncoderXL
           // (expects "hidden_embeds" output instead of "last_hidden_state")
           pipe = try StableDiffusionXLPipeline(
@@ -192,6 +193,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
   // MARK: - generateImage
 
+  // swiftlint:disable:next cyclomatic_complexity
   @objc func generateImage(_ params: NSDictionary,
                            resolver resolve: @escaping RCTPromiseResolveBlock,
                            rejecter reject: @escaping RCTPromiseRejectBlock) {

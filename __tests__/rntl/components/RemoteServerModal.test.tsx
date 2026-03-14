@@ -14,7 +14,6 @@
 
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
 // Mock AppSheet
 jest.mock('../../../src/components/AppSheet', () => ({
@@ -50,7 +49,29 @@ jest.mock('../../../src/services/httpClient', () => ({
 }));
 
 jest.mock('../../../src/theme', () => ({
-  useTheme: () => ({ colors: { textMuted: '#666', background: '#000' } }),
+  useTheme: () => ({
+    colors: {
+      textMuted: '#666',
+      background: '#000',
+      surface: '#222',
+      surfaceLight: '#333',
+      border: '#444',
+      textSecondary: '#aaa',
+      text: '#fff',
+      error: '#f00',
+      errorBackground: '#fee',
+      primary: '#4a90d9',
+      success: '#4caf50',
+    },
+    elevation: {
+      level0: { backgroundColor: '#000', borderWidth: 0, borderColor: 'transparent' },
+      level1: { backgroundColor: '#222', borderWidth: 1, borderColor: '#444' },
+      level2: { backgroundColor: '#333', borderWidth: 1, borderColor: '#444' },
+      level3: { backgroundColor: '#333F2', borderTopWidth: 1, borderColor: '#444', borderRadius: 16 },
+      level4: { backgroundColor: '#333FA', borderTopWidth: 1, borderColor: '#4a90d9', borderRadius: 16 },
+      handle: { width: 36, height: 5, backgroundColor: '#444', borderRadius: 2.5 },
+    },
+  }),
   useThemedStyles: (fn: any) =>
     fn(
       {
@@ -70,8 +91,38 @@ const mockTestConnection = remoteServerManager.testConnectionByEndpoint as jest.
 const mockAddServer = remoteServerManager.addServer as jest.Mock;
 const mockUpdateServer = remoteServerManager.updateServer as jest.Mock;
 const mockIsPrivate = isPrivateNetworkEndpoint as jest.Mock;
-const mockAlert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 const mockSetDiscoveredModels = jest.fn();
+
+const mockShowAlert = jest.fn((_t: string, _m: string, _b?: any) => ({
+  visible: true,
+  title: _t,
+  message: _m,
+  buttons: _b || [],
+}));
+
+jest.mock('../../../src/components/CustomAlert', () => ({
+  CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
+    if (!visible) return null;
+    const { View, Text, TouchableOpacity: TO } = require('react-native');
+    return (
+      <View testID="custom-alert">
+        <Text testID="alert-title">{title}</Text>
+        <Text testID="alert-message">{message}</Text>
+        {buttons && buttons.map((btn: any, i: number) => (
+          <TO key={i} testID={`alert-button-${btn.text}`} onPress={btn.onPress}>
+            <Text>{btn.text}</Text>
+          </TO>
+        ))}
+        <TO testID="alert-close" onPress={onClose}>
+          <Text>CloseAlert</Text>
+        </TO>
+      </View>
+    );
+  },
+  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
+  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
+  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
+}));
 
 function createMockServer(overrides: Partial<any> = {}) {
   return {
@@ -322,7 +373,7 @@ describe('RemoteServerModal', () => {
       );
       await connectAndEnableSave(getByText, getByPlaceholderText);
       await act(async () => { fireEvent.press(getByText('Add Server')); });
-      expect(mockAlert).toHaveBeenCalledWith('Error', 'Server unavailable');
+      expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Server unavailable');
     });
 
   });
@@ -371,7 +422,7 @@ describe('RemoteServerModal', () => {
       );
       await connectForEdit(getByText);
       await act(async () => { fireEvent.press(getByText('Update Server')); });
-      expect(mockAlert).toHaveBeenCalledWith('Error', 'Update failed');
+      expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Update failed');
     });
   });
 
@@ -395,7 +446,7 @@ describe('RemoteServerModal', () => {
       );
       await setupPublicEndpointWithTest(getByText, getByPlaceholderText);
       await act(async () => { fireEvent.press(getByText('Add Server')); });
-      expect(mockAlert).toHaveBeenCalledWith(
+      expect(mockShowAlert).toHaveBeenCalledWith(
         'Public Network Warning',
         expect.stringContaining('public internet'),
         expect.arrayContaining([
@@ -412,7 +463,7 @@ describe('RemoteServerModal', () => {
       );
       await setupPublicEndpointWithTest(getByText, getByPlaceholderText);
       await act(async () => { fireEvent.press(getByText('Add Server')); });
-      const continueBtn = (mockAlert.mock.calls as any)[0][2].find((b: any) => b.text === 'Continue');
+      const continueBtn = (mockShowAlert.mock.calls as any)[0][2].find((b: any) => b.text === 'Continue');
       await act(async () => { continueBtn.onPress(); });
       expect(mockAddServer).toHaveBeenCalled();
     });

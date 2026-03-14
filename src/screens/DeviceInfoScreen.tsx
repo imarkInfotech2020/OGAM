@@ -83,6 +83,11 @@ export const DeviceInfoScreen: React.FC = () => {
               <Text style={styles.tierDesc}>{'>6GB RAM'}</Text>
               <Text style={styles.tierModels}>All models</Text>
             </View>
+            <View style={[styles.tierItem, deviceTier === 'flagship' && styles.tierItemActive]}>
+              <Text style={[styles.tierName, deviceTier === 'flagship' && styles.tierNameActive]}>Flagship</Text>
+              <Text style={styles.tierDesc}>{'8GB+ RAM'}</Text>
+              <Text style={styles.tierModels}>All models + largest</Text>
+            </View>
           </View>
         </Card>
       </ScrollView>

@@ -10,6 +10,7 @@ class PDFExtractorModule: NSObject {
   }
 
   @objc
+  // swiftlint:disable:next cyclomatic_complexity
   func extractText(_ filePath: String, maxChars: Double, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     DispatchQueue.global(qos: .userInitiated).async {
       print("[PDFExtractor] Received filePath: \(filePath)")
@@ -80,7 +81,7 @@ class PDFExtractorModule: NSObject {
 
             if data.count < 5 {
               errorMessage = "File is too small to be a valid PDF: \(data.count) bytes"
-            } else if !data.prefix(5).elementsEqual("%PDF-".data(using: .ascii)!) {
+            } else if let asciiData = "%PDF-".data(using: .ascii), !data.prefix(5).elementsEqual(asciiData) {
               errorMessage = "File does not have valid PDF header. Got: \(header)"
             } else {
               errorMessage = "PDFKit could not parse the PDF file. File size: \(data.count) bytes"
