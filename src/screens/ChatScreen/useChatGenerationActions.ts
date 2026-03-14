@@ -76,11 +76,15 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
     if (cutoffIdx !== -1) filtered = messages.slice(cutoffIdx + 1);
   }
   return { prefix, filtered };
-}function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
+}
+
+function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
   if (!attachments) return text;
   return attachments.filter(a => a.type === 'document' && a.textContent)
     .reduce((acc, doc) => `${acc}\n\n---\n📄 **Attached Document: ${doc.fileName || 'document'}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`, text);
-}function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
+}
+
+function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   const allMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, allMessages);
@@ -202,12 +206,10 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
     const docs = await ragService.getDocumentsByProject(projectId);
     const enabledDocs = docs.filter((d: import('../../services/rag').RagDocument) => d.enabled);
     if (enabledDocs.length === 0) return prompt;
-
     // Warm up embedding model in background (non-blocking)
     if (!embeddingService.isLoaded()) {
       embeddingService.load().catch(err => logger.error('[RAG] Embedding warmup failed', err));
     }
-
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
     kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
@@ -256,10 +258,8 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const heuristicMatch = shouldUseToolsForMessage(messageText, enabledTools);
   const activeTools = (isRemote || heuristicMatch) ? enabledTools : [];
   const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
-  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, heuristicMatch=${heuristicMatch}, enabledTools=[${enabledTools.join(', ')}], activeTools=[${activeTools.join(', ')}]`);
-  logger.log(`[ChatGen][DEBUG] Will use path: ${activeTools.length > 0 ? 'generateWithTools' : 'generateResponse'}, projectId=${conversation?.projectId || 'none'}`);
+  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
-  logger.log(`[ChatGen][DEBUG] messagesForContext count=${messagesForContext?.length ?? 0}`);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);

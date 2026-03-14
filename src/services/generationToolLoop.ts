@@ -64,10 +64,15 @@ export interface ToolLoopCallbacks {
   onFirstToken?: () => void;
 }
 export interface ToolLoopContext {
-  conversationId: string; messages: Message[]; enabledToolIds: string[];
-  projectId?: string; callbacks?: ToolLoopCallbacks;
-  isAborted: () => boolean; onThinkingDone: () => void;
-  onStream?: (data: StreamChunk) => void; onStreamReset?: () => void;
+  conversationId: string;
+  messages: Message[];
+  enabledToolIds: string[];
+  projectId?: string;
+  callbacks?: ToolLoopCallbacks;
+  isAborted: () => boolean;
+  onThinkingDone: () => void;
+  onStream?: (data: StreamChunk) => void;
+  onStreamReset?: () => void;
   onFinalResponse: (content: string) => void;
   forceRemote?: boolean;
 }
@@ -129,7 +134,6 @@ async function callRemoteLLMWithTools(
   };
   logger.log(`[ToolLoop] callRemoteLLM — server=${activeServerId}, tools=${tools.length}, thinking=${thinkingEnabled}`);
   let _fullContent = '';
-  let _reasoningContent = '';
   let toolCalls: ToolCall[] = [];
   const onStream = opts?.onStream;
   return new Promise((resolve, reject) => {
@@ -139,7 +143,6 @@ async function callRemoteLLMWithTools(
         onStream?.({ content: token });
       },
       onReasoning: (content: string) => {
-        _reasoningContent += content;
         onStream?.({ reasoningContent: content });
       },
       onComplete: (result: CompletionResult) => {
@@ -199,6 +202,8 @@ async function callLLMWithRetry(
     try { return await callRemoteLLMWithTools(messages, tools, { onStream, disableThinking }); }
     catch (e: any) { throw new Error(e?.message || String(e) || 'Remote LLM error'); }
   }
+  // disableThinking is not forwarded to local — local llama.rn controls thinking
+  // internally and doesn't count thinking tokens against num_predict.
   return callLocalWithRetry(messages, tools, onStream);
 }
 
@@ -214,7 +219,12 @@ function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
   return { effectiveToolCalls: toolCalls, displayResponse: fullResponse };
 }
 
-interface ToolLoopState { firstTokenFired: boolean; streamedContent: string; reasoningContent: string; }
+interface ToolLoopState {
+  firstTokenFired: boolean;
+  thinkingDoneFired: boolean;
+  streamedContent: string;
+  reasoningContent: string;
+}
 
 function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data: StreamChunk) => void) | undefined {
   if (!ctx.onStream) return undefined;
@@ -223,6 +233,7 @@ function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data:
     const chunk = normalizeStreamChunk(data);
     if (!state.firstTokenFired) {
       state.firstTokenFired = true;
+      state.thinkingDoneFired = true;
       ctx.onThinkingDone();
       ctx.callbacks?.onFirstToken?.();
     }
@@ -232,15 +243,15 @@ function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data:
   };
 }
 
-function emitFinalResponse(ctx: ToolLoopContext, displayResponse: string, streamedContent: string): void {
-  logger.log(`[ToolLoop][DEBUG] emitFinalResponse — displayResponse length=${displayResponse.length}, streamedContent length=${streamedContent.length}, displayPreview="${displayResponse.substring(0, 100) || '(empty)'}"`);
-  // If streamedContent is set, tokens were already streamed; otherwise deliver now.
-  if (streamedContent) {
-    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — content was already streamed (${streamedContent.length} chars), not delivering again`);
+function emitFinalResponse(ctx: ToolLoopContext, state: ToolLoopState, displayResponse: string): void {
+  if (state.streamedContent) {
+    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — already streamed (${state.streamedContent.length} chars), skipping`);
   } else {
-    logger.log(`[ToolLoop][DEBUG] emitFinalResponse — no streamed content, delivering: "${(displayResponse || '_(No response)_').substring(0, 100)}"`);
-    ctx.onThinkingDone();
-    ctx.callbacks?.onFirstToken?.();
+    // Guard: only fire onThinkingDone/onFirstToken if not already fired (e.g. by reasoning-only first call)
+    if (!state.thinkingDoneFired) {
+      ctx.onThinkingDone();
+      ctx.callbacks?.onFirstToken?.();
+    }
     ctx.onFinalResponse(displayResponse || '_(No response)_');
   }
 }
@@ -255,7 +266,7 @@ async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState
   // Disable thinking so the model spends all tokens on actual content
   const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true });
   logger.log(`[ToolLoop][DEBUG] Forced response — length=${forcedResponse.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
-  emitFinalResponse(ctx, forcedResponse, state.streamedContent);
+  emitFinalResponse(ctx, state, forcedResponse);
 }
 
 /**
@@ -267,7 +278,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const toolSchemas = getToolsAsOpenAISchema(ctx.enabledToolIds);
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
-  const state: ToolLoopState = { firstTokenFired: false, streamedContent: '', reasoningContent: '' };
+  const state: ToolLoopState = { firstTokenFired: false, thinkingDoneFired: false, streamedContent: '', reasoningContent: '' };
 
   logger.log(`[ToolLoop][DEBUG] === runToolLoop START === enabledToolIds=[${ctx.enabledToolIds.join(', ')}], toolSchemas=${toolSchemas.length}, messages=${ctx.messages.length}, forceRemote=${ctx.forceRemote}`);
 
@@ -290,20 +301,15 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     const onStream = buildStreamHandler(ctx, state);
     const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, { onStream, forceRemote: ctx.forceRemote });
 
-    logger.log(`[ToolLoop][DEBUG] LLM returned — fullResponse length=${fullResponse.length}, toolCalls=${toolCalls.length}, streamedContent=${state.streamedContent.length}, reasoningContent=${state.reasoningContent.length}`);
+    logger.log(`[ToolLoop][DEBUG] LLM returned — response=${fullResponse.length}, toolCalls=${toolCalls.length}, streamed=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
     if (fullResponse.length === 0 && state.streamedContent.length === 0) {
-      logger.log(`[ToolLoop][DEBUG] *** EMPTY RESPONSE *** — both fullResponse and streamedContent are empty! reasoning=${state.reasoningContent.length} chars`);
-      if (state.reasoningContent.length > 0) {
-        logger.log(`[ToolLoop][DEBUG] Reasoning content preview: "${state.reasoningContent.substring(0, 300)}"`);
-      }
+      logger.log(`[ToolLoop][DEBUG] *** EMPTY RESPONSE *** reasoning=${state.reasoningContent.length}: "${state.reasoningContent.substring(0, 200)}"`);
     }
-
     const { effectiveToolCalls, displayResponse } = resolveToolCalls(fullResponse, toolCalls);
     const cappedToolCalls = effectiveToolCalls.slice(0, MAX_TOTAL_TOOL_CALLS - totalToolCalls);
     totalToolCalls += cappedToolCalls.length;
 
-    logger.log(`[ToolLoop][DEBUG] After resolve — effectiveToolCalls=${effectiveToolCalls.length}, cappedToolCalls=${cappedToolCalls.length}, displayResponse length=${displayResponse.length}`);
-
+    logger.log(`[ToolLoop][DEBUG] After resolve — toolCalls=${cappedToolCalls.length}, displayResponse=${displayResponse.length}`);
     // No tool calls → model gave a final text response
     if (cappedToolCalls.length === 0) {
       // Empty response with tools — retry once without tools (some models choke on tool schemas)
@@ -316,12 +322,10 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
         const { fullResponse: fallbackResp } = await callLLMWithRetry(
           loopMessages, [], { onStream: fallbackOnStream, forceRemote: ctx.forceRemote, disableThinking: true },
         );
-        logger.log(`[ToolLoop][DEBUG] Fallback (no tools) — fullResponse length=${fallbackResp.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
-        emitFinalResponse(ctx, fallbackResp, state.streamedContent);
+        emitFinalResponse(ctx, state, fallbackResp);
         return;
       }
-      logger.log(`[ToolLoop][DEBUG] No tool calls, emitting final response`);
-      emitFinalResponse(ctx, displayResponse, state.streamedContent);
+      emitFinalResponse(ctx, state, displayResponse);
       return;
     }
 
