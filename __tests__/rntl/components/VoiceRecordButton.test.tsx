@@ -220,7 +220,7 @@ describe('VoiceRecordButton', () => {
 
       expect(mockShowAlert).toHaveBeenCalledWith(
         'Voice Input Unavailable',
-        expect.stringContaining('Go to Settings tab'),
+        expect.stringContaining('Download a Whisper model'),
         expect.any(Array)
       );
     });
