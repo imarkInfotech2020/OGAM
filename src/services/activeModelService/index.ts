@@ -14,13 +14,13 @@ import type {
 import {
   checkMemoryForModel as _checkMemoryForModel,
   checkMemoryForDualModel as _checkMemoryForDualModel,
+  getCurrentlyLoadedMemoryGB as _getCurrentlyLoadedMemoryGB,
 } from './memory';
 import { doLoadTextModel, doLoadImageModel } from './loaders';
 import {
   getResourceUsage as _getResourceUsage,
   syncWithNativeState as _syncWithNativeState,
 } from './utils';
-import { getCurrentlyLoadedMemoryGB as _getCurrentlyLoadedMemoryGB } from './memory';
 export type {
   ModelType,
   MemoryCheckSeverity,
@@ -181,7 +181,6 @@ class ActiveModelService {
     }
     return { canLoad: true };
   }
-
   async loadImageModel(
     modelId: string,
     timeoutMs: number = 180000,
@@ -271,10 +270,7 @@ class ActiveModelService {
       this.notifyListeners();
     }
   }
-  async unloadAllModels(): Promise<{
-    textUnloaded: boolean;
-    imageUnloaded: boolean;
-  }> {
+  async unloadAllModels(): Promise<{ textUnloaded: boolean; imageUnloaded: boolean }> {
     const store = useAppStore.getState();
     const results = { textUnloaded: false, imageUnloaded: false };
     const hasTextModel =

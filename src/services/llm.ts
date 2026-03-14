@@ -6,8 +6,8 @@ import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores';
 import {
   initContextWithFallback, captureGpuInfo, logContextMetadata, getModelMaxContext,
-  initMultimodal, checkContextMultimodal,
-  recordGenerationStats, getStreamingDelta, hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
+  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
+  hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion,
@@ -16,17 +16,16 @@ import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
-
+import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+import logger from '../utils/logger';
+export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
+export type StreamToken = { content?: string; reasoningContent?: string };
+type StreamCallback = (data: StreamToken) => void;
+type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
 function resolveGpuBackend(enabled: boolean, devices: string[]): string {
   if (!enabled) return 'CPU';
   return Platform.OS === 'ios' ? 'Metal' : (devices.length > 0 ? devices.join(', ') : 'OpenCL');
 }
-export type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
-import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
-import logger from '../utils/logger';
-export type StreamToken = { content?: string; reasoningContent?: string };
-type StreamCallback = (data: StreamToken) => void;
-type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
 class LLMService {
   private context: LlamaContext | null = null;
   private currentModelPath: string | null = null;
@@ -51,7 +50,6 @@ class LLMService {
     this.contextMutexPromise = new Promise<void>(resolve => { release = resolve; });
     return { release: release!, ready: prev };
   }
-
   private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
   private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
@@ -109,9 +107,7 @@ class LLMService {
       mutex.release();
     }
   }
-  private async initWithAutoContext(
-    params: { baseParams: object; ctxLen: number; nGpuLayers: number },
-  ): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
+  private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
     const safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
     if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
@@ -126,7 +122,6 @@ class LLMService {
     try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
     return initContextWithFallback(params.baseParams, targetCtx, safeGpuLayers);
   }
-
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }
     try {
@@ -141,7 +136,6 @@ class LLMService {
     this.multimodalSupport = support;
     return initialized;
   }
-
   async checkMultimodalSupport(): Promise<MultimodalSupport> {
     if (!this.context) { this.multimodalSupport = { vision: false, audio: false }; return this.multimodalSupport; }
     this.multimodalSupport = await checkContextMultimodal(this.context); return this.multimodalSupport;
@@ -162,7 +156,6 @@ class LLMService {
   private detectThinkingSupport(): void {
     this.thinkingSupported = supportsNativeThinking(this.context);
   }
-
   /** Internal unload without acquiring the mutex (used by loadModel which already holds it). */
   private async doUnloadModel(): Promise<void> {
     if (!this.context) return;
@@ -177,21 +170,11 @@ class LLMService {
   }
   async unloadModel(): Promise<void> {
     const mutex = this.acquireContextMutex();
-    try {
-      await mutex.ready;
-      await this.doUnloadModel();
-    } finally {
-      mutex.release();
-    }
+    try { await mutex.ready; await this.doUnloadModel(); } finally { mutex.release(); }
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-
-  async generateResponse(
-    messages: Message[],
-    onStream?: StreamCallback,
-    onComplete?: CompleteCallback,
-  ): Promise<string> {
+  async generateResponse(messages: Message[], onStream?: StreamCallback, onComplete?: CompleteCallback): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -199,26 +182,16 @@ class LLMService {
     const completionWork = (async () => {
       const managed = await this.manageContextWindow(messages);
       const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
-      const useMultimodal = hasImages && this.multimodalInitialized;
-      if (hasImages && !this.multimodalInitialized) {
-        logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
-      }
-      logger.log('[LLM] Generation mode:', useMultimodal ? 'VISION' : 'TEXT-ONLY');
+      if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
+      logger.log('[LLM] Generation mode:', hasImages && this.multimodalInitialized ? 'VISION' : 'TEXT-ONLY');
       const oaiMessages = this.convertToOAIMessages(managed);
       const { settings } = useAppStore.getState();
       const startTime = Date.now();
-      let firstTokenMs = 0;
-      let tokenCount = 0;
-      let firstReceived = false;
-      let fullContent = '';
-      let fullReasoningContent = '';
-      let streamedContentSoFar = '';
-      let streamedReasoningSoFar = '';
-      const enableThinking = this.isThinkingEnabled();
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings), ...buildThinkingCompletionParams(enableThinking) };
+      let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
+      let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings), ...buildThinkingCompletionParams(this.isThinkingEnabled()) };
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
-        if (!this.isGenerating) return;
-        if (!data.token) return;
+        if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
         tokenCount++;
         const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
@@ -238,18 +211,9 @@ class LLMService {
       return result.content;
     })();
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
-    try {
-      return await completionWork;
-    } finally {
-      this.isGenerating = false;
-      this.activeCompletionPromise = null;
-    }
+    try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-
-  async generateResponseWithTools(
-    messages: Message[],
-    options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback },
-  ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
@@ -264,18 +228,12 @@ class LLMService {
         ? ((onComplete) => (fullResponse: string) => onComplete({ content: fullResponse, reasoningContent: '' }))(options.onComplete) : undefined,
     });
     this.activeCompletionPromise = work.then(() => { }, () => { });
-    try {
-      return await work;
-    } finally {
-      this.activeCompletionPromise = null;
-    }
+    try { return await work; } finally { this.activeCompletionPromise = null; }
   }
-
   /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
   private async manageContextWindow(messages: Message[], _extraReserve = 0): Promise<Message[]> {
     return messages;
   }
-
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
@@ -290,21 +248,12 @@ class LLMService {
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
-    try {
-      await completionWork;
-      return fullResponse.trim();
-    } finally {
-      this.isGenerating = false;
-      this.activeCompletionPromise = null;
-    }
+    try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
     this.isGenerating = false;
-    if (this.activeCompletionPromise !== null) {
-      await this.activeCompletionPromise;
-      this.activeCompletionPromise = null;
-    }
+    if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
   }
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
@@ -365,19 +314,11 @@ class LLMService {
       logger.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
       try {
         const { context, gpuAttemptFailed } = await initContextWithFallback(baseParams, settings.contextLength, nGpuLayers);
-        this.context = context;
-        Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
-        this.currentModelPath = modelPath;
-        this.multimodalSupport = null; this.multimodalInitialized = false;
+        this.context = context; Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+        this.currentModelPath = modelPath; this.multimodalSupport = null; this.multimodalInitialized = false;
         await this.checkMultimodalSupport(); this.detectToolCallingSupport(); this.detectThinkingSupport();
-      } catch (error) {
-        logger.error('[LLM] Error reloading model:', error);
-        Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false, thinkingSupported: false });
-        throw error;
-      }
-    } finally {
-      mutex.release();
-    }
+      } catch (error) { logger.error('[LLM] Error reloading model:', error); Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false, thinkingSupported: false }); throw error; }
+    } finally { mutex.release(); }
   }
 }
 export const llmService = new LLMService();

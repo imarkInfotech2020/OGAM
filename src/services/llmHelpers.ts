@@ -9,23 +9,17 @@ import logger from '../utils/logger';
 export const SYSTEM_PROMPT_RESERVE = 256;
 export const RESPONSE_RESERVE = 512;
 export const CONTEXT_SAFETY_MARGIN = 0.85;
-// 4 threads targets performance cores only; over-threading onto efficiency cores (A520) hurts.
-const DEFAULT_THREADS = 4;
+const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
 const DEFAULT_BATCH = 512;
 export const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
-
 export function getOptimalThreadCount(): number { return DEFAULT_THREADS; }
 export function getOptimalBatchSize(): number { return DEFAULT_BATCH; }
-
 const REPACKABLE_QUANTS = ['q4_0', 'iq4_nl'];
-
 /** Detect repackable quant formats where disabling mmap improves inference speed. */
 export function shouldDisableMmap(modelPath: string): boolean {
   if (Platform.OS !== 'android') return false;
-  const lower = modelPath.toLowerCase();
-  return REPACKABLE_QUANTS.some(q => lower.includes(q));
+  return REPACKABLE_QUANTS.some(q => modelPath.toLowerCase().includes(q));
 }
-
 export function hashString(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -37,7 +31,6 @@ export function hashString(str: string): string {
   }
   return hash.toString(16);
 }
-
 export async function ensureSessionCacheDir(cacheDir: string): Promise<void> {
   try {
     if (!await RNFS.exists(cacheDir)) await RNFS.mkdir(cacheDir);
@@ -45,11 +38,9 @@ export async function ensureSessionCacheDir(cacheDir: string): Promise<void> {
     logger.log('[LLM] Failed to create session cache dir:', e);
   }
 }
-
 export function getSessionPath(cacheDir: string, promptHash: string): string {
   return `${cacheDir}/session-${promptHash}.bin`;
 }
-
 export interface ModelLoadParams {
   baseParams: object;
   nThreads: number;
@@ -81,16 +72,13 @@ export function buildModelParams(
     nThreads, nBatch, ctxLen, nGpuLayers,
   };
 }
-
 export interface ContextInitResult {
   context: LlamaContext;
   gpuAttemptFailed: boolean;
   actualLength: number;
 }
-
-/** Timeout for GPU context init on Android — bail before OS triggers ANR. */
+/** Timeout for GPU context init on Android -- bail before OS triggers ANR. */
 const GPU_INIT_TIMEOUT_MS = 8000;
-
 /** Race a promise against a timeout; rejects with descriptive error on expiry. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -99,7 +87,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
-
 /** Safely release a context, swallowing errors (used during fallback cleanup). */
 async function safeRelease(ctx: LlamaContext | null): Promise<void> {
   if (!ctx) return;
@@ -149,7 +136,6 @@ export async function initContextWithFallback(
     }
   }
 }
-
 export interface GpuInfo {
   gpuEnabled: boolean;
   gpuReason: string;
@@ -169,7 +155,6 @@ export function captureGpuInfo(
   const gpuEnabled = nativeGpuAvailable && activeGpuLayers > 0;
   return { gpuEnabled, gpuReason, gpuDevices, activeGpuLayers };
 }
-
 export function supportsNativeThinking(context: LlamaContext | null): boolean {
   if (!context) return false;
   try {
@@ -182,11 +167,9 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     return false;
   }
 }
-
 export function buildThinkingCompletionParams(enableThinking: boolean): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
   return { enable_thinking: enableThinking, reasoning_format: enableThinking ? 'deepseek' : 'none' };
 }
-
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   if (!nextValue) return undefined;
   if (!previousValue) return nextValue;
@@ -213,7 +196,6 @@ export function logContextMetadata(context: LlamaContext, contextLength: number)
   logger.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
   if (contextLength > maxModelCtx) logger.warn(`[LLM] Requested context (${contextLength}) exceeds model max (${maxModelCtx})`);
 }
-
 export interface MultimodalInitResult {
   initialized: boolean;
   support: MultimodalSupport;
@@ -245,7 +227,6 @@ export async function initMultimodal(
     return noSupport;
   }
 }
-
 export async function checkContextMultimodal(context: LlamaContext): Promise<MultimodalSupport> {
   try {
     // @ts-ignore - llama.rn may have this method
@@ -258,7 +239,6 @@ export async function checkContextMultimodal(context: LlamaContext): Promise<Mul
   }
   return { vision: false, audio: false };
 }
-
 export async function estimateTokens(context: LlamaContext, text: string): Promise<number> {
   try {
     return (await context.tokenize(text)).tokens?.length || 0;
@@ -266,7 +246,6 @@ export async function estimateTokens(context: LlamaContext, text: string): Promi
     return Math.ceil(text.length / 4);
   }
 }
-
 export async function fitMessagesInBudget(
   context: LlamaContext,
   messages: Message[],

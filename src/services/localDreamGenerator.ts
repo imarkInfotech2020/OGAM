@@ -121,6 +121,35 @@ class LocalDreamGeneratorService {
     );
   }
 
+  private buildNativeParams(params: ImageGenerationParams & { previewInterval?: number }, prompt: string) {
+    return {
+      prompt,
+      negativePrompt: params.negativePrompt || '',
+      steps: params.steps || 8,
+      guidanceScale: params.guidanceScale || 7.5,
+      seed: params.seed ?? generateRandomSeed(),
+      width: params.width || 512,
+      height: params.height || 512,
+      previewInterval: params.previewInterval ?? 2,
+      useOpenCL: params.useOpenCL ?? true,
+    };
+  }
+
+  private buildResult(params: ImageGenerationParams, result: any): GeneratedImage {
+    return {
+      id: result.id,
+      prompt: params.prompt,
+      negativePrompt: params.negativePrompt,
+      imagePath: result.imagePath,
+      width: result.width,
+      height: result.height,
+      steps: params.steps || 8,
+      seed: result.seed,
+      modelId: '',
+      createdAt: Date.now().toString(),
+    };
+  }
+
   async generateImage(
     params: ImageGenerationParams & { previewInterval?: number },
     onProgress?: ProgressCallback,
@@ -129,13 +158,9 @@ class LocalDreamGeneratorService {
     if (!this.isAvailable()) {
       throw new Error('LocalDream image generation is not available on this platform');
     }
-
     if (this.generating) {
       throw new Error('Image generation already in progress');
     }
-
-    // Validate prompt before sending to native — empty prompts cause a crash
-    // in the CoreML TextEncoder (force-unwrapped nil in encode(ids:)).
     const trimmedPrompt = (params.prompt || '').trim();
     if (!trimmedPrompt) {
       throw new Error('Cannot generate image with an empty prompt');
@@ -145,34 +170,9 @@ class LocalDreamGeneratorService {
     const progressSubscription = this.subscribeToProgress(onProgress, onPreview);
 
     try {
-      // Call native generateImage — handles HTTP POST, SSE parsing, and PNG saving
-      const result = await DiffusionModule.generateImage({
-        prompt: trimmedPrompt,
-        negativePrompt: params.negativePrompt || '',
-        steps: params.steps || 8,
-        guidanceScale: params.guidanceScale || 7.5,
-        seed: params.seed ?? generateRandomSeed(),
-        width: params.width || 512,
-        height: params.height || 512,
-        previewInterval: params.previewInterval ?? 2,
-        useOpenCL: params.useOpenCL ?? true,
-      });
-
-      return {
-        id: result.id,
-        prompt: params.prompt,
-        negativePrompt: params.negativePrompt,
-        imagePath: result.imagePath,
-        width: result.width,
-        height: result.height,
-        steps: params.steps || 8,
-        seed: result.seed,
-        modelId: '',
-        createdAt: Date.now().toString(),
-      };
+      const result = await DiffusionModule.generateImage(this.buildNativeParams(params, trimmedPrompt));
+      return this.buildResult(params, result);
     } catch (error: any) {
-      // If the native module reports the model was unloaded or is in a bad
-      // state, reset our local tracking so the next attempt reloads it.
       const msg = error?.message || '';
       if (msg.includes('ERR_NO_MODEL') || msg.includes('unloaded') || msg.includes('Pipeline failed')) {
         this.loadedThreads = null;

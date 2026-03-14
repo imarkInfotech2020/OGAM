@@ -197,6 +197,27 @@ class ImageGenerationService {
     }
   }
 
+  private _saveResult(result: any, opts: { params: GenerateImageParams; activeImageModel: any; meta: { steps: number; guidanceScale: number; useOpenCL: boolean; startTime: number } }): GeneratedImage {
+    const { params, activeImageModel, meta } = opts;
+    result.modelId = activeImageModel.id;
+    if (params.conversationId) result.conversationId = params.conversationId;
+    useAppStore.getState().addGeneratedImage(result);
+    useAppStore.getState().completeChecklistStep('triedImageGen');
+    this._checkSharePrompt();
+    if (params.conversationId) {
+      const genTime = Date.now() - meta.startTime;
+      useChatStore.getState().addMessage(params.conversationId, {
+        role: 'assistant',
+        content: `Generated image for: "${params.prompt}"`,
+        attachments: [{ id: result.id, type: 'image', uri: `file://${result.imagePath}`, width: result.width, height: result.height }],
+        generationTimeMs: genTime,
+        generationMeta: buildImageGenMeta(activeImageModel, { steps: meta.steps, guidanceScale: meta.guidanceScale, result, useOpenCL: meta.useOpenCL }),
+      });
+    }
+    this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, result, error: null });
+    return result;
+  }
+
   private async _runGenerationAndSave(opts: RunGenerationOptions): Promise<GeneratedImage | null> {
     const { params, enhancedPrompt, activeImageModel, steps, guidanceScale, imageWidth, imageHeight, useOpenCL } = opts;
 
@@ -241,25 +262,8 @@ class ImageGenerationService {
           this.updateState({ previewPath: `file://${preview.previewPath}?t=${Date.now()}`, status: `Refining image (${displayStep}/${steps})...` });
         },
       );
-      if (this.cancelRequested) { this.resetState(); return null; }
-      if (!result?.imagePath) { this.resetState(); return null; }
-      result.modelId = activeImageModel.id;
-      if (params.conversationId) result.conversationId = params.conversationId;
-      useAppStore.getState().addGeneratedImage(result);
-      useAppStore.getState().completeChecklistStep('triedImageGen');
-      this._checkSharePrompt();
-      if (params.conversationId) {
-        const genTime = Date.now() - startTime;
-        useChatStore.getState().addMessage(params.conversationId, {
-          role: 'assistant',
-          content: `Generated image for: "${params.prompt}"`,
-          attachments: [{ id: result.id, type: 'image', uri: `file://${result.imagePath}`, width: result.width, height: result.height }],
-          generationTimeMs: genTime,
-          generationMeta: buildImageGenMeta(activeImageModel, { steps, guidanceScale, result, useOpenCL }),
-        });
-      }
-      this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, result, error: null });
-      return result;
+      if (this.cancelRequested || !result?.imagePath) { this.resetState(); return null; }
+      return this._saveResult(result, { params, activeImageModel, meta: { steps, guidanceScale, useOpenCL, startTime } });
     } catch (error: any) {
       const errorMsg = error?.message || 'Image generation failed';
       if (errorMsg.includes('cancelled')) {
