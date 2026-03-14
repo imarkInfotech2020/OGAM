@@ -165,6 +165,71 @@ export function processDelta(
   }
 }
 
+/** Build the completion result from accumulated Ollama tool calls */
+function buildOllamaCompletion(
+  fullContent: string,
+  fullReasoningContent: string,
+  accumulatedToolCalls: OpenAIToolCall[],
+): { content: string; reasoningContent?: string; meta: { gpu: boolean; gpuBackend: string }; toolCalls?: Array<{ id: string; name: string; arguments: string }> } {
+  return {
+    content: fullContent,
+    reasoningContent: fullReasoningContent || undefined,
+    meta: { gpu: false, gpuBackend: 'Remote' },
+    toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls.map(tc => ({
+      id: tc.id, name: tc.function.name,
+      arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments),
+    })) : undefined,
+  };
+}
+
+/** NDJSON line handler state for Ollama streaming */
+interface OllamaStreamState {
+  fullContent: string;
+  fullReasoningContent: string;
+  completeCalled: boolean;
+  streamErrorOccurred: boolean;
+  accumulatedToolCalls: OpenAIToolCall[];
+}
+
+/** Process a single NDJSON line from Ollama's /api/chat streaming response */
+function handleOllamaChatLine(
+  line: Record<string, unknown>,
+  streamState: OllamaStreamState,
+  req: { callbacks: StreamCallbacks; signal: AbortSignal; abort: () => void },
+): void {
+  if (req.signal.aborted) return;
+
+  if (line.error) {
+    streamState.streamErrorOccurred = true;
+    req.callbacks.onError(new Error(typeof line.error === 'string' ? line.error : JSON.stringify(line.error)));
+    req.abort();
+    return;
+  }
+
+  const msg = line.message as {
+    role?: string; content?: string; thinking?: string; tool_calls?: OpenAIToolCall[]
+  } | undefined;
+  if (msg) {
+    if (msg.thinking) { streamState.fullReasoningContent += msg.thinking; req.callbacks.onReasoning?.(msg.thinking); }
+    if (msg.content) { streamState.fullContent += msg.content; req.callbacks.onToken(msg.content); }
+    // Collect tool_calls from every message (they arrive in done:false chunks)
+    if (msg.tool_calls) {
+      for (const tc of msg.tool_calls) {
+        if (tc.function?.name) {
+          logger.log(`[OllamaChat] tool_call: ${tc.function.name}(${typeof tc.function.arguments === 'string' ? tc.function.arguments.substring(0, 100) : JSON.stringify(tc.function.arguments).substring(0, 100)})`);
+          streamState.accumulatedToolCalls.push(tc);
+        }
+      }
+    }
+  }
+
+  if (line.done) {
+    logger.log(`[OllamaChat] stream done — content=${streamState.fullContent.length}, reasoning=${streamState.fullReasoningContent.length}, toolCalls=${streamState.accumulatedToolCalls.length}`);
+    streamState.completeCalled = true;
+    req.callbacks.onComplete(buildOllamaCompletion(streamState.fullContent, streamState.fullReasoningContent, streamState.accumulatedToolCalls));
+  }
+}
+
 /**
  * Generate using Ollama's native /api/chat endpoint (NDJSON streaming).
  * Supports think: true/false for reasoning control.
@@ -177,12 +242,27 @@ export async function generateOllamaChatImpl(
   const thinkingEnabled = options.enableThinking !== false;
 
   // Convert to Ollama message format
+  // Convert tool_calls arguments from JSON strings to objects for Ollama's native format
+  const convertToolCalls = (tcs: OpenAIToolCall[] | undefined) => {
+    if (!tcs) return undefined;
+    return tcs.map(tc => ({
+      ...tc,
+      function: {
+        ...tc.function,
+        arguments: typeof tc.function.arguments === 'string'
+          ? (() => { try { return JSON.parse(tc.function.arguments); } catch { return tc.function.arguments; } })()
+          : tc.function.arguments,
+      },
+    }));
+  };
+
   // Images go in a top-level `images` array as raw base64 (strip data:...;base64, prefix)
   const ollamaMessages = openaiMessages.map(m => {
+    const toolCalls = convertToolCalls(m.tool_calls);
     if (typeof m.content === 'string') {
       return {
         role: m.role, content: m.content,
-        ...(m.tool_calls && { tool_calls: m.tool_calls }),
+        ...(toolCalls && { tool_calls: toolCalls }),
         ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
       };
     }
@@ -199,7 +279,7 @@ export async function generateOllamaChatImpl(
     return {
       role: m.role, content: text,
       ...(images.length > 0 && { images }),
-      ...(m.tool_calls && { tool_calls: m.tool_calls }),
+      ...(toolCalls && { tool_calls: toolCalls }),
       ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
     };
   });
@@ -218,53 +298,21 @@ export async function generateOllamaChatImpl(
   while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
   const url = `${baseUrl}/api/chat`;
 
-  let fullContent = '';
-  let fullReasoningContent = '';
-  let completeCalled = false;
-  let streamErrorOccurred = false;
+  const streamState: OllamaStreamState = {
+    fullContent: '',
+    fullReasoningContent: '',
+    completeCalled: false,
+    streamErrorOccurred: false,
+    accumulatedToolCalls: [],
+  };
 
   try {
     await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, timeout: 300000, signal }, (line) => {
-      if (signal.aborted) return;
-
-      if (line.error) {
-        streamErrorOccurred = true;
-        callbacks.onError(new Error(typeof line.error === 'string' ? line.error : JSON.stringify(line.error)));
-        abort();
-        return;
-      }
-
-      logger.log('[OllamaChat] raw line:', JSON.stringify(line));
-      const msg = line.message as {
-        role?: string; content?: string; thinking?: string; tool_calls?: OpenAIToolCall[]
-      } | undefined;
-      logger.log('[OllamaChat] parsed msg:', JSON.stringify(msg), 'done:', line.done);
-      if (msg) {
-        if (msg.thinking) { fullReasoningContent += msg.thinking; callbacks.onReasoning?.(msg.thinking); }
-        if (msg.content) { fullContent += msg.content; callbacks.onToken(msg.content); }
-      }
-
-      if (line.done) {
-        logger.log('[OllamaChat] stream done — fullContent length:', fullContent.length, 'fullReasoningContent length:', fullReasoningContent.length);
-        completeCalled = true;
-        const toolCalls = (msg?.tool_calls ?? []).filter(tc => tc.function?.name);
-        callbacks.onComplete({
-          content: fullContent,
-          reasoningContent: fullReasoningContent || undefined,
-          meta: { gpu: false, gpuBackend: 'Remote' },
-          toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
-            id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
-          })) : undefined,
-        });
-      }
+      handleOllamaChatLine(line, streamState, { callbacks, signal, abort });
     });
 
-    if (!completeCalled && !streamErrorOccurred) {
-      callbacks.onComplete({
-        content: fullContent,
-        reasoningContent: fullReasoningContent || undefined,
-        meta: { gpu: false, gpuBackend: 'Remote' },
-      });
+    if (!streamState.completeCalled && !streamState.streamErrorOccurred) {
+      callbacks.onComplete(buildOllamaCompletion(streamState.fullContent, streamState.fullReasoningContent, streamState.accumulatedToolCalls));
     }
   } catch (error) {
     if (signal.aborted) { callbacks.onComplete({ content: '', meta: { gpu: false } }); return; }

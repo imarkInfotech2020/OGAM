@@ -48,8 +48,46 @@ export function parseSSELine(
 }
 
 /**
+ * Create a stateful SSE line processor that buffers partial lines across chunks.
+ * Used by XHR onprogress and onreadystatechange handlers.
+ */
+export function createSSELineProcessor(onEvent: (event: SSEEvent) => void) {
+  let lineBuffer = '';
+  let currentEvent: Partial<SSEEvent> = {};
+
+  return {
+    /** Process a new chunk of SSE data (may contain partial lines). */
+    process(newData: string): void {
+      const combined = lineBuffer + newData;
+      const lines = combined.split('\n');
+      // Last element may be an incomplete line — hold it for the next chunk
+      lineBuffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (parseSSELine(trimmed, currentEvent)) {
+          onEvent(yieldSSEvent(currentEvent));
+          currentEvent = {};
+        }
+      }
+    },
+    /** Flush any remaining buffered data (call on stream end). */
+    flush(): void {
+      if (lineBuffer.trim()) {
+        parseSSELine(lineBuffer.trim(), currentEvent);
+        lineBuffer = '';
+      }
+      if (currentEvent.data !== undefined) {
+        onEvent(yieldSSEvent(currentEvent));
+        currentEvent = {};
+      }
+    },
+  };
+}
+
+/**
  * Process SSE lines from text and invoke callback for each event
  * Used by XHR onprogress and onreadystatechange handlers
+ * NOTE: Does not buffer partial lines — use createSSELineProcessor for XHR streaming.
  */
 export function processSSELines(
   newData: string,

@@ -274,10 +274,15 @@ export async function generateRemoteWithToolsImpl(
   req: GenerationWithToolsRequest,
 ): Promise<void> {
   const { conversationId, messages, options } = req;
-  if (!(await prepareGenerationImpl(svc, conversationId))) return;
+  logger.log(`[GenService][DEBUG] generateRemoteWithToolsImpl — conv=${conversationId}, messages=${messages.length}, enabledToolIds=[${options.enabledToolIds.join(', ')}]`);
+  if (!(await prepareGenerationImpl(svc, conversationId))) {
+    logger.log(`[GenService][DEBUG] prepareGeneration returned false, aborting`);
+    return;
+  }
   const provider = svc.getCurrentProvider();
 
   if (!provider) { svc.resetState(); throw new Error('No remote provider available'); }
+  logger.log(`[GenService][DEBUG] Provider ready — type=${provider.type}, capabilities=${JSON.stringify(provider.capabilities)}`);
 
   const { enabledToolIds, projectId, ...callbacks } = options;
 
@@ -288,9 +293,12 @@ export async function generateRemoteWithToolsImpl(
     forceRemote: true,
   });
 
-  if (!svc.abortRequested) {
+  if (svc.abortRequested) {
+    logger.log(`[GenService][DEBUG] Generation was aborted, skipping finalize`);
+  } else {
     svc.forceFlushTokens();
     const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
+    logger.log(`[GenService][DEBUG] Finalizing — streamingContent length=${svc.state.streamingContent?.length || 0}, generationTime=${generationTime}ms`);
     useChatStore.getState().finalizeStreamingMessage(
       conversationId, generationTime, buildGenerationMetaImpl(svc),
     );

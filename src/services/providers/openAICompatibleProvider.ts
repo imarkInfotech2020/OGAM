@@ -16,6 +16,7 @@ import type {
 import { createStreamingRequest, parseOpenAIMessage } from '../httpClient';
 import { ThinkTagParser, processDelta, generateOllamaChatImpl } from './openAICompatibleStream';
 import { buildOpenAIMessagesImpl } from './openAIMessageBuilder';
+import logger from '../../utils/logger';
 import type {
   OpenAIChatMessage,
   OpenAIConfig,
@@ -126,6 +127,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
       const thinkingEnabled = options.enableThinking !== false;
 
+      logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
+
       // Route Ollama through its native /api/chat which supports think: true/false
       if (isOllamaEndpoint(this.config.endpoint)) {
         return generateOllamaChatImpl(openaiMessages, {
@@ -137,6 +140,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
 
       const requestBody = this.buildRequestBody(openaiMessages, options, thinkingEnabled);
+      logger.log(`[Provider][DEBUG] OpenAI request — hasTools=${!!requestBody.tools}, toolChoice=${typeof requestBody.tool_choice === 'string' ? requestBody.tool_choice : JSON.stringify(requestBody.tool_choice) || 'none'}`);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
@@ -162,6 +166,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (!message) return;
 
         if (message.error) {
+          logger.error(`[Provider][DEBUG] Stream error: ${JSON.stringify(message.error)}`);
           state.streamErrorOccurred = true;
           callbacks.onError(new Error(message.error.message || 'API error'));
           this.abortController?.abort();
@@ -174,9 +179,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
           if (choice.delta) {
             processDelta(choice.delta, state, { thinkingEnabled, callbacks, thinkTagParser });
           }
+          if (choice.finish_reason) {
+            logger.log(`[Provider][DEBUG] finish_reason=${choice.finish_reason}, fullContent=${state.fullContent.length}, reasoning=${state.fullReasoningContent.length}, toolCalls=${state.toolCalls.length}`);
+          }
           if (choice.finish_reason === 'stop' || choice.finish_reason === 'tool_calls') {
             state.completeCalled = true;
             const completedCalls = state.toolCalls.filter(tc => tc.function?.name);
+            logger.log(`[Provider][DEBUG] Completing — content=${state.fullContent.length} chars, reasoning=${state.fullReasoningContent.length} chars, completedCalls=${completedCalls.length}`);
             callbacks.onComplete({
               content: state.fullContent,
               reasoningContent: state.fullReasoningContent || undefined,
@@ -192,6 +201,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
       // 'content_filter', null), ensure the generation is finalised.
       if (!state.completeCalled && !state.streamErrorOccurred) {
+        logger.log(`[Provider][DEBUG] Fallback complete (no finish_reason) — content=${state.fullContent.length}, reasoning=${state.fullReasoningContent.length}, toolCalls=${state.toolCalls.length}`);
         const completedCalls = state.toolCalls.filter(tc => tc.function?.name);
         callbacks.onComplete({
           content: state.fullContent,

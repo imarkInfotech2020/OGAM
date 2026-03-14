@@ -67,7 +67,6 @@ export type GenerationDeps = {
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
 };
-/** Prepend system prompt + compaction summary (if persisted) to a prefix array. Returns messages after cutoff. */
 function applyCompactionPrefix(conversation: any, systemPrompt: string, messages: Message[]): { prefix: Message[]; filtered: Message[] } {
   const prefix: Message[] = [{ id: 'system', role: 'system', content: systemPrompt, timestamp: 0 }];
   let filtered = messages;
@@ -78,11 +77,13 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
   }
   return { prefix, filtered };
 }
+
 function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
   if (!attachments) return text;
   return attachments.filter(a => a.type === 'document' && a.textContent)
     .reduce((acc, doc) => `${acc}\n\n---\n📄 **Attached Document: ${doc.fileName || 'document'}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`, text);
 }
+
 function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   const allMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
@@ -205,12 +206,10 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
     const docs = await ragService.getDocumentsByProject(projectId);
     const enabledDocs = docs.filter((d: import('../../services/rag').RagDocument) => d.enabled);
     if (enabledDocs.length === 0) return prompt;
-
     // Warm up embedding model in background (non-blocking)
     if (!embeddingService.isLoaded()) {
       embeddingService.load().catch(err => logger.error('[RAG] Embedding warmup failed', err));
     }
-
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
     kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
@@ -259,6 +258,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const heuristicMatch = shouldUseToolsForMessage(messageText, enabledTools);
   const activeTools = (isRemote || heuristicMatch) ? enabledTools : [];
   const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {

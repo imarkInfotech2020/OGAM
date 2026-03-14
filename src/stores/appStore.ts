@@ -83,7 +83,6 @@ interface AppState {
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
-
   shownSpotlights: Record<string, boolean>;
   markSpotlightShown: (key: string) => void;
   resetShownSpotlights: () => void;
@@ -127,10 +126,15 @@ const DEFAULT_SETTINGS: AppSettings = {
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
-  enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url'],
+  enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: true,
 };
 
+function migrateEnabledTools(merged: any): void {
+  if (merged.settings?.enabledTools && !merged.settings.enabledTools.includes('search_knowledge_base')) {
+    merged.settings = { ...merged.settings, enabledTools: [...merged.settings.enabledTools, 'search_knowledge_base'] };
+  }
+}
 function migratePersistedState(persistedState: any, currentState: AppState): AppState {
   const merged = { ...currentState, ...persistedState };
   if (typeof merged.imageModelDownloading === 'string') {
@@ -154,9 +158,9 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   } else if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
     merged.imageModelDownloadIds = {};
   }
-  // Reset checklistDismissed if onboarding isn't actually complete (old bug persisted it too early)
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
+  migrateEnabledTools(merged);
   return merged as AppState;
 }
 
@@ -231,7 +235,6 @@ export const useAppStore = create<AppState>()(
           settings: { ...state.settings, ...newSettings },
         })),
       resetSettings: () => set({ settings: { ...DEFAULT_SETTINGS } }),
-
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,
@@ -307,7 +310,6 @@ export const useAppStore = create<AppState>()(
       },
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
-
       // Reactive spotlight tracking
       shownSpotlights: {},
       markSpotlightShown: (key) =>
