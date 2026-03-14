@@ -118,7 +118,13 @@ async function findReachableSubnet(subnets: string[]): Promise<string | null> {
  * Errors during probing are swallowed — only setup errors propagate.
  */
 export async function discoverLANServers(): Promise<DiscoveredServer[]> {
-  const runningOnEmulator = await isEmulator();
+  let runningOnEmulator: boolean;
+  try {
+    runningOnEmulator = await isEmulator();
+  } catch (err) {
+    logger.warn('[Discovery] isEmulator() threw:', (err as Error).message);
+    runningOnEmulator = false;
+  }
   if (runningOnEmulator) {
     logger.warn('[Discovery] Running on emulator — skipping LAN scan (emulator network stack cannot handle concurrent probes)');
     return [];
