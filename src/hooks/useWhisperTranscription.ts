@@ -4,6 +4,13 @@ import { whisperService } from '../services/whisperService';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
 
+/** Safely call a state setter only if the component is still mounted. */
+const useMountedRef = () => {
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  return mounted;
+};
+
 export interface UseWhisperTranscriptionResult {
   isRecording: boolean;
   isModelLoaded: boolean;
@@ -26,6 +33,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
   const [error, setError] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const isCancelled = useRef(false);
+  const mountedRef = useMountedRef();
   const transcribingStartTime = useRef<number | null>(null);
   const pendingResult = useRef<string | null>(null);
 
@@ -33,18 +41,20 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
 
   // Auto-load model if downloaded but not loaded
   useEffect(() => {
+    let cancelled = false;
     const autoLoadModel = async () => {
       if (downloadedModelId && !isModelLoaded && !whisperService.isModelLoaded()) {
         logger.log('[Whisper] Auto-loading model...');
         try {
           await loadModel();
-          logger.log('[Whisper] Model auto-loaded successfully');
+          if (!cancelled) logger.log('[Whisper] Model auto-loaded successfully');
         } catch (err) {
-          logger.error('[Whisper] Failed to auto-load model:', err);
+          if (!cancelled) logger.error('[Whisper] Failed to auto-load model:', err);
         }
       }
     };
     autoLoadModel();
+    return () => { cancelled = true; };
   }, [downloadedModelId, isModelLoaded, loadModel]);
 
   // Minimum time to show transcribing state (ms)
@@ -55,6 +65,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
   // which is called from ChatInput after the text is added to the input box.
   // This keeps the loader visible until text actually appears.
   const finalizeTranscription = useCallback((text: string) => {
+    if (!mountedRef.current) return;
     const startTime = transcribingStartTime.current;
     const elapsed = startTime ? Date.now() - startTime : MIN_TRANSCRIBING_TIME;
     const remaining = Math.max(0, MIN_TRANSCRIBING_TIME - elapsed);
@@ -63,6 +74,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       // Store result and wait for minimum time
       pendingResult.current = text;
       setTimeout(() => {
+        if (!mountedRef.current) return;
         if (!isCancelled.current && pendingResult.current !== null) {
           setFinalResult(pendingResult.current);
           pendingResult.current = null;
@@ -91,7 +103,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
 
     // Immediately update UI to show "Transcribing..." state
     // But keep recording in background for better accuracy
-    setIsRecording(false);
+    if (mountedRef.current) setIsRecording(false);
     transcribingStartTime.current = Date.now();
 
     try {
@@ -101,9 +113,9 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       logger.log('[Whisper] Capturing trailing audio for', TRAILING_RECORD_TIME, 'ms...');
       await new Promise<void>(resolve => setTimeout(() => resolve(), TRAILING_RECORD_TIME));
 
-      // Check if cancelled during the wait
-      if (isCancelled.current) {
-        logger.log('[Whisper] Cancelled during trailing capture');
+      // Check if cancelled or unmounted during the wait
+      if (isCancelled.current || !mountedRef.current) {
+        logger.log('[Whisper] Cancelled/unmounted during trailing capture');
         whisperService.forceReset();
         return;
       }
@@ -111,14 +123,16 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       // Now actually stop the transcription
       await whisperService.stopTranscription();
       // Haptic feedback
-      Vibration.vibrate(30);
+      if (mountedRef.current) Vibration.vibrate(30);
     } catch (err) {
       logger.error('[Whisper] Stop error:', err);
       // Force reset on error
       whisperService.forceReset();
-      // On error, also clear transcribing state
-      setIsTranscribing(false);
-      transcribingStartTime.current = null;
+      // On error, also clear transcribing state (only if still mounted)
+      if (mountedRef.current) {
+        setIsTranscribing(false);
+        transcribingStartTime.current = null;
+      }
     }
   }, []);
 
@@ -179,7 +193,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       await whisperService.startRealtimeTranscription((result) => {
         logger.log('[Whisper] Transcription result:', result.isCapturing, result.text?.slice(0, 50));
 
-        if (isCancelled.current) return;
+        if (isCancelled.current || !mountedRef.current) return;
 
         setRecordingTime(result.recordingTime);
 
@@ -190,12 +204,12 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
           }
         } else {
           // Recording finished - haptic feedback
-          Vibration.vibrate(30);
-          setIsRecording(false);
+          if (mountedRef.current) Vibration.vibrate(30);
+          if (mountedRef.current) setIsRecording(false);
           // Use finalizeTranscription to ensure minimum display time
           if (result.text && !isCancelled.current) {
             finalizeTranscription(result.text);
-          } else {
+          } else if (mountedRef.current) {
             setIsTranscribing(false);
             setPartialResult('');
             transcribingStartTime.current = null;
@@ -204,14 +218,16 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       });
     } catch (err) {
       logger.error('[Whisper] Recording error:', err);
-      const errorMsg = err instanceof Error ? err.message : 'Failed to start recording';
-      setError(errorMsg);
-      setIsRecording(false);
-      setIsTranscribing(false);
       // Force reset whisper service state
       whisperService.forceReset();
-      // Error haptic
-      Vibration.vibrate([0, 50, 50, 50]);
+      if (mountedRef.current) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to start recording';
+        setError(errorMsg);
+        setIsRecording(false);
+        setIsTranscribing(false);
+        // Error haptic
+        Vibration.vibrate([0, 50, 50, 50]);
+      }
     }
   }, [downloadedModelId, loadModel, isRecording, stopRecording, finalizeTranscription]);
 

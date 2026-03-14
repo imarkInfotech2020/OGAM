@@ -94,9 +94,15 @@ class LocalDreamGeneratorService {
 
   async unloadModel(): Promise<boolean> {
     if (!this.isAvailable()) return true;
-    const result = await DiffusionModule.unloadModel();
-    this.loadedThreads = null;
-    return result;
+    try {
+      const result = await DiffusionModule.unloadModel();
+      this.loadedThreads = null;
+      return result;
+    } catch (e) {
+      // Native bridge may be torn down; reset local state anyway
+      this.loadedThreads = null;
+      return false;
+    }
   }
 
   private subscribeToProgress(onProgress?: ProgressCallback, onPreview?: PreviewCallback): any {

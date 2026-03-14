@@ -10,6 +10,7 @@ import {
   recordGenerationStats, getStreamingDelta, hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
+  validateModelFile, checkMemoryForModel, safeCompletion,
 } from './llmHelpers';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
@@ -59,11 +60,19 @@ class LLMService {
     if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
     if (this.context && this.currentModelPath === modelPath) return;
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
+    // Validate GGUF file integrity before attempting native load
+    const validation = await validateModelFile(modelPath);
+    if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
     if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
     const { settings } = useAppStore.getState();
     const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = buildModelParams(modelPath, settings);
+    // Check available memory before loading
+    const fileStat = await RNFS.stat(modelPath);
+    const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
+    const memCheck = await checkMemoryForModel(fileSize, ctxLen, () => hardwareService.getAppMemoryUsage());
+    if (!memCheck.safe) logger.warn(`[LLM] Memory warning: ${memCheck.reason}`);
     this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
-    logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}`);
+    logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
     try {
       const result = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
       const { context, gpuAttemptFailed, actualLength } = result;
@@ -93,7 +102,7 @@ class LLMService {
   ): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
     const safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
-    if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] Low RAM (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB), GPU layers ${params.nGpuLayers} → ${safeGpuLayers}`);
+    if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
     const initial = await initContextWithFallback(params.baseParams, params.ctxLen, safeGpuLayers);
     const modelMax = getModelMaxContext(initial.context);
     const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
@@ -102,7 +111,7 @@ class LLMService {
     const targetCtx = Math.min(modelMax, 4096, deviceMaxCtx);
     if (targetCtx <= initial.actualLength) return initial;
     logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
-    await initial.context.release();
+    try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
     return initContextWithFallback(params.baseParams, targetCtx, safeGpuLayers);
   }
 
@@ -149,7 +158,11 @@ class LLMService {
         this.isGenerating = false;
       }
       if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
-      await this.context.release();
+      try {
+        await this.context.release();
+      } catch (e) {
+        logger.warn('[LLM] Error releasing context (bridge may be torn down):', e);
+      }
       useAppStore.getState().setModelMaxContext(null);
       Object.assign(this, {
         context: null, currentModelPath: null, multimodalSupport: null,
@@ -190,7 +203,7 @@ class LLMService {
       let streamedReasoningSoFar = '';
       const enableThinking = this.isThinkingEnabled();
       const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings), ...buildThinkingCompletionParams(enableThinking) };
-      const completionResult = await ctx.completion(completionParams, (data: any) => {
+      const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
         if (!this.isGenerating) return;
         if (!data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
@@ -203,7 +216,7 @@ class LLMService {
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
-      });
+      }), 'generateResponse');
       const cr = completionResult as any;
       this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
@@ -258,10 +271,11 @@ class LLMService {
     const oaiMessages = this.convertToOAIMessages(messages);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
-    const completionWork = this.context.completion(
+    const ctx = this.context;
+    const completionWork = safeCompletion(ctx, () => ctx.completion(
       { messages: oaiMessages, ...buildCompletionParams(settings), n_predict: maxTokens },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
-    );
+    ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try {
       await completionWork;

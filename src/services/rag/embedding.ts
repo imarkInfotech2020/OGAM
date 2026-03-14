@@ -56,8 +56,21 @@ class EmbeddingService {
 
   async embed(text: string): Promise<number[]> {
     if (!this.context) throw new Error('Embedding model not loaded. Call load() first.');
-    const result = await (this.context as any).embedding(text);
-    return result.embedding;
+    try {
+      const result = await (this.context as any).embedding(text);
+      return result.embedding;
+    } catch (error: any) {
+      const msg = error?.message || String(error) || '';
+      logger.error('[Embedding] Native error during embedding:', msg);
+      // Attempt recovery by reloading the embedding model
+      if (msg.includes('ggml') || msg.includes('abort') || msg.includes('alloc') || msg.includes('OOM')) {
+        try {
+          await this.unload();
+        } catch { /* ignore cleanup errors */ }
+        throw new Error(`Embedding failed (native error). Model has been unloaded for safety. (${msg})`);
+      }
+      throw error;
+    }
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
@@ -70,7 +83,11 @@ class EmbeddingService {
 
   async unload(): Promise<void> {
     if (this.context) {
-      await this.context.release();
+      try {
+        await this.context.release();
+      } catch (e) {
+        logger.warn('[Embedding] Error releasing context (bridge may be torn down):', e);
+      }
       this.context = null;
       logger.log('[Embedding] Model unloaded');
     }

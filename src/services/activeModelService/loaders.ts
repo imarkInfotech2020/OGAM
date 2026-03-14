@@ -91,8 +91,9 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
     const mmProjPath = await resolveMmProjPath(ctx.model, ctx.modelId);
 
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(
+      timeoutId = setTimeout(
         () =>
           reject(
             new Error(
@@ -104,10 +105,14 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       );
     });
 
-    await Promise.race([
-      llmService.loadModel(ctx.model.filePath, mmProjPath),
-      timeoutPromise,
-    ]);
+    try {
+      await Promise.race([
+        llmService.loadModel(ctx.model.filePath, mmProjPath),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
 
     // Capture settings that require model reload
     const { settings } = ctx.store;
@@ -160,25 +165,30 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
       ctx.onError(); // resets loadedImageModelId/threads to null
     }
 
+    let imgTimeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(
+      imgTimeoutId = setTimeout(
         () => reject(new Error('Image model loading timed out')),
         ctx.timeoutMs,
       );
     });
 
-    await Promise.race([
-      onnxImageGeneratorService.loadModel(
-        ctx.model.modelPath,
-        ctx.imageThreads,
-        {
-          backend: ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'),
-          cpuOnly: ctx.cpuOnly,
-          attentionVariant: ctx.model.attentionVariant,
-        },
-      ),
-      timeoutPromise,
-    ]);
+    try {
+      await Promise.race([
+        onnxImageGeneratorService.loadModel(
+          ctx.model.modelPath,
+          ctx.imageThreads,
+          {
+            backend: ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'),
+            cpuOnly: ctx.cpuOnly,
+            attentionVariant: ctx.model.attentionVariant,
+          },
+        ),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (imgTimeoutId !== null) clearTimeout(imgTimeoutId);
+    }
 
     ctx.onLoaded(ctx.modelId, ctx.imageThreads);
     ctx.store.setActiveImageModelId(ctx.modelId);

@@ -52,7 +52,12 @@ class ImageGeneratorService {
 
   async unloadModel(): Promise<boolean> {
     if (!this.isAvailable()) return true;
-    return await ImageGeneratorModule.unloadModel();
+    try {
+      return await ImageGeneratorModule.unloadModel();
+    } catch {
+      // Native bridge may be torn down
+      return false;
+    }
   }
 
   private attachEventListeners(onProgress?: ProgressCallback, onComplete?: CompleteCallback): void {

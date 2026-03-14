@@ -44,54 +44,60 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   } = useAppStore();
 
   useEffect(() => {
+    let cancelled = false;
+
+    const initializeHardwareAndModels = async () => {
+      try {
+        // Get device info
+        const info = await hardwareService.getDeviceInfo();
+        if (cancelled) return;
+        setDeviceInfo(info);
+
+        const recommendation = hardwareService.getModelRecommendation();
+        if (cancelled) return;
+        setModelRecommendation(recommendation);
+
+        // Filter recommended models based on device capability
+        const totalRamGB = hardwareService.getTotalMemoryGB();
+        const compatibleModels = RECOMMENDED_MODELS.filter(
+          (m) => m.minRam <= totalRamGB
+        );
+        if (cancelled) return;
+        setRecommendedModels(compatibleModels);
+
+        // Fetch files for all compatible models
+        const filesToFetch = compatibleModels;
+        const filesMap: Record<string, ModelFile[]> = {};
+
+        const RECOMMENDED_QUANTS = ['Q4_K_M', 'Q4_K_S', 'Q4_0'];
+        const isRecommendedQuant = (f: ModelFile) =>
+          RECOMMENDED_QUANTS.some((q) => f.quantization.toUpperCase().includes(q.replace('_', '')));
+
+        await Promise.all(
+          filesToFetch.map(async (model) => {
+            try {
+              const files = await huggingFaceService.getModelFiles(model.id);
+              const recommendedFiles = files.filter(isRecommendedQuant);
+              filesMap[model.id] = recommendedFiles.length > 0 ? recommendedFiles : files.slice(0, 2);
+            } catch (error) {
+              logger.error(`Error fetching files for ${model.id}:`, error);
+            }
+          })
+        );
+
+        if (cancelled) return;
+        setModelFiles(filesMap);
+      } catch (error) {
+        logger.error('Error initializing:', error);
+        if (!cancelled) setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
     initializeHardwareAndModels();
-
+    return () => { cancelled = true; };
   }, []);
-
-  const initializeHardwareAndModels = async () => {
-    try {
-      // Get device info
-      const info = await hardwareService.getDeviceInfo();
-      setDeviceInfo(info);
-
-      const recommendation = hardwareService.getModelRecommendation();
-      setModelRecommendation(recommendation);
-
-      // Filter recommended models based on device capability
-      const totalRamGB = hardwareService.getTotalMemoryGB();
-      const compatibleModels = RECOMMENDED_MODELS.filter(
-        (m) => m.minRam <= totalRamGB
-      );
-      setRecommendedModels(compatibleModels);
-
-      // Fetch files for all compatible models
-      const filesToFetch = compatibleModels;
-      const filesMap: Record<string, ModelFile[]> = {};
-
-      const RECOMMENDED_QUANTS = ['Q4_K_M', 'Q4_K_S', 'Q4_0'];
-      const isRecommendedQuant = (f: ModelFile) =>
-        RECOMMENDED_QUANTS.some((q) => f.quantization.toUpperCase().includes(q.replace('_', '')));
-
-      await Promise.all(
-        filesToFetch.map(async (model) => {
-          try {
-            const files = await huggingFaceService.getModelFiles(model.id);
-            const recommendedFiles = files.filter(isRecommendedQuant);
-            filesMap[model.id] = recommendedFiles.length > 0 ? recommendedFiles : files.slice(0, 2);
-          } catch (error) {
-            logger.error(`Error fetching files for ${model.id}:`, error);
-          }
-        })
-      );
-
-      setModelFiles(filesMap);
-    } catch (error) {
-      logger.error('Error initializing:', error);
-      setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSelectModel = async (modelId: string) => {
     setSelectedModel(modelId);

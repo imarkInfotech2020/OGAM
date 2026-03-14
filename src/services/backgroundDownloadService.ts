@@ -125,7 +125,11 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
-    await DownloadManagerModule.cancelDownload(downloadId);
+    try {
+      await DownloadManagerModule.cancelDownload(downloadId);
+    } catch (e) {
+      // Native bridge may be torn down — treat as successful cancellation
+    }
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
