@@ -16,10 +16,13 @@ import ReanimatedAnimated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useThemedStyles } from '../../theme';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { createStyles } from './styles';
 import { LoadingState, TranscribingState, UnavailableButton, ButtonIcon } from './states';
+import { RootStackParamList } from '../../navigation/types';
 import logger from '../../utils/logger';
 
 interface VoiceRecordButtonProps {
@@ -100,6 +103,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   asSendButton = false,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const loadingAnim = useRef(new Animated.Value(0)).current;
@@ -160,8 +164,14 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     const errorDetail = error || 'No transcription model downloaded';
     setAlertState(showAlert(
       'Voice Input Unavailable',
-      `${errorDetail}\n\nTo enable voice input:\n1. Go to Settings tab\n2. Scroll to "Voice Transcription"\n3. Download a Whisper model\n\nVoice transcription runs completely on-device for privacy.`,
-      [{ text: 'OK' }],
+      `${errorDetail}\n\nDownload a Whisper model to enable on-device voice input.`,
+      [
+        { text: 'Cancel' },
+        {
+          text: 'Go to Voice Settings',
+          onPress: () => navigation.navigate('VoiceSettings'),
+        },
+      ],
     ));
   };
 
