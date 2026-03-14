@@ -261,11 +261,23 @@ class ImageGenerationService {
       this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, result, error: null });
       return result;
     } catch (error: any) {
-      if (error?.message?.includes('cancelled')) {
+      const errorMsg = error?.message || 'Image generation failed';
+      if (errorMsg.includes('cancelled')) {
         this.resetState();
       } else {
         logger.error('[ImageGenerationService] Generation error:', error);
-        this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, error: error?.message || 'Image generation failed' });
+
+        // If the pipeline crashed or the model was unloaded, surface a
+        // user-friendly message and allow retry (model will auto-reload).
+        const isPipelineCrash = errorMsg.includes('Pipeline failed') ||
+          errorMsg.includes('unloaded') ||
+          errorMsg.includes('ERR_NO_MODEL') ||
+          errorMsg.includes('TextEncoder');
+        const userMessage = isPipelineCrash
+          ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
+          : errorMsg;
+
+        this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, error: userMessage });
       }
       return null;
     }

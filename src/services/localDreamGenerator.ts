@@ -134,13 +134,20 @@ class LocalDreamGeneratorService {
       throw new Error('Image generation already in progress');
     }
 
+    // Validate prompt before sending to native — empty prompts cause a crash
+    // in the CoreML TextEncoder (force-unwrapped nil in encode(ids:)).
+    const trimmedPrompt = (params.prompt || '').trim();
+    if (!trimmedPrompt) {
+      throw new Error('Cannot generate image with an empty prompt');
+    }
+
     this.generating = true;
     const progressSubscription = this.subscribeToProgress(onProgress, onPreview);
 
     try {
       // Call native generateImage — handles HTTP POST, SSE parsing, and PNG saving
       const result = await DiffusionModule.generateImage({
-        prompt: params.prompt,
+        prompt: trimmedPrompt,
         negativePrompt: params.negativePrompt || '',
         steps: params.steps || 8,
         guidanceScale: params.guidanceScale || 7.5,
@@ -163,6 +170,14 @@ class LocalDreamGeneratorService {
         modelId: '',
         createdAt: Date.now().toString(),
       };
+    } catch (error: any) {
+      // If the native module reports the model was unloaded or is in a bad
+      // state, reset our local tracking so the next attempt reloads it.
+      const msg = error?.message || '';
+      if (msg.includes('ERR_NO_MODEL') || msg.includes('unloaded') || msg.includes('Pipeline failed')) {
+        this.loadedThreads = null;
+      }
+      throw error;
     } finally {
       this.generating = false;
       progressSubscription?.remove();
