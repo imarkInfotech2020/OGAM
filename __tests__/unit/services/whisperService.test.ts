@@ -24,6 +24,8 @@ describe('WhisperService', () => {
     (whisperService as any).currentModelPath = null;
     (whisperService as any).isTranscribing = false;
     (whisperService as any).stopFn = null;
+    (whisperService as any).isReleasingContext = false;
+    (whisperService as any).transcriptionFullyStopped = Promise.resolve();
     // Re-establish default AudioSessionIos mock implementations
     // (previous tests may have set mockRejectedValue which clearAllMocks doesn't reset)
     mockedAudioSessionIos.setCategory.mockResolvedValue(undefined as any);
@@ -555,6 +557,8 @@ describe('WhisperService', () => {
       const mockStopFn = jest.fn();
       (whisperService as any).stopFn = mockStopFn;
       (whisperService as any).isTranscribing = true;
+      // Context must exist for stopFn to be called (guard against SIGSEGV on freed context)
+      (whisperService as any).context = { release: jest.fn() };
 
       await whisperService.stopTranscription();
 
@@ -562,9 +566,22 @@ describe('WhisperService', () => {
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
+    it('skips stopFn when context is already released', async () => {
+      const mockStopFn = jest.fn();
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).context = null; // Context already freed
+
+      await whisperService.stopTranscription();
+
+      expect(mockStopFn).not.toHaveBeenCalled();
+      expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+
     it('handles error in stop function gracefully', async () => {
       (whisperService as any).stopFn = () => { throw new Error('stop error'); };
       (whisperService as any).isTranscribing = true;
+      (whisperService as any).context = { release: jest.fn() };
 
       await whisperService.stopTranscription(); // Should not throw
 

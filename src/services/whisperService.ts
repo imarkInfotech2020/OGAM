@@ -56,6 +56,8 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
+  private isReleasingContext: boolean = false;
+  private transcriptionFullyStopped: Promise<void> = Promise.resolve();
 
   getModelsDir(): string {
     return `${RNFS.DocumentDirectoryPath}/whisper-models`;
@@ -126,7 +128,7 @@ class WhisperService {
   }
 
   async loadModel(modelPath: string): Promise<void> {
-    // Unload if different model
+    // Unload if different model (unloadModel now safely stops transcription first)
     if (this.context && this.currentModelPath !== modelPath) {
       await this.unloadModel();
     }
@@ -134,6 +136,12 @@ class WhisperService {
     // Skip if already loaded
     if (this.context && this.currentModelPath === modelPath) {
       return;
+    }
+
+    // If context is being released, wait for it
+    if (this.isReleasingContext) {
+      logger.log('[WhisperService] Waiting for context release to finish before loading');
+      await new Promise<void>(resolve => setTimeout(resolve, 300));
     }
 
     logger.log(`[Whisper] Loading model: ${modelPath}`);
@@ -152,9 +160,32 @@ class WhisperService {
 
   async unloadModel(): Promise<void> {
     if (this.context) {
-      await this.context.release();
-      this.context = null;
-      this.currentModelPath = null;
+      // Stop any active transcription before releasing the context
+      // This prevents SIGSEGV from finishRealtimeTranscribeJob on a freed context
+      if (this.isTranscribing || this.stopFn) {
+        logger.log('[WhisperService] Stopping active transcription before unloading model');
+        await this.stopTranscription();
+        // Wait for the native side to fully finish processing
+        await this.transcriptionFullyStopped;
+        // Extra safety delay for native cleanup
+        await new Promise<void>(resolve => setTimeout(resolve, 200));
+      }
+
+      if (this.isReleasingContext) {
+        logger.log('[WhisperService] Context release already in progress, skipping');
+        return;
+      }
+
+      this.isReleasingContext = true;
+      try {
+        await this.context.release();
+      } catch (error) {
+        logger.error('[WhisperService] Error releasing context:', error);
+      } finally {
+        this.context = null;
+        this.currentModelPath = null;
+        this.isReleasingContext = false;
+      }
     }
   }
 
@@ -232,7 +263,20 @@ class WhisperService {
 
     this.isTranscribing = true;
 
+    // Create a promise that resolves when the native side fully finishes
+    let resolveTranscriptionStopped: () => void;
+    this.transcriptionFullyStopped = new Promise<void>(resolve => {
+      resolveTranscriptionStopped = resolve;
+    });
+
     try {
+      // Guard: context could have been released during the async permission check
+      if (!this.context) {
+        this.isTranscribing = false;
+        resolveTranscriptionStopped!();
+        throw new Error('Whisper context was released before transcription could start');
+      }
+
       logger.log('[WhisperService] Calling transcribeRealtime...');
       // Use the transcribeRealtime API
       const { stop, subscribe } = await this.context.transcribeRealtime({
@@ -272,12 +316,15 @@ class WhisperService {
           logger.log('[WhisperService] Recording finished');
           this.isTranscribing = false;
           this.stopFn = null;
+          // Signal that native processing is complete - safe to release context
+          resolveTranscriptionStopped();
         }
       });
     } catch (error) {
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
       this.stopFn = null;
+      resolveTranscriptionStopped!();
       throw error;
     }
   }
@@ -286,7 +333,13 @@ class WhisperService {
     logger.log('[WhisperService] stopTranscription called');
     try {
       if (this.stopFn) {
-        this.stopFn();
+        // Guard: only call stop if context still exists
+        // Calling stop on a freed context causes SIGSEGV
+        if (this.context) {
+          this.stopFn();
+        } else {
+          logger.log('[WhisperService] Context already released, skipping stopFn call');
+        }
         this.stopFn = null;
       }
     } catch (error) {
@@ -301,6 +354,8 @@ class WhisperService {
     logger.log('[WhisperService] Force resetting state');
     this.isTranscribing = false;
     this.stopFn = null;
+    // Resolve any pending transcription stop promise so unloadModel won't hang
+    this.transcriptionFullyStopped = Promise.resolve();
   }
 
   isCurrentlyTranscribing(): boolean {
