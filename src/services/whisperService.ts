@@ -25,6 +25,7 @@ class WhisperService {
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
   private isReleasingContext: boolean = false;
+  private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
 
   getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
@@ -108,7 +109,7 @@ class WhisperService {
     if (this.context && this.currentModelPath === modelPath) return;
     if (this.isReleasingContext) {
       logger.log('[WhisperService] Waiting for context release to finish before loading');
-      await new Promise<void>(resolve => setTimeout(resolve, 300));
+      await this.contextReleasePromise;
     }
 
     // Validate model file before passing to native layer.
@@ -135,12 +136,14 @@ class WhisperService {
       logger.log('[WhisperService] Stopping active transcription before unloading model');
       await this.stopTranscription();
       await this.transcriptionFullyStopped;
-      await new Promise<void>(resolve => setTimeout(resolve, 200));
     }
     if (this.isReleasingContext) { logger.log('[WhisperService] Context release already in progress, skipping'); return; }
     this.isReleasingContext = true;
-    try { await this.context.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
-    finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
+    this.contextReleasePromise = (async () => {
+      try { await this.context!.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
+      finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
+    })()
+    await this.contextReleasePromise;
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }

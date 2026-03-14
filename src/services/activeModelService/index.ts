@@ -42,7 +42,7 @@ class ActiveModelService {
     let release: () => void = () => {};
     const prev = this.textMutex;
     this.textMutex = new Promise<void>(resolve => { release = resolve; });
-    return { release, ready: prev };
+    return { release, ready: prev.catch(() => {}) };
   }
   getActiveModels(): ActiveModelInfo {
     const store = useAppStore.getState();

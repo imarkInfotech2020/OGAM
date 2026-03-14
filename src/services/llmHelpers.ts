@@ -100,22 +100,24 @@ export async function initContextWithFallback(
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
   let gpuAttemptFailed = false;
-  let pendingContext: LlamaContext | null = null;
   try {
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
     // On Android, guard against Adreno driver hangs that cause ANRs.
     // If GPU init times out, the promise may still resolve later; capture and release it.
     if (nGpuLayers > 0 && Platform.OS === 'android') {
-      gpuInitPromise.then(ctx => { pendingContext = ctx; }).catch(() => {});
-      const context = await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init');
-      pendingContext = null; // won by the race — don't release
-      return { context, gpuAttemptFailed, actualLength: contextLength };
+      let timedOut = false;
+      gpuInitPromise.then(ctx => { if (timedOut) safeRelease(ctx); }).catch(() => {});
+      try {
+        const context = await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init');
+        return { context, gpuAttemptFailed, actualLength: contextLength };
+      } catch (e) {
+        timedOut = true;
+        throw e;
+      }
     }
     const context = await gpuInitPromise;
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
-    // If the GPU init promise resolves after the timeout, release the leaked context
-    if (pendingContext) { await safeRelease(pendingContext); pendingContext = null; }
     if (nGpuLayers > 0) {
       logger.warn('[LLM] GPU load failed, falling back to CPU:', gpuError?.message || gpuError);
       gpuAttemptFailed = true;

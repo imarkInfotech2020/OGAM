@@ -48,7 +48,7 @@ class LLMService {
     let release: () => void = () => {};
     const prev = this.contextMutexPromise;
     this.contextMutexPromise = new Promise<void>(resolve => { release = resolve; });
-    return { release, ready: prev };
+    return { release, ready: prev.catch(() => {}) };
   }
   private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }

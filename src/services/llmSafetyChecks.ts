@@ -90,7 +90,7 @@ export async function safeCompletion<T>(
     const isNativeCrash = msg.includes('ggml') || msg.includes('abort') ||
       msg.includes('SIGABRT') || msg.includes('tensor') ||
       msg.includes('alloc') || msg.includes('out of memory') ||
-      msg.includes('failed to') || msg.includes('OOM');
+      msg.includes('failed to allocate') || msg.includes('OOM');
     if (isNativeCrash) {
       logger.error(`[LLM] Native crash during ${label}: ${msg}`);
       // Try to recover the context by clearing KV cache
