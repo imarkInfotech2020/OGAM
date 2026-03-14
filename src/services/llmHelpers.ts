@@ -100,6 +100,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** Safely release a context, swallowing errors (used during fallback cleanup). */
+async function safeRelease(ctx: LlamaContext | null): Promise<void> {
+  if (!ctx) return;
+  try { await ctx.release(); } catch (e) { logger.warn('[LLM] Error releasing context during fallback:', e); }
+}
+
 /** Init llama with GPU, fall back to CPU, then retry with ctx=2048 on failure. */
 export async function initContextWithFallback(
   params: object,
@@ -107,14 +113,22 @@ export async function initContextWithFallback(
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
   let gpuAttemptFailed = false;
+  let pendingContext: LlamaContext | null = null;
   try {
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
-    // On Android, guard against Adreno driver hangs that cause ANRs
-    const context = nGpuLayers > 0 && Platform.OS === 'android'
-      ? await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init')
-      : await gpuInitPromise;
+    // On Android, guard against Adreno driver hangs that cause ANRs.
+    // If GPU init times out, the promise may still resolve later; capture and release it.
+    if (nGpuLayers > 0 && Platform.OS === 'android') {
+      gpuInitPromise.then(ctx => { pendingContext = ctx; }).catch(() => {});
+      const context = await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init');
+      pendingContext = null; // won by the race — don't release
+      return { context, gpuAttemptFailed, actualLength: contextLength };
+    }
+    const context = await gpuInitPromise;
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
+    // If the GPU init promise resolves after the timeout, release the leaked context
+    if (pendingContext) { await safeRelease(pendingContext); pendingContext = null; }
     if (nGpuLayers > 0) {
       logger.warn('[LLM] GPU load failed, falling back to CPU:', gpuError?.message || gpuError);
       gpuAttemptFailed = true;

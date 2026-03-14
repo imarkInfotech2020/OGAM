@@ -43,6 +43,14 @@ class LLMService {
   private toolCallingSupported: boolean = false;
   private thinkingSupported: boolean = false;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
+  /** Serializes loadModel / unloadModel / reloadWithSettings to prevent concurrent native context init. */
+  private contextMutexPromise: Promise<void> = Promise.resolve();
+  private acquireContextMutex(): { release: () => void; ready: Promise<void> } {
+    let release: () => void;
+    const prev = this.contextMutexPromise;
+    this.contextMutexPromise = new Promise<void>(resolve => { release = resolve; });
+    return { release: release!, ready: prev };
+  }
 
   private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
@@ -74,21 +82,31 @@ class LLMService {
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
   async loadModel(modelPath: string, mmProjPath?: string): Promise<void> {
-    if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
-    if (this.context && this.currentModelPath === modelPath) return;
-    const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath);
-    if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
-    const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
-    this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
-    logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
+    const mutex = this.acquireContextMutex();
     try {
-      const { context, gpuAttemptFailed, actualLength } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
-      await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath });
-    } catch (error: any) {
-      this.context = null; this.currentModelPath = null; this.multimodalSupport = null;
-      this.toolCallingSupported = false; this.thinkingSupported = false;
-      Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [] });
-      throw new Error(error?.message || 'Unknown error loading model');
+      await mutex.ready;
+      // Re-check after acquiring mutex — another call may have loaded the same model
+      if (this.context && this.currentModelPath === modelPath) return;
+      if (this.context && this.currentModelPath !== modelPath) {
+        logger.log('[LLM] Releasing previous context before loading new model');
+        await this.doUnloadModel();
+      }
+      const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath);
+      if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
+      const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
+      this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
+      logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
+      try {
+        const { context, gpuAttemptFailed, actualLength } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
+        await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath });
+      } catch (error: any) {
+        this.context = null; this.currentModelPath = null; this.multimodalSupport = null;
+        this.toolCallingSupported = false; this.thinkingSupported = false;
+        Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [] });
+        throw new Error(error?.message || 'Unknown error loading model');
+      }
+    } finally {
+      mutex.release();
     }
   }
   private async initWithAutoContext(
@@ -145,7 +163,8 @@ class LLMService {
     this.thinkingSupported = supportsNativeThinking(this.context);
   }
 
-  async unloadModel(): Promise<void> {
+  /** Internal unload without acquiring the mutex (used by loadModel which already holds it). */
+  private async doUnloadModel(): Promise<void> {
     if (!this.context) return;
     if (this.isGenerating) {
       try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
@@ -155,6 +174,15 @@ class LLMService {
     try { await this.context.release(); } catch (e) { logger.warn('[LLM] Error releasing context (bridge may be torn down):', e); }
     useAppStore.getState().setModelMaxContext(null);
     Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0 });
+  }
+  async unloadModel(): Promise<void> {
+    const mutex = this.acquireContextMutex();
+    try {
+      await mutex.ready;
+      await this.doUnloadModel();
+    } finally {
+      mutex.release();
+    }
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
@@ -328,21 +356,27 @@ class LLMService {
   getPerformanceSettings(): LLMPerformanceSettings { return { ...this.currentSettings }; }
   getPerformanceStats(): LLMPerformanceStats { return { ...this.performanceStats }; }
   async reloadWithSettings(modelPath: string, settings: LLMPerformanceSettings): Promise<void> {
-    this.updatePerformanceSettings(settings);
-    if (this.context) await this.unloadModel();
-    const { baseParams, nGpuLayers } = buildModelParams(modelPath, { ...useAppStore.getState().settings, ...settings });
-    logger.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
+    const mutex = this.acquireContextMutex();
     try {
-      const { context, gpuAttemptFailed } = await initContextWithFallback(baseParams, settings.contextLength, nGpuLayers);
-      this.context = context;
-      Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
-      this.currentModelPath = modelPath;
-      this.multimodalSupport = null; this.multimodalInitialized = false;
-      await this.checkMultimodalSupport(); this.detectToolCallingSupport(); this.detectThinkingSupport();
-    } catch (error) {
-      logger.error('[LLM] Error reloading model:', error);
-      Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false, thinkingSupported: false });
-      throw error;
+      await mutex.ready;
+      this.updatePerformanceSettings(settings);
+      if (this.context) await this.doUnloadModel();
+      const { baseParams, nGpuLayers } = buildModelParams(modelPath, { ...useAppStore.getState().settings, ...settings });
+      logger.log(`[LLM] Reloading with threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}`);
+      try {
+        const { context, gpuAttemptFailed } = await initContextWithFallback(baseParams, settings.contextLength, nGpuLayers);
+        this.context = context;
+        Object.assign(this, captureGpuInfo(context, gpuAttemptFailed, nGpuLayers));
+        this.currentModelPath = modelPath;
+        this.multimodalSupport = null; this.multimodalInitialized = false;
+        await this.checkMultimodalSupport(); this.detectToolCallingSupport(); this.detectThinkingSupport();
+      } catch (error) {
+        logger.error('[LLM] Error reloading model:', error);
+        Object.assign(this, { context: null, currentModelPath: null, toolCallingSupported: false, thinkingSupported: false });
+        throw error;
+      }
+    } finally {
+      mutex.release();
     }
   }
 }

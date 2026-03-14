@@ -85,7 +85,12 @@ export interface TextLoadContext {
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      await llmService.unloadModel();
+      try {
+        await llmService.unloadModel();
+      } catch (unloadErr) {
+        // Log but continue — loadModel will also attempt to release the old context
+        console.warn('[ActiveModel] Error unloading previous model, continuing:', unloadErr);
+      }
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
 

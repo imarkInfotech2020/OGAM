@@ -36,6 +36,14 @@ class ActiveModelService {
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
   private imageLoadPromise: Promise<void> | null = null;
+  /** Serializes text model load/unload so only one operation runs at a time. */
+  private textMutex: Promise<void> = Promise.resolve();
+  private acquireTextMutex(): { release: () => void; ready: Promise<void> } {
+    let release: () => void;
+    const prev = this.textMutex;
+    this.textMutex = new Promise<void>(resolve => { release = resolve; });
+    return { release: release!, ready: prev };
+  }
   getActiveModels(): ActiveModelInfo {
     const store = useAppStore.getState();
     const textModel =
@@ -77,50 +85,55 @@ class ActiveModelService {
     modelId: string,
     timeoutMs: number = 120000,
   ): Promise<void> {
+    // Fast path — model already loaded
     if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
-      // Model already loaded natively — ensure store reflects it
       const store = useAppStore.getState();
       if (store.activeModelId !== modelId) {
         store.setActiveModelId(modelId);
       }
       return;
     }
-    if (this.textLoadPromise !== null) {
-      await this.textLoadPromise;
-      if (this.loadedTextModelId === modelId) {
+    // Serialize: wait for any in-flight text model operation to finish
+    const mutex = this.acquireTextMutex();
+    try {
+      await mutex.ready;
+      // Re-check after acquiring — a concurrent call may have loaded it
+      if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
         const store = useAppStore.getState();
         if (store.activeModelId !== modelId) {
           store.setActiveModelId(modelId);
         }
         return;
       }
+      const store = useAppStore.getState();
+      const model = store.downloadedModels.find(m => m.id === modelId);
+      if (!model) {
+        throw new Error('Model not found');
+      }
+      this.loadingState.text = true;
+      this.notifyListeners();
+      this.textLoadPromise = doLoadTextModel({
+        model,
+        modelId,
+        store,
+        timeoutMs,
+        loadedTextModelId: this.loadedTextModelId,
+        onLoaded: id => {
+          this.loadedTextModelId = id;
+        },
+        onError: () => {
+          this.loadedTextModelId = null;
+        },
+        onFinally: () => {
+          this.loadingState.text = false;
+          this.textLoadPromise = null;
+          this.notifyListeners();
+        },
+      });
+      await this.textLoadPromise;
+    } finally {
+      mutex.release();
     }
-    const store = useAppStore.getState();
-    const model = store.downloadedModels.find(m => m.id === modelId);
-    if (!model) {
-      throw new Error('Model not found');
-    }
-    this.loadingState.text = true;
-    this.notifyListeners();
-    this.textLoadPromise = doLoadTextModel({
-      model,
-      modelId,
-      store,
-      timeoutMs,
-      loadedTextModelId: this.loadedTextModelId,
-      onLoaded: id => {
-        this.loadedTextModelId = id;
-      },
-      onError: () => {
-        this.loadedTextModelId = null;
-      },
-      onFinally: () => {
-        this.loadingState.text = false;
-        this.textLoadPromise = null;
-        this.notifyListeners();
-      },
-    });
-    await this.textLoadPromise;
   }
   async unloadTextModel(): Promise<void> {
     if (this.textLoadPromise !== null) {
