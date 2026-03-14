@@ -67,7 +67,6 @@ export type GenerationDeps = {
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
 };
-/** Prepend system prompt + compaction summary (if persisted) to a prefix array. Returns messages after cutoff. */
 function applyCompactionPrefix(conversation: any, systemPrompt: string, messages: Message[]): { prefix: Message[]; filtered: Message[] } {
   const prefix: Message[] = [{ id: 'system', role: 'system', content: systemPrompt, timestamp: 0 }];
   let filtered = messages;
@@ -77,13 +76,11 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
     if (cutoffIdx !== -1) filtered = messages.slice(cutoffIdx + 1);
   }
   return { prefix, filtered };
-}
-function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
+}function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
   if (!attachments) return text;
   return attachments.filter(a => a.type === 'document' && a.textContent)
     .reduce((acc, doc) => `${acc}\n\n---\n📄 **Attached Document: ${doc.fileName || 'document'}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`, text);
-}
-function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
+}function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   const allMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, allMessages);
@@ -259,7 +256,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const heuristicMatch = shouldUseToolsForMessage(messageText, enabledTools);
   const activeTools = (isRemote || heuristicMatch) ? enabledTools : [];
   const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, heuristicMatch=${heuristicMatch}, enabledTools=[${enabledTools.join(', ')}], activeTools=[${activeTools.join(', ')}]`);
+  logger.log(`[ChatGen][DEBUG] Will use path: ${activeTools.length > 0 ? 'generateWithTools' : 'generateResponse'}, projectId=${conversation?.projectId || 'none'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
+  logger.log(`[ChatGen][DEBUG] messagesForContext count=${messagesForContext.length}, roles: ${messagesForContext.map(m => m.role).join(', ')}`);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: messagesForContext }, activeTools, conversation?.projectId);

@@ -177,12 +177,27 @@ export async function generateOllamaChatImpl(
   const thinkingEnabled = options.enableThinking !== false;
 
   // Convert to Ollama message format
+  // Convert tool_calls arguments from JSON strings to objects for Ollama's native format
+  const convertToolCalls = (tcs: OpenAIToolCall[] | undefined) => {
+    if (!tcs) return undefined;
+    return tcs.map(tc => ({
+      ...tc,
+      function: {
+        ...tc.function,
+        arguments: typeof tc.function.arguments === 'string'
+          ? (() => { try { return JSON.parse(tc.function.arguments); } catch { return tc.function.arguments; } })()
+          : tc.function.arguments,
+      },
+    }));
+  };
+
   // Images go in a top-level `images` array as raw base64 (strip data:...;base64, prefix)
   const ollamaMessages = openaiMessages.map(m => {
+    const toolCalls = convertToolCalls(m.tool_calls);
     if (typeof m.content === 'string') {
       return {
         role: m.role, content: m.content,
-        ...(m.tool_calls && { tool_calls: m.tool_calls }),
+        ...(toolCalls && { tool_calls: toolCalls }),
         ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
       };
     }
@@ -199,7 +214,7 @@ export async function generateOllamaChatImpl(
     return {
       role: m.role, content: text,
       ...(images.length > 0 && { images }),
-      ...(m.tool_calls && { tool_calls: m.tool_calls }),
+      ...(toolCalls && { tool_calls: toolCalls }),
       ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
     };
   });
@@ -222,6 +237,9 @@ export async function generateOllamaChatImpl(
   let fullReasoningContent = '';
   let completeCalled = false;
   let streamErrorOccurred = false;
+  // Accumulate tool_calls from ALL streaming messages — Ollama sends them
+  // in intermediate done:false messages, NOT in the final done:true message.
+  const accumulatedToolCalls: OpenAIToolCall[] = [];
 
   try {
     await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, timeout: 300000, signal }, (line) => {
@@ -234,26 +252,33 @@ export async function generateOllamaChatImpl(
         return;
       }
 
-      logger.log('[OllamaChat] raw line:', JSON.stringify(line));
       const msg = line.message as {
         role?: string; content?: string; thinking?: string; tool_calls?: OpenAIToolCall[]
       } | undefined;
-      logger.log('[OllamaChat] parsed msg:', JSON.stringify(msg), 'done:', line.done);
       if (msg) {
         if (msg.thinking) { fullReasoningContent += msg.thinking; callbacks.onReasoning?.(msg.thinking); }
         if (msg.content) { fullContent += msg.content; callbacks.onToken(msg.content); }
+        // Collect tool_calls from every message (they arrive in done:false chunks)
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            if (tc.function?.name) {
+              logger.log(`[OllamaChat] tool_call: ${tc.function.name}(${typeof tc.function.arguments === 'string' ? tc.function.arguments.substring(0, 100) : JSON.stringify(tc.function.arguments).substring(0, 100)})`);
+              accumulatedToolCalls.push(tc);
+            }
+          }
+        }
       }
 
       if (line.done) {
-        logger.log('[OllamaChat] stream done — fullContent length:', fullContent.length, 'fullReasoningContent length:', fullReasoningContent.length);
+        logger.log(`[OllamaChat] stream done — content=${fullContent.length}, reasoning=${fullReasoningContent.length}, toolCalls=${accumulatedToolCalls.length}`);
         completeCalled = true;
-        const toolCalls = (msg?.tool_calls ?? []).filter(tc => tc.function?.name);
         callbacks.onComplete({
           content: fullContent,
           reasoningContent: fullReasoningContent || undefined,
           meta: { gpu: false, gpuBackend: 'Remote' },
-          toolCalls: toolCalls.length > 0 ? toolCalls.map(tc => ({
-            id: tc.id, name: tc.function.name, arguments: tc.function.arguments,
+          toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls.map(tc => ({
+            id: tc.id, name: tc.function.name,
+            arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments),
           })) : undefined,
         });
       }
@@ -264,6 +289,10 @@ export async function generateOllamaChatImpl(
         content: fullContent,
         reasoningContent: fullReasoningContent || undefined,
         meta: { gpu: false, gpuBackend: 'Remote' },
+        toolCalls: accumulatedToolCalls.length > 0 ? accumulatedToolCalls.map(tc => ({
+          id: tc.id, name: tc.function.name,
+          arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments),
+        })) : undefined,
       });
     }
   } catch (error) {

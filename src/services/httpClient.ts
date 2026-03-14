@@ -6,7 +6,7 @@
  */
 
 import logger from '../utils/logger';
-import { processSSELines } from './httpClientSSE';
+import { createSSELineProcessor } from './httpClientSSE';
 
 export { parseOpenAIMessage, parseAnthropicMessage, parseSSEStream, parseSSEFromText } from './httpClientSSE';
 export { imageToBase64DataUrl, isPrivateNetworkEndpoint, testEndpoint, detectServerType } from './httpClientUtils';
@@ -201,6 +201,7 @@ export async function createStreamingRequest(
 
     // Track processed length for incremental parsing
     let processedLength = 0;
+    const sseProcessor = createSSELineProcessor(onEvent);
 
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
@@ -212,8 +213,9 @@ export async function createStreamingRequest(
             if (responseText.length > processedLength) {
               const newData = responseText.slice(processedLength);
               processedLength = responseText.length;
-              processSSELines(newData, onEvent);
+              sseProcessor.process(newData);
             }
+            sseProcessor.flush();
             resolve();
           } catch (err) {
             reject(err);
@@ -230,7 +232,7 @@ export async function createStreamingRequest(
       if (responseText.length > processedLength) {
         const newData = responseText.slice(processedLength);
         processedLength = responseText.length;
-        processSSELines(newData, onEvent);
+        sseProcessor.process(newData);
       }
     };
 
@@ -281,9 +283,14 @@ export async function createNDJSONStreamingRequest(
     Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
 
     let processedLength = 0;
+    let lineBuffer = '';
 
     const processChunk = (text: string) => {
-      const lines = text.split('\n');
+      // Prepend any leftover partial line from the previous chunk
+      const combined = lineBuffer + text;
+      const lines = combined.split('\n');
+      // Last element may be an incomplete line — hold it for the next chunk
+      lineBuffer = lines.pop() || '';
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -310,6 +317,15 @@ export async function createNDJSONStreamingRequest(
           const text = xhr.responseText;
           if (text.length > processedLength) {
             processChunk(text.slice(processedLength));
+          }
+          // Flush any remaining buffered line
+          if (lineBuffer.trim()) {
+            try {
+              onLine(JSON.parse(lineBuffer.trim()) as Record<string, unknown>);
+            } catch {
+              logger.warn('[HttpClient] Failed to parse final NDJSON line:', lineBuffer.substring(0, 100));
+            }
+            lineBuffer = '';
           }
           resolve();
         } else {
