@@ -30,7 +30,7 @@ async function probe(ip: string, port: number, path: string): Promise<boolean> {
     const controller = new AbortController();
     const timer = setTimeout(() => { controller.abort(); resolve(false); }, TIMEOUT_MS);
 
-    fetch(`http://${ip}:${port}${path}`, { signal: controller.signal })
+    fetch(`http://${ip}:${port}${path}`, { signal: controller.signal }) // NOSONAR — LAN-only probe; HTTPS requires certs on private IPs
       .then(res => { clearTimeout(timer); resolve(res.status === 200); })
       .catch(() => { clearTimeout(timer); resolve(false); });
   });
@@ -79,7 +79,7 @@ async function findReachableSubnet(subnets: string[]): Promise<string | null> {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
       try {
-        await fetch(`http://${gateway}:80/`, { signal: controller.signal });
+        await fetch(`http://${gateway}:80/`, { signal: controller.signal }); // NOSONAR — LAN gateway probe
         clearTimeout(timer);
         return base;
       } catch {
@@ -88,7 +88,7 @@ async function findReachableSubnet(subnets: string[]): Promise<string | null> {
         const controller2 = new AbortController();
         const timer2 = setTimeout(() => controller2.abort(), GATEWAY_TIMEOUT_MS);
         try {
-          await fetch(`http://${gateway}:11434/`, { signal: controller2.signal });
+          await fetch(`http://${gateway}:11434/`, { signal: controller2.signal }); // NOSONAR — LAN Ollama probe
           clearTimeout(timer2);
           return base;
         } catch {
@@ -161,7 +161,7 @@ export async function discoverLANServers(): Promise<DiscoveredServer[]> {
 
     const recordIfFound = (target: string, provider: typeof PROVIDERS[0]) => (found: boolean) => {
       if (!found) return;
-      const endpoint = `http://${target}:${provider.port}`;
+      const endpoint = `http://${target}:${provider.port}`; // NOSONAR — LAN endpoint
       if (!seenEndpoints.has(endpoint)) {
         seenEndpoints.add(endpoint);
         logger.log(`[Discovery] Found ${provider.name} at ${target}:${provider.port}`);

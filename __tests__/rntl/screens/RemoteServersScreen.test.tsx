@@ -96,36 +96,10 @@ jest.mock('../../../src/services/networkDiscovery', () => ({
 
 const mockDiscoverLANServers = discoverLANServers as jest.Mock;
 
-const mockShowAlert = jest.fn((_t: string, _m: string, _b?: any) => ({
-  visible: true,
-  title: _t,
-  message: _m,
-  buttons: _b || [],
-}));
-
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
-    if (!visible) return null;
-    const { View, Text, TouchableOpacity: TO } = require('react-native');
-    return (
-      <View testID="custom-alert">
-        <Text testID="alert-title">{title}</Text>
-        <Text testID="alert-message">{message}</Text>
-        {buttons && buttons.map((btn: any, i: number) => (
-          <TO key={i} testID={`alert-button-${btn.text}`} onPress={btn.onPress}>
-            <Text>{btn.text}</Text>
-          </TO>
-        ))}
-        <TO testID="alert-close" onPress={onClose}>
-          <Text>CloseAlert</Text>
-        </TO>
-      </View>
-    );
-  },
-  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
-  hideAlert: jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] })),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-}));
+jest.mock('../../../src/components/CustomAlert', () =>
+  require('../../helpers/mockCustomAlert').customAlertMock,
+);
+const { mockShowAlert } = require('../../helpers/mockCustomAlert');
 
 // Helper to create mock server
 function createMockServer(overrides: Partial<any> = {}) {
