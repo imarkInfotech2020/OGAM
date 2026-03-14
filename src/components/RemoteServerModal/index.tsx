@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
 import { AppSheet } from '../AppSheet';
+import { CustomAlert } from '../CustomAlert';
 import { RemoteServer } from '../../types';
 import { createStyles } from './styles';
 import { useRemoteServerForm } from './useRemoteServerForm';
@@ -75,6 +76,8 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
     handleTestConnection,
     handleSave,
     isPublicNetwork,
+    alertState,
+    dismissAlert,
   } = useRemoteServerForm({ server, visible, onSave, onClose });
 
   return (
@@ -159,6 +162,8 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <CustomAlert {...alertState} onClose={dismissAlert} />
     </AppSheet>
   );
 };

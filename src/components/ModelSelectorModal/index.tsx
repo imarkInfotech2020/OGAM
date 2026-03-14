@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  Alert,
   View,
   Text,
   ScrollView,
@@ -13,6 +12,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../types';
 import { activeModelService, remoteServerManager } from '../../services';
+import { CustomAlert, AlertState, initialAlertState, showAlert } from '../CustomAlert';
 import { createAllStyles } from './styles';
 import { TextTab } from './TextTab';
 import { ImageTab } from './ImageTab';
@@ -59,6 +59,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   useEffect(() => {
     if (visible) setActiveTab(initialTab);
@@ -89,7 +90,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       onSelectImageModel?.(model);
     } catch (error) {
       logger.error('Failed to load image model:', error);
-      Alert.alert('Failed to Load', (error as Error).message);
+      setAlertState(showAlert('Failed to Load', (error as Error).message));
     } finally {
       setIsLoadingImage(false);
     }
@@ -114,7 +115,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       await remoteServerManager.setActiveRemoteTextModel(serverId, model.id);
     } catch (error) {
       logger.error('[ModelSelectorModal] Failed to set remote text model:', error);
-      Alert.alert('Failed to Select Model', (error as Error).message);
+      setAlertState(showAlert('Failed to Select Model', (error as Error).message));
     }
   };
 
@@ -124,7 +125,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       await remoteServerManager.setActiveRemoteImageModel(serverId, model.id);
     } catch (error) {
       logger.error('[ModelSelectorModal] Failed to set remote vision model:', error);
-      Alert.alert('Failed to Select Model', (error as Error).message);
+      setAlertState(showAlert('Failed to Select Model', (error as Error).message));
     }
   };
 
@@ -212,6 +213,8 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             />
           )}
         </ScrollView>
+
+      <CustomAlert {...alertState} onClose={() => setAlertState(initialAlertState)} />
     </AppSheet>
   );
 };
