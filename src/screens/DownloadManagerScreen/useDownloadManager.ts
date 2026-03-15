@@ -28,9 +28,11 @@ export interface UseDownloadManagerResult {
 async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
   const { downloadedImageModels } = useAppStore.getState();
   const downloadedIds = new Set(downloadedImageModels.map(m => m.id));
+  logger.log('[DownloadManager] purgeStale: downloadedIds=', [...downloadedIds], 'active=', downloads.map(d => ({ id: d.modelId, status: d.status })));
   for (const d of downloads) {
     if (!d.modelId.startsWith('image:')) continue;
     if (downloadedIds.has(d.modelId.replace('image:', ''))) {
+      logger.log('[DownloadManager] purging stale entry:', d.modelId, d.downloadId);
       backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
       backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
     }
