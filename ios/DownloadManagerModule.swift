@@ -639,30 +639,39 @@ extension DownloadManagerModule {
                                    rejecter reject: @escaping RCTPromiseRejectBlock) {
     let id = Int64(downloadId)
     NSLog("[DownloadManager] moveCompletedDownload #%lld -> %@", id, targetPath)
-    queue.sync {
-      guard let info = downloads[id] else {
-        NSLog("[DownloadManager] moveCompletedDownload: #%lld NOT FOUND", id)
-        reject("NOT_FOUND", "Download \(id) not found or not completed", nil)
-        return
-      }
 
-      if info.isMultiFile {
-        NSLog("[DownloadManager] Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
-        let destDir = info.multiFileDestDir ?? targetPath
-        DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
+    // Read download info with a short sync read, then do heavy I/O async
+    // so the RN bridge thread is not blocked during large file moves.
+    var snapshotInfo: DownloadInfo?
+    queue.sync { snapshotInfo = downloads[id] }
+
+    guard let info = snapshotInfo else {
+      NSLog("[DownloadManager] moveCompletedDownload: #%lld NOT FOUND", id)
+      reject("NOT_FOUND", "Download \(id) not found or not completed", nil)
+      return
+    }
+
+    if info.isMultiFile {
+      NSLog("[DownloadManager] Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
+      let destDir = info.multiFileDestDir ?? targetPath
+      DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
+      queue.async(flags: .barrier) {
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
-        resolve(destDir)
-        return
       }
+      resolve(destDir)
+      return
+    }
 
-      guard let localUri = info.localUri else {
-        NSLog("[DownloadManager] moveCompletedDownload: #%lld localUri is nil (not completed yet)", id)
-        reject("NOT_COMPLETED", "Download \(id) not completed yet", nil)
-        return
-      }
+    guard let localUri = info.localUri else {
+      NSLog("[DownloadManager] moveCompletedDownload: #%lld localUri is nil (not completed yet)", id)
+      reject("NOT_COMPLETED", "Download \(id) not completed yet", nil)
+      return
+    }
 
-      NSLog("[DownloadManager] Moving from %@ to %@", localUri, targetPath)
+    // Perform heavy file I/O on a background queue so the JS thread stays free
+    DispatchQueue.global(qos: .userInitiated).async {
+      NSLog("[DownloadManager] Moving from %@ to %@ (background)", localUri, targetPath)
 
       let fileManager = FileManager.default
       let sourceURL = URL(fileURLWithPath: localUri)
@@ -682,8 +691,10 @@ extension DownloadManagerModule {
           NSLog("[DownloadManager] File copied successfully")
         }
         DownloadManagerModule.excludeFromBackup(at: targetURL)
-        self.downloads.removeValue(forKey: id)
-        self.persistStateLocked()
+        self.queue.async(flags: .barrier) {
+          self.downloads.removeValue(forKey: id)
+          self.persistStateLocked()
+        }
         resolve(targetPath)
       } catch {
         NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
@@ -748,7 +759,7 @@ extension DownloadManagerModule {
 
   func pollProgress() {
     guard hasListeners else { return }
-    queue.sync(flags: .barrier) {
+    queue.async(flags: .barrier) {
       let activeDownloads = downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
       for (downloadId, var info) in activeDownloads {
         if info.isMultiFile {
