@@ -64,20 +64,23 @@ const mockSetActiveConversation = jest.fn();
 const mockDeleteConversation = jest.fn();
 
 jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn(() => ({
-    downloadedModels: [],
-    setDownloadedModels: jest.fn(),
-    activeModelId: null,
-    setActiveModelId: jest.fn(),
-    downloadedImageModels: [],
-    setDownloadedImageModels: jest.fn(),
-    activeImageModelId: null,
-    setActiveImageModelId: jest.fn(),
-    deviceInfo: { deviceName: 'TestPhone' },
-    setDeviceInfo: jest.fn(),
-    generatedImages: [],
-    settings: { contextLength: 4096 },
-  })),
+  useAppStore: jest.fn((selector?: any) => {
+    const state = {
+      downloadedModels: [],
+      setDownloadedModels: jest.fn(),
+      activeModelId: null,
+      setActiveModelId: jest.fn(),
+      downloadedImageModels: [],
+      setDownloadedImageModels: jest.fn(),
+      activeImageModelId: null,
+      setActiveImageModelId: jest.fn(),
+      deviceInfo: { deviceName: 'TestPhone' },
+      setDeviceInfo: jest.fn(),
+      generatedImages: [],
+      settings: { contextLength: 4096 },
+    };
+    return selector ? selector(state) : state;
+  }),
   useChatStore: jest.fn(() => ({
     conversations: [],
     createConversation: mockCreateConversation,
@@ -128,19 +131,22 @@ describe('useHomeScreen', () => {
       setActiveConversation: mockSetActiveConversation,
       deleteConversation: mockDeleteConversation,
     });
-    (useAppStore as unknown as jest.Mock).mockReturnValue({
-      downloadedModels: [],
-      setDownloadedModels: jest.fn(),
-      activeModelId: null,
-      setActiveModelId: jest.fn(),
-      downloadedImageModels: [],
-      setDownloadedImageModels: jest.fn(),
-      activeImageModelId: null,
-      setActiveImageModelId: jest.fn(),
-      deviceInfo: { deviceName: 'TestPhone' },
-      setDeviceInfo: jest.fn(),
-      generatedImages: [],
-      settings: { contextLength: 4096 },
+    (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => {
+      const st = {
+        downloadedModels: [],
+        setDownloadedModels: jest.fn(),
+        activeModelId: null,
+        setActiveModelId: jest.fn(),
+        downloadedImageModels: [],
+        setDownloadedImageModels: jest.fn(),
+        activeImageModelId: null,
+        setActiveImageModelId: jest.fn(),
+        deviceInfo: { deviceName: 'TestPhone' },
+        setDeviceInfo: jest.fn(),
+        generatedImages: [],
+        settings: { contextLength: 4096 },
+      };
+      return sel ? sel(st) : st;
     });
   });
 
@@ -155,14 +161,14 @@ describe('useHomeScreen', () => {
     });
 
     it('creates conversation and navigates when local model is active', () => {
-      (useAppStore as unknown as jest.Mock).mockReturnValue({
+      (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [{ id: 'local-model-1', name: 'Local' }], setDownloadedModels: jest.fn(),
         activeModelId: 'local-model-1', setActiveModelId: jest.fn(),
         downloadedImageModels: [], setDownloadedImageModels: jest.fn(),
         activeImageModelId: null, setActiveImageModelId: jest.fn(),
         deviceInfo: null, setDeviceInfo: jest.fn(),
         generatedImages: [], settings: { contextLength: 4096 },
-      });
+      }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
       expect(mockCreateConversation).toHaveBeenCalledWith('local-model-1');
@@ -230,14 +236,14 @@ describe('useHomeScreen', () => {
     });
 
     it('shows eject confirmation when local model is active', () => {
-      (useAppStore as unknown as jest.Mock).mockReturnValue({
+      (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [], setDownloadedModels: jest.fn(),
         activeModelId: 'model-1', setActiveModelId: jest.fn(),
         downloadedImageModels: [], setDownloadedImageModels: jest.fn(),
         activeImageModelId: null, setActiveImageModelId: jest.fn(),
         deviceInfo: null, setDeviceInfo: jest.fn(),
         generatedImages: [], settings: { contextLength: 4096 },
-      });
+      }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.handleEjectAll(); });
       expect(showAlert).toHaveBeenCalledWith(
@@ -327,7 +333,7 @@ describe('useHomeScreen', () => {
   describe('activeTextModel computation', () => {
     it('returns local model when active', () => {
       const localModel = { id: 'local-1', name: 'Local Llama' } as any;
-      (useAppStore as unknown as jest.Mock).mockReturnValue({
+      (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [localModel],
         setDownloadedModels: jest.fn(),
         activeModelId: 'local-1',
@@ -336,7 +342,7 @@ describe('useHomeScreen', () => {
         activeImageModelId: null, setActiveImageModelId: jest.fn(),
         deviceInfo: null, setDeviceInfo: jest.fn(),
         generatedImages: [], settings: { contextLength: 4096 },
-      });
+      }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       expect(result.current.activeTextModel).toEqual(localModel);
     });

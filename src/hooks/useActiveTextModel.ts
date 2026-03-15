@@ -18,7 +18,8 @@ type ActiveTextModelResult = {
  * Use this anywhere you need to know if a text model is available.
  */
 export function useActiveTextModel(): ActiveTextModelResult {
-  const { downloadedModels, activeModelId } = useAppStore();
+  const downloadedModels = useAppStore((s) => s.downloadedModels);
+  const activeModelId = useAppStore((s) => s.activeModelId);
   const activeServerId = useRemoteServerStore((s) => s.activeServerId);
   const activeRemoteTextModelId = useRemoteServerStore((s) => s.activeRemoteTextModelId);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
