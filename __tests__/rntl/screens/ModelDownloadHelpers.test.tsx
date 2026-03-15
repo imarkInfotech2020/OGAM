@@ -51,6 +51,7 @@ const mockColors = {
   surface: '#F5F5F5',
   border: '#DDD',
   warning: '#FF9500',
+  success: '#525252',
 };
 
 import { RemoteServer } from '../../../src/types';
@@ -278,6 +279,23 @@ describe('ServerCard', () => {
     );
     fireEvent.press(getByText('Connect'));
     expect(onConnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows "Connected" badge when isConnected', () => {
+    const { getByTestId, getByText, queryByTestId } = render(
+      <ServerCard {...defaultCardProps} isConnected={true} />,
+    );
+    expect(getByTestId('discovered-server-server-1-connected')).toBeTruthy();
+    expect(getByText('Connected')).toBeTruthy();
+    expect(queryByTestId('discovered-server-server-1-connect')).toBeNull();
+  });
+
+  it('shows Connect button when not connected', () => {
+    const { getByTestId, queryByTestId } = render(
+      <ServerCard {...defaultCardProps} isConnected={false} />,
+    );
+    expect(getByTestId('discovered-server-server-1-connect')).toBeTruthy();
+    expect(queryByTestId('discovered-server-server-1-connected')).toBeNull();
   });
 });
 
