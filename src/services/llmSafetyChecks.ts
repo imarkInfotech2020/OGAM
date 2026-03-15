@@ -33,7 +33,7 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
       logger.warn('[LLM] RNFS.read() failed for magic check, skipping header validation:', readErr);
     }
     if (header !== undefined && !header.startsWith(GGUF_MAGIC)) {
-      return { valid: false, reason: `Invalid model file — not a GGUF file (header: ${header.substring(0, 8)})` };
+      return { valid: false, reason: `Invalid model file — not a GGUF file (header: ${header})` };
     }
     return { valid: true };
   } catch (e: any) {
