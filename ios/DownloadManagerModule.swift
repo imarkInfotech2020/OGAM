@@ -658,8 +658,8 @@ extension DownloadManagerModule {
       queue.async(flags: .barrier) {
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
+        resolve(destDir)
       }
-      resolve(destDir)
       return
     }
 
@@ -694,8 +694,8 @@ extension DownloadManagerModule {
         self.queue.async(flags: .barrier) {
           self.downloads.removeValue(forKey: id)
           self.persistStateLocked()
+          resolve(targetPath)
         }
-        resolve(targetPath)
       } catch {
         NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
         reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)

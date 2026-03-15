@@ -16,8 +16,14 @@ import RNFS from 'react-native-fs';
 
 function isMMProjFile(fileName: string): boolean {
   const lower = fileName.toLowerCase();
-  return (lower.includes('mmproj') || lower.includes('projector') ||
-    (lower.includes('clip') && lower.endsWith('.gguf'))) && lower.endsWith('.gguf');
+  if (!lower.endsWith('.gguf')) return false;
+  return (
+    lower.includes('mmproj') ||
+    lower.includes('projector') ||
+    // LLaVA/InternVL-style CLIP vision encoder projectors, e.g.
+    // "mmproj-model-f16-clip-vit-large-patch14-336.gguf"
+    (lower.includes('clip') && lower.includes('vit'))
+  );
 }
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirItem | undefined> {
