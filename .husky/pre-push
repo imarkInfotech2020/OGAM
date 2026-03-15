@@ -48,7 +48,7 @@ if [ -n "$PUSHED_JS" ]; then
   npx tsc --noEmit
 
   echo "▶ JS/TS tests (related to changed files)..."
-  npx jest --findRelatedTests $PUSHED_JS
+  echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests
 fi
 
 if [ -n "$PUSHED_SWIFT" ]; then
