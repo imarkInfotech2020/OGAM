@@ -164,6 +164,8 @@ export async function downloadCoreMLMultiFile(
       imageDownloadType: 'multifile',
     });
     const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
+      // Remove the native download entry (no-op for multi-file — files already moved by native handler)
+      await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, modelDir).catch(() => {});
       const imageModel: ONNXImageModel = {
         id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
         modelPath: modelDir, downloadedAt: new Date().toISOString(),

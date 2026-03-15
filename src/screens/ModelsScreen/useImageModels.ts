@@ -50,6 +50,8 @@ async function handleCompletedImageDownload(opts: {
     };
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
   } else if (metadata.imageDownloadType === 'multifile') {
+    // Clean up native download entry (files already at final location)
+    await backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => {});
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
