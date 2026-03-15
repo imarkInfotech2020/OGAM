@@ -25,6 +25,22 @@ export interface UseDownloadManagerResult {
   totalStorageUsed: number;
 }
 
+async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
+  const { downloadedImageModels } = useAppStore.getState();
+  const downloadedIds = new Set(downloadedImageModels.map(m => m.id));
+  for (const d of downloads) {
+    if (!d.modelId.startsWith('image:')) continue;
+    if (downloadedIds.has(d.modelId.replace('image:', ''))) {
+      backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
+      backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+    }
+  }
+  return downloads.filter(d =>
+    (d.status === 'running' || d.status === 'pending' || d.status === 'paused') &&
+    !(d.modelId.startsWith('image:') && downloadedIds.has(d.modelId.replace('image:', ''))),
+  );
+}
+
 export function useDownloadManager(): UseDownloadManagerResult {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
@@ -104,24 +120,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
-      const { downloadedImageModels: imgModels } = useAppStore.getState();
-      const downloadedImageIds = new Set(imgModels.map(m => m.id));
-
-      // Purge stale image download entries whose model is already registered
-      const stale = downloads.filter(d => {
-        if (!d.modelId.startsWith('image:')) return false;
-        const imageId = d.modelId.replace('image:', '');
-        return downloadedImageIds.has(imageId);
-      });
-      for (const s of stale) {
-        backgroundDownloadService.moveCompletedDownload(s.downloadId, '').catch(() => {});
-        backgroundDownloadService.cancelDownload(s.downloadId).catch(() => {});
-      }
-
-      setActiveDownloads(downloads.filter(
-        d => (d.status === 'running' || d.status === 'pending' || d.status === 'paused') &&
-          !(d.modelId.startsWith('image:') && downloadedImageIds.has(d.modelId.replace('image:', ''))),
-      ));
+      setActiveDownloads(await purgeStaleImageDownloads(downloads));
     }
   };
   const handleRefresh = useCallback(async () => {

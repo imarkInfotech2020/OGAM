@@ -56,6 +56,7 @@ jest.mock('../../../../src/services', () => ({
     onComplete: jest.fn((_id: number, _cb: Function) => jest.fn()),
     onError: jest.fn((_id: number, _cb: Function) => jest.fn()),
     moveCompletedDownload: jest.fn(() => Promise.resolve()),
+    cancelDownload: jest.fn(() => Promise.resolve()),
     startProgressPolling: jest.fn(),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
   },
@@ -92,10 +93,12 @@ const mockSetActiveImageModelId = jest.fn();
 let mockActiveBackgroundDownloads: Record<number, PersistedDownloadInfo> = {};
 let mockImageModelDownloading: string[] = [];
 
+let mockDownloadedImageModels: any[] = [];
+
 jest.mock('../../../../src/stores', () => ({
   useAppStore: Object.assign(
     jest.fn(() => ({
-      downloadedImageModels: [],
+      downloadedImageModels: mockDownloadedImageModels,
       setDownloadedImageModels: mockSetDownloadedImageModels,
       addDownloadedImageModel: mockStoreAddDownloadedImageModel,
       activeImageModelId: null,
@@ -110,6 +113,7 @@ jest.mock('../../../../src/stores', () => ({
     {
       getState: jest.fn(() => ({
         activeBackgroundDownloads: mockActiveBackgroundDownloads,
+        downloadedImageModels: mockDownloadedImageModels,
       })),
     },
   ),
@@ -167,6 +171,7 @@ describe('restoreActiveImageDownloads', () => {
     mockOnProgressCallbacks.length = 0;
     mockActiveBackgroundDownloads = {};
     mockImageModelDownloading = [];
+    mockDownloadedImageModels = [];
   });
 
   it('returns early when background download service is unavailable', async () => {

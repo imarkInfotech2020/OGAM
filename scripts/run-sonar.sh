@@ -2,6 +2,12 @@
 
 set -eu
 
+# Source .env if present (for local dev — CI sets SONAR_TOKEN directly)
+if [ -f ".env" ]; then
+  # shellcheck disable=SC1091
+  . ./.env
+fi
+
 if [ -z "${SONAR_TOKEN:-}" ]; then
   echo "SONAR_TOKEN is not set. Skipping Sonar scan."
   exit 0

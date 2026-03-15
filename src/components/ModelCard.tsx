@@ -62,6 +62,28 @@ function resolveCredibility(
   return model.credibility ?? downloadedModel?.credibility;
 }
 
+const DownloadProgressSection: React.FC<{
+  progress: number;
+  bytes?: { downloaded: number; total: number };
+}> = ({ progress, bytes }) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+  <View style={styles.progressSection}>
+    <View style={styles.progressContainer}>
+      <View style={styles.progressBar}>
+        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+      </View>
+      <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+    </View>
+    {bytes && bytes.total > 0 && (
+      <Text style={styles.progressBytesText}>
+        {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
+      </Text>
+    )}
+  </View>
+  );
+};
+
 export const ModelCard: React.FC<ModelCardProps> = ({
   model,
   file,
@@ -155,19 +177,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {isDownloading && (
-            <View style={styles.progressSection}>
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]} />
-                </View>
-                <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
-              </View>
-              {downloadBytes && downloadBytes.total > 0 && (
-                <Text style={styles.progressBytesText}>
-                  {formatBytes(downloadBytes.downloaded)} / {formatBytes(downloadBytes.total)}
-                </Text>
-              )}
-            </View>
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} />
           )}
         </View>
 
