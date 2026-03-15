@@ -203,7 +203,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   progressText: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
-    width: 40,
+    flexShrink: 0,
     textAlign: 'right' as const,
   },
   iconButton: {
