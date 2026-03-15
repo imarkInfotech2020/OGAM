@@ -67,7 +67,7 @@ export const ServerCard: React.FC<{
         {isConnecting ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : isConnected ? (
-          <View style={[styles.connectedBadge, { backgroundColor: colors.success + '20', borderColor: colors.success }]} testID={`discovered-server-${server.id}-connected`}>
+          <View style={[styles.connectedBadge, { backgroundColor: `${colors.success}20`, borderColor: colors.success }]} testID={`discovered-server-${server.id}-connected`}>
             <Text style={[styles.connectButtonText, { color: colors.success }]}>Connected</Text>
           </View>
         ) : (
