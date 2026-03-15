@@ -194,7 +194,7 @@ const createIndicatorStyles = (colors: ThemeColors) => ({
     backgroundColor: `${colors.primary}20`,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginRight: 10,
+    marginRight: 20,
   },
   imageProgressInfo: { flex: 1 },
   imageProgressTitle: { ...TYPOGRAPHY.body, fontWeight: '600' as const, color: colors.text },

@@ -266,6 +266,8 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             {model.capabilities.supportsVision && 'Vision'}
                             {model.capabilities.supportsVision && model.capabilities.supportsToolCalling && ' · '}
                             {model.capabilities.supportsToolCalling && 'Tools'}
+                            {(model.capabilities.supportsVision || model.capabilities.supportsToolCalling) && model.capabilities.supportsThinking && ' · '}
+                            {model.capabilities.supportsThinking && 'Thinking'}
                           </Text>
                         </View>
                         {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
