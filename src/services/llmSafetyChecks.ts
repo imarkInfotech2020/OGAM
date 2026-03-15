@@ -22,9 +22,17 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
     if (fileSize < MIN_GGUF_FILE_SIZE) {
       return { valid: false, reason: `Model file too small (${fileSize} bytes) — likely corrupted or incomplete download` };
     }
-    // Read first 4 bytes to check GGUF magic number
-    const header = await RNFS.read(modelPath, 4, 0, 'ascii');
-    if (!header.startsWith(GGUF_MAGIC)) {
+    // Read first 4 bytes to check GGUF magic number.
+    // RNFS.read() has an iOS bridging bug with NSInteger arguments on
+    // react-native-fs 2.x, so we catch and skip the magic check if it fails.
+    // llama.rn will still validate the file format natively on load.
+    let header: string | undefined;
+    try {
+      header = await RNFS.read(modelPath, 4, 0, 'ascii');
+    } catch (readErr) {
+      logger.warn('[LLM] RNFS.read() failed for magic check, skipping header validation:', readErr);
+    }
+    if (header !== undefined && !header.startsWith(GGUF_MAGIC)) {
       return { valid: false, reason: `Invalid model file — not a GGUF file (header: ${header.substring(0, 8)})` };
     }
     return { valid: true };
