@@ -9,7 +9,7 @@
 # 4. Cancel picker (we can't select files in Maestro native pickers reliably)
 # 5. Verify chat input is still usable after picker dismissal
 
-appId: ai.offgridmobile.dev
+appId: ${APP_ID}
 name: "P0: Document Attachment"
 tags:
   - p0

@@ -5,7 +5,7 @@
 # Test: Go to Models tab → Delete model → Verify removed
 # Postcondition: Model removed from downloaded list
 
-appId: ai.offgridmobile.dev
+appId: ${APP_ID}
 name: "P0: Model Uninstall"
 tags:
   - p0

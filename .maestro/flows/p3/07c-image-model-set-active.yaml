@@ -2,7 +2,7 @@
 # Tests selecting a downloaded image model from the home screen picker
 # Assumes an image model is already downloaded but not active
 
-appId: ai.offgridmobile.dev
+appId: ${APP_ID}
 name: "P0: Image Model Set Active"
 tags:
   - p0

@@ -98,11 +98,11 @@ const SlideContent: React.FC<{
     }));
 
     return (
-      <View style={styles.slide}>
+      <View testID={`onboarding-slide-${item.id}`} style={styles.slide}>
         <View style={styles.slideInner}>
           {/* Hero keyword */}
           <ReanimatedAnimated.View style={keywordStyle}>
-            <Text style={[styles.keyword, { color: accentColor }]}>
+            <Text testID={`onboarding-keyword-${item.id}`} style={[styles.keyword, { color: accentColor }]}>
               {item.keyword}
             </Text>
           </ReanimatedAnimated.View>
@@ -186,7 +186,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   );
 
   const renderDots = () => (
-    <View style={styles.dotsContainer}>
+    <View testID="onboarding-dots" style={styles.dotsContainer}>
       {ONBOARDING_SLIDES.map((_, index) => {
         const inputRange = [
           (index - 1) * width,

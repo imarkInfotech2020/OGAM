@@ -2,7 +2,7 @@
 # Tests retrying a generation from the message action menu
 # Prerequisites: Text model must be loaded
 
-appId: ai.offgridmobile.dev
+appId: ${APP_ID}
 name: "P0: Text Generation Retry"
 tags:
   - p0
