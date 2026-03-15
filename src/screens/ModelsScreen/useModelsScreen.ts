@@ -134,10 +134,15 @@ export function useModelsScreen() {
     }
   };
 
+  const activeDownloadCount = Object.keys(text.downloadProgress).filter(key => {
+    if (!key.startsWith('image:')) return true;
+    const imageId = key.split('/').slice(0, -1).join('/').replace('image:', '');
+    return !image.downloadedImageModels.some(m => m.id === imageId);
+  }).length;
   const totalModelCount =
     text.downloadedModels.length +
     image.downloadedImageModels.length +
-    Object.keys(text.downloadProgress).length;
+    activeDownloadCount;
 
   const handleDownload = useCallback(
     (...args: Parameters<typeof text.handleDownload>) => {
