@@ -2,13 +2,20 @@
 
 # Run Maestro E2E tests in alphabetical order
 # Usage: ./run-tests.sh [folder] [--ios | --android]
-# Example:
+# Examples:
 #   ./run-tests.sh                          # auto-detect platform, run p0
-#   ./run-tests.sh .maestro/flows/p0 --ios  # force iOS
+#   ./run-tests.sh --ios                    # force iOS, run p0
 #   ./run-tests.sh .maestro/flows/p1 --android
 
-TEST_DIR="${1:-.maestro/flows/p0}"
-PLATFORM="${2:-}"
+# Parse arguments: flags vs positional
+for arg in "$@"; do
+  case "$arg" in
+    --ios|--android) PLATFORM="$arg" ;;
+    *) TEST_DIR="$arg" ;;
+  esac
+done
+TEST_DIR="${TEST_DIR:-.maestro/flows/p0}"
+
 FAILED_TESTS=()
 PASSED_TESTS=()
 
@@ -30,11 +37,11 @@ resolve_app_id() {
         echo "ai.offgridmobile.dev"
     else
         echo "ERROR: No booted simulator or emulator found" >&2
-        exit 1
+        return 1
     fi
 }
 
-APP_ID=$(resolve_app_id)
+APP_ID=$(resolve_app_id) || exit 1
 echo "Platform app ID: $APP_ID"
 echo "Running tests from: $TEST_DIR"
 echo "================================"

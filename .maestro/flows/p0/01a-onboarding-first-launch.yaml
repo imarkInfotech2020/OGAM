@@ -14,7 +14,7 @@ tags:
 - clearState
 - launchApp
 
-# Wait for JS bundle + app init + navigation (clearState wipes Metro cache)
+# Wait for JS bundle + app init + navigation (clearState resets persisted app state)
 - extendedWaitUntil:
     visible:
       id: "onboarding-screen"
