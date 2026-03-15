@@ -69,10 +69,6 @@ export function getStatusText(status: string): string {
 export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
   const items: DownloadItem[] = [];
 
-  // Active downloads — native list is the source of truth for what's active.
-  // downloadProgress provides supplementary byte counts.
-  const activeDownloadIds = new Set(data.activeDownloads.map(d => d.downloadId));
-
   Object.entries(data.downloadProgress).forEach(([key, progress]) => {
     const [_modelId, fileName] = key.split('/').slice(-2);
     const fullModelId = key.substring(0, key.lastIndexOf('/'));
