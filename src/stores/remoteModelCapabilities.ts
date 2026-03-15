@@ -6,6 +6,8 @@
  * from Ollama and LM Studio servers.
  */
 
+import logger from '../utils/logger';
+
 export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
@@ -161,14 +163,16 @@ export async function fetchLmStudioModelInfo(
 }
 
 /**
- * Probe an LM Studio model for thinking support by sending a short non-streaming
- * request and checking if the response contains thinking content.
+ * Probe an LM Studio model for thinking support by sending a short streaming
+ * request and checking if any SSE delta contains thinking content.
+ *
+ * LM Studio only honours `chat_template_kwargs` in streaming mode.
+ * React Native's fetch doesn't support ReadableStream, so the full SSE
+ * response is collected with `response.text()` instead.
  *
  * LM Studio may return thinking in different ways:
  * - Inline `<think>` tags in message.content
  * - Separate message.reasoning_content field
- *
- * Uses non-streaming because React Native's fetch doesn't support ReadableStream.
  */
 function deltaHasThinking(delta: Record<string, unknown>): boolean {
   if (typeof delta.content === 'string' && delta.content.includes('<think>')) return true;
@@ -215,8 +219,9 @@ async function probeLmStudioThinking(endpoint: string, modelId: string): Promise
     }
 
     return false;
-  } catch {
+  } catch (error) {
     // Timeout, network error, model not loaded
+    logger.warn('[probeLmStudioThinking] Failed to probe for thinking support:', error);
   }
   return false;
 }

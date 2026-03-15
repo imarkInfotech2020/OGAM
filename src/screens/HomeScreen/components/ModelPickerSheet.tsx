@@ -263,11 +263,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                             <Icon name="cloud" size={14} color={colors.primary} />
                           </Text>
                           <Text style={styles.pickerItemMeta}>
-                            {model.capabilities.supportsVision && 'Vision'}
-                            {model.capabilities.supportsVision && model.capabilities.supportsToolCalling && ' · '}
-                            {model.capabilities.supportsToolCalling && 'Tools'}
-                            {(model.capabilities.supportsVision || model.capabilities.supportsToolCalling) && model.capabilities.supportsThinking && ' · '}
-                            {model.capabilities.supportsThinking && 'Thinking'}
+                            {[model.capabilities.supportsVision && 'Vision', model.capabilities.supportsToolCalling && 'Tools', model.capabilities.supportsThinking && 'Thinking'].filter(Boolean).join(' · ')}
                           </Text>
                         </View>
                         {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
