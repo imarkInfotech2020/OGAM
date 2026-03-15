@@ -12,6 +12,15 @@ tags:
 
 - launchApp
 
+# Dismiss any error dialogs from previous tests
+- runFlow:
+    when:
+      visible:
+        text: "Error"
+    commands:
+      - tapOn:
+          text: "OK"
+
 # Handle onboarding/model-download if shown
 - runFlow:
     when:

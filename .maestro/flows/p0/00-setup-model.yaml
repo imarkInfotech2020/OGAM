@@ -20,6 +20,15 @@ tags:
 - evalScript: "${console.log('SETUP - Launch')}"
 - launchApp
 
+# Dismiss any error dialogs from previous tests
+- runFlow:
+    when:
+      visible:
+        text: "Error"
+    commands:
+      - tapOn:
+          text: "OK"
+
 - extendedWaitUntil:
     notVisible:
       id: "app-loading"
@@ -89,11 +98,10 @@ tags:
       - evalScript: "${console.log('SETUP - Need to load model')}"
       - takeScreenshot: 04-setup-card
 
-      # First, check if there are any downloaded models
-      # Open Text picker to see if models exist
+      # Open Text picker to check for downloaded models
       - evalScript: "${console.log('SETUP - Check for existing models')}"
       - tapOn:
-          text: "Text"
+          id: "browse-models-button"
       - extendedWaitUntil:
           visible:
             text: "Text Models"
@@ -181,7 +189,7 @@ tags:
             # Open Text picker again
             - evalScript: "${console.log('SETUP - Open picker again')}"
             - tapOn:
-                text: "Text"
+                id: "browse-models-button"
             - extendedWaitUntil:
                 visible:
                   text: "Text Models"

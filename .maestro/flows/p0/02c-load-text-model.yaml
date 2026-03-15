@@ -13,6 +13,15 @@ tags:
 
 - launchApp
 
+# Dismiss any error dialogs from previous tests (e.g. CoreML model load failure)
+- runFlow:
+    when:
+      visible:
+        text: "Error"
+    commands:
+      - tapOn:
+          text: "OK"
+
 # Handle onboarding/model-download if shown
 - runFlow:
     when:

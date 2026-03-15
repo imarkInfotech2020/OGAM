@@ -12,6 +12,15 @@ tags:
 
 - launchApp
 
+# Dismiss any error dialogs from previous tests
+- runFlow:
+    when:
+      visible:
+        text: "Error"
+    commands:
+      - tapOn:
+          text: "OK"
+
 # Wait for app initialization
 - extendedWaitUntil:
     notVisible:
