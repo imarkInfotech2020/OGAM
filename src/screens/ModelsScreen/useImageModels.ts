@@ -50,9 +50,8 @@ async function handleCompletedImageDownload(opts: {
     };
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
   } else if (metadata.imageDownloadType === 'multifile') {
-    if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
-      await downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo);
-    }
+    // Clean up native download entry in background (files already at final location)
+    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => {});
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -60,6 +59,10 @@ async function handleCompletedImageDownload(opts: {
       backend: metadata.imageModelBackend as ONNXImageModel['backend'],
     };
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
+    // Fetch tokenizer files in background after model is registered
+    if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
+      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => {});
+    }
   }
 }
 
@@ -183,7 +186,20 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     if (!backgroundDownloadService.isAvailable()) return;
     try {
       const activeDownloads = await modelManager.getActiveBackgroundDownloads();
-      const imageDownloads = activeDownloads.filter(d => d.modelId.startsWith('image:'));
+      const currentImageModels = useAppStore.getState().downloadedImageModels;
+      const downloadedImageIds = new Set(currentImageModels.map(m => m.id));
+
+      // Clean up stale native entries for already-downloaded image models
+      const imageDownloads = activeDownloads.filter(d => {
+        if (!d.modelId.startsWith('image:')) return false;
+        const imageId = d.modelId.replace('image:', '');
+        if (downloadedImageIds.has(imageId)) {
+          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
+          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+          return false;
+        }
+        return true;
+      });
       const activeNativeIds = new Set(imageDownloads.map(d => d.modelId.replace('image:', '')));
       for (const modelId of imageModelDownloading) {
         if (!activeNativeIds.has(modelId)) removeImageModelDownloading(modelId);

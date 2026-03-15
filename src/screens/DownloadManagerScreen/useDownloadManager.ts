@@ -25,6 +25,22 @@ export interface UseDownloadManagerResult {
   totalStorageUsed: number;
 }
 
+async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
+  const { downloadedImageModels } = useAppStore.getState();
+  const downloadedIds = new Set(downloadedImageModels.map(m => m.id));
+  for (const d of downloads) {
+    if (!d.modelId.startsWith('image:')) continue;
+    if (downloadedIds.has(d.modelId.replace('image:', ''))) {
+      backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
+      backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+    }
+  }
+  return downloads.filter(d =>
+    (d.status === 'running' || d.status === 'pending' || d.status === 'paused') &&
+    !(d.modelId.startsWith('image:') && downloadedIds.has(d.modelId.replace('image:', ''))),
+  );
+}
+
 export function useDownloadManager(): UseDownloadManagerResult {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
@@ -51,10 +67,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
     if (backgroundDownloadService.isAvailable()) {
       modelManager.startBackgroundDownloadPolling();
     }
-
-    return () => {
-      modelManager.stopBackgroundDownloadPolling();
-    };
+    // Do NOT stop polling on unmount — other screens (Models tab) rely on
+    // the same native polling timer for progress events. Polling is cheap
+    // (no-op when no active downloads) and stops automatically when all
+    // downloads complete.
   }, []);
 
   // Subscribe to background download service events
@@ -104,9 +120,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
-      setActiveDownloads(downloads.filter(
-        d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
-      ));
+      setActiveDownloads(await purgeStaleImageDownloads(downloads));
     }
   };
   const handleRefresh = useCallback(async () => {

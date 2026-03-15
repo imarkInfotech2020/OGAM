@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useThemedStyles, useTheme } from '../theme';
+import type { ThemeColors } from '../theme';
 import { createStyles } from './ModelCard.styles';
 import { huggingFaceService } from '../services/huggingface';
 import { ModelCredibility } from '../types';
@@ -290,6 +291,21 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
   );
 }
 
+function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelete, onRepairVision }: Readonly<{
+  isActive?: boolean; testID?: string; colors: ThemeColors; styles: any;
+  onSelect?: () => void; onDelete?: () => void; onRepairVision?: () => void;
+}>) {
+  const tid = (s: string) => testID ? `${testID}-${s}` : undefined;
+  if (!onSelect && !onDelete && !onRepairVision) return <Icon name="check-circle" size={16} color={colors.primary} />;
+  return (
+    <>
+      {onRepairVision && <ActionButton icon="eye" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />}
+      {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
+      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
+    </>
+  );
+}
+
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   isDownloaded, isDownloading, isActive, isCompatible, incompatibleReason,
   testID, onDownload, onSelect, onDelete, onRepairVision, onCancel,
@@ -298,29 +314,14 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
-  return (
-    <>
-      {isDownloading && onCancel && (
-        <ActionButton icon="x" color={colors.error} haptic="notificationWarning"
-          onPress={onCancel} testID={tid('cancel')} styles={styles} />
-      )}
-      {!isDownloaded && !isDownloading && onDownload && (
-        <ActionButton icon="download" color={colors.primary} haptic="impactLight"
-          onPress={onDownload} disabled={!isCompatible && !incompatibleReason}
-          testID={tid('download')} styles={styles} />
-      )}
-      {isDownloaded && onRepairVision && (
-        <ActionButton icon="eye" color={colors.warning} haptic="impactLight"
-          onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
-      )}
-      {isDownloaded && !isActive && onSelect && (
-        <ActionButton icon="check-circle" color={colors.primary} haptic="selection"
-          onPress={onSelect} styles={styles} />
-      )}
-      {isDownloaded && onDelete && (
-        <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning"
-          onPress={onDelete} styles={styles} />
-      )}
-    </>
-  );
+  if (isDownloading && onCancel) {
+    return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
+  }
+  if (!isDownloaded && onDownload) {
+    return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible && !incompatibleReason} testID={tid('download')} styles={styles} />;
+  }
+  if (isDownloaded) {
+    return <DownloadedActions isActive={isActive} testID={testID} colors={colors} styles={styles} onSelect={onSelect} onDelete={onDelete} onRepairVision={onRepairVision} />;
+  }
+  return null;
 };

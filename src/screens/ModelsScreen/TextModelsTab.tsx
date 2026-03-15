@@ -32,7 +32,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
-  | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload'
+  | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
   | 'downloadIds'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
@@ -55,6 +55,7 @@ interface DetailProps {
   handleDownload: (model: ModelInfo, file: ModelFile) => void;
   handleRepairMmProj: (model: ModelInfo, file: ModelFile) => void;
   handleCancelDownload: (downloadKey: string) => void;
+  handleDeleteModel: (modelId: string) => void;
   downloadIds: Record<string, number>;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
@@ -63,7 +64,7 @@ interface DetailProps {
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   downloadProgress, alertState, setAlertState, onBack,
-  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, downloadIds,
+  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, downloadIds,
   styles, colors,
 }) => {
   const { goTo } = useSpotlightTour();
@@ -80,44 +81,37 @@ const ModelDetailView: React.FC<DetailProps> = ({
     }
   }, []);
 
-  const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
+  const getFileCardState = (item: ModelFile) => {
     const downloadKey = `${selectedModel.id}/${item.name}`;
     const repairKey = `${selectedModel.id}/${item.name}-mmproj`;
     const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
-    // Show repair button when: file is downloaded, has an mmproj companion, but stored model is missing mmProjPath
     const needsVisionRepair = downloaded && !!item.mmProjFile && !downloadedModel?.mmProjPath;
     const canCancel = !!progress && downloadIds[downloadKey] != null;
-    const handleFileDownload = !downloaded && !progress ? () => {
-      handleDownload(selectedModel, item);
-      // If in onboarding flow, auto-navigate back to show Download Manager spotlight
-      if (peekPendingSpotlight() !== null) {
-        setTimeout(onBack, 800);
-      }
-    } : undefined;
+    return { downloadKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
+  };
 
+  const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
+    const s = getFileCardState(item);
+    const onDownload = !s.downloaded && !s.progress ? () => {
+      handleDownload(selectedModel, item);
+      if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
+    } : undefined;
     const card = (
       <ModelCard
         model={{ id: selectedModel.id, name: item.name.replace('.gguf', ''), author: selectedModel.author, credibility: selectedModel.credibility }}
-        file={item}
-        downloadedModel={downloadedModel}
-        isDownloaded={downloaded}
-        isDownloading={!!progress}
-        downloadProgress={progress?.progress}
-        isCompatible={item.size / (1024 ** 3) < ramGB * 0.6}
-        testID={`file-card-${index}`}
-        onDownload={handleFileDownload}
-        onRepairVision={needsVisionRepair && !progress ? () => handleRepairMmProj(selectedModel, item) : undefined}
-        onCancel={canCancel ? () => handleCancelDownload(downloadKey) : undefined}
+        file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
+        isDownloading={!!s.progress} downloadProgress={s.progress?.progress}
+        downloadBytes={s.progress ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
+        isCompatible={item.size / (1024 ** 3) < ramGB * 0.6} testID={`file-card-${index}`}
+        onDownload={onDownload}
+        onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
+        onRepairVision={s.needsVisionRepair && !s.progress ? () => handleRepairMmProj(selectedModel, item) : undefined}
+        onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
       />
     );
-
-    // Spotlight the first file card for the "Download a model" onboarding step (part 2)
-    if (index === 0) {
-      return <AttachStep index={9} fill>{card}</AttachStep>;
-    }
-    return card;
+    return index === 0 ? <AttachStep index={9} fill>{card}</AttachStep> : card;
   };
 
   return (
@@ -177,7 +171,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels, downloadProgress,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload,
+    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     downloadIds,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
@@ -234,6 +228,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         handleDownload={handleDownload}
         handleRepairMmProj={handleRepairMmProj}
         handleCancelDownload={handleCancelDownload}
+        handleDeleteModel={handleDeleteModel}
         downloadIds={downloadIds}
         styles={styles}
         colors={colors}

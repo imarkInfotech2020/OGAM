@@ -62,6 +62,8 @@ jest.mock('../../../src/services', () => ({
     onAnyProgress: jest.fn(() => jest.fn()),
     onAnyComplete: jest.fn(() => jest.fn()),
     onAnyError: jest.fn(() => jest.fn()),
+    moveCompletedDownload: jest.fn(() => Promise.resolve()),
+    cancelDownload: jest.fn(() => Promise.resolve()),
   },
   activeModelService: {
     unloadTextModel: jest.fn(),
@@ -908,6 +910,7 @@ describe('DownloadManagerScreen', () => {
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
       {
         downloadId: 101,
+        modelId: 'author/bg-model',
         status: 'running',
         bytesDownloaded: 500,
         title: 'bg-model.gguf',
@@ -1009,6 +1012,7 @@ describe('DownloadManagerScreen', () => {
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
       {
         downloadId: 301,
+        modelId: 'author/bg-model',
         status: 'running',
         bytesDownloaded: 500,
         title: 'bg-model.gguf',
@@ -1066,12 +1070,14 @@ describe('DownloadManagerScreen', () => {
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
       {
         downloadId: 201,
+        modelId: 'undefined',
         status: 'running',
         bytesDownloaded: Number.NaN,
         title: 'undefined',
       },
       {
         downloadId: 202,
+        modelId: 'valid/model',
         status: 'running',
         bytesDownloaded: 300,
         title: 'valid.gguf',
@@ -1267,7 +1273,7 @@ describe('DownloadManagerScreen', () => {
   it('shows "Downloading..." for background download with status "running"', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 11, status: 'running', bytesDownloaded: 100, title: 'run.gguf' },
+      { downloadId: 11, modelId: 'a/m', status: 'running', bytesDownloaded: 100, title: 'run.gguf' },
     ]);
     const state = createDefaultState({
       activeBackgroundDownloads: {
@@ -1285,7 +1291,7 @@ describe('DownloadManagerScreen', () => {
   it('shows "Queued" for background download with status "pending"', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 12, status: 'pending', bytesDownloaded: 0, title: 'pend.gguf' },
+      { downloadId: 12, modelId: 'a/m', status: 'pending', bytesDownloaded: 0, title: 'pend.gguf' },
     ]);
     const state = createDefaultState({
       activeBackgroundDownloads: {
@@ -1303,7 +1309,7 @@ describe('DownloadManagerScreen', () => {
   it('shows "Paused" for background download with status "paused"', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 13, status: 'paused', bytesDownloaded: 400, title: 'paus.gguf' },
+      { downloadId: 13, modelId: 'a/m', status: 'paused', bytesDownloaded: 400, title: 'paus.gguf' },
     ]);
     const state = createDefaultState({
       activeBackgroundDownloads: {
@@ -1344,6 +1350,7 @@ describe('DownloadManagerScreen', () => {
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
       {
         downloadId: 101,
+        modelId: 'author/bg-model',
         status: 'running',
         bytesDownloaded: 500,
         title: 'bg-model.gguf',

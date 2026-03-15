@@ -69,13 +69,17 @@ export function getStatusText(status: string): string {
 export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
   const items: DownloadItem[] = [];
 
-  // Active RNFS downloads (iOS and foreground Android)
   Object.entries(data.downloadProgress).forEach(([key, progress]) => {
     const [_modelId, fileName] = key.split('/').slice(-2);
     const fullModelId = key.substring(0, key.lastIndexOf('/'));
     if (!fileName || !fullModelId || fileName === 'undefined' || fullModelId === 'undefined' ||
         Number.isNaN(progress.totalBytes) || Number.isNaN(progress.bytesDownloaded)) {
       return;
+    }
+    // Skip image download entries whose model is already in Downloaded Models
+    if (fullModelId.startsWith('image:')) {
+      const imageId = fullModelId.replace('image:', '');
+      if (data.downloadedImageModels.some(m => m.id === imageId)) return;
     }
     items.push({
       type: 'active',
@@ -92,7 +96,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     });
   });
 
-  // Active background downloads (Android)
+  // Background downloads not already covered by downloadProgress
   data.activeDownloads.forEach(download => {
     const metadata = data.activeBackgroundDownloads[download.downloadId];
     if (!metadata) return;

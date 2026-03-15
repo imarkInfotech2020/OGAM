@@ -578,17 +578,21 @@ describe('ModelCard', () => {
 
     it('does not show download button when isDownloading', () => {
       const onDownload = jest.fn();
-      const { queryByTestId } = render(
+      const onCancel = jest.fn();
+      const { queryByTestId, getByTestId } = render(
         <ModelCard
           model={baseModel}
           isDownloaded={false}
           isDownloading={true}
           onDownload={onDownload}
+          onCancel={onCancel}
           testID="card"
         />
       );
       // Download button should not show during download
       expect(queryByTestId('card-download')).toBeNull();
+      // Cancel button should be shown instead
+      expect(getByTestId('card-cancel')).toBeTruthy();
     });
 
     it('does not show select button when model is active', () => {

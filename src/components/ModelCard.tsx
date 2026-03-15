@@ -30,6 +30,7 @@ interface ModelCardProps {
   isDownloaded?: boolean;
   isDownloading?: boolean;
   downloadProgress?: number;
+  downloadBytes?: { downloaded: number; total: number };
   isActive?: boolean;
   isCompatible?: boolean;
   incompatibleReason?: string;
@@ -61,6 +62,28 @@ function resolveCredibility(
   return model.credibility ?? downloadedModel?.credibility;
 }
 
+const DownloadProgressSection: React.FC<{
+  progress: number;
+  bytes?: { downloaded: number; total: number };
+}> = ({ progress, bytes }) => {
+  const styles = useThemedStyles(createStyles);
+  return (
+  <View style={styles.progressSection}>
+    <View style={styles.progressContainer}>
+      <View style={styles.progressBar}>
+        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+      </View>
+      <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+    </View>
+    {bytes && bytes.total > 0 && (
+      <Text style={styles.progressBytesText}>
+        {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
+      </Text>
+    )}
+  </View>
+  );
+};
+
 export const ModelCard: React.FC<ModelCardProps> = ({
   model,
   file,
@@ -68,6 +91,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isDownloaded,
   isDownloading,
   downloadProgress = 0,
+  downloadBytes,
   isActive,
   isCompatible = true,
   incompatibleReason,
@@ -153,12 +177,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {isDownloading && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]} />
-              </View>
-              <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
-            </View>
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} />
           )}
         </View>
 
@@ -184,4 +203,11 @@ function formatNumber(num: number): string {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
 }
