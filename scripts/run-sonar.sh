@@ -1,19 +1,19 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -eu
 
 # Source .env if present (for local dev — CI sets SONAR_TOKEN directly)
-if [ -f ".env" ]; then
+if [[ -f ".env" ]]; then
   # shellcheck disable=SC1091
   . ./.env
 fi
 
-if [ -z "${SONAR_TOKEN:-}" ]; then
+if [[ -z "${SONAR_TOKEN:-}" ]]; then
   echo "SONAR_TOKEN is not set. Skipping Sonar scan."
   exit 0
 fi
 
-if [ -x "./node_modules/.bin/sonar-scanner" ]; then
+if [[ -x "./node_modules/.bin/sonar-scanner" ]]; then
   exec ./node_modules/.bin/sonar-scanner "$@"
 fi
 

@@ -291,10 +291,10 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
   );
 }
 
-function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelete, onRepairVision }: {
+function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelete, onRepairVision }: Readonly<{
   isActive?: boolean; testID?: string; colors: ThemeColors; styles: any;
   onSelect?: () => void; onDelete?: () => void; onRepairVision?: () => void;
-}) {
+}>) {
   const tid = (s: string) => testID ? `${testID}-${s}` : undefined;
   if (!onSelect && !onDelete && !onRepairVision) return <Icon name="check-circle" size={16} color={colors.primary} />;
   return (
