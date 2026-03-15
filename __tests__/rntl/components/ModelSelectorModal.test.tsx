@@ -47,6 +47,10 @@ jest.mock('../../../src/services', () => ({
   activeModelService: {
     loadImageModel: jest.fn().mockResolvedValue(undefined),
     unloadImageModel: jest.fn().mockResolvedValue(undefined),
+    unloadTextModel: jest.fn().mockResolvedValue(undefined),
+  },
+  llmService: {
+    isModelLoaded: jest.fn(() => false),
   },
   hardwareService: {
     formatModelSize: jest.fn(() => '4.0 GB'),

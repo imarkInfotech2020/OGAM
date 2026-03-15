@@ -116,15 +116,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 <Text style={styles.setupText}>
                   {downloadedModels.length > 0 || remoteTextModels.length > 0
                     ? 'Select a text model to start chatting'
-                    : 'Download a text model to start chatting'}
+                    : 'Add a remote server or download a model to start chatting'}
                 </Text>
-                <Button
-                  title={downloadedModels.length > 0 || remoteTextModels.length > 0 ? 'Select Model' : 'Browse Models'}
-                  variant="outline"
-                  size="small"
-                  onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab', { initialTab: 'text' })}
-                  testID="browse-models-button"
-                />
+                <View style={styles.setupActions}>
+                  <Button
+                    title="Add Remote Server"
+                    variant="outline"
+                    size="small"
+                    onPress={() => navigation.navigate('RemoteServers')}
+                    testID="add-server-button"
+                  />
+                  <Button
+                    title={downloadedModels.length > 0 || remoteTextModels.length > 0 ? 'Select Model' : 'Browse Models'}
+                    variant="outline"
+                    size="small"
+                    onPress={() => downloadedModels.length > 0 || remoteTextModels.length > 0 ? setPickerType('text') : navigation.navigate('ModelsTab', { initialTab: 'text' })}
+                    testID="browse-models-button"
+                  />
+                </View>
               </Card>
             )
           }

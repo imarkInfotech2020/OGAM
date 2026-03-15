@@ -402,9 +402,9 @@ describe('HomeScreen', () => {
       expect(getByText('Select a text model to start chatting')).toBeTruthy();
     });
 
-    it('shows "Download a text model" when no models downloaded', () => {
+    it('shows "Add remote server or download" when no models downloaded', () => {
       const { getByText } = renderHomeScreen();
-      expect(getByText('Download a text model to start chatting')).toBeTruthy();
+      expect(getByText('Add a remote server or download a model to start chatting')).toBeTruthy();
     });
 
     it('shows "Select Model" button when models exist but none active', () => {

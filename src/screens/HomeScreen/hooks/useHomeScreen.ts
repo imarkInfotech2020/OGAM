@@ -11,6 +11,7 @@ import { MainTabParamList, RootStackParamList } from '../../../navigation/types'
 import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
+import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
 import logger from '../../../utils/logger';
 
 export type HomeScreenNavigationProp = CompositeNavigationProp<
@@ -117,6 +118,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     [_handleUnloadTextModel],
   );
 
+  const { model: activeTextModel, modelId: activeTextModelId } = useActiveTextModel();
+
   const { runLANDiscovery } = useLANDiscovery({ navigation, setAlertState });
 
   const {
@@ -220,10 +223,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    // Use local model ID if active, otherwise use remote model ID
-    const modelId = activeModelId || activeRemoteTextModelId;
-    if (!modelId) { return; }
-    const conversationId = createConversation(modelId);
+    if (!activeTextModelId) { return; }
+    const conversationId = createConversation(activeTextModelId);
     setActiveConversation(conversationId);
     navigation.navigate('Chat', { conversationId });
   };
@@ -236,16 +237,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const handleDeleteConversation = (conversation: Conversation) =>
     deleteConversationWithAlert(conversation, setAlertState, deleteConversation);
 
-  // Compute active remote text model reactively (using selected state, not getter)
-  const activeRemoteTextModel = activeRemoteTextModelId && activeServerId
-    ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteTextModelId)
-    : null;
-
   const activeRemoteImageModel = activeRemoteImageModelId && activeServerId
     ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
     : null;
 
-  const activeTextModel = activeRemoteTextModel || downloadedModels.find((m) => m.id === activeModelId) || null;
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
   const recentConversations = conversations.slice(0, 4);
 

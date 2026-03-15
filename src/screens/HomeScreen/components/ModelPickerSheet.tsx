@@ -165,7 +165,10 @@ export const ModelPickerSheet: React.FC<Props> = ({
             {downloadedModels.length === 0 && remoteTextModels.length === 0 ? (
               <View style={styles.emptyPicker}>
                 <Text style={styles.emptyPickerText}>No text models available</Text>
-                <Button title="Browse Models" variant="outline" size="small" onPress={() => onBrowseModels('text')} />
+                <View style={localStyles.emptyActions}>
+                  <Button title="Add Remote Server" variant="outline" size="small" onPress={() => { onClose(); onAddServer?.(); }} />
+                  <Button title="Browse Models" variant="outline" size="small" onPress={() => onBrowseModels('text')} />
+                </View>
               </View>
             ) : (
               <>
@@ -310,6 +313,7 @@ const localStyles = StyleSheet.create({
   iconOnlyButton: { flex: 1 },
   addServerButton: { borderColor: TRANSPARENT },
   unloadButtonMargin: { marginBottom: 12 },
+  emptyActions: { flexDirection: 'row' as const, gap: 10 },
   scrollContent: { paddingBottom: 16 },
   serverHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 8 },
 });

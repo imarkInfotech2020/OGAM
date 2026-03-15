@@ -11,7 +11,7 @@ import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../types';
-import { activeModelService, remoteServerManager } from '../../services';
+import { activeModelService, llmService, remoteServerManager } from '../../services';
 import { CustomAlert, AlertState, initialAlertState, showAlert } from '../CustomAlert';
 import { createAllStyles } from './styles';
 import { TextTab } from './TextTab';
@@ -112,6 +112,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // Handle selecting a remote text model
   const handleSelectRemoteTextModel = async (model: RemoteModel, serverId: string) => {
     try {
+      // Unload any active local model first — only one active model at a time
+      if (llmService.isModelLoaded()) {
+        await activeModelService.unloadTextModel();
+      }
       await remoteServerManager.setActiveRemoteTextModel(serverId, model.id);
     } catch (error) {
       logger.error('[ModelSelectorModal] Failed to set remote text model:', error);
