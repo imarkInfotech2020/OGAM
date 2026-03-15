@@ -104,8 +104,23 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
+      const { downloadedImageModels: imgModels } = useAppStore.getState();
+      const downloadedImageIds = new Set(imgModels.map(m => m.id));
+
+      // Purge stale image download entries whose model is already registered
+      const stale = downloads.filter(d => {
+        if (!d.modelId.startsWith('image:')) return false;
+        const imageId = d.modelId.replace('image:', '');
+        return downloadedImageIds.has(imageId);
+      });
+      for (const s of stale) {
+        backgroundDownloadService.moveCompletedDownload(s.downloadId, '').catch(() => {});
+        backgroundDownloadService.cancelDownload(s.downloadId).catch(() => {});
+      }
+
       setActiveDownloads(downloads.filter(
-        d => d.status === 'running' || d.status === 'pending' || d.status === 'paused',
+        d => (d.status === 'running' || d.status === 'pending' || d.status === 'paused') &&
+          !(d.modelId.startsWith('image:') && downloadedImageIds.has(d.modelId.replace('image:', ''))),
       ));
     }
   };

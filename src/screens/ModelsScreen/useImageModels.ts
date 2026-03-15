@@ -186,7 +186,20 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     if (!backgroundDownloadService.isAvailable()) return;
     try {
       const activeDownloads = await modelManager.getActiveBackgroundDownloads();
-      const imageDownloads = activeDownloads.filter(d => d.modelId.startsWith('image:'));
+      const currentImageModels = useAppStore.getState().downloadedImageModels;
+      const downloadedImageIds = new Set(currentImageModels.map(m => m.id));
+
+      // Clean up stale native entries for already-downloaded image models
+      const imageDownloads = activeDownloads.filter(d => {
+        if (!d.modelId.startsWith('image:')) return false;
+        const imageId = d.modelId.replace('image:', '');
+        if (downloadedImageIds.has(imageId)) {
+          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
+          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+          return false;
+        }
+        return true;
+      });
       const activeNativeIds = new Set(imageDownloads.map(d => d.modelId.replace('image:', '')));
       for (const modelId of imageModelDownloading) {
         if (!activeNativeIds.has(modelId)) removeImageModelDownloading(modelId);
