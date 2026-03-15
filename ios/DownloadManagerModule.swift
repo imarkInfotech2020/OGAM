@@ -759,8 +759,8 @@ extension DownloadManagerModule {
 
   func pollProgress() {
     guard hasListeners else { return }
-    queue.async(flags: .barrier) {
-      let activeDownloads = downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
+    queue.async(flags: .barrier) { [self] in
+      let activeDownloads = self.downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
       for (downloadId, var info) in activeDownloads {
         if info.isMultiFile {
           var aggregateBytes: Int64 = 0
@@ -783,10 +783,10 @@ extension DownloadManagerModule {
           if task.countOfBytesExpectedToReceive > 0 {
             info.totalBytes = task.countOfBytesExpectedToReceive
           }
-          info.status = statusString(from: task.state)
+          info.status = self.statusString(from: task.state)
         }
-        downloads[downloadId] = info
-        sendEvent(withName: "DownloadProgress", body: [
+        self.downloads[downloadId] = info
+        self.sendEvent(withName: "DownloadProgress", body: [
           "downloadId": NSNumber(value: info.downloadId),
           "fileName": info.fileName,
           "modelId": info.modelId,
