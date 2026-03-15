@@ -120,7 +120,8 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     const downloadKey = `${model.id}/${file.name}`;
-    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
+    const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
+    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes });
     const onProgress = (p: { progress: number; bytesDownloaded: number; totalBytes: number }) =>
       setDownloadProgress(downloadKey, p);
     const onComplete = (dm: DownloadedModel) => {
