@@ -105,6 +105,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         isDownloaded={downloaded}
         isDownloading={!!progress}
         downloadProgress={progress?.progress}
+        downloadBytes={progress ? { downloaded: progress.bytesDownloaded, total: progress.totalBytes } : undefined}
         isCompatible={item.size / (1024 ** 3) < ramGB * 0.6}
         testID={`file-card-${index}`}
         onDownload={handleFileDownload}

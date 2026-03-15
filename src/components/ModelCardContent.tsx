@@ -321,6 +321,9 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
         <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning"
           onPress={onDelete} styles={styles} />
       )}
+      {isDownloaded && !onSelect && !onDelete && !onRepairVision && (
+        <Icon name="check-circle" size={16} color={colors.primary} />
+      )}
     </>
   );
 };
