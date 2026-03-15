@@ -1,0 +1,90 @@
+# P0 E2E: 3.2 Download — first time
+# Searches for a small model, taps into detail, downloads a file, verifies success
+# QA_TEST_PLAN §3.2
+
+appId: ${APP_ID}
+name: "P0: Model Download"
+tags:
+  - p0
+  - models
+  - download
+---
+
+- launchApp
+
+# Handle onboarding/model-download if shown
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-screen"
+    commands:
+      - tapOn:
+          id: "onboarding-skip"
+      - extendedWaitUntil:
+          visible:
+            id: "model-download-screen"
+          timeout: 20000
+      - tapOn:
+          id: "model-download-skip"
+
+- runFlow:
+    when:
+      visible:
+        id: "model-download-screen"
+    commands:
+      - tapOn:
+          id: "model-download-skip"
+
+# Navigate to Models tab
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 15000
+
+- tapOn:
+    id: "models-tab"
+
+- extendedWaitUntil:
+    visible:
+      id: "models-screen"
+    timeout: 5000
+
+# Search for a small model
+- tapOn:
+    id: "search-input"
+- inputText: "SmolLM2-135M"
+- hideKeyboard
+- tapOn:
+    id: "search-button"
+
+- extendedWaitUntil:
+    visible:
+      id: "model-card-0"
+    timeout: 15000
+
+# Step 1: Tap model card → detail screen
+- tapOn:
+    id: "model-card-0"
+
+- extendedWaitUntil:
+    visible:
+      id: "model-detail-screen"
+    timeout: 5000
+
+# Step 2: Verify file cards are shown
+- assertVisible:
+    id: "file-card-0"
+
+# Step 3: Tap download on first file
+- tapOn:
+    id: "file-card-0-download"
+
+# Step 4: Wait for download to complete (up to 5 min for ~135MB)
+- extendedWaitUntil:
+    visible:
+      text: "Success"
+    timeout: 300000
+
+# Dismiss success alert
+- tapOn:
+    text: "OK"
