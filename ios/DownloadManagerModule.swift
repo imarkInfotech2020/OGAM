@@ -759,58 +759,41 @@ extension DownloadManagerModule {
 
   func pollProgress() {
     guard hasListeners else { return }
-    // Take a snapshot of active downloads without blocking.
-    // We only need to read task progress counters (atomic on URLSessionTask)
-    // and send events to JS — no need for a barrier.
-    var snapshot: [(Int64, DownloadInfo)] = []
-    queue.sync {
-      snapshot = downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
-        .map { ($0.key, $0.value) }
-    }
-    if snapshot.isEmpty { return }
-    // Collect updates, then apply them in a single barrier write
-    var updates: [(Int64, DownloadInfo)] = []
-    for (downloadId, var info) in snapshot {
-      if info.isMultiFile {
-        var aggregateBytes: Int64 = 0
-        var aggregateTotal: Int64 = 0
-        for (taskId, var fileTask) in info.fileTasks {
-          if let task = fileTask.task {
-            fileTask.bytesDownloaded = task.countOfBytesReceived
-            if task.countOfBytesExpectedToReceive > 0 {
-              fileTask.totalBytes = task.countOfBytesExpectedToReceive
+    queue.async(flags: .barrier) { [self] in
+      let activeDownloads = self.downloads.filter { $0.value.status == "running" || $0.value.status == "pending" || $0.value.status == "paused" }
+      for (downloadId, var info) in activeDownloads {
+        if info.isMultiFile {
+          var aggregateBytes: Int64 = 0
+          var aggregateTotal: Int64 = 0
+          for (taskId, var fileTask) in info.fileTasks {
+            if let task = fileTask.task {
+              fileTask.bytesDownloaded = task.countOfBytesReceived
+              if task.countOfBytesExpectedToReceive > 0 {
+                fileTask.totalBytes = task.countOfBytesExpectedToReceive
+              }
+              info.fileTasks[taskId] = fileTask
             }
-            info.fileTasks[taskId] = fileTask
+            aggregateBytes += fileTask.bytesDownloaded
+            aggregateTotal += fileTask.totalBytes
           }
-          aggregateBytes += fileTask.bytesDownloaded
-          aggregateTotal += fileTask.totalBytes
+          info.bytesDownloaded = aggregateBytes
+          if info.totalBytes <= 0 { info.totalBytes = aggregateTotal }
+        } else if let task = info.task {
+          info.bytesDownloaded = task.countOfBytesReceived
+          if task.countOfBytesExpectedToReceive > 0 {
+            info.totalBytes = task.countOfBytesExpectedToReceive
+          }
+          info.status = self.statusString(from: task.state)
         }
-        info.bytesDownloaded = aggregateBytes
-        if info.totalBytes <= 0 { info.totalBytes = aggregateTotal }
-      } else if let task = info.task {
-        info.bytesDownloaded = task.countOfBytesReceived
-        if task.countOfBytesExpectedToReceive > 0 {
-          info.totalBytes = task.countOfBytesExpectedToReceive
-        }
-        info.status = statusString(from: task.state)
-      }
-      updates.append((downloadId, info))
-      sendEvent(withName: "DownloadProgress", body: [
-          "downloadId": NSNumber(value: info.downloadId),
-          "fileName": info.fileName,
-          "modelId": info.modelId,
-          "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
-          "totalBytes": NSNumber(value: info.totalBytes),
-          "status": info.status
-        ] as [String: Any])
-    }
-    // Batch-write updated progress back — single short barrier instead of
-    // holding a barrier for the entire poll + sendEvent cycle.
-    if !updates.isEmpty {
-      queue.async(flags: .barrier) { [self] in
-        for (downloadId, info) in updates {
-          self.downloads[downloadId] = info
-        }
+        self.downloads[downloadId] = info
+        self.sendEvent(withName: "DownloadProgress", body: [
+            "downloadId": NSNumber(value: info.downloadId),
+            "fileName": info.fileName,
+            "modelId": info.modelId,
+            "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+            "totalBytes": NSNumber(value: info.totalBytes),
+            "status": info.status
+          ] as [String: Any])
       }
     }
   }
