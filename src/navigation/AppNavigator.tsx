@@ -117,7 +117,6 @@ const MainTabs: React.FC = () => {
           headerShown: false,
           animation: 'fade',
           lazy: true,
-          freezeOnBlur: true,
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
