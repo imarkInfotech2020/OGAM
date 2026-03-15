@@ -655,11 +655,12 @@ extension DownloadManagerModule {
       NSLog("[DownloadManager] Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
       let destDir = info.multiFileDestDir ?? targetPath
       DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
+      // Multi-file: no heavy I/O — just cleanup state and resolve immediately
       queue.async(flags: .barrier) {
         self.downloads.removeValue(forKey: id)
         self.persistStateLocked()
-        resolve(destDir)
       }
+      resolve(destDir)
       return
     }
 
