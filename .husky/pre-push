@@ -47,8 +47,8 @@ if [ -n "$PUSHED_JS" ]; then
   echo "▶ TypeScript type check..."
   npx tsc --noEmit
 
-  echo "▶ JS/TS tests..."
-  npm test
+  echo "▶ JS/TS tests (related to changed files)..."
+  npx jest --findRelatedTests $PUSHED_JS
 fi
 
 if [ -n "$PUSHED_SWIFT" ]; then
