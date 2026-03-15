@@ -32,7 +32,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
-  | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload'
+  | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
   | 'downloadIds'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
@@ -178,7 +178,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels, downloadProgress,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload,
+    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     downloadIds,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
@@ -196,6 +196,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           model={item}
           isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))}
           onPress={() => handleSelectModel(item)}
+          onDelete={downloadedModels.some(m => m.id.startsWith(item.id)) ? () => handleDeleteModel(item.id) : undefined}
           testID={`model-card-${index}`}
           compact
         />

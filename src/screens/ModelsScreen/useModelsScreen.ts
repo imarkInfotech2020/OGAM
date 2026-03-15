@@ -192,6 +192,7 @@ export function useModelsScreen() {
     handleDownload,
     handleRepairMmProj: text.handleRepairMmProj,
     handleCancelDownload: text.handleCancelDownload,
+    handleDeleteModel: text.handleDeleteModel,
     downloadIds: text.downloadIds,
     clearFilters: text.clearFilters,
     toggleFilterDimension: text.toggleFilterDimension,

@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
-import { huggingFaceService, modelManager, hardwareService } from '../../services';
+import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
@@ -12,6 +12,15 @@ import { getModelType } from './utils';
 import logger from '../../utils/logger';
 
 const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
+
+async function fetchRecommendedModelDetails(): Promise<Record<string, ModelInfo>> {
+  const details: Record<string, ModelInfo> = {};
+  await Promise.allSettled(RECOMMENDED_MODELS.map(async (m) => {
+    try { details[m.id] = await huggingFaceService.getModelDetails(m.id); }
+    catch (e) { logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e); }
+  }));
+  return details;
+}
 
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,7 +35,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
 
-  const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel } = useAppStore();
+  const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
   const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
 
   const loadDownloadedModels = async () => {
@@ -41,18 +50,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const details: Record<string, ModelInfo> = {};
-      await Promise.allSettled(RECOMMENDED_MODELS.map(async (m) => {
-        try {
-          const info = await huggingFaceService.getModelDetails(m.id);
-          if (!cancelled) details[m.id] = info;
-        } catch (e) {
-          logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e);
-        }
-      }));
-      if (!cancelled) setRecommendedModelDetails(details);
-    })();
+    fetchRecommendedModelDetails().then(d => { if (!cancelled) setRecommendedModelDetails(d); });
     return () => { cancelled = true; };
   }, []);
 
@@ -153,6 +151,13 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
   };
 
+  const handleDeleteModel = async (modelId: string) => {
+    const model = downloadedModels.find(m => m.id.startsWith(modelId));
+    if (!model) return;
+    if (activeModelId === model.id) await activeModelService.unloadTextModel().catch(() => {});
+    await modelManager.deleteModel(model.id);
+    removeDownloadedModel(model.id);
+  };
   const isModelDownloaded = (modelId: string, fileName: string) =>
     downloadedModels.some(m => m.id === `${modelId}/${fileName}`);
 
@@ -255,7 +260,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     downloadedModels, downloadProgress,
     hasActiveFilters, ramGB, deviceRecommendation,
     filteredResults, recommendedAsModelInfo,
-    handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, loadDownloadedModels,
+    handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
     isModelDownloaded, getDownloadedModel,

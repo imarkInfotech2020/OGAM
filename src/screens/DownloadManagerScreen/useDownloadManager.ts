@@ -67,10 +67,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
     if (backgroundDownloadService.isAvailable()) {
       modelManager.startBackgroundDownloadPolling();
     }
-
-    return () => {
-      modelManager.stopBackgroundDownloadPolling();
-    };
+    // Do NOT stop polling on unmount — other screens (Models tab) rely on
+    // the same native polling timer for progress events. Polling is cheap
+    // (no-op when no active downloads) and stops automatically when all
+    // downloads complete.
   }, []);
 
   // Subscribe to background download service events
