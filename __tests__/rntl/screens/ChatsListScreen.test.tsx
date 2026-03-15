@@ -157,8 +157,10 @@ describe('ChatsListScreen', () => {
     });
 
     it('shows start conversation prompt when models are downloaded', () => {
+      const model = createDownloadedModel();
       useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
+        downloadedModels: [model],
+        activeModelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(
@@ -169,8 +171,10 @@ describe('ChatsListScreen', () => {
     });
 
     it('shows "New Chat" button in empty state when models are downloaded', () => {
+      const model = createDownloadedModel();
       useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
+        downloadedModels: [model],
+        activeModelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(getByText('New Chat')).toBeTruthy();
@@ -290,8 +294,10 @@ describe('ChatsListScreen', () => {
     });
 
     it('navigates to new Chat when New button is pressed and models exist', () => {
+      const model = createDownloadedModel();
       useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
+        downloadedModels: [model],
+        activeModelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);
@@ -430,8 +436,10 @@ describe('ChatsListScreen', () => {
   // ==========================================================================
   describe('empty state new chat button', () => {
     it('navigates when New Chat empty state button pressed', () => {
+      const model = createDownloadedModel();
       useAppStore.setState({
-        downloadedModels: [createDownloadedModel()],
+        downloadedModels: [model],
+        activeModelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);

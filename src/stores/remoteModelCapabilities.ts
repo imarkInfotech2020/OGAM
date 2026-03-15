@@ -6,6 +6,8 @@
  * from Ollama and LM Studio servers.
  */
 
+import logger from '../utils/logger';
+
 export interface RemoteModelInfo {
   contextLength: number;
   supportsVision: boolean;
@@ -161,21 +163,39 @@ export async function fetchLmStudioModelInfo(
 }
 
 /**
- * Probe an LM Studio model for thinking support by sending a 1-token streaming
- * request and checking if the first content delta is `<think>`.
+ * Probe an LM Studio model for thinking support by sending a short streaming
+ * request and checking if any SSE delta contains thinking content.
+ *
+ * LM Studio only honours `chat_template_kwargs` in streaming mode.
+ * React Native's fetch doesn't support ReadableStream, so the full SSE
+ * response is collected with `response.text()` instead.
+ *
+ * LM Studio may return thinking in different ways:
+ * - Inline `<think>` tags in message.content
+ * - Separate message.reasoning_content field
  */
+function deltaHasThinking(delta: Record<string, unknown>): boolean {
+  if (typeof delta.content === 'string' && delta.content.includes('<think>')) return true;
+  if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) return true;
+  if (typeof delta.reasoning === 'string' && delta.reasoning.length > 0) return true;
+  if (typeof delta.thinking === 'string' && delta.thinking.length > 0) return true;
+  return false;
+}
+
 async function probeLmStudioThinking(endpoint: string, modelId: string): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+    // Use streaming — LM Studio only honours chat_template_kwargs in streaming mode.
+    // Read the full SSE response as text (RN fetch supports .text() but not ReadableStream).
     const response = await fetch(`${endpoint}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: modelId,
-        messages: [{ role: 'user', content: 'hi' }],
-        max_tokens: 1,
+        messages: [{ role: 'user', content: 'Say hi' }],
+        max_tokens: 2,
         stream: true,
         chat_template_kwargs: { enable_thinking: true },
       }),
@@ -183,28 +203,25 @@ async function probeLmStudioThinking(endpoint: string, modelId: string): Promise
     });
 
     clearTimeout(timeoutId);
-    if (!response.ok || !response.body) return false;
+    if (!response.ok) return false;
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+    // response.text() collects the full SSE stream as a string
+    const text = await response.text();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      // Parse first SSE data line
-      const match = /^data: ({.+})$/m.exec(buf);
-      if (match) {
-        reader.cancel();
-        const chunk = JSON.parse(match[1]);
-        const content = chunk?.choices?.[0]?.delta?.content ?? '';
-        return content.includes('<think>');
-      }
+    // Check all SSE data lines for thinking indicators
+    for (const line of text.split('\n')) {
+      if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+      try {
+        const chunk = JSON.parse(line.slice(6));
+        const delta = chunk?.choices?.[0]?.delta;
+        if (delta && deltaHasThinking(delta)) return true;
+      } catch { /* skip malformed lines */ }
     }
-  } catch {
-    // Timeout, network error, model not loaded — not a thinking model or can't determine
+
+    return false;
+  } catch (error) {
+    // Timeout, network error, model not loaded
+    logger.warn('[probeLmStudioThinking] Failed to probe for thinking support:', error);
   }
   return false;
 }

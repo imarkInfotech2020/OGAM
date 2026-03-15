@@ -128,6 +128,10 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 20,
     gap: 12,
   },
+  setupActions: {
+    flexDirection: 'row' as const,
+    gap: 10,
+  },
   setupText: {
     ...TYPOGRAPHY.body,
     color: colors.textMuted,
