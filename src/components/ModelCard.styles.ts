@@ -182,11 +182,13 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
   },
+  progressSection: {
+    marginBottom: 12,
+  },
   progressContainer: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 12,
-    marginBottom: 12,
   },
   progressBar: {
     flex: 1,
@@ -203,8 +205,13 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   progressText: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
-    flexShrink: 0,
+    width: 40,
     textAlign: 'right' as const,
+  },
+  progressBytesText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    marginTop: 4,
   },
   iconButton: {
     padding: 4,

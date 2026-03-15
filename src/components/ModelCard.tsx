@@ -155,15 +155,18 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {isDownloading && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]} />
+            <View style={styles.progressSection}>
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]} />
+                </View>
+                <Text style={styles.progressText}>{Math.round(downloadProgress * 100)}%</Text>
               </View>
-              <Text style={styles.progressText}>
-                {downloadBytes && downloadBytes.total > 0
-                  ? `${formatBytes(downloadBytes.downloaded)} / ${formatBytes(downloadBytes.total)}`
-                  : `${Math.round(downloadProgress * 100)}%`}
-              </Text>
+              {downloadBytes && downloadBytes.total > 0 && (
+                <Text style={styles.progressBytesText}>
+                  {formatBytes(downloadBytes.downloaded)} / {formatBytes(downloadBytes.total)}
+                </Text>
+              )}
             </View>
           )}
         </View>
