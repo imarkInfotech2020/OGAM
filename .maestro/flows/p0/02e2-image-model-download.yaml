@@ -1,0 +1,85 @@
+# P0 E2E: Image Model Download
+# Downloads SD 2.1 Palettized (CoreML) — small enough for CI
+# Must run before 02f-image-generation
+
+appId: ${APP_ID}
+name: "P0: Image Model Download"
+tags:
+  - p0
+  - models
+  - image
+---
+
+- launchApp
+
+# Handle onboarding/model-download if shown
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-screen"
+    commands:
+      - tapOn:
+          id: "onboarding-skip"
+      - extendedWaitUntil:
+          visible:
+            id: "model-download-screen"
+          timeout: 20000
+      - tapOn:
+          id: "model-download-skip"
+
+- runFlow:
+    when:
+      visible:
+        id: "model-download-screen"
+    commands:
+      - tapOn:
+          id: "model-download-skip"
+
+- extendedWaitUntil:
+    visible:
+      id: "home-screen"
+    timeout: 60000
+
+# Navigate to Models tab
+- tapOn:
+    id: "models-tab"
+
+- extendedWaitUntil:
+    visible:
+      id: "models-screen"
+    timeout: 10000
+
+# Switch to Image Models tab
+- tapOn:
+    text: "Image Models"
+
+# Deselect recommended filter to show all models
+- extendedWaitUntil:
+    visible:
+      id: "rec-toggle"
+    timeout: 5000
+- tapOn:
+    id: "rec-toggle"
+
+# Scroll down to find SD 2.1 Palettized (Core ML) — it's the 5th card (index 4)
+- swipe:
+    direction: UP
+    duration: 300
+
+- extendedWaitUntil:
+    visible:
+      id: "image-model-card-4"
+    timeout: 5000
+
+# Tap download icon on SD 2.1 Palettized (Core ML)
+- tapOn:
+    id: "image-model-card-4-download"
+
+# Wait for download (up to 3 min)
+- extendedWaitUntil:
+    visible:
+      text: "Success"
+    timeout: 180000
+
+- tapOn:
+    text: "OK"
