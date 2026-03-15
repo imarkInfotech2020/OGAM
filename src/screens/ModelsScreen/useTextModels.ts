@@ -153,7 +153,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   const handleDeleteModel = async (modelId: string) => {
-    const model = downloadedModels.find(m => m.id.startsWith(modelId));
+    const model = downloadedModels.find(m => m.id === modelId);
     if (!model) return;
     if (activeModelId === model.id) await activeModelService.unloadTextModel().catch(() => {});
     await modelManager.deleteModel(model.id);

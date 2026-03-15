@@ -55,6 +55,7 @@ interface DetailProps {
   handleDownload: (model: ModelInfo, file: ModelFile) => void;
   handleRepairMmProj: (model: ModelInfo, file: ModelFile) => void;
   handleCancelDownload: (downloadKey: string) => void;
+  handleDeleteModel: (modelId: string) => void;
   downloadIds: Record<string, number>;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
@@ -63,7 +64,7 @@ interface DetailProps {
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   downloadProgress, alertState, setAlertState, onBack,
-  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, downloadIds,
+  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, downloadIds,
   styles, colors,
 }) => {
   const { goTo } = useSpotlightTour();
@@ -105,6 +106,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         downloadBytes={s.progress ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isCompatible={item.size / (1024 ** 3) < ramGB * 0.6} testID={`file-card-${index}`}
         onDownload={onDownload}
+        onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
       />
@@ -187,7 +189,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           model={item}
           isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))}
           onPress={() => handleSelectModel(item)}
-          onDelete={downloadedModels.some(m => m.id.startsWith(item.id)) ? () => handleDeleteModel(item.id) : undefined}
           testID={`model-card-${index}`}
           compact
         />
@@ -227,6 +228,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         handleDownload={handleDownload}
         handleRepairMmProj={handleRepairMmProj}
         handleCancelDownload={handleCancelDownload}
+        handleDeleteModel={handleDeleteModel}
         downloadIds={downloadIds}
         styles={styles}
         colors={colors}
