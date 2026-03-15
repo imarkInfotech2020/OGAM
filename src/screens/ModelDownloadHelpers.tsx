@@ -64,13 +64,15 @@ export const ServerCard: React.FC<{
             {serverType} · {modelCount > 0 ? `${modelCount} model${modelCount !== 1 ? 's' : ''}` : 'Tap to connect'}
           </Text>
         </View>
-        {isConnecting ? (
+        {isConnecting && (
           <ActivityIndicator size="small" color={colors.primary} />
-        ) : isConnected ? (
+        )}
+        {!isConnecting && isConnected && (
           <View style={[styles.connectedBadge, { backgroundColor: `${colors.success}20`, borderColor: colors.success }]} testID={`discovered-server-${server.id}-connected`}>
             <Text style={[styles.connectButtonText, { color: colors.success }]}>Connected</Text>
           </View>
-        ) : (
+        )}
+        {!isConnecting && !isConnected && (
           <TouchableOpacity style={[styles.connectButton, { borderColor: colors.primary }]} onPress={onConnect} testID={`discovered-server-${server.id}-connect`}>
             <Text style={[styles.connectButtonText, { color: colors.primary }]}>Connect</Text>
           </TouchableOpacity>
