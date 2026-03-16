@@ -99,8 +99,11 @@ export async function initContextWithFallback(
   contextLength: number,
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
+  const modelPath = (params as any).model || 'unknown';
+  logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}`);
   let gpuAttemptFailed = false;
   try {
+    logger.log(`[LLM] Attempt 1/3: GPU init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
     // On Android, guard against Adreno driver hangs that cause ANRs.
     // If GPU init times out, the promise may still resolve later; capture and release it.
@@ -109,6 +112,7 @@ export async function initContextWithFallback(
       gpuInitPromise.then(ctx => { if (timedOut) safeRelease(ctx); }).catch(() => {});
       try {
         const context = await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init');
+        logger.log('[LLM] GPU init succeeded');
         return { context, gpuAttemptFailed, actualLength: contextLength };
       } catch (e) {
         timedOut = true;
@@ -116,24 +120,35 @@ export async function initContextWithFallback(
       }
     }
     const context = await gpuInitPromise;
+    logger.log('[LLM] GPU init succeeded');
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
+    const gpuMsg = gpuError?.message || String(gpuError) || '';
     if (nGpuLayers > 0) {
-      logger.warn('[LLM] GPU load failed, falling back to CPU:', gpuError?.message || gpuError);
+      logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
       gpuAttemptFailed = true;
+    } else {
+      logger.warn(`[LLM] Attempt 1/3 failed (no GPU requested): ${gpuMsg}`);
     }
     try {
+      logger.log(`[LLM] Attempt 2/3: CPU init (ctx=${contextLength}, gpu_layers=0)`);
       const context = await initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: 0 } as any);
+      logger.log('[LLM] CPU init succeeded');
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
-      logger.warn(`[LLM] CPU load failed (ctx=${contextLength}), retrying with ctx=2048:`, cpuError?.message || cpuError);
+      const cpuMsg = cpuError?.message || String(cpuError) || '';
+      logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
       try {
+        logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
         const context = await initLlama({ ...params, n_ctx: 2048, n_gpu_layers: 0 } as any);
+        logger.log('[LLM] CPU init with ctx=2048 succeeded');
         return { context, gpuAttemptFailed, actualLength: 2048 };
       } catch (finalError: any) {
-        const msg = finalError?.message || String(finalError) || '';
-        logger.error(`[LLM] All context init attempts failed: ${msg}`);
-        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format. (${msg})`);
+        const finalMsg = finalError?.message || String(finalError) || '';
+        logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
+        logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
+        logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);
+        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format. (${finalMsg})`);
       }
     }
   }
