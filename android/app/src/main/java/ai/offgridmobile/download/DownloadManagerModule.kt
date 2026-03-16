@@ -80,10 +80,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
          * (completed, failed, or unknown) — i.e., no download is pending,
          * running, or paused. Used to decide when to stop the foreground service.
          */
+        private val ACTIVE_STATUSES = setOf("pending", "running", "paused")
+
         internal fun hasNoActiveDownloads(downloads: JSONArray): Boolean {
             for (i in 0 until downloads.length()) {
                 val status = downloads.getJSONObject(i).optString("status", "pending")
-                if (status == "pending" || status == "running" || status == "paused") return false
+                if (status in ACTIVE_STATUSES) return false
             }
             return true
         }
@@ -504,12 +506,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             eventParams.putString("localUri", file.toURI().toString())
             if (!completedEventSent) sendEvent("DownloadComplete", eventParams)
             updateDownloadStatus(downloadId, "completed", file.toURI().toString())
-            stopForegroundServiceIfIdle()
         } else {
             android.util.Log.d("DownloadManager", "No file found for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
-            stopForegroundServiceIfIdle()
         }
+        stopForegroundServiceIfIdle()
     }
 
     private fun pollAllDownloads() {
