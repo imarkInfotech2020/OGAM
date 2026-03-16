@@ -27,8 +27,9 @@ class DownloadForegroundService : Service() {
         private const val CHANNEL_ID = "offgrid_download_channel"
         private const val NOTIFICATION_ID = 9001
         private const val EXTRA_TITLE = "title"
+        private const val DEFAULT_TITLE = "Downloading model\u2026"
 
-        fun start(context: Context, title: String = "Downloading model…") {
+        fun start(context: Context, title: String = DEFAULT_TITLE) {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
                 putExtra(EXTRA_TITLE, title)
             }
@@ -50,7 +51,7 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Downloading model…"
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
         val notification = buildNotification(title)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

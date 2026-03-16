@@ -26,13 +26,20 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
 
+        internal const val STATUS_PENDING = "pending"
+        internal const val STATUS_RUNNING = "running"
+        internal const val STATUS_PAUSED = "paused"
+        internal const val STATUS_COMPLETED = "completed"
+        internal const val STATUS_FAILED = "failed"
+        internal const val STATUS_UNKNOWN = "unknown"
+
         internal fun statusToString(status: Int): String = when (status) {
-            DownloadManager.STATUS_PENDING -> "pending"
-            DownloadManager.STATUS_RUNNING -> "running"
-            DownloadManager.STATUS_PAUSED -> "paused"
-            DownloadManager.STATUS_SUCCESSFUL -> "completed"
-            DownloadManager.STATUS_FAILED -> "failed"
-            else -> "unknown"
+            DownloadManager.STATUS_PENDING -> STATUS_PENDING
+            DownloadManager.STATUS_RUNNING -> STATUS_RUNNING
+            DownloadManager.STATUS_PAUSED -> STATUS_PAUSED
+            DownloadManager.STATUS_SUCCESSFUL -> STATUS_COMPLETED
+            DownloadManager.STATUS_FAILED -> STATUS_FAILED
+            else -> STATUS_UNKNOWN
         }
 
         internal fun reasonToString(status: Int, reason: Int): String {
@@ -80,11 +87,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
          * (completed, failed, or unknown) — i.e., no download is pending,
          * running, or paused. Used to decide when to stop the foreground service.
          */
-        private val ACTIVE_STATUSES = setOf("pending", "running", "paused")
+        private val ACTIVE_STATUSES = setOf(STATUS_PENDING, STATUS_RUNNING, STATUS_PAUSED)
 
         internal fun hasNoActiveDownloads(downloads: JSONArray): Boolean {
             for (i in 0 until downloads.length()) {
-                val status = downloads.getJSONObject(i).optString("status", "pending")
+                val status = downloads.getJSONObject(i).optString("status", STATUS_PENDING)
                 if (status in ACTIVE_STATUSES) return false
             }
             return true
@@ -95,8 +102,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             liveStatus: String,
             currentTimeMs: Long = System.currentTimeMillis(),
         ): Boolean {
-            if (liveStatus == "unknown") return true
-            if (download.optString("status", "pending") == "completed") {
+            if (liveStatus == STATUS_UNKNOWN) return true
+            if (download.optString("status", STATUS_PENDING) == STATUS_COMPLETED) {
                 val moveCompleted = download.optBoolean("moveCompleted", false)
                 if (moveCompleted) {
                     val completedAt = download.optLong("completedAt", 0L)
@@ -222,7 +229,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     put("modelId", modelId)
                     put("title", title)
                     put("totalBytes", totalBytes)
-                    put("status", "pending")
+                    put("status", STATUS_PENDING)
                     put("startedAt", System.currentTimeMillis())
                 }
                 persistDownload(downloadId, downloadInfo)
@@ -483,7 +490,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         if (!completedEventSent) {
             android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
             sendEvent("DownloadComplete", eventParams)
-            updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
+            updateDownloadStatus(downloadId, STATUS_COMPLETED, statusInfo.getString("localUri"))
             stopForegroundServiceIfIdle()
         }
     }
@@ -505,7 +512,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             android.util.Log.d("DownloadManager", "File exists, treating as completed: ${file.absolutePath}")
             eventParams.putString("localUri", file.toURI().toString())
             if (!completedEventSent) sendEvent("DownloadComplete", eventParams)
-            updateDownloadStatus(downloadId, "completed", file.toURI().toString())
+            updateDownloadStatus(downloadId, STATUS_COMPLETED, file.toURI().toString())
         } else {
             android.util.Log.d("DownloadManager", "No file found for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
@@ -520,24 +527,24 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val download = downloads.getJSONObject(i)
             val downloadId = download.getLong("downloadId")
             val statusInfo = queryDownloadStatus(downloadId)
-            val status = statusInfo.getString("status") ?: "unknown"
+            val status = statusInfo.getString("status") ?: STATUS_UNKNOWN
             val eventParams = buildEventParams(downloadId, download, statusInfo, status)
             val completedEventSent = download.optBoolean("completedEventSent", false)
 
             when (status) {
-                "completed" -> handlePollCompleted(downloadId, eventParams, statusInfo, completedEventSent)
-                "failed" -> {
+                STATUS_COMPLETED -> handlePollCompleted(downloadId, eventParams, statusInfo, completedEventSent)
+                STATUS_FAILED -> {
                     eventParams.putString("reason", statusInfo.getString("reason"))
                     sendEvent("DownloadError", eventParams)
                     removeDownload(downloadId)
                     stopForegroundServiceIfIdle()
                 }
-                "paused" -> {
+                STATUS_PAUSED -> {
                     eventParams.putString("reason", statusInfo.getString("reason"))
                     sendEvent("DownloadProgress", eventParams)
                 }
-                "running", "pending" -> sendEvent("DownloadProgress", eventParams)
-                "unknown" -> handlePollUnknown(downloadId, eventParams, completedEventSent)
+                STATUS_RUNNING, STATUS_PENDING -> sendEvent("DownloadProgress", eventParams)
+                STATUS_UNKNOWN -> handlePollUnknown(downloadId, eventParams, completedEventSent)
             }
         }
     }
@@ -546,7 +553,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         putDouble("bytesDownloaded", 0.0)
         putDouble("totalBytes", 0.0)
         putString("localUri", "")
-        putString("status", "unknown")
+        putString("status", STATUS_UNKNOWN)
         putString("reason", reason)
     }
 
@@ -617,7 +624,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             if (localUri != null) {
                 info.put("localUri", localUri)
             }
-            if (status == "completed") {
+            if (status == STATUS_COMPLETED) {
                 info.put("completedAt", System.currentTimeMillis())
                 info.put("completedEventSent", true)
             }
@@ -675,15 +682,15 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val downloadId = download.getLong("downloadId")
             val statusInfo = queryDownloadStatus(downloadId)
             val status = statusInfo.getString("status")
-            val previousStatus = download.optString("status", "pending")
+            val previousStatus = download.optString("status", STATUS_PENDING)
 
-            if (shouldRemoveDownload(download, status ?: "unknown")) {
+            if (shouldRemoveDownload(download, status ?: STATUS_UNKNOWN)) {
                 android.util.Log.d("DownloadManager", "Cleanup: removing download $downloadId (liveStatus=$status, storedStatus=$previousStatus)")
                 removedCount++
                 continue
             }
 
-            if (previousStatus == "completed" && download.optLong("completedAt", 0L) > 0 && !download.optBoolean("completedEventSent", false)) {
+            if (previousStatus == STATUS_COMPLETED && download.optLong("completedAt", 0L) > 0 && !download.optBoolean("completedEventSent", false)) {
                 android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
             }
 
