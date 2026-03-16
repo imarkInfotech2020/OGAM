@@ -228,37 +228,37 @@ class DownloadManagerModuleTest {
 
     @Test
     fun `hasNoActiveDownloads returns false when a download is pending`() {
-        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("pending")))
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_PENDING)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns false when a download is running`() {
-        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("running")))
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_RUNNING)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns false when a download is paused`() {
-        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("paused")))
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_PAUSED)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns true when all are completed`() {
-        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "completed")))
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_COMPLETED, DownloadManagerModule.STATUS_COMPLETED)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns true when all are failed`() {
-        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("failed", "failed")))
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_FAILED, DownloadManagerModule.STATUS_FAILED)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns true for mix of completed and failed`() {
-        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "failed")))
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_COMPLETED, DownloadManagerModule.STATUS_FAILED)))
     }
 
     @Test
     fun `hasNoActiveDownloads returns false when one of many is still running`() {
-        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "running", "failed")))
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray(DownloadManagerModule.STATUS_COMPLETED, DownloadManagerModule.STATUS_RUNNING, DownloadManagerModule.STATUS_FAILED)))
     }
 
     @Test
