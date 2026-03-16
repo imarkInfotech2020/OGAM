@@ -59,7 +59,7 @@ class DownloadForegroundService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

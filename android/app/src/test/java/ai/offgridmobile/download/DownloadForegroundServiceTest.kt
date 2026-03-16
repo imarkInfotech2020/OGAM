@@ -71,13 +71,13 @@ class DownloadForegroundServiceTest {
     }
 
     @Test
-    fun `returns START_STICKY from onStartCommand`() {
+    fun `returns START_NOT_STICKY from onStartCommand`() {
         val controller = Robolectric.buildService(DownloadForegroundService::class.java)
         controller.create()
 
         val intent = Intent(context, DownloadForegroundService::class.java)
         val result = controller.get().onStartCommand(intent, 0, 0)
-        assertEquals(android.app.Service.START_STICKY, result)
+        assertEquals(android.app.Service.START_NOT_STICKY, result)
     }
 
     // ── onBind ───────────────────────────────────────────────────────────────
