@@ -213,6 +213,61 @@ class DownloadManagerModuleTest {
         assertEquals("", DownloadManagerModule.reasonToString(DownloadManager.STATUS_SUCCESSFUL, 0))
     }
 
+    // ── hasNoActiveDownloads ────────────────────────────────────────────────
+
+    private fun downloadsArray(vararg statuses: String): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        statuses.forEach { arr.put(JSONObject().put("downloadId", arr.length().toLong()).put("status", it)) }
+        return arr
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns true for empty list`() {
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(org.json.JSONArray()))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns false when a download is pending`() {
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("pending")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns false when a download is running`() {
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("running")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns false when a download is paused`() {
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("paused")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns true when all are completed`() {
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "completed")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns true when all are failed`() {
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("failed", "failed")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns true for mix of completed and failed`() {
+        assertTrue(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "failed")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads returns false when one of many is still running`() {
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(downloadsArray("completed", "running", "failed")))
+    }
+
+    @Test
+    fun `hasNoActiveDownloads defaults missing status to pending`() {
+        val arr = org.json.JSONArray()
+        arr.put(JSONObject().put("downloadId", 1L)) // no "status" key
+        assertFalse(DownloadManagerModule.hasNoActiveDownloads(arr))
+    }
+
     // ── shouldRemoveDownload ──────────────────────────────────────────────────
     //
     // Entries are only pruned after moveCompletedDownload sets moveCompleted=true.

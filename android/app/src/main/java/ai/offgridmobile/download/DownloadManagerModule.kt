@@ -75,6 +75,19 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
          *
          * The [currentTimeMs] parameter is injectable so tests can control the clock.
          */
+        /**
+         * Returns true if all persisted downloads are in a terminal state
+         * (completed, failed, or unknown) — i.e., no download is pending,
+         * running, or paused. Used to decide when to stop the foreground service.
+         */
+        internal fun hasNoActiveDownloads(downloads: JSONArray): Boolean {
+            for (i in 0 until downloads.length()) {
+                val status = downloads.getJSONObject(i).optString("status", "pending")
+                if (status == "pending" || status == "running" || status == "paused") return false
+            }
+            return true
+        }
+
         internal fun shouldRemoveDownload(
             download: JSONObject,
             liveStatus: String,
@@ -192,6 +205,13 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
                 val downloadId = downloadManager.enqueue(request)
 
+                // Start foreground service to prevent Android from throttling the download
+                try {
+                    DownloadForegroundService.start(reactApplicationContext, title)
+                } catch (e: Exception) {
+                    android.util.Log.w("DownloadManager", "Failed to start foreground service (non-fatal)", e)
+                }
+
                 // Persist download info
                 val downloadInfo = JSONObject().apply {
                     put("downloadId", downloadId)
@@ -239,6 +259,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
             }
 
+            stopForegroundServiceIfIdle()
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
@@ -461,6 +482,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
             sendEvent("DownloadComplete", eventParams)
             updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
+            stopForegroundServiceIfIdle()
         }
     }
 
@@ -471,6 +493,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         if (fileName == null) {
             android.util.Log.d("DownloadManager", "No info for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
+            stopForegroundServiceIfIdle()
             return
         }
         val file = java.io.File(
@@ -481,9 +504,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             eventParams.putString("localUri", file.toURI().toString())
             if (!completedEventSent) sendEvent("DownloadComplete", eventParams)
             updateDownloadStatus(downloadId, "completed", file.toURI().toString())
+            stopForegroundServiceIfIdle()
         } else {
             android.util.Log.d("DownloadManager", "No file found for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
+            stopForegroundServiceIfIdle()
         }
     }
 
@@ -504,6 +529,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     eventParams.putString("reason", statusInfo.getString("reason"))
                     sendEvent("DownloadError", eventParams)
                     removeDownload(downloadId)
+                    stopForegroundServiceIfIdle()
                 }
                 "paused" -> {
                     eventParams.putString("reason", statusInfo.getString("reason"))
@@ -675,6 +701,19 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             JSONArray(json)
         } catch (e: Exception) {
             JSONArray()
+        }
+    }
+
+    /**
+     * Stop the foreground service if no downloads are still active
+     * (pending, running, or paused).
+     */
+    private fun stopForegroundServiceIfIdle() {
+        if (!hasNoActiveDownloads(getAllPersistedDownloads())) return
+        try {
+            DownloadForegroundService.stop(reactApplicationContext)
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadManager", "Failed to stop foreground service (non-fatal)", e)
         }
     }
 }
