@@ -283,15 +283,20 @@ class WhisperService {
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
     try {
-      if (this.stopFn) {
+      // Grab and clear stopFn atomically to prevent double-stop race conditions.
+      // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
+      // both see stopFn as non-null and call it twice, causing SIGSEGV in
+      // finishRealtimeTranscribeJob on the native side.
+      const fn = this.stopFn;
+      this.stopFn = null;
+      if (fn) {
         // Guard: only call stop if context still exists
         // Calling stop on a freed context causes SIGSEGV
         if (this.context) {
-          this.stopFn();
+          fn();
         } else {
           logger.log('[WhisperService] Context already released, skipping stopFn call');
         }
-        this.stopFn = null;
       }
     } catch (error) {
       logger.error('[WhisperService] Error stopping transcription:', error);
@@ -300,18 +305,18 @@ class WhisperService {
     }
   }
 
-  // Force reset state - use when state gets stuck
+  /** Force reset state — also calls native stop to prevent SIGSEGV from orphaned jobs. */
   forceReset(): void {
     logger.log('[WhisperService] Force resetting state');
+    if (this.stopFn && this.context) {
+      try { this.stopFn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
+    }
     this.isTranscribing = false;
     this.stopFn = null;
-    // Resolve any pending transcription stop promise so unloadModel won't hang
     this.transcriptionFullyStopped = Promise.resolve();
   }
 
-  isCurrentlyTranscribing(): boolean {
-    return this.isTranscribing;
-  }
+  isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
 
   // Transcribe a single audio file
   async transcribeFile(

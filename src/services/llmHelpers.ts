@@ -314,7 +314,7 @@ export const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
-}): Record<string, any> {
+}, options?: { disableCtxShift?: boolean }): Record<string, any> {
   return {
     n_predict: settings.maxTokens || RESPONSE_RESERVE,
     temperature: settings.temperature ?? 0.7,
@@ -322,7 +322,7 @@ export function buildCompletionParams(settings: {
     top_p: settings.topP ?? 0.95,
     penalty_repeat: settings.repeatPenalty ?? 1.1,
     stop: STOP_TOKENS,
-    ctx_shift: true,
+    ctx_shift: options?.disableCtxShift ? false : true,
   };
 }
 

@@ -11,6 +11,22 @@ import java.io.File
 
 class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
+        try {
+            promise.reject(code, message, throwable)
+        } catch (e: NullPointerException) {
+            android.util.Log.w("PDFExtractorModule", "Promise.reject NPE (bridge torn down): $code: $message")
+        }
+    }
+
+    private fun safeResolve(promise: Promise, value: Any?) {
+        try {
+            promise.resolve(value)
+        } catch (e: NullPointerException) {
+            android.util.Log.w("PDFExtractorModule", "Promise.resolve NPE (bridge torn down)")
+        }
+    }
+
     override fun getName(): String = "PDFExtractorModule"
 
     private fun extractPageText(doc: PdfDocument, pageIndex: Int, sb: StringBuilder) {
@@ -31,7 +47,7 @@ class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBa
             try {
                 val file = File(filePath)
                 if (!file.exists()) {
-                    promise.reject("PDF_ERROR", "File not found: $filePath")
+                    safeReject(promise, "PDF_ERROR", "File not found: $filePath")
                     return@Thread
                 }
 
@@ -54,9 +70,9 @@ class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBa
 
                 doc.close()
                 fd.close()
-                promise.resolve(sb.toString())
+                safeResolve(promise, sb.toString())
             } catch (e: Exception) {
-                promise.reject("PDF_ERROR", "Failed to extract text: ${e.message}", e)
+                safeReject(promise, "PDF_ERROR", "Failed to extract text: ${e.message}", e)
             }
         }.start()
     }

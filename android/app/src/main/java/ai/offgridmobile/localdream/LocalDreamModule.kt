@@ -32,6 +32,35 @@ import org.json.JSONObject
 class LocalDreamModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
+    /**
+     * Safely reject a promise, catching NPEs that occur when the React bridge
+     * is torn down (PromiseImpl's internal Callback becomes null).
+     */
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
+        try {
+            promise.reject(code, message, throwable)
+        } catch (e: NullPointerException) {
+            Log.w(TAG, "Promise.reject NPE (bridge torn down): $code: $message")
+        }
+    }
+
+    private fun safeResolve(promise: Promise, value: Any?) {
+        try {
+            when (value) {
+                is Boolean -> promise.resolve(value)
+                is String -> promise.resolve(value)
+                is Int -> promise.resolve(value)
+                is Double -> promise.resolve(value)
+                is WritableMap -> promise.resolve(value)
+                is WritableArray -> promise.resolve(value)
+                null -> promise.resolve(null)
+                else -> promise.resolve(value)
+            }
+        } catch (e: NullPointerException) {
+            Log.w(TAG, "Promise.resolve NPE (bridge torn down)")
+        }
+    }
+
     companion object {
         private const val TAG = "LocalDreamModule"
         private const val MODULE_NAME = "LocalDreamModule"
@@ -347,20 +376,20 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             try {
                 val modelPath = params.getString("modelPath")
                 if (modelPath.isNullOrBlank()) {
-                    promise.reject("INVALID_ARGS", "modelPath is required")
+                    safeReject(promise, "INVALID_ARGS", "modelPath is required")
                     return@launch
                 }
 
                 val rawModelDir = File(modelPath)
                 if (!rawModelDir.exists() || !rawModelDir.isDirectory) {
-                    promise.reject("MODEL_NOT_FOUND", "Model directory not found: $modelPath")
+                    safeReject(promise, "MODEL_NOT_FOUND", "Model directory not found: $modelPath")
                     return@launch
                 }
 
                 val normalizedBackend = normalizeBackend(params)
                 val (backend, modelDir) = resolveBackendAndDir(normalizedBackend, rawModelDir) ?: run {
                     val contents = rawModelDir.listFiles()?.map { it.name }?.joinToString(", ") ?: "empty"
-                    promise.reject(
+                    safeReject(promise,
                         "MODEL_FILES_NOT_FOUND",
                         "Could not find model files (unet.mnn or unet.bin) in $modelPath or its subdirectories. " +
                             "Directory contents: [$contents]"
@@ -373,7 +402,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
                 if (currentModelPath == modelPath && serverProcess?.isAlive == true && isServerReady) {
                     Log.d(TAG, "Model already loaded: $modelPath")
-                    promise.resolve(true)
+                    safeResolve(promise, true)
                     return@launch
                 }
 
@@ -384,14 +413,14 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 val result = startWithFallback(modelPath, backend, modelDir, cpuModelDir)
 
                 if (result.success) {
-                    promise.resolve(true)
+                    safeResolve(promise, true)
                 } else {
-                    promise.reject("SERVER_FAILED", result.error ?: "Server failed to start")
+                    safeReject(promise, "SERVER_FAILED", result.error ?: "Server failed to start")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading model", e)
                 stopServer()
-                promise.reject("LOAD_ERROR", "Failed to load model: ${e.message}", e)
+                safeReject(promise, "LOAD_ERROR", "Failed to load model: ${e.message}", e)
             }
         }
     }
@@ -574,25 +603,25 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     fun unloadModel(promise: Promise) {
         try {
             stopServer()
-            promise.resolve(true)
+            safeResolve(promise, true)
         } catch (e: Exception) {
-            promise.reject("UNLOAD_ERROR", "Failed to unload model: ${e.message}", e)
+            safeReject(promise, "UNLOAD_ERROR", "Failed to unload model: ${e.message}", e)
         }
     }
 
     @ReactMethod
     fun isModelLoaded(promise: Promise) {
-        promise.resolve(serverProcess?.isAlive == true && isServerReady)
+        safeResolve(promise, serverProcess?.isAlive == true && isServerReady)
     }
 
     @ReactMethod
     fun getLoadedModelPath(promise: Promise) {
-        promise.resolve(currentModelPath)
+        safeResolve(promise, currentModelPath)
     }
 
     @ReactMethod
     fun isGenerating(promise: Promise) {
-        promise.resolve(activeGenerationConnection != null)
+        safeResolve(promise, activeGenerationConnection != null)
     }
 
     @ReactMethod
@@ -602,7 +631,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
             try { it.disconnect() } catch (_: Exception) {}
         }
         activeGenerationConnection = null
-        promise.resolve(true)
+        safeResolve(promise, true)
     }
 
     // =====================================================================
@@ -752,17 +781,17 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
     private fun handleEofException(e: java.io.EOFException, promise: Promise) {
         if (generationCancelled.get()) {
-            promise.reject("CANCELLED", "Generation cancelled")
+            safeReject(promise, "CANCELLED", "Generation cancelled")
             return
         }
         val alive = serverProcess?.isAlive == true
         Log.e(TAG, "EOFException during generation. Server alive: $alive", e)
         if (!alive) {
             isServerReady = false
-            promise.reject("SERVER_CRASHED",
+            safeReject(promise, "SERVER_CRASHED",
                 "Server process died during generation. Reload the model and try again.")
         } else {
-            promise.reject("CONNECTION_ERROR",
+            safeReject(promise, "CONNECTION_ERROR",
                 "Connection to server was closed unexpectedly. " +
                 "The server may have crashed during inference. Try again.")
         }
@@ -770,10 +799,10 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
     private fun handleGeneralException(e: Exception, promise: Promise) {
         if (generationCancelled.get()) {
-            promise.reject("CANCELLED", "Generation cancelled")
+            safeReject(promise, "CANCELLED", "Generation cancelled")
         } else {
             Log.e(TAG, "Generation error: ${e.javaClass.simpleName}", e)
-            promise.reject("GENERATION_ERROR",
+            safeReject(promise, "GENERATION_ERROR",
                 "Failed to generate image: [${e.javaClass.simpleName}] ${e.message ?: "unknown error"}", e)
         }
     }
@@ -782,12 +811,12 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
     fun generateImage(params: ReadableMap, promise: Promise) {
         coroutineScope.launch(Dispatchers.IO) {
             if (!isServerReady || serverProcess?.isAlive != true) {
-                promise.reject("SERVER_NOT_READY", "Server is not running. Load a model first.")
+                safeReject(promise, "SERVER_NOT_READY", "Server is not running. Load a model first.")
                 return@launch
             }
             if (!checkServerHealth()) {
                 isServerReady = false
-                promise.reject("SERVER_NOT_READY",
+                safeReject(promise, "SERVER_NOT_READY",
                     "Server process is not responsive. Try unloading and reloading the model.")
                 return@launch
             }
@@ -808,15 +837,15 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                     val errorBody = try {
                         connection.errorStream?.bufferedReader()?.readText() ?: "no error body"
                     } catch (_: Exception) { "could not read error" }
-                    promise.reject("SERVER_ERROR",
+                    safeReject(promise, "SERVER_ERROR",
                         "Server returned $responseCode: ${connection.responseMessage}. Body: $errorBody")
                     return@launch
                 }
 
                 when (val result = parseSseStream(connection, body)) {
-                    is SseParseResult.Complete -> promise.resolve(buildFinalResult(result.data))
-                    is SseParseResult.Cancelled -> promise.reject("CANCELLED", "Generation cancelled")
-                    is SseParseResult.NoResult -> promise.reject("NO_RESULT", "Server did not return a complete event")
+                    is SseParseResult.Complete -> safeResolve(promise, buildFinalResult(result.data))
+                    is SseParseResult.Cancelled -> safeReject(promise, "CANCELLED", "Generation cancelled")
+                    is SseParseResult.NoResult -> safeReject(promise, "NO_RESULT", "Server did not return a complete event")
                 }
             } catch (e: java.io.EOFException) {
                 handleEofException(e, promise)
@@ -843,14 +872,14 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 val outputPath = params.getString("outputPath") ?: ""
 
                 if (base64Rgb.isEmpty() || outputPath.isEmpty()) {
-                    promise.reject("INVALID_ARGS", "base64Rgb and outputPath are required")
+                    safeReject(promise, "INVALID_ARGS", "base64Rgb and outputPath are required")
                     return@launch
                 }
 
                 val rgbBytes = Base64.decode(base64Rgb, Base64.DEFAULT)
                 val expectedSize = width * height * 3
                 if (rgbBytes.size != expectedSize) {
-                    promise.reject("SIZE_MISMATCH",
+                    safeReject(promise, "SIZE_MISMATCH",
                         "RGB data size ${rgbBytes.size} doesn't match expected $expectedSize (${width}x${height}x3)")
                     return@launch
                 }
@@ -875,10 +904,10 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 }
                 bitmap.recycle()
 
-                promise.resolve(true)
+                safeResolve(promise, true)
             } catch (e: Exception) {
                 Log.e(TAG, "Error saving RGB as PNG", e)
-                promise.reject("SAVE_ERROR", "Failed to save image: ${e.message}", e)
+                safeReject(promise, "SAVE_ERROR", "Failed to save image: ${e.message}", e)
             }
         }
     }
@@ -888,7 +917,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         try {
             val outputDir = File(reactApplicationContext.filesDir, "generated_images")
             if (!outputDir.exists()) {
-                promise.resolve(Arguments.createArray())
+                safeResolve(promise, Arguments.createArray())
                 return
             }
 
@@ -903,9 +932,9 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 images.pushMap(imageMap)
             }
 
-            promise.resolve(images)
+            safeResolve(promise, images)
         } catch (e: Exception) {
-            promise.reject("LIST_ERROR", "Failed to list generated images: ${e.message}", e)
+            safeReject(promise, "LIST_ERROR", "Failed to list generated images: ${e.message}", e)
         }
     }
 
@@ -917,12 +946,12 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
             if (imageFile.exists()) {
                 imageFile.delete()
-                promise.resolve(true)
+                safeResolve(promise, true)
             } else {
-                promise.reject("NOT_FOUND", "Image not found: $imageId")
+                safeReject(promise, "NOT_FOUND", "Image not found: $imageId")
             }
         } catch (e: Exception) {
-            promise.reject("DELETE_ERROR", "Failed to delete image: ${e.message}", e)
+            safeReject(promise, "DELETE_ERROR", "Failed to delete image: ${e.message}", e)
         }
     }
 
@@ -931,7 +960,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun getServerPort(promise: Promise) {
-        promise.resolve(SERVER_PORT)
+        safeResolve(promise, SERVER_PORT)
     }
 
     /**
@@ -939,7 +968,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
      */
     @ReactMethod
     fun isNpuSupported(promise: Promise) {
-        promise.resolve(isNpuSupportedInternal())
+        safeResolve(promise, isNpuSupportedInternal())
     }
 
     @ReactMethod
@@ -949,7 +978,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         } else {
             ""
         }
-        promise.resolve(soc)
+        safeResolve(promise, soc)
     }
 
     /**
@@ -962,7 +991,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         val appFilesDir = reactApplicationContext.filesDir.canonicalPath
         val canonical = File(modelPath).canonicalPath
         if (!canonical.startsWith(appFilesDir)) {
-            promise.reject("CACHE_ERROR", "Model path is outside the app directory")
+            safeReject(promise, "CACHE_ERROR", "Model path is outside the app directory")
             return
         }
         coroutineScope.launch(Dispatchers.IO) {
@@ -970,7 +999,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 val modelDir = File(modelPath)
                 val cpuModelDir = resolveModelDir(modelDir, true)
                 if (cpuModelDir == null) {
-                    promise.resolve(0)
+                    safeResolve(promise, 0)
                     return@launch
                 }
 
@@ -981,10 +1010,10 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                     if (file.delete()) cleared++
                 }
                 Log.i(TAG, "Cleared $cleared OpenCL cache file(s) from ${cpuModelDir.absolutePath}")
-                promise.resolve(cleared)
+                safeResolve(promise, cleared)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to clear OpenCL cache", e)
-                promise.reject("CACHE_ERROR", "Failed to clear OpenCL cache: ${e.message}", e)
+                safeReject(promise, "CACHE_ERROR", "Failed to clear OpenCL cache: ${e.message}", e)
             }
         }
     }
@@ -998,7 +1027,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
         val appFilesDir = reactApplicationContext.filesDir.canonicalPath
         val canonical = File(modelPath).canonicalPath
         if (!canonical.startsWith(appFilesDir)) {
-            promise.reject("CACHE_ERROR", "Model path is outside the app directory")
+            safeReject(promise, "CACHE_ERROR", "Model path is outside the app directory")
             return
         }
         coroutineScope.launch(Dispatchers.IO) {
@@ -1006,16 +1035,16 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                 val modelDir = File(modelPath)
                 val cpuModelDir = resolveModelDir(modelDir, true)
                 if (cpuModelDir == null) {
-                    promise.resolve(false)
+                    safeResolve(promise, false)
                     return@launch
                 }
 
                 val cachePattern = Regex(".*\\.mnnc(\\..+)?$")
                 val hasCache = cpuModelDir.listFiles()?.any { it.name.matches(cachePattern) } == true
-                promise.resolve(hasCache)
+                safeResolve(promise, hasCache)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to check OpenCL cache", e)
-                promise.reject("CACHE_ERROR", "Failed to check OpenCL cache: ${e.message}", e)
+                safeReject(promise, "CACHE_ERROR", "Failed to check OpenCL cache: ${e.message}", e)
             }
         }
     }

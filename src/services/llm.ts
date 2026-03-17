@@ -145,6 +145,8 @@ class LLMService {
   supportsToolCalling(): boolean { return this.toolCallingSupported; }
   supportsThinking(): boolean { return this.thinkingSupported; }
   isThinkingEnabled(): boolean { return this.thinkingSupported && useAppStore.getState().settings.thinkingEnabled; }
+  /** Disable ctx_shift on Android when GPU layers are active — the OpenCL backend SIGSEGVs on the ggml set op used by KV cache shifting. */
+  private shouldDisableCtxShift(): boolean { return Platform.OS === 'android' && this.activeGpuLayers > 0; }
   private detectToolCallingSupport(): void {
     if (!this.context) { this.toolCallingSupported = false; return; }
     try {
@@ -189,7 +191,7 @@ class LLMService {
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings), ...buildThinkingCompletionParams(this.isThinkingEnabled()) };
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(this.isThinkingEnabled()) };
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
@@ -217,6 +219,7 @@ class LLMService {
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
+      disableCtxShift: this.shouldDisableCtxShift(),
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
       setPerformanceStats: (s) => { this.performanceStats = s; },
@@ -244,7 +247,7 @@ class LLMService {
     let fullResponse = '';
     const ctx = this.context;
     const completionWork = safeCompletion(ctx, () => ctx.completion(
-      { messages: oaiMessages, ...buildCompletionParams(settings), n_predict: maxTokens },
+      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });

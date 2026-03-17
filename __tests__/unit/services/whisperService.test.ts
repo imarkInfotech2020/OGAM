@@ -708,5 +708,77 @@ describe('WhisperService', () => {
 
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
+
+    it('calls native stopFn when context exists (prevents SIGSEGV)', () => {
+      const mockStopFn = jest.fn();
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).context = { release: jest.fn() };
+
+      whisperService.forceReset();
+
+      expect(mockStopFn).toHaveBeenCalled();
+      expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+
+    it('does not call stopFn when context is null (prevents SIGSEGV on freed context)', () => {
+      const mockStopFn = jest.fn();
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).context = null;
+
+      whisperService.forceReset();
+
+      expect(mockStopFn).not.toHaveBeenCalled();
+      expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+
+    it('handles stopFn error gracefully during forceReset', () => {
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = () => { throw new Error('stop error'); };
+      (whisperService as any).context = { release: jest.fn() };
+
+      // Should not throw
+      whisperService.forceReset();
+
+      expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+  });
+
+  // ========================================================================
+  // stopTranscription — double-stop race condition fix
+  // ========================================================================
+  describe('stopTranscription race condition', () => {
+    it('prevents double-stop by atomically clearing stopFn', async () => {
+      const mockStopFn = jest.fn();
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).context = { release: jest.fn() };
+
+      // Call stopTranscription twice concurrently (simulates trailing audio + clearResult race)
+      await Promise.all([
+        whisperService.stopTranscription(),
+        whisperService.stopTranscription(),
+      ]);
+
+      // Native stop should only be called once, not twice
+      expect(mockStopFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears stopFn before calling it to prevent reentry', async () => {
+      let stopFnDuringCall: any = 'not-checked';
+      const mockStopFn = jest.fn(() => {
+        // Check that stopFn is already null while this is executing
+        stopFnDuringCall = (whisperService as any).stopFn;
+      });
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = mockStopFn;
+      (whisperService as any).context = { release: jest.fn() };
+
+      await whisperService.stopTranscription();
+
+      expect(mockStopFn).toHaveBeenCalled();
+      expect(stopFnDuringCall).toBeNull();
+    });
   });
 });

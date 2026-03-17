@@ -20,6 +20,34 @@ import java.util.concurrent.Executors
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
+    /**
+     * Safely reject a promise, catching NPEs that occur when the React bridge
+     * is torn down (PromiseImpl's internal Callback becomes null).
+     */
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
+        try {
+            promise.reject(code, message, throwable)
+        } catch (e: NullPointerException) {
+            android.util.Log.w("DownloadManager", "Promise.reject NPE (bridge torn down): $code: $message")
+        }
+    }
+
+    private fun safeResolve(promise: Promise, value: Any?) {
+        try {
+            when (value) {
+                is Boolean -> promise.resolve(value)
+                is String -> promise.resolve(value)
+                is Int -> promise.resolve(value)
+                is Double -> promise.resolve(value)
+                is com.facebook.react.bridge.WritableMap -> promise.resolve(value)
+                is com.facebook.react.bridge.WritableArray -> promise.resolve(value)
+                else -> promise.resolve(value)
+            }
+        } catch (e: NullPointerException) {
+            android.util.Log.w("DownloadManager", "Promise.resolve NPE (bridge torn down)")
+        }
+    }
+
     companion object {
         const val NAME = "DownloadManagerModule"
         const val PREFS_NAME = "OffgridMobileDownloads"
@@ -132,11 +160,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun startDownload(params: ReadableMap, promise: Promise) {
         val url = params.getString("url") ?: run {
-            promise.reject("DOWNLOAD_ERROR", "URL is required")
+            safeReject(promise, "DOWNLOAD_ERROR", "URL is required")
             return
         }
         val fileName = params.getString("fileName")?.let { File(it).name } ?: run {
-            promise.reject("DOWNLOAD_ERROR", "fileName is required")
+            safeReject(promise, "DOWNLOAD_ERROR", "fileName is required")
             return
         }
         val title = params.getString("title") ?: fileName
@@ -148,7 +176,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         // Validate URL against allowed download hosts to prevent SSRF
         val parsedHost = try { URL(url).host } catch (_: Exception) { null }
         if (parsedHost == null || !allowedDownloadHosts.any { parsedHost == it || parsedHost.endsWith(".$it") }) {
-            promise.reject("DOWNLOAD_ERROR", "Download URL host not allowed: $parsedHost")
+            safeReject(promise, "DOWNLOAD_ERROR", "Download URL host not allowed: $parsedHost")
             return
         }
 
@@ -210,9 +238,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     putString("fileName", fileName)
                     putString("modelId", modelId)
                 }
-                promise.resolve(result)
+                safeResolve(promise, result)
             } catch (e: Exception) {
-                promise.reject("DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
+                safeReject(promise, "DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
             }
         }
     }
@@ -239,9 +267,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
             }
 
-            promise.resolve(true)
+            safeResolve(promise, true)
         } catch (e: Exception) {
-            promise.reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
+            safeReject(promise, "CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
         }
     }
 
@@ -272,9 +300,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 result.pushMap(map)
             }
 
-            promise.resolve(result)
+            safeResolve(promise, result)
         } catch (e: Exception) {
-            promise.reject("QUERY_ERROR", "Failed to get active downloads: ${e.message}", e)
+            safeReject(promise, "QUERY_ERROR", "Failed to get active downloads: ${e.message}", e)
         }
     }
 
@@ -294,9 +322,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 putString("localUri", statusInfo.getString("localUri"))
                 putString("reason", statusInfo.getString("reason"))
             }
-            promise.resolve(result)
+            safeResolve(promise, result)
         } catch (e: Exception) {
-            promise.reject("PROGRESS_ERROR", "Failed to get download progress: ${e.message}", e)
+            safeReject(promise, "PROGRESS_ERROR", "Failed to get download progress: ${e.message}", e)
         }
     }
 
@@ -347,7 +375,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             // Move the file
             if (sourceFile.renameTo(targetFile)) {
                 markMoveCompleted(id)
-                promise.resolve(targetFile.absolutePath)
+                safeResolve(promise, targetFile.absolutePath)
             } else {
                 // If rename fails (different filesystem), copy then delete
                 sourceFile.copyTo(targetFile, overwrite = true)
@@ -355,10 +383,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     android.util.Log.w("DownloadManager", "Failed to delete source file: ${sourceFile.absolutePath}")
                 }
                 markMoveCompleted(id)
-                promise.resolve(targetFile.absolutePath)
+                safeResolve(promise, targetFile.absolutePath)
             }
         } catch (e: Exception) {
-            promise.reject("MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
+            safeReject(promise, "MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
         }
     }
 
