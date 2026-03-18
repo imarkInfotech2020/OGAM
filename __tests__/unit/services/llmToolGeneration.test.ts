@@ -28,6 +28,7 @@ function createMockDeps(overrides: Partial<ToolGenerationDeps> = {}): ToolGenera
     },
     isGenerating: false,
     isThinkingEnabled: false,
+    disableCtxShift: false,
     manageContextWindow: jest.fn(async (msgs: Message[]) => msgs),
     convertToOAIMessages: jest.fn((msgs: Message[]) =>
       msgs.map(m => ({ role: m.role, content: m.content })),
@@ -137,6 +138,26 @@ describe('generateWithToolsImpl', () => {
       const callArgs = completion.mock.calls[0][0];
       expect(callArgs.enable_thinking).toBe(false);
       expect(callArgs.reasoning_format).toBe('none');
+    });
+
+    it('disables ctx_shift when disableCtxShift is true (Android GPU SIGSEGV fix)', async () => {
+      const completion = jest.fn(async (_params: any, _cb: any) => ({}));
+      const deps = createMockDeps({ context: { completion }, disableCtxShift: true });
+
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+
+      const callArgs = completion.mock.calls[0][0];
+      expect(callArgs.ctx_shift).toBe(false);
+    });
+
+    it('enables ctx_shift when disableCtxShift is false', async () => {
+      const completion = jest.fn(async (_params: any, _cb: any) => ({}));
+      const deps = createMockDeps({ context: { completion }, disableCtxShift: false });
+
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+
+      const callArgs = completion.mock.calls[0][0];
+      expect(callArgs.ctx_shift).toBe(true);
     });
 
     it('passes temperature and other settings from the app store', async () => {

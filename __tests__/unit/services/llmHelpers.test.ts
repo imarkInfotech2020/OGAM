@@ -8,6 +8,7 @@ import {
   fitMessagesInBudget,
   getStreamingDelta,
   buildModelParams,
+  buildCompletionParams,
   shouldDisableMmap,
   captureGpuInfo,
   logContextMetadata,
@@ -361,5 +362,36 @@ describe('logContextMetadata', () => {
     logContextMetadata(ctx, 4096);
     expect(logger.log).toHaveBeenCalled();
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+// ==========================================================================
+// buildCompletionParams — ctx_shift disable for Android GPU (SIGSEGV fix)
+// ==========================================================================
+describe('buildCompletionParams', () => {
+  const defaultSettings = { maxTokens: 512, temperature: 0.7, topP: 0.95, repeatPenalty: 1.1 };
+
+  it('enables ctx_shift by default', () => {
+    const params = buildCompletionParams(defaultSettings);
+    expect(params.ctx_shift).toBe(true);
+  });
+
+  it('enables ctx_shift when disableCtxShift is false', () => {
+    const params = buildCompletionParams(defaultSettings, { disableCtxShift: false });
+    expect(params.ctx_shift).toBe(true);
+  });
+
+  it('disables ctx_shift when disableCtxShift is true (Android GPU SIGSEGV fix)', () => {
+    const params = buildCompletionParams(defaultSettings, { disableCtxShift: true });
+    expect(params.ctx_shift).toBe(false);
+  });
+
+  it('preserves other params when ctx_shift is disabled', () => {
+    const params = buildCompletionParams(defaultSettings, { disableCtxShift: true });
+    expect(params.n_predict).toBe(512);
+    expect(params.temperature).toBe(0.7);
+    expect(params.top_p).toBe(0.95);
+    expect(params.penalty_repeat).toBe(1.1);
+    expect(params.stop).toBeDefined();
   });
 });
