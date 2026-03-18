@@ -68,7 +68,7 @@ if [ -n "$PUSHED_KOTLIN" ]; then
   (cd android && ./gradlew compileDebugKotlin --quiet)
 
   echo "▶ Android lint..."
-  (cd android && ./gradlew lintDebug --quiet)
+  (cd android && ./gradlew :app:lintDebug --quiet)
 
   echo "▶ Android tests..."
   npm run test:android
