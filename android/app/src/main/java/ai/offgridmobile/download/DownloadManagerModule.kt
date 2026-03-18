@@ -15,30 +15,17 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import ai.offgridmobile.SafePromise
 import java.util.concurrent.Executors
 
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    /**
-     * Safely reject a promise, catching NPEs that occur when the React bridge
-     * is torn down (PromiseImpl's internal Callback becomes null).
-     */
-    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
-        try {
-            promise.reject(code, message, throwable)
-        } catch (e: NullPointerException) {
-            android.util.Log.w("DownloadManager", "Promise.reject NPE (bridge torn down): $code: $message")
-        }
-    }
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) =
+        SafePromise(promise, NAME).reject(code, message, throwable)
 
-    private fun safeResolve(promise: Promise, value: Any?) {
-        try {
-            promise.resolve(value)
-        } catch (e: NullPointerException) {
-            android.util.Log.w("DownloadManager", "Promise.resolve NPE (bridge torn down)")
-        }
-    }
+    private fun safeResolve(promise: Promise, value: Any?) =
+        SafePromise(promise, NAME).resolve(value)
 
     companion object {
         const val NAME = "DownloadManagerModule"

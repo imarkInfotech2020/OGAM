@@ -17,6 +17,7 @@ import java.net.URL
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import ai.offgridmobile.SafePromise
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
@@ -32,25 +33,11 @@ import org.json.JSONObject
 class LocalDreamModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
-    /**
-     * Safely reject a promise, catching NPEs that occur when the React bridge
-     * is torn down (PromiseImpl's internal Callback becomes null).
-     */
-    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
-        try {
-            promise.reject(code, message, throwable)
-        } catch (e: NullPointerException) {
-            Log.w(TAG, "Promise.reject NPE (bridge torn down): $code: $message")
-        }
-    }
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) =
+        SafePromise(promise, TAG).reject(code, message, throwable)
 
-    private fun safeResolve(promise: Promise, value: Any?) {
-        try {
-            promise.resolve(value)
-        } catch (e: NullPointerException) {
-            Log.w(TAG, "Promise.resolve NPE (bridge torn down)")
-        }
-    }
+    private fun safeResolve(promise: Promise, value: Any?) =
+        SafePromise(promise, TAG).resolve(value)
 
     companion object {
         private const val TAG = "LocalDreamModule"

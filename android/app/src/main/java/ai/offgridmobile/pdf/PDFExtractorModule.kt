@@ -4,6 +4,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import ai.offgridmobile.SafePromise
 import io.legere.pdfiumandroid.PdfDocument
 import io.legere.pdfiumandroid.PdfiumCore
 import android.os.ParcelFileDescriptor
@@ -11,23 +12,17 @@ import java.io.File
 
 class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) {
-        try {
-            promise.reject(code, message, throwable)
-        } catch (e: NullPointerException) {
-            android.util.Log.w("PDFExtractorModule", "Promise.reject NPE (bridge torn down): $code: $message")
-        }
+    companion object {
+        private const val NAME = "PDFExtractorModule"
     }
 
-    private fun safeResolve(promise: Promise, value: Any?) {
-        try {
-            promise.resolve(value)
-        } catch (e: NullPointerException) {
-            android.util.Log.w("PDFExtractorModule", "Promise.resolve NPE (bridge torn down)")
-        }
-    }
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) =
+        SafePromise(promise, NAME).reject(code, message, throwable)
 
-    override fun getName(): String = "PDFExtractorModule"
+    private fun safeResolve(promise: Promise, value: Any?) =
+        SafePromise(promise, NAME).resolve(value)
+
+    override fun getName(): String = NAME
 
     private fun extractPageText(doc: PdfDocument, pageIndex: Int, sb: StringBuilder) {
         val page = doc.openPage(pageIndex)
