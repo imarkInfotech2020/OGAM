@@ -46,16 +46,7 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
 
     private fun safeResolve(promise: Promise, value: Any?) {
         try {
-            when (value) {
-                is Boolean -> promise.resolve(value)
-                is String -> promise.resolve(value)
-                is Int -> promise.resolve(value)
-                is Double -> promise.resolve(value)
-                is WritableMap -> promise.resolve(value)
-                is WritableArray -> promise.resolve(value)
-                null -> promise.resolve(null)
-                else -> promise.resolve(value)
-            }
+            promise.resolve(value)
         } catch (e: NullPointerException) {
             Log.w(TAG, "Promise.resolve NPE (bridge torn down)")
         }

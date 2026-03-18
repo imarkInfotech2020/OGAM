@@ -308,11 +308,13 @@ class WhisperService {
   /** Force reset state — also calls native stop to prevent SIGSEGV from orphaned jobs. */
   forceReset(): void {
     logger.log('[WhisperService] Force resetting state');
-    if (this.stopFn && this.context) {
-      try { this.stopFn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
+    // Atomic grab-and-clear to match stopTranscription's pattern and prevent double-stop
+    const fn = this.stopFn;
+    this.stopFn = null;
+    if (fn && this.context) {
+      try { fn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
     }
     this.isTranscribing = false;
-    this.stopFn = null;
     this.transcriptionFullyStopped = Promise.resolve();
   }
 
