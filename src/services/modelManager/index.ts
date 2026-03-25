@@ -271,9 +271,11 @@ class ModelManager {
     sourceUri: string,
     fileName: string,
     onProgress?: (progress: { fraction: number; fileName: string }) => void,
+    mmProjSourceUri?: string,
+    mmProjFileName?: string,
   ): Promise<DownloadedModel> {
     await this.initialize();
-    return scanImportLocalModel({ sourceUri, fileName, modelsDir: this.modelsDir, onProgress });
+    return scanImportLocalModel({ sourceUri, fileName, modelsDir: this.modelsDir, onProgress, mmProjSourceUri, mmProjFileName });
   }
 
   async getDownloadedImageModels(): Promise<ONNXImageModel[]> {

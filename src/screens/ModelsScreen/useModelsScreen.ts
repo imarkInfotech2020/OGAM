@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
-import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
+import { showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { modelManager } from '../../services';
@@ -107,24 +107,90 @@ export function useModelsScreen() {
 
   const handleImportLocalModel = async () => {
     try {
-      const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
-      const file = result[0];
-      if (!file) return;
-      const fileName = file.name || 'unknown';
-      const lowerName = fileName.toLowerCase();
-      if (!lowerName.endsWith('.gguf') && !lowerName.endsWith('.zip')) {
-        setAlertState(showAlert('Invalid File', 'Supported formats: .gguf (text models) and .zip (image models).'));
+      const result = await pick({ type: [types.allFiles], allowMultiSelection: true });
+      if (!result || result.length === 0) return;
+
+      // Validate: all files must be .gguf, or exactly 1 .zip
+      const allGguf = result.every(f => (f.name || '').toLowerCase().endsWith('.gguf'));
+      const singleZip = result.length === 1 && (result[0].name || '').toLowerCase().endsWith('.zip');
+
+      if (!allGguf && !singleZip) {
+        setAlertState(showAlert(
+          'Invalid File',
+          result.length > 1
+            ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
+            : 'Supported formats: .gguf (text models) and .zip (image models).',
+        ));
         return;
       }
+
+      if (result.length > 2) {
+        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
+        return;
+      }
+
+      const firstFile = result[0];
+      const firstFileName = firstFile.name || 'unknown';
+
       setIsImporting(true);
-      setImportProgress({ fraction: 0, fileName });
-      if (lowerName.endsWith('.zip')) {
-        await handleImportImageModelZip(file.uri, fileName);
-      } else {
-        const model = await modelManager.importLocalModel(file.uri, fileName, p => setImportProgress(p));
+      setImportProgress({ fraction: 0, fileName: firstFileName });
+
+      if (singleZip) {
+        await handleImportImageModelZip(firstFile.uri, firstFileName);
+        return;
+      }
+
+      // Single GGUF — plain text model import
+      if (result.length === 1) {
+        const model = await modelManager.importLocalModel(firstFile.uri, firstFileName, p => setImportProgress(p));
         addDownloadedModel(model);
         setAlertState(showAlert('Success', `${model.name} imported successfully!`));
+        return;
       }
+
+      // Two GGUFs — classify main model vs mmproj
+      const file1 = { uri: result[0].uri, name: result[0].name || '', size: result[0].size ?? 0 };
+      const file2 = { uri: result[1].uri, name: result[1].name || '', size: result[1].size ?? 0 };
+
+      const isMmProj = (name: string) => {
+        const lower = name.toLowerCase();
+        return lower.includes('mmproj') || lower.includes('projector') || (lower.includes('clip') && lower.endsWith('.gguf'));
+      };
+
+      let mainFile = file1;
+      let mmProjFile = file2;
+
+      if (isMmProj(file1.name)) {
+        mainFile = file2;
+        mmProjFile = file1;
+      } else if (!isMmProj(file2.name)) {
+        // Neither name matches — use size: smaller = mmproj
+        if (file1.size > 0 && file2.size > 0) {
+          mainFile = file1.size >= file2.size ? file1 : file2;
+          mmProjFile = file1.size >= file2.size ? file2 : file1;
+        }
+      }
+
+      // Confirm with user before importing — lets them catch a wrong classification
+      const confirmed = await new Promise<boolean>((resolve) => {
+        setAlertState(showAlert(
+          'Import Vision Model?',
+          `Main model:  ${mainFile.name}\nProjector:    ${mmProjFile.name}\n\nIf these look wrong, cancel and rename your files.`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => { setAlertState(hideAlert()); resolve(false); } },
+            { text: 'Import', onPress: () => { setAlertState(hideAlert()); resolve(true); } },
+          ],
+        ));
+      });
+      if (!confirmed) return;
+
+      const model = await modelManager.importLocalModel(
+        mainFile.uri, mainFile.name,
+        p => setImportProgress(p),
+        mmProjFile.uri, mmProjFile.name,
+      );
+      addDownloadedModel(model);
+      setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));
     } catch (error: any) {
       if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
       setAlertState(showAlert('Import Failed', error?.message || 'Unknown error'));
