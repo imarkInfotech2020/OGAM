@@ -256,10 +256,18 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
 
     // Copy mmproj and link it to the model: progress 0.5→1
     if (mmProjFileName && resolvedMmProjSource) {
-      const { mmProjPath, mmProjFileSize } = await copyMmProjFile(resolvedMmProjSource, mmProjFileName, modelsDir, onProgress);
-      builtModel.mmProjPath = mmProjPath;
+      const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
+      await copyFileWithProgress(
+        resolvedMmProjSource,
+        mmProjDestPath,
+        onProgress
+          ? (fraction) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
+          : undefined,
+      );
+      const mmProjStat = await RNFS.stat(mmProjDestPath);
+      builtModel.mmProjPath = mmProjDestPath;
       builtModel.mmProjFileName = mmProjFileName;
-      builtModel.mmProjFileSize = mmProjFileSize;
+      builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
       builtModel.isVisionModel = true;
     }
 

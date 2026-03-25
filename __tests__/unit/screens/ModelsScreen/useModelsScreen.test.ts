@@ -325,11 +325,11 @@ describe('useModelsScreen', () => {
   });
 
   describe('handleImportLocalModel - GGUF success path', () => {
-    it('imports GGUF file successfully', async () => {
+    it('imports single GGUF file successfully (object-arg signature)', async () => {
       const { modelManager } = require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
 
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf' }]);
+      mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 4000 }]);
       modelManager.importLocalModel.mockResolvedValueOnce({ id: 'gguf-1', name: 'Test GGUF Model' });
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
@@ -344,15 +344,76 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(modelManager.importLocalModel).toHaveBeenCalledWith(
-        'file://test.gguf',
-        'test.gguf',
-        expect.any(Function)
-      );
+      // importLocalModel now takes an options object, not positional args
+      expect(modelManager.importLocalModel).toHaveBeenCalledWith({
+        sourceUri: 'file://test.gguf',
+        fileName: 'test.gguf',
+        onProgress: expect.any(Function),
+      });
       expect(result.current.alertState.visible).toBe(true);
       expect(result.current.alertState.title).toBe('Success');
       expect(result.current.isImporting).toBe(false);
       expect(result.current.importProgress).toBeNull();
+    });
+
+    it('returns early without calling pick if isImporting is already true', async () => {
+      const { result } = renderHook(() => useModelsScreen());
+
+      // Make the first pick call hang so the first import stays in-flight
+      let resolveFirst!: (v: any) => void;
+      const hangingPromise = new Promise(r => { resolveFirst = r; });
+      mockPick.mockReturnValueOnce(hangingPromise);
+
+      // Start first import (will hang at pick)
+      const firstImport = act(() => { result.current.handleImportLocalModel(); });
+
+      // Second call should bail early (isImporting is true)
+      await act(async () => { await result.current.handleImportLocalModel(); });
+
+      // pick should only have been called once
+      expect(mockPick).toHaveBeenCalledTimes(1);
+
+      // Resolve the hanging promise BEFORE test ends to avoid consuming
+      // the next test's mockPick setup
+      act(() => { resolveFirst([]); });
+      await firstImport;
+    });
+
+    it('shows "Invalid File" alert when a non-gguf/non-zip file is selected', async () => {
+      mockPick.mockResolvedValueOnce([{ uri: 'file://doc.pdf', name: 'doc.pdf', size: 100 }]);
+      const { result } = renderHook(() => useModelsScreen());
+
+      await act(async () => { await result.current.handleImportLocalModel(); });
+
+      expect(result.current.alertState.visible).toBe(true);
+      expect(result.current.alertState.title).toBe('Invalid File');
+      expect(result.current.isImporting).toBe(false);
+    });
+
+    it('shows "Invalid File" when multiple files include a non-gguf', async () => {
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://a.gguf', name: 'a.gguf', size: 4000 },
+        { uri: 'file://b.pdf', name: 'b.pdf', size: 100 },
+      ]);
+      const { result } = renderHook(() => useModelsScreen());
+
+      await act(async () => { await result.current.handleImportLocalModel(); });
+
+      expect(result.current.alertState.title).toBe('Invalid File');
+    });
+
+    it('shows "Too Many Files" when more than 2 gguf files selected', async () => {
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://a.gguf', name: 'a.gguf', size: 4000 },
+        { uri: 'file://b.gguf', name: 'b.gguf', size: 300 },
+        { uri: 'file://c.gguf', name: 'c.gguf', size: 200 },
+      ]);
+      const { result } = renderHook(() => useModelsScreen());
+
+      await act(async () => { await result.current.handleImportLocalModel(); });
+
+      expect(result.current.alertState.title).toBe('Too Many Files');
+      expect(result.current.isImporting).toBe(false);
     });
   });
 
@@ -365,7 +426,7 @@ describe('useModelsScreen', () => {
       // Set Platform.OS to ios
       (Platform as any).OS = 'ios';
 
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'TestModel.zip' }]);
+      mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'TestModel.zip', size: 0 }]);
       modelManager.addDownloadedImageModel.mockResolvedValueOnce(undefined);
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
@@ -391,7 +452,7 @@ describe('useModelsScreen', () => {
       const RNFS = require('react-native-fs');
 
       (Platform as any).OS = 'ios';
-      mockPick.mockResolvedValueOnce([{ uri: 'file://coreml.zip', name: 'CoreMLModel.zip' }]);
+      mockPick.mockResolvedValueOnce([{ uri: 'file://coreml.zip', name: 'CoreMLModel.zip', size: 0 }]);
       RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mlmodelc', isDirectory: () => true }]);
       resolveCoreMLModelDir.mockResolvedValueOnce('/resolved/coreml');
       modelManager.addDownloadedImageModel.mockResolvedValueOnce(undefined);
