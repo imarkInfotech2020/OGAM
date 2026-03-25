@@ -93,11 +93,12 @@ export function useModelsScreen() {
     handleNotifRationaleDismiss,
   } = useNotifRationale(isFirstDownload);
 
+  const { availableHFModels, hfModelsLoading, loadHFModels } = image;
   useEffect(() => {
-    if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
-      image.loadHFModels();
+    if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
+      loadHFModels();
     }
-  }, [activeTab, image]);
+  }, [activeTab, availableHFModels.length, hfModelsLoading, loadHFModels]);
 
   const setActiveTab = (tab: ModelTab) => {
     setActiveTabState(tab);
