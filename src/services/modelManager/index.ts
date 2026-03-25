@@ -31,6 +31,7 @@ import {
   scanForUntrackedTextModels as scanUntrackedText,
   importLocalModel as scanImportLocalModel,
   isMMProjFile,
+  ImportLocalModelOpts,
 } from './scan';
 import { resolveStoredPath, determineCredibility } from './storage';
 
@@ -267,15 +268,9 @@ class ModelManager {
     return scanCleanupMMProjEntries(this.modelsDir);
   }
 
-  async importLocalModel(
-    sourceUri: string,
-    fileName: string,
-    onProgress?: (progress: { fraction: number; fileName: string }) => void,
-    mmProjSourceUri?: string,
-    mmProjFileName?: string,
-  ): Promise<DownloadedModel> {
+  async importLocalModel(opts: Omit<ImportLocalModelOpts, 'modelsDir'>): Promise<DownloadedModel> {
     await this.initialize();
-    return scanImportLocalModel({ sourceUri, fileName, modelsDir: this.modelsDir, onProgress, mmProjSourceUri, mmProjFileName });
+    return scanImportLocalModel({ ...opts, modelsDir: this.modelsDir });
   }
 
   async getDownloadedImageModels(): Promise<ONNXImageModel[]> {

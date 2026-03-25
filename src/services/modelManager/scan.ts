@@ -201,6 +201,16 @@ export interface ImportLocalModelOpts {
   mmProjFileName?: string;
 }
 
+async function resolveAndroidUri(uri: string, cacheFileName: string): Promise<{ resolved: string; tempPath: string | null }> {
+  if (Platform.OS !== 'android' || !uri.startsWith('content://')) {
+    return { resolved: uri, tempPath: null };
+  }
+  const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${cacheFileName}`;
+  await RNFS.copyFile(uri, tempPath);
+  return { resolved: tempPath, tempPath };
+}
+
+
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> {
   const { sourceUri, fileName, modelsDir, onProgress, mmProjSourceUri, mmProjFileName } = opts;
 
@@ -208,31 +218,16 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
     throw new Error('Only .gguf files can be imported');
   }
 
-  let resolvedSource = sourceUri;
-  let tempCachePath: string | null = null;
-  let resolvedMmProjSource = mmProjSourceUri;
-  let tempMmProjCachePath: string | null = null;
-
-  if (Platform.OS === 'android' && sourceUri.startsWith('content://')) {
-    tempCachePath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
-    await RNFS.copyFile(sourceUri, tempCachePath);
-    resolvedSource = tempCachePath;
-  }
-
-  if (mmProjSourceUri && mmProjFileName && Platform.OS === 'android' && mmProjSourceUri.startsWith('content://')) {
-    tempMmProjCachePath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${mmProjFileName}`;
-    await RNFS.copyFile(mmProjSourceUri, tempMmProjCachePath);
-    resolvedMmProjSource = tempMmProjCachePath;
-  }
+  const { resolved: resolvedSource, tempPath: tempCachePath } = await resolveAndroidUri(sourceUri, fileName);
+  const { resolved: resolvedMmProjSource, tempPath: tempMmProjCachePath } = mmProjSourceUri && mmProjFileName
+    ? await resolveAndroidUri(mmProjSourceUri, mmProjFileName)
+    : { resolved: mmProjSourceUri, tempPath: null };
 
   try {
     const destPath = `${modelsDir}/${fileName}`;
-    const destExists = await RNFS.exists(destPath);
-    if (destExists) throw new Error(`A model file named "${fileName}" already exists`);
-
-    if (mmProjFileName) {
-      const mmProjDestExists = await RNFS.exists(`${modelsDir}/${mmProjFileName}`);
-      if (mmProjDestExists) throw new Error(`A file named "${mmProjFileName}" already exists`);
+    if (await RNFS.exists(destPath)) throw new Error(`A model file named "${fileName}" already exists`);
+    if (mmProjFileName && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
+      throw new Error(`A file named "${mmProjFileName}" already exists`);
     }
 
     // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
@@ -240,9 +235,7 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
     await copyFileWithProgress(
       resolvedSource,
       destPath,
-      onProgress
-        ? (fraction) => onProgress({ fraction: fraction * mainProgressScale, fileName })
-        : undefined,
+      onProgress ? (fraction) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
     );
 
     const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
@@ -263,18 +256,10 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
 
     // Copy mmproj and link it to the model: progress 0.5→1
     if (mmProjFileName && resolvedMmProjSource) {
-      const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
-      await copyFileWithProgress(
-        resolvedMmProjSource,
-        mmProjDestPath,
-        onProgress
-          ? (fraction) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
-          : undefined,
-      );
-      const mmProjStat = await RNFS.stat(mmProjDestPath);
-      builtModel.mmProjPath = mmProjDestPath;
+      const { mmProjPath, mmProjFileSize } = await copyMmProjFile(resolvedMmProjSource, mmProjFileName, modelsDir, onProgress);
+      builtModel.mmProjPath = mmProjPath;
       builtModel.mmProjFileName = mmProjFileName;
-      builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+      builtModel.mmProjFileSize = mmProjFileSize;
       builtModel.isVisionModel = true;
     }
 
