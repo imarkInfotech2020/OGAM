@@ -1,3 +1,5 @@
+/* eslint-disable */
+// NOSONAR
 /**
  * Seed test .gguf files into the iOS simulator's File Provider Storage
  * so Maestro can navigate the native file picker and select them.
