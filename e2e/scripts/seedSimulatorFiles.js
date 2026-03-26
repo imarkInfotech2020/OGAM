@@ -8,9 +8,9 @@
  * Run this BEFORE: maestro test e2e/maestro/import_vision_model.yaml
  */
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execSync } = require('node:child_process');
 
 // ── Find booted simulator ────────────────────────────────────────────────
 const simctlOutput = execSync('xcrun simctl list devices --json').toString();
