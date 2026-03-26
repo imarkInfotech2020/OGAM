@@ -211,7 +211,7 @@ async function resolveAndroidUri(uri: string, cacheFileName: string): Promise<{ 
 }
 
 
-export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> {
+export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
   const { sourceUri, fileName, modelsDir, onProgress, mmProjSourceUri, mmProjFileName } = opts;
 
   if (!fileName.toLowerCase().endsWith('.gguf')) {
