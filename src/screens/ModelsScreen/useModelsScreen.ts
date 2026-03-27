@@ -16,6 +16,60 @@ import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { useNotifRationale } from './useNotifRationale';
+import { importGgufFiles, getErrorMessage } from './importHelpers';
+
+type ZipImportDeps = {
+  addDownloadedImageModel: (model: ONNXImageModel) => void;
+  activeImageModelId: string | null;
+  setActiveImageModelId: (id: string | null) => void;
+  setImportProgress: (p: { fraction: number; fileName: string } | null) => void;
+  setAlertState: (s: AlertState) => void;
+};
+
+async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
+  const { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState } = deps;
+  const imageModelsDir = modelManager.getImageModelsDirectory();
+  const modelId = `local_${fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
+  const modelDir = `${imageModelsDir}/${modelId}`;
+  const zipPath = `${imageModelsDir}/${modelId}.zip`;
+  if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
+  setImportProgress({ fraction: 0.1, fileName });
+  if (Platform.OS === 'ios') await RNFS.moveFile(sourceUri, zipPath);
+  else await RNFS.copyFile(sourceUri, zipPath);
+  setImportProgress({ fraction: 0.5, fileName });
+  if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+  setImportProgress({ fraction: 0.6, fileName });
+  await unzip(zipPath, modelDir);
+  setImportProgress({ fraction: 0.85, fileName });
+  const dirContents = await RNFS.readDir(modelDir);
+  const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
+  const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
+  let resolvedModelDir = modelDir;
+  let backend: 'mnn' | 'qnn' | 'coreml' | undefined;
+  if (hasMLModelC || hasNestedMLModelC) {
+    backend = 'coreml';
+    resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+  } else {
+    const hasMNN = dirContents.some(f => f.name.endsWith('.mnn'));
+    const hasQNN = dirContents.some(f => f.name.endsWith('.bin') || f.name.includes('qnn'));
+    if (hasMNN) backend = 'mnn';
+    else if (hasQNN) backend = 'qnn';
+  }
+  await RNFS.unlink(zipPath).catch(() => { });
+  const totalSize = await getDirectorySize(resolvedModelDir);
+  setImportProgress({ fraction: 0.95, fileName });
+  const modelName = fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[_-]/g, ' ');
+  const imageModel: ONNXImageModel = {
+    id: modelId, name: modelName, description: 'Locally imported image model',
+    modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: totalSize, backend,
+  };
+  await modelManager.addDownloadedImageModel(imageModel);
+  addDownloadedImageModel(imageModel);
+  if (!activeImageModelId) setActiveImageModelId(imageModel.id);
+  setImportProgress({ fraction: 1, fileName });
+  setAlertState(showAlert('Success', `${modelName} imported successfully!`));
+}
+
 
 export function useModelsScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -39,12 +93,12 @@ export function useModelsScreen() {
     handleNotifRationaleDismiss,
   } = useNotifRationale(isFirstDownload);
 
+  const { availableHFModels, hfModelsLoading, loadHFModels } = image;
   useEffect(() => {
-    if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
-      image.loadHFModels();
+    if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
+      loadHFModels();
     }
-
-  }, [activeTab]);
+  }, [activeTab, availableHFModels.length, hfModelsLoading, loadHFModels]);
 
   const setActiveTab = (tab: ModelTab) => {
     setActiveTabState(tab);
@@ -62,72 +116,47 @@ export function useModelsScreen() {
     text.setIsRefreshing(false);
   };
 
-  const handleImportImageModelZip = async (sourceUri: string, fileName: string) => {
-    const imageModelsDir = modelManager.getImageModelsDirectory();
-    const modelId = `local_${fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
-    const modelDir = `${imageModelsDir}/${modelId}`;
-    const zipPath = `${imageModelsDir}/${modelId}.zip`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    setImportProgress({ fraction: 0.1, fileName });
-    if (Platform.OS === 'ios') await RNFS.moveFile(sourceUri, zipPath);
-    else await RNFS.copyFile(sourceUri, zipPath);
-    setImportProgress({ fraction: 0.5, fileName });
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-    setImportProgress({ fraction: 0.6, fileName });
-    await unzip(zipPath, modelDir);
-    setImportProgress({ fraction: 0.85, fileName });
-    const dirContents = await RNFS.readDir(modelDir);
-    const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
-    const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
-    let resolvedModelDir = modelDir;
-    let backend: 'mnn' | 'qnn' | 'coreml' | undefined;
-    if (hasMLModelC || hasNestedMLModelC) {
-      backend = 'coreml';
-      resolvedModelDir = await resolveCoreMLModelDir(modelDir);
-    } else {
-      const hasMNN = dirContents.some(f => f.name.endsWith('.mnn'));
-      const hasQNN = dirContents.some(f => f.name.endsWith('.bin') || f.name.includes('qnn'));
-      if (hasMNN) backend = 'mnn';
-      else if (hasQNN) backend = 'qnn';
-    }
-    await RNFS.unlink(zipPath).catch(() => { });
-    const totalSize = await getDirectorySize(resolvedModelDir);
-    setImportProgress({ fraction: 0.95, fileName });
-    const modelName = fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[_-]/g, ' ');
-    const imageModel: ONNXImageModel = {
-      id: modelId, name: modelName, description: 'Locally imported image model',
-      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: totalSize, backend,
-    };
-    await modelManager.addDownloadedImageModel(imageModel);
-    addDownloadedImageModel(imageModel);
-    if (!activeImageModelId) setActiveImageModelId(imageModel.id);
-    setImportProgress({ fraction: 1, fileName });
-    setAlertState(showAlert('Success', `${modelName} imported successfully!`));
-  };
+  const handleImportImageModelZip = (sourceUri: string, fileName: string) =>
+    importImageModelZip(sourceUri, fileName, { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState });
 
   const handleImportLocalModel = async () => {
+    if (isImporting) return;
+    setIsImporting(true);
     try {
-      const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
-      const file = result[0];
-      if (!file) return;
-      const fileName = file.name || 'unknown';
-      const lowerName = fileName.toLowerCase();
-      if (!lowerName.endsWith('.gguf') && !lowerName.endsWith('.zip')) {
-        setAlertState(showAlert('Invalid File', 'Supported formats: .gguf (text models) and .zip (image models).'));
+      const result = await pick({ type: [types.allFiles], allowMultiSelection: true });
+      if (!result || result.length === 0) return;
+
+      const allGguf = result.every(f => (f.name ?? '').toLowerCase().endsWith('.gguf'));
+      const singleZip = result.length === 1 && (result[0].name ?? '').toLowerCase().endsWith('.zip');
+
+      if (!allGguf && !singleZip) {
+        setAlertState(showAlert(
+          'Invalid File',
+          result.length > 1
+            ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
+            : 'Supported formats: .gguf (text models) and .zip (image models).',
+        ));
         return;
       }
-      setIsImporting(true);
-      setImportProgress({ fraction: 0, fileName });
-      if (lowerName.endsWith('.zip')) {
-        await handleImportImageModelZip(file.uri, fileName);
-      } else {
-        const model = await modelManager.importLocalModel(file.uri, fileName, p => setImportProgress(p));
-        addDownloadedModel(model);
-        setAlertState(showAlert('Success', `${model.name} imported successfully!`));
+
+      if (result.length > 2) {
+        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
+        return;
       }
-    } catch (error: any) {
+
+      const firstUri = result[0].uri;
+      const firstFileName = result[0].name ?? 'unknown';
+      setImportProgress({ fraction: 0, fileName: firstFileName });
+
+      if (singleZip) {
+        await handleImportImageModelZip(firstUri, firstFileName);
+        return;
+      }
+
+      await importGgufFiles(result.slice(0, 2), { setAlertState, setImportProgress, addDownloadedModel });
+    } catch (error: unknown) {
       if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
-      setAlertState(showAlert('Import Failed', error?.message || 'Unknown error'));
+      setAlertState(showAlert('Import Failed', getErrorMessage(error)));
     } finally {
       setIsImporting(false);
       setImportProgress(null);
