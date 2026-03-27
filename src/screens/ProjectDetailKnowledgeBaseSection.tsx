@@ -1,26 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick, keepLocalCopy } from '@react-native-documents/picker';
+import { pick } from '@react-native-documents/picker';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 
-async function copyFileLocally(uri: string, fileName: string): Promise<string> {
-  try {
-    const copyResult = await keepLocalCopy({
-      files: [{ uri, fileName }],
-      destination: 'documentDirectory',
-    });
-    if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-      return copyResult[0].localUri;
-    }
-  } catch {
-    // Fall through and return original URI
-  }
-  return uri;
-}
 
 function decodeFilePath(filePath: string): string {
   try {
@@ -57,7 +43,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
 
   const handleAddDocument = async () => {
     try {
-      const files = await pick({ mode: 'open', allowMultiSelection: true });
+      const files = await pick({ mode: 'import', allowMultiSelection: true });
       if (!files?.length) return;
 
       for (let i = 0; i < files.length; i++) {
@@ -65,8 +51,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        const localUri = await copyFileLocally(file.uri, fileName);
-        const pathForDb = decodeFilePath(localUri);
+        const pathForDb = decodeFilePath(file.uri);
 
         await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
         await loadKbDocs();
