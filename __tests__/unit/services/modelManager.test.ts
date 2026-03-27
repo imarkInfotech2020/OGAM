@@ -1073,10 +1073,10 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel(
-        '/path/to/source.gguf',
-        'MyModel-Q4_K_M.gguf'
-      );
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/source.gguf',
+        fileName: 'MyModel-Q4_K_M.gguf',
+      });
 
       expect(result.id).toBe('local_import/MyModel-Q4_K_M.gguf');
       expect(result.author).toBe('Local Import');
@@ -1086,7 +1086,7 @@ describe('ModelManager', () => {
 
     it('rejects non-.gguf files', async () => {
       await expect(
-        modelManager.importLocalModel('/path/to/model.bin', 'model.bin')
+        modelManager.importLocalModel({ sourceUri: '/path/to/model.bin', fileName: 'model.bin' })
       ).rejects.toThrow('Only .gguf files can be imported');
     });
 
@@ -1098,7 +1098,7 @@ describe('ModelManager', () => {
       mockedRNFS.stat.mockResolvedValue({ size: 1000, isFile: () => true } as any);
 
       await expect(
-        modelManager.importLocalModel('/path/to/source.gguf', 'existing.gguf')
+        modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'existing.gguf' })
       ).rejects.toThrow('already exists');
     });
 
@@ -1111,10 +1111,10 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel(
-        '/path/to/source.gguf',
-        'llama-3.2-3B-Q8_0.gguf'
-      );
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/source.gguf',
+        fileName: 'llama-3.2-3B-Q8_0.gguf',
+      });
 
       expect(result.quantization).toBe('Q8_0');
     });
@@ -1128,10 +1128,10 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel(
-        '/path/to/source.gguf',
-        'custom-model.gguf'
-      );
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/source.gguf',
+        fileName: 'custom-model.gguf',
+      });
 
       expect(result.quantization).toBe('Unknown');
     });
@@ -1145,7 +1145,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      await modelManager.importLocalModel('/path/to/source.gguf', 'imported.gguf');
+      await modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'imported.gguf' });
 
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         MODELS_STORAGE_KEY,
@@ -1162,7 +1162,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockRejectedValue(new Error('Copy failed'));
 
       await expect(
-        modelManager.importLocalModel('/path/to/source.gguf', 'fail.gguf')
+        modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'fail.gguf' })
       ).rejects.toThrow('Copy failed');
 
       // Partial file should be cleaned up
@@ -1179,11 +1179,11 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const onProgress = jest.fn();
-      await modelManager.importLocalModel(
-        '/path/to/source.gguf',
-        'progress-model.gguf',
-        onProgress
-      );
+      await modelManager.importLocalModel({
+        sourceUri: '/path/to/source.gguf',
+        fileName: 'progress-model.gguf',
+        onProgress,
+      });
 
       // At minimum, progress should be called with 1.0 at completion
       expect(onProgress).toHaveBeenCalledWith(
@@ -2261,7 +2261,7 @@ describe('ModelManager', () => {
       const existing = [{ id: 'local_import/model.gguf', name: 'Old', author: 'Local Import', filePath: '/old/model.gguf', fileName: 'model.gguf', fileSize: 3000000000, quantization: 'Q4', downloadedAt: '' }];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(existing));
 
-      const result = await modelManager.importLocalModel('/external/model.gguf', 'model.gguf');
+      const result = await modelManager.importLocalModel({ sourceUri: '/external/model.gguf', fileName: 'model.gguf' });
 
       expect(result.id).toBe('local_import/model.gguf');
     });
@@ -2359,10 +2359,10 @@ describe('ModelManager', () => {
       mockedRNFS.unlink.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel(
-        'content://com.android.provider/document/model.gguf',
-        'model-Q4_K_M.gguf'
-      );
+      const result = await modelManager.importLocalModel({
+        sourceUri: 'content://com.android.provider/document/model.gguf',
+        fileName: 'model-Q4_K_M.gguf',
+      });
 
       // copyFile should have been called for the content:// URI
       expect((mockedRNFS as any).copyFile).toHaveBeenCalledWith(
@@ -2405,11 +2405,11 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const onProgress = jest.fn();
-      await modelManager.importLocalModel(
-        '/source/model-Q4_K_M.gguf',
-        'model-Q4_K_M.gguf',
-        onProgress
-      );
+      await modelManager.importLocalModel({
+        sourceUri: '/source/model-Q4_K_M.gguf',
+        fileName: 'model-Q4_K_M.gguf',
+        onProgress,
+      });
 
       // progress callback should have been called
       expect(onProgress).toHaveBeenCalled();

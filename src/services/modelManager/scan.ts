@@ -197,33 +197,45 @@ export interface ImportLocalModelOpts {
   fileName: string;
   modelsDir: string;
   onProgress?: (progress: { fraction: number; fileName: string }) => void;
+  mmProjSourceUri?: string;
+  mmProjFileName?: string;
 }
 
-export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> {
-  const { sourceUri, fileName, modelsDir, onProgress } = opts;
+async function resolveAndroidUri(uri: string, cacheFileName: string): Promise<{ resolved: string; tempPath: string | null }> {
+  if (Platform.OS !== 'android' || !uri.startsWith('content://')) {
+    return { resolved: uri, tempPath: null };
+  }
+  const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${cacheFileName}`;
+  await RNFS.copyFile(uri, tempPath);
+  return { resolved: tempPath, tempPath };
+}
+
+
+export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
+  const { sourceUri, fileName, modelsDir, onProgress, mmProjSourceUri, mmProjFileName } = opts;
 
   if (!fileName.toLowerCase().endsWith('.gguf')) {
     throw new Error('Only .gguf files can be imported');
   }
 
-  let resolvedSource = sourceUri;
-  let tempCachePath: string | null = null;
-
-  if (Platform.OS === 'android' && sourceUri.startsWith('content://')) {
-    tempCachePath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
-    await RNFS.copyFile(sourceUri, tempCachePath);
-    resolvedSource = tempCachePath;
-  }
+  const { resolved: resolvedSource, tempPath: tempCachePath } = await resolveAndroidUri(sourceUri, fileName);
+  const { resolved: resolvedMmProjSource, tempPath: tempMmProjCachePath } = mmProjSourceUri && mmProjFileName
+    ? await resolveAndroidUri(mmProjSourceUri, mmProjFileName)
+    : { resolved: mmProjSourceUri, tempPath: null };
 
   try {
     const destPath = `${modelsDir}/${fileName}`;
-    const destExists = await RNFS.exists(destPath);
-    if (destExists) throw new Error(`A model file named "${fileName}" already exists`);
+    if (await RNFS.exists(destPath)) throw new Error(`A model file named "${fileName}" already exists`);
+    if (mmProjFileName && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
+      throw new Error(`A file named "${mmProjFileName}" already exists`);
+    }
 
+    // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
+    const mainProgressScale = mmProjFileName ? 0.5 : 1;
     await copyFileWithProgress(
       resolvedSource,
       destPath,
-      onProgress ? (fraction) => onProgress({ fraction, fileName }) : undefined,
+      onProgress ? (fraction) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
     );
 
     const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
@@ -242,12 +254,28 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
       credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
     };
 
+    // Copy mmproj and link it to the model: progress 0.5→1
+    if (mmProjFileName && resolvedMmProjSource) {
+      const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
+      await copyFileWithProgress(
+        resolvedMmProjSource,
+        mmProjDestPath,
+        onProgress
+          ? (fraction) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
+          : undefined,
+      );
+      const mmProjStat = await RNFS.stat(mmProjDestPath);
+      builtModel.mmProjPath = mmProjDestPath;
+      builtModel.mmProjFileName = mmProjFileName;
+      builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+      builtModel.isVisionModel = true;
+    }
+
     await persistDownloadedModel(builtModel, modelsDir);
     return builtModel;
   } finally {
-    if (tempCachePath) {
-      await RNFS.unlink(tempCachePath).catch(() => {});
-    }
+    if (tempCachePath) await RNFS.unlink(tempCachePath).catch(() => {});
+    if (tempMmProjCachePath) await RNFS.unlink(tempMmProjCachePath).catch(() => {});
   }
 }
 
