@@ -270,9 +270,11 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
       "Unet.mlmodelc",
       "VAEDecoder.mlmodelc",
     ])
+    addTeardownBlock {
+      try FileManager.default.removeItem(at: url)
+    }
 
     XCTAssertNil(CoreMLDiffusionModule.validateModelDirectory(at: url))
-    try? FileManager.default.removeItem(at: url)
   }
 
   func testValidateModelDirectoryAcceptsChunkedSDXLLayout() {
@@ -283,10 +285,12 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
       "UnetChunk2.mlmodelc",
       "VAEDecoder.mlmodelc",
     ])
+    addTeardownBlock {
+      try FileManager.default.removeItem(at: url)
+    }
 
     XCTAssertTrue(CoreMLDiffusionModule.isXLModelDirectory(at: url))
     XCTAssertNil(CoreMLDiffusionModule.validateModelDirectory(at: url))
-    try? FileManager.default.removeItem(at: url)
   }
 
   func testValidateModelDirectoryRejectsIncompleteChunkedSDXLLayout() {
@@ -296,12 +300,14 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
       "UnetChunk1.mlmodelc",
       "VAEDecoder.mlmodelc",
     ])
+    addTeardownBlock {
+      try FileManager.default.removeItem(at: url)
+    }
 
     XCTAssertEqual(
       CoreMLDiffusionModule.validateModelDirectory(at: url),
       "Missing required model component: Unet.mlmodelc or UnetChunk1.mlmodelc + UnetChunk2.mlmodelc"
     )
-    try? FileManager.default.removeItem(at: url)
   }
 
   // MARK: initial state queries
