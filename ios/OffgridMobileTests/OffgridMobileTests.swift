@@ -13,6 +13,13 @@ private enum TestPaths {
   static let tmpShouldNotExist = "/tmp/should-not-exist.gguf"
 }
 
+private func makeTempDirectory() -> URL {
+  let url = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  return url
+}
+
 // MARK: - PDFExtractorModule Tests
 
 final class PDFExtractorModuleTests: XCTestCase {
@@ -231,6 +238,17 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
     module = CoreMLDiffusionModule()
   }
 
+  private func makeModelDirectory(components: [String]) -> URL {
+    let url = makeTempDirectory()
+    for component in components {
+      try! FileManager.default.createDirectory(
+        at: url.appendingPathComponent(component),
+        withIntermediateDirectories: true
+      )
+    }
+    return url
+  }
+
   // MARK: requiresMainQueueSetup
 
   func testRequiresMainQueueSetupReturnsFalse() {
@@ -244,6 +262,46 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
     XCTAssertTrue(events.contains("LocalDreamProgress"))
     XCTAssertTrue(events.contains("LocalDreamError"))
     XCTAssertEqual(events.count, 2)
+  }
+
+  func testValidateModelDirectoryAcceptsStandardUnetLayout() {
+    let url = makeModelDirectory(components: [
+      "TextEncoder.mlmodelc",
+      "Unet.mlmodelc",
+      "VAEDecoder.mlmodelc",
+    ])
+
+    XCTAssertNil(CoreMLDiffusionModule.validateModelDirectory(at: url))
+    try? FileManager.default.removeItem(at: url)
+  }
+
+  func testValidateModelDirectoryAcceptsChunkedSDXLLayout() {
+    let url = makeModelDirectory(components: [
+      "TextEncoder.mlmodelc",
+      "TextEncoder2.mlmodelc",
+      "UnetChunk1.mlmodelc",
+      "UnetChunk2.mlmodelc",
+      "VAEDecoder.mlmodelc",
+    ])
+
+    XCTAssertTrue(CoreMLDiffusionModule.isXLModelDirectory(at: url))
+    XCTAssertNil(CoreMLDiffusionModule.validateModelDirectory(at: url))
+    try? FileManager.default.removeItem(at: url)
+  }
+
+  func testValidateModelDirectoryRejectsIncompleteChunkedSDXLLayout() {
+    let url = makeModelDirectory(components: [
+      "TextEncoder.mlmodelc",
+      "TextEncoder2.mlmodelc",
+      "UnetChunk1.mlmodelc",
+      "VAEDecoder.mlmodelc",
+    ])
+
+    XCTAssertEqual(
+      CoreMLDiffusionModule.validateModelDirectory(at: url),
+      "Missing required model component: Unet.mlmodelc or UnetChunk1.mlmodelc + UnetChunk2.mlmodelc"
+    )
+    try? FileManager.default.removeItem(at: url)
   }
 
   // MARK: initial state queries

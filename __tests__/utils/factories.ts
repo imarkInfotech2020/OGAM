@@ -282,6 +282,7 @@ export interface ONNXImageModelFactoryOptions {
   size?: number;
   style?: string;
   backend?: 'mnn' | 'qnn' | 'coreml';
+  attentionVariant?: 'split_einsum' | 'original';
 }
 
 export const createONNXImageModel = (options: ONNXImageModelFactoryOptions = {}): ONNXImageModel => ({
@@ -293,6 +294,7 @@ export const createONNXImageModel = (options: ONNXImageModelFactoryOptions = {})
   size: options.size ?? 2 * 1024 * 1024 * 1024, // 2GB
   style: options.style ?? 'creative',
   backend: options.backend ?? 'mnn',
+  attentionVariant: options.attentionVariant,
 });
 
 // ============================================================================
