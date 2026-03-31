@@ -77,8 +77,6 @@ class BackgroundDownloadService {
       throw new Error('Background downloads not available on this platform');
     }
 
-    await this.checkAndPromptBatteryOptimization();
-
     const result = await DownloadManagerModule.startDownload({
       url: params.url,
       fileName: params.fileName,

@@ -35,7 +35,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
         internal const val WATCHDOG_INTERVAL_MS = 15_000L  // Check every 15 seconds
-        internal const val STUCK_THRESHOLD = 3             // 3 × 15s = 45 seconds of zero progress
+        internal const val STUCK_THRESHOLD = 3             // 3 × 15s = 45 seconds of zero progress after first byte
+        internal const val STARTUP_TIMEOUT_POLLS = 8       // 8 × 15s = 2 minutes waiting for first byte before giving up
         internal const val MAX_RETRY_ATTEMPTS = 3          // give up after 3 retries
 
         internal const val STATUS_PENDING = "pending"
@@ -129,13 +130,22 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         internal fun evaluateStuckProgress(track: BytesTrack, currentBytes: Long): StuckAction {
             val bytesDelta = currentBytes - track.lastBytes
             if (bytesDelta > 0) {
+                // Progress made — reset stuck counter
                 return StuckAction.ResetCounter(BytesTrack(currentBytes, 0, track.retryCount))
             }
+
             val newCount = track.unchangedCount + 1
+
+            if (track.lastBytes == 0L && currentBytes == 0L) {
+                // Download hasn't received its first byte yet (still connecting / CDN handshake).
+                // Wait up to STARTUP_TIMEOUT_POLLS before giving up — no auto-retry, let the user decide.
+                if (newCount >= STARTUP_TIMEOUT_POLLS) return StuckAction.StartupTimeout
+                return StuckAction.IncrementCounter(BytesTrack(0L, newCount, track.retryCount))
+            }
+
+            // Was downloading but has now frozen — use the shorter stuck threshold
             if (newCount >= STUCK_THRESHOLD) {
-                if (track.retryCount >= MAX_RETRY_ATTEMPTS) {
-                    return StuckAction.GiveUp
-                }
+                if (track.retryCount >= MAX_RETRY_ATTEMPTS) return StuckAction.GiveUp
                 return StuckAction.Retry(track.retryCount + 1)
             }
             return StuckAction.IncrementCounter(BytesTrack(track.lastBytes, newCount, track.retryCount))
@@ -158,6 +168,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         data class IncrementCounter(val newTrack: BytesTrack) : StuckAction()
         data class Retry(val retryCount: Int) : StuckAction()
         object GiveUp : StuckAction()
+        object StartupTimeout : StuckAction() // never received first byte — let user retry
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -340,7 +351,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
             downloadManager.remove(id)
             removeDownload(id)
-            downloadBytesTracker.remove(id)
+            handler.post { downloadBytesTracker.remove(id) }
 
             // Clean up partial file
             downloadInfo?.optString("fileName")?.let { fileName ->
@@ -630,22 +641,36 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     downloadBytesTracker[downloadId] = action.newTrack
                 }
                 is StuckAction.IncrementCounter -> {
-                    val stuckMinutes = action.newTrack.unchangedCount * WATCHDOG_INTERVAL_MS / 60_000
-                    android.util.Log.w("DownloadService", "No progress for ${stuckMinutes}m on download $downloadId (${action.newTrack.unchangedCount}/$STUCK_THRESHOLD checks)")
+                    val elapsedSeconds = action.newTrack.unchangedCount * WATCHDOG_INTERVAL_MS / 1000
+                    if (action.newTrack.lastBytes == 0L) {
+                        android.util.Log.d("DownloadService", "Waiting for first byte on download $downloadId (${elapsedSeconds}s elapsed, timeout: ${STARTUP_TIMEOUT_POLLS * WATCHDOG_INTERVAL_MS / 1000}s)")
+                    } else {
+                        android.util.Log.w("DownloadService", "No progress for ${elapsedSeconds}s on download $downloadId (${action.newTrack.unchangedCount}/$STUCK_THRESHOLD checks)")
+                    }
                     downloadBytesTracker[downloadId] = action.newTrack
                 }
                 is StuckAction.Retry -> {
-                    val stuckMinutes = STUCK_THRESHOLD * WATCHDOG_INTERVAL_MS / 60_000
-                    android.util.Log.w("DownloadService", "Download $downloadId stuck for ${stuckMinutes}m — retrying (attempt ${action.retryCount}/$MAX_RETRY_ATTEMPTS)")
+                    val stuckSeconds = STUCK_THRESHOLD * WATCHDOG_INTERVAL_MS / 1000
+                    android.util.Log.w("DownloadService", "Download $downloadId stuck for ${stuckSeconds}s — retrying (attempt ${action.retryCount}/$MAX_RETRY_ATTEMPTS)")
                     downloadBytesTracker.remove(downloadId)
                     handleStuckDownload(downloadId, bytesDownloaded, download, action.retryCount)
                 }
                 is StuckAction.GiveUp -> {
-                    val stuckMinutes = STUCK_THRESHOLD * WATCHDOG_INTERVAL_MS / 60_000
-                    android.util.Log.e("DownloadService", "Download $downloadId gave up after ${track.retryCount} retries (stuck for ${stuckMinutes}m)")
+                    android.util.Log.e("DownloadService", "Download $downloadId gave up after ${track.retryCount} retries")
                     downloadBytesTracker.remove(downloadId)
                     sendEvent("DownloadError", buildEventParams(downloadId, download, queryDownloadStatus(downloadId), STATUS_FAILED).also {
                         it.putString("reason", "Download stuck after ${track.retryCount} retries")
+                    })
+                    downloadManager.remove(downloadId)
+                    removeDownload(downloadId)
+                    stopForegroundServiceIfIdle("failed")
+                    return
+                }
+                is StuckAction.StartupTimeout -> {
+                    android.util.Log.e("DownloadService", "Download $downloadId failed to start after ${STARTUP_TIMEOUT_POLLS * WATCHDOG_INTERVAL_MS / 1000}s — no bytes received")
+                    downloadBytesTracker.remove(downloadId)
+                    sendEvent("DownloadError", buildEventParams(downloadId, download, queryDownloadStatus(downloadId), STATUS_FAILED).also {
+                        it.putString("reason", "Download failed to start — please check your connection and try again")
                     })
                     downloadManager.remove(downloadId)
                     removeDownload(downloadId)
@@ -665,11 +690,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         val modelId = downloadInfo.optString("modelId", "")
         val totalBytes = downloadInfo.optLong("totalBytes", 0L)
 
+        // Step 1: resolve URL and delete partial file on background executor (network/IO)
         executor.execute {
             try {
                 val resolvedUrl = resolveRedirects(url)
 
-                // Delete partial file so DownloadManager doesn't auto-rename (e.g. file-1.gguf)
                 val partialFile = File(
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                     fileName
@@ -679,48 +704,51 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     partialFile.delete()
                 }
 
-                // Backoff before re-enqueue: 30s × retry attempt (30s, 60s, 90s)
+                // Step 2: backoff using postDelayed — does NOT block the executor thread
                 val backoffMs = retryCount * 30_000L
-                android.util.Log.d("DownloadService", "Backoff ${backoffMs / 1000}s before re-enqueue")
-                Thread.sleep(backoffMs)
+                android.util.Log.d("DownloadService", "Backoff ${backoffMs / 1000}s before re-enqueue (retry $retryCount/$MAX_RETRY_ATTEMPTS)")
 
-                val request = DownloadManager.Request(Uri.parse(resolvedUrl))
-                    .setTitle(title)
-                    .setDescription("Downloading model...")
-                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    .setDestinationInExternalFilesDir(
-                        reactApplicationContext,
-                        Environment.DIRECTORY_DOWNLOADS,
-                        fileName
-                    )
-                    .setAllowedOverMetered(true)
-                    .setAllowedOverRoaming(true)
+                watchdogHandler.postDelayed({
+                    try {
+                        val request = DownloadManager.Request(Uri.parse(resolvedUrl))
+                            .setTitle(title)
+                            .setDescription("Downloading model...")
+                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            .setDestinationInExternalFilesDir(
+                                reactApplicationContext,
+                                Environment.DIRECTORY_DOWNLOADS,
+                                fileName
+                            )
+                            .setAllowedOverMetered(true)
+                            .setAllowedOverRoaming(true)
 
-                val newDownloadId = downloadManager.enqueue(request)
+                        val newDownloadId = downloadManager.enqueue(request)
 
-                // Persist new entry first, then remove old — avoids a gap where
-                // SharedPreferences is empty and the poll loop stops the foreground service
-                val newInfo = JSONObject().apply {
-                    put("downloadId", newDownloadId)
-                    put("url", url)
-                    put("fileName", fileName)
-                    put("modelId", modelId)
-                    put("title", title)
-                    put("totalBytes", totalBytes)
-                    put("status", STATUS_PENDING)
-                    put("startedAt", System.currentTimeMillis())
-                }
-                persistDownload(newDownloadId, newInfo)
-                downloadManager.remove(downloadId)
-                removeDownload(downloadId)
+                        // Persist new entry first, then remove old — avoids a gap where
+                        // SharedPreferences is empty and the poll loop stops the foreground service
+                        val newInfo = JSONObject().apply {
+                            put("downloadId", newDownloadId)
+                            put("url", url)
+                            put("fileName", fileName)
+                            put("modelId", modelId)
+                            put("title", title)
+                            put("totalBytes", totalBytes)
+                            put("status", STATUS_PENDING)
+                            put("startedAt", System.currentTimeMillis())
+                        }
+                        persistDownload(newDownloadId, newInfo)
+                        downloadManager.remove(downloadId)
+                        removeDownload(downloadId)
 
-                // Seed tracker with current retry count so the watchdog knows how many attempts remain
-                handler.post { downloadBytesTracker[newDownloadId] = BytesTrack(0L, 0, retryCount) }
-
-                android.util.Log.d("DownloadService", "Re-enqueued - new id: $newDownloadId (replaced: $downloadId, retry $retryCount/$MAX_RETRY_ATTEMPTS)")
+                        downloadBytesTracker[newDownloadId] = BytesTrack(0L, 0, retryCount)
+                        android.util.Log.d("DownloadService", "Re-enqueued - new id: $newDownloadId (replaced: $downloadId, retry $retryCount/$MAX_RETRY_ATTEMPTS)")
+                    } catch (e: Exception) {
+                        android.util.Log.e("DownloadService", "Failed to re-enqueue stuck download $downloadId: ${e.message}")
+                    }
+                }, backoffMs)
 
             } catch (e: Exception) {
-                android.util.Log.e("DownloadService", "Failed to restart stuck download $downloadId: ${e.message}")
+                android.util.Log.e("DownloadService", "Failed to prepare retry for stuck download $downloadId: ${e.message}")
             }
         }
     }

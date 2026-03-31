@@ -517,6 +517,45 @@ class DownloadManagerModuleTest {
     }
 
     @Test
+    fun `zero bytes on first poll increments startup counter but does not retry`() {
+        // Download just started — still connecting. Should increment but not trigger retry yet.
+        val result = DownloadManagerModule.evaluateStuckProgress(track(0L, 0), currentBytes = 0L)
+        assertTrue(result is DownloadManagerModule.StuckAction.IncrementCounter)
+        val inc = result as DownloadManagerModule.StuckAction.IncrementCounter
+        assertEquals(1, inc.newTrack.unchangedCount)
+    }
+
+    @Test
+    fun `zero bytes below startup timeout does not trigger retry`() {
+        // Simulate polls at 0 bytes — should not retry until STARTUP_TIMEOUT_POLLS is hit
+        val belowTimeout = DownloadManagerModule.STARTUP_TIMEOUT_POLLS - 1
+        val result = DownloadManagerModule.evaluateStuckProgress(track(0L, belowTimeout - 1), currentBytes = 0L)
+        assertTrue(result is DownloadManagerModule.StuckAction.IncrementCounter)
+    }
+
+    @Test
+    fun `zero bytes at startup timeout fires StartupTimeout not Retry`() {
+        // After STARTUP_TIMEOUT_POLLS of never receiving a byte, give up — let user retry manually
+        val timeout = DownloadManagerModule.STARTUP_TIMEOUT_POLLS
+        val result = DownloadManagerModule.evaluateStuckProgress(track(0L, timeout - 1), currentBytes = 0L)
+        assertTrue(result is DownloadManagerModule.StuckAction.StartupTimeout)
+    }
+
+    @Test
+    fun `zero bytes startup timeout is 2 minutes (8 x 15s)`() {
+        assertEquals(120_000L, DownloadManagerModule.STARTUP_TIMEOUT_POLLS * DownloadManagerModule.WATCHDOG_INTERVAL_MS)
+    }
+
+    @Test
+    fun `stuck detection only starts after first byte received`() {
+        // Once bytes > 0 then stop, THAT is when the short stuck threshold kicks in
+        val result = DownloadManagerModule.evaluateStuckProgress(track(1000L, 0), currentBytes = 1000L)
+        assertTrue(result is DownloadManagerModule.StuckAction.IncrementCounter)
+        val inc = result as DownloadManagerModule.StuckAction.IncrementCounter
+        assertEquals(1, inc.newTrack.unchangedCount)
+    }
+
+    @Test
     fun `backoff for retry 1 is 30 seconds`() {
         // Backoff is retryCount * 30_000ms, independent of watchdog interval
         assertEquals(30_000L, 1 * 30_000L)
