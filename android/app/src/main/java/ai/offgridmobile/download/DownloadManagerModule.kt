@@ -2,12 +2,20 @@ package ai.offgridmobile.download
 
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.database.Cursor
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import org.json.JSONArray
@@ -17,6 +25,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
+
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
@@ -25,6 +34,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         const val PREFS_NAME = "OffgridMobileDownloads"
         const val DOWNLOADS_KEY = "active_downloads"
         private const val POLL_INTERVAL_MS = 500L
+        internal const val WATCHDOG_INTERVAL_MS = 15_000L  // Check every 15 seconds
+        internal const val STUCK_THRESHOLD = 3             // 3 × 15s = 45 seconds of zero progress
+        internal const val MAX_RETRY_ATTEMPTS = 3          // give up after 3 retries
 
         internal const val STATUS_PENDING = "pending"
         internal const val STATUS_RUNNING = "running"
@@ -113,6 +125,38 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
             return false
         }
+
+        /**
+         * Pure function that decides what to do with a download based on byte progress.
+         * Called by the watchdog on each poll interval.
+         *
+         * Returns one of:
+         * - [StuckAction.ResetCounter] — progress was made, reset the stuck counter
+         * - [StuckAction.IncrementCounter] — no progress, increment counter (not stuck yet)
+         * - [StuckAction.Retry] — stuck threshold reached, retry the download
+         * - [StuckAction.GiveUp] — max retries exhausted, give up
+         */
+        internal sealed class StuckAction {
+            data class ResetCounter(val newTrack: BytesTrack) : StuckAction()
+            data class IncrementCounter(val newTrack: BytesTrack) : StuckAction()
+            data class Retry(val retryCount: Int) : StuckAction()
+            object GiveUp : StuckAction()
+        }
+
+        internal fun evaluateStuckProgress(track: BytesTrack, currentBytes: Long): StuckAction {
+            val bytesDelta = currentBytes - track.lastBytes
+            if (bytesDelta > 0) {
+                return StuckAction.ResetCounter(BytesTrack(currentBytes, 0, track.retryCount))
+            }
+            val newCount = track.unchangedCount + 1
+            if (newCount >= STUCK_THRESHOLD) {
+                if (track.retryCount >= MAX_RETRY_ATTEMPTS) {
+                    return StuckAction.GiveUp
+                }
+                return StuckAction.Retry(track.retryCount + 1)
+            }
+            return StuckAction.IncrementCounter(BytesTrack(track.lastBytes, newCount, track.retryCount))
+        }
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -131,6 +175,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         reactApplicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    // --- Progress polling (500ms) ---
     private val handler = Handler(Looper.getMainLooper())
     private var isPolling = false
     private val pollRunnable = object : Runnable {
@@ -142,10 +187,47 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    // --- Stuck-download watchdog ---
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    internal data class BytesTrack(val lastBytes: Long, val unchangedCount: Int, val retryCount: Int = 0)
+    private val downloadBytesTracker = mutableMapOf<Long, BytesTrack>()
+
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            if (isPolling && networkAvailable) {
+                checkForStuckDownloads()
+            }
+            if (isPolling) {
+                watchdogHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+            }
+        }
+    }
+
+    // --- Network connectivity ---
+    @Volatile private var networkAvailable = true
+    private var networkCallbackRegistered = false
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            android.util.Log.d("DownloadService", "Network available - checking download status")
+            networkAvailable = true
+            handler.post { checkNetworkRestored() }
+        }
+
+        override fun onLost(network: Network) {
+            android.util.Log.d("DownloadService", "Network lost - download paused")
+            networkAvailable = false
+        }
+    }
+
     override fun getName(): String = NAME
 
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
+        isPolling = false
+        handler.removeCallbacks(pollRunnable)
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+        unregisterNetworkCallback()
         if (!executor.isShutdown) {
             executor.shutdown()
         }
@@ -184,7 +266,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     fileName
                 )
                 if (existingFile.exists()) {
-                    android.util.Log.d("DownloadManager", "Deleting existing file before download: ${existingFile.absolutePath}")
+                    android.util.Log.d("DownloadService", "Deleting existing file before download: ${existingFile.absolutePath}")
                     existingFile.delete()
                 }
 
@@ -195,7 +277,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 // HuggingFace returns a 302 redirect to a long signed CDN URL (~1350 chars)
                 // that some OEM DownloadManager implementations fail to follow silently.
                 val resolvedUrl = resolveRedirects(url)
-                android.util.Log.d("DownloadManager", "Resolved URL: ${resolvedUrl.take(120)}...")
+                android.util.Log.d("DownloadService", "Resolved URL: ${resolvedUrl.take(120)}...")
 
                 val request = DownloadManager.Request(Uri.parse(resolvedUrl))
                     .setTitle(title)
@@ -213,12 +295,13 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     .setAllowedOverRoaming(true)
 
                 val downloadId = downloadManager.enqueue(request)
+                android.util.Log.d("DownloadService", "Download enqueued - id: $downloadId | file: $fileName")
 
                 // Start foreground service to prevent Android from throttling the download
                 try {
-                    DownloadForegroundService.start(reactApplicationContext, title)
+                    DownloadForegroundService.start(reactApplicationContext, title, downloadId)
                 } catch (e: Exception) {
-                    android.util.Log.w("DownloadManager", "Failed to start foreground service (non-fatal)", e)
+                    android.util.Log.w("DownloadService", "Failed to start foreground service (non-fatal)", e)
                 }
 
                 // Persist download info
@@ -250,12 +333,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun cancelDownload(downloadId: Double, promise: Promise) {
         try {
             val id = downloadId.toLong()
+            android.util.Log.d("DownloadService", "Cancelling download - id: $id")
 
             // Get download info BEFORE removing from SharedPreferences
             val downloadInfo = getDownloadInfo(id)
 
             downloadManager.remove(id)
             removeDownload(id)
+            downloadBytesTracker.remove(id)
 
             // Clean up partial file
             downloadInfo?.optString("fileName")?.let { fileName ->
@@ -268,7 +353,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
             }
 
-            stopForegroundServiceIfIdle()
+            stopForegroundServiceIfIdle("cancelled")
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
@@ -350,11 +435,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         val uriFile = File(path)
                         if (uriFile.exists()) {
                             sourceFile = uriFile
-                            android.util.Log.d("DownloadManager", "Using DownloadManager localUri: ${uriFile.absolutePath}")
+                            android.util.Log.d("DownloadService", "Using DownloadManager localUri: ${uriFile.absolutePath}")
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("DownloadManager", "Failed to resolve localUri: $localUri", e)
+                    android.util.Log.w("DownloadService", "Failed to resolve localUri: $localUri", e)
                 }
             }
 
@@ -364,7 +449,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                     fileName
                 )
-                android.util.Log.d("DownloadManager", "Using persisted fileName: ${sourceFile.absolutePath}")
+                android.util.Log.d("DownloadService", "Using persisted fileName: ${sourceFile.absolutePath}")
             }
 
             if (!sourceFile.exists()) {
@@ -382,7 +467,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 // If rename fails (different filesystem), copy then delete
                 sourceFile.copyTo(targetFile, overwrite = true)
                 if (!sourceFile.delete()) {
-                    android.util.Log.w("DownloadManager", "Failed to delete source file: ${sourceFile.absolutePath}")
+                    android.util.Log.w("DownloadService", "Failed to delete source file: ${sourceFile.absolutePath}")
                 }
                 markMoveCompleted(id)
                 promise.resolve(targetFile.absolutePath)
@@ -397,6 +482,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         if (!isPolling) {
             isPolling = true
             handler.post(pollRunnable)
+            watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_INTERVAL_MS)
+            registerNetworkCallback()
         }
     }
 
@@ -404,6 +491,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun stopProgressPolling() {
         isPolling = false
         handler.removeCallbacks(pollRunnable)
+        watchdogHandler.removeCallbacks(watchdogRunnable)
+        unregisterNetworkCallback()
     }
 
     @ReactMethod
@@ -415,6 +504,230 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun removeListeners(count: Int) {
         // Required for RN event emitter
     }
+
+    /**
+     * Returns true if the app is already excluded from battery optimization.
+     * On Android < M this always returns true (feature doesn't exist).
+     */
+    @ReactMethod
+    fun isBatteryOptimizationIgnored(promise: Promise) {
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                promise.resolve(true)
+                return
+            }
+            val pm = reactApplicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val ignored = pm.isIgnoringBatteryOptimizations(reactApplicationContext.packageName)
+            android.util.Log.d("DownloadService", "Battery optimization ignored: $ignored")
+            promise.resolve(ignored)
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadService", "Failed to check battery optimization: ${e.message}")
+            promise.resolve(true) // fail open — don't block downloads
+        }
+    }
+
+    /**
+     * Opens the system dialog asking the user to exempt this app from battery optimization.
+     * No-op on Android < M.
+     */
+    @ReactMethod
+    fun requestBatteryOptimizationIgnore() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${reactApplicationContext.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            reactApplicationContext.startActivity(intent)
+            android.util.Log.d("DownloadService", "Opened battery optimization settings")
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadService", "Failed to open battery optimization settings: ${e.message}")
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Network connectivity
+    // -------------------------------------------------------------------------
+
+    private fun registerNetworkCallback() {
+        if (networkCallbackRegistered) return
+        try {
+            val cm = reactApplicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(request, networkCallback)
+            networkCallbackRegistered = true
+            android.util.Log.d("DownloadService", "Network callback registered")
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadService", "Failed to register network callback: ${e.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        if (!networkCallbackRegistered) return
+        try {
+            val cm = reactApplicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            cm.unregisterNetworkCallback(networkCallback)
+            networkCallbackRegistered = false
+            android.util.Log.d("DownloadService", "Network callback unregistered")
+        } catch (e: Exception) {
+            android.util.Log.w("DownloadService", "Failed to unregister network callback: ${e.message}")
+        }
+    }
+
+    private fun checkNetworkRestored() {
+        val downloads = getAllPersistedDownloads()
+        for (i in 0 until downloads.length()) {
+            val download = downloads.getJSONObject(i)
+            val downloadId = download.getLong("downloadId")
+            val statusInfo = queryDownloadStatus(downloadId)
+            val status = statusInfo.getString("status") ?: STATUS_UNKNOWN
+            val reason = statusInfo.getString("reason") ?: ""
+            android.util.Log.d("DownloadService", "Download status: ${status.uppercase()} - reason: $reason - id: $downloadId")
+            if (status == STATUS_PAUSED) {
+                android.util.Log.d("DownloadService", "Download $downloadId paused - DownloadManager will auto-resume")
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Stuck-download watchdog
+    // -------------------------------------------------------------------------
+
+    private fun checkForStuckDownloads() {
+        val downloads = getAllPersistedDownloads()
+        for (i in 0 until downloads.length()) {
+            val download = downloads.getJSONObject(i)
+            val downloadId = download.getLong("downloadId")
+
+            val statusInfo = queryDownloadStatus(downloadId)
+            val status = statusInfo.getString("status") ?: STATUS_UNKNOWN
+            val reason = statusInfo.getString("reason") ?: ""
+
+            android.util.Log.d("DownloadService", "Download status: ${status.uppercase()} - reason: $reason - id: $downloadId")
+
+            if (status != STATUS_RUNNING) {
+                downloadBytesTracker.remove(downloadId)
+                continue
+            }
+
+            val bytesDownloaded = statusInfo.getDouble("bytesDownloaded").toLong()
+            val totalBytes = (statusInfo.getDouble("totalBytes").takeIf { it > 0 }
+                ?: download.optDouble("totalBytes", 0.0)).toLong()
+            val percent = if (totalBytes > 0) (bytesDownloaded * 100 / totalBytes) else 0
+
+            android.util.Log.d("DownloadService", "Progress - id: $downloadId | bytes: $bytesDownloaded / $totalBytes | percent: $percent%")
+
+            val track = downloadBytesTracker[downloadId]
+            if (track == null) {
+                downloadBytesTracker[downloadId] = BytesTrack(bytesDownloaded, 0)
+                continue
+            }
+
+            when (val action = evaluateStuckProgress(track, bytesDownloaded)) {
+                is StuckAction.ResetCounter -> {
+                    downloadBytesTracker[downloadId] = action.newTrack
+                }
+                is StuckAction.IncrementCounter -> {
+                    val stuckMinutes = action.newTrack.unchangedCount * WATCHDOG_INTERVAL_MS / 60_000
+                    android.util.Log.w("DownloadService", "No progress for ${stuckMinutes}m on download $downloadId (${action.newTrack.unchangedCount}/$STUCK_THRESHOLD checks)")
+                    downloadBytesTracker[downloadId] = action.newTrack
+                }
+                is StuckAction.Retry -> {
+                    val stuckMinutes = STUCK_THRESHOLD * WATCHDOG_INTERVAL_MS / 60_000
+                    android.util.Log.w("DownloadService", "Download $downloadId stuck for ${stuckMinutes}m — retrying (attempt ${action.retryCount}/$MAX_RETRY_ATTEMPTS)")
+                    downloadBytesTracker.remove(downloadId)
+                    handleStuckDownload(downloadId, bytesDownloaded, download, action.retryCount)
+                }
+                is StuckAction.GiveUp -> {
+                    val stuckMinutes = STUCK_THRESHOLD * WATCHDOG_INTERVAL_MS / 60_000
+                    android.util.Log.e("DownloadService", "Download $downloadId gave up after ${track.retryCount} retries (stuck for ${stuckMinutes}m)")
+                    downloadBytesTracker.remove(downloadId)
+                    sendEvent("DownloadError", buildEventParams(downloadId, download, queryDownloadStatus(downloadId), STATUS_FAILED).also {
+                        it.putString("reason", "Download stuck after ${track.retryCount} retries")
+                    })
+                    downloadManager.remove(downloadId)
+                    removeDownload(downloadId)
+                    stopForegroundServiceIfIdle("failed")
+                    return
+                }
+            }
+        }
+    }
+
+    private fun handleStuckDownload(downloadId: Long, bytesDownloaded: Long, downloadInfo: JSONObject, retryCount: Int = 1) {
+        android.util.Log.w("DownloadService", "Restarting stuck download - id: $downloadId (attempt $retryCount/$MAX_RETRY_ATTEMPTS)")
+
+        val url = downloadInfo.optString("url", "")
+        val fileName = downloadInfo.optString("fileName", "")
+        val title = downloadInfo.optString("title", fileName)
+        val modelId = downloadInfo.optString("modelId", "")
+        val totalBytes = downloadInfo.optLong("totalBytes", 0L)
+
+        executor.execute {
+            try {
+                val resolvedUrl = resolveRedirects(url)
+
+                // Delete partial file so DownloadManager doesn't auto-rename (e.g. file-1.gguf)
+                val partialFile = File(
+                    reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    fileName
+                )
+                if (partialFile.exists()) {
+                    android.util.Log.d("DownloadService", "Deleting partial file (${partialFile.length()}B): ${partialFile.name}")
+                    partialFile.delete()
+                }
+
+                // Backoff before re-enqueue: 30s × retry attempt (30s, 60s, 90s)
+                val backoffMs = retryCount * 30_000L
+                android.util.Log.d("DownloadService", "Backoff ${backoffMs / 1000}s before re-enqueue")
+                Thread.sleep(backoffMs)
+
+                val request = DownloadManager.Request(Uri.parse(resolvedUrl))
+                    .setTitle(title)
+                    .setDescription("Downloading model...")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalFilesDir(
+                        reactApplicationContext,
+                        Environment.DIRECTORY_DOWNLOADS,
+                        fileName
+                    )
+                    .setAllowedOverMetered(true)
+                    .setAllowedOverRoaming(true)
+
+                val newDownloadId = downloadManager.enqueue(request)
+
+                // Persist new entry first, then remove old — avoids a gap where
+                // SharedPreferences is empty and the poll loop stops the foreground service
+                val newInfo = JSONObject().apply {
+                    put("downloadId", newDownloadId)
+                    put("url", url)
+                    put("fileName", fileName)
+                    put("modelId", modelId)
+                    put("title", title)
+                    put("totalBytes", totalBytes)
+                    put("status", STATUS_PENDING)
+                    put("startedAt", System.currentTimeMillis())
+                }
+                persistDownload(newDownloadId, newInfo)
+                downloadManager.remove(downloadId)
+                removeDownload(downloadId)
+
+                // Seed tracker with current retry count so the watchdog knows how many attempts remain
+                handler.post { downloadBytesTracker[newDownloadId] = BytesTrack(0L, 0, retryCount) }
+
+                android.util.Log.d("DownloadService", "Re-enqueued - new id: $newDownloadId (replaced: $downloadId, retry $retryCount/$MAX_RETRY_ATTEMPTS)")
+
+            } catch (e: Exception) {
+                android.util.Log.e("DownloadService", "Failed to restart stuck download $downloadId: ${e.message}")
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // URL redirect resolution
+    // -------------------------------------------------------------------------
 
     private fun isHostAllowed(host: String?): Boolean {
         if (host == null) return false
@@ -439,7 +752,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
             val nextHost = try { URL(nextUrl).host } catch (_: Exception) { null }
             if (!isHostAllowed(nextHost)) {
-                android.util.Log.w("DownloadManager", "Redirect to unauthorized host blocked: $nextHost")
+                android.util.Log.w("DownloadService", "Redirect to unauthorized host blocked: $nextHost")
                 return null
             }
             return nextUrl
@@ -462,13 +775,17 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val nextUrl = followOneRedirect(currentUrl) ?: return currentUrl
                 currentUrl = nextUrl
             } catch (e: Exception) {
-                android.util.Log.w("DownloadManager", "Redirect resolution failed, using original URL", e)
+                android.util.Log.w("DownloadService", "Redirect resolution failed, using original URL", e)
                 return originalUrl
             }
         }
-        android.util.Log.w("DownloadManager", "Redirect resolution exceeded max redirects ($maxRedirects), using original URL")
+        android.util.Log.w("DownloadService", "Redirect resolution exceeded max redirects ($maxRedirects), using original URL")
         return originalUrl
     }
+
+    // -------------------------------------------------------------------------
+    // Progress polling helpers
+    // -------------------------------------------------------------------------
 
     private fun buildEventParams(
         downloadId: Long, download: JSONObject, statusInfo: ReadableMap, status: String,
@@ -488,36 +805,38 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ) {
         eventParams.putString("localUri", statusInfo.getString("localUri"))
         if (!completedEventSent) {
-            android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
+            android.util.Log.d("DownloadService", "Sending DownloadComplete event for $downloadId")
             sendEvent("DownloadComplete", eventParams)
             updateDownloadStatus(downloadId, STATUS_COMPLETED, statusInfo.getString("localUri"))
-            stopForegroundServiceIfIdle()
+            stopForegroundServiceIfIdle("completed")
         }
     }
 
     private fun handlePollUnknown(downloadId: Long, eventParams: WritableMap, completedEventSent: Boolean) {
-        android.util.Log.w("DownloadManager", "Download $downloadId has unknown status - may have completed or been removed")
+        android.util.Log.w("DownloadService", "Download $downloadId has unknown status - may have completed or been removed")
         val downloadInfo = getDownloadInfo(downloadId)
         val fileName = downloadInfo?.optString("fileName")
         if (fileName == null) {
-            android.util.Log.d("DownloadManager", "No info for unknown download $downloadId, removing stale entry")
+            android.util.Log.d("DownloadService", "No info for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
-            stopForegroundServiceIfIdle()
+            downloadBytesTracker.remove(downloadId)
+            stopForegroundServiceIfIdle("unknown")
             return
         }
         val file = java.io.File(
             reactApplicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), fileName
         )
         if (file.exists() && file.length() > 0) {
-            android.util.Log.d("DownloadManager", "File exists, treating as completed: ${file.absolutePath}")
+            android.util.Log.d("DownloadService", "File exists, treating as completed: ${file.absolutePath}")
             eventParams.putString("localUri", file.toURI().toString())
             if (!completedEventSent) sendEvent("DownloadComplete", eventParams)
             updateDownloadStatus(downloadId, STATUS_COMPLETED, file.toURI().toString())
         } else {
-            android.util.Log.d("DownloadManager", "No file found for unknown download $downloadId, removing stale entry")
+            android.util.Log.d("DownloadService", "No file found for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
+            downloadBytesTracker.remove(downloadId)
         }
-        stopForegroundServiceIfIdle()
+        stopForegroundServiceIfIdle("completed")
     }
 
     private fun pollAllDownloads() {
@@ -526,6 +845,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         for (i in 0 until downloads.length()) {
             val download = downloads.getJSONObject(i)
             val downloadId = download.getLong("downloadId")
+
             val statusInfo = queryDownloadStatus(downloadId)
             val status = statusInfo.getString("status") ?: STATUS_UNKNOWN
             val eventParams = buildEventParams(downloadId, download, statusInfo, status)
@@ -537,7 +857,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     eventParams.putString("reason", statusInfo.getString("reason"))
                     sendEvent("DownloadError", eventParams)
                     removeDownload(downloadId)
-                    stopForegroundServiceIfIdle()
+                    downloadBytesTracker.remove(downloadId)
+                    stopForegroundServiceIfIdle("failed")
                 }
                 STATUS_PAUSED -> {
                     eventParams.putString("reason", statusInfo.getString("reason"))
@@ -548,6 +869,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
         }
     }
+
+    // -------------------------------------------------------------------------
+    // DownloadManager query helpers
+    // -------------------------------------------------------------------------
 
     private fun buildUnknownStatusMap(reason: String): WritableMap = Arguments.createMap().apply {
         putDouble("bytesDownloaded", 0.0)
@@ -596,6 +921,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit(eventName, params)
     }
+
+    // -------------------------------------------------------------------------
+    // SharedPreferences persistence
+    // -------------------------------------------------------------------------
 
     private fun persistDownload(downloadId: Long, info: JSONObject) {
         val downloads = getAllPersistedDownloads()
@@ -685,20 +1014,20 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val previousStatus = download.optString("status", STATUS_PENDING)
 
             if (shouldRemoveDownload(download, status ?: STATUS_UNKNOWN)) {
-                android.util.Log.d("DownloadManager", "Cleanup: removing download $downloadId (liveStatus=$status, storedStatus=$previousStatus)")
+                android.util.Log.d("DownloadService", "Cleanup: removing download $downloadId (liveStatus=$status, storedStatus=$previousStatus)")
                 removedCount++
                 continue
             }
 
             if (previousStatus == STATUS_COMPLETED && download.optLong("completedAt", 0L) > 0 && !download.optBoolean("completedEventSent", false)) {
-                android.util.Log.w("DownloadManager", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
+                android.util.Log.w("DownloadService", "Cleanup: found completed download $downloadId without event sent - will retry in polling")
             }
 
             cleanedDownloads.put(download)
         }
 
         if (removedCount > 0) {
-            android.util.Log.d("DownloadManager", "Cleanup: removed $removedCount stale entries")
+            android.util.Log.d("DownloadService", "Cleanup: removed $removedCount stale entries")
             sharedPrefs.edit().putString(DOWNLOADS_KEY, cleanedDownloads.toString()).apply()
         }
     }
@@ -716,12 +1045,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
      * Stop the foreground service if no downloads are still active
      * (pending, running, or paused).
      */
-    private fun stopForegroundServiceIfIdle() {
+    private fun stopForegroundServiceIfIdle(reason: String = "completed") {
         if (!hasNoActiveDownloads(getAllPersistedDownloads())) return
         try {
-            DownloadForegroundService.stop(reactApplicationContext)
+            DownloadForegroundService.stop(reactApplicationContext, reason)
         } catch (e: Exception) {
-            android.util.Log.w("DownloadManager", "Failed to stop foreground service (non-fatal)", e)
+            android.util.Log.w("DownloadService", "Failed to stop foreground service (non-fatal): ${e.message}", e)
         }
     }
 }

@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid, Alert } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 import logger from '../utils/logger';
 const { DownloadManagerModule } = NativeModules;
@@ -76,6 +76,8 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
+
+    await this.checkAndPromptBatteryOptimization();
 
     const result = await DownloadManagerModule.startDownload({
       url: params.url,
@@ -237,6 +239,65 @@ class BackgroundDownloadService {
     } catch {
       // Non-fatal — download still works, just no system notification
     }
+  }
+
+  /**
+   * Returns true if the app is already excluded from battery optimization,
+   * or if the platform doesn't support the check (iOS, old Android).
+   */
+  async isBatteryOptimizationIgnored(): Promise<boolean> {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return true;
+    try {
+      return await DownloadManagerModule.isBatteryOptimizationIgnored();
+    } catch {
+      return true; // fail open
+    }
+  }
+
+  /**
+   * Opens the system dialog to exempt this app from battery optimization.
+   */
+  requestBatteryOptimizationIgnore(): void {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return;
+    try {
+      DownloadManagerModule.requestBatteryOptimizationIgnore();
+    } catch (e) {
+      logger.log('[BackgroundDownload] requestBatteryOptimizationIgnore failed:', e);
+    }
+  }
+
+  /**
+   * Checks battery optimization status and shows a one-time dialog if the app
+   * is not whitelisted. Call this before starting a download.
+   *
+   * The dialog explains why the permission is needed and takes the user directly
+   * to the system settings screen. If already whitelisted, this is a no-op.
+   */
+  async checkAndPromptBatteryOptimization(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    const ignored = await this.isBatteryOptimizationIgnored();
+    if (ignored) return;
+    return new Promise<void>(resolve => {
+      Alert.alert(
+        'Keep downloads running',
+        'To prevent Android from pausing large model downloads when your screen is off, allow this app to run without battery restrictions.',
+        [
+          {
+            text: 'Not now',
+            style: 'cancel',
+            onPress: () => resolve(),
+          },
+          {
+            text: 'Allow',
+            onPress: () => {
+              this.requestBatteryOptimizationIgnore();
+              resolve();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    });
   }
 
   /** Start a background download, wait for completion, then move to destPath. */
