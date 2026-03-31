@@ -237,7 +237,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         super.onCatalystInstanceDestroy()
         isPolling = false
         handler.removeCallbacks(pollRunnable)
-        watchdogHandler.removeCallbacks(watchdogRunnable)
+        watchdogHandler.removeCallbacksAndMessages(null) // clears watchdog + any pending retry postDelayed callbacks
         unregisterNetworkCallback()
         if (!executor.isShutdown) {
             executor.shutdown()
@@ -709,41 +709,49 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 android.util.Log.d("DownloadService", "Backoff ${backoffMs / 1000}s before re-enqueue (retry $retryCount/$MAX_RETRY_ATTEMPTS)")
 
                 watchdogHandler.postDelayed({
-                    try {
-                        val request = DownloadManager.Request(Uri.parse(resolvedUrl))
-                            .setTitle(title)
-                            .setDescription("Downloading model...")
-                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                            .setDestinationInExternalFilesDir(
-                                reactApplicationContext,
-                                Environment.DIRECTORY_DOWNLOADS,
-                                fileName
-                            )
-                            .setAllowedOverMetered(true)
-                            .setAllowedOverRoaming(true)
+                    // Guard: if download was cancelled during backoff, do not resurrect it
+                    if (getDownloadInfo(downloadId) == null) {
+                        android.util.Log.d("DownloadService", "Download $downloadId was cancelled during backoff — skipping re-enqueue")
+                        return@postDelayed
+                    }
+                    // enqueue and persist on executor to avoid disk/network IO on main thread
+                    executor.execute {
+                        try {
+                            val request = DownloadManager.Request(Uri.parse(resolvedUrl))
+                                .setTitle(title)
+                                .setDescription("Downloading model...")
+                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                .setDestinationInExternalFilesDir(
+                                    reactApplicationContext,
+                                    Environment.DIRECTORY_DOWNLOADS,
+                                    fileName
+                                )
+                                .setAllowedOverMetered(true)
+                                .setAllowedOverRoaming(true)
 
-                        val newDownloadId = downloadManager.enqueue(request)
+                            val newDownloadId = downloadManager.enqueue(request)
 
-                        // Persist new entry first, then remove old — avoids a gap where
-                        // SharedPreferences is empty and the poll loop stops the foreground service
-                        val newInfo = JSONObject().apply {
-                            put("downloadId", newDownloadId)
-                            put("url", url)
-                            put("fileName", fileName)
-                            put("modelId", modelId)
-                            put("title", title)
-                            put("totalBytes", totalBytes)
-                            put("status", STATUS_PENDING)
-                            put("startedAt", System.currentTimeMillis())
+                            // Persist new entry first, then remove old — avoids a gap where
+                            // SharedPreferences is empty and the poll loop stops the foreground service
+                            val newInfo = JSONObject().apply {
+                                put("downloadId", newDownloadId)
+                                put("url", url)
+                                put("fileName", fileName)
+                                put("modelId", modelId)
+                                put("title", title)
+                                put("totalBytes", totalBytes)
+                                put("status", STATUS_PENDING)
+                                put("startedAt", System.currentTimeMillis())
+                            }
+                            persistDownload(newDownloadId, newInfo)
+                            downloadManager.remove(downloadId)
+                            removeDownload(downloadId)
+
+                            handler.post { downloadBytesTracker[newDownloadId] = BytesTrack(0L, 0, retryCount) }
+                            android.util.Log.d("DownloadService", "Re-enqueued - new id: $newDownloadId (replaced: $downloadId, retry $retryCount/$MAX_RETRY_ATTEMPTS)")
+                        } catch (e: Exception) {
+                            android.util.Log.e("DownloadService", "Failed to re-enqueue stuck download $downloadId: ${e.message}")
                         }
-                        persistDownload(newDownloadId, newInfo)
-                        downloadManager.remove(downloadId)
-                        removeDownload(downloadId)
-
-                        downloadBytesTracker[newDownloadId] = BytesTrack(0L, 0, retryCount)
-                        android.util.Log.d("DownloadService", "Re-enqueued - new id: $newDownloadId (replaced: $downloadId, retry $retryCount/$MAX_RETRY_ATTEMPTS)")
-                    } catch (e: Exception) {
-                        android.util.Log.e("DownloadService", "Failed to re-enqueue stuck download $downloadId: ${e.message}")
                     }
                 }, backoffMs)
 
