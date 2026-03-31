@@ -126,23 +126,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             return false
         }
 
-        /**
-         * Pure function that decides what to do with a download based on byte progress.
-         * Called by the watchdog on each poll interval.
-         *
-         * Returns one of:
-         * - [StuckAction.ResetCounter] — progress was made, reset the stuck counter
-         * - [StuckAction.IncrementCounter] — no progress, increment counter (not stuck yet)
-         * - [StuckAction.Retry] — stuck threshold reached, retry the download
-         * - [StuckAction.GiveUp] — max retries exhausted, give up
-         */
-        internal sealed class StuckAction {
-            data class ResetCounter(val newTrack: BytesTrack) : StuckAction()
-            data class IncrementCounter(val newTrack: BytesTrack) : StuckAction()
-            data class Retry(val retryCount: Int) : StuckAction()
-            object GiveUp : StuckAction()
-        }
-
         internal fun evaluateStuckProgress(track: BytesTrack, currentBytes: Long): StuckAction {
             val bytesDelta = currentBytes - track.lastBytes
             if (bytesDelta > 0) {
@@ -157,6 +140,24 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
             return StuckAction.IncrementCounter(BytesTrack(track.lastBytes, newCount, track.retryCount))
         }
+    }
+
+    /** Tracks byte progress for a single download across watchdog poll intervals. */
+    internal data class BytesTrack(val lastBytes: Long, val unchangedCount: Int, val retryCount: Int = 0)
+
+    /**
+     * Result of [evaluateStuckProgress] — tells the watchdog what to do next.
+     *
+     * - [ResetCounter] — progress was made, reset the stuck counter
+     * - [IncrementCounter] — no progress, increment counter (not stuck yet)
+     * - [Retry] — stuck threshold reached, retry the download
+     * - [GiveUp] — max retries exhausted, give up
+     */
+    internal sealed class StuckAction {
+        data class ResetCounter(val newTrack: BytesTrack) : StuckAction()
+        data class IncrementCounter(val newTrack: BytesTrack) : StuckAction()
+        data class Retry(val retryCount: Int) : StuckAction()
+        object GiveUp : StuckAction()
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -189,7 +190,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     // --- Stuck-download watchdog ---
     private val watchdogHandler = Handler(Looper.getMainLooper())
-    internal data class BytesTrack(val lastBytes: Long, val unchangedCount: Int, val retryCount: Int = 0)
     private val downloadBytesTracker = mutableMapOf<Long, BytesTrack>()
 
     private val watchdogRunnable = object : Runnable {

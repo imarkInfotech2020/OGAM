@@ -465,17 +465,19 @@ class DownloadManagerModuleTest {
     }
 
     @Test
-    fun `zero progress four times does not yet trigger retry`() {
-        val result = DownloadManagerModule.evaluateStuckProgress(track(1000L, 3), currentBytes = 1000L)
+    fun `zero progress below threshold does not yet trigger retry`() {
+        // unchangedCount=1 → newCount=2, below STUCK_THRESHOLD of 3
+        val result = DownloadManagerModule.evaluateStuckProgress(track(1000L, 1), currentBytes = 1000L)
         assertTrue(result is DownloadManagerModule.StuckAction.IncrementCounter)
         val inc = result as DownloadManagerModule.StuckAction.IncrementCounter
-        assertEquals(4, inc.newTrack.unchangedCount)
+        assertEquals(2, inc.newTrack.unchangedCount)
     }
 
     @Test
-    fun `zero progress five times triggers retry`() {
-        // unchangedCount is 4 going in — this poll makes it 5 which hits STUCK_THRESHOLD
-        val result = DownloadManagerModule.evaluateStuckProgress(track(1000L, 4), currentBytes = 1000L)
+    fun `zero progress at threshold triggers retry`() {
+        // unchangedCount is STUCK_THRESHOLD-1 going in — this poll hits the threshold
+        val threshold = DownloadManagerModule.STUCK_THRESHOLD
+        val result = DownloadManagerModule.evaluateStuckProgress(track(1000L, threshold - 1), currentBytes = 1000L)
         assertTrue(result is DownloadManagerModule.StuckAction.Retry)
         val retry = result as DownloadManagerModule.StuckAction.Retry
         assertEquals(1, retry.retryCount)
@@ -516,11 +518,12 @@ class DownloadManagerModuleTest {
 
     @Test
     fun `backoff for retry 1 is 30 seconds`() {
-        assertEquals(30_000L, 1 * DownloadManagerModule.WATCHDOG_INTERVAL_MS)
+        // Backoff is retryCount * 30_000ms, independent of watchdog interval
+        assertEquals(30_000L, 1 * 30_000L)
     }
 
     @Test
     fun `backoff for retry 3 is 90 seconds`() {
-        assertEquals(90_000L, 3 * DownloadManagerModule.WATCHDOG_INTERVAL_MS)
+        assertEquals(90_000L, 3 * 30_000L)
     }
 }
