@@ -5,6 +5,8 @@ import {
   FlatList,
   Dimensions,
   Animated,
+  TouchableOpacity,
+  Linking,
 } from 'react-native';
 import ReanimatedAnimated, {
   useSharedValue,
@@ -260,6 +262,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             style={styles.nextButton}
             testID="onboarding-next"
           />
+          <TouchableOpacity
+            onPress={() => Linking.openURL('https://www.wednesday.is/?utm_source=off-grid-mobile-app')}
+            style={styles.madeWithLove}
+          >
+            <Text style={styles.madeWithLoveText}>
+              {'made with '}
+              <Text style={styles.heart}>{'♥'}</Text>
+              {' by '}
+              <Text style={styles.wednesdayLink}>{'Wednesday'}</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -331,5 +344,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   nextButton: {
     width: '100%' as const,
+  },
+  madeWithLove: {
+    alignItems: 'center' as const,
+    paddingTop: SPACING.md,
+  },
+  madeWithLoveText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textMuted,
+  },
+  heart: {
+    color: '#FF0000',
+    fontSize: 14,
+  },
+  wednesdayLink: {
+    textDecorationLine: 'underline' as const,
   },
 });

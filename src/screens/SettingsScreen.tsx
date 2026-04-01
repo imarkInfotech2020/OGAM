@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -19,10 +20,16 @@ import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
+import DeviceInfo from 'react-native-device-info';
+import RNFS from 'react-native-fs';
 import { useAppStore } from '../stores';
+import { useRemoteServerStore } from '../stores';
+import { hardwareService } from '../services';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
+
+const FEEDBACK_EMAIL = 'work@wednesday.is';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -39,11 +46,54 @@ export const SettingsScreen: React.FC = () => {
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
+  const deviceInfo = useAppStore((s) => s.deviceInfo);
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
 
   }, []);
+
+  const handleSendFeedback = async () => {
+    const { downloadedModels, activeModelId } = useAppStore.getState();
+    const { activeServerId } = useRemoteServerStore.getState();
+
+    const [buildNumber, fsInfo] = await Promise.all([
+      DeviceInfo.getBuildNumber(),
+      RNFS.getFSInfo(),
+    ]);
+
+    const ramGB = hardwareService.getTotalMemoryGB().toFixed(1);
+    const tier = hardwareService.getDeviceTier();
+    const freeGB = (fsInfo.freeSpace / 1e9).toFixed(1);
+    const activeModel = downloadedModels.find(m => m.id === activeModelId);
+    const modelLine = activeModel ? activeModel.fileName : 'None';
+    const remoteServer = activeServerId ? 'Yes' : 'No';
+    const deviceLine = deviceInfo
+      ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
+      : 'Device: Unknown';
+
+    const subject = encodeURIComponent(`[Feedback] Off Grid v${packageJson.version}`);
+    const body = encodeURIComponent(
+      `Hi,\n\n[Describe your feedback or issue here]\n\n` +
+      `---\n` +
+      `App: v${packageJson.version} (build ${buildNumber})\n` +
+      `${deviceLine}\n` +
+      `RAM: ${ramGB} GB · Tier: ${tier}\n` +
+      `Model: ${modelLine}\n` +
+      `Free storage: ${freeGB} GB\n` +
+      `Remote server: ${remoteServer}`,
+    );
+    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        'Could Not Open Mail',
+        `Looks like there was an issue. You can reach out to us at ${FEEDBACK_EMAIL}`,
+        [{ text: 'OK' }],
+      );
+    }
+  };
 
   const handleResetOnboarding = () => {
     setOnboardingComplete(false);
@@ -99,6 +149,7 @@ export const SettingsScreen: React.FC = () => {
             {[
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
               { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
+            //  { icon: 'search', title: 'Web Search', desc: 'Configure search API key for reliable results', screen: 'WebSearchSettings' as const },
               { icon: 'mic', title: 'Voice Transcription', desc: 'On-device speech to text', screen: 'VoiceSettings' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
@@ -135,6 +186,16 @@ export const SettingsScreen: React.FC = () => {
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Star on GitHub</Text>
                 <Text style={styles.navItemDesc}>Support the open-source project</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} onPress={handleSendFeedback}>
+              <View style={styles.navItemIcon}>
+                <Icon name="mail" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Send Feedback</Text>
+                <Text style={styles.navItemDesc}>Report a bug or share a suggestion</Text>
               </View>
               <Icon name="external-link" size={14} color={colors.textMuted} />
             </TouchableOpacity>
@@ -178,21 +239,28 @@ export const SettingsScreen: React.FC = () => {
           </Card>
         </AnimatedEntry>
 
-        {/* Dev-only: Reset Onboarding */}
-        {__DEV__ && (
-          <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
-            <View style={styles.devButtonGroup}>
-              <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
-                <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>Reset Onboarding</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.devButton} onPress={resetChecklist}>
-                <Icon name="list" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
-              </TouchableOpacity>
-            </View>
-          </AnimatedEntry>
-        )}
+        {/* Reset Onboarding */}
+        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.devButtonGroup}>
+            <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
+              <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>Reset Onboarding</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.devButton} onPress={resetChecklist}>
+              <Icon name="list" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
+            </TouchableOpacity>
+          </View>
+        </AnimatedEntry>
+        <TouchableOpacity
+          onPress={() => Linking.openURL('https://www.wednesday.is/?utm_source=off-grid-mobile-app')}
+          style={styles.madeWithLove}
+        >
+          <Text style={styles.madeWithLoveText}>
+            {'made with ♥ by '}
+            <Text style={styles.wednesdayLink}>{'Wednesday'}</Text>
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -283,4 +351,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  madeWithLove: { alignItems: 'center' as const, paddingVertical: SPACING.lg },
+  madeWithLoveText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  wednesdayLink: { textDecorationLine: 'underline' as const },
 });
