@@ -64,7 +64,7 @@ export const SettingsScreen: React.FC = () => {
 
     const ramGB = hardwareService.getTotalMemoryGB().toFixed(1);
     const tier = hardwareService.getDeviceTier();
-    const freeGB = (fsInfo.freeSpace / 1e9).toFixed(1);
+    const freeGB = (fsInfo.freeSpace / (1024 * 1024 * 1024)).toFixed(1);
     const activeModel = downloadedModels.find(m => m.id === activeModelId);
     const modelLine = activeModel ? activeModel.fileName : 'None';
     const remoteServer = activeServerId ? 'Yes' : 'No';
