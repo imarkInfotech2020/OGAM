@@ -257,7 +257,9 @@ export const SettingsScreen: React.FC = () => {
           style={styles.madeWithLove}
         >
           <Text style={styles.madeWithLoveText}>
-            {'made with ♥ by '}
+            {'made with '}
+            <Text style={styles.heart}>{'♥'}</Text>
+            {' by '}
             <Text style={styles.wednesdayLink}>{'Wednesday'}</Text>
           </Text>
         </TouchableOpacity>
@@ -354,4 +356,5 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   madeWithLove: { alignItems: 'center' as const, paddingVertical: SPACING.lg },
   madeWithLoveText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
   wednesdayLink: { textDecorationLine: 'underline' as const },
+  heart: { color: '#FF0000' },
 });
