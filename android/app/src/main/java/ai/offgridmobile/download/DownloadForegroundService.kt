@@ -27,11 +27,13 @@ class DownloadForegroundService : Service() {
         private const val CHANNEL_ID = "offgrid_download_channel"
         private const val NOTIFICATION_ID = 9001
         private const val EXTRA_TITLE = "title"
+        private const val EXTRA_DOWNLOAD_ID = "download_id"
         private const val DEFAULT_TITLE = "Downloading model\u2026"
 
-        fun start(context: Context, title: String = DEFAULT_TITLE) {
+        fun start(context: Context, title: String = DEFAULT_TITLE, downloadId: Long = -1L) {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
                 putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_DOWNLOAD_ID, downloadId)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -40,7 +42,8 @@ class DownloadForegroundService : Service() {
             }
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context, reason: String = "unknown") {
+            android.util.Log.d("DownloadService", "stopForeground() called - reason: $reason")
             context.stopService(Intent(context, DownloadForegroundService::class.java))
         }
     }
@@ -52,6 +55,10 @@ class DownloadForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
+        val downloadId = intent?.getLongExtra(EXTRA_DOWNLOAD_ID, -1L) ?: -1L
+
+        android.util.Log.d("DownloadService", "startForeground() called - downloadId: $downloadId")
+
         val notification = buildNotification(title)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -60,10 +67,17 @@ class DownloadForegroundService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
+        android.util.Log.d("DownloadService", "Foreground notification posted successfully")
+
         return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        android.util.Log.d("DownloadService", "Service destroyed")
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
