@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   ScrollView,
   TouchableOpacity,
   Linking,
@@ -256,12 +257,15 @@ export const SettingsScreen: React.FC = () => {
           onPress={() => Linking.openURL('https://www.wednesday.is/?utm_source=off-grid-mobile-app')}
           style={styles.madeWithLove}
         >
-          <Text style={styles.madeWithLoveText}>
-            {'made with '}
-            <Text style={styles.heart}>{'♥'}</Text>
-            {' by '}
-            <Text style={styles.wednesdayLink}>{'Wednesday'}</Text>
-          </Text>
+          <View style={styles.madeWithLoveRow}>
+            <Text style={styles.madeWithLoveText}>
+              {'made with '}
+              <Text style={styles.heart}>{'♥'}</Text>
+              {' by '}
+            </Text>
+            <Image source={require('../assets/wednesday_logo.png')} style={styles.wednesdayLogo} />
+            <Text style={styles.madeWithLoveText}>{'Wednesday'}</Text>
+          </View>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -332,6 +336,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
   madeWithLove: { alignItems: 'center' as const, paddingVertical: SPACING.lg },
   madeWithLoveText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
-  wednesdayLink: { textDecorationLine: 'underline' as const },
   heart: { color: '#FF0000' },
+  wednesdayLogo: { width: 20, height: 20, resizeMode: 'contain' as const, marginHorizontal: 4 },
+  madeWithLoveRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
 });
