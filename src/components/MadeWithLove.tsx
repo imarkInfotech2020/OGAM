@@ -18,10 +18,13 @@ export const MadeWithLove: React.FC = () => (
   </TouchableOpacity>
 );
 
+const TEXT_COLOR = '#8C8C8C';
+const HEART_COLOR = '#FF0000';
+
 const styles = StyleSheet.create({
   container: { alignItems: 'center', paddingVertical: 16 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  text: { ...(TYPOGRAPHY.bodySmall as object), color: '#8C8C8C' },
-  heart: { color: '#FF0000' },
+  text: { ...(TYPOGRAPHY.bodySmall as object), color: TEXT_COLOR },
+  heart: { color: HEART_COLOR },
   logo: { width: 20, height: 20, resizeMode: 'contain', marginHorizontal: 4 },
 });
