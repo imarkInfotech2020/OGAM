@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   Linking,
@@ -17,14 +16,14 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { MadeWithLove } from '../components/MadeWithLove';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
-import { useAppStore } from '../stores';
-import { useRemoteServerStore } from '../stores';
+import { useAppStore, useRemoteServerStore } from '../stores';
 import { hardwareService } from '../services';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
@@ -253,20 +252,7 @@ export const SettingsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </AnimatedEntry>
-        <TouchableOpacity
-          onPress={() => Linking.openURL('https://www.wednesday.is/?utm_source=off-grid-mobile-app')}
-          style={styles.madeWithLove}
-        >
-          <View style={styles.madeWithLoveRow}>
-            <Text style={styles.madeWithLoveText}>
-              {'made with '}
-              <Text style={styles.heart}>{'♥'}</Text>
-              {' by '}
-            </Text>
-            <Image source={require('../assets/wednesday_logo.png')} style={styles.wednesdayLogo} />
-            <Text style={styles.madeWithLoveText}>{'Wednesday'}</Text>
-          </View>
-        </TouchableOpacity>
+        <MadeWithLove />
       </ScrollView>
     </SafeAreaView>
   );
@@ -334,9 +320,4 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
-  madeWithLove: { alignItems: 'center' as const, paddingVertical: SPACING.lg },
-  madeWithLoveText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
-  heart: { color: '#FF0000' },
-  wednesdayLogo: { width: 20, height: 20, resizeMode: 'contain' as const, marginHorizontal: 4 },
-  madeWithLoveRow: { flexDirection: 'row' as const, alignItems: 'center' as const },
 });
