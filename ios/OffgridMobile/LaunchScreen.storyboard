@@ -28,6 +28,12 @@
                                 <fontDescription key="fontDescription" type="boldSystem" pointSize="36"/>
                                 <nil key="highlightedColor"/>
                             </label>
+                            <label opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="made with love by wednesday" textAlignment="center" lineBreakMode="middleTruncation" baselineAdjustment="alignBaselines" translatesAutoresizingMaskIntoConstraints="NO" id="mwl-wd-001">
+                                <rect key="frame" x="0.0" y="630" width="375" height="20"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="13"/>
+                                <color key="textColor" white="0.55" alpha="1" colorSpace="calibratedWhite"/>
+                                <nil key="highlightedColor"/>
+                            </label>
                         </subviews>
                         <color key="backgroundColor" systemColor="systemBackgroundColor" cocoaTouchSystemColor="whiteColor"/>
                         <constraints>
@@ -36,6 +42,9 @@
                             <constraint firstItem="GJd-Yh-RWb" firstAttribute="top" secondItem="Lgp-K1-zXR" secondAttribute="bottom" constant="16" id="tpG-Jd-Yh1"/>
                             <constraint firstItem="GJd-Yh-RWb" firstAttribute="leading" secondItem="Bcu-3y-fUS" secondAttribute="leading" id="ldG-Jd-Yh1"/>
                             <constraint firstItem="GJd-Yh-RWb" firstAttribute="trailing" secondItem="Bcu-3y-fUS" secondAttribute="trailing" id="trG-Jd-Yh1"/>
+                            <constraint firstItem="mwl-wd-001" firstAttribute="leading" secondItem="Bcu-3y-fUS" secondAttribute="leading" id="ldM-wl-001"/>
+                            <constraint firstItem="mwl-wd-001" firstAttribute="trailing" secondItem="Bcu-3y-fUS" secondAttribute="trailing" id="trM-wl-001"/>
+                            <constraint firstItem="mwl-wd-001" firstAttribute="bottom" secondItem="Bcu-3y-fUS" secondAttribute="bottom" constant="-16" id="btM-wl-001"/>
                         </constraints>
                         <viewLayoutGuide key="safeArea" id="Bcu-3y-fUS"/>
                     </view>
