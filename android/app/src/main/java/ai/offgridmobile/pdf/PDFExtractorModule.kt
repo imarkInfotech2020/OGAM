@@ -4,6 +4,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
+import ai.offgridmobile.SafePromise
 import io.legere.pdfiumandroid.PdfDocument
 import io.legere.pdfiumandroid.PdfiumCore
 import android.os.ParcelFileDescriptor
@@ -11,7 +12,17 @@ import java.io.File
 
 class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName(): String = "PDFExtractorModule"
+    companion object {
+        private const val NAME = "PDFExtractorModule"
+    }
+
+    private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) =
+        SafePromise(promise, NAME).reject(code, message, throwable)
+
+    private fun safeResolve(promise: Promise, value: Any?) =
+        SafePromise(promise, NAME).resolve(value)
+
+    override fun getName(): String = NAME
 
     private fun extractPageText(doc: PdfDocument, pageIndex: Int, sb: StringBuilder) {
         val page = doc.openPage(pageIndex)
@@ -31,7 +42,7 @@ class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBa
             try {
                 val file = File(filePath)
                 if (!file.exists()) {
-                    promise.reject("PDF_ERROR", "File not found: $filePath")
+                    safeReject(promise, "PDF_ERROR", "File not found: $filePath")
                     return@Thread
                 }
 
@@ -54,9 +65,9 @@ class PDFExtractorModule(reactContext: ReactApplicationContext) : ReactContextBa
 
                 doc.close()
                 fd.close()
-                promise.resolve(sb.toString())
+                safeResolve(promise, sb.toString())
             } catch (e: Exception) {
-                promise.reject("PDF_ERROR", "Failed to extract text: ${e.message}", e)
+                safeReject(promise, "PDF_ERROR", "Failed to extract text: ${e.message}", e)
             }
         }.start()
     }

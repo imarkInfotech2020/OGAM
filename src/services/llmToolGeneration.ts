@@ -26,6 +26,7 @@ export interface ToolGenerationDeps {
   context: any;
   isGenerating: boolean;
   isThinkingEnabled: boolean;
+  disableCtxShift: boolean;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
   convertToOAIMessages: (messages: Message[]) => any[];
   setPerformanceStats: (stats: any) => void;
@@ -59,7 +60,7 @@ export async function generateWithToolsImpl(
 
     const completionParams = {
       messages: oaiMessages,
-      ...buildCompletionParams(settings),
+      ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
       tools: options.tools,
       tool_choice: 'auto',
       ...buildThinkingCompletionParams(deps.isThinkingEnabled),
