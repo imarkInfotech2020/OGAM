@@ -365,9 +365,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
 
             stopForegroundServiceIfIdle("cancelled")
-            promise.resolve(true)
+            safeResolve(promise, true)
         } catch (e: Exception) {
-            promise.reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
+            safeReject(promise, "CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
         }
     }
 
