@@ -206,7 +206,6 @@ export function getModelMaxContext(context: LlamaContext): number | null {
     return null;
   }
 }
-
 export function logContextMetadata(context: LlamaContext, contextLength: number): void {
   const maxModelCtx = getModelMaxContext(context);
   if (maxModelCtx == null) return;
@@ -217,7 +216,6 @@ export interface MultimodalInitResult {
   initialized: boolean;
   support: MultimodalSupport;
 }
-
 export async function initMultimodal(
   context: LlamaContext,
   mmProjPath: string,
@@ -290,7 +288,6 @@ export async function fitMessagesInBudget(
   }
   return result;
 }
-
 /** Max safe context length based on device RAM to prevent OOM on low-RAM devices. */
 export const BYTES_PER_GB = 1024 * 1024 * 1024;
 export function getMaxContextForDevice(totalMemoryBytes: number): number {
@@ -299,14 +296,8 @@ export function getMaxContextForDevice(totalMemoryBytes: number): number {
   if (gb <= 8) return 4096;
   return 8192;
 }
-
-// Android Adreno GPU layer caps by RAM tier to prevent ANRs from GPU contention.
-// ≤4 GB → 0, ≤6 GB → 0, ≤8 GB → 12, >8 GB → 24. iOS Metal unaffected.
-const ANDROID_GPU_LAYER_CAPS: { maxGB: number; layers: number }[] = [
-  { maxGB: 4, layers: 0 },
-  { maxGB: 6, layers: 0 },
-  { maxGB: 8, layers: 12 },
-];
+// Android Adreno GPU caps (≤4GB/≤6GB→0, ≤8GB→12, >8GB→24). iOS unaffected.
+const ANDROID_GPU_LAYER_CAPS: { maxGB: number; layers: number }[] = [{ maxGB: 4, layers: 0 }, { maxGB: 6, layers: 0 }, { maxGB: 8, layers: 12 }];
 const ANDROID_GPU_LAYERS_FALLBACK = 24;
 
 /** Safe GPU layer count based on device RAM. Skips GPU on ≤4 GB to prevent abort(). */
@@ -320,13 +311,10 @@ export function getGpuLayersForDevice(totalMemoryBytes: number, requestedLayers:
     const maxLayers = tier ? tier.layers : ANDROID_GPU_LAYERS_FALLBACK;
     return Math.min(requestedLayers, maxLayers);
   }
-
   return requestedLayers;
 }
-
 export { validateModelFile, checkMemoryForModel, safeCompletion } from './llmSafetyChecks';
 export const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
-
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
 }, options?: { disableCtxShift?: boolean }): Record<string, any> {
@@ -340,7 +328,6 @@ export function buildCompletionParams(settings: {
     ctx_shift: options?.disableCtxShift ? false : true,
   };
 }
-
 export function recordGenerationStats(
   startTime: number,
   firstTokenMs: number,
