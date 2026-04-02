@@ -62,21 +62,35 @@ class CoreMLDiffusionModule: RCTEventEmitter {
 
   /// Returns true if the model directory contains TextEncoder2.mlmodelc,
   /// which is the hallmark of an SDXL model.
-  private func isXLModel(at url: URL) -> Bool {
+  static func isXLModelDirectory(at url: URL) -> Bool {
     let te2 = url.appendingPathComponent("TextEncoder2.mlmodelc")
     return FileManager.default.fileExists(atPath: te2.path)
   }
 
   // MARK: - Model integrity validation
 
+  /// SDXL iOS models may ship either a monolithic Unet.mlmodelc or split
+  /// the UNet into two compiled chunks.
+  static func hasValidUnetDirectory(at url: URL) -> Bool {
+    let unet = url.appendingPathComponent("Unet.mlmodelc")
+    if FileManager.default.fileExists(atPath: unet.path) {
+      return true
+    }
+
+    let unetChunk1 = url.appendingPathComponent("UnetChunk1.mlmodelc")
+    let unetChunk2 = url.appendingPathComponent("UnetChunk2.mlmodelc")
+    return FileManager.default.fileExists(atPath: unetChunk1.path) &&
+      FileManager.default.fileExists(atPath: unetChunk2.path)
+  }
+
   /// Validates that the required model sub-components exist on disk before
   /// attempting to run the pipeline.  A missing TextEncoder.mlmodelc is the
   /// most common cause of the "Unexpectedly found nil" crash in
   /// TextEncoder.encode(ids:).
-  private func validateModelFiles(at url: URL, isXL: Bool) -> String? {
+  static func validateModelDirectory(at url: URL) -> String? {
+    let isXL = isXLModelDirectory(at: url)
     let requiredComponents = [
       "TextEncoder.mlmodelc",
-      "Unet.mlmodelc",
       "VAEDecoder.mlmodelc"
     ]
     for component in requiredComponents {
@@ -84,6 +98,11 @@ class CoreMLDiffusionModule: RCTEventEmitter {
       if !FileManager.default.fileExists(atPath: path.path) {
         return "Missing required model component: \(component)"
       }
+    }
+    if !hasValidUnetDirectory(at: url) {
+      return isXL
+        ? "Missing required model component: Unet.mlmodelc or UnetChunk1.mlmodelc + UnetChunk2.mlmodelc"
+        : "Missing required model component: Unet.mlmodelc"
     }
     if isXL {
       let te2 = url.appendingPathComponent("TextEncoder2.mlmodelc")
@@ -117,8 +136,8 @@ class CoreMLDiffusionModule: RCTEventEmitter {
         let url = URL(fileURLWithPath: modelPath)
 
         // Validate model files exist before attempting to load
-        let isXL = self.isXLModel(at: url)
-        if let validationError = self.validateModelFiles(at: url, isXL: isXL) {
+        let isXL = Self.isXLModelDirectory(at: url)
+        if let validationError = Self.validateModelDirectory(at: url) {
           reject("ERR_INVALID_MODEL", validationError, nil)
           return
         }

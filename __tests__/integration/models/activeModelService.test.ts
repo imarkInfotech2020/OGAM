@@ -1423,6 +1423,29 @@ describe('ActiveModelService Integration', () => {
         { backend: 'auto', cpuOnly: false }, // coreml backend should map to 'auto'
       );
     });
+
+    it('passes attentionVariant through for SDXL-style coreml models', async () => {
+      const coremlModel = createONNXImageModel({
+        id: 'coreml-sdxl-model',
+        backend: 'coreml',
+        attentionVariant: 'split_einsum',
+      });
+      useAppStore.setState({
+        downloadedImageModels: [coremlModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+
+      await activeModelService.loadImageModel('coreml-sdxl-model');
+
+      expect(mockLocalDreamService.loadModel).toHaveBeenCalledWith(
+        coremlModel.modelPath,
+        4,
+        { backend: 'auto', cpuOnly: false, attentionVariant: 'split_einsum' },
+      );
+    });
   });
 
   describe('loadImageModel already loaded and native confirms', () => {
