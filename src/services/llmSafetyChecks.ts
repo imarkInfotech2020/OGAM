@@ -19,6 +19,9 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
   try {
     const stat = await RNFS.stat(modelPath);
     const fileSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
+    const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+    logger.log(`[LLM] Validating model: ${modelPath}`);
+    logger.log(`[LLM] Model file size: ${fileSizeMB}MB (${fileSize} bytes)`);
     if (fileSize < MIN_GGUF_FILE_SIZE) {
       return { valid: false, reason: `Model file too small (${fileSize} bytes) — likely corrupted or incomplete download` };
     }
@@ -35,6 +38,23 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
     if (header !== undefined && !header.startsWith(GGUF_MAGIC)) {
       return { valid: false, reason: `Invalid model file — not a GGUF file (header: ${header})` };
     }
+    if (header !== undefined) {
+      logger.log(`[LLM] GGUF magic OK`);
+    }
+    // Try to read GGUF version (bytes 4-7, little-endian uint32)
+    try {
+      const versionBytes = await RNFS.read(modelPath, 4, 4, 'ascii');
+      if (versionBytes) {
+        const version = versionBytes.charCodeAt(0) | (versionBytes.charCodeAt(1) << 8) |
+          (versionBytes.charCodeAt(2) << 16) | (versionBytes.charCodeAt(3) << 24);
+        logger.log(`[LLM] GGUF version: ${version}`);
+      }
+    } catch (_e) {
+      // Non-critical, just skip
+    }
+    // Log the model filename for easier identification
+    const filename = modelPath.split('/').pop() || modelPath;
+    logger.log(`[LLM] Model filename: ${filename}`);
     return { valid: true };
   } catch (e: any) {
     return { valid: false, reason: `Failed to validate model file: ${e?.message || e}` };

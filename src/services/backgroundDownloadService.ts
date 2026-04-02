@@ -1,56 +1,12 @@
-import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid, Alert } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 import logger from '../utils/logger';
+import type {
+  DownloadParams, MultiFileDownloadParams,
+  DownloadProgressEvent, DownloadCompleteEvent, DownloadErrorEvent,
+  DownloadProgressCallback, DownloadCompleteCallback, DownloadErrorCallback,
+} from './backgroundDownloadTypes';
 const { DownloadManagerModule } = NativeModules;
-
-interface DownloadParams {
-  url: string;
-  fileName: string;
-  modelId: string;
-  title?: string;
-  description?: string;
-  totalBytes?: number;
-}
-
-interface MultiFileDownloadParams {
-  files: { url: string; relativePath: string; size: number }[];
-  fileName: string;
-  modelId: string;
-  destinationDir: string;
-  totalBytes?: number;
-}
-
-interface DownloadProgressEvent {
-  downloadId: number;
-  fileName: string;
-  modelId: string;
-  bytesDownloaded: number;
-  totalBytes: number;
-  status: BackgroundDownloadStatus;
-  reason?: string;
-}
-
-interface DownloadCompleteEvent {
-  downloadId: number;
-  fileName: string;
-  modelId: string;
-  bytesDownloaded: number;
-  totalBytes: number;
-  status: 'completed';
-  localUri: string;
-}
-
-interface DownloadErrorEvent {
-  downloadId: number;
-  fileName: string;
-  modelId: string;
-  status: 'failed';
-  reason: string;
-}
-
-type DownloadProgressCallback = (event: DownloadProgressEvent) => void;
-type DownloadCompleteCallback = (event: DownloadCompleteEvent) => void;
-type DownloadErrorCallback = (event: DownloadErrorEvent) => void;
 
 class BackgroundDownloadService {
   private eventEmitter: NativeEventEmitter | null = null;
@@ -181,37 +137,31 @@ class BackgroundDownloadService {
     this.progressListeners.set(key, callback);
     return () => this.progressListeners.delete(key);
   }
-
   onComplete(downloadId: number, callback: DownloadCompleteCallback): () => void {
     const key = `complete_${downloadId}`;
     this.completeListeners.set(key, callback);
     return () => this.completeListeners.delete(key);
   }
-
   onError(downloadId: number, callback: DownloadErrorCallback): () => void {
     const key = `error_${downloadId}`;
     this.errorListeners.set(key, callback);
     return () => this.errorListeners.delete(key);
   }
-
   onAnyProgress(callback: DownloadProgressCallback): () => void {
     const key = 'progress_all';
     this.progressListeners.set(key, callback);
     return () => this.progressListeners.delete(key);
   }
-
   onAnyComplete(callback: DownloadCompleteCallback): () => void {
     const key = 'complete_all';
     this.completeListeners.set(key, callback);
     return () => this.completeListeners.delete(key);
   }
-
   onAnyError(callback: DownloadErrorCallback): () => void {
     const key = 'error_all';
     this.errorListeners.set(key, callback);
     return () => this.errorListeners.delete(key);
   }
-
   startProgressPolling(): void {
     if (!this.isAvailable() || this.isPolling) {
       return;
@@ -237,6 +187,54 @@ class BackgroundDownloadService {
     } catch {
       // Non-fatal — download still works, just no system notification
     }
+  }
+
+  /** Returns true if battery optimization is ignored, or if unsupported (iOS, old Android). */
+  async isBatteryOptimizationIgnored(): Promise<boolean> {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return true;
+    try {
+      return await DownloadManagerModule.isBatteryOptimizationIgnored();
+    } catch {
+      return true; // fail open
+    }
+  }
+
+  /** Opens the system dialog to exempt this app from battery optimization. */
+  requestBatteryOptimizationIgnore(): void {
+    if (Platform.OS !== 'android' || !this.isAvailable()) return;
+    try {
+      DownloadManagerModule.requestBatteryOptimizationIgnore();
+    } catch (e) {
+      logger.log('[BackgroundDownload] requestBatteryOptimizationIgnore failed:', e);
+    }
+  }
+
+  /** Checks battery optimization and prompts once if not whitelisted. Call before starting a download. */
+  async checkAndPromptBatteryOptimization(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    const ignored = await this.isBatteryOptimizationIgnored();
+    if (ignored) return;
+    return new Promise<void>(resolve => {
+      Alert.alert(
+        'Keep downloads running',
+        'To prevent Android from pausing large model downloads when your screen is off, allow this app to run without battery restrictions.',
+        [
+          {
+            text: 'Not now',
+            style: 'cancel',
+            onPress: () => resolve(),
+          },
+          {
+            text: 'Allow',
+            onPress: () => {
+              this.requestBatteryOptimizationIgnore();
+              resolve();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    });
   }
 
   /** Start a background download, wait for completion, then move to destPath. */
