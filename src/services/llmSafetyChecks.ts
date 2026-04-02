@@ -49,7 +49,7 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
           (versionBytes.charCodeAt(2) << 16) | (versionBytes.charCodeAt(3) << 24);
         logger.log(`[LLM] GGUF version: ${version}`);
       }
-    } catch (e) {
+    } catch (_e) {
       // Non-critical, just skip
     }
     // Log the model filename for easier identification
