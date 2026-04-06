@@ -132,7 +132,7 @@ export function useModelsScreen() {
       // Resolve filename: use picker name if available, fall back to last path segment of URI
       const resolvedFiles = result.map(f => ({
         ...f,
-        name: f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown',
+        name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
       }));
 
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));

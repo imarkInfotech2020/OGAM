@@ -279,7 +279,15 @@ async function copyFileWithProgress(
   dest: string,
   { knownTotalBytes, onProgress }: CopyProgressOpts,
 ): Promise<void> {
-  const totalBytes = knownTotalBytes ?? 0;
+  let totalBytes = knownTotalBytes ?? 0;
+  if (totalBytes === 0) {
+    try {
+      const sourceStat = await RNFS.stat(source);
+      totalBytes = parseSizeInt(sourceStat.size);
+    } catch {
+      // stat failed — progress will be indeterminate (stuck at 0%), non-fatal
+    }
+  }
 
   let polling = true;
 
