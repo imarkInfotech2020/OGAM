@@ -1,5 +1,6 @@
+import { Alert } from 'react-native';
 import { modelManager } from '../../services';
-import { showAlert, hideAlert, AlertState } from '../../components/CustomAlert';
+import { showAlert, AlertState } from '../../components/CustomAlert';
 import { DownloadedModel } from '../../types';
 
 export type GgufFileRef = { uri: string; name: string; size: number };
@@ -45,10 +46,14 @@ export async function importGgufFiles(
   const { setAlertState, setImportProgress, addDownloadedModel } = deps;
 
   if (files.length === 1) {
+    const resolvedFileName = files[0].name ?? 'unknown';
     const model = await modelManager.importLocalModel({
       sourceUri: files[0].uri,
-      fileName: files[0].name ?? 'unknown',
-      onProgress: p => setImportProgress(p),
+      fileName: resolvedFileName,
+      sourceSize: files[0].size,
+      onProgress: p => {
+        setImportProgress(p);
+      },
     });
     addDownloadedModel(model);
     setAlertState(showAlert('Success', `${model.name} imported successfully!`));
@@ -57,29 +62,35 @@ export async function importGgufFiles(
 
   const file1: GgufFileRef = { uri: files[0].uri, name: files[0].name ?? '', size: files[0].size ?? 0 };
   const file2: GgufFileRef = { uri: files[1].uri, name: files[1].name ?? '', size: files[1].size ?? 0 };
+
   const { mainFile, mmProjFile } = classifyGgufPair(file1, file2);
 
   const confirmed = await new Promise<boolean>(resolve => {
-    setAlertState(
-      showAlert(
-        'Import Vision Model?',
-        `Main model:  ${mainFile.name}\nProjector:    ${mmProjFile.name}\n\nIf these look wrong, cancel and rename your files.`,
-        [
-          { text: 'Cancel', style: 'cancel', onPress: () => { setAlertState(hideAlert()); resolve(false); } },
-          { text: 'Import', onPress: () => { setAlertState(hideAlert()); resolve(true); } },
-        ],
-      ),
+    Alert.alert(
+      'Import Vision Model?',
+      `Main model:  ${mainFile.name}\nProjector:    ${mmProjFile.name}\n\nIf these look wrong, cancel and rename your files.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Import', onPress: () => resolve(true) },
+      ],
+      { cancelable: false },
     );
   });
 
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   const model = await modelManager.importLocalModel({
     sourceUri: mainFile.uri,
     fileName: mainFile.name,
-    onProgress: p => setImportProgress(p),
+    sourceSize: mainFile.size,
+    onProgress: p => {
+      setImportProgress(p);
+    },
     mmProjSourceUri: mmProjFile.uri,
     mmProjFileName: mmProjFile.name,
+    mmProjSourceSize: mmProjFile.size,
   });
   addDownloadedModel(model);
   setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));

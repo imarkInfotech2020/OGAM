@@ -1,5 +1,4 @@
 import RNFS from 'react-native-fs';
-import { Platform } from 'react-native';
 import { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
 
@@ -196,109 +195,114 @@ export interface ImportLocalModelOpts {
   sourceUri: string;
   fileName: string;
   modelsDir: string;
+  sourceSize?: number | null;
   onProgress?: (progress: { fraction: number; fileName: string }) => void;
   mmProjSourceUri?: string;
   mmProjFileName?: string;
+  mmProjSourceSize?: number | null;
 }
 
-async function resolveAndroidUri(uri: string, cacheFileName: string): Promise<{ resolved: string; tempPath: string | null }> {
-  if (Platform.OS !== 'android' || !uri.startsWith('content://')) {
-    return { resolved: uri, tempPath: null };
+function resolveUri(uri: string): string {
+  // Android content:// URIs are passed directly to RNFS.copyFile — no cache copy needed.
+  // iOS file:// URIs need decoding (%20 → space) so RNFS can find the file on disk.
+  if (uri.startsWith('content://')) {
+    return uri;
   }
-  const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${cacheFileName}`;
-  await RNFS.copyFile(uri, tempPath);
-  return { resolved: tempPath, tempPath };
+  return decodeURIComponent(uri);
 }
 
 
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
-  const { sourceUri, fileName, modelsDir, onProgress, mmProjSourceUri, mmProjFileName } = opts;
+  const { sourceUri, fileName, modelsDir, sourceSize, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
 
   if (!fileName.toLowerCase().endsWith('.gguf')) {
     throw new Error('Only .gguf files can be imported');
   }
 
-  const { resolved: resolvedSource, tempPath: tempCachePath } = await resolveAndroidUri(sourceUri, fileName);
-  const { resolved: resolvedMmProjSource, tempPath: tempMmProjCachePath } = mmProjSourceUri && mmProjFileName
-    ? await resolveAndroidUri(mmProjSourceUri, mmProjFileName)
-    : { resolved: mmProjSourceUri, tempPath: null };
+  const resolvedSource = resolveUri(sourceUri);
+  const resolvedMmProjSource = mmProjSourceUri ? resolveUri(mmProjSourceUri) : undefined;
 
-  try {
-    const destPath = `${modelsDir}/${fileName}`;
-    if (await RNFS.exists(destPath)) throw new Error(`A model file named "${fileName}" already exists`);
-    if (mmProjFileName && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
-      throw new Error(`A file named "${mmProjFileName}" already exists`);
-    }
-
-    // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
-    const mainProgressScale = mmProjFileName ? 0.5 : 1;
-    await copyFileWithProgress(
-      resolvedSource,
-      destPath,
-      onProgress ? (fraction) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
-    );
-
-    const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
-    const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
-    const modelName = fileName.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, '');
-    const destStat = await RNFS.stat(destPath);
-    const fileSize = parseSizeInt(destStat.size);
-
-    const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
-    const model = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
-    const builtModel: DownloadedModel = {
-      ...model,
-      id: `local_import/${fileName}`,
-      name: modelName,
-      author: 'Local Import',
-      credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
-    };
-
-    // Copy mmproj and link it to the model: progress 0.5→1
-    if (mmProjFileName && resolvedMmProjSource) {
-      const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
-      await copyFileWithProgress(
-        resolvedMmProjSource,
-        mmProjDestPath,
-        onProgress
-          ? (fraction) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
-          : undefined,
-      );
-      const mmProjStat = await RNFS.stat(mmProjDestPath);
-      builtModel.mmProjPath = mmProjDestPath;
-      builtModel.mmProjFileName = mmProjFileName;
-      builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
-      builtModel.isVisionModel = true;
-    }
-
-    await persistDownloadedModel(builtModel, modelsDir);
-    return builtModel;
-  } finally {
-    if (tempCachePath) await RNFS.unlink(tempCachePath).catch(() => {});
-    if (tempMmProjCachePath) await RNFS.unlink(tempMmProjCachePath).catch(() => {});
+  const destPath = `${modelsDir}/${fileName}`;
+  const destExists = await RNFS.exists(destPath);
+  if (destExists) throw new Error(`A model file named "${fileName}" already exists`);
+  if (mmProjFileName && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
+    throw new Error(`A file named "${mmProjFileName}" already exists`);
   }
+
+  // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
+  const mainProgressScale = mmProjFileName ? 0.5 : 1;
+  await copyFileWithProgress(resolvedSource, destPath, {
+    knownTotalBytes: sourceSize ?? null,
+    onProgress: onProgress ? (fraction: number) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
+  });
+
+  const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
+  const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+  const modelName = fileName.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, '');
+  const destStat = await RNFS.stat(destPath);
+  const fileSize = parseSizeInt(destStat.size);
+
+  const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
+  const model = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
+  const builtModel: DownloadedModel = {
+    ...model,
+    id: `local_import/${fileName}`,
+    name: modelName,
+    author: 'Local Import',
+    credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
+  };
+
+  // Copy mmproj and link it to the model: progress 0.5→1
+  if (mmProjFileName && resolvedMmProjSource) {
+    const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
+    await copyFileWithProgress(resolvedMmProjSource, mmProjDestPath, {
+      knownTotalBytes: mmProjSourceSize ?? null,
+      onProgress: onProgress
+        ? (fraction: number) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
+        : undefined,
+    });
+    const mmProjStat = await RNFS.stat(mmProjDestPath);
+    builtModel.mmProjPath = mmProjDestPath;
+    builtModel.mmProjFileName = mmProjFileName;
+    builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+    builtModel.isVisionModel = true;
+  }
+
+  await persistDownloadedModel(builtModel, modelsDir);
+  return builtModel;
 }
+
+type CopyProgressOpts = { knownTotalBytes: number | null; onProgress?: (fraction: number) => void };
 
 async function copyFileWithProgress(
   source: string,
   dest: string,
-  onProgress?: (fraction: number) => void,
+  { knownTotalBytes, onProgress }: CopyProgressOpts,
 ): Promise<void> {
-  const sourceStat = await RNFS.stat(source);
-  const totalBytes = parseSizeInt(sourceStat.size);
+  let totalBytes = knownTotalBytes ?? 0;
+  if (totalBytes === 0) {
+    try {
+      const sourceStat = await RNFS.stat(source);
+      totalBytes = parseSizeInt(sourceStat.size);
+    } catch {
+      // stat failed — progress will be indeterminate (stuck at 0%), non-fatal
+    }
+  }
+
   let polling = true;
 
   const pollInterval = setInterval(async () => {
     if (!polling) return;
     try {
       const exists = await RNFS.exists(dest);
-      if (exists) {
+      if (exists && totalBytes > 0) {
         const stat = await RNFS.stat(dest);
         const written = parseSizeInt(stat.size);
-        onProgress?.(totalBytes > 0 ? Math.min(written / totalBytes, 0.99) : 0);
+        const pct = Math.min(written / totalBytes, 0.99);
+        onProgress?.(pct);
       }
     } catch {
-      // File may not exist yet, ignore
+      // poll errors are non-fatal
     }
   }, 500);
 

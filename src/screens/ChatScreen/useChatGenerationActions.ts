@@ -1,6 +1,4 @@
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
-let _msgIdSeq = 0;
-const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
 import {
   AlertState,
   showAlert,
@@ -23,10 +21,8 @@ import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
-import { shouldUseToolsForMessage } from './toolUsage';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
-
 export type GenerationDeps = {
   activeModelId: string | null;
   activeModel: DownloadedModel | null | undefined;
@@ -77,13 +73,11 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
   }
   return { prefix, filtered };
 }
-
 function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
   if (!attachments) return text;
   return attachments.filter(a => a.type === 'document' && a.textContent)
     .reduce((acc, doc) => `${acc}\n\n---\n📄 **Attached Document: ${doc.fileName || 'document'}**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`, text);
 }
-
 function buildMessagesForContext(conversationId: string, messageText: string, systemPrompt: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   const allMessages = (conversation?.messages || []).filter(m => !m.isSystemInfo);
@@ -158,9 +152,7 @@ export async function handleImageGenerationFn(
 }
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
-  // Remote models don't need local loading
   if (deps.activeModelInfo?.isRemote) return true;
-  // Local models need to be loaded
   const loadedPath = llmService.getLoadedModelPath();
   if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
   await deps.ensureModelLoaded();
@@ -213,7 +205,6 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
     const docList = enabledDocs.map((d: import('../../services/rag').RagDocument) => `- ${d.name}`).join('\n');
     let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
     kbPrompt += '\nUse the search_knowledge_base tool to look up specific information from these documents.';
-
     const r = await ragService.searchProject(projectId, query);
     if (r.chunks.length > 0) {
       kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
@@ -223,6 +214,10 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
     logger.error('[RAG] Context injection failed', err);
   }
   return prompt;
+}
+/** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode. */
+function applyGemma4ThinkToken(prompt: string, isRemote: boolean): string {
+  return (!isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled()) ? `<|think|>\n${prompt}` : prompt;
 }
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabledTools: string[]; rawPrompt: string } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
@@ -237,7 +232,6 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabl
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
   return { enabledTools, rawPrompt };
 }
-
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.hasActiveModel) return;
@@ -253,11 +247,12 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  // Remote models use native tool_choice: 'auto' — skip heuristic gate and always pass enabled tools
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const heuristicMatch = shouldUseToolsForMessage(messageText, enabledTools);
-  const activeTools = (isRemote || heuristicMatch) ? enabledTools : [];
-  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  const activeTools = enabledTools;
+  const systemPrompt = applyGemma4ThinkToken(
+    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    isRemote,
+  );
   logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
@@ -272,6 +267,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   }
   deps.generatingForConversationRef.current = null;
 }
+let _msgIdSeq = 0; const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
   const { text, attachments, imageMode, startGeneration } = call;
@@ -332,9 +328,12 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     .map(m => m.id === userMessage.id ? { ...m, content: messageText } : m);
   const { enabledTools, rawPrompt } = resolveToolsAndPrompt(deps, conversation);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const activeTools = (isRemote || shouldUseToolsForMessage(messageText, enabledTools)) ? enabledTools : [];
+  const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  const systemPrompt = (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt;
+  const systemPrompt = applyGemma4ThinkToken(
+    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    isRemote,
+  );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);

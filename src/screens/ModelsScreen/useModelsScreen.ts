@@ -121,31 +121,40 @@ export function useModelsScreen() {
 
   const handleImportLocalModel = async () => {
     if (isImporting) return;
-    setIsImporting(true);
     try {
       const result = await pick({ type: [types.allFiles], allowMultiSelection: true });
-      if (!result || result.length === 0) return;
+      setIsImporting(true);
 
-      const allGguf = result.every(f => (f.name ?? '').toLowerCase().endsWith('.gguf'));
-      const singleZip = result.length === 1 && (result[0].name ?? '').toLowerCase().endsWith('.zip');
+      if (!result || result.length === 0) {
+        return;
+      }
+
+      // Resolve filename: use picker name if available, fall back to last path segment of URI
+      const resolvedFiles = result.map(f => ({
+        ...f,
+        name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
+      }));
+
+      const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
+      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
 
       if (!allGguf && !singleZip) {
         setAlertState(showAlert(
           'Invalid File',
-          result.length > 1
+          resolvedFiles.length > 1
             ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
             : 'Supported formats: .gguf (text models) and .zip (image models).',
         ));
         return;
       }
 
-      if (result.length > 2) {
+      if (resolvedFiles.length > 2) {
         setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
         return;
       }
 
-      const firstUri = result[0].uri;
-      const firstFileName = result[0].name ?? 'unknown';
+      const firstUri = resolvedFiles[0].uri;
+      const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
       if (singleZip) {
@@ -153,9 +162,11 @@ export function useModelsScreen() {
         return;
       }
 
-      await importGgufFiles(result.slice(0, 2), { setAlertState, setImportProgress, addDownloadedModel });
+      await importGgufFiles(resolvedFiles.slice(0, 2), { setAlertState, setImportProgress, addDownloadedModel });
     } catch (error: unknown) {
-      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
+      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+        return;
+      }
       setAlertState(showAlert('Import Failed', getErrorMessage(error)));
     } finally {
       setIsImporting(false);

@@ -28,6 +28,7 @@ function createMockDeps(overrides: Partial<ToolGenerationDeps> = {}): ToolGenera
     },
     isGenerating: false,
     isThinkingEnabled: false,
+    isGemma4Model: false,
     disableCtxShift: false,
     manageContextWindow: jest.fn(async (msgs: Message[]) => msgs),
     convertToOAIMessages: jest.fn((msgs: Message[]) =>

@@ -11,7 +11,7 @@ export const MODEL_RECOMMENDATIONS = {
   ],
 };
 
-// Curated list of recommended models for mobile (updated Feb 2026)
+// Curated list of recommended models for mobile (updated Apr 2026)
 // All IDs use official org repos where available, ggml-org (HuggingFace official) as fallback
 export const RECOMMENDED_MODELS = [
   // --- Text: Ultra-light (3 GB+) ---
@@ -34,6 +34,16 @@ export const RECOMMENDED_MODELS = [
     org: 'google',
   },
   // --- Text: Small (4 GB+) ---
+  {
+    id: 'ggml-org/gemma-4-E2B-it-GGUF',
+    name: 'Gemma 4 E2B',
+    params: 2,
+    description: 'Google\'s latest with thinking mode, MoE architecture',
+    minRam: 4,
+    type: 'text' as const,
+    org: 'google',
+    isNew: true,
+  },
   {
     id: 'bartowski/Llama-3.2-1B-Instruct-GGUF',
     name: 'Llama 3.2 1B',
@@ -153,6 +163,16 @@ export const RECOMMENDED_MODELS = [
     minRam: 6,
     type: 'vision' as const,
     org: 'google',
+  },
+  {
+    id: 'ggml-org/gemma-4-E4B-it-GGUF',
+    name: 'Gemma 4 E4B',
+    params: 4,
+    description: 'Google\'s latest, stronger reasoning + vision',
+    minRam: 6,
+    type: 'vision' as const,
+    org: 'google',
+    isNew: true,
   },
   // --- Text: Large (8 GB+) ---
   {

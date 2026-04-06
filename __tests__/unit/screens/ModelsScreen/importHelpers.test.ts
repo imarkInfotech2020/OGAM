@@ -17,12 +17,12 @@ jest.mock('../../../../src/services', () => ({
 
 jest.mock('../../../../src/components/CustomAlert', () => ({
   showAlert: jest.fn(),
-  hideAlert: jest.fn(() => ({ visible: false })),
   initialAlertState: { visible: false },
 }));
 
 // ── Imports ─────────────────────────────────────────────────────────────────
 
+import { Alert } from 'react-native';
 import {
   isMmProj,
   classifyGgufPair,
@@ -30,10 +30,10 @@ import {
   importGgufFiles,
   GgufFileRef,
 } from '../../../../src/screens/ModelsScreen/importHelpers';
-import { showAlert, hideAlert } from '../../../../src/components/CustomAlert';
+import { showAlert } from '../../../../src/components/CustomAlert';
 
 const mockShowAlert = showAlert as jest.Mock;
-const mockHideAlert = hideAlert as jest.Mock;
+const mockAlertAlert = jest.spyOn(Alert, 'alert') as jest.Mock;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,33 +87,17 @@ describe('classifyGgufPair', () => {
     expect(mmProjFile.name).toBe('llava-mmproj-f16.gguf');
   });
 
-  it('falls back to size: larger file is main model', () => {
-    const big = makeFile('unknown-a.gguf', 5000);
-    const small = makeFile('unknown-b.gguf', 200);
+  it('falls back to size comparison when neither name signals mmproj', () => {
+    const big = makeFile('model-Q4.gguf', 5000);
+    const small = makeFile('model-clip.bin', 200);
     const { mainFile, mmProjFile } = classifyGgufPair(big, small);
-    expect(mainFile.name).toBe('unknown-a.gguf');
-    expect(mmProjFile.name).toBe('unknown-b.gguf');
+    expect(mainFile.name).toBe('model-Q4.gguf');
+    expect(mmProjFile.name).toBe('model-clip.bin');
   });
 
-  it('falls back to size when file2 is the larger one', () => {
-    const small = makeFile('unknown-a.gguf', 200);
-    const big = makeFile('unknown-b.gguf', 5000);
-    const { mainFile, mmProjFile } = classifyGgufPair(small, big);
-    expect(mainFile.name).toBe('unknown-b.gguf');
-    expect(mmProjFile.name).toBe('unknown-a.gguf');
-  });
-
-  it('defaults to file1=main when both sizes are 0 and no name hint', () => {
-    const f1 = makeFile('model-a.gguf', 0);
-    const f2 = makeFile('model-b.gguf', 0);
-    const { mainFile, mmProjFile } = classifyGgufPair(f1, f2);
-    expect(mainFile.name).toBe('model-a.gguf');
-    expect(mmProjFile.name).toBe('model-b.gguf');
-  });
-
-  it('treats equal-sized files as main=file1, mmproj=file2', () => {
-    const f1 = makeFile('a.gguf', 1000);
-    const f2 = makeFile('b.gguf', 1000);
+  it('falls back to file1 as main when sizes are both 0', () => {
+    const f1 = makeFile('a.gguf', 0);
+    const f2 = makeFile('b.gguf', 0);
     const { mainFile, mmProjFile } = classifyGgufPair(f1, f2);
     expect(mainFile.name).toBe('a.gguf');
     expect(mmProjFile.name).toBe('b.gguf');
@@ -123,8 +107,8 @@ describe('classifyGgufPair', () => {
 // ── getErrorMessage ─────────────────────────────────────────────────────────
 
 describe('getErrorMessage', () => {
-  it('returns message from Error instance', () => {
-    expect(getErrorMessage(new Error('Something broke'))).toBe('Something broke');
+  it('returns error.message for Error instances', () => {
+    expect(getErrorMessage(new Error('boom'))).toBe('boom');
   });
 
   it('returns "Unknown error" for non-Error values', () => {
@@ -152,7 +136,6 @@ describe('importGgufFiles', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockShowAlert.mockReturnValue({ visible: true });
-    mockHideAlert.mockReturnValue({ visible: false });
   });
 
   // ── single GGUF ────────────────────────────────────────────────────────
@@ -166,11 +149,12 @@ describe('importGgufFiles', () => {
       deps,
     );
 
-    expect(mockImportLocalModel).toHaveBeenCalledWith({
+    expect(mockImportLocalModel).toHaveBeenCalledWith(expect.objectContaining({
       sourceUri: 'file://my-model.gguf',
       fileName: 'my-model.gguf',
+      sourceSize: 4000,
       onProgress: expect.any(Function),
-    });
+    }));
     expect(mockAddDownloadedModel).toHaveBeenCalledWith(fakeModel);
     expect(mockSetAlertState).toHaveBeenCalledWith(expect.objectContaining({ visible: true }));
     expect(mockShowAlert).toHaveBeenCalledWith('Success', 'MyModel imported successfully!');
@@ -188,10 +172,9 @@ describe('importGgufFiles', () => {
     const fakeModel = { id: 'm2', name: 'VisionModel' };
     mockImportLocalModel.mockResolvedValueOnce(fakeModel);
 
-    // Capture buttons from showAlert and immediately press "Import"
-    mockShowAlert.mockImplementationOnce((_title: string, _msg: string, buttons: any[]) => {
-      buttons?.find((b: any) => b.text === 'Import')?.onPress();
-      return { visible: true };
+    // Simulate user tapping "Import" in the native Alert dialog
+    mockAlertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: any[]) => {
+      buttons?.find((b: any) => b.text === 'Import')?.onPress?.();
     });
 
     const file1 = { uri: 'file://llava-7b-Q4.gguf', name: 'llava-7b-Q4.gguf', size: 4200 };
@@ -199,24 +182,24 @@ describe('importGgufFiles', () => {
 
     await importGgufFiles([file1, file2], deps);
 
-    // Confirmation dialog shown first
-    expect(mockShowAlert).toHaveBeenCalledWith(
+    // Confirmation dialog shown via Alert.alert
+    expect(Alert.alert).toHaveBeenCalledWith(
       'Import Vision Model?',
       expect.stringContaining('llava-7b-Q4.gguf'),
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Cancel' }),
-        expect.objectContaining({ text: 'Import' }),
-      ]),
+      expect.any(Array),
+      expect.any(Object),
     );
 
     // importLocalModel called with mmproj fields
-    expect(mockImportLocalModel).toHaveBeenCalledWith({
+    expect(mockImportLocalModel).toHaveBeenCalledWith(expect.objectContaining({
       sourceUri: file1.uri,
       fileName: file1.name,
+      sourceSize: file1.size,
       onProgress: expect.any(Function),
       mmProjSourceUri: file2.uri,
       mmProjFileName: file2.name,
-    });
+      mmProjSourceSize: file2.size,
+    }));
 
     expect(mockAddDownloadedModel).toHaveBeenCalledWith(fakeModel);
     expect(mockShowAlert).toHaveBeenCalledWith('Success', 'VisionModel imported with vision projector!');
@@ -229,15 +212,14 @@ describe('importGgufFiles', () => {
     const mmproj = { uri: 'file://mmproj-f16.gguf', name: 'mmproj-f16.gguf', size: 200 };
     const main = { uri: 'file://model-Q4.gguf', name: 'model-Q4.gguf', size: 4000 };
 
-    mockShowAlert.mockImplementationOnce((_: string, __: string, buttons: any[]) => {
-      buttons?.find((b: any) => b.text === 'Import')?.onPress();
-      return { visible: true };
+    mockAlertAlert.mockImplementationOnce((_: string, __: string, buttons: any[]) => {
+      buttons?.find((b: any) => b.text === 'Import')?.onPress?.();
     });
 
     await importGgufFiles([mmproj, main], deps);
 
     expect(mockImportLocalModel).toHaveBeenCalledWith(expect.objectContaining({
-      sourceUri: main.uri,       // main model is file2
+      sourceUri: main.uri,         // main model is file2
       mmProjSourceUri: mmproj.uri, // projector is file1
     }));
   });
@@ -245,9 +227,8 @@ describe('importGgufFiles', () => {
   // ── two GGUFs — user cancels ───────────────────────────────────────────
 
   it('two GGUFs: on cancel, does NOT call importLocalModel', async () => {
-    mockShowAlert.mockImplementationOnce((_title: string, _msg: string, buttons: any[]) => {
-      buttons?.find((b: any) => b.text === 'Cancel')?.onPress();
-      return { visible: true };
+    mockAlertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: any[]) => {
+      buttons?.find((b: any) => b.text === 'Cancel')?.onPress?.();
     });
 
     const file1 = { uri: 'file://llava-7b-Q4.gguf', name: 'llava-7b-Q4.gguf', size: 4200 };

@@ -92,6 +92,14 @@ async function safeRelease(ctx: LlamaContext | null): Promise<void> {
   if (!ctx) return;
   try { await ctx.release(); } catch (e) { logger.warn('[LLM] Error releasing context during fallback:', e); }
 }
+/** On Android, race GPU init against a timeout to prevent Adreno driver ANRs. */
+async function tryGpuInit(promise: Promise<LlamaContext>, nGpuLayers: number): Promise<LlamaContext> {
+  if (nGpuLayers <= 0 || Platform.OS !== 'android') return promise;
+  let timedOut = false;
+  promise.then(ctx => { if (timedOut) safeRelease(ctx); }).catch(() => {});
+  try { return await withTimeout(promise, GPU_INIT_TIMEOUT_MS, 'GPU context init'); }
+  catch (e) { timedOut = true; throw e; }
+}
 
 /** Init llama with GPU, fall back to CPU, then retry with ctx=2048 on failure. */
 export async function initContextWithFallback(
@@ -105,25 +113,11 @@ export async function initContextWithFallback(
   try {
     logger.log(`[LLM] Attempt 1/3: GPU init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
-    // On Android, guard against Adreno driver hangs that cause ANRs.
-    // If GPU init times out, the promise may still resolve later; capture and release it.
-    if (nGpuLayers > 0 && Platform.OS === 'android') {
-      let timedOut = false;
-      gpuInitPromise.then(ctx => { if (timedOut) safeRelease(ctx); }).catch(() => {});
-      try {
-        const context = await withTimeout(gpuInitPromise, GPU_INIT_TIMEOUT_MS, 'GPU context init');
-        logger.log('[LLM] GPU init succeeded');
-        return { context, gpuAttemptFailed, actualLength: contextLength };
-      } catch (e) {
-        timedOut = true;
-        throw e;
-      }
-    }
-    const context = await gpuInitPromise;
+    const context = await tryGpuInit(gpuInitPromise, nGpuLayers);
     logger.log('[LLM] GPU init succeeded');
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
-    const gpuMsg = gpuError?.message || String(gpuError) || '';
+    const gpuMsg = gpuError?.message || String(gpuError);
     if (nGpuLayers > 0) {
       logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
       gpuAttemptFailed = true;
@@ -136,7 +130,7 @@ export async function initContextWithFallback(
       logger.log('[LLM] CPU init succeeded');
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
-      const cpuMsg = cpuError?.message || String(cpuError) || '';
+      const cpuMsg = cpuError?.message || String(cpuError);
       logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
       try {
         logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
@@ -144,11 +138,16 @@ export async function initContextWithFallback(
         logger.log('[LLM] CPU init with ctx=2048 succeeded');
         return { context, gpuAttemptFailed, actualLength: 2048 };
       } catch (finalError: any) {
-        const finalMsg = finalError?.message || String(finalError) || '';
+        const finalMsg = finalError?.message || String(finalError);
         logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
         logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
         logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);
-        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format. (${finalMsg})`);
+        const errorParts = [
+          gpuMsg && gpuMsg !== finalMsg ? `GPU: ${gpuMsg}` : null,
+          cpuMsg && cpuMsg !== finalMsg ? `CPU: ${cpuMsg}` : null,
+          `min-ctx: ${finalMsg}`,
+        ].filter(Boolean).join(' | ');
+        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}`);
       }
     }
   }
@@ -184,8 +183,10 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     return false;
   }
 }
-export function buildThinkingCompletionParams(enableThinking: boolean): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
-  return { enable_thinking: enableThinking, reasoning_format: enableThinking ? 'deepseek' : 'none' };
+export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false): { enable_thinking: boolean; reasoning_format: 'none' | 'deepseek' } {
+  // Gemma 4 uses its own <|channel>thought\n...<channel|> format — not DeepSeek's <think> tags.
+  // Set reasoning_format:'none' so llama.rn doesn't try to strip DeepSeek tags; we parse it ourselves.
+  return { enable_thinking: enableThinking, reasoning_format: (enableThinking && !isGemma4) ? 'deepseek' : 'none' };
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   if (!nextValue) return undefined;
