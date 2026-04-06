@@ -345,11 +345,12 @@ describe('useModelsScreen', () => {
       });
 
       // importLocalModel now takes an options object, not positional args
-      expect(modelManager.importLocalModel).toHaveBeenCalledWith({
+      expect(modelManager.importLocalModel).toHaveBeenCalledWith(expect.objectContaining({
         sourceUri: 'file://test.gguf',
         fileName: 'test.gguf',
+        sourceSize: 4000,
         onProgress: expect.any(Function),
-      });
+      }));
       expect(result.current.alertState.visible).toBe(true);
       expect(result.current.alertState.title).toBe('Success');
       expect(result.current.isImporting).toBe(false);
@@ -357,25 +358,29 @@ describe('useModelsScreen', () => {
     });
 
     it('returns early without calling pick if isImporting is already true', async () => {
+      const { modelManager } = require('../../../../src/services');
       const { result } = renderHook(() => useModelsScreen());
 
-      // Make the first pick call hang so the first import stays in-flight
-      let resolveFirst!: (v: any) => void;
-      const hangingPromise = new Promise(r => { resolveFirst = r; });
-      mockPick.mockReturnValueOnce(hangingPromise);
+      // Make importLocalModel hang so isImporting stays true after pick returns
+      let resolveImport!: (v: any) => void;
+      const hangingImport = new Promise(r => { resolveImport = r; });
+      mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 100 }]);
+      modelManager.importLocalModel.mockReturnValueOnce(hangingImport);
 
-      // Start first import (will hang at pick)
+      // Start first import — pick returns, isImporting becomes true, import hangs
       const firstImport = act(() => { result.current.handleImportLocalModel(); });
 
-      // Second call should bail early (isImporting is true)
+      // Give the first import time to set isImporting=true
+      await act(async () => {});
+
+      // Second call should bail early because isImporting is now true
       await act(async () => { await result.current.handleImportLocalModel(); });
 
       // pick should only have been called once
       expect(mockPick).toHaveBeenCalledTimes(1);
 
-      // Resolve the hanging promise BEFORE test ends to avoid consuming
-      // the next test's mockPick setup
-      act(() => { resolveFirst([]); });
+      // Resolve the hanging import to clean up
+      act(() => { resolveImport({ id: 'x', name: 'X' }); });
       await firstImport;
     });
 

@@ -2348,7 +2348,7 @@ describe('ModelManager', () => {
       jest.useRealTimers();
     });
 
-    it('copies content:// URI to temp cache on Android and cleans up after import', async () => {
+    it('copies content:// URI directly to models dir on Android (no temp cache)', async () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
@@ -2356,7 +2356,6 @@ describe('ModelManager', () => {
 
       mockedRNFS.stat.mockResolvedValue({ size: 2000000000, isFile: () => true } as any);
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
-      mockedRNFS.unlink.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const result = await modelManager.importLocalModel({
@@ -2364,13 +2363,11 @@ describe('ModelManager', () => {
         fileName: 'model-Q4_K_M.gguf',
       });
 
-      // copyFile should have been called for the content:// URI
+      // content:// URI is copied directly to the models dir — no temp cache step
       expect((mockedRNFS as any).copyFile).toHaveBeenCalledWith(
         'content://com.android.provider/document/model.gguf',
-        expect.stringContaining('model-Q4_K_M.gguf')
+        expect.stringContaining('model-Q4_K_M.gguf'),
       );
-      // unlink should have been called for the temp cache file
-      expect(mockedRNFS.unlink).toHaveBeenCalled();
       expect(result.id).toBe('local_import/model-Q4_K_M.gguf');
     });
   });

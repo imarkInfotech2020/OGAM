@@ -61,6 +61,8 @@ jest.mock('../../../src/services/llm', () => ({
     isModelLoaded: jest.fn(),
     supportsToolCalling: jest.fn(() => false),
     supportsThinking: jest.fn(() => false),
+    isGemma4Model: jest.fn(() => false),
+    isThinkingEnabled: jest.fn(() => false),
     stopGeneration: jest.fn(),
     getContextDebugInfo: jest.fn(),
     clearKVCache: jest.fn(),
@@ -157,6 +159,9 @@ beforeEach(() => {
   mockCancelGeneration.mockResolvedValue(undefined);
   mockGetLoadedModelPath.mockReturnValue('/path/model.gguf');
   mockIsModelLoaded.mockReturnValue(true);
+  (llmService.supportsToolCalling as jest.Mock).mockReturnValue(false);
+  (llmService.isGemma4Model as jest.Mock).mockReturnValue(false);
+  (llmService.isThinkingEnabled as jest.Mock).mockReturnValue(false);
   mockStopLlmGeneration.mockResolvedValue(undefined);
   mockGetContextDebugInfo.mockResolvedValue({ truncatedCount: 0, contextUsagePercent: 0 });
   mockClearKVCache.mockResolvedValue(undefined);
@@ -519,7 +524,7 @@ describe('startGenerationFn', () => {
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
-  it('does not use tool loop for messages that do not match tool patterns', async () => {
+  it('uses tool loop for all messages when tools are enabled', async () => {
     (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
     const deps = makeGenerationDeps({
       settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
@@ -527,9 +532,9 @@ describe('startGenerationFn', () => {
 
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
 
-    // 'Hi' doesn't match any tool trigger patterns, so regular generateResponse is used
-    expect(mockGenerateResponse).toHaveBeenCalledWith('conv-1', expect.any(Array));
-    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+    // Tools are always passed when enabled — no heuristic gate
+    expect(mockGenerateWithTools).toHaveBeenCalled();
+    expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
   it('uses the tool loop when the message clearly needs a tool', async () => {
