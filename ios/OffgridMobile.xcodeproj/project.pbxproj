@@ -315,9 +315,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-OffgridMobile/Pods-OffgridMobile-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-OffgridMobile/Pods-OffgridMobile-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -354,9 +358,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-OffgridMobile/Pods-OffgridMobile-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-OffgridMobile/Pods-OffgridMobile-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -423,7 +431,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile;
 				PRODUCT_NAME = OffgridMobile;
 				SWIFT_OBJC_BRIDGING_HEADER = "OffgridMobile/OffgridMobile-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -454,7 +462,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile;
 				PRODUCT_NAME = OffgridMobile;
 				SWIFT_OBJC_BRIDGING_HEADER = "OffgridMobile/OffgridMobile-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
