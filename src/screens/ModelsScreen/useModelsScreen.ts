@@ -97,7 +97,7 @@ export function useModelsScreen() {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
       image.loadHFModels();
     }
-   
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const setActiveTab = (tab: ModelTab) => {

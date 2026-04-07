@@ -33,7 +33,7 @@ export const ModelsScreen: React.FC = () => {
         vm.setSelectedModel(null);
         vm.setModelFiles([]);
       };
-
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [route.params?.initialTab]),
   );
 

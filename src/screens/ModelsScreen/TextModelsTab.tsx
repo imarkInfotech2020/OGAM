@@ -79,6 +79,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getFileCardState = (item: ModelFile) => {

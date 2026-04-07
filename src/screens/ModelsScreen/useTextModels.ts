@@ -52,7 +52,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   useEffect(() => {
     loadDownloadedModels();
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
