@@ -214,7 +214,8 @@ export const useChatScreen = () => {
     if (!was || isStreamingForThisConversation || !activeConversationId) return;
     const tts = useTTSStore.getState();
     if (tts.settings.interfaceMode !== 'audio' || !tts.isModelLoaded) return;
-    const last = (activeConversation?.messages ?? []).at(-1);
+    const conv = useChatStore.getState().conversations.find((c) => c.id === activeConversationId);
+    const last = (conv?.messages ?? []).at(-1);
     if (!last || last.role !== 'assistant' || last.isSystemInfo || last.toolCalls?.length || last.audioPath) return;
     triggerAudioModeGeneration(activeConversationId, last.id, last.content);
   }, [isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
