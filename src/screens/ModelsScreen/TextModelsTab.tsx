@@ -8,6 +8,7 @@ import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
+import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
@@ -86,9 +87,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
-    // Show repair whenever the file has an mmproj — lets user re-fetch if the
-    // mmproj is missing on disk even though the store path is set.
-    const needsVisionRepair = downloaded && !!item.mmProjFile;
+    const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const canCancel = !!progress && downloadIds[downloadKey] != null;
     return { downloadKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
   };

@@ -5,6 +5,7 @@ import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import { hardwareService } from '../../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
+import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { createStyles } from './styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -214,7 +215,7 @@ interface CompletedDownloadCardProps {
 export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const needsVisionRepair = item.isVisionModel && !item.mmProjPath;
+  const needsVisionRepair = checkNeedsVisionRepair(item);
 
   return (
     <Card style={styles.downloadCard}>
