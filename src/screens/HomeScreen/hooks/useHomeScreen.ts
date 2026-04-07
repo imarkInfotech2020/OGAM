@@ -79,7 +79,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     generatedImages,
   } = useAppStore();
 
-  const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
+  const { conversations, setActiveConversation, deleteConversation } = useChatStore();
 
   // Remote server store for remote models
   const {
