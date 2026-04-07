@@ -85,6 +85,7 @@ export function detectToolCallingCapability(modelId: string): boolean {
 
 export async function createProviderForServerImpl(server: RemoteServer): Promise<void> {
   const apiKey = await getApiKeyImpl(server.id);
+  logger.log('[RemoteServerManager] createProvider:', server.name, '| endpoint:', server.endpoint, '| hasApiKey:', !!apiKey);
   const provider = createOpenAIProvider(server.id, server.endpoint, { apiKey: apiKey || undefined });
   providerRegistry.registerProvider(server.id, provider);
 }

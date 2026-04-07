@@ -35,6 +35,7 @@ jest.mock('../../../src/services/remoteServerManager', () => ({
     testConnection: jest.fn().mockResolvedValue({ success: true, latency: 10 }),
     addServer: jest.fn(),
     updateServer: jest.fn(),
+    getApiKey: jest.fn().mockResolvedValue(null),
   },
 }));
 
