@@ -266,15 +266,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           testID="search-input"
         />
         <TouchableOpacity
-          style={[styles.filterToggle, (textFiltersVisible || hasNonSortActiveFilters) && styles.filterToggleActive]}
-          onPress={() => setTextFiltersVisible(v => !v)}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          testID="text-filter-toggle"
-        >
-          <Icon name="sliders" size={14} color={(textFiltersVisible || hasNonSortActiveFilters) ? colors.primary : colors.textMuted} />
-          {hasNonSortActiveFilters && <View style={styles.filterDot} />}
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.filterToggle, (isSortActive || filterState.expandedDimension === 'sort') && styles.filterToggleActive]}
           onPress={() => toggleFilterDimension('sort')}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
@@ -286,6 +277,15 @@ export const TextModelsTab: React.FC<Props> = (props) => {
             color={(isSortActive || filterState.expandedDimension === 'sort') ? colors.primary : colors.textMuted}
           />
           {isSortActive && <View style={styles.filterDot} />}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterToggle, (textFiltersVisible || hasNonSortActiveFilters) && styles.filterToggleActive]}
+          onPress={() => setTextFiltersVisible(v => !v)}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          testID="text-filter-toggle"
+        >
+          <Icon name="sliders" size={14} color={(textFiltersVisible || hasNonSortActiveFilters) ? colors.primary : colors.textMuted} />
+          {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
       </View>
 
