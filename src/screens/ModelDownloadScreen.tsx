@@ -40,7 +40,9 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel } = useAppStore();
+  const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
+
+  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel, downloadedModels } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
 
@@ -118,16 +120,25 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [refreshServerHealth]);
 
+  const handleCancelDownload = async (key: string) => {
+    const downloadId = downloadIds[key];
+    if (downloadId == null) return;
+    try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
+    setDownloadProgress(key, null);
+    setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
+  };
+
   const handleDownload = async (modelId: string, file: ModelFile) => {
     const key = `${modelId}/${file.name}`;
     setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
     const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', error.message)); };
     try {
       const info = await modelManager.downloadModelBackground(modelId, file, (p) => setDownloadProgress(key, p));
+      setDownloadIds(prev => ({ ...prev, [key]: info.downloadId }));
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
         setDownloadProgress(key, null);
+        setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
         addDownloadedModel(model);
-        setAlertState(showAlert('Download Complete!', `${model.name} has been downloaded successfully.`, [{ text: 'OK' }]));
       }, onError);
     } catch (error) { onError(error as Error); }
   };
@@ -223,6 +234,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
             const recFile = modelFiles[model.id][0];
             const key = `${model.id}/${recFile.name}`;
             const progress = downloadProgress[key];
+            const downloaded = downloadedModels.find(d => d.id === model.id && d.fileName === recFile.name);
             return (
               <ModelCard
                 key={model.id}
@@ -230,11 +242,14 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
                 compact
                 model={{ id: model.id, name: model.name, author: model.id.split('/')[0], description: model.description, modelType: model.type, paramCount: model.params, minRamGB: model.minRam }}
                 file={recFile}
+                downloadedModel={downloaded}
+                isDownloaded={!!downloaded}
                 isDownloading={!!progress}
                 downloadProgress={progress?.progress}
                 isCompatible={model.minRam <= totalRamGB}
                 onPress={() => {}}
-                onDownload={() => handleDownload(model.id, recFile)}
+                onDownload={downloaded ? undefined : () => handleDownload(model.id, recFile)}
+                onCancel={progress ? () => handleCancelDownload(key) : undefined}
               />
             );
           })}

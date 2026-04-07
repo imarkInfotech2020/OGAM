@@ -393,14 +393,15 @@ describe('ModelDownloadScreen', () => {
     return { result, completedModel };
   }
 
-  it('download calls onComplete callback and shows alert', async () => {
+  it('download calls onComplete callback and marks model as downloaded', async () => {
     const { completedModel } = await setupDownloadCompletion();
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
-    expect(mockShowAlert).toHaveBeenCalledWith(
+    // No alert on completion — success is shown via the tick on the card
+    expect(mockShowAlert).not.toHaveBeenCalledWith(
       'Download Complete!',
-      expect.stringContaining('downloaded successfully'),
-      expect.any(Array),
+      expect.anything(),
+      expect.anything(),
     );
   });
 
