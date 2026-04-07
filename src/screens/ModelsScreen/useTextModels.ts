@@ -284,14 +284,14 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
-    // Pick the best-fit (highest params that still fits) from each trending family
+    // Pick the best-fit per family using the same bestFitScore used for "for you" recommendations
     return Object.values(TRENDING_FAMILIES)
       .map(ids => RECOMMENDED_MODELS
         .filter(m => ids.includes(m.id) && m.params <= maxParams)
-        .sort((a, b) => b.params - a.params)[0])
-      .filter(Boolean)
-      .map(m => mapCuratedModel(m, recommendedModelDetails));
-  }, [deviceRecommendation.maxParameters, recommendedModelDetails]);
+        .map(m => mapCuratedModel(m, recommendedModelDetails))
+        .sort((a, b) => bestFitScore(a, ramGB) - bestFitScore(b, ramGB))[0])
+      .filter((m): m is ModelInfo => Boolean(m));
+  }, [deviceRecommendation.maxParameters, recommendedModelDetails, ramGB]);
 
   return {
     searchQuery, setSearchQuery,
