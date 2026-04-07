@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { useThemedStyles, useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { createStyles } from './ModelCard.styles';
@@ -80,11 +81,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           <View style={styles.authorTag}>
             <Text style={styles.authorTagText}>{model.author}</Text>
           </View>
-          {isTrending && (
-            <View style={styles.trendingBadge}>
-              <Text style={styles.trendingBadgeText}>↑ trending</Text>
-            </View>
-          )}
+          {isTrending && <MaterialIcon name="whatshot" size={14} color="#FF6B00" />}
           {credibilityInfo && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
               {credibility?.source === 'lmstudio' && (
