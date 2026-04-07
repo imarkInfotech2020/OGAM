@@ -9,13 +9,23 @@ import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } fr
 import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
 import { CREDIBILITY_LABELS } from '../../constants';
-import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
+import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { TextFiltersSection } from './TextFiltersSection';
-import { FilterState } from './types';
+import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber } from './utils';
+
+function hasNonSortFilters(fs: FilterState): boolean {
+  return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
+}
+
+function getEmptyText(hasSearched: boolean, hasActiveFilters: boolean): string {
+  if (!hasSearched) return 'No recommended models available.';
+  if (hasActiveFilters) return 'No models match your filters. Try adjusting or clearing them.';
+  return 'No models found. Try a different search term.';
+}
 
 type Props = Pick<ModelsScreenViewModel,
   | 'searchQuery' | 'setSearchQuery'
@@ -41,33 +51,20 @@ type Props = Pick<ModelsScreenViewModel,
   | 'isModelDownloaded' | 'getDownloadedModel'
 >;
 
-interface DetailProps {
-  selectedModel: ModelInfo;
-  modelFiles: ModelFile[];
-  isLoadingFiles: boolean;
-  filterState: FilterState;
-  ramGB: number;
-  downloadProgress: Props['downloadProgress'];
-  alertState: Props['alertState'];
-  setAlertState: Props['setAlertState'];
-  onBack: () => void;
-  getDownloadedModel: (modelId: string, fileName: string) => DownloadedModel | undefined;
-  isModelDownloaded: (modelId: string, fileName: string) => boolean;
-  handleDownload: (model: ModelInfo, file: ModelFile) => void;
-  handleRepairMmProj: (model: ModelInfo, file: ModelFile) => void;
-  handleCancelDownload: (downloadKey: string) => void;
-  handleDeleteModel: (modelId: string) => void;
-  downloadIds: Record<string, number>;
-  styles: ReturnType<typeof createStyles>;
-  colors: ReturnType<typeof useTheme>['colors'];
-}
+type DetailProps = Pick<Props,
+  | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
+  | 'downloadProgress' | 'alertState' | 'setAlertState'
+  | 'getDownloadedModel' | 'isModelDownloaded'
+  | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel' | 'downloadIds'
+> & { selectedModel: ModelInfo; onBack: () => void; };
 
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   downloadProgress, alertState, setAlertState, onBack,
   getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, downloadIds,
-  styles, colors,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { goTo } = useSpotlightTour();
 
   // If user arrived here via onboarding spotlight flow, show file card spotlight
@@ -172,6 +169,48 @@ const ModelDetailView: React.FC<DetailProps> = ({
   );
 };
 
+const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
+  <View>
+    <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
+    {showTitle && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
+  </View>
+);
+
+interface ModelListItemProps {
+  item: ModelInfo; index: number; focusTrigger: number;
+  isDownloaded: boolean; isTrending: boolean; onPress: () => void;
+}
+const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} onPress={onPress} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
+  return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
+};
+
+function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void, goTo: (step: number) => void): void {
+  const pending = consumePendingSpotlight();
+  setSelectedModel(null);
+  setModelFiles([]);
+  if (pending !== null) { InteractionManager.runAfterInteractions(() => goTo(pending)); }
+}
+
+interface SortPanelProps {
+  filterState: FilterState;
+  setSortOption: (s: SortOption) => void;
+  styles: ReturnType<typeof createStyles>;
+  colors: ReturnType<typeof useTheme>['colors'];
+}
+const SortPanel: React.FC<SortPanelProps> = ({ filterState, setSortOption, styles, colors }) => (
+  <View style={styles.filterExpandedContent}>
+    <View style={styles.filterChipWrap}>
+      {SORT_OPTIONS.map(option => (
+        <TouchableOpacity key={option.key} style={[styles.filterChip, filterState.sort === option.key && styles.filterChipActive]} onPress={() => setSortOption(option.key)}>
+          <Icon name={option.icon} size={12} color={filterState.sort === option.key ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.filterChipText, filterState.sort === option.key && styles.filterChipTextActive]}>{option.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </View>
+);
+
 export const TextModelsTab: React.FC<Props> = (props) => {
   const {
     searchQuery, setSearchQuery, isLoading, isRefreshing, hasSearched,
@@ -187,44 +226,21 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     isModelDownloaded, getDownloadedModel,
   } = props;
 
-  const hasNonSortActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' ||
-    filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
-  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
+  const hasNonSortActiveFilters = hasNonSortFilters(filterState);
+  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort)!;
   const isSortActive = filterState.sort !== 'recommended';
+  const sortToggleActive = isSortActive || filterState.expandedDimension === 'sort';
+  const filterToggleActive = textFiltersVisible || hasNonSortActiveFilters;
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { goTo } = useSpotlightTour();
 
-  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
-    const card = (
-      <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}>
-        <ModelCard
-          model={item}
-          isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))}
-          onPress={() => handleSelectModel(item)}
-          testID={`model-card-${index}`}
-          compact
-          isTrending={trendingAsModelInfo.some(t => t.id === item.id)}
-        />
-      </AnimatedEntry>
-    );
+  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => (
+    <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={() => handleSelectModel(item)} />
+  );
 
-    // Spotlight the first recommended model card for the "Download a model" onboarding step
-    if (index === 0) {
-      return <AttachStep index={0} fill>{card}</AttachStep>;
-    }
-    return card;
-  };
-
-  const onBack = () => {
-    const pending = consumePendingSpotlight();
-    setSelectedModel(null);
-    setModelFiles([]);
-    if (pending !== null) {
-      InteractionManager.runAfterInteractions(() => goTo(pending));
-    }
-  };
+  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles, goTo);
 
   if (selectedModel) {
     return (
@@ -245,15 +261,12 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         handleCancelDownload={handleCancelDownload}
         handleDeleteModel={handleDeleteModel}
         downloadIds={downloadIds}
-        styles={styles}
-        colors={colors}
       />
     );
   }
 
   return (
     <>
-      {/* Main list / search UI */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -266,51 +279,26 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           testID="search-input"
         />
         <TouchableOpacity
-          style={[styles.filterToggle, (isSortActive || filterState.expandedDimension === 'sort') && styles.filterToggleActive]}
+          style={[styles.filterToggle, sortToggleActive && styles.filterToggleActive]}
           onPress={() => toggleFilterDimension('sort')}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           testID="sort-pill"
         >
-          <Icon
-            name={currentSort.icon}
-            size={14}
-            color={(isSortActive || filterState.expandedDimension === 'sort') ? colors.primary : colors.textMuted}
-          />
+          <Icon name={currentSort.icon} size={14} color={sortToggleActive ? colors.primary : colors.textMuted} />
           {isSortActive && <View style={styles.filterDot} />}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterToggle, (textFiltersVisible || hasNonSortActiveFilters) && styles.filterToggleActive]}
+          style={[styles.filterToggle, filterToggleActive && styles.filterToggleActive]}
           onPress={() => setTextFiltersVisible(v => !v)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           testID="text-filter-toggle"
         >
-          <Icon name="sliders" size={14} color={(textFiltersVisible || hasNonSortActiveFilters) ? colors.primary : colors.textMuted} />
+          <Icon name="sliders" size={14} color={filterToggleActive ? colors.primary : colors.textMuted} />
           {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
       </View>
 
-      {filterState.expandedDimension === 'sort' && (
-        <View style={styles.filterExpandedContent}>
-          <View style={styles.filterChipWrap}>
-            {SORT_OPTIONS.map(option => (
-              <TouchableOpacity
-                key={option.key}
-                style={[styles.filterChip, filterState.sort === option.key && styles.filterChipActive]}
-                onPress={() => setSortOption(option.key)}
-              >
-                <Icon
-                  name={option.icon}
-                  size={12}
-                  color={filterState.sort === option.key ? colors.primary : colors.textSecondary}
-                />
-                <Text style={[styles.filterChipText, filterState.sort === option.key && styles.filterChipTextActive]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      )}
+      {filterState.expandedDimension === 'sort' && <SortPanel filterState={filterState} setSortOption={setSortOption} styles={styles} colors={colors} />}
 
       {textFiltersVisible && (
         <TextFiltersSection
@@ -340,25 +328,10 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           contentContainerStyle={styles.listContent}
           testID="models-list"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-          ListHeaderComponent={hasSearched ? null : (
-            <View>
-              <View style={styles.deviceBanner}>
-                <Text style={styles.deviceBannerText}>
-                  {Math.round(ramGB)}GB RAM — models up to {deviceRecommendation.maxParameters}B recommended ({deviceRecommendation.recommendedQuantization})
-                </Text>
-              </View>
-              {recommendedAsModelInfo.length > 0 && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
-            </View>
-          )}
+          ListHeaderComponent={hasSearched ? null : <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>
-              <Text style={styles.emptyText}>
-                {(() => {
-                  if (!hasSearched) return 'No recommended models available.';
-                  if (hasActiveFilters) return 'No models match your filters. Try adjusting or clearing them.';
-                  return 'No models found. Try a different search term.';
-                })()}
-              </Text>
+              <Text style={styles.emptyText}>{getEmptyText(hasSearched, hasActiveFilters)}</Text>
             </Card>
           }
         />

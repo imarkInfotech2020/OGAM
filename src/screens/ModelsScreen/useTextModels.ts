@@ -64,6 +64,33 @@ async function fetchRecommendedModelDetails(): Promise<Record<string, ModelInfo>
   return details;
 }
 
+function computeFilteredResults(
+  searchResults: ModelInfo[],
+  filterState: FilterState,
+  ramGB: number,
+): ModelInfo[] {
+  const filtered = searchResults.filter(model => {
+    if (filterState.source !== 'all' && model.credibility?.source !== filterState.source) return false;
+    if (filterState.type !== 'all' && getModelType(model) !== filterState.type) return false;
+    if (!matchesOrgFilter(model, filterState.orgs)) return false;
+    if (filterState.size !== 'all') {
+      const params = parseParamCount(model);
+      if (params !== null) {
+        const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
+        if (sizeOpt && (params < sizeOpt.min || params >= sizeOpt.max)) return false;
+      }
+    }
+    const filesWithSize = (model.files || []).filter(f => f.size > 0);
+    if (filesWithSize.length > 0 && !filesWithSize.some(f => f.size / (1024 ** 3) < ramGB * 0.6)) return false;
+    return true;
+  });
+  return filtered.map(model => {
+    const type = getModelType(model);
+    const params = parseParamCount(model);
+    return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
+  });
+}
+
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -246,29 +273,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all' ||
     filterState.sort !== 'recommended';
 
-  const filteredResults = useMemo(() => {
-    const filtered = searchResults.filter(model => {
-      if (filterState.source !== 'all' && model.credibility?.source !== filterState.source) return false;
-      if (filterState.type !== 'all' && getModelType(model) !== filterState.type) return false;
-      if (!matchesOrgFilter(model, filterState.orgs)) return false;
-      if (filterState.size !== 'all') {
-        const params = parseParamCount(model);
-        if (params !== null) {
-          const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
-          if (sizeOpt && (params < sizeOpt.min || params >= sizeOpt.max)) return false;
-        }
-      }
-      const filesWithSize = (model.files || []).filter(f => f.size > 0);
-      if (filesWithSize.length > 0 && !filesWithSize.some(f => f.size / (1024 ** 3) < ramGB * 0.6)) return false;
-      return true;
-    });
-    const mapped = filtered.map(model => {
-      const type = getModelType(model);
-      const params = parseParamCount(model);
-      return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
-    });
-    return applySort(mapped, filterState.sort, ramGB);
-  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, filterState.sort, ramGB]);
+  const filteredResults = useMemo(
+    () => applySort(computeFilteredResults(searchResults, filterState, ramGB), filterState.sort, ramGB),
+    [searchResults, filterState, ramGB],
+  );
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
