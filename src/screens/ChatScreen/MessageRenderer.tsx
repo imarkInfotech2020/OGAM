@@ -4,6 +4,7 @@ import { ChatMessage } from '../../components';
 import { AudioMessageBubble } from '../../components/AudioMessageBubble';
 import { TTSButton } from '../../components/TTSButton';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
+import { useTTSStore } from '../../stores/ttsStore';
 import { stripControlTokens } from '../../utils/messageContent';
 import { Message } from '../../types';
 import '../../types/tts';
@@ -58,6 +59,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   onGenerateImage,
   onImagePress,
 }) => {
+  const ttsMode = useTTSStore((s) => s.settings.interfaceMode);
   const msg = item as Message;
   const animateEntry = animateLastN > 0 && index >= displayMessagesLength - animateLastN;
   const isStreamingThis = item.id === 'streaming';
@@ -82,8 +84,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
   }
 
-  // Audio Mode: assistant messages that were generated in audio mode appear as audio bubbles
-  if (msg.role === 'assistant' && msg.isAudioModeMessage && !msg.isSystemInfo && !msg.toolCalls?.length) {
+  // Audio Mode: show all assistant messages as audio bubbles when in audio mode,
+  // or messages that were explicitly generated in audio mode (isAudioModeMessage flag)
+  const isAudioAssistant = msg.role === 'assistant' && !msg.isSystemInfo && !msg.toolCalls?.length;
+  if (isAudioAssistant && (ttsMode === 'audio' || msg.isAudioModeMessage) && !isStreamingThis) {
     const bubble = (
       <View style={audioStyles.assistantContainer}>
         <AudioMessageBubble {...buildAudioBubbleProps(msg)} />

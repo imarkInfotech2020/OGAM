@@ -210,12 +210,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     return (
       <View style={styles.container}>
+        <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
         <QueueRow
           queueCount={queueCount}
           queuedTexts={queuedTexts}
           onClearQueue={onClearQueue}
         />
         <View style={styles.audioModeRow}>
+          {/* Attach + Settings on the left */}
+          <TouchableOpacity
+            ref={attachPicker.triggerRef}
+            style={styles.pillIconButton}
+            onPress={handleAttachPress}
+            disabled={disabled}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Icon name="plus" size={20} color={disabled ? colors.textMuted : colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            ref={quickSettings.triggerRef}
+            style={styles.pillIconButton}
+            onPress={handleQuickSettingsPress}
+            disabled={disabled}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+          </TouchableOpacity>
+
+          {/* Centered hint + mic */}
           <Text style={[styles.audioModeHint, isRecording && styles.audioModeHintRecording]}>
             {isRecording ? 'Release to send' : isTranscribing ? 'Transcribing...' : 'Hold to speak'}
           </Text>
@@ -233,6 +255,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onCancelRecording={cancelRecording}
           />
         </View>
+
+        <AttachPickerPopover
+          visible={attachPicker.visible}
+          onClose={attachPicker.hide}
+          anchorY={attachPicker.anchor.y}
+          anchorX={attachPicker.anchor.x}
+          supportsVision={supportsVision}
+          onPhoto={handleVisionPress}
+          onDocument={handlePickDocument}
+        />
+        <QuickSettingsPopover
+          visible={quickSettings.visible}
+          onClose={quickSettings.hide}
+          anchorY={quickSettings.anchor.y}
+          anchorX={quickSettings.anchor.x}
+          imageMode={imageMode}
+          onImageModeToggle={handleImageModeToggle}
+          imageModelLoaded={imageModelLoaded}
+          supportsThinking={supportsThinking}
+          supportsToolCalling={supportsToolCalling}
+          enabledToolCount={enabledToolCount}
+          onToolsPress={onToolsPress}
+        />
         <CustomAlert
           visible={alertState.visible}
           title={alertState.title}

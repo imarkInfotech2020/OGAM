@@ -150,15 +150,6 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </TouchableOpacity>
   );
 
-  const voiceChip = !isUser ? (
-    <TouchableOpacity
-      onPress={handleVoiceCycle}
-      style={styles.speedChip}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-    >
-      <Text style={styles.speedText}>{currentVoice.label}</Text>
-    </TouchableOpacity>
-  ) : null;
 
   const playButton = (
     <TouchableOpacity
@@ -195,10 +186,22 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
             <WaveformBars data={waveformData} colors={colors} />
             {durationText}
             {speedChip}
-            {voiceChip}
           </>
         )}
       </View>
+
+      {/* Voice row — AI bubbles only: shows current voice, tap to cycle */}
+      {!isUser ? (
+        <TouchableOpacity
+          onPress={handleVoiceCycle}
+          style={styles.voiceRow}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Icon name="mic" size={11} color={colors.textMuted} />
+          <Text style={styles.voiceLabel}>{currentVoice.label}</Text>
+          <Icon name="chevron-right" size={11} color={colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
 
       {/* Transcript toggle */}
       {transcript ? (
@@ -272,6 +275,16 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   speedText: {
     ...TYPOGRAPHY.metaSmall,
     color: colors.textSecondary,
+  },
+  voiceRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  voiceLabel: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.textMuted,
+    flex: 1,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,
