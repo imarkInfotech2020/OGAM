@@ -52,6 +52,7 @@ git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
 # ── 2. Generate grouped release notes ──────────────────────────────
 info "Generating release notes..."
 
+git fetch --tags
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 if [ -z "$LAST_TAG" ]; then
   COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges -50)
