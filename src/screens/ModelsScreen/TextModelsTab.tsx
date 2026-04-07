@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, ScrollView, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
@@ -13,7 +13,7 @@ import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { TextFiltersSection } from './TextFiltersSection';
-import { FilterState, SortOption } from './types';
+import { FilterState } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber } from './utils';
 
@@ -205,6 +205,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           onPress={() => handleSelectModel(item)}
           testID={`model-card-${index}`}
           compact
+          isTrending={trendingAsModelInfo.some(t => t.id === item.id)}
         />
       </AnimatedEntry>
     );
@@ -346,25 +347,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
                   {Math.round(ramGB)}GB RAM — models up to {deviceRecommendation.maxParameters}B recommended ({deviceRecommendation.recommendedQuantization})
                 </Text>
               </View>
-              {trendingAsModelInfo.length > 0 && (
-                <View style={styles.trendingScroll}>
-                  <Text style={styles.trendingSectionTitle}>Trending</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScrollContent}>
-                    {trendingAsModelInfo.map((item, index) => (
-                      <View key={item.id} style={styles.trendingCardWrapper}>
-                        <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}>
-                          <ModelCard
-                            model={item}
-                            isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))}
-                            onPress={() => handleSelectModel(item)}
-                            compact
-                          />
-                        </AnimatedEntry>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
               {recommendedAsModelInfo.length > 0 && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
             </View>
           )}

@@ -27,6 +27,7 @@ interface CompactModelCardContentProps {
   };
   credibility?: ModelCredibility;
   credibilityInfo: CredibilityInfo | null;
+  isTrending?: boolean;
 }
 
 function formatNumber(num: number): string {
@@ -65,6 +66,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
   model,
   credibility,
   credibilityInfo,
+  isTrending,
 }) => {
   const styles = useThemedStyles(createStyles);
 
@@ -78,6 +80,11 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           <View style={styles.authorTag}>
             <Text style={styles.authorTagText}>{model.author}</Text>
           </View>
+          {isTrending && (
+            <View style={styles.trendingBadge}>
+              <Text style={styles.trendingBadgeText}>↑ trending</Text>
+            </View>
+          )}
           {credibilityInfo && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
               {credibility?.source === 'lmstudio' && (

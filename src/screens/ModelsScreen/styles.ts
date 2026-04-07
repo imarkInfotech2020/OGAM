@@ -218,10 +218,6 @@ const createTextModelsStyles = (colors: ThemeColors, _shadows: ThemeShadows) => 
     marginBottom: 16,
   },
   recommendedTitle: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginBottom: SPACING.md },
-  trendingSectionTitle: { ...TYPOGRAPHY.h3, color: colors.text, marginBottom: SPACING.sm },
-  trendingScroll: { marginBottom: SPACING.lg },
-  trendingScrollContent: { gap: 10 },
-  trendingCardWrapper: { width: 180 },
 });
 
 export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({

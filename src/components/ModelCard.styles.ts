@@ -90,6 +90,18 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   credibilityText: {
     ...TYPOGRAPHY.meta,
   },
+  trendingBadge: {
+    backgroundColor: '#FF6B0015',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FF6B0040',
+  },
+  trendingBadgeText: {
+    ...TYPOGRAPHY.meta,
+    color: '#FF6B00',
+  },
   activeBadge: {
     backgroundColor: colors.primary,
     paddingHorizontal: 8,
