@@ -235,7 +235,7 @@ describe('ttsService', () => {
       const path = await ttsService.saveToFile(audio, 'conv1', 'msg1');
 
       expect(path).toBe('/mock/docs/audio-cache/conv1/msg1.pcm');
-      expect(mockRNFS.writeFile).toHaveBeenCalledWith( // eslint-disable-line @typescript-eslint/no-unsafe-call
+      expect(mockRNFS.writeFile).toHaveBeenCalledWith(
         '/mock/docs/audio-cache/conv1/msg1.pcm',
         expect.any(String),
         'base64',

@@ -187,15 +187,6 @@ export interface Message {
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
   /** Tool name (for tool result messages) */
   toolName?: string;
-  // Audio Mode fields
-  /** Path to generated WAV/PCM file on disk (Audio Mode only) */
-  audioPath?: string;
-  /** 200-point amplitude envelope for waveform visualization (Audio Mode only) */
-  waveformData?: number[];
-  /** Total audio duration in seconds (Audio Mode only) */
-  audioDurationSeconds?: number;
-  /** True while TTS is still generating audio for this message */
-  isGeneratingAudio?: boolean;
 }
 
 export interface Conversation {

@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
-import { TTSButton } from '../TTSButton';
-import { AudioMessageBubble } from '../AudioMessageBubble';
-import { useTTSStore } from '../../stores/ttsStore';
 import { useTheme, useThemedStyles } from '../../theme';
 import Icon from 'react-native-vector-icons/Feather';
 import { stripControlTokens } from '../../utils/messageContent';
@@ -144,9 +141,6 @@ const MessageMetaRow: React.FC<MetaRowProps> = ({ message, styles, isStreaming, 
     {message.generationTimeMs != null && message.role === 'assistant' && (
       <Text style={styles.generationTime}>{formatDuration(message.generationTimeMs)}</Text>
     )}
-    {message.role === 'assistant' && !isStreaming && (
-      <TTSButton text={stripControlTokens(message.content)} messageId={message.id} />
-    )}
     {showActions && !isStreaming && (
       <TouchableOpacity style={styles.actionHint} onPress={onMenuOpen}>
         <Text style={styles.actionHintText}>•••</Text>
@@ -190,7 +184,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
@@ -248,26 +241,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     onGenerateImage?.(source.trim().slice(0, 500));
     setShowActionMenu(false);
   };
-
-  // Audio Mode: assistant messages render as waveform bubbles
-  if (
-    message.role === 'assistant' &&
-    ttsInterfaceMode === 'audio' &&
-    !message.isSystemInfo &&
-    !message.toolCalls?.length
-  ) {
-    const bubble = (
-      <AudioMessageBubble
-        messageId={message.id}
-        audioPath={message.audioPath ?? ''}
-        waveformData={message.waveformData ?? []}
-        durationSeconds={message.audioDurationSeconds ?? 0}
-        transcript={stripControlTokens(message.content)}
-        isGenerating={message.isGeneratingAudio || (!message.audioPath && isStreaming === false)}
-      />
-    );
-    return animateEntry ? <AnimatedEntry index={0}>{bubble}</AnimatedEntry> : bubble;
-  }
 
   if (message.isSystemInfo) {
     return <SystemInfoMessage content={displayContent} styles={styles}

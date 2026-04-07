@@ -149,6 +149,23 @@ jest.mock('whisper.rn', () => ({
   },
 }), { virtual: true });
 
+// react-native-audio-api mock
+jest.mock('react-native-audio-api', () => ({
+  AudioContext: jest.fn().mockImplementation(() => ({
+    createBuffer: jest.fn().mockReturnValue({ copyToChannel: jest.fn() }),
+    createBufferSource: jest.fn().mockReturnValue({
+      connect: jest.fn(),
+      start: jest.fn(),
+      stop: jest.fn(),
+      playbackRate: { value: 1.0 },
+      onEnded: null,
+      buffer: null,
+    }),
+    destination: {},
+    close: jest.fn(),
+  })),
+}), { virtual: true });
+
 // react-native-fs mock
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/mock/documents',
