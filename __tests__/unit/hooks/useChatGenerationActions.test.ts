@@ -223,6 +223,8 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
     generatingForConversationRef: makeRef<string | null>(null),
     navigation: { goBack: jest.fn(), navigate: jest.fn() },
     ensureModelLoaded: jest.fn(() => Promise.resolve()),
+    createConversation: jest.fn(() => 'new-conv-id'),
+    pendingProjectId: undefined,
     ...overrides,
   };
 }
@@ -426,15 +428,18 @@ describe('regenerateResponseFn', () => {
 // ─────────────────────────────────────────────
 
 describe('handleSendFn', () => {
-  it('shows alert when no activeConversationId', async () => {
+  it('lazily creates conversation and sends when no activeConversationId', async () => {
+    const startGeneration = jest.fn(() => Promise.resolve());
     const deps = makeGenerationDeps({ activeConversationId: null });
     await handleSendFn(deps, {
       text: 'hello',
-      imageMode: 'auto',
-      startGeneration: jest.fn(),
+      imageMode: 'disabled',
+      startGeneration,
       setDebugInfo: jest.fn(),
     });
-    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'No Model Selected' }));
+    expect(deps.createConversation).toHaveBeenCalledWith('model-1', undefined, undefined);
+    expect(deps.setActiveConversation).toHaveBeenCalledWith('new-conv-id');
+    expect(startGeneration).toHaveBeenCalledWith('new-conv-id', 'hello');
   });
 
   it('shows alert when no activeModel', async () => {
