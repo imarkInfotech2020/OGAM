@@ -25,14 +25,15 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
 
   // Initialize form when editing existing server
   useEffect(() => {
+    let cancelled = false;
     if (server) {
       setName(server.name);
       setEndpoint(server.endpoint);
       setNotes(server.notes || '');
       // Load existing API key from keychain so user can see it's set
       remoteServerManager.getApiKey(server.id).then((key) => {
-        setApiKey(key || '');
-      }).catch(() => setApiKey(''));
+        if (!cancelled) setApiKey(key || '');
+      }).catch(() => { if (!cancelled) setApiKey(''); });
     } else {
       // Reset form for new server
       setName('');
@@ -43,6 +44,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     setErrors({});
     setTestResult(null);
     setDiscoveredModels([]);
+    return () => { cancelled = true; };
   }, [server, visible]);
 
   const validateForm = useCallback((): boolean => {
@@ -87,7 +89,7 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
   const saveServer = useCallback(async () => {
     try {
       if (server) {
-        await remoteServerManager.updateServer(server.id, { name, endpoint, notes, apiKey: apiKey !== '' ? apiKey : undefined });
+        await remoteServerManager.updateServer(server.id, { name, endpoint, notes, apiKey });
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(server.id, discoveredModels);
         }
