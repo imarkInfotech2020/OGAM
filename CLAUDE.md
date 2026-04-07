@@ -8,6 +8,19 @@
 1. Push the branch and open a PR — never `git push origin main`.
 2. If you find yourself on `main`, create a branch first: `git checkout -b <branch-name>`.
 
+## Design Standards
+
+**Any change that touches UI (screens, components, styles) must comply with the design system:**
+
+- Read `docs/design/VISUAL_HIERARCHY_STANDARD.md` before writing or modifying any UI code.
+- Check `docs/design/` for any other relevant design documents.
+- Use `TYPOGRAPHY` tokens — never hardcode font sizes or weights.
+- Use `COLORS` tokens — never hardcode color values.
+- Use `SPACING` tokens — never hardcode margin/padding values.
+- Weights must stay ≤ 400 (no bold).
+- Never use emojis or emoticons in UI text — use Feather icons (`react-native-vector-icons`) instead.
+- Follow the 5-category text hierarchy: TITLE → BODY → SUBTITLE/DESCRIPTION → META.
+
 ## Pre-Commit Quality Gates
 
 All quality gates run automatically via Husky on every `git commit`, scoped to the file types you staged:
