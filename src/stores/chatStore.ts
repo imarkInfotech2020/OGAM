@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
+import '../types/tts';
+import { useTTSStore } from './ttsStore';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
   const now = Date.now();
@@ -267,13 +269,18 @@ export const useChatStore = create<ChatState>()(
         const sanitizedMessage = stripControlTokens(streamingMessage).trim();
         const reasoningContent = streamingReasoningContent.trim() || undefined;
         if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
-          addMessage(conversationId, {
+          const savedMsg = addMessage(conversationId, {
             role: 'assistant',
             content: sanitizedMessage,
             reasoningContent,
             generationTimeMs,
             generationMeta,
           });
+          // Audio Mode: kick off TTS generation in the background
+          const tts = useTTSStore.getState();
+          if (tts.settings.interfaceMode === 'audio' && tts.isModelLoaded) {
+            tts.generateAndSave(sanitizedMessage, conversationId, savedMsg.id);
+          }
         }
         set({
           streamingMessage: '',
