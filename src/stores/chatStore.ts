@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, GenerationMeta } from '../types';
-import { stripControlTokens } from '../utils/messageContent';
+import { stripControlTokens, stripStreamingControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
@@ -239,7 +239,7 @@ export const useChatStore = create<ChatState>()(
 
       appendToStreamingMessage: (token) => {
         set((state) => ({
-          streamingMessage: stripControlTokens(state.streamingMessage + token),
+          streamingMessage: stripStreamingControlTokens(state.streamingMessage + token),
           isStreaming: true,
           isThinking: false,
         }));
@@ -263,9 +263,39 @@ export const useChatStore = create<ChatState>()(
 
       finalizeStreamingMessage: (conversationId, generationTimeMs, generationMeta) => {
         const { streamingMessage, streamingReasoningContent, streamingForConversationId, addMessage } = get();
+
+        // Extract channel-based thinking BEFORE stripping control tokens.
+        // stripControlTokens removes <|channel>thought\n and <channel|> as a safety net,
+        // but that prevents parseThinkingContent (called later in buildMessageData) from
+        // finding them. We pull out the thinking here and store it as reasoningContent so
+        // the ThinkingBlock renders correctly on the finalized message.
+        let rawContent = streamingMessage;
+        let reasoningContent = streamingReasoningContent.trim() || undefined;
+
+        if (!reasoningContent) {
+          // Gemma 4 format: <|channel>thought\n[thinking]<channel|>[response]
+          const g4Open = rawContent.match(/<\|channel>thought\n/i);
+          const g4Close = rawContent.match(/<channel\|>/i);
+          if (g4Open && g4Close && g4Close.index! > g4Open.index!) {
+            const thinkStart = g4Open.index! + g4Open[0].length;
+            const thinkEnd = g4Close.index!;
+            reasoningContent = rawContent.slice(thinkStart, thinkEnd).trim() || undefined;
+            rawContent = rawContent.slice(thinkEnd + g4Close[0].length);
+          } else {
+            // Qwen channel format: <|channel|>analysis<|message|>[thinking]<|channel|>final<|message|>[response]
+            const qwenOpen = rawContent.match(/<\|channel\|>analysis<\|message\|>/i);
+            const qwenClose = rawContent.match(/<\|channel\|>final<\|message\|>/i);
+            if (qwenOpen && qwenClose && qwenClose.index! > qwenOpen.index!) {
+              const thinkStart = qwenOpen.index! + qwenOpen[0].length;
+              const thinkEnd = qwenClose.index!;
+              reasoningContent = rawContent.slice(thinkStart, thinkEnd).trim() || undefined;
+              rawContent = rawContent.slice(thinkEnd + qwenClose[0].length);
+            }
+          }
+        }
+
         // Only finalize if this is the conversation we were generating for
-        const sanitizedMessage = stripControlTokens(streamingMessage).trim();
-        const reasoningContent = streamingReasoningContent.trim() || undefined;
+        const sanitizedMessage = stripControlTokens(rawContent).trim();
         if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {
             role: 'assistant',
