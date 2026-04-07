@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
@@ -79,6 +79,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
   const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
+  const lastProgressUpdate = useRef<Record<string, number>>({});
 
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
@@ -169,8 +170,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const downloadKey = `${model.id}/${file.name}`;
     const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
     setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes });
-    const onProgress = (p: { progress: number; bytesDownloaded: number; totalBytes: number }) =>
+    const onProgress = (p: { progress: number; bytesDownloaded: number; totalBytes: number }) => {
+      const now = Date.now();
+      if (now - (lastProgressUpdate.current[downloadKey] ?? 0) < 500) return;
+      lastProgressUpdate.current[downloadKey] = now;
       setDownloadProgress(downloadKey, p);
+    };
     const onComplete = (dm: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
       setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });

@@ -37,6 +37,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [showServerModal, setShowServerModal] = useState(false);
   const healthCheckInFlight = useRef(false);
   const cancelledKeys = useRef<Set<string>>(new Set());
+  const lastProgressUpdate = useRef<Record<string, number>>({});
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -138,7 +139,11 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', error.message)); };
     try {
       const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
-        if (!cancelledKeys.current.has(key)) setDownloadProgress(key, p);
+        if (cancelledKeys.current.has(key)) return;
+        const now = Date.now();
+        if (now - (lastProgressUpdate.current[key] ?? 0) < 500) return;
+        lastProgressUpdate.current[key] = now;
+        setDownloadProgress(key, p);
       });
       // If the user cancelled before downloadModelBackground resolved, kill it now
       if (cancelledKeys.current.has(key)) {
