@@ -12,7 +12,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { RECOMMENDED_MODELS, TYPOGRAPHY, SPACING } from '../constants';
+import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { hardwareService, modelManager, remoteServerManager } from '../services';
@@ -31,11 +31,12 @@ interface RecommendedCardProps {
   progress: { progress: number } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
+  isTrending: boolean;
   onDownload: () => void;
   onCancel: () => void;
 }
 
-const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, index, progress, downloaded, totalRamGB, onDownload, onCancel }) => (
+const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, index, progress, downloaded, totalRamGB, isTrending, onDownload, onCancel }) => (
   <ModelCard
     key={model.id}
     testID={`recommended-model-${index}`}
@@ -47,6 +48,7 @@ const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, 
     isDownloading={!!progress}
     downloadProgress={progress?.progress}
     isCompatible={model.minRam <= totalRamGB}
+    isTrending={isTrending}
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}
@@ -217,6 +219,19 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   }, [refreshServerHealth]);
 
   const totalRamGB = hardwareService.getTotalMemoryGB();
+
+  // One best-fit trending model per family (highest params that fits device RAM)
+  const trendingModelIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const familyIds of Object.values(TRENDING_FAMILIES)) {
+      const best = RECOMMENDED_MODELS
+        .filter(m => familyIds.includes(m.id) && m.minRam <= totalRamGB)
+        .sort((a, b) => b.params - a.params)[0];
+      if (best) ids.add(best.id);
+    }
+    return ids;
+  }, [totalRamGB]);
+
   const liveServers = servers.filter((s) => reachableServerIds.has(s.id));
 
   if (isLoading) return (
@@ -275,8 +290,9 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
                 recFile={recFile}
                 index={index}
                 progress={downloadProgress[key]}
-                downloaded={downloadedModels.find(d => d.id === model.id && d.fileName === recFile.name)}
+                downloaded={downloadedModels.find(d => d.id === `${model.id}/${recFile.name}`)}
                 totalRamGB={totalRamGB}
+                isTrending={trendingModelIds.has(model.id)}
                 onDownload={() => handleDownload(model.id, recFile)}
                 onCancel={() => handleCancelDownload(key)}
               />
