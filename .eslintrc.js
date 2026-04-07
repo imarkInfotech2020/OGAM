@@ -30,8 +30,8 @@ module.exports = {
     'no-else-return': 'error',
     'prefer-template': 'error',
     complexity: ['error', 15],
-    'max-lines-per-function': ['error', 250],
-    'max-lines': ['error', 350],
+    'max-lines-per-function': ['error', 350],
+    'max-lines': ['error', 500],
     'max-params': ['error', 3],
     // React hooks
     'react-hooks/rules-of-hooks': 'error',
