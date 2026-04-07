@@ -310,28 +310,17 @@ describe('ModelsScreen', () => {
       });
     });
 
-    it('shows search button', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('search-button')).toBeTruthy();
-      });
-    });
-
-    it('triggers search when search button pressed', async () => {
+    it('triggers search when typing', async () => {
       mockSearchModels.mockResolvedValue([
         createModelInfo({ name: 'Llama-3', author: 'meta-llama' }),
       ]);
 
       const { getByTestId } = renderModelsScreen();
 
-      await waitFor(() => {
-        const searchInput = getByTestId('search-input');
-        fireEvent.changeText(searchInput, 'llama');
-      });
+      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
 
       await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
+        fireEvent.changeText(getByTestId('search-input'), 'llama');
       });
 
       await waitFor(() => {
@@ -376,9 +365,6 @@ describe('ModelsScreen', () => {
       });
 
       // Press search button and wait for async results
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText('Test Model Alpha')).toBeTruthy();
@@ -398,10 +384,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'nonexistent-model');
-      });
-
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => {
@@ -637,7 +619,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-        fireEvent.press(getByTestId('search-button'));
       });
 
       // Screen should still be rendered (no crash)
@@ -895,10 +876,6 @@ describe('ModelsScreen', () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
 
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
-
       await waitFor(() => {
         expect(getByText('Test Model')).toBeTruthy();
       });
@@ -933,9 +910,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => expect(getByText('Back Test Model')).toBeTruthy());
@@ -981,9 +955,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => expect(getByText('Stats Model')).toBeTruthy());
 
@@ -1019,9 +990,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Files Model')).toBeTruthy());
 
       await act(async () => {
@@ -1055,9 +1023,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Official Model')).toBeTruthy());
 
       await act(async () => {
@@ -1089,9 +1054,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('LMStudio Model')).toBeTruthy());
 
@@ -1125,9 +1087,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Verified Model')).toBeTruthy());
 
       await act(async () => {
@@ -1160,9 +1119,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('Large Model')).toBeTruthy());
 
@@ -1204,9 +1160,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('Vision Model')).toBeTruthy());
 
@@ -1430,17 +1383,11 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Search Result')).toBeTruthy());
 
       // Clear search and search again
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), '');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       // Should show recommended models again
@@ -1664,9 +1611,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'model');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       // Only official model should show
       await waitFor(() => {
@@ -1711,9 +1655,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText('LLaVA Vision 7B')).toBeTruthy();
@@ -1755,9 +1696,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText('Small 1B')).toBeTruthy();
@@ -1789,9 +1727,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'nonexistent');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText(/No models match your filters/)).toBeTruthy();
@@ -1807,9 +1742,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'nonexistent');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => {
@@ -1841,9 +1773,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
@@ -1883,9 +1812,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
@@ -1937,9 +1863,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
       await act(async () => {
         fireEvent.press(getByText('Test Model'));
@@ -1979,9 +1902,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
       await act(async () => {
@@ -2103,9 +2023,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'coder');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText('DeepSeek Coder 7B')).toBeTruthy();
@@ -2128,9 +2045,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'stable');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => {
@@ -2165,9 +2079,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(getByText('Fits in RAM 3B')).toBeTruthy();
@@ -2190,9 +2101,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'no-files');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => {
@@ -2260,9 +2168,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       // Should not crash - error is handled
       await waitFor(() => {
@@ -2293,9 +2198,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
       await act(async () => {
@@ -2354,9 +2256,6 @@ describe('ModelsScreen', () => {
       // Search
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       // Qwen model matches via name containing "Qwen"
@@ -2544,9 +2443,6 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'test');
       });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
       await act(async () => {
         fireEvent.press(getByText('Test Model'));
@@ -2679,9 +2575,6 @@ describe('ModelsScreen', () => {
       });
 
       // Hit search with empty query but vision filter active
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       await waitFor(() => {
         expect(mockSearchModels).toHaveBeenCalledWith(
@@ -2692,7 +2585,7 @@ describe('ModelsScreen', () => {
     });
 
     it('does not trigger HuggingFace search when query is empty and no filters are active', async () => {
-      const { getByText, getByTestId } = renderModelsScreen();
+      const { getByText } = renderModelsScreen();
 
       await waitFor(() => {
         expect(getByText(/Recommended for your device/)).toBeTruthy();
@@ -2701,9 +2594,6 @@ describe('ModelsScreen', () => {
       mockSearchModels.mockClear();
 
       // Hit search with empty query and no filters
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
-      });
 
       expect(mockSearchModels).not.toHaveBeenCalled();
       // Should still show recommended section
@@ -2731,10 +2621,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.press(getByText('Code'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
 
       await waitFor(() => {
@@ -2770,9 +2656,6 @@ describe('ModelsScreen', () => {
 
       await act(async () => {
         fireEvent.changeText(getByTestId('search-input'), 'popular');
-      });
-      await act(async () => {
-        fireEvent.press(getByTestId('search-button'));
       });
       await waitFor(() => expect(getByText('Popular Model')).toBeTruthy());
       await act(async () => {
