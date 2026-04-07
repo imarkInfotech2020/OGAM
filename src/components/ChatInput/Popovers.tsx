@@ -1,11 +1,14 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { ImageModeState } from '../../types';
-import { useAppStore } from '../../stores';
+import { useAppStore, useTTSStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS } from '../../constants';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/types';
 
 // ─── Shared Styles ──────────────────────────────────────────────────────────
 
@@ -100,11 +103,29 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 }) => {
   const { colors } = useTheme();
   const { settings, updateSettings } = useAppStore();
+  const { settings: ttsSettings, isBackboneDownloaded, isVocoderDownloaded, isModelLoaded, loadModels, unloadModels, updateSettings: updateTTSSettings } = useTTSStore();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   if (!visible) return null;
 
   const imgBadge = getImageModeBadge(imageMode, colors);
   const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
+  const ttsAvailable = isBackboneDownloaded && isVocoderDownloaded;
+  const ttsMode = ttsSettings.interfaceMode;
+  const ttsBadge = !ttsAvailable
+    ? { label: 'N/A', bg: colors.textMuted }
+    : ttsMode === 'audio'
+      ? { label: 'Audio', bg: colors.primary }
+      : { label: 'Chat', bg: `${colors.textMuted}80` };
+
+  const handleTTSToggle = () => {
+    triggerHaptic('impactLight');
+    if (!ttsAvailable) { onClose(); navigation.navigate('TTSSettings'); return; }
+    const next = ttsMode === 'audio' ? 'chat' : 'audio';
+    updateTTSSettings({ interfaceMode: next });
+    if (next === 'audio' && !isModelLoaded) { loadModels(); }
+    if (next === 'chat' && isModelLoaded) { unloadModels(); }
+  };
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -149,6 +170,18 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   </View>
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity
+                testID="quick-tts-mode"
+                style={popoverStyles.row}
+                onPress={handleTTSToggle}
+              >
+                <Icon name={ttsMode === 'audio' ? 'volume-2' : 'volume-1'} size={16} color={ttsAvailable ? colors.text : colors.textMuted} />
+                <Text style={[popoverStyles.rowLabel, { color: ttsAvailable ? colors.text : colors.textMuted }]}>Voice</Text>
+                <View style={[popoverStyles.badge, { backgroundColor: ttsBadge.bg }]}>
+                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{ttsBadge.label}</Text>
+                </View>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 testID="quick-tools"
