@@ -8,6 +8,7 @@ import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
+import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
@@ -86,7 +87,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
-    const needsVisionRepair = downloaded && !!item.mmProjFile && !downloadedModel?.mmProjPath;
+    const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const canCancel = !!progress && downloadIds[downloadKey] != null;
     return { downloadKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
   };
@@ -227,7 +228,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   } = props;
 
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
-  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort)!;
+  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
   const isSortActive = filterState.sort !== 'recommended';
   const sortToggleActive = isSortActive || filterState.expandedDimension === 'sort';
   const filterToggleActive = textFiltersVisible || hasNonSortActiveFilters;
@@ -311,7 +312,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           setSourceFilter={setSourceFilter}
           setSizeFilter={setSizeFilter}
           setQuantFilter={setQuantFilter}
-          setSortOption={setSortOption}
         />
       )}
 

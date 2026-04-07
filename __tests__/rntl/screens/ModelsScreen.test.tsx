@@ -502,8 +502,7 @@ describe('ModelsScreen', () => {
 
     it('recommended models have editorial ordering with Gemma 4 first', () => {
       const { RECOMMENDED_MODELS } = require('../../../src/constants');
-      const firstText = RECOMMENDED_MODELS.find((m: any) => m.type === 'text');
-      expect(firstText.id).toContain('gemma-4');
+      expect(RECOMMENDED_MODELS[0].id).toContain('gemma-4');
     });
 
     it('MODEL_ORGS contains expected organizations', () => {

@@ -18,7 +18,8 @@
 - Use `COLORS` tokens — never hardcode color values.
 - Use `SPACING` tokens — never hardcode margin/padding values.
 - Weights must stay ≤ 400 (no bold).
-- Never use emojis or emoticons in UI text — use Feather icons (`react-native-vector-icons`) instead.
+- Never use emojis or emoticons in UI text — always use `react-native-vector-icons` instead. Feather is the default; MaterialIcons is allowed only when Feather lacks a suitable icon (e.g. `whatshot` for trending).
+- Never use `lucide-react` or any other icon library — only `react-native-vector-icons`.
 - Follow the 5-category text hierarchy: TITLE → BODY → SUBTITLE/DESCRIPTION → META.
 
 ## Pre-Commit Quality Gates

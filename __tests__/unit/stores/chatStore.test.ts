@@ -523,6 +523,68 @@ describe('chatStore', () => {
       const message = getChatState().conversations[0].messages[0];
       expect(message.generationMeta?.gpu).toBe(true);
     });
+
+    it('extracts Gemma 4 channel thinking into reasoningContent', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      useChatStore.setState({
+        streamingMessage: '<|channel>thought\nThis is the thinking part.<channel|>This is the response.',
+        streamingForConversationId: convId,
+      });
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.reasoningContent).toBe('This is the thinking part.');
+      expect(message.content).toBe('This is the response.');
+    });
+
+    it('extracts Qwen channel thinking into reasoningContent', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      useChatStore.setState({
+        streamingMessage: '<|channel|>analysis<|message|>This is the analysis.<|channel|>final<|message|>This is the final response.',
+        streamingForConversationId: convId,
+      });
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.reasoningContent).toBe('This is the analysis.');
+      expect(message.content).toBe('This is the final response.');
+    });
+
+    it('does not extract thinking when streamingReasoningContent is already populated', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      useChatStore.setState({
+        streamingMessage: 'Plain response without tags',
+        streamingReasoningContent: 'Pre-extracted reasoning',
+        streamingForConversationId: convId,
+      });
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.reasoningContent).toBe('Pre-extracted reasoning');
+      expect(message.content).toBe('Plain response without tags');
+    });
+
+    it('leaves content unchanged when no thinking tags present', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Regular response with no thinking.');
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.reasoningContent).toBeUndefined();
+      expect(message.content).toBe('Regular response with no thinking.');
+    });
   });
 
   describe('clearStreamingMessage', () => {

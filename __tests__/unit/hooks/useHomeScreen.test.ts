@@ -20,6 +20,7 @@ jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn().mockResolvedValue([]),
     getDownloadedImageModels: jest.fn().mockResolvedValue([]),
+    linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
   },
   hardwareService: {
     getDeviceInfo: jest.fn().mockResolvedValue({ deviceName: 'TestPhone' }),
@@ -171,9 +172,7 @@ describe('useHomeScreen', () => {
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockCreateConversation).toHaveBeenCalledWith('local-model-1');
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-new');
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'conv-new' });
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
 
     it('uses remote text model id when no local model is active', () => {
@@ -185,7 +184,7 @@ describe('useHomeScreen', () => {
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       act(() => { result.current.startNewChat(); });
-      expect(mockCreateConversation).toHaveBeenCalledWith('remote-model-1');
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 

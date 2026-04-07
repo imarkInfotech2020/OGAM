@@ -10,6 +10,7 @@ import {
   BackgroundDownloadContext,
 } from './types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
+import { extractBaseName } from './scan';
 import logger from '../../utils/logger';
 
 export {
@@ -31,7 +32,9 @@ export interface PerformBackgroundDownloadOpts {
 export async function performBackgroundDownload(opts: PerformBackgroundDownloadOpts): Promise<BackgroundDownloadInfo> {
   const { modelId, file, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
   const localPath = `${modelsDir}/${file.name}`;
-  const mmProjLocalPath = file.mmProjFile ? `${modelsDir}/${file.mmProjFile.name}` : null;
+  const mmProjLocalPath = file.mmProjFile
+    ? `${modelsDir}/${extractBaseName(file.name)}-${file.mmProjFile.name}`
+    : null;
 
   const mainExists = await RNFS.exists(localPath);
   const mmProjExists = await checkMmProjExists(mmProjLocalPath, file.mmProjFile?.size);
@@ -126,7 +129,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   backgroundDownloadMetadataCallback?.(downloadInfo.downloadId, {
     modelId, fileName: file.name, quantization: file.quantization, author,
     totalBytes: combinedTotalBytes, mainFileSize: file.size,
-    mmProjFileName: file.mmProjFile?.name, mmProjFileSize: mmProjSize,
+    mmProjFileName: mmProjLocalPath ? mmProjLocalPath.split('/').pop() : file.mmProjFile?.name, mmProjFileSize: mmProjSize,
     mmProjLocalPath, mmProjDownloadId,
   });
 
