@@ -36,6 +36,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
   const [showServerModal, setShowServerModal] = useState(false);
   const healthCheckInFlight = useRef(false);
+  const cancelledKeys = useRef<Set<string>>(new Set());
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -121,6 +122,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   }, [refreshServerHealth]);
 
   const handleCancelDownload = async (key: string) => {
+    cancelledKeys.current.add(key);
     const downloadId = downloadIds[key];
     if (downloadId != null) {
       try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
@@ -131,12 +133,16 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleDownload = async (modelId: string, file: ModelFile) => {
     const key = `${modelId}/${file.name}`;
+    cancelledKeys.current.delete(key);
     setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
     const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', error.message)); };
     try {
-      const info = await modelManager.downloadModelBackground(modelId, file, (p) => setDownloadProgress(key, p));
+      const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
+        if (!cancelledKeys.current.has(key)) setDownloadProgress(key, p);
+      });
       setDownloadIds(prev => ({ ...prev, [key]: info.downloadId }));
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
+        if (cancelledKeys.current.has(key)) return;
         setDownloadProgress(key, null);
         setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
         addDownloadedModel(model);
