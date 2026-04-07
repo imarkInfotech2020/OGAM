@@ -269,13 +269,16 @@ class TTSService {
     return this.playFromSamples(samples, speed, startOffset);
   }
 
-  /** Chat Mode: generate + play + discard. No disk write. */
-  async speak(text: string, options: TTSOptions = {}): Promise<void> {
+  /** Chat Mode: generate + play + discard. No disk write.
+   *  @param onStartPlayback  Called once generation is done and audio is about to play.
+   */
+  async speak(text: string, options: TTSOptions = {}, onStartPlayback?: () => void): Promise<void> {
     this.stop();
     this.isSpeakingFlag = true; // mark in-progress so stop() during generation works
     try {
       const audio = await this.generate(text, options);
       if (!this.isSpeakingFlag) return; // stop() was called during generation
+      onStartPlayback?.();
       await this.playFromSamples(audio.samples, options.speed ?? 1.0);
     } finally {
       this.isSpeakingFlag = false;

@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ttsService } from '../services/ttsService';
+import { kokoroRef } from '../components/KokoroTTSManager';
+import { isExecutorchSupported } from '../constants/kokoroModels';
+import type { KokoroVoiceId } from '../constants/kokoroModels';
+import { DEFAULT_KOKORO_VOICE_ID } from '../constants/kokoroModels';
 import logger from '../utils/logger';
 
 export type InterfaceMode = 'chat' | 'audio';
@@ -14,6 +18,8 @@ export interface TTSSettings {
   autoPlay: boolean;
   speed: number;
   voiceId: string;
+  /** Kokoro voice used for Chat Mode speak (fast path) */
+  kokoroVoiceId: KokoroVoiceId;
 }
 
 export interface TTSState {
@@ -31,7 +37,13 @@ export interface TTSState {
 
   // Playback
   isSpeaking: boolean;
+  /** True while LLM inference is running to generate audio tokens (before audio plays). OuteTTS only — Kokoro streams so this is never set. */
+  isGeneratingAudio: boolean;
   currentMessageId: string | null;
+
+  // Kokoro (fast TTS, Android 13+ / iOS 17+)
+  kokoroReady: boolean;
+  kokoroDownloadProgress: number;
 
   // Cache
   audioCacheSizeMB: number;
@@ -65,6 +77,7 @@ export interface TTSState {
   refreshCacheSize: () => Promise<void>;
   clearAudioCache: () => Promise<void>;
 
+  setKokoroState: (ready: boolean, progress: number) => void;
   updateSettings: (patch: Partial<TTSSettings>) => void;
   clearError: () => void;
 }
@@ -81,7 +94,10 @@ export const useTTSStore = create<TTSState>()(
       isModelLoading: false,
       isModelLoaded: false,
       isSpeaking: false,
+      isGeneratingAudio: false,
       currentMessageId: null,
+      kokoroReady: false,
+      kokoroDownloadProgress: 0,
       audioCacheSizeMB: 0,
       settings: {
         interfaceMode: 'chat',
@@ -89,6 +105,7 @@ export const useTTSStore = create<TTSState>()(
         autoPlay: false,
         speed: 1.0,
         voiceId: '0',
+        kokoroVoiceId: DEFAULT_KOKORO_VOICE_ID,
       },
       error: null,
 
@@ -151,31 +168,58 @@ export const useTTSStore = create<TTSState>()(
       // ── Chat Mode ───────────────────────────────────────────────────────────
 
       speak: async (text: string, messageId: string) => {
-        const { isModelLoaded, settings } = get();
-        if (!settings.enabled || !isModelLoaded) {
-          return;
-        }
+        const { settings } = get();
+        if (!settings.enabled) return;
+
         // Tapping same message while speaking → stop
         if (get().currentMessageId === messageId && get().isSpeaking) {
           get().stop();
           return;
         }
-        ttsService.stop();
-        set({ isSpeaking: true, currentMessageId: messageId, error: null });
+
+        // ── Kokoro fast path (Android 13+ / iOS 17+, model ready) ────────────
+        if (get().kokoroReady && isExecutorchSupported()) {
+          ttsService.stop(); // ensure OuteTTS is silent
+          // Truncate to keep generation snappy even for Kokoro
+          const truncated = text.length > 500 ? `${text.slice(0, 497)}...` : text;
+          set({ isSpeaking: true, isGeneratingAudio: false, currentMessageId: messageId, error: null });
+          try {
+            await kokoroRef.speak(truncated, settings.speed);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Speech failed';
+            logger.error('[TTS Store] Kokoro speak error:', msg);
+            set({ error: msg });
+          } finally {
+            set({ isSpeaking: false, currentMessageId: null });
+          }
+          return;
+        }
+
+        // ── OuteTTS fallback (slow, Android <13 / Kokoro not loaded yet) ─────
+        if (!get().isModelLoaded) return;
+        kokoroRef.stop(true); // ensure Kokoro is silent
+        // Truncate to keep generation time reasonable (~300 chars ≈ 20-30s on device)
+        const truncated = text.length > 300 ? `${text.slice(0, 297)}...` : text;
+        set({ isSpeaking: true, isGeneratingAudio: true, currentMessageId: messageId, error: null });
         try {
-          await ttsService.speak(text, { speed: settings.speed, voiceId: settings.voiceId });
+          await ttsService.speak(
+            truncated,
+            { speed: settings.speed, voiceId: settings.voiceId },
+            () => set({ isGeneratingAudio: false }),
+          );
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Speech failed';
-          logger.error('[TTS Store] Speak error:', msg);
+          logger.error('[TTS Store] OuteTTS speak error:', msg);
           set({ error: msg });
         } finally {
-          set({ isSpeaking: false, currentMessageId: null });
+          set({ isSpeaking: false, isGeneratingAudio: false, currentMessageId: null });
         }
       },
 
       stop: () => {
+        kokoroRef.stop(true);
         ttsService.stop();
-        set({ isSpeaking: false, currentMessageId: null });
+        set({ isSpeaking: false, isGeneratingAudio: false, currentMessageId: null });
       },
 
       // ── Audio Mode ──────────────────────────────────────────────────────────
@@ -225,6 +269,10 @@ export const useTTSStore = create<TTSState>()(
       clearAudioCache: async () => {
         await ttsService.clearAudioCache();
         set({ audioCacheSizeMB: 0 });
+      },
+
+      setKokoroState: (ready, progress) => {
+        set({ kokoroReady: ready, kokoroDownloadProgress: progress });
       },
 
       updateSettings: (patch) => {

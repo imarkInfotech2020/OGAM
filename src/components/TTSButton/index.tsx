@@ -23,17 +23,25 @@ export const TTSButton: React.FC<TTSButtonProps> = ({ text, messageId }) => {
     speak,
     stop,
     isSpeaking,
+    isGeneratingAudio,
     isModelLoading,
     isModelLoaded,
     currentMessageId,
     settings,
     isBackboneDownloaded,
     isVocoderDownloaded,
+    kokoroReady,
     loadModels,
   } = useTTSStore();
 
   const areBothDownloaded = isBackboneDownloaded && isVocoderDownloaded;
-  const isThisMessageSpeaking = isSpeaking && currentMessageId === messageId;
+  const isThisMessage = currentMessageId === messageId;
+  // Kokoro streams so no separate generation phase — only OuteTTS sets isGeneratingAudio
+  const isThisMessageGenerating = isGeneratingAudio && isThisMessage;
+  const isThisMessageSpeaking = isSpeaking && !isGeneratingAudio && isThisMessage;
+
+  // Button is usable if Kokoro is ready (fast path) OR OuteTTS is downloaded (slow path)
+  const canSpeak = kokoroReady || areBothDownloaded;
 
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -54,24 +62,27 @@ export const TTSButton: React.FC<TTSButtonProps> = ({ text, messageId }) => {
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
-  // Don't render in Audio Mode, or if TTS disabled / not downloaded
-  if (
-    settings.interfaceMode === 'audio' ||
-    !settings.enabled ||
-    !areBothDownloaded
-  ) {
+  // Don't render if TTS disabled or no model is usable (Kokoro or OuteTTS)
+  if (!settings.enabled || !canSpeak) {
     return null;
   }
 
-  if (isModelLoading && currentMessageId === messageId) {
+  // Show spinner while model is loading for this message, or while generating audio tokens
+  if ((isModelLoading && isThisMessage) || isThisMessageGenerating) {
     return <ActivityIndicator size="small" color={colors.textMuted} style={styles.button} />;
   }
 
   const handlePress = () => {
-    if (isThisMessageSpeaking) {
+    if (isThisMessageSpeaking || isThisMessageGenerating) {
       stop();
       return;
     }
+    // Kokoro: ready immediately, no model loading step needed
+    if (kokoroReady) {
+      speak(text, messageId);
+      return;
+    }
+    // OuteTTS fallback: load models on first press if needed
     if (!isModelLoaded) {
       loadModels().then(() => {
         useTTSStore.getState().speak(text, messageId);
