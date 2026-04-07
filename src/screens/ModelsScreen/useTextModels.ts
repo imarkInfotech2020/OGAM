@@ -133,9 +133,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     }, [selectedModel])
   );
 
-  const handleSearch = async () => {
-    Keyboard.dismiss();
-    setFilterState(prev => ({ ...prev, expandedDimension: null }));
+  const runSearch = async () => {
     const hasQuery = searchQuery.trim().length > 0;
     const hasTypeFilter = filterState.type !== 'all';
     const hasOrgFilter = filterState.orgs.length > 0;
@@ -158,12 +156,26 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     }
   };
 
+  const handleSearch = async () => {
+    Keyboard.dismiss();
+    setFilterState(prev => ({ ...prev, expandedDimension: null }));
+    await runSearch();
+  };
+
   useEffect(() => {
     if (!searchQuery.trim()) { setHasSearched(false); setSearchResults([]); return; }
-    const timer = setTimeout(() => { handleSearch(); }, 500);
+    const timer = setTimeout(() => { runSearch(); }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
+
+  // Auto-search when searchable filters change (type/size/org) even with empty query
+  // Uses runSearch directly to avoid collapsing the expanded filter dimension
+  useEffect(() => {
+    if (filterState.type === 'all' && filterState.size === 'all' && filterState.orgs.length === 0) return;
+    runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterState.type, filterState.size, filterState.orgs.length]);
 
   const handleSelectModel = async (model: ModelInfo) => {
     setSelectedModel(model); setIsLoadingFiles(true);
