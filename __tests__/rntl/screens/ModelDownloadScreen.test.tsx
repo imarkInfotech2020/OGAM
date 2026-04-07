@@ -478,7 +478,7 @@ describe('ModelDownloadScreen', () => {
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    render(<ModelDownloadScreen navigation={mockNavigation} />);
     await flushPromises();
 
     await act(async () => {

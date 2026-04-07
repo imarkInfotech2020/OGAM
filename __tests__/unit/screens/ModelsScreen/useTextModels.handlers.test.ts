@@ -39,15 +39,15 @@ jest.mock('../../../../src/stores', () => ({
 }));
 
 // ── Services ──────────────────────────────────────────────────────────
-const mockSearchModels = jest.fn(() => Promise.resolve([]));
-const mockCancelBackgroundDownload = jest.fn(() => Promise.resolve());
-const mockDeleteModel = jest.fn(() => Promise.resolve());
+const mockSearchModels = jest.fn((_query: string, _opts?: any) => Promise.resolve([]));
+const mockCancelBackgroundDownload = jest.fn((_id: number) => Promise.resolve());
+const mockDeleteModel = jest.fn((_id: string) => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockGetDownloadedModels = jest.fn(() => Promise.resolve([]));
 
 jest.mock('../../../../src/services', () => ({
   huggingFaceService: {
-    searchModels: (...args: any[]) => mockSearchModels(...args),
+    searchModels: (query: string, opts?: any) => mockSearchModels(query, opts),
     getModelDetails: jest.fn(() => Promise.reject(new Error('not found'))),
     getModelFiles: jest.fn(() => Promise.resolve([])),
   },
@@ -55,9 +55,9 @@ jest.mock('../../../../src/services', () => ({
     getDownloadedModels: () => mockGetDownloadedModels(),
     downloadModelBackground: jest.fn(),
     watchDownload: jest.fn(),
-    cancelBackgroundDownload: (...args: any[]) => mockCancelBackgroundDownload(...args),
+    cancelBackgroundDownload: (id: number) => mockCancelBackgroundDownload(id),
     repairMmProj: jest.fn(),
-    deleteModel: (...args: any[]) => mockDeleteModel(...args),
+    deleteModel: (id: string) => mockDeleteModel(id),
   },
   hardwareService: {
     getTotalMemoryGB: jest.fn(() => 8),
@@ -71,7 +71,7 @@ jest.mock('../../../../src/services', () => ({
 // ── Alert ─────────────────────────────────────────────────────────────
 const mockShowAlert = jest.fn((title: string, message: string) => ({ title, message, visible: true }));
 jest.mock('../../../../src/components/CustomAlert', () => ({
-  showAlert: (...args: any[]) => mockShowAlert(...args),
+  showAlert: (title: string, message: string) => mockShowAlert(title, message),
   initialAlertState: { title: '', message: '', visible: false },
 }));
 
