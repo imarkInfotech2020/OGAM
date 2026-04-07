@@ -247,6 +247,7 @@ export function useModelsScreen() {
     setSourceFilter: text.setSourceFilter,
     setSizeFilter: text.setSizeFilter,
     setQuantFilter: text.setQuantFilter,
+    setSortOption: text.setSortOption,
     isModelDownloaded: text.isModelDownloaded,
     getDownloadedModel: text.getDownloadedModel,
     // image model state & handlers

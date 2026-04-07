@@ -162,6 +162,7 @@ export const ModelsScreen: React.FC = () => {
           setSourceFilter={vm.setSourceFilter}
           setSizeFilter={vm.setSizeFilter}
           setQuantFilter={vm.setQuantFilter}
+          setSortOption={vm.setSortOption}
           isModelDownloaded={vm.isModelDownloaded}
           getDownloadedModel={vm.getDownloadedModel}
         />

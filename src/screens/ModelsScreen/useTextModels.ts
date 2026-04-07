@@ -6,7 +6,7 @@ import { RECOMMENDED_MODELS, TRENDING_MODEL_IDS, MODEL_ORGS } from '../../consta
 import { useAppStore } from '../../stores';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
-import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter } from './types';
+import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
 import { getModelType } from './utils';
 import logger from '../../utils/logger';
@@ -96,6 +96,17 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setHasSearched(false);
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => { handleSearch(); }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
   const handleSelectModel = async (model: ModelInfo) => {
     setSelectedModel(model); setIsLoadingFiles(true);
@@ -191,17 +202,35 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     setFilterState(prev => ({ ...prev, size, expandedDimension: null })), []);
   const setQuantFilter = useCallback((quant: string) =>
     setFilterState(prev => ({ ...prev, quant, expandedDimension: null })), []);
+  const setSortOption = useCallback((sort: SortOption) =>
+    setFilterState(prev => ({ ...prev, sort, expandedDimension: null })), []);
 
   // Computed
   const ramGB = hardwareService.getTotalMemoryGB();
   const deviceRecommendation = useMemo(() => hardwareService.getModelRecommendation(), []);
   const hasActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' ||
-    filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
+    filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all' ||
+    filterState.sort !== 'recommended';
 
   const parseParamCount = useCallback((model: ModelInfo): number | null => {
     const match = PARAM_COUNT_REGEX.exec(model.name) ?? PARAM_COUNT_REGEX.exec(model.id);
     return match ? Number.parseFloat(match[1]) : null;
   }, []);
+
+  const applySort = useCallback(<T extends ModelInfo>(models: T[], sort: SortOption): T[] => {
+    if (sort === 'recommended') return models;
+    return [...models].sort((a, b) => {
+      if (sort === 'size') {
+        const pa = a.paramCount ?? parseParamCount(a) ?? 0;
+        const pb = b.paramCount ?? parseParamCount(b) ?? 0;
+        return pa - pb;
+      }
+      if (sort === 'downloads') return (b.downloads ?? 0) - (a.downloads ?? 0);
+      const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
+      const db = b.lastModified ? new Date(b.lastModified).getTime() : 0;
+      return db - da;
+    });
+  }, [parseParamCount]);
 
   const matchesOrgFilter = useCallback((model: ModelInfo, orgs: string[]): boolean => {
     if (orgs.length === 0) return true;
@@ -229,12 +258,13 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       if (filesWithSize.length > 0 && !filesWithSize.some(f => f.size / (1024 ** 3) < ramGB * 0.6)) return false;
       return true;
     });
-    return filtered.map(model => {
+    const mapped = filtered.map(model => {
       const type = getModelType(model);
       const params = parseParamCount(model);
       return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
     });
-  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, matchesOrgFilter, parseParamCount, ramGB]);
+    return applySort(mapped, filterState.sort);
+  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, filterState.sort, matchesOrgFilter, parseParamCount, ramGB, applySort]);
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
@@ -250,9 +280,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         return true;
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
-    // Sort by best fit: models closest to the device's maxParams come first
-    return [...models].sort((a, b) => (maxParams - (a.paramCount ?? 0)) - (maxParams - (b.paramCount ?? 0)));
-  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
+    // When sort is 'recommended', keep the curated best-fit order; otherwise apply the user's sort
+    if (filterState.sort === 'recommended') {
+      return [...models].sort((a, b) => (maxParams - (a.paramCount ?? 0)) - (maxParams - (b.paramCount ?? 0)));
+    }
+    return applySort(models, filterState.sort);
+  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, applySort]);
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] =>
     RECOMMENDED_MODELS
@@ -274,7 +307,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo,
     handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
-    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
+    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel,
     downloadIds,
   };

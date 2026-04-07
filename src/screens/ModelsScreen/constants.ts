@@ -5,6 +5,7 @@ import {
   FilterState,
   ModelTypeFilter,
   SizeFilter,
+  SortOption,
 } from './types';
 
 export const VISION_PIPELINE_TAG = 'image-text-to-text';
@@ -61,11 +62,19 @@ export const BACKEND_OPTIONS: { key: BackendFilter; label: string }[] = [
   { key: 'qnn', label: 'NPU' },
 ];
 
+export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
+  { key: 'recommended', label: 'Smart' },
+  { key: 'size', label: 'Size' },
+  { key: 'downloads', label: 'Downloads' },
+  { key: 'recency', label: 'Newest' },
+];
+
 export const initialFilterState: FilterState = {
   orgs: [],
   type: 'all',
   source: 'all',
   size: 'all',
   quant: 'all',
+  sort: 'recommended',
   expandedDimension: null,
 };

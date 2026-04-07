@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { useThemedStyles } from '../../theme';
 import { MODEL_ORGS } from '../../constants';
 import { createStyles } from './styles';
-import { FilterState, FilterDimension, ModelTypeFilter, CredibilityFilter, SizeFilter } from './types';
+import { FilterState, FilterDimension, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { CREDIBILITY_OPTIONS, MODEL_TYPE_OPTIONS, SIZE_OPTIONS, QUANT_OPTIONS } from './constants';
 
 interface Props {
@@ -16,11 +16,12 @@ interface Props {
   setSourceFilter: (source: CredibilityFilter) => void;
   setSizeFilter: (size: SizeFilter) => void;
   setQuantFilter: (quant: string) => void;
+  setSortOption: (sort: SortOption) => void;
 }
 
 export const TextFiltersSection: React.FC<Props> = ({
   filterState, hasActiveFilters, clearFilters,
-  toggleFilterDimension, toggleOrg, setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
+  toggleFilterDimension, toggleOrg, setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption: _setSortOption,
 }) => {
   const styles = useThemedStyles(createStyles);
 

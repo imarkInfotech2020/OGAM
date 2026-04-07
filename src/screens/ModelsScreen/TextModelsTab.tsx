@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, FlatList, ScrollView, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { Card, ModelCard, Button } from '../../components';
+import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
@@ -13,7 +13,8 @@ import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { TextFiltersSection } from './TextFiltersSection';
-import { FilterState } from './types';
+import { FilterState, SortOption } from './types';
+import { SORT_OPTIONS } from './constants';
 import { formatNumber } from './utils';
 
 type Props = Pick<ModelsScreenViewModel,
@@ -36,7 +37,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'downloadIds'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
-  | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter'
+  | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
   | 'isModelDownloaded' | 'getDownloadedModel'
 >;
 
@@ -152,7 +153,14 @@ const ModelDetailView: React.FC<DetailProps> = ({
         <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
         <FlatList
-          data={modelFiles.filter(f => f.size > 0 && f.size / (1024 ** 3) < ramGB * 0.6 && (filterState.quant === 'all' || f.name.includes(filterState.quant)))}
+          data={modelFiles
+            .filter(f => f.size > 0 && f.size / (1024 ** 3) < ramGB * 0.6 && (filterState.quant === 'all' || f.name.includes(filterState.quant)))
+            .sort((a, b) => {
+              const aRec = a.name.includes('Q4_K_M') ? 0 : 1;
+              const bRec = b.name.includes('Q4_K_M') ? 0 : 1;
+              if (aRec !== bRec) return aRec - bRec;
+              return b.size - a.size;
+            })}
           renderItem={renderFileItem}
           keyExtractor={item => item.name}
           contentContainerStyle={styles.listContent}
@@ -175,9 +183,14 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     downloadIds,
     clearFilters, toggleFilterDimension, toggleOrg,
-    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
+    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel,
   } = props;
+
+  const hasNonSortActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' ||
+    filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
+  const sortLabel = SORT_OPTIONS.find(o => o.key === filterState.sort)?.label ?? 'Smart';
+  const isSortActive = filterState.sort !== 'recommended';
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -252,21 +265,47 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           testID="search-input"
         />
         <TouchableOpacity
-          style={[styles.filterToggle, (textFiltersVisible || hasActiveFilters) && styles.filterToggleActive]}
+          style={[styles.filterToggle, (textFiltersVisible || hasNonSortActiveFilters) && styles.filterToggleActive]}
           onPress={() => setTextFiltersVisible(v => !v)}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           testID="text-filter-toggle"
         >
-          <Icon name="sliders" size={14} color={(textFiltersVisible || hasActiveFilters) ? colors.primary : colors.textMuted} />
-          {hasActiveFilters && <View style={styles.filterDot} />}
+          <Icon name="sliders" size={14} color={(textFiltersVisible || hasNonSortActiveFilters) ? colors.primary : colors.textMuted} />
+          {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
-        <Button title="Search" size="small" onPress={handleSearch} testID="search-button" />
+        <TouchableOpacity
+          style={[styles.filterPill, isSortActive && styles.filterPillActive]}
+          onPress={() => toggleFilterDimension('sort')}
+          testID="sort-pill"
+        >
+          <Text style={[styles.filterPillText, isSortActive && styles.filterPillTextActive]}>
+            {sortLabel} {filterState.expandedDimension === 'sort' ? '\u25B4' : '\u25BE'}
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {filterState.expandedDimension === 'sort' && (
+        <View style={styles.filterExpandedContent}>
+          <View style={styles.filterChipWrap}>
+            {(SORT_OPTIONS as { key: SortOption; label: string }[]).map(option => (
+              <TouchableOpacity
+                key={option.key}
+                style={[styles.filterChip, filterState.sort === option.key && styles.filterChipActive]}
+                onPress={() => setSortOption(option.key)}
+              >
+                <Text style={[styles.filterChipText, filterState.sort === option.key && styles.filterChipTextActive]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
 
       {textFiltersVisible && (
         <TextFiltersSection
           filterState={filterState}
-          hasActiveFilters={hasActiveFilters}
+          hasActiveFilters={hasNonSortActiveFilters}
           clearFilters={clearFilters}
           toggleFilterDimension={toggleFilterDimension}
           toggleOrg={toggleOrg}
@@ -274,6 +313,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           setSourceFilter={setSourceFilter}
           setSizeFilter={setSizeFilter}
           setQuantFilter={setQuantFilter}
+          setSortOption={setSortOption}
         />
       )}
 
