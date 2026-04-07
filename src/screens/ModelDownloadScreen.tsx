@@ -122,8 +122,9 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleCancelDownload = async (key: string) => {
     const downloadId = downloadIds[key];
-    if (downloadId == null) return;
-    try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
+    if (downloadId != null) {
+      try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
+    }
     setDownloadProgress(key, null);
     setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
   };
