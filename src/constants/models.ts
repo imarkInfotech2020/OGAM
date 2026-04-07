@@ -112,14 +112,13 @@ export const RECOMMENDED_MODELS = [
   },
 ];
 
-// Trending model IDs — Gemma 4 and Qwen 3.5 family
-export const TRENDING_MODEL_IDS = [
-  'unsloth/gemma-4-E2B-it-GGUF',
-  'unsloth/gemma-4-E4B-it-GGUF',
-  'unsloth/Qwen3.5-0.8B-GGUF',
-  'unsloth/Qwen3.5-2B-GGUF',
-  'unsloth/Qwen3.5-9B-GGUF',
-];
+// Trending model families — one best-fit per family is shown as "trending"
+export const TRENDING_FAMILIES: Record<string, string[]> = {
+  gemma4: ['unsloth/gemma-4-E2B-it-GGUF', 'unsloth/gemma-4-E4B-it-GGUF'],
+  qwen35: ['unsloth/Qwen3.5-0.8B-GGUF', 'unsloth/Qwen3.5-2B-GGUF', 'unsloth/Qwen3.5-9B-GGUF'],
+};
+// Flat list used for badge rendering
+export const TRENDING_MODEL_IDS = Object.values(TRENDING_FAMILIES).flat();
 
 // Model organization filter options
 export const MODEL_ORGS = [

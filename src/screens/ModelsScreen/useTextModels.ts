@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
-import { RECOMMENDED_MODELS, TRENDING_MODEL_IDS, MODEL_ORGS } from '../../constants';
+import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
@@ -12,6 +12,32 @@ import { getModelType } from './utils';
 import logger from '../../utils/logger';
 
 const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
+
+function parseParamCount(model: ModelInfo): number | null {
+  const match = PARAM_COUNT_REGEX.exec(model.name) ?? PARAM_COUNT_REGEX.exec(model.id);
+  return match ? Number.parseFloat(match[1]) : null;
+}
+
+function applySort<T extends ModelInfo>(models: T[], sort: SortOption): T[] {
+  if (sort === 'recommended') return models;
+  return [...models].sort((a, b) => {
+    if (sort === 'size') return (a.paramCount ?? parseParamCount(a) ?? 0) - (b.paramCount ?? parseParamCount(b) ?? 0);
+    if (sort === 'downloads') return (b.downloads ?? 0) - (a.downloads ?? 0);
+    const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
+    const db = b.lastModified ? new Date(b.lastModified).getTime() : 0;
+    return db - da;
+  });
+}
+
+function matchesOrgFilter(model: ModelInfo, orgs: string[]): boolean {
+  if (orgs.length === 0) return true;
+  return orgs.some(orgKey => {
+    if (model.author === orgKey) return true;
+    const orgLabel = MODEL_ORGS.find(o => o.key === orgKey)?.label || orgKey;
+    return model.id.toLowerCase().includes(orgLabel.toLowerCase()) ||
+      model.name.toLowerCase().includes(orgLabel.toLowerCase());
+  });
+}
 
 function mapCuratedModel(m: typeof RECOMMENDED_MODELS[number], details: Record<string, ModelInfo>): ModelInfo {
   const fetched = details[m.id];
@@ -50,10 +76,8 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     setDownloadedModels(models);
   };
 
-  useEffect(() => {
-    loadDownloadedModels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadDownloadedModels(); }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,11 +122,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setHasSearched(false);
-      setSearchResults([]);
-      return;
-    }
+    if (!searchQuery.trim()) { setHasSearched(false); setSearchResults([]); return; }
     const timer = setTimeout(() => { handleSearch(); }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,36 +232,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all' ||
     filterState.sort !== 'recommended';
 
-  const parseParamCount = useCallback((model: ModelInfo): number | null => {
-    const match = PARAM_COUNT_REGEX.exec(model.name) ?? PARAM_COUNT_REGEX.exec(model.id);
-    return match ? Number.parseFloat(match[1]) : null;
-  }, []);
-
-  const applySort = useCallback(<T extends ModelInfo>(models: T[], sort: SortOption): T[] => {
-    if (sort === 'recommended') return models;
-    return [...models].sort((a, b) => {
-      if (sort === 'size') {
-        const pa = a.paramCount ?? parseParamCount(a) ?? 0;
-        const pb = b.paramCount ?? parseParamCount(b) ?? 0;
-        return pa - pb;
-      }
-      if (sort === 'downloads') return (b.downloads ?? 0) - (a.downloads ?? 0);
-      const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
-      const db = b.lastModified ? new Date(b.lastModified).getTime() : 0;
-      return db - da;
-    });
-  }, [parseParamCount]);
-
-  const matchesOrgFilter = useCallback((model: ModelInfo, orgs: string[]): boolean => {
-    if (orgs.length === 0) return true;
-    return orgs.some(orgKey => {
-      if (model.author === orgKey) return true;
-      const orgLabel = MODEL_ORGS.find(o => o.key === orgKey)?.label || orgKey;
-      return model.id.toLowerCase().includes(orgLabel.toLowerCase()) ||
-        model.name.toLowerCase().includes(orgLabel.toLowerCase());
-    });
-  }, []);
-
   const filteredResults = useMemo(() => {
     const filtered = searchResults.filter(model => {
       if (filterState.source !== 'all' && model.credibility?.source !== filterState.source) return false;
@@ -264,7 +254,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
     });
     return applySort(mapped, filterState.sort);
-  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, filterState.sort, matchesOrgFilter, parseParamCount, ramGB, applySort]);
+  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, filterState.sort, ramGB]);
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
@@ -281,13 +271,18 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
     return applySort(models, filterState.sort);
-  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, applySort]);
+  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails]);
 
-  const trendingAsModelInfo = useMemo((): ModelInfo[] =>
-    RECOMMENDED_MODELS
-      .filter(m => TRENDING_MODEL_IDS.includes(m.id) && m.params <= deviceRecommendation.maxParameters)
-      .map(m => mapCuratedModel(m, recommendedModelDetails)),
-  [deviceRecommendation.maxParameters, recommendedModelDetails]);
+  const trendingAsModelInfo = useMemo((): ModelInfo[] => {
+    const maxParams = deviceRecommendation.maxParameters;
+    // Pick the best-fit (highest params that still fits) from each trending family
+    return Object.values(TRENDING_FAMILIES)
+      .map(ids => RECOMMENDED_MODELS
+        .filter(m => ids.includes(m.id) && m.params <= maxParams)
+        .sort((a, b) => b.params - a.params)[0])
+      .filter(Boolean)
+      .map(m => mapCuratedModel(m, recommendedModelDetails));
+  }, [deviceRecommendation.maxParameters, recommendedModelDetails]);
 
   return {
     searchQuery, setSearchQuery,
