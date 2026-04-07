@@ -518,12 +518,10 @@ describe('ModelsScreen', () => {
       }
     });
 
-    it('recommended models are sorted by minRam per type', () => {
+    it('recommended models have editorial ordering with Gemma 4 first', () => {
       const { RECOMMENDED_MODELS } = require('../../../src/constants');
-      const textModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'text');
-      for (let i = 1; i < textModels.length; i++) {
-        expect(textModels[i].minRam).toBeGreaterThanOrEqual(textModels[i - 1].minRam);
-      }
+      const firstText = RECOMMENDED_MODELS.find((m: any) => m.type === 'text');
+      expect(firstText.id).toContain('gemma-4');
     });
 
     it('MODEL_ORGS contains expected organizations', () => {
