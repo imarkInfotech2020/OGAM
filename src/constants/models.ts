@@ -42,7 +42,7 @@ export const RECOMMENDED_MODELS = [
     params: 0.8,
     description: 'Thinking mode, ultra-light, 262K context',
     minRam: 3,
-    type: 'text' as const,
+    type: 'vision' as const,
     org: 'Qwen',
   },
   {
