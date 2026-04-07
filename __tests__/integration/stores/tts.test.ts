@@ -50,7 +50,7 @@ const resetStore = () => {
     isSpeaking: false,
     currentMessageId: null,
     audioCacheSizeMB: 0,
-    settings: { interfaceMode: 'chat', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0' },
+    settings: { interfaceMode: 'chat', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
     error: null,
   });
 };
@@ -106,7 +106,7 @@ describe('TTS integration', () => {
   describe('Audio Mode: download → load → generateAndSave → playMessage → stop', () => {
     beforeEach(() => {
       useTTSStore.setState({
-        settings: { interfaceMode: 'audio', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0' },
+        settings: { interfaceMode: 'audio', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
       });
     });
 
@@ -177,7 +177,7 @@ describe('TTS integration', () => {
     it('speak is called when autoPlay is true and model is loaded', async () => {
       useTTSStore.setState({
         isModelLoaded: true,
-        settings: { interfaceMode: 'chat', enabled: true, autoPlay: true, speed: 1.0, voiceId: '0' },
+        settings: { interfaceMode: 'chat', enabled: true, autoPlay: true, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
       });
       mockTTS.speak.mockResolvedValue(undefined);
       mockTTS.stop.mockReturnValue(undefined);

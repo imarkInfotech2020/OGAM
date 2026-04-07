@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
+import { useTTSStore } from '../../stores/ttsStore';
 import Icon from 'react-native-vector-icons/Feather';
 import { stripControlTokens } from '../../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
@@ -181,12 +182,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onGenerateImage,
   showActions = true,
   canGenerateImage = false,
+  canSpeak: canSpeakProp = false,
+  onSpeak: onSpeakProp,
   showGenerationDetails = false,
   animateEntry = false,
   metaExtra,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const ttsCanSpeak = useTTSStore(
+    s => s.settings.enabled && s.isBackboneDownloaded && s.isVocoderDownloaded,
+  );
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
@@ -243,6 +249,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     const source = isUser ? message.content : parsedContent.response;
     onGenerateImage?.(source.trim().slice(0, 500));
     setShowActionMenu(false);
+  };
+
+  const canSpeak = !isUser && !isStreaming && (canSpeakProp || ttsCanSpeak);
+
+  const handleSpeak = () => {
+    setShowActionMenu(false);
+    if (onSpeakProp) {
+      onSpeakProp();
+      return;
+    }
+    const tts = useTTSStore.getState();
+    if (!tts.isModelLoaded) {
+      tts.loadModels().then(() => useTTSStore.getState().speak(displayContent, message.id));
+    } else {
+      tts.speak(displayContent, message.id);
+    }
   };
 
   if (message.isSystemInfo) {
@@ -314,11 +336,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         canEdit={!!onEdit}
         canRetry={!!onRetry}
         canGenerateImage={canGenerateImage && !!onGenerateImage}
+        canSpeak={canSpeak}
         styles={styles}
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}
         onGenerateImage={handleGenerateImage}
+        onSpeak={handleSpeak}
       />
       <EditSheet
         visible={isEditing}

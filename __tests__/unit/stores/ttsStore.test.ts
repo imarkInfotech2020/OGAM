@@ -54,6 +54,7 @@ const resetState = () => {
       autoPlay: false,
       speed: 1.0,
       voiceId: '0',
+      kokoroVoiceId: 'af_heart',
     },
     error: null,
   });
