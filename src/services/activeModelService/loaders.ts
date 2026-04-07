@@ -133,10 +133,11 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     }
     const multimodalSupport = llmService.getMultimodalSupport();
 
-    // If we passed an mmproj but the native layer rejected it (incompatible), clear the bad link
-    // so the eye icon reappears and the user can repair with the correct file.
-    if (mmProjPath && !multimodalSupport?.vision) {
-      console.warn('[doLoadTextModel] mmproj incompatible — clearing stored link for', ctx.modelId);
+    // If the model had a pre-existing stored mmproj link but the native layer rejected it
+    // (incompatible file), clear it so the eye icon reappears for repair.
+    // Only applies when the link was already persisted before this load attempt — not
+    // when resolveMmProjPath just discovered the file via directory scan.
+    if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
       await modelManager.clearMmProjLink(ctx.modelId);
     }
 

@@ -129,7 +129,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   backgroundDownloadMetadataCallback?.(downloadInfo.downloadId, {
     modelId, fileName: file.name, quantization: file.quantization, author,
     totalBytes: combinedTotalBytes, mainFileSize: file.size,
-    mmProjFileName: file.mmProjFile?.name, mmProjFileSize: mmProjSize,
+    mmProjFileName: mmProjLocalPath ? mmProjLocalPath.split('/').pop() : file.mmProjFile?.name, mmProjFileSize: mmProjSize,
     mmProjLocalPath, mmProjDownloadId,
   });
 

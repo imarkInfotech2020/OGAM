@@ -77,6 +77,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
 jest.mock('../../../src/services/modelManager', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
+      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
 }));
