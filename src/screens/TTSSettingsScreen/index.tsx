@@ -163,11 +163,12 @@ export const TTSSettingsScreen: React.FC = () => {
     isModelLoaded, isModelLoading,
     audioCacheSizeMB, settings, error,
     downloadModels, deleteModels, loadModels, unloadModels,
-    refreshCacheSize, clearAudioCache, updateSettings, clearError,
+    checkDownloadStatus, refreshCacheSize, clearAudioCache, updateSettings, clearError,
   } = useTTSStore();
 
   useEffect(() => {
     setRamGB(hardwareService.getTotalMemoryGB());
+    checkDownloadStatus();
     refreshCacheSize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

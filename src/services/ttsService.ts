@@ -73,11 +73,16 @@ class TTSService {
 
   async getAudioCacheSizeMB(): Promise<number> {
     const cacheRoot = `${RNFS.DocumentDirectoryPath}/audio-cache`;
-    if (!(await RNFS.exists(cacheRoot))) {
-      return 0;
+    if (!(await RNFS.exists(cacheRoot))) return 0;
+    let totalBytes = 0;
+    const convDirs = await RNFS.readDir(cacheRoot);
+    for (const convDir of convDirs) {
+      if (convDir.isDirectory()) {
+        const files = await RNFS.readDir(convDir.path);
+        for (const file of files) { totalBytes += Number(file.size); }
+      }
     }
-    const stat = await RNFS.stat(cacheRoot);
-    return Number(stat.size) / (1024 * 1024);
+    return totalBytes / (1024 * 1024);
   }
 
   async clearAudioCache(): Promise<void> {
@@ -266,12 +271,14 @@ class TTSService {
 
   /** Chat Mode: generate + play + discard. No disk write. */
   async speak(text: string, options: TTSOptions = {}): Promise<void> {
-    if (this.isSpeakingFlag) {
-      this.stop();
-    }
-    const audio = await this.generate(text, options);
-    if (!this.isSpeakingFlag) {
+    this.stop();
+    this.isSpeakingFlag = true; // mark in-progress so stop() during generation works
+    try {
+      const audio = await this.generate(text, options);
+      if (!this.isSpeakingFlag) return; // stop() was called during generation
       await this.playFromSamples(audio.samples, options.speed ?? 1.0);
+    } finally {
+      this.isSpeakingFlag = false;
     }
   }
 
