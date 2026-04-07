@@ -232,6 +232,7 @@ export function useModelsScreen() {
     deviceRecommendation: text.deviceRecommendation,
     filteredResults: text.filteredResults,
     recommendedAsModelInfo: text.recommendedAsModelInfo,
+    trendingAsModelInfo: text.trendingAsModelInfo,
     handleSearch: text.handleSearch,
     handleSelectModel: text.handleSelectModel,
     handleDownload,

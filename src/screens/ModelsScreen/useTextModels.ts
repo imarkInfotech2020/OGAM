@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
-import { RECOMMENDED_MODELS, MODEL_ORGS } from '../../constants';
+import { RECOMMENDED_MODELS, TRENDING_MODEL_IDS, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
@@ -12,6 +12,13 @@ import { getModelType } from './utils';
 import logger from '../../utils/logger';
 
 const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
+
+function mapCuratedModel(m: typeof RECOMMENDED_MODELS[number], details: Record<string, ModelInfo>): ModelInfo {
+  const fetched = details[m.id];
+  const curatedFields = { modelType: m.type, paramCount: m.params, minRamGB: m.minRam };
+  if (fetched) return { ...fetched, name: m.name, description: m.description, ...curatedFields };
+  return { id: m.id, name: m.name, author: m.id.split('/')[0], description: m.description, downloads: -1, likes: 0, tags: [], lastModified: '', files: [], ...curatedFields };
+}
 
 async function fetchRecommendedModelDetails(): Promise<Record<string, ModelInfo>> {
   const details: Record<string, ModelInfo> = {};
@@ -230,8 +237,9 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, matchesOrgFilter, parseParamCount, ramGB]);
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
-    return RECOMMENDED_MODELS
-      .filter(m => m.params <= deviceRecommendation.maxParameters)
+    const maxParams = deviceRecommendation.maxParameters;
+    const models = RECOMMENDED_MODELS
+      .filter(m => m.params <= maxParams)
       .filter(m => {
         if (filterState.type !== 'all' && m.type !== filterState.type) return false;
         if (filterState.orgs.length > 0 && !filterState.orgs.includes(m.org)) return false;
@@ -241,13 +249,16 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         }
         return true;
       })
-      .map(m => {
-        const fetched = recommendedModelDetails[m.id];
-        const curatedFields = { modelType: m.type, paramCount: m.params, minRamGB: m.minRam };
-        if (fetched) return { ...fetched, name: m.name, description: m.description, ...curatedFields };
-        return { id: m.id, name: m.name, author: m.id.split('/')[0], description: m.description, downloads: -1, likes: 0, tags: [], lastModified: '', files: [], ...curatedFields };
-      });
+      .map(m => mapCuratedModel(m, recommendedModelDetails));
+    // Sort by best fit: models closest to the device's maxParams come first
+    return [...models].sort((a, b) => (maxParams - (a.paramCount ?? 0)) - (maxParams - (b.paramCount ?? 0)));
   }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
+
+  const trendingAsModelInfo = useMemo((): ModelInfo[] =>
+    RECOMMENDED_MODELS
+      .filter(m => TRENDING_MODEL_IDS.includes(m.id) && m.params <= deviceRecommendation.maxParameters)
+      .map(m => mapCuratedModel(m, recommendedModelDetails)),
+  [deviceRecommendation.maxParameters, recommendedModelDetails]);
 
   return {
     searchQuery, setSearchQuery,
@@ -260,7 +271,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     textFiltersVisible, setTextFiltersVisible,
     downloadedModels, downloadProgress,
     hasActiveFilters, ramGB, deviceRecommendation,
-    filteredResults, recommendedAsModelInfo,
+    filteredResults, recommendedAsModelInfo, trendingAsModelInfo,
     handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,

@@ -138,6 +138,7 @@ export const ModelsScreen: React.FC = () => {
           setTextFiltersVisible={vm.setTextFiltersVisible}
           filteredResults={vm.filteredResults}
           recommendedAsModelInfo={vm.recommendedAsModelInfo}
+          trendingAsModelInfo={vm.trendingAsModelInfo}
           ramGB={vm.ramGB}
           deviceRecommendation={vm.deviceRecommendation}
           hasActiveFilters={vm.hasActiveFilters}

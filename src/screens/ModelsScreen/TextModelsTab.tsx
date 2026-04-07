@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, FlatList, ScrollView, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard, Button } from '../../components';
@@ -25,7 +25,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'isLoadingFiles'
   | 'filterState'
   | 'textFiltersVisible' | 'setTextFiltersVisible'
-  | 'filteredResults' | 'recommendedAsModelInfo'
+  | 'filteredResults' | 'recommendedAsModelInfo' | 'trendingAsModelInfo'
   | 'ramGB' | 'deviceRecommendation'
   | 'hasActiveFilters'
   | 'downloadedModels' | 'downloadProgress'
@@ -168,7 +168,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     searchQuery, setSearchQuery, isLoading, isRefreshing, hasSearched,
     selectedModel, setSelectedModel, modelFiles, setModelFiles, isLoadingFiles,
     filterState, textFiltersVisible, setTextFiltersVisible,
-    filteredResults, recommendedAsModelInfo, ramGB, deviceRecommendation,
+    filteredResults, recommendedAsModelInfo, trendingAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels, downloadProgress,
     alertState, setAlertState, focusTrigger,
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
@@ -296,6 +296,25 @@ export const TextModelsTab: React.FC<Props> = (props) => {
                   {Math.round(ramGB)}GB RAM — models up to {deviceRecommendation.maxParameters}B recommended ({deviceRecommendation.recommendedQuantization})
                 </Text>
               </View>
+              {trendingAsModelInfo.length > 0 && (
+                <View style={styles.trendingScroll}>
+                  <Text style={styles.trendingSectionTitle}>Trending</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingScrollContent}>
+                    {trendingAsModelInfo.map((item, index) => (
+                      <View key={item.id} style={styles.trendingCardWrapper}>
+                        <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}>
+                          <ModelCard
+                            model={item}
+                            isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))}
+                            onPress={() => handleSelectModel(item)}
+                            compact
+                          />
+                        </AnimatedEntry>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
               {recommendedAsModelInfo.length > 0 && <Text style={styles.recommendedTitle}>Recommended for your device</Text>}
             </View>
           )}

@@ -83,6 +83,7 @@ jest.mock('../../../../src/screens/ModelsScreen/useTextModels', () => ({
     deviceRecommendation: 'medium',
     filteredResults: [],
     recommendedAsModelInfo: null,
+    trendingAsModelInfo: [],
     handleSearch: jest.fn(),
     handleSelectModel: jest.fn(),
     handleDownload: jest.fn(),

@@ -113,6 +113,15 @@ export const RECOMMENDED_MODELS = [
   },
 ];
 
+// Trending model IDs — Gemma 4 and Qwen 3.5 family
+export const TRENDING_MODEL_IDS = [
+  'unsloth/gemma-4-E2B-it-GGUF',
+  'unsloth/gemma-4-E4B-it-GGUF',
+  'unsloth/Qwen3.5-0.8B-GGUF',
+  'unsloth/Qwen3.5-2B-GGUF',
+  'unsloth/Qwen3.5-9B-GGUF',
+];
+
 // Model organization filter options
 export const MODEL_ORGS = [
   { key: 'Qwen', label: 'Qwen' },
