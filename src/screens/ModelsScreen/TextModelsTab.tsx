@@ -311,7 +311,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           setSourceFilter={setSourceFilter}
           setSizeFilter={setSizeFilter}
           setQuantFilter={setQuantFilter}
-          setSortOption={setSortOption}
         />
       )}
 
