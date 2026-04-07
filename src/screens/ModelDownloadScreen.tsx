@@ -205,7 +205,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
       if (textModel) await remoteServerManager.setActiveRemoteTextModel(server.id, textModel.id);
-      setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length !== 1 ? 's' : ''}. You can start chatting now.`,
+      setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length === 1 ? '' : 's'}. You can start chatting now.`,
         [{ text: 'Continue', onPress: () => { setAlertState(hideAlert()); navigation.replace('Main'); } }]));
     } catch (e) { setAlertState(showAlert('Connection Failed', (e as Error).message)); }
     finally { setConnectingServerId(null); }

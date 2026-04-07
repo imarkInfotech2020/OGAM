@@ -227,7 +227,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   } = props;
 
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
-  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort)!;
+  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
   const isSortActive = filterState.sort !== 'recommended';
   const sortToggleActive = isSortActive || filterState.expandedDimension === 'sort';
   const filterToggleActive = textFiltersVisible || hasNonSortActiveFilters;
