@@ -26,28 +26,31 @@ function updateMessageInConv(
   };
 }
 
+/** Locate a fixed-string thinking block and split content into reasoning + response. */
+function sliceThinkingBlock(
+  content: string,
+  openTag: string,
+  closeTag: string,
+): { reasoningContent: string | undefined; responseContent: string } | null {
+  const openIdx = content.toLowerCase().indexOf(openTag.toLowerCase());
+  if (openIdx === -1) return null;
+  const closeIdx = content.toLowerCase().indexOf(closeTag.toLowerCase(), openIdx + openTag.length);
+  if (closeIdx === -1) return null;
+  const thinkStart = openIdx + openTag.length;
+  return {
+    reasoningContent: content.slice(thinkStart, closeIdx).trim() || undefined,
+    responseContent: content.slice(closeIdx + closeTag.length),
+  };
+}
+
 /** Extract channel-based thinking from raw streaming content before control tokens are stripped. */
 function extractChannelThinking(rawContent: string): { reasoningContent: string | undefined; responseContent: string } {
-  const g4Open = rawContent.match(/<\|channel>thought\n/i);
-  const g4Close = rawContent.match(/<channel\|>/i);
-  if (g4Open && g4Close && g4Close.index! > g4Open.index!) {
-    const thinkStart = g4Open.index! + g4Open[0].length;
-    const thinkEnd = g4Close.index!;
-    return {
-      reasoningContent: rawContent.slice(thinkStart, thinkEnd).trim() || undefined,
-      responseContent: rawContent.slice(thinkEnd + g4Close[0].length),
-    };
-  }
-  const qwenOpen = rawContent.match(/<\|channel\|>analysis<\|message\|>/i);
-  const qwenClose = rawContent.match(/<\|channel\|>final<\|message\|>/i);
-  if (qwenOpen && qwenClose && qwenClose.index! > qwenOpen.index!) {
-    const thinkStart = qwenOpen.index! + qwenOpen[0].length;
-    const thinkEnd = qwenClose.index!;
-    return {
-      reasoningContent: rawContent.slice(thinkStart, thinkEnd).trim() || undefined,
-      responseContent: rawContent.slice(thinkEnd + qwenClose[0].length),
-    };
-  }
+  // Gemma 4 format: <|channel>thought\n[thinking]<channel|>[response]
+  const gemma4 = sliceThinkingBlock(rawContent, '<|channel>thought\n', '<channel|>');
+  if (gemma4) return gemma4;
+  // Qwen channel format: <|channel|>analysis<|message|>[thinking]<|channel|>final<|message|>[response]
+  const qwen = sliceThinkingBlock(rawContent, '<|channel|>analysis<|message|>', '<|channel|>final<|message|>');
+  if (qwen) return qwen;
   return { reasoningContent: undefined, responseContent: rawContent };
 }
 
