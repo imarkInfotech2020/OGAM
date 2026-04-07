@@ -7,10 +7,7 @@ import { generateId } from '../utils/generateId';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
   const now = Date.now();
-  if (!previousUpdatedAt) {
-    return new Date(now).toISOString();
-  }
-
+  if (!previousUpdatedAt) return new Date(now).toISOString();
   const previousTime = Date.parse(previousUpdatedAt);
   const nextTime = Number.isNaN(previousTime) ? now : Math.max(now, previousTime + 1);
   return new Date(nextTime).toISOString();
@@ -29,6 +26,38 @@ function updateMessageInConv(
   };
 }
 
+/** Extract channel-based thinking from raw streaming content before control tokens are stripped. */
+function extractChannelThinking(rawContent: string): { reasoningContent: string | undefined; responseContent: string } {
+  const g4Open = rawContent.match(/<\|channel>thought\n/i);
+  const g4Close = rawContent.match(/<channel\|>/i);
+  if (g4Open && g4Close && g4Close.index! > g4Open.index!) {
+    const thinkStart = g4Open.index! + g4Open[0].length;
+    const thinkEnd = g4Close.index!;
+    return {
+      reasoningContent: rawContent.slice(thinkStart, thinkEnd).trim() || undefined,
+      responseContent: rawContent.slice(thinkEnd + g4Close[0].length),
+    };
+  }
+  const qwenOpen = rawContent.match(/<\|channel\|>analysis<\|message\|>/i);
+  const qwenClose = rawContent.match(/<\|channel\|>final<\|message\|>/i);
+  if (qwenOpen && qwenClose && qwenClose.index! > qwenOpen.index!) {
+    const thinkStart = qwenOpen.index! + qwenOpen[0].length;
+    const thinkEnd = qwenClose.index!;
+    return {
+      reasoningContent: rawContent.slice(thinkStart, thinkEnd).trim() || undefined,
+      responseContent: rawContent.slice(thinkEnd + qwenClose[0].length),
+    };
+  }
+  return { reasoningContent: undefined, responseContent: rawContent };
+}
+
+/** Derive conversation title from the first user message. */
+function deriveTitle(currentTitle: string, role: string, content: string): string {
+  if (currentTitle !== 'New Conversation' || role !== 'user') return currentTitle;
+  const truncated = content.slice(0, 50);
+  return content.length > 50 ? `${truncated}...` : truncated;
+}
+
 /** Map over conversations, applying `updater` only to the one matching `conversationId`. */
 function mapConversation(
   conversations: Conversation[],
@@ -39,32 +68,23 @@ function mapConversation(
 }
 
 interface ChatState {
-  // Conversations
   conversations: Conversation[];
   activeConversationId: string | null;
-
-  // Current message being streamed
   streamingMessage: string;
   streamingReasoningContent: string;
-  streamingForConversationId: string | null; // Which conversation is being generated for
+  streamingForConversationId: string | null;
   isStreaming: boolean;
-  isThinking: boolean; // True when processing prompt, before first token
-
-  // Actions
+  isThinking: boolean;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   deleteConversation: (conversationId: string) => void;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
   setConversationProject: (conversationId: string, projectId: string | null) => void;
-
-  // Messages
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => Message;
   updateMessageContent: (conversationId: string, messageId: string, content: string) => void;
   updateMessageThinking: (conversationId: string, messageId: string, isThinking: boolean) => void;
   deleteMessage: (conversationId: string, messageId: string) => void;
   deleteMessagesAfter: (conversationId: string, messageId: string) => void;
-
-  // Streaming
   startStreaming: (conversationId: string) => void;
   setStreamingMessage: (content: string) => void;
   appendToStreamingMessage: (token: string) => void;
@@ -74,11 +94,7 @@ interface ChatState {
   finalizeStreamingMessage: (conversationId: string, generationTimeMs?: number, generationMeta?: GenerationMeta) => void;
   clearStreamingMessage: () => void;
   getStreamingState: () => { conversationId: string | null; content: string; reasoningContent: string; isStreaming: boolean; isThinking: boolean };
-
-  // Compaction
   updateCompactionState: (conversationId: string, summary?: string, cutoffMessageId?: string) => void;
-
-  // Utilities
   clearAllConversations: () => void;
   getConversationMessages: (conversationId: string) => Message[];
 }
@@ -109,8 +125,6 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
-          // Don't clear streaming state - generation may be in progress for another conversation
-          // The UI checks streamingForConversationId to scope streaming display to the correct chat
         }));
 
         return id;
@@ -119,16 +133,11 @@ export const useChatStore = create<ChatState>()(
       deleteConversation: (conversationId) => {
         set((state) => ({
           conversations: state.conversations.filter((c) => c.id !== conversationId),
-          activeConversationId:
-            state.activeConversationId === conversationId
-              ? null
-              : state.activeConversationId,
+          activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
         }));
       },
 
       setActiveConversation: (conversationId) => {
-        // Don't clear streaming state - generation may be in progress for another conversation
-        // The UI should check streamingForConversationId to know if streaming applies to current view
         set({ activeConversationId: conversationId });
       },
 
@@ -139,17 +148,11 @@ export const useChatStore = create<ChatState>()(
 
       setConversationProject: (conversationId, projectId) => {
         set((state) => ({
-          conversations: state.conversations.map((conv) => {
-            if (conv.id !== conversationId) {
-              return conv;
-            }
-
-            return {
-              ...conv,
-              projectId: projectId || undefined,
-              updatedAt: nextUpdatedAt(conv.updatedAt),
-            };
-          }),
+          conversations: state.conversations.map((conv) =>
+            conv.id !== conversationId
+              ? conv
+              : { ...conv, projectId: projectId || undefined, updatedAt: nextUpdatedAt(conv.updatedAt) }
+          ),
         }));
       },
 
@@ -167,14 +170,7 @@ export const useChatStore = create<ChatState>()(
                   ...conv,
                   messages: [...conv.messages, message],
                   updatedAt: nextUpdatedAt(conv.updatedAt),
-                  // Update title from first user message if still default
-                  title: (() => {
-                    if (conv.title === 'New Conversation' && messageData.role === 'user') {
-                      const truncated = messageData.content.slice(0, 50);
-                      return messageData.content.length > 50 ? `${truncated}...` : truncated;
-                    }
-                    return conv.title;
-                  })(),
+                  title: deriveTitle(conv.title, messageData.role, messageData.content),
                 }
               : conv
           ),
@@ -265,33 +261,15 @@ export const useChatStore = create<ChatState>()(
         const { streamingMessage, streamingReasoningContent, streamingForConversationId, addMessage } = get();
 
         // Extract channel-based thinking BEFORE stripping control tokens.
-        // stripControlTokens removes <|channel>thought\n and <channel|> as a safety net,
-        // but that prevents parseThinkingContent (called later in buildMessageData) from
-        // finding them. We pull out the thinking here and store it as reasoningContent so
+        // stripControlTokens removes thinking delimiters as a safety net, but that
+        // prevents extraction here. We pull them out and store as reasoningContent so
         // the ThinkingBlock renders correctly on the finalized message.
-        let rawContent = streamingMessage;
         let reasoningContent = streamingReasoningContent.trim() || undefined;
-
+        let rawContent = streamingMessage;
         if (!reasoningContent) {
-          // Gemma 4 format: <|channel>thought\n[thinking]<channel|>[response]
-          const g4Open = rawContent.match(/<\|channel>thought\n/i);
-          const g4Close = rawContent.match(/<channel\|>/i);
-          if (g4Open && g4Close && g4Close.index! > g4Open.index!) {
-            const thinkStart = g4Open.index! + g4Open[0].length;
-            const thinkEnd = g4Close.index!;
-            reasoningContent = rawContent.slice(thinkStart, thinkEnd).trim() || undefined;
-            rawContent = rawContent.slice(thinkEnd + g4Close[0].length);
-          } else {
-            // Qwen channel format: <|channel|>analysis<|message|>[thinking]<|channel|>final<|message|>[response]
-            const qwenOpen = rawContent.match(/<\|channel\|>analysis<\|message\|>/i);
-            const qwenClose = rawContent.match(/<\|channel\|>final<\|message\|>/i);
-            if (qwenOpen && qwenClose && qwenClose.index! > qwenOpen.index!) {
-              const thinkStart = qwenOpen.index! + qwenOpen[0].length;
-              const thinkEnd = qwenClose.index!;
-              reasoningContent = rawContent.slice(thinkStart, thinkEnd).trim() || undefined;
-              rawContent = rawContent.slice(thinkEnd + qwenClose[0].length);
-            }
-          }
+          const extracted = extractChannelThinking(rawContent);
+          reasoningContent = extracted.reasoningContent;
+          rawContent = extracted.responseContent;
         }
 
         // Only finalize if this is the conversation we were generating for
