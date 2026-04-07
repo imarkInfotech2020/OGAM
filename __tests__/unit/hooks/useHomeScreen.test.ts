@@ -20,6 +20,7 @@ jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn().mockResolvedValue([]),
     getDownloadedImageModels: jest.fn().mockResolvedValue([]),
+    linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
   },
   hardwareService: {
     getDeviceInfo: jest.fn().mockResolvedValue({ deviceName: 'TestPhone' }),
