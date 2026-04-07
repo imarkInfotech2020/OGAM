@@ -310,15 +310,12 @@ describe('fetchModelFiles', () => {
     jest.clearAllMocks();
   });
 
-  it('returns recommended quant files when available', async () => {
-    // Note: isRecommendedQuant uses q.replace('_', '') which only removes the
-    // first underscore, so Q4_0 becomes Q40. A file with quantization "Q40"
-    // will match because 'Q40'.includes('Q40') === true.
-    const recommendedFile = {
-      name: 'model-Q40.gguf',
+  it('returns the Q4_K_M file when available', async () => {
+    const q4kmFile = {
+      name: 'model-Q4_K_M.gguf',
       size: 4000000000,
-      quantization: 'Q40',
-      downloadUrl: 'https://example.com/model-Q40.gguf',
+      quantization: 'Q4_K_M',
+      downloadUrl: 'https://example.com/model-Q4_K_M.gguf',
     };
     const otherFile = {
       name: 'model-Q8_0.gguf',
@@ -326,13 +323,36 @@ describe('fetchModelFiles', () => {
       quantization: 'Q8_0',
       downloadUrl: 'https://example.com/model-Q8_0.gguf',
     };
-    mockGetModelFiles.mockResolvedValueOnce([otherFile, recommendedFile]);
+    mockGetModelFiles.mockResolvedValueOnce([otherFile, q4kmFile]);
 
     const result = await fetchModelFiles([{ id: 'test/model' }]);
-    expect(result['test/model']).toEqual([recommendedFile]);
+    expect(result['test/model']).toEqual([q4kmFile]);
   });
 
-  it('falls back to first 2 files when no recommended quants', async () => {
+  it('picks Q4_K_M even when listed after other variants', async () => {
+    const q4ksFile = { name: 'model-Q4_K_S.gguf', size: 3800000000, quantization: 'Q4_K_S', downloadUrl: 'https://example.com/q4ks' };
+    const q4kmFile = { name: 'model-Q4_K_M.gguf', size: 4200000000, quantization: 'Q4_K_M', downloadUrl: 'https://example.com/q4km' };
+    const q8File = { name: 'model-Q8_0.gguf', size: 8000000000, quantization: 'Q8_0', downloadUrl: 'https://example.com/q8' };
+    mockGetModelFiles.mockResolvedValueOnce([q4ksFile, q4kmFile, q8File]);
+
+    const result = await fetchModelFiles([{ id: 'test/model' }]);
+    expect(result['test/model']).toEqual([q4kmFile]);
+  });
+
+  it('does not treat Q4_K_S or Q4_0 as Q4_K_M', async () => {
+    const files = [
+      { name: 'model-Q4_K_S.gguf', size: 3800000000, quantization: 'Q4_K_S', downloadUrl: 'https://example.com/q4ks' },
+      { name: 'model-Q4_0.gguf', size: 3500000000, quantization: 'Q4_0', downloadUrl: 'https://example.com/q40' },
+      { name: 'model-Q8_0.gguf', size: 8000000000, quantization: 'Q8_0', downloadUrl: 'https://example.com/q8' },
+    ];
+    mockGetModelFiles.mockResolvedValueOnce(files);
+
+    const result = await fetchModelFiles([{ id: 'test/model' }]);
+    // No Q4_K_M → falls back to first 2 files
+    expect(result['test/model']).toEqual([files[0], files[1]]);
+  });
+
+  it('falls back to first 2 files when no Q4_K_M present', async () => {
     const files = [
       { name: 'model-Q8_0.gguf', size: 8e9, quantization: 'Q8_0', downloadUrl: 'https://example.com/1' },
       { name: 'model-Q5_1.gguf', size: 5e9, quantization: 'Q5_1', downloadUrl: 'https://example.com/2' },
