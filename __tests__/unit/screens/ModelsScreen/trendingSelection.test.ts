@@ -88,7 +88,7 @@ describe('trendingAsModelInfo — family best-fit selection', () => {
     expect(e4bSelected).toBeUndefined();
   });
 
-  it('selects Qwen 3.5 9B over Qwen 3.5 2B for an 8GB RAM device (maxParams 8)', () => {
+  it('selects Qwen 3.5 0.8B as best fit for an 8GB RAM device (maxParams 8)', () => {
     // 8GB RAM → maxParams = 8; both 2B and 9B qualify, but 9B scores better (ratio closer to 0.4 * 8 = 3.2)
     mockGetModelRecommendation.mockReturnValue({ maxParameters: 8 });
     mockGetTotalMemoryGB.mockReturnValue(8);
