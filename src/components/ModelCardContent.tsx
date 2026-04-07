@@ -81,7 +81,6 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           <View style={styles.authorTag}>
             <Text style={styles.authorTagText}>{model.author}</Text>
           </View>
-          {isTrending && <MaterialIcon name="whatshot" size={14} color="#FF6B00" />}
           {credibilityInfo && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
               {credibility?.source === 'lmstudio' && (
@@ -92,6 +91,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
               </Text>
             </View>
           )}
+          {isTrending && <MaterialIcon name="whatshot" size={14} color="#FF6B00" />}
         </View>
         {model.downloads !== undefined && model.downloads > 0 && (
           <View style={styles.authorTag}>
