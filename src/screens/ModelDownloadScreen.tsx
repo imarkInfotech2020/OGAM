@@ -219,10 +219,9 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </Card>
 
-          {recommendedModels.map((model, index) => {
-            const files = modelFiles[model.id] || [];
-            const recFile = files[0];
-            const key = recFile ? `${model.id}/${recFile.name}` : '';
+          {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
+            const recFile = modelFiles[model.id][0];
+            const key = `${model.id}/${recFile.name}`;
             const progress = downloadProgress[key];
             return (
               <ModelCard
@@ -235,7 +234,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
                 downloadProgress={progress?.progress}
                 isCompatible={model.minRam <= totalRamGB}
                 onPress={() => {}}
-                onDownload={recFile ? () => handleDownload(model.id, recFile) : undefined}
+                onDownload={() => handleDownload(model.id, recFile)}
               />
             );
           })}

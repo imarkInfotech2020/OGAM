@@ -25,7 +25,7 @@ export async function fetchModelFiles(
       try {
         const files = await huggingFaceService.getModelFiles(model.id);
         const q4km = files.find(f => f.quantization.toUpperCase() === 'Q4_K_M');
-        filesMap[model.id] = q4km ? [q4km] : files.slice(0, 2);
+        if (q4km) filesMap[model.id] = [q4km];
       } catch (error) {
         logger.error(`Error fetching files for ${model.id}:`, error);
       }
