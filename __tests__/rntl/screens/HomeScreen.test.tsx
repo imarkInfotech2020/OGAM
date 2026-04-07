@@ -399,7 +399,7 @@ describe('HomeScreen', () => {
       useAppStore.setState({ downloadedModels: [model] });
 
       const { getByText } = renderHomeScreen();
-      expect(getByText('Select a text model to start chatting')).toBeTruthy();
+      expect(getByText('Select a text or image model to start')).toBeTruthy();
     });
 
     it('shows "Add remote server or download" when no models downloaded', () => {

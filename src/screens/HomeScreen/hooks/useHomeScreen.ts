@@ -223,8 +223,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    if (!activeTextModelId) { return; }
-    const conversationId = createConversation(activeTextModelId);
+    const modelId = activeTextModelId || activeImageModelId;
+    if (!modelId) { return; }
+    const conversationId = createConversation(modelId);
     setActiveConversation(conversationId);
     navigation.navigate('Chat', { conversationId });
   };

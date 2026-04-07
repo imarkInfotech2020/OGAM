@@ -114,7 +114,8 @@ export const useChatScreen = () => {
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote ? undefined : (activeModelInfo.model as DownloadedModel | undefined);
   const activeRemoteModel = activeModelInfo.isRemote ? (activeModelInfo.model as RemoteModel | null) : null;
-  const hasActiveModel = activeModelInfo.modelId !== null;
+  const hasTextModel = activeModelInfo.modelId !== null;
+  const hasActiveModel = hasTextModel || !!activeImageModelId;
   const activeModelName = activeModelInfo.modelName;
 
   const activeProject = activeConversation?.projectId ? getProject(activeConversation.projectId) : null;
@@ -124,7 +125,7 @@ export const useChatScreen = () => {
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
 
   const genDeps = {
-    activeModelId: activeModelInfo.modelId, activeModel, activeModelInfo, hasActiveModel, activeConversationId, activeConversation, activeProject,
+    activeModelId: activeModelInfo.modelId, activeModel, activeModelInfo, hasActiveModel, hasTextModel, activeConversationId, activeConversation, activeProject,
     activeImageModel, imageModelLoaded, isStreaming, isGeneratingImage, imageGenState, settings,
     downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
@@ -240,7 +241,7 @@ export const useChatScreen = () => {
     viewerImageUri, setViewerImageUri, imageGenState,
     enabledTools, handleToggleTool,
     activeModelId: activeModelInfo.modelId, activeConversationId, activeConversation, activeModel,
-    activeModelInfo, hasActiveModel, activeRemoteModel, activeModelName,
+    activeModelInfo, hasActiveModel, hasTextModel, activeRemoteModel, activeModelName,
     activeProject, activeImageModel, imageModelLoaded, isGeneratingImage,
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
