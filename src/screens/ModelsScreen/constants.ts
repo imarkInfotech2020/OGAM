@@ -64,6 +64,7 @@ export const BACKEND_OPTIONS: { key: BackendFilter; label: string }[] = [
 
 export const SORT_OPTIONS: { key: SortOption; label: string; icon: string }[] = [
   { key: 'recommended', label: 'Smart', icon: 'zap' },
+  { key: 'bestfit', label: 'For You', icon: 'smartphone' },
   { key: 'size', label: 'Size', icon: 'database' },
   { key: 'downloads', label: 'Downloads', icon: 'download' },
   { key: 'recency', label: 'Newest', icon: 'clock' },

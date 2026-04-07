@@ -18,9 +18,18 @@ function parseParamCount(model: ModelInfo): number | null {
   return match ? Number.parseFloat(match[1]) : null;
 }
 
-function applySort<T extends ModelInfo>(models: T[], sort: SortOption): T[] {
+// Score how well a model fits a device: ideal is ~40% of RAM, penalty above 75% (too slow)
+function bestFitScore(model: ModelInfo, ramGB: number): number {
+  const minRam = model.minRamGB ?? (model.paramCount ?? 0) * 0.75;
+  const ratio = minRam / ramGB;
+  const penalty = ratio > 0.75 ? (ratio - 0.75) * 4 : 0;
+  return Math.abs(ratio - 0.4) + penalty;
+}
+
+function applySort<T extends ModelInfo>(models: T[], sort: SortOption, ramGB = 0): T[] {
   if (sort === 'recommended') return models;
   return [...models].sort((a, b) => {
+    if (sort === 'bestfit') return bestFitScore(a, ramGB) - bestFitScore(b, ramGB);
     if (sort === 'size') return (a.paramCount ?? parseParamCount(a) ?? 0) - (b.paramCount ?? parseParamCount(b) ?? 0);
     if (sort === 'downloads') return (b.downloads ?? 0) - (a.downloads ?? 0);
     const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
@@ -253,7 +262,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       const params = parseParamCount(model);
       return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
     });
-    return applySort(mapped, filterState.sort);
+    return applySort(mapped, filterState.sort, ramGB);
   }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, filterState.sort, ramGB]);
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
@@ -270,8 +279,8 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         return true;
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
-    return applySort(models, filterState.sort);
-  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails]);
+    return applySort(models, filterState.sort, ramGB);
+  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, ramGB]);
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
