@@ -309,7 +309,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     if (activeModelInfo.isRemote) return;
     if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
 
-  }, [activeModelId]);
+  }, [activeModelId, activeModel?.mmProjPath]);
   useEffect(() => {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
