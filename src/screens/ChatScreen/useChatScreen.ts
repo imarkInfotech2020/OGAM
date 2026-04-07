@@ -21,17 +21,8 @@ export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
 
 function triggerAudioModeGeneration(conversationId: string, messageId: string, content: string) {
-  const updateAudio = useChatStore.getState().updateMessageAudio;
-  updateAudio(conversationId, messageId, { isGeneratingAudio: true });
-  useTTSStore.getState().generateAndSave(content, conversationId, messageId)
-    .then(({ path, waveformData, durationSeconds }) => {
-      useChatStore.getState().updateMessageAudio(conversationId, messageId, {
-        audioPath: path, waveformData, audioDurationSeconds: durationSeconds, isGeneratingAudio: false,
-      });
-    })
-    .catch(() => {
-      useChatStore.getState().updateMessageAudio(conversationId, messageId, { isGeneratingAudio: false });
-    });
+  useChatStore.getState().updateMessageAudio(conversationId, messageId, { isAudioModeMessage: true });
+  useTTSStore.getState().speak(content, messageId);
 }
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;

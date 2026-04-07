@@ -187,6 +187,8 @@ export interface Message {
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
   /** Tool name (for tool result messages) */
   toolName?: string;
+  /** True when this assistant message was generated while interfaceMode === 'audio' */
+  isAudioModeMessage?: boolean;
 }
 
 export interface Conversation {

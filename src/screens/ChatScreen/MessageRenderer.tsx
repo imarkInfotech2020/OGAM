@@ -32,7 +32,6 @@ type AudioBubbleProps = {
   waveformData: number[];
   durationSeconds: number;
   transcript: string;
-  isGenerating: boolean;
 };
 
 function buildAudioBubbleProps(msg: Message): AudioBubbleProps {
@@ -42,7 +41,6 @@ function buildAudioBubbleProps(msg: Message): AudioBubbleProps {
     waveformData: msg.waveformData ?? [],
     durationSeconds: msg.audioDurationSeconds ?? 0,
     transcript: stripControlTokens(msg.content),
-    isGenerating: Boolean(msg.isGeneratingAudio),
   };
 }
 
@@ -86,10 +84,8 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
   }
 
-  // Audio Mode: assistant voice note (audio is ready or being generated)
-  // (historical messages without audio fall through to normal ChatMessage)
-  if (msg.role === 'assistant' && ttsMode === 'audio' && !msg.isSystemInfo && !msg.toolCalls?.length
-    && (msg.audioPath || msg.isGeneratingAudio)) {
+  // Audio Mode: assistant messages that were generated in audio mode appear as audio bubbles
+  if (msg.role === 'assistant' && msg.isAudioModeMessage && !msg.isSystemInfo && !msg.toolCalls?.length) {
     const bubble = (
       <View style={audioStyles.assistantContainer}>
         <AudioMessageBubble {...buildAudioBubbleProps(msg)} />
@@ -124,7 +120,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
 // Matches the horizontal padding of ChatMessage so audio bubbles align with text bubbles
 const audioStyles = StyleSheet.create({
   userContainer: {
-    paddingHorizontal: 16,
+    paddingRight: 16,
     marginVertical: 8,
     alignItems: 'flex-end',
   },

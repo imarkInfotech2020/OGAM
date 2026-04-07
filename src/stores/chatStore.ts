@@ -87,7 +87,7 @@ interface ChatState {
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => Message;
   updateMessageContent: (conversationId: string, messageId: string, content: string) => void;
   updateMessageThinking: (conversationId: string, messageId: string, isThinking: boolean) => void;
-  updateMessageAudio: (conversationId: string, messageId: string, audio: { audioPath?: string; waveformData?: number[]; audioDurationSeconds?: number; isGeneratingAudio?: boolean }) => void;
+  updateMessageAudio: (conversationId: string, messageId: string, audio: { audioPath?: string; waveformData?: number[]; audioDurationSeconds?: number; isGeneratingAudio?: boolean; isAudioModeMessage?: boolean }) => void;
   deleteMessage: (conversationId: string, messageId: string) => void;
   deleteMessagesAfter: (conversationId: string, messageId: string) => void;
   startStreaming: (conversationId: string) => void;
