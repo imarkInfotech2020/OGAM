@@ -62,11 +62,11 @@ export const BACKEND_OPTIONS: { key: BackendFilter; label: string }[] = [
   { key: 'qnn', label: 'NPU' },
 ];
 
-export const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: 'recommended', label: 'Smart' },
-  { key: 'size', label: 'Size' },
-  { key: 'downloads', label: 'Downloads' },
-  { key: 'recency', label: 'Newest' },
+export const SORT_OPTIONS: { key: SortOption; label: string; icon: string }[] = [
+  { key: 'recommended', label: 'Smart', icon: 'zap' },
+  { key: 'size', label: 'Size', icon: 'database' },
+  { key: 'downloads', label: 'Downloads', icon: 'download' },
+  { key: 'recency', label: 'Newest', icon: 'clock' },
 ];
 
 export const initialFilterState: FilterState = {

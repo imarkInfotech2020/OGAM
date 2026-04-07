@@ -189,7 +189,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   const hasNonSortActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' ||
     filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
-  const sortLabel = SORT_OPTIONS.find(o => o.key === filterState.sort)?.label ?? 'Smart';
+  const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
   const isSortActive = filterState.sort !== 'recommended';
 
   const { colors } = useTheme();
@@ -274,25 +274,34 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterPill, isSortActive && styles.filterPillActive]}
+          style={[styles.filterToggle, (isSortActive || filterState.expandedDimension === 'sort') && styles.filterToggleActive]}
           onPress={() => toggleFilterDimension('sort')}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
           testID="sort-pill"
         >
-          <Text style={[styles.filterPillText, isSortActive && styles.filterPillTextActive]}>
-            {sortLabel} {filterState.expandedDimension === 'sort' ? '\u25B4' : '\u25BE'}
-          </Text>
+          <Icon
+            name={currentSort.icon}
+            size={14}
+            color={(isSortActive || filterState.expandedDimension === 'sort') ? colors.primary : colors.textMuted}
+          />
+          {isSortActive && <View style={styles.filterDot} />}
         </TouchableOpacity>
       </View>
 
       {filterState.expandedDimension === 'sort' && (
         <View style={styles.filterExpandedContent}>
           <View style={styles.filterChipWrap}>
-            {(SORT_OPTIONS as { key: SortOption; label: string }[]).map(option => (
+            {SORT_OPTIONS.map(option => (
               <TouchableOpacity
                 key={option.key}
                 style={[styles.filterChip, filterState.sort === option.key && styles.filterChipActive]}
                 onPress={() => setSortOption(option.key)}
               >
+                <Icon
+                  name={option.icon}
+                  size={12}
+                  color={filterState.sort === option.key ? colors.primary : colors.textSecondary}
+                />
                 <Text style={[styles.filterChipText, filterState.sort === option.key && styles.filterChipTextActive]}>
                   {option.label}
                 </Text>
