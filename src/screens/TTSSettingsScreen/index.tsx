@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
+import { NumericStepper } from '../../components/NumericStepper';
 import { useNavigation } from '@react-navigation/native';
 import { Card, Button } from '../../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
@@ -12,6 +12,8 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useTTSStore } from '../../stores/ttsStore';
 import { hardwareService } from '../../services/hardware';
 import { TTS_BACKBONE_MODEL, TTS_WARN_RAM_GB, TTS_BLOCK_RAM_GB } from '../../constants/ttsModels';
+import { KOKORO_VOICES, isExecutorchSupported } from '../../constants/kokoroModels';
+import type { KokoroVoiceId } from '../../constants/kokoroModels';
 import type { InterfaceMode } from '../../stores/ttsStore';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -90,24 +92,12 @@ const PlaybackCard: React.FC<{
 }> = ({ settings, onUpdate, colors, styles }) => (
   <Card style={styles.section}>
     <Text style={styles.sectionLabel}>Playback</Text>
-    <View style={styles.sliderRow}>
-      <Text style={styles.sliderLabel}>Speed</Text>
-      <Text style={styles.sliderValue}>{settings.speed.toFixed(1)}x</Text>
-    </View>
-    <View style={styles.sliderMarks}>
-      <Text style={styles.sliderMark}>0.5x</Text>
-      <Text style={styles.sliderMark}>1x</Text>
-      <Text style={styles.sliderMark}>2x</Text>
-    </View>
-    <Slider
-      minimumValue={0.5}
-      maximumValue={2.0}
-      step={0.1}
+    <Text style={styles.sliderLabel}>Speed</Text>
+    <NumericStepper
       value={settings.speed}
-      onValueChange={(v) => onUpdate({ speed: parseFloat(v.toFixed(1)) })}
-      minimumTrackTintColor={colors.primary}
-      maximumTrackTintColor={colors.border}
-      thumbTintColor={colors.primary}
+      min={0.5} max={2.0} step={0.1} decimals={1}
+      formatValue={(v) => `${v.toFixed(1)}x`}
+      onChange={(v) => onUpdate({ speed: v })}
     />
     {settings.interfaceMode === 'chat' && (
       <View style={[styles.toggleRow, styles.toggleRowBorder]}>
@@ -147,6 +137,56 @@ const CompatibilityCard: React.FC<{
   );
 };
 
+const KokoroCard: React.FC<{
+  kokoroReady: boolean;
+  kokoroDownloadProgress: number;
+  selectedVoiceId: KokoroVoiceId;
+  onVoiceChange: (id: KokoroVoiceId) => void;
+  styles: Styles;
+  colors: ThemeColors;
+}> = ({ kokoroReady, kokoroDownloadProgress, selectedVoiceId, onVoiceChange, styles, colors }) => {
+  const supported = isExecutorchSupported();
+  return (
+    <Card style={styles.section}>
+      <View style={styles.kokoroHeader}>
+        <Text style={styles.sectionLabel}>Voice</Text>
+        {!supported && (
+          <Text style={styles.hintText}>Requires Android 13+ / iOS 17</Text>
+        )}
+        {supported && !kokoroReady && kokoroDownloadProgress > 0 && (
+          <Text style={styles.hintText}>{Math.round(kokoroDownloadProgress * 100)}%</Text>
+        )}
+        {supported && !kokoroReady && kokoroDownloadProgress === 0 && (
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        )}
+        {supported && kokoroReady && (
+          <Icon name="check-circle" size={14} color={colors.primary} />
+        )}
+      </View>
+      <Text style={styles.description}>
+        Fast on-device voice synthesis. Used for the speak button in Chat Mode.
+      </Text>
+      {KOKORO_VOICES.map((voice, i) => {
+        const active = selectedVoiceId === voice.id;
+        return (
+          <TouchableOpacity
+            key={voice.id}
+            style={[styles.voiceRow, i > 0 && styles.voiceRowBorder]}
+            onPress={() => onVoiceChange(voice.id)}
+            disabled={!supported}
+          >
+            <View style={styles.voiceInfo}>
+              <Text style={styles.voiceName}>{voice.label}</Text>
+              <Text style={styles.voiceMeta}>{voice.accent} · {voice.gender}</Text>
+            </View>
+            {active && <Icon name="check" size={14} color={colors.primary} />}
+          </TouchableOpacity>
+        );
+      })}
+    </Card>
+  );
+};
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export const TTSSettingsScreen: React.FC = () => {
@@ -162,6 +202,7 @@ export const TTSSettingsScreen: React.FC = () => {
     backboneDownloadProgress, vocoderDownloadProgress,
     isModelLoaded, isModelLoading,
     audioCacheSizeMB, settings, error,
+    kokoroReady, kokoroDownloadProgress,
     downloadModels, deleteModels, loadModels, unloadModels,
     checkDownloadStatus, refreshCacheSize, clearAudioCache, updateSettings, clearError,
   } = useTTSStore();
@@ -253,7 +294,16 @@ export const TTSSettingsScreen: React.FC = () => {
           {error && <TouchableOpacity onPress={clearError}><Text style={styles.error}>{error}</Text></TouchableOpacity>}
         </Card>
 
-        {areBothDownloaded && (
+        <KokoroCard
+          kokoroReady={kokoroReady}
+          kokoroDownloadProgress={kokoroDownloadProgress}
+          selectedVoiceId={settings.kokoroVoiceId as KokoroVoiceId}
+          onVoiceChange={(id) => updateSettings({ kokoroVoiceId: id })}
+          styles={styles}
+          colors={colors}
+        />
+
+        {(areBothDownloaded || kokoroReady) && (
           <PlaybackCard settings={settings} onUpdate={updateSettings} colors={colors} styles={styles} />
         )}
 
@@ -347,4 +397,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     privacyIcon: { marginBottom: SPACING.sm },
     privacyTitle: { ...TYPOGRAPHY.h3, color: colors.text, marginBottom: SPACING.sm },
     privacyText: { ...TYPOGRAPHY.body, color: colors.textSecondary, textAlign: 'center' as const, lineHeight: 20 },
+    kokoroHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: SPACING.xs },
+    voiceRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: SPACING.sm },
+    voiceRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+    voiceInfo: { flex: 1 },
+    voiceName: { ...TYPOGRAPHY.body, color: colors.text },
+    voiceMeta: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginTop: 2 },
   });
