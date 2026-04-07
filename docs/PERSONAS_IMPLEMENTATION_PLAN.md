@@ -91,9 +91,10 @@ export interface PersonaModelOverrides {
 }
 
 export interface PersonaVoice {
-  ttsVoiceId: string;                // TTS voice identifier
+  interfaceMode: 'chat' | 'audio';   // 'chat' = text bubbles + play button; 'audio' = waveform bubbles by default
+  ttsVoiceId: string;                // OuteTTS speaker profile id (e.g. '0')
   sttLanguage: string;               // 'en', 'es', etc.
-  speakingRate?: number;             // 0.5–2.0
+  speakingRate: number;              // 0.5–2.0, default 1.0
 }
 
 export interface Persona {
@@ -486,6 +487,11 @@ export function buildMemoryContext(facts: PersonaMemoryFact[]): string {
 - Tapping a capability without a downloaded model → CapabilityDownloadPrompt sheet
 - Capability bar hidden when only `text` is enabled (no need to show one option)
 
+**Message rendering — mode-branched:**
+- `voice.interfaceMode === 'audio'` → assistant messages render as `AudioMessageBubble` (waveform + scrubber + speed chip + Show transcript). TTS is generated automatically after each streaming response completes and saved to `audio-cache/{conversationId}/{messageId}.wav`.
+- `voice.interfaceMode === 'chat'` → standard text bubbles with a `TTSButton` play/stop icon on each assistant message. Audio generated on demand, discarded after playback.
+- User messages (Whisper STT) render as waveform bubbles in both modes — transcript shown as secondary.
+
 **Input Area:**
 - Voice capability enabled → mic button replaces/joins send button
 - Image gen capability → image prompt indicator in input area
@@ -562,9 +568,11 @@ Toggle cards, each with an icon, label, and inline download CTA if model missing
 ```
 
 #### Voice Settings (shown when Voice is ON)
-- Voice style: [selector — coming with TTS]
-- Speaking language: [picker]
-- Speaking rate: [slider 0.5–2.0]
+- Interface Mode: segmented control — `Chat` (text bubbles + play button) / `Audio` (waveform bubbles, always-on)
+  - If device RAM < 6GB: Audio option greyed out with "Requires 6GB+ RAM"
+- Voice: picker from available OuteTTS speaker profiles
+- Speaking rate: slider 0.5–2.0x
+- Speaking language: picker (STT language for Whisper)
 
 #### Knowledge Bases (shown when KB is ON)
 ```
@@ -821,27 +829,67 @@ export async function migrateProjectsToPersonas(): Promise<void> {
 
 ---
 
-## TTS Integration (when ready)
+## TTS Integration
 
-TTS plugs into the `voice` capability:
+TTS plugs into the `voice` capability via `ttsService` and `ttsStore`. See `docs/TTS_IMPLEMENTATION_PLAN.md` for full service/store implementation.
+
+### How persona voice settings wire into TTS
+
+When a conversation loads, resolve the persona's voice settings and pass them through:
 
 ```typescript
-// src/services/ttsService.ts (stub — fill when TTS lands)
+const { voice } = persona;
 
-interface TTSService {
-  speak(text: string, options: TTSOptions): Promise<void>;
-  stop(): void;
-  isSpeaking(): boolean;
-}
+// Chat Mode: generate on demand, play, discard
+ttsStore.getState().speak(text, messageId);
+// uses voice.ttsVoiceId and voice.speakingRate from ttsStore.settings
 
-interface TTSOptions {
-  voiceId: string;    // persona-specific voice
-  rate?: number;      // from persona.voice.speakingRate
-  language?: string;  // from persona.voice.sttLanguage
+// Audio Mode: generate after streaming completes, save to disk
+const { path, waveformData, durationSeconds } = await ttsStore.getState().generateAndSave(
+  stripControlTokens(lastMessage.content),
+  conversationId,
+  lastMessage.id,
+);
+// saves to audio-cache/{conversationId}/{messageId}.wav
+// update message record with audioPath, waveformData, audioDurationSeconds
+```
+
+### Per-persona voice settings → ttsStore sync
+
+When a persona is activated (user opens chat), sync its voice settings into `ttsStore`:
+
+```typescript
+// src/hooks/usePersonaVoiceSync.ts
+
+export function usePersonaVoiceSync(persona: Persona) {
+  const updateSettings = useTTSStore(s => s.updateSettings);
+
+  useEffect(() => {
+    if (!persona.voice) return;
+    updateSettings({
+      interfaceMode: persona.voice.interfaceMode,
+      voiceId: persona.voice.ttsVoiceId,
+      speed: persona.voice.speakingRate,
+    });
+  }, [persona.id]);
 }
 ```
 
-In chat: after each assistant message completes streaming, if `voice` capability is active, auto-call `ttsService.speak(finalMessage)`. User can tap to stop.
+This means each persona carries its own interface mode, voice, and speed — switching personas instantly reconfigures the TTS experience.
+
+### Message model additions (required for Audio Mode)
+
+Add to the `Message` type:
+
+```typescript
+export interface Message {
+  // ...existing fields...
+  audioPath?: string;              // path to WAV on disk (Audio Mode only)
+  waveformData?: number[];         // 200-point amplitude envelope for waveform bar
+  audioDurationSeconds?: number;   // total audio duration
+  isGeneratingAudio?: boolean;     // true while TTS is running for this message
+}
+```
 
 ---
 
@@ -867,7 +915,11 @@ In chat: after each assistant message completes streaming, if `voice` capability
 13. `CapabilityBar` component in chat
 14. `CapabilityDownloadPrompt` sheet
 15. Wire capability switching (text ↔ image gen ↔ vision)
-16. TTS integration (when branch lands) — auto-speak assistant messages in voice mode
+16. TTS integration — requires TTS_IMPLEMENTATION_PLAN to be executed first, then:
+    - Add `usePersonaVoiceSync` hook to sync persona voice settings into `ttsStore` on persona activation
+    - Chat Mode: add `TTSButton` to text bubble action row
+    - Audio Mode: render `AudioMessageBubble` for assistant messages; trigger `generateAndSave` after streaming completes
+    - Add `audioPath`, `waveformData`, `audioDurationSeconds`, `isGeneratingAudio` to `Message` type
 
 ### Phase 4 — Memory
 17. `personaMemoryService.ts` — fact extraction after conversations
