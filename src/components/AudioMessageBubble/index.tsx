@@ -3,16 +3,17 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useTTSStore } from '../../stores/ttsStore';
+import { KOKORO_VOICES } from '../../constants/kokoroModels';
+import type { KokoroVoiceId } from '../../constants/kokoroModels';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 
-const WAVEFORM_BARS = 40; // number of bars to display (subset of 200 data points)
+const WAVEFORM_BARS = 28;
 const SPEED_STEPS: number[] = [0.5, 1.0, 1.5, 2.0];
 
 interface AudioMessageBubbleProps {
@@ -22,7 +23,6 @@ interface AudioMessageBubbleProps {
   durationSeconds: number;
   /** Optional plain-text transcript to show when user expands */
   transcript?: string;
-  isGenerating?: boolean;
   /** True for user-sent voice recordings (right-aligned) */
   isUser?: boolean;
 }
@@ -79,10 +79,12 @@ const WaveformBars: React.FC<{
 
 const barStyles = StyleSheet.create({
   container: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
     height: 32,
+    overflow: 'hidden',
   },
   bar: {
     width: 3,
@@ -96,12 +98,11 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   waveformData,
   durationSeconds,
   transcript,
-  isGenerating,
   isUser = false,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { isSpeaking, currentMessageId, settings, playMessage, stopPlayback, updateSettings } =
+  const { isSpeaking, currentMessageId, settings, playMessage, stopPlayback, speak, updateSettings } =
     useTTSStore();
 
   const [showTranscript, setShowTranscript] = useState(false);
@@ -110,13 +111,21 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   const isThisPlaying = isSpeaking && currentMessageId === messageId;
 
+  const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
+  const currentVoiceIdx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
+  const currentVoice = KOKORO_VOICES[currentVoiceIdx >= 0 ? currentVoiceIdx : 0];
+
   const handlePlayPause = useCallback(() => {
     if (isThisPlaying) {
       stopPlayback();
       return;
     }
-    playMessage(messageId, audioPath);
-  }, [isThisPlaying, stopPlayback, playMessage, messageId, audioPath]);
+    if (audioPath) {
+      playMessage(messageId, audioPath);
+    } else {
+      speak(transcript ?? '', messageId);
+    }
+  }, [isThisPlaying, stopPlayback, playMessage, speak, messageId, audioPath, transcript]);
 
   const handleSpeedCycle = useCallback(() => {
     const next = (speedIndex + 1) % SPEED_STEPS.length;
@@ -124,42 +133,70 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     updateSettings({ speed: SPEED_STEPS[next] });
   }, [speedIndex, updateSettings]);
 
-  if (isGenerating) {
-    return (
-      <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-generating-${messageId}`}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.generatingText}>Generating audio...</Text>
-      </View>
-    );
-  }
+  const handleVoiceCycle = useCallback(() => {
+    const idx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
+    const next = (idx + 1) % KOKORO_VOICES.length;
+    updateSettings({ kokoroVoiceId: KOKORO_VOICES[next].id as KokoroVoiceId });
+  }, [kokoroVoiceId, updateSettings]);
+
+  const speedChip = (
+    <TouchableOpacity
+      onPress={handleSpeedCycle}
+      style={styles.speedChip}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Text style={styles.speedText}>{SPEED_STEPS[speedIndex]}x</Text>
+    </TouchableOpacity>
+  );
+
+  const voiceChip = !isUser ? (
+    <TouchableOpacity
+      onPress={handleVoiceCycle}
+      style={styles.speedChip}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Text style={styles.speedText}>{currentVoice.label}</Text>
+    </TouchableOpacity>
+  ) : null;
+
+  const playButton = (
+    <TouchableOpacity
+      onPress={handlePlayPause}
+      style={styles.playButton}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Icon
+        name={isThisPlaying ? 'pause' : 'play'}
+        size={16}
+        color={colors.primary}
+      />
+    </TouchableOpacity>
+  );
+
+  const durationText = (
+    <Text style={styles.duration}>{formatDuration(durationSeconds)}</Text>
+  );
 
   return (
     <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-${messageId}`}>
       {/* Playback row */}
       <View style={styles.playRow}>
-        <TouchableOpacity
-          onPress={handlePlayPause}
-          style={styles.playButton}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Icon
-            name={isThisPlaying ? 'pause' : 'play'}
-            size={16}
-            color={colors.primary}
-          />
-        </TouchableOpacity>
-
-        <WaveformBars data={waveformData} colors={colors} />
-
-        <Text style={styles.duration}>{formatDuration(durationSeconds)}</Text>
-
-        <TouchableOpacity
-          onPress={handleSpeedCycle}
-          style={styles.speedChip}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.speedText}>{SPEED_STEPS[speedIndex]}x</Text>
-        </TouchableOpacity>
+        {isUser ? (
+          <>
+            {speedChip}
+            {durationText}
+            <WaveformBars data={waveformData} colors={colors} />
+            {playButton}
+          </>
+        ) : (
+          <>
+            {playButton}
+            <WaveformBars data={waveformData} colors={colors} />
+            {durationText}
+            {speedChip}
+            {voiceChip}
+          </>
+        )}
       </View>
 
       {/* Transcript toggle */}
@@ -193,19 +230,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderWidth: 1,
     borderColor: colors.border,
     padding: SPACING.md,
-    maxWidth: '80%' as const,
+    maxWidth: '88%' as const,
     alignSelf: 'flex-start' as const,
     gap: SPACING.sm,
+    overflow: 'hidden' as const,
   },
   bubbleUser: {
     alignSelf: 'flex-end' as const,
     backgroundColor: `${colors.primary}18`,
     borderColor: `${colors.primary}40`,
-  },
-  generatingText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-    marginLeft: SPACING.sm,
   },
   playRow: {
     flexDirection: 'row' as const,
