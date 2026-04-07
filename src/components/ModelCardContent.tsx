@@ -69,6 +69,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
   credibilityInfo,
   isTrending,
 }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
@@ -91,7 +92,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
               </Text>
             </View>
           )}
-          {isTrending && <MaterialIcon name="whatshot" size={14} color="#FF6B00" />}
+          {isTrending && <MaterialIcon name="whatshot" size={14} color={colors.trending} />}
         </View>
         {model.downloads !== undefined && model.downloads > 0 && (
           <View style={styles.authorTag}>

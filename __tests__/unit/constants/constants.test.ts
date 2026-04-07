@@ -13,6 +13,8 @@ import {
   LMSTUDIO_AUTHORS,
   QUANTIZATION_INFO,
   CREDIBILITY_LABELS,
+  TRENDING_FAMILIES,
+  TRENDING_MODEL_IDS,
 } from '../../../src/constants';
 
 describe('RECOMMENDED_MODELS', () => {
@@ -185,5 +187,49 @@ describe('CREDIBILITY_LABELS', () => {
       expect(info.description).toBeTruthy();
       expect(info.color).toBeTruthy();
     }
+  });
+});
+
+describe('TRENDING_FAMILIES', () => {
+  it('contains gemma4 and qwen35 families', () => {
+    expect(TRENDING_FAMILIES.gemma4).toBeDefined();
+    expect(TRENDING_FAMILIES.qwen35).toBeDefined();
+  });
+
+  it('gemma4 family contains Gemma 4 model IDs', () => {
+    expect(TRENDING_FAMILIES.gemma4).toContain('unsloth/gemma-4-E2B-it-GGUF');
+    expect(TRENDING_FAMILIES.gemma4).toContain('unsloth/gemma-4-E4B-it-GGUF');
+  });
+
+  it('qwen35 family contains Qwen 3.5 model IDs', () => {
+    expect(TRENDING_FAMILIES.qwen35).toContain('unsloth/Qwen3.5-0.8B-GGUF');
+    expect(TRENDING_FAMILIES.qwen35).toContain('unsloth/Qwen3.5-2B-GGUF');
+    expect(TRENDING_FAMILIES.qwen35).toContain('unsloth/Qwen3.5-9B-GGUF');
+  });
+});
+
+describe('TRENDING_MODEL_IDS', () => {
+  it('contains all IDs from TRENDING_FAMILIES', () => {
+    const allFamilyIds = Object.values(TRENDING_FAMILIES).flat();
+    for (const id of allFamilyIds) {
+      expect(TRENDING_MODEL_IDS).toContain(id);
+    }
+    expect(TRENDING_MODEL_IDS.length).toBe(allFamilyIds.length);
+  });
+
+  it('contains exactly the Gemma 4 IDs', () => {
+    expect(TRENDING_MODEL_IDS).toContain('unsloth/gemma-4-E2B-it-GGUF');
+    expect(TRENDING_MODEL_IDS).toContain('unsloth/gemma-4-E4B-it-GGUF');
+  });
+
+  it('contains exactly the Qwen 3.5 IDs', () => {
+    expect(TRENDING_MODEL_IDS).toContain('unsloth/Qwen3.5-0.8B-GGUF');
+    expect(TRENDING_MODEL_IDS).toContain('unsloth/Qwen3.5-2B-GGUF');
+    expect(TRENDING_MODEL_IDS).toContain('unsloth/Qwen3.5-9B-GGUF');
+  });
+
+  it('has no duplicate IDs', () => {
+    const unique = new Set(TRENDING_MODEL_IDS);
+    expect(unique.size).toBe(TRENDING_MODEL_IDS.length);
   });
 });
