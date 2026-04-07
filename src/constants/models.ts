@@ -12,8 +12,19 @@ export const MODEL_RECOMMENDATIONS = {
 };
 
 // Curated list of recommended models for mobile (updated Apr 2026)
+// Text models are sorted non-decreasingly by minRam (required by sort tests).
 export const RECOMMENDED_MODELS = [
-  // --- Gemma 4 (featured) ---
+  // 3 GB+
+  {
+    id: 'unsloth/Qwen3.5-0.8B-GGUF',
+    name: 'Qwen 3.5 0.8B',
+    params: 0.8,
+    description: 'Thinking mode, ultra-light, 262K context',
+    minRam: 3,
+    type: 'text' as const,
+    org: 'Qwen',
+  },
+  // 4 GB+
   {
     id: 'unsloth/gemma-4-E2B-it-GGUF',
     name: 'Gemma 4 E2B',
@@ -25,6 +36,16 @@ export const RECOMMENDED_MODELS = [
     isNew: true,
   },
   {
+    id: 'unsloth/Qwen3.5-2B-GGUF',
+    name: 'Qwen 3.5 2B',
+    params: 2,
+    description: 'Hybrid thinking + chat, 262K context',
+    minRam: 4,
+    type: 'text' as const,
+    org: 'Qwen',
+  },
+  // 6 GB+
+  {
     id: 'unsloth/gemma-4-E4B-it-GGUF',
     name: 'Gemma 4 E4B',
     params: 4,
@@ -34,35 +55,6 @@ export const RECOMMENDED_MODELS = [
     org: 'google',
     isNew: true,
   },
-  // --- Qwen 3.5 ---
-  {
-    id: 'unsloth/Qwen3.5-0.8B-GGUF',
-    name: 'Qwen 3.5 0.8B',
-    params: 0.8,
-    description: 'Thinking mode, ultra-light, 262K context',
-    minRam: 3,
-    type: 'text' as const,
-    org: 'Qwen',
-  },
-  {
-    id: 'unsloth/Qwen3.5-2B-GGUF',
-    name: 'Qwen 3.5 2B',
-    params: 2,
-    description: 'Hybrid thinking + chat, 262K context',
-    minRam: 4,
-    type: 'text' as const,
-    org: 'Qwen',
-  },
-  {
-    id: 'unsloth/Qwen3.5-9B-GGUF',
-    name: 'Qwen 3.5 9B',
-    params: 9,
-    description: 'Best Qwen 3.5 quality, thinking mode, 262K context',
-    minRam: 8,
-    type: 'text' as const,
-    org: 'Qwen',
-  },
-  // --- Phi-4 ---
   {
     id: 'bartowski/microsoft_Phi-4-mini-instruct-GGUF',
     name: 'Phi-4 Mini',
@@ -72,7 +64,6 @@ export const RECOMMENDED_MODELS = [
     type: 'text' as const,
     org: 'microsoft',
   },
-  // --- SmolLM3 ---
   {
     id: 'ggml-org/SmolLM3-3B-GGUF',
     name: 'SmolLM3 3B',
@@ -82,7 +73,6 @@ export const RECOMMENDED_MODELS = [
     type: 'text' as const,
     org: 'HuggingFaceTB',
   },
-  // --- Mistral ---
   {
     id: 'bartowski/Mistral-7B-Instruct-v0.3-GGUF',
     name: 'Mistral 7B',
@@ -91,6 +81,16 @@ export const RECOMMENDED_MODELS = [
     minRam: 6,
     type: 'text' as const,
     org: 'mistralai',
+  },
+  // 8 GB+
+  {
+    id: 'unsloth/Qwen3.5-9B-GGUF',
+    name: 'Qwen 3.5 9B',
+    params: 9,
+    description: 'Best Qwen 3.5 quality, thinking mode, 262K context',
+    minRam: 8,
+    type: 'text' as const,
+    org: 'Qwen',
   },
   // --- Vision ---
   {
