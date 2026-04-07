@@ -48,17 +48,26 @@ Do not consider a feature complete with only unit tests. Integration tests catch
 
 ## Push = Create PR + Address Review
 
-When asked to push code, follow this full workflow:
+When the user says "push" (or any equivalent like "ship it", "send it", "push this"), follow this full workflow:
 
-0. ensure that you are on a branch that is specific to this change i.e feat/new-feature or fix/bug-fix or docs/update-readme or chore/update-dependencies, or test/new-test, etc
-1. Push the branch to the remote (`git push -u origin <branch>`)
-2. Create a PR using `gh pr create`. Ensure that you are adhering to the PR template. **Do NOT include "Generated with Codex" or any AI attribution in PR descriptions.**
-3. Wait for Gemini to review the PR (poll with `gh pr checks` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews` until a review appears)
-4. Once a review exists, pull down the review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews`
-5. Address every review comment — fix the code, re-run the quality gates (tests, lint, tsc).
-6. Reply to **each** review comment individually on the PR using `gh api` (use `/pulls/comments/{id}/replies` endpoint). Every comment must get its own reply confirming what was done — do not post a single summary comment.
-7. Push the fixes
-8. Report what was changed in response to the review
+### Before pushing
+0. Write tests for any new or changed logic if they don't already exist.
+1. Run `npm run lint && npx tsc --noEmit && npm test` — fix any failures before continuing.
+2. Commit all staged changes with a descriptive message.
+3. Ensure you are NOT on `main`. If you are, create an appropriately named branch first: `git checkout -b feat/...` or `fix/...` or `chore/...` etc.
+
+### Pushing & PR
+4. Push the branch: `git push -u origin <branch>`
+5. If no PR exists for this branch, create one with `gh pr create`. **Do NOT include "Generated with Codex" or any AI attribution in PR descriptions.**
+6. If a PR already exists, update its description to reflect **all commits in the PR** (not just the latest push). Read the full commit history with `git log main..HEAD` and write a coherent description that summarises the entire change set — what it does, why, and how.
+
+### Review loop
+7. Wait for Gemini to review the PR (poll with `gh pr checks` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews` until a review appears).
+8. Pull down review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments` and `gh api repos/{owner}/{repo}/pulls/{number}/reviews`.
+9. Address every review comment — fix the code, re-run quality gates (lint, tsc, test).
+10. Reply to **each** review comment individually using `gh api` (`/pulls/comments/{id}/replies`). Every comment gets its own reply — do not post a single summary comment.
+11. Push fixes, update the PR description again to stay coherent across all commits.
+12. Report what was changed in response to the review.
 
 ## CI Review Loop
 
