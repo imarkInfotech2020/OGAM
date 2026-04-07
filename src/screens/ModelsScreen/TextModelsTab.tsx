@@ -242,7 +242,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search models..."
+          placeholder="Search Hugging Face models..."
           placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
