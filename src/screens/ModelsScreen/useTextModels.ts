@@ -280,10 +280,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         return true;
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
-    // When sort is 'recommended', keep the curated best-fit order; otherwise apply the user's sort
-    if (filterState.sort === 'recommended') {
-      return [...models].sort((a, b) => (maxParams - (a.paramCount ?? 0)) - (maxParams - (b.paramCount ?? 0)));
-    }
     return applySort(models, filterState.sort);
   }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, applySort]);
 
