@@ -167,6 +167,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       const info = await hardwareService.getDeviceInfo();
       setDeviceInfo(info);
     }
+    await modelManager.linkOrphanMmProj();
     const models = await modelManager.getDownloadedModels();
     setDownloadedModels(models);
     const imageModels = await modelManager.getDownloadedImageModels();
@@ -224,9 +225,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const startNewChat = () => {
     if (!activeTextModelId) { return; }
-    const conversationId = createConversation(activeTextModelId);
-    setActiveConversation(conversationId);
-    navigation.navigate('Chat', { conversationId });
+    navigation.navigate('Chat', {});
   };
 
   const continueChat = (conversationId: string) => {
