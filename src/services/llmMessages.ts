@@ -55,19 +55,21 @@ function toFileUrl(uri: string, requireFilePrefix = false): string {
   return uri.startsWith('file://') || uri.startsWith('http') ? uri : `file://${uri}`;
 }
 
-function buildMediaParts(message: Message): RNLlamaMessagePart[] {
+function buildMediaParts(message: Message, supportsAudio: boolean): RNLlamaMessagePart[] {
   const parts: RNLlamaMessagePart[] = [];
   for (const a of message.attachments?.filter(att => att.type === 'image') ?? []) {
     parts.push({ type: 'image_url', image_url: { url: toFileUrl(a.uri) } });
   }
-  for (const a of message.attachments?.filter(att => att.type === 'audio') ?? []) {
-    parts.push({ type: 'input_audio', input_audio: { format: a.audioFormat ?? 'wav', url: toFileUrl(a.uri, true) } });
+  if (supportsAudio) {
+    for (const a of message.attachments?.filter(att => att.type === 'audio') ?? []) {
+      parts.push({ type: 'input_audio', input_audio: { format: a.audioFormat ?? 'wav', url: toFileUrl(a.uri, true) } });
+    }
   }
   if (message.content) parts.push({ type: 'text', text: message.content });
   return parts;
 }
 
-export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
+export function buildOAIMessages(messages: Message[], supportsAudio = false): RNLlamaOAICompatibleMessage[] {
   return messages.filter(m => !m.isSystemInfo).map((message) => {
     if (message.role === 'tool') {
       const label = message.toolName || 'tool';
@@ -77,8 +79,9 @@ export function buildOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessa
       const toolCallText = message.toolCalls.map(formatToolCallAsText).join('\n');
       return { role: 'assistant' as const, content: message.content ? `${message.content}\n${toolCallText}` : toolCallText };
     }
-    const hasMedia = message.role === 'user' && message.attachments?.some(a => a.type === 'image' || a.type === 'audio');
-    if (!hasMedia) return { role: message.role, content: message.content };
-    return { role: message.role, content: buildMediaParts(message) };
+    const hasImage = message.role === 'user' && message.attachments?.some(a => a.type === 'image');
+    const hasAudio = supportsAudio && message.role === 'user' && message.attachments?.some(a => a.type === 'audio');
+    if (!hasImage && !hasAudio) return { role: message.role, content: message.content };
+    return { role: message.role, content: buildMediaParts(message, supportsAudio) };
   });
 }

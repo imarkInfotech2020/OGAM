@@ -1,4 +1,4 @@
-import { AudioRecorder, FileFormat, FileDirectory } from 'react-native-audio-api';
+import { AudioRecorder, FileFormat, FileDirectory, BitDepth, IOSAudioQuality, FlacCompressionLevel } from 'react-native-audio-api';
 import { PermissionsAndroid, Platform } from 'react-native';
 import logger from '../utils/logger';
 
@@ -46,12 +46,21 @@ class AudioRecorderService {
       throw new Error('Microphone permission denied');
     }
     const rec = new AudioRecorder();
+    // Whisper requires 16 kHz mono int16 PCM.
+    // Set sampleRate via preset so the WAV header and data match what whisper.rn expects.
     rec.enableFileOutput({
       format: FileFormat.Wav,
       directory: FileDirectory.Document,
       subDirectory: 'audio-input',
       fileNamePrefix: `input_${Date.now()}`,
       channelCount: 1,
+      preset: {
+        sampleRate: 16000,
+        bitDepth: BitDepth.Bit16,
+        bitRate: 256000,
+        iosQuality: IOSAudioQuality.High,
+        flacCompressionLevel: FlacCompressionLevel.L5,
+      },
     });
     this.recorder = rec;
     this.isRecording = true;
