@@ -28,7 +28,8 @@ export interface ImageModelDescriptor {
 export type CredibilityFilter = 'all' | ModelSource;
 export type ModelTypeFilter = 'all' | 'text' | 'vision' | 'code' | 'image-gen';
 export type SizeFilter = 'all' | 'tiny' | 'small' | 'medium' | 'large';
-export type FilterDimension = 'org' | 'type' | 'source' | 'size' | 'quant' | null;
+export type SortOption = 'recommended' | 'bestfit' | 'size' | 'downloads' | 'recency';
+export type FilterDimension = 'org' | 'type' | 'source' | 'size' | 'quant' | 'sort' | null;
 export type ImageFilterDimension = 'backend' | 'style' | 'sdVersion' | null;
 export type ModelTab = 'text' | 'image';
 
@@ -38,6 +39,7 @@ export interface FilterState {
   source: CredibilityFilter;
   size: SizeFilter;
   quant: string;
+  sort: SortOption;
   expandedDimension: FilterDimension;
 }
 

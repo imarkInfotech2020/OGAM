@@ -162,6 +162,9 @@ const createFilterStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   filterExpandedContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   filterChipWrap: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
   filterChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 8,

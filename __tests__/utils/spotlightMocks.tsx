@@ -113,6 +113,7 @@ export function createModelManagerMock() {
   return {
     modelManager: {
       getDownloadedModels: jest.fn(() => Promise.resolve([])),
+      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
       getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
       deleteModel: jest.fn(() => Promise.resolve()),
     },

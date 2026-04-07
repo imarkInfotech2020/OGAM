@@ -49,6 +49,7 @@ jest.mock('../../../src/stores', () => {
 jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
+      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
     getActiveBackgroundDownloads: jest.fn(() => Promise.resolve([])),
     startBackgroundDownloadPolling: jest.fn(),

@@ -176,7 +176,7 @@ describe('Parallel mmproj download', () => {
 
       expect(metadataCallback).toHaveBeenCalledWith(42, expect.objectContaining({
         mmProjDownloadId: 43,
-        mmProjFileName: 'mmproj.gguf',
+        mmProjFileName: 'vision-mmproj.gguf',
       }));
     });
 
@@ -432,7 +432,7 @@ describe('Parallel mmproj download', () => {
       await completeCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf' });
 
       expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(
-        43, `${MODELS_DIR}/mmproj.gguf`,
+        43, `${MODELS_DIR}/vision-mmproj.gguf`,
       );
     });
 
@@ -568,8 +568,8 @@ describe('Parallel mmproj download', () => {
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjFileName: 'mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
+            mmProjFileName: 'vision-mmproj.gguf',
+            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
             mmProjDownloadId: 43,
           },
         },
@@ -580,7 +580,7 @@ describe('Parallel mmproj download', () => {
       expect(models.length).toBe(1);
       // Should move both files
       expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(42, `${MODELS_DIR}/vision.gguf`);
-      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/mmproj.gguf`);
+      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/vision-mmproj.gguf`);
       expect(clearCb).toHaveBeenCalledWith(42);
     });
 
@@ -657,8 +657,8 @@ describe('Parallel mmproj download', () => {
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjFileName: 'mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
+            mmProjFileName: 'vision-mmproj.gguf',
+            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
             mmProjDownloadId: 43,
           },
         },
@@ -684,7 +684,7 @@ describe('Parallel mmproj download', () => {
         { downloadId: 42, status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
         { downloadId: 43, status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
-      mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/mmproj.gguf`);
+      mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/vision-mmproj.gguf`);
       mockedRNFS.exists.mockResolvedValue(true);
 
       await restoreInProgressDownloads({
@@ -695,8 +695,8 @@ describe('Parallel mmproj download', () => {
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjFileName: 'mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
+            mmProjFileName: 'vision-mmproj.gguf',
+            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
             mmProjDownloadId: 43,
           },
         },
@@ -708,7 +708,7 @@ describe('Parallel mmproj download', () => {
       const ctx = bgContext.get(42) as any;
       expect(ctx.mmProjCompleted).toBe(true);
       // Should have tried to move the completed mmproj
-      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/mmproj.gguf`);
+      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/vision-mmproj.gguf`);
       // Should NOT register mmproj progress listener (already done)
       expect(mockService.markSilent).not.toHaveBeenCalled();
     });
@@ -727,8 +727,8 @@ describe('Parallel mmproj download', () => {
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjFileName: 'mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf`,
+            mmProjFileName: 'vision-mmproj.gguf',
+            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
             mmProjDownloadId: 43,
           },
         },

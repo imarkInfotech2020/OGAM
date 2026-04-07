@@ -97,7 +97,7 @@ export function useModelsScreen() {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
       image.loadHFModels();
     }
-   
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const setActiveTab = (tab: ModelTab) => {
@@ -232,6 +232,7 @@ export function useModelsScreen() {
     deviceRecommendation: text.deviceRecommendation,
     filteredResults: text.filteredResults,
     recommendedAsModelInfo: text.recommendedAsModelInfo,
+    trendingAsModelInfo: text.trendingAsModelInfo,
     handleSearch: text.handleSearch,
     handleSelectModel: text.handleSelectModel,
     handleDownload,
@@ -246,6 +247,7 @@ export function useModelsScreen() {
     setSourceFilter: text.setSourceFilter,
     setSizeFilter: text.setSizeFilter,
     setQuantFilter: text.setQuantFilter,
+    setSortOption: text.setSortOption,
     isModelDownloaded: text.isModelDownloaded,
     getDownloadedModel: text.getDownloadedModel,
     // image model state & handlers

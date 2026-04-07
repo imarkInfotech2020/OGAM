@@ -1,6 +1,8 @@
 import RNFS from 'react-native-fs';
+import logger from '../../utils/logger';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
+import { useAppStore } from '../../stores';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import {
   BackgroundDownloadMetadataCallback,
@@ -31,6 +33,8 @@ import {
   scanForUntrackedTextModels as scanUntrackedText,
   importLocalModel as scanImportLocalModel,
   isMMProjFile,
+  extractBaseName,
+  findMatchingMmProj,
   ImportLocalModelOpts,
 } from './scan';
 import { resolveStoredPath, determineCredibility } from './storage';
@@ -59,6 +63,45 @@ class ModelManager {
     const exclude = (p: string) => backgroundDownloadService.excludeFromBackup(p);
     await Promise.all([exclude(this.modelsDir), exclude(this.imageModelsDir),
       exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`)]);
+  }
+
+  async linkOrphanMmProj(): Promise<void> {
+    const models = await this.getDownloadedModels();
+    let dirFiles: RNFS.ReadDirItem[] = [];
+    try {
+      dirFiles = await RNFS.readDir(this.modelsDir);
+    } catch {
+      return;
+    }
+    const mmProjFiles = dirFiles.filter(f => f.isFile() && this.isMMProjFile(f.name));
+    if (mmProjFiles.length === 0) return;
+
+    const toSave: typeof models = [];
+    for (const m of models) {
+      const baseName = extractBaseName(m.fileName);
+      const match = findMatchingMmProj(baseName, mmProjFiles);
+
+      if (m.mmProjPath) {
+        // Clear link if the stored file no longer exists OR doesn't name-match this model
+        const nameMatch = findMatchingMmProj(baseName, [{ name: m.mmProjPath.split('/').pop() ?? '', path: m.mmProjPath, isFile: () => true } as RNFS.ReadDirItem]);
+        const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
+        if (!fileExists || !nameMatch) {
+          logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
+          toSave.push({ ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false });
+        }
+        // If link is valid, leave it alone
+      } else if (match) {
+        logger.log(`[linkOrphanMmProj] ${m.id} — linking ${match.path}`);
+        await this.saveModelWithMmproj(m.id, match.path);
+      }
+    }
+
+    if (toSave.length > 0) {
+      const current = await this.getDownloadedModels();
+      const updated = current.map(m => toSave.find(s => s.id === m.id) ?? m);
+      await saveModelsList(updated);
+      useAppStore.getState().setDownloadedModels(updated);
+    }
   }
 
   async getDownloadedModels(): Promise<DownloadedModel[]> {
@@ -227,29 +270,42 @@ class ModelManager {
   ): Promise<void> {
     if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
     await this.initialize();
-    const mmProjLocalPath = `${this.modelsDir}/${file.mmProjFile.name}`;
+    const modelBase = extractBaseName(file.name);
+    const mmProjFileName = `${modelBase}-${file.mmProjFile.name}`;
+    const mmProjLocalPath = `${this.modelsDir}/${mmProjFileName}`;
     const totalBytes = file.mmProjFile.size;
     if (await RNFS.exists(mmProjLocalPath)) await RNFS.unlink(mmProjLocalPath).catch(() => {});
 
-    const download = backgroundDownloadService.downloadFileTo({
-      params: { url: file.mmProjFile.downloadUrl, fileName: file.mmProjFile.name, modelId, totalBytes },
-      destPath: mmProjLocalPath,
-      onProgress: (bytesDownloaded: number) => {
-        opts?.onProgress?.({ modelId, fileName: file.mmProjFile!.name, bytesDownloaded, totalBytes, progress: totalBytes > 0 ? bytesDownloaded / totalBytes : 0 });
-      },
-      silent: true,
+    // Use the Android DownloadManager so the download survives app kills.
+    const info = await backgroundDownloadService.startDownload({
+      url: file.mmProjFile.downloadUrl,
+      fileName: file.mmProjFile.name,
+      modelId,
+      title: `Downloading ${file.mmProjFile.name} (vision)`,
+      description: `${modelId} - vision repair`,
+      totalBytes,
     });
-    const { promise, downloadIdPromise } = download;
+    opts?.onDownloadIdReady?.(info.downloadId);
 
-    if (opts?.onDownloadIdReady) {
-      downloadIdPromise
-        .then((downloadId) => {
-          if (downloadId !== 0) opts.onDownloadIdReady?.(downloadId);
-        })
-        .catch(() => {});
-    }
-    await promise;
-    await this.saveModelWithMmproj(`${modelId}/${file.name}`, mmProjLocalPath);
+    let resolvedPath = mmProjLocalPath;
+    await new Promise<void>((resolve, reject) => {
+      const removeProgress = backgroundDownloadService.onProgress(info.downloadId, (event) => {
+        opts?.onProgress?.({ modelId, fileName: file.mmProjFile!.name, bytesDownloaded: event.bytesDownloaded, totalBytes, progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0 });
+      });
+      const removeComplete = backgroundDownloadService.onComplete(info.downloadId, async (event) => {
+        removeProgress(); removeComplete(); removeError();
+        try {
+          resolvedPath = await backgroundDownloadService.moveCompletedDownload(info.downloadId, mmProjLocalPath);
+        } catch {
+          resolvedPath = event.localUri?.replace('file://', '') || mmProjLocalPath;
+        }
+        resolve();
+      });
+      const removeError = backgroundDownloadService.onError(info.downloadId, (err) => { removeProgress(); removeComplete(); removeError(); reject(new Error(err.reason || 'Download failed')); });
+      backgroundDownloadService.startProgressPolling();
+    });
+
+    await this.saveModelWithMmproj(`${modelId}/${file.name}`, resolvedPath);
   }
 
   async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {
@@ -262,6 +318,17 @@ class ModelManager {
       m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true } : m
     );
     await saveModelsList(updated);
+    // Also update the in-memory Zustand store so UI reflects the change immediately.
+    useAppStore.getState().setDownloadedModels(updated);
+  }
+
+  async clearMmProjLink(modelId: string): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const updated = models.map(m =>
+      m.id === modelId ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false } : m
+    );
+    await saveModelsList(updated);
+    useAppStore.getState().setDownloadedModels(updated);
   }
 
   async cleanupMMProjEntries(): Promise<number> {

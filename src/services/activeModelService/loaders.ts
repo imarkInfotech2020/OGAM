@@ -131,6 +131,15 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     } finally {
       if (timeoutId !== null) clearTimeout(timeoutId);
     }
+    const multimodalSupport = llmService.getMultimodalSupport();
+
+    // If the model had a pre-existing stored mmproj link but the native layer rejected it
+    // (incompatible file), clear it so the eye icon reappears for repair.
+    // Only applies when the link was already persisted before this load attempt — not
+    // when resolveMmProjPath just discovered the file via directory scan.
+    if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
+      await modelManager.clearMmProjLink(ctx.modelId);
+    }
 
     // Capture settings that require model reload
     const { settings } = ctx.store;
