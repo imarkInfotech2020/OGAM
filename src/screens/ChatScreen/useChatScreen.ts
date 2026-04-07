@@ -199,16 +199,57 @@ export const useChatScreen = () => {
   }, [displayMessages.length]);
   useEffect(() => { lastMessageCountRef.current = 0; setAnimateLastN(0); }, [activeConversationId]);
   const prevStreamingRef = useRef(false);
+  const ttsStreamRef = useRef<{ nextPos: number; pending: string[]; isPlaying: boolean }>({
+    nextPos: 0, pending: [], isPlaying: false,
+  });
+
+  // Sentence-level TTS streaming: feed complete sentences to Kokoro as they arrive
+  useEffect(() => {
+    if (!isStreamingForThisConversation) return;
+    const tts = useTTSStore.getState();
+    if (tts.settings.interfaceMode !== 'audio') return;
+    if (!tts.kokoroReady && !tts.isModelLoaded) return;
+    if (!streamingMessage) return;
+
+    const ref = ttsStreamRef.current;
+    const remaining = streamingMessage.slice(ref.nextPos);
+    // Require at least 20 chars and a sentence-ending boundary followed by whitespace or end
+    const match = remaining.match(/^([\s\S]{20,}?[.!?])(\s|$)/);
+    if (!match) return;
+
+    const sentence = match[1].trim();
+    ref.nextPos += match[0].length;
+    ref.pending.push(sentence);
+
+    if (!ref.isPlaying) {
+      const playNext = () => {
+        const next = ref.pending.shift();
+        if (!next) { ref.isPlaying = false; return; }
+        ref.isPlaying = true;
+        useTTSStore.getState().speak(next, 'streaming').finally(playNext);
+      };
+      playNext();
+    }
+  }, [streamingMessage, isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const was = prevStreamingRef.current;
     prevStreamingRef.current = isStreamingForThisConversation;
     if (!was || isStreamingForThisConversation || !activeConversationId) return;
+    const { nextPos: alreadySpoken } = ttsStreamRef.current;
+    ttsStreamRef.current = { nextPos: 0, pending: [], isPlaying: false };
     const tts = useTTSStore.getState();
-    if (tts.settings.interfaceMode !== 'audio' || !tts.isModelLoaded) return;
+    if (tts.settings.interfaceMode !== 'audio') return;
+    if (!tts.kokoroReady && !tts.isModelLoaded) return;
     const conv = useChatStore.getState().conversations.find((c) => c.id === activeConversationId);
     const last = (conv?.messages ?? []).at(-1);
     if (!last || last.role !== 'assistant' || last.isSystemInfo || last.toolCalls?.length || last.audioPath) return;
-    triggerAudioModeGeneration(activeConversationId, last.id, last.content);
+    // Stamp the message as audio-mode and speak any remaining text not yet spoken
+    useChatStore.getState().updateMessageAudio(activeConversationId, last.id, { isAudioModeMessage: true });
+    const remaining = last.content.slice(alreadySpoken).trim();
+    if (remaining) {
+      useTTSStore.getState().speak(remaining, last.id);
+    }
   }, [isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startGeneration = async (targetConversationId: string, messageText: string) => {

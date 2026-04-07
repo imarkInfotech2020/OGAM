@@ -35,7 +35,8 @@ function formatDuration(seconds: number): string {
 
 function subsample(data: number[], count: number): number[] {
   if (data.length === 0) {
-    return Array(count).fill(0.1);
+    // Generate a visible placeholder waveform pattern
+    return Array.from({ length: count }, (_, i) => 0.25 + 0.25 * Math.sin((i / count) * Math.PI * 4));
   }
   const step = data.length / count;
   const result: number[] = [];
@@ -58,7 +59,7 @@ const WaveformBars: React.FC<{
   return (
     <View style={barStyles.container}>
       {bars.map((amp, i) => {
-        const height = Math.max(3, Math.round(amp * 28));
+        const height = Math.max(6, Math.round(amp * 28));
         return (
           <View
             key={i}
