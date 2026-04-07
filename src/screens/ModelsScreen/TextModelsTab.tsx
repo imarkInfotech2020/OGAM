@@ -86,7 +86,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
-    const needsVisionRepair = downloaded && !!item.mmProjFile && !downloadedModel?.mmProjPath;
+    // Show repair whenever the file has an mmproj — lets user re-fetch if the
+    // mmproj is missing on disk even though the store path is set.
+    const needsVisionRepair = downloaded && !!item.mmProjFile;
     const canCancel = !!progress && downloadIds[downloadKey] != null;
     return { downloadKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
   };

@@ -114,7 +114,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleVisionPress = () => {
-    if (!supportsVision) { setAlertState(showAlert('Vision Not Supported', 'Load a vision-capable model (with mmproj) to enable image input.', [{ text: 'OK' }])); return; }
+    if (!supportsVision) { setAlertState(showAlert('Vision Not Supported', 'The loaded model does not have vision support.\n\nIf you think this model supports vision, go to Models → tap the model → tap the eye icon to repair the vision file.', [{ text: 'OK' }])); return; }
     handlePickImage();
   };
 
