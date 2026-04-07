@@ -180,6 +180,11 @@ export const useTTSStore = create<TTSState>()(
         // ── Kokoro fast path (Android 13+ / iOS 17+, model ready) ────────────
         if (get().kokoroReady && isExecutorchSupported()) {
           ttsService.stop(); // ensure OuteTTS is silent
+          if (get().isSpeaking) {
+            // Cancel ongoing Kokoro generation and give it a moment to finish cleanup
+            kokoroRef.stop(true);
+            await new Promise<void>((r) => setTimeout(r, 80));
+          }
           // Truncate to keep generation snappy even for Kokoro
           const truncated = text.length > 500 ? `${text.slice(0, 497)}...` : text;
           set({ isSpeaking: true, isGeneratingAudio: false, currentMessageId: messageId, error: null });

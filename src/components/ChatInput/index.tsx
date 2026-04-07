@@ -217,13 +217,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onClearQueue={onClearQueue}
         />
         <View style={styles.audioModeRow}>
-          {/* Attach + Settings on the left */}
+          {/* Hint text — expands to fill space */}
+          <Text style={[styles.audioModeHint, isRecording && styles.audioModeHintRecording]}>
+            {isRecording ? 'Release to send' : isTranscribing ? 'Transcribing...' : 'Hold to speak'}
+          </Text>
+
+          {/* Attach + Settings — right side, next to mic so popovers open near them */}
           <TouchableOpacity
             ref={attachPicker.triggerRef}
             style={styles.pillIconButton}
             onPress={handleAttachPress}
             disabled={disabled}
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
           >
             <Icon name="plus" size={20} color={disabled ? colors.textMuted : colors.textSecondary} />
           </TouchableOpacity>
@@ -232,28 +237,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             style={styles.pillIconButton}
             onPress={handleQuickSettingsPress}
             disabled={disabled}
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
           >
             <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* Centered hint + mic */}
-          <Text style={[styles.audioModeHint, isRecording && styles.audioModeHintRecording]}>
-            {isRecording ? 'Release to send' : isTranscribing ? 'Transcribing...' : 'Hold to speak'}
-          </Text>
-          {audioStopButton}
-          <VoiceRecordButton
-            isRecording={isRecording}
-            isAvailable={voiceAvailable}
-            isModelLoading={isModelLoading}
-            isTranscribing={isTranscribing}
-            partialResult={partialResult}
-            error={error}
-            disabled={disabled || !!(isGenerating && onStop)}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onCancelRecording={cancelRecording}
-          />
+          {/* Stop replaces mic while generating; mic shows otherwise */}
+          {isGenerating && onStop ? (
+            audioStopButton
+          ) : (
+            <VoiceRecordButton
+              isRecording={isRecording}
+              isAvailable={voiceAvailable}
+              isModelLoading={isModelLoading}
+              isTranscribing={isTranscribing}
+              partialResult={partialResult}
+              error={error}
+              disabled={disabled}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              onCancelRecording={cancelRecording}
+            />
+          )}
         </View>
 
         <AttachPickerPopover

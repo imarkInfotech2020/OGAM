@@ -243,8 +243,14 @@ export const useChatScreen = () => {
     const conv = useChatStore.getState().conversations.find((c) => c.id === activeConversationId);
     const last = (conv?.messages ?? []).at(-1);
     if (!last || last.role !== 'assistant' || last.isSystemInfo || last.toolCalls?.length || last.audioPath) return;
-    // Always stamp as audio-mode so the bubble renders correctly even if TTS engine isn't ready
-    useChatStore.getState().updateMessageAudio(activeConversationId, last.id, { isAudioModeMessage: true });
+    // Stamp as audio-mode. Estimate duration from word count (avg 2.5 words/sec)
+    const wordCount = last.content.split(/\s+/).filter(Boolean).length;
+    const speed = useTTSStore.getState().settings.speed || 1;
+    const estDuration = Math.max(1, wordCount / (2.5 * speed));
+    useChatStore.getState().updateMessageAudio(activeConversationId, last.id, {
+      isAudioModeMessage: true,
+      audioDurationSeconds: estDuration,
+    });
     // Only speak if a TTS engine is available
     if (!tts.kokoroReady && !tts.isModelLoaded) return;
     const remaining = last.content.slice(alreadySpoken).trim();

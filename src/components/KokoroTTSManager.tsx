@@ -65,10 +65,13 @@ export const KokoroTTSManager: React.FC = () => {
         speed,
         onNext: (chunk: Float32Array) =>
           new Promise<void>((resolve) => {
+            // Read speed fresh on each chunk so live speed changes take effect immediately
+            const currentSpeed = useTTSStore.getState().settings.speed;
             const buffer = ctx.createBuffer(1, chunk.length, 24000);
             buffer.copyToChannel(chunk, 0);
             const source = ctx.createBufferSource();
             source.buffer = buffer;
+            source.playbackRate.value = currentSpeed;
             source.connect(ctx.destination);
             source.onEnded = () => resolve();
             source.start();
