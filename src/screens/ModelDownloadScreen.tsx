@@ -140,6 +140,11 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
         if (!cancelledKeys.current.has(key)) setDownloadProgress(key, p);
       });
+      // If the user cancelled before downloadModelBackground resolved, kill it now
+      if (cancelledKeys.current.has(key)) {
+        try { await modelManager.cancelBackgroundDownload(info.downloadId); } catch { /* ignore */ }
+        return;
+      }
       setDownloadIds(prev => ({ ...prev, [key]: info.downloadId }));
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
         if (cancelledKeys.current.has(key)) return;
