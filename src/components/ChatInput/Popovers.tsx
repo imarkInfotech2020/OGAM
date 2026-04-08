@@ -284,17 +284,11 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
 
   const handleSelect = (voice: typeof KOKORO_VOICES[number]) => {
     triggerHaptic('impactLight');
+    // Stop playback first — KokoroTTSManager defers voice config changes
+    // until isSpeaking is false, so no native crash
+    if (isSpeaking) { stop(); }
+    updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
     onClose();
-    if (isSpeaking) {
-      // Stop playback and wait for native ExecuTorch worker to fully clean up
-      // before changing voice config — prevents SIGABRT crash
-      stop();
-      setTimeout(() => {
-        updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
-      }, 150);
-    } else {
-      updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
-    }
   };
 
   return (

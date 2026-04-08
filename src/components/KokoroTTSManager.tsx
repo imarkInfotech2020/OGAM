@@ -46,12 +46,22 @@ export const kokoroRef = {
 
 export const KokoroTTSManager: React.FC = () => {
   const kokoroVoiceId = useTTSStore(s => s.settings.kokoroVoiceId) as KokoroVoiceId;
+  const isSpeaking = useTTSStore(s => s.isSpeaking);
   const audioCtxRef = useRef<AudioContext | null>(null);
   _audioCtxRef = audioCtxRef; // Expose to module-level kokoroRef for pause/resume
 
+  // Only update the voice config when NOT speaking to avoid crashing ExecuTorch
+  // mid-stream. Queue the change and apply when idle.
+  const [activeVoiceId, setActiveVoiceId] = React.useState(kokoroVoiceId);
+  React.useEffect(() => {
+    if (!isSpeaking && kokoroVoiceId !== activeVoiceId) {
+      setActiveVoiceId(kokoroVoiceId);
+    }
+  }, [kokoroVoiceId, isSpeaking, activeVoiceId]);
+
   const tts = useTextToSpeech({
     model: KOKORO_MEDIUM,
-    voice: getKokoroVoiceConfig(kokoroVoiceId),
+    voice: getKokoroVoiceConfig(activeVoiceId),
   });
 
   // Sync isReady + downloadProgress into ttsStore
