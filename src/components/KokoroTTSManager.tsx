@@ -20,11 +20,26 @@ import logger from '../utils/logger';
 
 let _streamFn: ((text: string, speed: number) => Promise<void>) | null = null;
 let _stopFn: ((instant?: boolean) => void) | null = null;
+let _audioCtxRef: { current: AudioContext | null } = { current: null };
+// Pending onNext resolvers — force-resolved on stop so isSpeaking is always cleared
+const _pendingResolvers: Set<() => void> = new Set();
+// When true, onEnd skips ctx.suspend() so the next chunk can start cleanly
+let _skipSuspendOnEnd = false;
 
 export const kokoroRef = {
   speak: (text: string, speed = 1.0): Promise<void> =>
     _streamFn ? _streamFn(text, speed) : Promise.resolve(),
-  stop: (instant = true) => _stopFn?.(instant),
+  /** Call before sequential chunks to prevent AudioContext suspension between them */
+  setKeepAlive: (keepAlive: boolean) => { _skipSuspendOnEnd = keepAlive; },
+  stop: (instant = true) => {
+    _pendingResolvers.forEach((resolve) => resolve());
+    _pendingResolvers.clear();
+    _stopFn?.(instant);
+  },
+  /** Pause playback — suspends AudioContext, Kokoro waits for onNext to resolve */
+  pause: () => { _audioCtxRef.current?.suspend().catch(() => {}); },
+  /** Resume playback — AudioContext resumes, current chunk finishes, Kokoro continues */
+  resume: () => { _audioCtxRef.current?.resume().catch(() => {}); },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -32,6 +47,7 @@ export const kokoroRef = {
 export const KokoroTTSManager: React.FC = () => {
   const kokoroVoiceId = useTTSStore(s => s.settings.kokoroVoiceId) as KokoroVoiceId;
   const audioCtxRef = useRef<AudioContext | null>(null);
+  _audioCtxRef = audioCtxRef; // Expose to module-level kokoroRef for pause/resume
 
   const tts = useTextToSpeech({
     model: KOKORO_MEDIUM,
@@ -53,9 +69,11 @@ export const KokoroTTSManager: React.FC = () => {
 
   // Keep module refs pointing to the latest hook functions on every render
   _streamFn = async (text: string, speed: number) => {
-    // Reuse or create AudioContext
+    // Reuse or create AudioContext — always resume in case it was suspended after last playback
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
       audioCtxRef.current = new AudioContext({ sampleRate: 24000 });
+    } else if (audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume().catch(() => {});
     }
     const ctx = audioCtxRef.current;
 
@@ -65,6 +83,20 @@ export const KokoroTTSManager: React.FC = () => {
         speed,
         onNext: (chunk: Float32Array) =>
           new Promise<void>((resolve) => {
+            // Track this resolver so stop() can force-resolve it if AudioContext closes mid-chunk
+            _pendingResolvers.add(resolve);
+            const done = () => { _pendingResolvers.delete(resolve); resolve(); };
+
+            // Signal that audio is actually playing (first chunk received)
+            useTTSStore.getState().setAudioPlaying(true);
+
+            // Compute RMS amplitude for waveform sync (speech typically 0.01–0.3; scale ×4 to 0–1)
+            let sumSq = 0;
+            for (let i = 0; i < chunk.length; i++) { sumSq += chunk[i] * chunk[i]; }
+            const rms = Math.min(1, Math.sqrt(sumSq / chunk.length) * 4);
+            // Floor at 0.18 so bars never fully collapse during natural speech pauses
+            useTTSStore.getState().setCurrentAmplitude(Math.max(0.18, rms));
+
             // Read speed fresh on each chunk so live speed changes take effect immediately
             const currentSpeed = useTTSStore.getState().settings.speed;
             const buffer = ctx.createBuffer(1, chunk.length, 24000);
@@ -73,11 +105,14 @@ export const KokoroTTSManager: React.FC = () => {
             source.buffer = buffer;
             source.playbackRate.value = currentSpeed;
             source.connect(ctx.destination);
-            source.onEnded = () => resolve();
+            source.onEnded = done;
             source.start();
           }),
         onEnd: async () => {
-          await ctx.suspend().catch(() => {});
+          // Skip suspend if more chunks are queued (keepAlive mode)
+          if (!_skipSuspendOnEnd) {
+            await ctx.suspend().catch(() => {});
+          }
         },
       });
     } catch (err) {

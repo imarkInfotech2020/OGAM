@@ -1,10 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  Animated,
+  ActivityIndicator,
 } from 'react-native';
+import { stripMarkdownForSpeech } from '../../utils/messageContent';
+import { MarkdownText } from '../MarkdownText';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useTTSStore } from '../../stores/ttsStore';
@@ -25,6 +29,10 @@ interface AudioMessageBubbleProps {
   transcript?: string;
   /** True for user-sent voice recordings (right-aligned) */
   isUser?: boolean;
+  /** True while the LLM is still generating — shows a thinking indicator */
+  isLoading?: boolean;
+  /** Thinking/reasoning content from the model — shown as collapsible block above waveform */
+  reasoningContent?: string;
 }
 
 function formatDuration(seconds: number): string {
@@ -51,24 +59,100 @@ function normalize(data: number[]): number[] {
   return data.map((v) => v / max);
 }
 
+/**
+ * Waveform bar display — three modes:
+ *
+ *  1. `amplitude` provided (0–1): VU-meter driven by live Kokoro chunk RMS.
+ *     Instant attack, 350ms decay. Used for AI messages via Kokoro.
+ *
+ *  2. `isPlaying` true but no `amplitude`: wave animation (staggered bounce).
+ *     Used for user voice recordings played via file-based playback.
+ *
+ *  3. Neither: static bars at resting shape.
+ */
 const WaveformBars: React.FC<{
   data: number[];
   colors: ThemeColors;
-}> = ({ data, colors }) => {
-  const bars = normalize(subsample(data, WAVEFORM_BARS));
+  amplitude?: number;
+  isPlaying?: boolean;
+}> = ({ data, colors, amplitude, isPlaying }) => {
+  const bars = useMemo(() => normalize(subsample(data, WAVEFORM_BARS)), [data]);
+
+  // ── VU-meter mode (amplitude-driven) ─────────────────────────────────────
+  const ampAnim = useRef(new Animated.Value(1)).current;
+  const ampAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (amplitude === undefined) return;
+    ampAnimRef.current?.stop();
+    const current = (ampAnim as any)._value ?? 0;
+    if (amplitude >= current) {
+      ampAnim.setValue(amplitude);
+    } else {
+      ampAnimRef.current = Animated.timing(ampAnim, {
+        toValue: amplitude,
+        duration: 350,
+        useNativeDriver: false,
+      });
+      ampAnimRef.current.start();
+    }
+  }, [amplitude, ampAnim]);
+
+  // ── Wave mode (bounce animation for file playback) ───────────────────────
+  const waveAnims = useRef(bars.map(() => new Animated.Value(0))).current;
+  const waveRef = useRef<Animated.CompositeAnimation[]>([]);
+
+  useEffect(() => {
+    const shouldWave = isPlaying && amplitude === undefined;
+    if (!shouldWave) {
+      waveRef.current.forEach(a => a.stop());
+      waveAnims.forEach(v => v.setValue(0));
+      return;
+    }
+    waveRef.current = waveAnims.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 25),
+          Animated.timing(v, { toValue: 1, duration: 250, useNativeDriver: false }),
+          Animated.timing(v, { toValue: 0, duration: 250, useNativeDriver: false }),
+        ]),
+      ),
+    );
+    waveRef.current.forEach(a => a.start());
+    return () => waveRef.current.forEach(a => a.stop());
+  }, [isPlaying, amplitude, waveAnims]);
+
+  // Reset VU-meter when not playing
+  useEffect(() => {
+    if (!isPlaying && amplitude === undefined) {
+      ampAnim.setValue(1);
+    }
+  }, [isPlaying, amplitude, ampAnim]);
+
   return (
     <View style={barStyles.container}>
-      {bars.map((amp, i) => {
-        const height = Math.max(6, Math.round(amp * 28));
+      {bars.map((shape, i) => {
+        const maxH = Math.max(8, Math.round(shape * 36));
+        const minH = Math.max(5, Math.round(shape * 10));
+
+        let heightStyle: number | Animated.AnimatedInterpolation<number> = maxH;
+        if (amplitude !== undefined) {
+          // VU-meter: driven by live RMS
+          heightStyle = ampAnim.interpolate({ inputRange: [0, 1], outputRange: [minH, maxH] });
+        } else if (isPlaying) {
+          // Wave: staggered bounce animation
+          heightStyle = waveAnims[i].interpolate({ inputRange: [0, 1], outputRange: [minH, maxH] });
+        }
+
         return (
-          <View
+          <Animated.View
             key={i}
             style={[
               barStyles.bar,
               {
-                height,
+                height: heightStyle,
                 backgroundColor: colors.primary,
-                opacity: 0.6 + amp * 0.4,
+                opacity: 0.5 + shape * 0.5,
               },
             ]}
           />
@@ -84,12 +168,55 @@ const barStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    height: 32,
+    height: 40,
     overflow: 'hidden',
   },
   bar: {
     width: 3,
     borderRadius: 2,
+  },
+});
+
+/** Three pulsing dots shown while the LLM is generating */
+const ThinkingDots: React.FC<{ colors: ThemeColors }> = ({ colors }) => {
+  const dots = useRef([new Animated.Value(0.3), new Animated.Value(0.3), new Animated.Value(0.3)]).current;
+
+  useEffect(() => {
+    const anims = dots.map((v, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 150),
+          Animated.timing(v, { toValue: 1, duration: 300, useNativeDriver: false }),
+          Animated.timing(v, { toValue: 0.3, duration: 300, useNativeDriver: false }),
+        ]),
+      ),
+    );
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [dots]);
+
+  return (
+    <View style={dotStyles.container}>
+      {dots.map((v, i) => (
+        <Animated.View key={i} style={[dotStyles.dot, { backgroundColor: colors.primary, opacity: v }]} />
+      ))}
+    </View>
+  );
+};
+
+const dotStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    height: 32,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
 });
 
@@ -100,33 +227,44 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   durationSeconds,
   transcript,
   isUser = false,
+  isLoading = false,
+  reasoningContent,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { isSpeaking, currentMessageId, settings, playMessage, stopPlayback, speak, updateSettings } =
-    useTTSStore();
+  const { isSpeaking, isPaused, isAudioPlaying, currentAmplitude, currentMessageId, settings,
+    playMessage, stopPlayback, speak, stop, pause, resume, updateSettings } = useTTSStore();
 
   const [showTranscript, setShowTranscript] = useState(false);
   const initialSpeedIdx = SPEED_STEPS.indexOf(settings.speed);
   const [speedIndex, setSpeedIndex] = useState(initialSpeedIdx >= 0 ? initialSpeedIdx : 1);
 
-  const isThisPlaying = isSpeaking && currentMessageId === messageId;
+  const isThisPlaying = isSpeaking && currentMessageId === messageId && !isPaused;
+  const isThisPaused = isSpeaking && currentMessageId === messageId && isPaused;
+  // Kokoro is actually pushing audio chunks for this message
+  const isThisAudible = isAudioPlaying && currentMessageId === messageId;
+  // Between "play pressed" and "first chunk": show loading indicator
+  const isThisLoading = isThisPlaying && !isThisAudible;
 
   const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
   const currentVoiceIdx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
   const currentVoice = KOKORO_VOICES[currentVoiceIdx >= 0 ? currentVoiceIdx : 0];
 
   const handlePlayPause = useCallback(() => {
+    if (isThisPaused) {
+      resume();
+      return;
+    }
     if (isThisPlaying) {
-      stopPlayback();
+      pause();
       return;
     }
     if (audioPath) {
       playMessage(messageId, audioPath);
     } else {
-      speak(transcript ?? '', messageId);
+      speak(stripMarkdownForSpeech(transcript ?? ''), messageId);
     }
-  }, [isThisPlaying, stopPlayback, playMessage, speak, messageId, audioPath, transcript]);
+  }, [isThisPlaying, isThisPaused, pause, resume, playMessage, speak, messageId, audioPath, transcript]);
 
   const handleSpeedCycle = useCallback(() => {
     const next = (speedIndex + 1) % SPEED_STEPS.length;
@@ -138,7 +276,9 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     const idx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
     const next = (idx + 1) % KOKORO_VOICES.length;
     updateSettings({ kokoroVoiceId: KOKORO_VOICES[next].id as KokoroVoiceId });
-  }, [kokoroVoiceId, updateSettings]);
+    // Stop if playing — user taps play again to hear new voice
+    if (isThisPlaying || isThisPaused) { stop(); }
+  }, [kokoroVoiceId, updateSettings, isThisPlaying, isThisPaused, stop]);
 
   const speedChip = (
     <TouchableOpacity
@@ -151,7 +291,17 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   );
 
 
-  const playButton = (
+  const playButton = isLoading ? (
+    // LLM still generating — disabled ghost play
+    <View style={[styles.playButton, { opacity: 0.35 }]}>
+      <Icon name="play" size={16} color={colors.primary} />
+    </View>
+  ) : isThisLoading ? (
+    // Play tapped, waiting for first audio chunk
+    <View style={styles.playButton}>
+      <ActivityIndicator size="small" color={colors.primary} />
+    </View>
+  ) : (
     <TouchableOpacity
       onPress={handlePlayPause}
       style={styles.playButton}
@@ -165,8 +315,20 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </TouchableOpacity>
   );
 
+  // For AI bubbles (no saved audio), adjust estimated duration by current speed.
+  // Transcript word count / (2.5 words/s * speed) gives a live estimate.
+  const displayDuration = (() => {
+    if (isLoading) return '—';
+    if (!audioPath && transcript) {
+      const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+      const speed = SPEED_STEPS[speedIndex] ?? 1;
+      return formatDuration(Math.max(1, wordCount / (2.5 * speed)));
+    }
+    return formatDuration(durationSeconds);
+  })();
+
   const durationText = (
-    <Text style={styles.duration}>{formatDuration(durationSeconds)}</Text>
+    <Text style={styles.duration}>{displayDuration}</Text>
   );
 
   return (
@@ -177,13 +339,20 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <>
             {speedChip}
             {durationText}
-            <WaveformBars data={waveformData} colors={colors} />
+            <WaveformBars data={waveformData} colors={colors} isPlaying={isThisPlaying} />
             {playButton}
           </>
         ) : (
           <>
             {playButton}
-            <WaveformBars data={waveformData} colors={colors} />
+            {isLoading
+              ? <ThinkingDots colors={colors} />
+              : <WaveformBars
+                  data={waveformData}
+                  colors={colors}
+                  isPlaying={isThisPlaying}
+                  amplitude={isThisAudible ? currentAmplitude : undefined}
+                />}
             {durationText}
             {speedChip}
           </>
@@ -221,7 +390,9 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
       ) : null}
 
       {showTranscript && transcript ? (
-        <Text style={styles.transcript}>{transcript}</Text>
+        <View style={styles.transcriptContent}>
+          <MarkdownText>{transcript}</MarkdownText>
+        </View>
       ) : null}
     </View>
   );
@@ -299,5 +470,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
     lineHeight: 18,
+  },
+  transcriptContent: {
+    paddingTop: SPACING.xs,
   },
 });
