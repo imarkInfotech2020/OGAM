@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore } from '../../stores';
+import { useWhisperStore, useChatStore } from '../../stores';
 import { useTTSStore } from '../../stores/ttsStore';
 import { llmService } from '../../services/llm';
 import { audioRecorderService } from '../../services/audioRecorderService';
@@ -103,6 +103,22 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           // In Audio Mode, auto-send directly — no transcription needed for multimodal models
           if (onAutoSendRef.current && isInAudioInterfaceMode()) {
             onAutoSendRef.current('', { uri: path, format, durationSeconds });
+
+            // Parallel transcription: send audio to model immediately, transcribe in background
+            // so the voice bubble gets a transcript for display/playback review
+            if (downloadedModelId) {
+              const convId = conversationId;
+              whisperService.transcribeFile(path).then(text => {
+                if (!text?.trim() || !convId) return;
+                const conv = useChatStore.getState().conversations.find(c => c.id === convId);
+                const msg = conv?.messages.find(m =>
+                  m.role === 'user' && m.attachments?.some(a => a.uri === path),
+                );
+                if (msg) {
+                  useChatStore.getState().updateMessageContent(convId, msg.id, text.trim());
+                }
+              }).catch(err => logger.error('[Voice] Background transcription error:', err));
+            }
           } else {
             onAudioAttachmentRef.current?.(path, format, durationSeconds);
           }
@@ -139,6 +155,10 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
             onAudioAttachmentRef.current?.(path, 'wav', durationSeconds);
             onTranscriptRef.current(text.trim());
           }
+        } else {
+          // Transcription returned nothing — clip too short or too quiet
+          setDirectError("Couldn't hear that — try again");
+          setTimeout(() => setDirectError(null), 3000);
         }
       } catch (err) {
         setIsAudioModeRecording(false);

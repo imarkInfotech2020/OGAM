@@ -16,13 +16,14 @@ import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn } 
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
 import { saveImageToGallery } from './useSaveImage';
+import { stripControlTokens, stripMarkdownForSpeech } from '../../utils/messageContent';
 
 export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
 
 function triggerAudioModeGeneration(conversationId: string, messageId: string, content: string) {
   useChatStore.getState().updateMessageAudio(conversationId, messageId, { isAudioModeMessage: true });
-  useTTSStore.getState().speak(content, messageId);
+  useTTSStore.getState().speak(stripMarkdownForSpeech(stripControlTokens(content)), messageId);
 }
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
@@ -59,6 +60,14 @@ export const useChatScreen = () => {
   const [isCompacting, setIsCompacting] = useState(false);
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
+
+  // Stop TTS when navigating away from the chat screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      useTTSStore.getState().stop();
+    });
+    return unsubscribe;
+  }, [navigation]);
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
   const addMessageRef = useRef<typeof addMessage>(null as any);
@@ -203,7 +212,9 @@ export const useChatScreen = () => {
     nextPos: 0, pending: [], isPlaying: false,
   });
 
-  // Sentence-level TTS streaming: feed complete sentences to Kokoro as they arrive
+  // Buffer-based streaming TTS: feed text to Kokoro as soon as enough runway accumulates.
+  // No sentence detection — just split at word boundaries when buffer exceeds threshold.
+  // Works even at low tok/sec because the threshold is much smaller than a full sentence.
   useEffect(() => {
     if (!isStreamingForThisConversation) return;
     const tts = useTTSStore.getState();
@@ -212,14 +223,22 @@ export const useChatScreen = () => {
     if (!streamingMessage) return;
 
     const ref = ttsStreamRef.current;
-    const remaining = streamingMessage.slice(ref.nextPos);
-    // Require at least 20 chars and a sentence-ending boundary followed by whitespace or end
-    const match = remaining.match(/^([\s\S]{20,}?[.!?])(\s|$)/);
-    if (!match) return;
+    const stripped = stripControlTokens(streamingMessage);
+    const buffered = stripped.slice(ref.nextPos);
 
-    const sentence = match[1].trim();
-    ref.nextPos += match[0].length;
-    ref.pending.push(sentence);
+    // Need enough chars for Kokoro to have meaningful speech (~2-3 seconds worth)
+    const MIN_CHARS = 50;
+    if (buffered.length < MIN_CHARS) return;
+
+    // Split at the last word boundary so we don't cut mid-word
+    const lastSpace = buffered.lastIndexOf(' ');
+    if (lastSpace <= 0) return;
+
+    const chunk = buffered.slice(0, lastSpace).trim();
+    ref.nextPos += lastSpace + 1;
+    if (!chunk) return;
+
+    ref.pending.push(stripMarkdownForSpeech(chunk));
 
     if (!ref.isPlaying) {
       const playNext = () => {
@@ -253,7 +272,9 @@ export const useChatScreen = () => {
     });
     // Only speak if a TTS engine is available
     if (!tts.kokoroReady && !tts.isModelLoaded) return;
-    const remaining = last.content.slice(alreadySpoken).trim();
+    // Strip thinking/control tokens — must match how positions were tracked during streaming
+    const cleanContent = stripMarkdownForSpeech(stripControlTokens(last.content));
+    const remaining = cleanContent.slice(alreadySpoken).trim();
     if (remaining) {
       useTTSStore.getState().speak(remaining, last.id);
     }
