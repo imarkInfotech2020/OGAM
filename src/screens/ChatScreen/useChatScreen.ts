@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore, useTTSStore } from '../../stores';
@@ -61,12 +62,15 @@ export const useChatScreen = () => {
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
 
-  // Stop TTS when navigating away from the chat screen
+  // Stop TTS when navigating away, app backgrounded, or screen locked
   useEffect(() => {
     const unsubscribe = navigation.addListener('blur', () => {
       useTTSStore.getState().stop();
     });
-    return unsubscribe;
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') { useTTSStore.getState().stop(); }
+    });
+    return () => { unsubscribe(); appStateSub.remove(); };
   }, [navigation]);
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
