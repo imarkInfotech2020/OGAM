@@ -295,12 +295,14 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   /** Seek to a position by re-speaking from a character offset in the transcript */
   const handleSeek = useCallback((fraction: number) => {
+    console.log('[AudioBubble] handleSeek called, fraction:', fraction, 'transcript?', !!transcript, 'audioPath?', !!audioPath);
     if (!transcript || audioPath) return; // only for AI TTS bubbles
     const text = stripMarkdownForSpeech(transcript);
     const charOffset = Math.floor(fraction * text.length);
     // Find the nearest sentence boundary to avoid cutting mid-word
     const seekPoint = text.lastIndexOf('. ', charOffset) + 2 || charOffset;
     const remaining = text.slice(seekPoint).trim();
+    console.log('[AudioBubble] seeking to', Math.round(fraction * 100) + '%', 'charOffset:', charOffset, 'remaining:', remaining.length, 'chars');
     if (!remaining) return;
     // Set elapsed to the seek position so progress bar updates
     const seekSeconds = Math.floor(fraction * totalDurationRef.current);
@@ -364,12 +366,14 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </Text>
   );
 
-  // ── Seek handler — tap on the waveform area to jump to a position ──
-  const seekAreaWidth = useRef(0);
-  const handleWaveformSeek = useCallback((e: any) => {
-    if (!isThisActive || isLoading || !seekAreaWidth.current) return;
+  // ── Seek handler — tap on the progress bar to jump to a position ──
+  const seekBarWidth = useRef(0);
+  const handleSeekBarTap = useCallback((e: any) => {
+    console.log('[AudioBubble] seekbar tapped, isThisActive:', isThisActive, 'width:', seekBarWidth.current, 'locationX:', e.nativeEvent.locationX);
+    if (!isThisActive || isLoading || !seekBarWidth.current) return;
     const locationX = e.nativeEvent.locationX;
-    const fraction = Math.max(0, Math.min(1, locationX / seekAreaWidth.current));
+    const fraction = Math.max(0, Math.min(1, locationX / seekBarWidth.current));
+    console.log('[AudioBubble] seek fraction:', fraction);
     handleSeek(fraction);
   }, [isThisActive, isLoading, handleSeek]);
 
@@ -389,32 +393,31 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
             {playButton}
             {isLoading
               ? <ThinkingDots colors={colors} />
-              : (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={handleWaveformSeek}
-                  onLayout={(e) => { seekAreaWidth.current = e.nativeEvent.layout.width; }}
-                  disabled={!isThisActive}
-                  style={styles.waveformSeekArea}
-                >
-                  <WaveformBars
-                    data={waveformData}
-                    colors={colors}
-                    isPlaying={isThisAudible}
-                  />
-                  {isThisActive && (
-                    <View style={styles.progressTrack}>
-                      <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-                      <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              )}
+              : <WaveformBars
+                  data={waveformData}
+                  colors={colors}
+                  isPlaying={isThisAudible}
+                />}
             {durationText}
             {speedChip}
           </>
         )}
       </View>
+
+      {/* Full-width seekable progress bar */}
+      {isThisActive && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={handleSeekBarTap}
+          onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
+          style={styles.seekBarTouchable}
+        >
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+          </View>
+          <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+        </TouchableOpacity>
+      )}
 
       {/* Transcript toggle — only for user voice recordings */}
       {transcript ? (
@@ -491,15 +494,14 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.metaSmall,
     color: colors.textSecondary,
   },
-  waveformSeekArea: {
-    flex: 1,
+  seekBarTouchable: {
+    paddingVertical: 10,
+    position: 'relative' as const,
   },
   progressTrack: {
-    height: 3,
+    height: 4,
     backgroundColor: `${colors.primary}15`,
     borderRadius: 2,
-    marginTop: 4,
-    position: 'relative' as const,
   },
   progressFill: {
     height: '100%' as const,
@@ -508,11 +510,11 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   progressThumb: {
     position: 'absolute' as const,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginLeft: -5,
-    top: -3.5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: -6,
+    top: 4,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,
