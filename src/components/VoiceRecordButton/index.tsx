@@ -9,6 +9,7 @@ import {
   PanResponderGestureState,
   Vibration,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import ReanimatedAnimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -228,6 +229,42 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     disabled && styles.buttonDisabled,
   ];
 
+  // ── Audio mode: tap-to-toggle (tap to start, tap to stop & send) ───────────
+  if (!asSendButton) {
+    const handleToggle = () => {
+      if (disabled) return;
+      Vibration.vibrate(50);
+      if (isRecording) {
+        onStopRecording();
+      } else {
+        onStartRecording();
+      }
+    };
+
+    return (
+      <View style={styles.container}>
+        {isRecording && <ReanimatedAnimated.View style={[styles.rippleRing, rippleStyle]} />}
+        <Animated.View
+          style={[styles.buttonWrapper, { transform: [{ scale: isRecording ? pulseAnim : 1 }] }]}
+        >
+          <TouchableOpacity
+            onPress={handleToggle}
+            disabled={disabled}
+            activeOpacity={0.7}
+          >
+            <View style={buttonStyle}>
+              {isRecording
+                ? <Icon name="square" size={16} color="#fff" />
+                : <ButtonIcon asSendButton={false} isRecording={false} />}
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+        {alert}
+      </View>
+    );
+  }
+
+  // ── Chat mode: hold-to-record with slide-to-cancel ─────────────────────────
   return (
     <View style={styles.container}>
       {isRecording && (
