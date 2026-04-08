@@ -67,8 +67,15 @@ export const useChatScreen = () => {
     const unsubscribe = navigation.addListener('blur', () => {
       useTTSStore.getState().stop();
     });
-    const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') { useTTSStore.getState().stop(); }
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      const tts = useTTSStore.getState();
+      if (nextState !== 'active') {
+        // Pause instead of stop so playback can resume when user returns
+        if (tts.isSpeaking && !tts.isPaused) { tts.pause(); }
+      } else {
+        // Resume playback when app comes back to foreground
+        if (tts.isSpeaking && tts.isPaused) { tts.resume(); }
+      }
     });
     return () => { unsubscribe(); appStateSub.remove(); };
   }, [navigation]);

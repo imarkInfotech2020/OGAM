@@ -12,8 +12,6 @@ import { MarkdownText } from '../MarkdownText';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useTTSStore } from '../../stores/ttsStore';
-import { KOKORO_VOICES } from '../../constants/kokoroModels';
-import type { KokoroVoiceId } from '../../constants/kokoroModels';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 
@@ -234,41 +232,53 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { isSpeaking, isPaused, isAudioPlaying, currentMessageId, settings,
-    playMessage, speak, stop, pause, resume, updateSettings } = useTTSStore();
+
+  // ── Targeted selectors — only re-render when these specific values change,
+  //    NOT on every amplitude update (which fires ~30×/s during playback) ──
+  const isSpeaking = useTTSStore((s) => s.isSpeaking);
+  const isPaused = useTTSStore((s) => s.isPaused);
+  const isAudioPlaying = useTTSStore((s) => s.isAudioPlaying);
+  const currentMessageId = useTTSStore((s) => s.currentMessageId);
+  const speed = useTTSStore((s) => s.settings.speed);
+  const playMessage = useTTSStore((s) => s.playMessage);
+  const speak = useTTSStore((s) => s.speak);
+  const stop = useTTSStore((s) => s.stop);
+  const pause = useTTSStore((s) => s.pause);
+  const resume = useTTSStore((s) => s.resume);
+  const updateSettings = useTTSStore((s) => s.updateSettings);
 
   const [showTranscript, setShowTranscript] = useState(false);
-  const initialSpeedIdx = SPEED_STEPS.indexOf(settings.speed);
-  const [speedIndex, setSpeedIndex] = useState(initialSpeedIdx >= 0 ? initialSpeedIdx : 1);
+  const [speedIndex, setSpeedIndex] = useState(() => {
+    const idx = SPEED_STEPS.indexOf(speed);
+    return idx >= 0 ? idx : 1;
+  });
 
   const isThisPlaying = isSpeaking && currentMessageId === messageId && !isPaused;
   const isThisPaused = isSpeaking && currentMessageId === messageId && isPaused;
-  // Kokoro is actually pushing audio chunks for this message
   const isThisAudible = isAudioPlaying && currentMessageId === messageId;
-  // Between "play pressed" and "first chunk": show loading indicator
   const isThisLoading = isThisPlaying && !isThisAudible;
 
-  // 1-second elapsed timer — starts only when audio is actually audible, not during loading
+  // ── Wall-clock elapsed timer ────────────────────────────────────────────
   const [localElapsed, setLocalElapsed] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const pausedAtRef = useRef<number>(0);
   useEffect(() => {
-    if (!isThisAudible) { setLocalElapsed(0); return; }
-    const id = setInterval(() => setLocalElapsed((e) => e + 1), 1000);
+    if (!isThisAudible && !isThisPaused) { setLocalElapsed(0); pausedAtRef.current = 0; return; }
+    if (isThisPaused) {
+      pausedAtRef.current = localElapsed;
+      return;
+    }
+    startTimeRef.current = Date.now() - pausedAtRef.current * 1000;
+    const id = setInterval(() => {
+      setLocalElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }, 500);
     return () => clearInterval(id);
-  }, [isThisAudible]);
-
-  const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
-  const currentVoiceIdx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
-  const currentVoice = KOKORO_VOICES[currentVoiceIdx >= 0 ? currentVoiceIdx : 0];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isThisAudible, isThisPaused]);
 
   const handlePlayPause = useCallback(() => {
-    if (isThisPaused) {
-      resume();
-      return;
-    }
-    if (isThisPlaying) {
-      pause();
-      return;
-    }
+    if (isThisPaused) { resume(); return; }
+    if (isThisPlaying) { pause(); return; }
     if (audioPath) {
       playMessage(messageId, audioPath);
     } else {
@@ -282,15 +292,6 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     updateSettings({ speed: SPEED_STEPS[next] });
   }, [speedIndex, updateSettings]);
 
-  const handleVoiceCycle = useCallback(() => {
-    // Stop FIRST to avoid crash — changing voice triggers KokoroTTSManager re-render
-    // which recreates the TTS hook while audio may still be streaming
-    if (isThisPlaying || isThisPaused) { stop(); }
-    const idx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
-    const next = (idx + 1) % KOKORO_VOICES.length;
-    updateSettings({ kokoroVoiceId: KOKORO_VOICES[next].id as KokoroVoiceId });
-  }, [kokoroVoiceId, updateSettings, isThisPlaying, isThisPaused, stop]);
-
   const speedChip = (
     <TouchableOpacity
       onPress={handleSpeedCycle}
@@ -301,14 +302,11 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </TouchableOpacity>
   );
 
-
   const playButton = isLoading ? (
-    // LLM still generating — disabled ghost play
     <View style={[styles.playButton, { opacity: 0.35 }]}>
       <Icon name="play" size={16} color={colors.primary} />
     </View>
   ) : isThisLoading ? (
-    // Play tapped, waiting for first audio chunk
     <View style={styles.playButton}>
       <ActivityIndicator size="small" color={colors.primary} />
     </View>
@@ -326,25 +324,31 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </TouchableOpacity>
   );
 
-  // For AI bubbles (no saved audio), adjust estimated duration by current speed.
-  // Transcript word count / (2.5 words/s * speed) gives a live estimate.
+  // Estimated total duration — adjusted by current playback speed
+  const currentSpeed = SPEED_STEPS[speedIndex] ?? 1;
   const totalDuration = (() => {
     if (!audioPath && transcript) {
       const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-      const speed = SPEED_STEPS[speedIndex] ?? 1;
-      return Math.max(1, wordCount / (2.5 * speed));
+      return Math.max(1, wordCount / (2.5 * currentSpeed));
     }
     return durationSeconds;
   })();
 
   const isThisActive = (isThisPlaying || isThisPaused) && currentMessageId === messageId;
-  const displayDuration = isLoading ? '—'
-    : isThisActive ? `${formatDuration(localElapsed)} / ${formatDuration(totalDuration)}`
-    : formatDuration(totalDuration);
+  const progress = isThisActive ? Math.min(1, localElapsed / Math.max(1, totalDuration)) : 0;
 
   const durationText = (
-    <Text style={styles.duration}>{displayDuration}</Text>
+    <Text style={styles.duration}>
+      {isLoading ? '—' : formatDuration(totalDuration)}
+    </Text>
   );
+
+  // ── Progress bar — thin line under waveform showing listening position ──
+  const progressBar = isThisActive ? (
+    <View style={styles.progressTrack}>
+      <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+    </View>
+  ) : null;
 
   return (
     <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-${messageId}`}>
@@ -372,9 +376,10 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           </>
         )}
       </View>
+      {progressBar}
 
-      {/* Transcript toggle */}
-      {transcript ? (
+      {/* Transcript toggle — only for user voice recordings */}
+      {isUser && transcript ? (
         <TouchableOpacity
           onPress={() => setShowTranscript((v) => !v)}
           style={styles.transcriptToggle}
@@ -448,15 +453,17 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.metaSmall,
     color: colors.textSecondary,
   },
-  voiceRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 4,
+  progressTrack: {
+    height: 3,
+    backgroundColor: `${colors.primary}15`,
+    borderRadius: 2,
+    overflow: 'hidden' as const,
+    marginTop: -SPACING.xs,
   },
-  voiceLabel: {
-    ...TYPOGRAPHY.metaSmall,
-    color: colors.textMuted,
-    flex: 1,
+  progressFill: {
+    height: '100%' as const,
+    borderRadius: 2,
+    opacity: 0.6,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,
