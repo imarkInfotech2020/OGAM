@@ -258,13 +258,24 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   const [localElapsed, setLocalElapsed] = useState(0);
   const startTimeRef = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);
+  const seekOffsetRef = useRef<number>(0); // preserved across stop/restart during seek
   useEffect(() => {
-    if (!isThisAudible && !isThisPaused) { setLocalElapsed(0); pausedAtRef.current = 0; return; }
+    if (!isThisAudible && !isThisPaused) {
+      // Don't reset if we have a pending seek offset (stop→speak cycle)
+      if (seekOffsetRef.current === 0) {
+        setLocalElapsed(0);
+        pausedAtRef.current = 0;
+      }
+      return;
+    }
     if (isThisPaused) {
       pausedAtRef.current = localElapsed;
       return;
     }
-    startTimeRef.current = Date.now() - pausedAtRef.current * 1000;
+    // Use seek offset if set, then clear it
+    const offset = seekOffsetRef.current || pausedAtRef.current;
+    seekOffsetRef.current = 0;
+    startTimeRef.current = Date.now() - offset * 1000;
     const id = setInterval(() => {
       setLocalElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 500);
@@ -304,10 +315,9 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     const remaining = text.slice(seekPoint).trim();
     console.log('[AudioBubble] seeking to', Math.round(fraction * 100) + '%', 'charOffset:', charOffset, 'remaining:', remaining.length, 'chars');
     if (!remaining) return;
-    // Set elapsed to the seek position so progress bar updates
+    // Set seek offset so the timer picks up from the right position after stop→speak
     const seekSeconds = Math.floor(fraction * totalDurationRef.current);
-    startTimeRef.current = Date.now() - seekSeconds * 1000;
-    pausedAtRef.current = 0;
+    seekOffsetRef.current = seekSeconds;
     setLocalElapsed(seekSeconds);
     // Stop current playback and re-speak from the seek point
     stop();
