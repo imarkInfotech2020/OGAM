@@ -216,13 +216,4 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: SPACING.md,
     paddingVertical: SPACING.xs,
   },
-  audioModeHint: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-    flex: 1,
-    textAlign: 'right' as const,
-  },
-  audioModeHintRecording: {
-    color: colors.error,
-  },
 });

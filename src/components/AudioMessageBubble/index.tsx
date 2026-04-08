@@ -79,7 +79,7 @@ const WaveformBars: React.FC<{
   const bars = useMemo(() => normalize(subsample(data, WAVEFORM_BARS)), [data]);
 
   // ── VU-meter mode (amplitude-driven) ─────────────────────────────────────
-  const ampAnim = useRef(new Animated.Value(1)).current;
+  const ampAnim = useRef(new Animated.Value(0)).current;
   const ampAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
@@ -87,11 +87,13 @@ const WaveformBars: React.FC<{
     ampAnimRef.current?.stop();
     const current = (ampAnim as any)._value ?? 0;
     if (amplitude >= current) {
+      // Instant attack — bars jump up immediately
       ampAnim.setValue(amplitude);
     } else {
+      // Slow decay — bars fall smoothly
       ampAnimRef.current = Animated.timing(ampAnim, {
         toValue: amplitude,
-        duration: 350,
+        duration: 250,
         useNativeDriver: false,
       });
       ampAnimRef.current.start();
@@ -122,10 +124,10 @@ const WaveformBars: React.FC<{
     return () => waveRef.current.forEach(a => a.stop());
   }, [isPlaying, amplitude, waveAnims]);
 
-  // Reset VU-meter when not playing
+  // Reset VU-meter when not playing — bars return to resting shape
   useEffect(() => {
     if (!isPlaying && amplitude === undefined) {
-      ampAnim.setValue(1);
+      ampAnim.setValue(0);
     }
   }, [isPlaying, amplitude, ampAnim]);
 
@@ -232,7 +234,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { isSpeaking, isPaused, isAudioPlaying, currentAmplitude, currentMessageId, settings,
+  const { isSpeaking, isPaused, isAudioPlaying, currentAmplitude, playbackElapsed, currentMessageId, settings,
     playMessage, stopPlayback, speak, stop, pause, resume, updateSettings } = useTTSStore();
 
   const [showTranscript, setShowTranscript] = useState(false);
@@ -273,11 +275,12 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   }, [speedIndex, updateSettings]);
 
   const handleVoiceCycle = useCallback(() => {
+    // Stop FIRST to avoid crash — changing voice triggers KokoroTTSManager re-render
+    // which recreates the TTS hook while audio may still be streaming
+    if (isThisPlaying || isThisPaused) { stop(); }
     const idx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
     const next = (idx + 1) % KOKORO_VOICES.length;
     updateSettings({ kokoroVoiceId: KOKORO_VOICES[next].id as KokoroVoiceId });
-    // Stop if playing — user taps play again to hear new voice
-    if (isThisPlaying || isThisPaused) { stop(); }
   }, [kokoroVoiceId, updateSettings, isThisPlaying, isThisPaused, stop]);
 
   const speedChip = (
@@ -317,15 +320,19 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   // For AI bubbles (no saved audio), adjust estimated duration by current speed.
   // Transcript word count / (2.5 words/s * speed) gives a live estimate.
-  const displayDuration = (() => {
-    if (isLoading) return '—';
+  const totalDuration = (() => {
     if (!audioPath && transcript) {
       const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
       const speed = SPEED_STEPS[speedIndex] ?? 1;
-      return formatDuration(Math.max(1, wordCount / (2.5 * speed)));
+      return Math.max(1, wordCount / (2.5 * speed));
     }
-    return formatDuration(durationSeconds);
+    return durationSeconds;
   })();
+
+  const isThisActive = (isThisPlaying || isThisPaused) && currentMessageId === messageId;
+  const displayDuration = isLoading ? '—'
+    : isThisActive ? `${formatDuration(playbackElapsed)} / ${formatDuration(totalDuration)}`
+    : formatDuration(totalDuration);
 
   const durationText = (
     <Text style={styles.duration}>{displayDuration}</Text>

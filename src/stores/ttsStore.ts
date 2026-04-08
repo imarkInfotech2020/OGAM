@@ -49,6 +49,8 @@ export interface TTSState {
   isAudioPlaying: boolean;
   /** RMS amplitude of the current audio chunk (0–1), updated per chunk for waveform sync */
   currentAmplitude: number;
+  /** Elapsed playback seconds — accumulated per Kokoro chunk for progress display */
+  playbackElapsed: number;
 
   // Cache
   audioCacheSizeMB: number;
@@ -87,6 +89,7 @@ export interface TTSState {
   setKokoroState: (ready: boolean, progress: number) => void;
   setAudioPlaying: (playing: boolean) => void;
   setCurrentAmplitude: (amplitude: number) => void;
+  addPlaybackElapsed: (seconds: number) => void;
   updateSettings: (patch: Partial<TTSSettings>) => void;
   clearError: () => void;
 }
@@ -110,6 +113,7 @@ export const useTTSStore = create<TTSState>()(
       kokoroDownloadProgress: 0,
       isAudioPlaying: false,
       currentAmplitude: 0,
+      playbackElapsed: 0,
       audioCacheSizeMB: 0,
       settings: {
         interfaceMode: 'chat',
@@ -197,7 +201,7 @@ export const useTTSStore = create<TTSState>()(
             await new Promise<void>((r) => setTimeout(r, 80));
           }
 
-          set({ isSpeaking: true, isPaused: false, isAudioPlaying: false, isGeneratingAudio: false, currentMessageId: messageId, error: null });
+          set({ isSpeaking: true, isPaused: false, isAudioPlaying: false, isGeneratingAudio: false, currentMessageId: messageId, playbackElapsed: 0, error: null });
           try {
             kokoroRef.setKeepAlive(false);
             await kokoroRef.speak(text, settings.speed);
@@ -206,7 +210,7 @@ export const useTTSStore = create<TTSState>()(
             logger.error('[TTS Store] Kokoro speak error:', msg);
             set({ error: msg });
           } finally {
-            set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, currentMessageId: null });
+            set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, playbackElapsed: 0, currentMessageId: null });
           }
           return;
         }
@@ -235,7 +239,7 @@ export const useTTSStore = create<TTSState>()(
       stop: () => {
         kokoroRef.stop(true);
         ttsService.stop();
-        set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, isGeneratingAudio: false, currentMessageId: null });
+        set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, playbackElapsed: 0, isGeneratingAudio: false, currentMessageId: null });
       },
 
       pause: () => {
@@ -303,6 +307,7 @@ export const useTTSStore = create<TTSState>()(
 
       setAudioPlaying: (playing) => set({ isAudioPlaying: playing }),
       setCurrentAmplitude: (amplitude) => set({ currentAmplitude: amplitude }),
+      addPlaybackElapsed: (seconds) => set((s) => ({ playbackElapsed: s.playbackElapsed + seconds })),
 
       updateSettings: (patch) => {
         set((state) => ({ settings: { ...state.settings, ...patch } }));

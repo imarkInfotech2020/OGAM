@@ -90,15 +90,19 @@ export const KokoroTTSManager: React.FC = () => {
             // Signal that audio is actually playing (first chunk received)
             useTTSStore.getState().setAudioPlaying(true);
 
-            // Compute RMS amplitude for waveform sync (speech typically 0.01–0.3; scale ×4 to 0–1)
+            // Compute RMS amplitude for waveform sync (speech typically 0.01–0.3; scale ×8 to 0–1)
             let sumSq = 0;
             for (let i = 0; i < chunk.length; i++) { sumSq += chunk[i] * chunk[i]; }
-            const rms = Math.min(1, Math.sqrt(sumSq / chunk.length) * 4);
-            // Floor at 0.18 so bars never fully collapse during natural speech pauses
-            useTTSStore.getState().setCurrentAmplitude(Math.max(0.18, rms));
+            const rms = Math.min(1, Math.sqrt(sumSq / chunk.length) * 8);
+            // Floor at 0.15 so bars never fully collapse during natural speech pauses
+            useTTSStore.getState().setCurrentAmplitude(Math.max(0.15, rms));
+
+            // Track elapsed playback time (chunk samples / sampleRate / speed)
+            const currentSpeed = useTTSStore.getState().settings.speed;
+            const chunkDuration = chunk.length / 24000 / currentSpeed;
+            useTTSStore.getState().addPlaybackElapsed(chunkDuration);
 
             // Read speed fresh on each chunk so live speed changes take effect immediately
-            const currentSpeed = useTTSStore.getState().settings.speed;
             const buffer = ctx.createBuffer(1, chunk.length, 24000);
             buffer.copyToChannel(chunk, 0);
             const source = ctx.createBufferSource();
