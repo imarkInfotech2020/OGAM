@@ -27,18 +27,21 @@ export type KokoroVoiceId =
 export const KOKORO_VOICES: {
   id: KokoroVoiceId;
   label: string;
+  persona: string;
   accent: string;
   gender: 'Female' | 'Male';
+  /** Recommended playback speed for this persona's mood */
+  defaultSpeed: number;
   config: VoiceConfig;
 }[] = [
-  { id: 'af_heart',   label: 'Heart',   accent: 'US English',      gender: 'Female', config: KOKORO_VOICE_AF_HEART },
-  { id: 'af_river',   label: 'River',   accent: 'US English',      gender: 'Female', config: KOKORO_VOICE_AF_RIVER },
-  { id: 'af_sarah',   label: 'Sarah',   accent: 'US English',      gender: 'Female', config: KOKORO_VOICE_AF_SARAH },
-  { id: 'am_adam',    label: 'Adam',    accent: 'US English',      gender: 'Male',   config: KOKORO_VOICE_AM_ADAM },
-  { id: 'am_michael', label: 'Michael', accent: 'US English',      gender: 'Male',   config: KOKORO_VOICE_AM_MICHAEL },
-  { id: 'am_santa',   label: 'Santa',   accent: 'US English',      gender: 'Male',   config: KOKORO_VOICE_AM_SANTA },
-  { id: 'bf_emma',    label: 'Emma',    accent: 'British English',  gender: 'Female', config: KOKORO_VOICE_BF_EMMA },
-  { id: 'bm_daniel',  label: 'Daniel',  accent: 'British English',  gender: 'Male',   config: KOKORO_VOICE_BM_DANIEL },
+  { id: 'af_heart',   label: 'Warm',      persona: 'Friendly and approachable',   accent: 'US',      gender: 'Female', defaultSpeed: 1.0, config: KOKORO_VOICE_AF_HEART },
+  { id: 'af_river',   label: 'Calm',      persona: 'Relaxed and soothing',        accent: 'US',      gender: 'Female', defaultSpeed: 0.9, config: KOKORO_VOICE_AF_RIVER },
+  { id: 'af_sarah',   label: 'Clear',     persona: 'Crisp and professional',      accent: 'US',      gender: 'Female', defaultSpeed: 1.0, config: KOKORO_VOICE_AF_SARAH },
+  { id: 'am_adam',    label: 'Steady',    persona: 'Composed and reliable',       accent: 'US',      gender: 'Male',   defaultSpeed: 1.0, config: KOKORO_VOICE_AM_ADAM },
+  { id: 'am_michael', label: 'Bold',      persona: 'Confident and direct',        accent: 'US',      gender: 'Male',   defaultSpeed: 1.1, config: KOKORO_VOICE_AM_MICHAEL },
+  { id: 'am_santa',   label: 'Cheerful',  persona: 'Upbeat and energetic',        accent: 'US',      gender: 'Male',   defaultSpeed: 1.2, config: KOKORO_VOICE_AM_SANTA },
+  { id: 'bf_emma',    label: 'Gentle',    persona: 'Soft and thoughtful',         accent: 'British',  gender: 'Female', defaultSpeed: 0.9, config: KOKORO_VOICE_BF_EMMA },
+  { id: 'bm_daniel',  label: 'Refined',   persona: 'Polished and articulate',     accent: 'British',  gender: 'Male',   defaultSpeed: 1.0, config: KOKORO_VOICE_BM_DANIEL },
 ];
 
 export const DEFAULT_KOKORO_VOICE_ID: KokoroVoiceId = 'af_heart';

@@ -282,10 +282,11 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
 
   if (!visible) return null;
 
-  const handleSelect = (id: KokoroVoiceId) => {
+  const handleSelect = (voice: typeof KOKORO_VOICES[number]) => {
     triggerHaptic('impactLight');
     if (isSpeaking) { stop(); }
-    updateSettings({ kokoroVoiceId: id });
+    // Apply persona's recommended speed along with the voice
+    updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
     onClose();
   };
 
@@ -307,7 +308,7 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
                   <TouchableOpacity
                     key={voice.id}
                     style={popoverStyles.row}
-                    onPress={() => handleSelect(voice.id)}
+                    onPress={() => handleSelect(voice)}
                   >
                     <Icon
                       name="user"
@@ -319,7 +320,7 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
                         {voice.label}
                       </Text>
                       <Text style={[voicePickerStyles.accent, { color: colors.textMuted }]}>
-                        {voice.accent} {voice.gender === 'Female' ? 'F' : 'M'}
+                        {voice.persona}
                       </Text>
                     </View>
                     {isActive && (

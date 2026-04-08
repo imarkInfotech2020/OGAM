@@ -38,7 +38,8 @@ Respond as if you are speaking to the user in a natural conversation:
 - Use short sentences and natural spoken transitions ("So,", "Basically,", "Here's the thing —")
 - If summarizing research or long content, give the key takeaways in a few spoken paragraphs, not an essay
 - Numbers: say "about two thousand" not "~2,000"
-- Keep responses under 2-3 paragraphs unless the user explicitly asks for detail`;
+- Keep responses under 2-3 paragraphs unless the user explicitly asks for detail
+- Use expressive punctuation for natural prosody: exclamation marks for emphasis!, question marks for curiosity?, ellipses for pauses..., and vary sentence length for rhythm`;
 export type GenerationDeps = {
   activeModelId: string | null;
   activeModel: DownloadedModel | null | undefined;
