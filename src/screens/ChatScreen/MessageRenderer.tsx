@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { ChatMessage } from '../../components';
 import { AudioMessageBubble } from '../../components/AudioMessageBubble';
@@ -9,7 +9,10 @@ import { stripControlTokens } from '../../utils/messageContent';
 import { Message } from '../../types';
 import '../../types/tts';
 import { ChatMessageItem } from './useChatScreen';
-import { parseThinkingContent } from '../../components/ChatMessage/utils';
+import { parseThinkingContent, buildMessageData } from '../../components/ChatMessage/utils';
+import { ThinkingBlock } from '../../components/ChatMessage/components/ThinkingBlock';
+import { createStyles as createChatStyles } from '../../components/ChatMessage/styles';
+import { useThemedStyles } from '../../theme';
 
 type MessageRendererProps = {
   item: Message | ChatMessageItem;
@@ -25,6 +28,24 @@ type MessageRendererProps = {
   onEdit: (message: Message, newContent: string) => void;
   onGenerateImage: (prompt: string) => void;
   onImagePress: (uri: string) => void;
+};
+
+/** Renders the thinking/reasoning block for audio mode without the ChatMessage bubble wrapper */
+const AudioModeThinkingBlock: React.FC<{ msg: Message }> = ({ msg }) => {
+  const chatStyles = useThemedStyles(createChatStyles);
+  const [showThinking, setShowThinking] = useState(false);
+  const { parsedContent } = buildMessageData(msg);
+  if (!parsedContent.thinking) return null;
+  return (
+    <View style={chatStyles.thinkingBlockWrapper}>
+      <ThinkingBlock
+        parsedContent={parsedContent}
+        showThinking={showThinking}
+        onToggle={() => setShowThinking((v) => !v)}
+        styles={chatStyles}
+      />
+    </View>
+  );
 };
 
 function buildAudioBubbleProps(msg: Message) {
@@ -111,21 +132,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     const hasThinking = !!msg.reasoningContent || !!parseThinkingContent(msg.content).thinking;
     const bubble = (
       <View style={audioStyles.assistantContainer}>
-        {hasThinking && (
-          <ChatMessage
-            message={{ ...msg, content: msg.reasoningContent ? '' : msg.content } as Message}
-            isStreaming={false}
-            onCopy={onCopy}
-            onRetry={onRetry}
-            onEdit={onEdit}
-            onGenerateImage={onGenerateImage}
-            onImagePress={onImagePress}
-            canGenerateImage={false}
-            showGenerationDetails={showGenerationDetails}
-            animateEntry={false}
-            showActions={false}
-          />
-        )}
+        {hasThinking && <AudioModeThinkingBlock msg={msg} />}
         <AudioMessageBubble {...buildAudioBubbleProps(msg)} />
       </View>
     );

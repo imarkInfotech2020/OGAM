@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -11,12 +11,11 @@ import { createStyles, PILL_ICONS_WIDTH, ANIM_DURATION_IN, ANIM_DURATION_OUT } f
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
-import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
+import { QuickSettingsPopover, AttachPickerPopover, VoicePickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useTTSStore } from '../../stores/ttsStore';
 import { useAppStore } from '../../stores';
 import { KOKORO_VOICES } from '../../constants/kokoroModels';
-import type { KokoroVoiceId } from '../../constants/kokoroModels';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -73,6 +72,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const quickSettings = useKeyboardAwarePopover();
   const attachPicker = useKeyboardAwarePopover();
+  const voicePicker = useKeyboardAwarePopover();
   const inputRef = useRef<TextInput>(null);
   const attachmentsRef = useRef<MediaAttachment[]>([]);
   const hasText = message.length > 0;
@@ -91,16 +91,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
   const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
   const isAudioMode = ttsInterfaceMode === 'audio';
+  const currentVoice = useMemo(
+    () => KOKORO_VOICES.find((v) => v.id === kokoroVoiceId) ?? KOKORO_VOICES[0],
+    [kokoroVoiceId],
+  );
 
-  const handleVoiceCycle = () => {
-    triggerHaptic('impactLight');
-    // Stop playback first to avoid crash from KokoroTTSManager re-render
-    const tts = useTTSStore.getState();
-    if (tts.isSpeaking) { tts.stop(); }
-    const idx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
-    const next = (idx + 1) % KOKORO_VOICES.length;
-    tts.updateSettings({ kokoroVoiceId: KOKORO_VOICES[next].id as KokoroVoiceId });
-  };
+  const handleVoicePress = () => voicePicker.show();
 
   const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
@@ -289,13 +285,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           >
             <Icon name="tool" size={18} color={enabledToolCount > 0 ? colors.primary : !supportsToolCalling ? colors.textMuted : colors.textSecondary} />
           </TouchableOpacity>
-          {/* Voice selector — cycle through Kokoro voices */}
+          {/* Voice selector — opens popover to pick Kokoro voice */}
           <TouchableOpacity
-            style={styles.pillIconButton}
-            onPress={handleVoiceCycle}
+            ref={voicePicker.triggerRef}
+            style={styles.audioVoiceButton}
+            onPress={handleVoicePress}
             hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
           >
-            <Icon name="user" size={18} color={colors.textSecondary} />
+            <Icon name="user" size={14} color={colors.textSecondary} />
+            <Text style={styles.audioVoiceLabel}>{currentVoice.label}</Text>
           </TouchableOpacity>
 
           {/* Stop replaces mic while generating; mic shows otherwise */}
@@ -325,6 +323,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           supportsVision={supportsVision}
           onPhoto={handleVisionPress}
           onDocument={handlePickDocument}
+        />
+        <VoicePickerPopover
+          visible={voicePicker.visible}
+          onClose={voicePicker.hide}
+          anchorY={voicePicker.anchor.y}
+          anchorX={voicePicker.anchor.x}
         />
         {/* QuickSettings kept for edge cases (popover opened before mode switch) */}
         <QuickSettingsPopover

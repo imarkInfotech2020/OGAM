@@ -234,8 +234,8 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { isSpeaking, isPaused, isAudioPlaying, currentAmplitude, playbackElapsed, currentMessageId, settings,
-    playMessage, stopPlayback, speak, stop, pause, resume, updateSettings } = useTTSStore();
+  const { isSpeaking, isPaused, isAudioPlaying, currentMessageId, settings,
+    playMessage, speak, stop, pause, resume, updateSettings } = useTTSStore();
 
   const [showTranscript, setShowTranscript] = useState(false);
   const initialSpeedIdx = SPEED_STEPS.indexOf(settings.speed);
@@ -247,6 +247,14 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   const isThisAudible = isAudioPlaying && currentMessageId === messageId;
   // Between "play pressed" and "first chunk": show loading indicator
   const isThisLoading = isThisPlaying && !isThisAudible;
+
+  // 1-second elapsed timer — starts only when audio is actually audible, not during loading
+  const [localElapsed, setLocalElapsed] = useState(0);
+  useEffect(() => {
+    if (!isThisAudible) { setLocalElapsed(0); return; }
+    const id = setInterval(() => setLocalElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [isThisAudible]);
 
   const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
   const currentVoiceIdx = KOKORO_VOICES.findIndex((v) => v.id === kokoroVoiceId);
@@ -331,7 +339,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   const isThisActive = (isThisPlaying || isThisPaused) && currentMessageId === messageId;
   const displayDuration = isLoading ? '—'
-    : isThisActive ? `${formatDuration(playbackElapsed)} / ${formatDuration(totalDuration)}`
+    : isThisActive ? `${formatDuration(localElapsed)} / ${formatDuration(totalDuration)}`
     : formatDuration(totalDuration);
 
   const durationText = (
@@ -357,8 +365,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
               : <WaveformBars
                   data={waveformData}
                   colors={colors}
-                  isPlaying={isThisPlaying}
-                  amplitude={isThisAudible ? currentAmplitude : undefined}
+                  isPlaying={isThisAudible}
                 />}
             {durationText}
             {speedChip}

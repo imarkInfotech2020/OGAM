@@ -196,8 +196,10 @@ export const useTTSStore = create<TTSState>()(
         // ── Kokoro fast path (Android 13+ / iOS 17+, model ready) ────────────
         if (get().kokoroReady && isExecutorchSupported()) {
           ttsService.stop(); // ensure OuteTTS is silent
+          // Always stop Kokoro — a previous failed call may have left its internal
+          // state as "generating" even though isSpeaking was reset by our finally block.
+          kokoroRef.stop(true);
           if (get().isSpeaking) {
-            kokoroRef.stop(true);
             await new Promise<void>((r) => setTimeout(r, 80));
           }
 

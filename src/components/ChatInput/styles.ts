@@ -216,4 +216,17 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     gap: SPACING.md,
     paddingVertical: SPACING.xs,
   },
+  // Voice cycle button — shows icon + voice name
+  audioVoiceButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    paddingHorizontal: SPACING.sm,
+    height: 32,
+    borderRadius: 16,
+  },
+  audioVoiceLabel: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+  },
 });

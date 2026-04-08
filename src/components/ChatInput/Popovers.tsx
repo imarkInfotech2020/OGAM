@@ -6,7 +6,9 @@ import { useTheme } from '../../theme';
 import { ImageModeState } from '../../types';
 import { useAppStore, useTTSStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
-import { FONTS } from '../../constants';
+import { FONTS, TYPOGRAPHY } from '../../constants';
+import { KOKORO_VOICES } from '../../constants/kokoroModels';
+import type { KokoroVoiceId } from '../../constants/kokoroModels';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -261,3 +263,85 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
     </Modal>
   );
 };
+
+// ─── Voice Picker Popover ──────────────────────────────────────────────────
+
+interface VoicePickerPopoverProps {
+  visible: boolean;
+  onClose: () => void;
+  anchorY: number;
+  anchorX: number;
+}
+
+export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
+  visible, onClose, anchorY, anchorX,
+}) => {
+  const { colors } = useTheme();
+  const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
+  const { isSpeaking, stop, updateSettings } = useTTSStore();
+
+  if (!visible) return null;
+
+  const handleSelect = (id: KokoroVoiceId) => {
+    triggerHaptic('impactLight');
+    if (isSpeaking) { stop(); }
+    updateSettings({ kokoroVoiceId: id });
+    onClose();
+  };
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={popoverStyles.overlay}>
+          <TouchableWithoutFeedback>
+            <View style={[popoverStyles.popover, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              bottom: anchorY + 8,
+              right: anchorX,
+              minWidth: 200,
+            }]}>
+              {KOKORO_VOICES.map((voice) => {
+                const isActive = voice.id === kokoroVoiceId;
+                return (
+                  <TouchableOpacity
+                    key={voice.id}
+                    style={popoverStyles.row}
+                    onPress={() => handleSelect(voice.id)}
+                  >
+                    <Icon
+                      name="user"
+                      size={14}
+                      color={isActive ? colors.primary : colors.textMuted}
+                    />
+                    <View style={voicePickerStyles.labelCol}>
+                      <Text style={[popoverStyles.rowLabel, { color: isActive ? colors.primary : colors.text }]}>
+                        {voice.label}
+                      </Text>
+                      <Text style={[voicePickerStyles.accent, { color: colors.textMuted }]}>
+                        {voice.accent} {voice.gender === 'Female' ? 'F' : 'M'}
+                      </Text>
+                    </View>
+                    {isActive && (
+                      <Icon name="check" size={14} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
+
+const voicePickerStyles = StyleSheet.create({
+  labelCol: {
+    flex: 1,
+  },
+  accent: {
+    ...TYPOGRAPHY.meta,
+    marginTop: 1,
+  },
+});
