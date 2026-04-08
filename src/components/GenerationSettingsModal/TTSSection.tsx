@@ -110,7 +110,6 @@ const ModePicker: React.FC<{ areBothDownloaded: boolean }> = ({ areBothDownloade
 
 const VoicePicker: React.FC = () => {
   const { colors } = useTheme();
-  const modal = useThemedStyles(createModalStyles);
   const local = useThemedStyles(createLocalStyles);
   const { settings, updateSettings, kokoroReady, kokoroDownloadProgress } = useTTSStore();
   const supported = isExecutorchSupported();

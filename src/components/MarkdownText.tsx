@@ -16,7 +16,7 @@ export function preprocessMarkdown(text: string): string {
 
 /** Custom link rule — renders as inline Text so it wraps correctly inside list items */
 function createLinkRule(onPress: (url: string) => void) {
-  return (node: any, children: any, _parent: any, styles: any) => (
+  return (node: any, children: any, ...[, styles]: any[]) => (
     <Text
       key={node.key}
       accessibilityRole="link"
