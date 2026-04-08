@@ -284,10 +284,17 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
 
   const handleSelect = (voice: typeof KOKORO_VOICES[number]) => {
     triggerHaptic('impactLight');
-    if (isSpeaking) { stop(); }
-    // Apply persona's recommended speed along with the voice
-    updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
     onClose();
+    if (isSpeaking) {
+      // Stop playback and wait for native ExecuTorch worker to fully clean up
+      // before changing voice config — prevents SIGABRT crash
+      stop();
+      setTimeout(() => {
+        updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
+      }, 150);
+    } else {
+      updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
+    }
   };
 
   return (

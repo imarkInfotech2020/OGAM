@@ -251,7 +251,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   const isThisPlaying = isSpeaking && currentMessageId === messageId && !isPaused;
   const isThisPaused = isSpeaking && currentMessageId === messageId && isPaused;
-  const isThisAudible = isAudioPlaying && currentMessageId === messageId;
+  const isThisAudible = isAudioPlaying && currentMessageId === messageId && !isPaused;
   const isThisLoading = isThisPlaying && !isThisAudible;
 
   // ── Wall-clock elapsed timer ────────────────────────────────────────────
@@ -381,6 +381,8 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
       </View>
+      {/* Seek thumb dot */}
+      <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
     </TouchableOpacity>
   ) : null;
 
@@ -488,19 +490,29 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textSecondary,
   },
   progressTouchable: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     marginTop: -SPACING.xs,
+    position: 'relative' as const,
+    justifyContent: 'center' as const,
   },
   progressTrack: {
-    height: 3,
-    backgroundColor: `${colors.primary}15`,
+    height: 4,
+    backgroundColor: `${colors.primary}20`,
     borderRadius: 2,
     overflow: 'hidden' as const,
   },
   progressFill: {
     height: '100%' as const,
     borderRadius: 2,
-    opacity: 0.6,
+    opacity: 0.7,
+  },
+  progressThumb: {
+    position: 'absolute' as const,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: -6,
+    top: 4,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,
