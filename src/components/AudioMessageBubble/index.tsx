@@ -511,6 +511,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   seekBarTouchable: {
     paddingVertical: 10,
     position: 'relative' as const,
+    justifyContent: 'center' as const,
   },
   progressTrack: {
     height: 4,
@@ -528,7 +529,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     height: 12,
     borderRadius: 6,
     marginLeft: -6,
-    top: 4,
+    top: 7,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,

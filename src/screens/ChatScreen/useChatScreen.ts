@@ -64,21 +64,22 @@ export const useChatScreen = () => {
 
   // Stop TTS when navigating away, app backgrounded, or screen locked
   useEffect(() => {
-    const unsubscribe = navigation.addListener('blur', () => {
-      console.log('[ChatScreen] blur — stopping TTS');
+    const unsubBlur = navigation.addListener('blur', () => {
+      useTTSStore.getState().stop();
+    });
+    // beforeRemove fires on back button — more reliable than blur for native-stack
+    const unsubRemove = navigation.addListener('beforeRemove', () => {
       useTTSStore.getState().stop();
     });
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       const tts = useTTSStore.getState();
       if (nextState !== 'active') {
-        // Pause instead of stop so playback can resume when user returns
         if (tts.isSpeaking && !tts.isPaused) { tts.pause(); }
       } else {
-        // Resume playback when app comes back to foreground
         if (tts.isSpeaking && tts.isPaused) { tts.resume(); }
       }
     });
-    return () => { unsubscribe(); appStateSub.remove(); };
+    return () => { unsubBlur(); unsubRemove(); appStateSub.remove(); };
   }, [navigation]);
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
