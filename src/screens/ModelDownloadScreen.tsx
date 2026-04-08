@@ -220,13 +220,18 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
   const totalRamGB = hardwareService.getTotalMemoryGB();
 
-  // One best-fit trending model per family (highest params that fits device RAM)
+  // One best-fit trending model per family (ideal ≈ 40% of RAM, penalise > 75%)
   const trendingModelIds = React.useMemo(() => {
+    const score = (m: (typeof RECOMMENDED_MODELS)[number]) => {
+      const ratio = m.minRam / totalRamGB;
+      const penalty = ratio > 0.75 ? (ratio - 0.75) * 4 : 0;
+      return Math.abs(ratio - 0.4) + penalty;
+    };
     const ids = new Set<string>();
     for (const familyIds of Object.values(TRENDING_FAMILIES)) {
       const best = RECOMMENDED_MODELS
         .filter(m => familyIds.includes(m.id) && m.minRam <= totalRamGB)
-        .sort((a, b) => b.params - a.params)[0];
+        .sort((a, b) => score(a) - score(b))[0];
       if (best) ids.add(best.id);
     }
     return ids;
