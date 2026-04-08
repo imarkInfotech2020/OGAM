@@ -37,6 +37,7 @@ export interface TTSState {
 
   // Playback
   isSpeaking: boolean;
+  isPaused: boolean;
   /** True while LLM inference is running to generate audio tokens (before audio plays). OuteTTS only — Kokoro streams so this is never set. */
   isGeneratingAudio: boolean;
   currentMessageId: string | null;
@@ -44,6 +45,10 @@ export interface TTSState {
   // Kokoro (fast TTS, Android 13+ / iOS 17+)
   kokoroReady: boolean;
   kokoroDownloadProgress: number;
+  /** True only while Kokoro is actively pushing audio chunks (first chunk received) */
+  isAudioPlaying: boolean;
+  /** RMS amplitude of the current audio chunk (0–1), updated per chunk for waveform sync */
+  currentAmplitude: number;
 
   // Cache
   audioCacheSizeMB: number;
@@ -63,6 +68,8 @@ export interface TTSState {
   // Chat Mode
   speak: (text: string, messageId: string) => Promise<void>;
   stop: () => void;
+  pause: () => void;
+  resume: () => void;
 
   // Audio Mode
   generateAndSave: (
@@ -78,6 +85,8 @@ export interface TTSState {
   clearAudioCache: () => Promise<void>;
 
   setKokoroState: (ready: boolean, progress: number) => void;
+  setAudioPlaying: (playing: boolean) => void;
+  setCurrentAmplitude: (amplitude: number) => void;
   updateSettings: (patch: Partial<TTSSettings>) => void;
   clearError: () => void;
 }
@@ -94,10 +103,13 @@ export const useTTSStore = create<TTSState>()(
       isModelLoading: false,
       isModelLoaded: false,
       isSpeaking: false,
+      isPaused: false,
       isGeneratingAudio: false,
       currentMessageId: null,
       kokoroReady: false,
       kokoroDownloadProgress: 0,
+      isAudioPlaying: false,
+      currentAmplitude: 0,
       audioCacheSizeMB: 0,
       settings: {
         interfaceMode: 'chat',
@@ -181,21 +193,20 @@ export const useTTSStore = create<TTSState>()(
         if (get().kokoroReady && isExecutorchSupported()) {
           ttsService.stop(); // ensure OuteTTS is silent
           if (get().isSpeaking) {
-            // Cancel ongoing Kokoro generation and give it a moment to finish cleanup
             kokoroRef.stop(true);
             await new Promise<void>((r) => setTimeout(r, 80));
           }
-          // Truncate to keep generation snappy even for Kokoro
-          const truncated = text.length > 500 ? `${text.slice(0, 497)}...` : text;
-          set({ isSpeaking: true, isGeneratingAudio: false, currentMessageId: messageId, error: null });
+
+          set({ isSpeaking: true, isPaused: false, isAudioPlaying: false, isGeneratingAudio: false, currentMessageId: messageId, error: null });
           try {
-            await kokoroRef.speak(truncated, settings.speed);
+            kokoroRef.setKeepAlive(false);
+            await kokoroRef.speak(text, settings.speed);
           } catch (err) {
             const msg = err instanceof Error ? err.message : 'Speech failed';
             logger.error('[TTS Store] Kokoro speak error:', msg);
             set({ error: msg });
           } finally {
-            set({ isSpeaking: false, currentMessageId: null });
+            set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, currentMessageId: null });
           }
           return;
         }
@@ -224,7 +235,17 @@ export const useTTSStore = create<TTSState>()(
       stop: () => {
         kokoroRef.stop(true);
         ttsService.stop();
-        set({ isSpeaking: false, isGeneratingAudio: false, currentMessageId: null });
+        set({ isSpeaking: false, isPaused: false, isAudioPlaying: false, currentAmplitude: 0, isGeneratingAudio: false, currentMessageId: null });
+      },
+
+      pause: () => {
+        kokoroRef.pause();
+        set({ isPaused: true, isAudioPlaying: false, currentAmplitude: 0 });
+      },
+
+      resume: () => {
+        kokoroRef.resume();
+        set({ isPaused: false, isAudioPlaying: true });
       },
 
       // ── Audio Mode ──────────────────────────────────────────────────────────
@@ -279,6 +300,9 @@ export const useTTSStore = create<TTSState>()(
       setKokoroState: (ready, progress) => {
         set({ kokoroReady: ready, kokoroDownloadProgress: progress });
       },
+
+      setAudioPlaying: (playing) => set({ isAudioPlaying: playing }),
+      setCurrentAmplitude: (amplitude) => set({ currentAmplitude: amplitude }),
 
       updateSettings: (patch) => {
         set((state) => ({ settings: { ...state.settings, ...patch } }));
