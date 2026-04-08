@@ -9,6 +9,7 @@ import { stripControlTokens } from '../../utils/messageContent';
 import { Message } from '../../types';
 import '../../types/tts';
 import { ChatMessageItem } from './useChatScreen';
+import { parseThinkingContent } from '../../components/ChatMessage/utils';
 
 type MessageRendererProps = {
   item: Message | ChatMessageItem;
@@ -26,21 +27,14 @@ type MessageRendererProps = {
   onImagePress: (uri: string) => void;
 };
 
-type AudioBubbleProps = {
-  messageId: string;
-  audioPath: string;
-  waveformData: number[];
-  durationSeconds: number;
-  transcript: string;
-};
-
-function buildAudioBubbleProps(msg: Message): AudioBubbleProps {
+function buildAudioBubbleProps(msg: Message) {
   return {
     messageId: msg.id,
     audioPath: msg.audioPath ?? '',
     waveformData: msg.waveformData ?? [],
     durationSeconds: msg.audioDurationSeconds ?? 0,
     transcript: stripControlTokens(msg.content),
+    reasoningContent: msg.reasoningContent,
   };
 }
 
@@ -84,12 +78,54 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
     }
   }
 
-  // Audio Mode: show all assistant messages as audio bubbles when in audio mode,
-  // or messages that were explicitly generated in audio mode (isAudioModeMessage flag)
   const isAudioAssistant = msg.role === 'assistant' && !msg.isSystemInfo && !msg.toolCalls?.length;
-  if (isAudioAssistant && (ttsMode === 'audio' || msg.isAudioModeMessage) && !isStreamingThis) {
+
+  // Thinking placeholder + audio streaming: intercept before the audio bubble check
+  // so these don't accidentally render as empty AudioMessageBubbles.
+  // Let them fall through to ChatMessage which renders the proper chat bubble with dots.
+  const isThinkingItem = !!(msg as any).isThinking;
+  if (isAudioAssistant && ttsMode === 'audio' && (isStreamingThis || isThinkingItem)) {
+    // In audio mode: ChatMessage renders the 3-dot bubble for thinking,
+    // "Generating response..." for streaming text. Both inside a proper chat bubble.
+    return (
+      <ChatMessage
+        message={msg}
+        isStreaming={isStreamingThis}
+        onCopy={onCopy}
+        onRetry={onRetry}
+        onEdit={onEdit}
+        onGenerateImage={onGenerateImage}
+        onImagePress={onImagePress}
+        canGenerateImage={false}
+        showGenerationDetails={showGenerationDetails}
+        animateEntry={false}
+      />
+    );
+  }
+
+  // Audio Mode: show assistant messages as audio bubbles ONLY after streaming ends.
+  // In chat mode, all messages render as text (even ones generated in audio mode).
+  // If the message has reasoningContent, render it as a regular ChatMessage first
+  // (which shows the native ThinkingBlock), then the audio bubble below.
+  if (isAudioAssistant && ttsMode === 'audio' && !isStreamingThis) {
+    const hasThinking = !!msg.reasoningContent || !!parseThinkingContent(msg.content).thinking;
     const bubble = (
       <View style={audioStyles.assistantContainer}>
+        {hasThinking && (
+          <ChatMessage
+            message={{ ...msg, content: msg.reasoningContent ? '' : msg.content } as Message}
+            isStreaming={false}
+            onCopy={onCopy}
+            onRetry={onRetry}
+            onEdit={onEdit}
+            onGenerateImage={onGenerateImage}
+            onImagePress={onImagePress}
+            canGenerateImage={false}
+            showGenerationDetails={showGenerationDetails}
+            animateEntry={false}
+            showActions={false}
+          />
+        )}
         <AudioMessageBubble {...buildAudioBubbleProps(msg)} />
       </View>
     );
