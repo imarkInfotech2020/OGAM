@@ -253,6 +253,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   const isThisPaused = isSpeaking && currentMessageId === messageId && isPaused;
   const isThisAudible = isAudioPlaying && currentMessageId === messageId && !isPaused;
   const isThisLoading = isThisPlaying && !isThisAudible;
+  const [isSeeking, setIsSeeking] = useState(false);
 
   // ── Wall-clock elapsed timer ────────────────────────────────────────────
   const [localElapsed, setLocalElapsed] = useState(0);
@@ -319,9 +320,12 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     const seekSeconds = Math.floor(fraction * totalDurationRef.current);
     seekOffsetRef.current = seekSeconds;
     setLocalElapsed(seekSeconds);
-    // Stop current playback and re-speak from the seek point
+    // Keep UI stable during the stop→speak transition
+    setIsSeeking(true);
     stop();
-    setTimeout(() => speak(remaining, messageId), 200);
+    setTimeout(() => {
+      speak(remaining, messageId).finally(() => setIsSeeking(false));
+    }, 200);
   }, [transcript, audioPath, stop, speak, messageId]);
 
   const speedChip = (
@@ -367,7 +371,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   })();
   totalDurationRef.current = totalDuration;
 
-  const isThisActive = (isThisPlaying || isThisPaused) && currentMessageId === messageId;
+  const isThisActive = ((isThisPlaying || isThisPaused) && currentMessageId === messageId) || isSeeking;
   const progress = isThisActive ? Math.min(1, localElapsed / Math.max(1, totalDuration)) : 0;
 
   const durationText = (
@@ -414,6 +418,21 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
         )}
       </View>
 
+      {/* Full-width seekable progress bar */}
+      {isThisActive && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={handleSeekBarTap}
+          onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
+          style={styles.seekBarTouchable}
+        >
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+          </View>
+          <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+        </TouchableOpacity>
+      )}
+
       {/* Transcript toggle */}
       {transcript ? (
         <TouchableOpacity
@@ -436,21 +455,6 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <MarkdownText>{transcript}</MarkdownText>
         </View>
       ) : null}
-
-      {/* Full-width seekable progress bar — below transcript toggle */}
-      {isThisActive && (
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={handleSeekBarTap}
-          onLayout={(e) => { seekBarWidth.current = e.nativeEvent.layout.width; }}
-          style={styles.seekBarTouchable}
-        >
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-          </View>
-          <View style={[styles.progressThumb, { left: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-        </TouchableOpacity>
-      )}
     </View>
   );
 };
