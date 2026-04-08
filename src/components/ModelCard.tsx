@@ -42,6 +42,7 @@ interface ModelCardProps {
   onRepairVision?: () => void;
   onCancel?: () => void;
   compact?: boolean;
+  isTrending?: boolean;
 }
 
 function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
@@ -103,6 +104,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onRepairVision,
   onCancel,
   compact,
+  isTrending,
 }) => {
   const styles = useThemedStyles(createStyles);
 
@@ -145,6 +147,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               model={model}
               credibility={credibility}
               credibilityInfo={credibilityInfo}
+              isTrending={isTrending}
             />
           ) : (
             <StandardModelCardContent

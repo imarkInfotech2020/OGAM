@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { useThemedStyles, useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { createStyles } from './ModelCard.styles';
@@ -27,6 +28,7 @@ interface CompactModelCardContentProps {
   };
   credibility?: ModelCredibility;
   credibilityInfo: CredibilityInfo | null;
+  isTrending?: boolean;
 }
 
 function formatNumber(num: number): string {
@@ -65,7 +67,9 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
   model,
   credibility,
   credibilityInfo,
+  isTrending,
 }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
@@ -88,6 +92,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
               </Text>
             </View>
           )}
+          {isTrending && <MaterialIcon name="whatshot" size={14} color={colors.trending} />}
         </View>
         {model.downloads !== undefined && model.downloads > 0 && (
           <View style={styles.authorTag}>

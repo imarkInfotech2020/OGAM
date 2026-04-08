@@ -1661,37 +1661,30 @@ describe('ModelManager', () => {
   });
 
   describe('repairMmProj', () => {
-    it('emits onDownloadIdReady when download id resolves asynchronously', async () => {
+    it('emits onDownloadIdReady with the download id from startDownload', async () => {
       const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
       const initSpy = jest.spyOn(modelManager, 'initialize').mockResolvedValue(undefined);
       try {
-        let resolveDownloadId!: (id: number) => void;
-        const downloadIdPromise = new Promise<number>((resolve) => {
-          resolveDownloadId = resolve;
+        mockedBackgroundDownloadService.startDownload.mockResolvedValue({ downloadId: 321 } as any);
+
+        let completeCallback!: (event: any) => void;
+        mockedBackgroundDownloadService.onComplete.mockImplementation((_id: number, cb: any) => {
+          completeCallback = cb;
+          return jest.fn();
         });
-        let resolveDownload!: () => void;
-        const completionPromise = new Promise<void>((resolve) => {
-          resolveDownload = resolve;
-        });
-        mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({
-          downloadId: 0,
-          downloadIdPromise,
-          promise: completionPromise,
-        } as any);
 
         const onDownloadIdReady = jest.fn();
         const file = createModelFileWithMmProj({ name: 'vision-model.gguf', mmProjName: 'vision-model-mmproj.gguf' });
         const repairPromise = modelManager.repairMmProj('test/model', file, { onDownloadIdReady });
 
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-        expect(mockedBackgroundDownloadService.downloadFileTo).toHaveBeenCalled();
-        resolveDownloadId(321);
-        await Promise.resolve();
+        // Flush all microtasks (initialize → RNFS.exists → startDownload)
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
         expect(onDownloadIdReady).toHaveBeenCalledWith(321);
 
-        resolveDownload();
+        // Resolve the download
+        completeCallback({ localUri: 'file:///models/vision-model-mmproj.gguf' });
         await repairPromise;
       } finally {
         initSpy.mockRestore();

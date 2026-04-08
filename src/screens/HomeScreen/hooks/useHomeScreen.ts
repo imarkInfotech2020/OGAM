@@ -79,7 +79,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     generatedImages,
   } = useAppStore();
 
-  const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
+  const { conversations, setActiveConversation, deleteConversation } = useChatStore();
 
   // Remote server store for remote models
   const {
@@ -167,6 +167,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       const info = await hardwareService.getDeviceInfo();
       setDeviceInfo(info);
     }
+    await modelManager.linkOrphanMmProj();
     const models = await modelManager.getDownloadedModels();
     setDownloadedModels(models);
     const imageModels = await modelManager.getDownloadedImageModels();
@@ -223,11 +224,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    const modelId = activeTextModelId || activeImageModelId;
-    if (!modelId) { return; }
-    const conversationId = createConversation(modelId);
-    setActiveConversation(conversationId);
-    navigation.navigate('Chat', { conversationId });
+    // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
+    if (!activeTextModelId && !activeImageModelId) { return; }
+    navigation.navigate('Chat', {});
   };
 
   const continueChat = (conversationId: string) => {

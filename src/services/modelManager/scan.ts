@@ -36,12 +36,12 @@ function looksLikeVisionModel(model: DownloadedModel): boolean {
     fileLower.includes('vl') || fileLower.includes('vision');
 }
 
-function extractBaseName(fileName: string): string {
+export function extractBaseName(fileName: string): string {
   const match = fileName.match(/^(.+?)[-_](?:Q\d|q\d|F\d|f\d)/i);
   return match ? match[1].toLowerCase() : fileName.toLowerCase().replace('.gguf', '');
 }
 
-function findMatchingMmProj(
+export function findMatchingMmProj(
   baseName: string,
   mmProjFiles: RNFS.ReadDirItem[],
 ): RNFS.ReadDirItem | undefined {

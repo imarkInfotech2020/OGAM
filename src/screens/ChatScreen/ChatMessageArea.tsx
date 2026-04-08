@@ -10,6 +10,9 @@ import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 
 export type ChatMessageAreaProps = {
   flatListRef: React.RefObject<FlatList | null>;
@@ -25,7 +28,12 @@ export type ChatMessageAreaProps = {
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
+  const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [inputHeight, setInputHeight] = useState(84);
+  const activeModelRepoId = chat.activeModelId?.split('/').slice(0, 2).join('/');
+  const handleRepairVision = activeModelRepoId
+    ? () => tabNav.navigate('Main', { screen: 'ModelsTab', params: { repairModelId: activeModelRepoId } })
+    : undefined;
   const scrollToBottomStyle = useMemo(
     () => [styles.scrollToBottomContainer, { bottom: inputHeight + 8 }],
     [styles.scrollToBottomContainer, inputHeight],
@@ -118,6 +126,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             enabledToolCount={chat.enabledTools.length}
             supportsToolCalling={chat.supportsToolCalling}
             supportsThinking={chat.supportsThinking}
+            onRepairVision={handleRepairVision}
             activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
           />
         </AttachStep>

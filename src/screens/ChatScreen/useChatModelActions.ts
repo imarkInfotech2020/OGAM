@@ -161,18 +161,13 @@ export async function proceedWithModelLoadFn(
     await activeModelService.loadTextModel(model.id);
     const multimodalSupport = llmService.getMultimodalSupport();
     deps.setSupportsVision(multimodalSupport?.vision || false);
-    if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
+    if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
-      const convId = deps.activeConversationId || deps.createConversation(model.id);
-      if (convId) {
-        deps.addMessage(convId, {
-          role: 'assistant',
-          content: `_Model loaded: ${model.name} (${loadTime}s)_`,
-          isSystemInfo: true,
-        });
-      }
-    } else if (!deps.activeConversationId) {
-      deps.createConversation(model.id);
+      deps.addMessage(deps.activeConversationId, {
+        role: 'assistant',
+        content: `_Model loaded: ${model.name} (${loadTime}s)_`,
+        isSystemInfo: true,
+      });
     }
   } catch (error) {
     deps.setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
@@ -309,7 +304,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     if (activeModelInfo.isRemote) return;
     if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
 
-  }, [activeModelId]);
+  }, [activeModelId, activeModel?.mmProjPath]);
   useEffect(() => {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);

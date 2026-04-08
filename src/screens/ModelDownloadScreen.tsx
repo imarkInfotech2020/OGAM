@@ -12,7 +12,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { RECOMMENDED_MODELS, TYPOGRAPHY, SPACING } from '../constants';
+import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { hardwareService, modelManager, remoteServerManager } from '../services';
@@ -23,6 +23,37 @@ import { fetchModelFiles, NetworkSection } from './ModelDownloadHelpers';
 import logger from '../utils/logger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'> };
+
+interface RecommendedCardProps {
+  model: typeof RECOMMENDED_MODELS[number];
+  recFile: ModelFile;
+  index: number;
+  progress: { progress: number } | null | undefined;
+  downloaded: DownloadedModel | undefined;
+  totalRamGB: number;
+  isTrending: boolean;
+  onDownload: () => void;
+  onCancel: () => void;
+}
+
+const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, index, progress, downloaded, totalRamGB, isTrending, onDownload, onCancel }) => (
+  <ModelCard
+    key={model.id}
+    testID={`recommended-model-${index}`}
+    compact
+    model={{ id: model.id, name: model.name, author: model.id.split('/')[0], description: model.description, modelType: model.type, paramCount: model.params, minRamGB: model.minRam }}
+    file={recFile}
+    downloadedModel={downloaded}
+    isDownloaded={!!downloaded}
+    isDownloading={!!progress}
+    downloadProgress={progress?.progress}
+    isCompatible={model.minRam <= totalRamGB}
+    isTrending={isTrending}
+    onPress={() => {}}
+    onDownload={downloaded ? undefined : onDownload}
+    onCancel={progress ? onCancel : undefined}
+  />
+);
 
 export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -36,11 +67,15 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
   const [showServerModal, setShowServerModal] = useState(false);
   const healthCheckInFlight = useRef(false);
+  const cancelledKeys = useRef<Set<string>>(new Set());
+  const lastProgressUpdate = useRef<Record<string, number>>({});
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel } = useAppStore();
+  const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
+
+  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel, downloadedModels } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
 
@@ -118,16 +153,40 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [refreshServerHealth]);
 
+  const handleCancelDownload = async (key: string) => {
+    cancelledKeys.current.add(key);
+    const downloadId = downloadIds[key];
+    if (downloadId != null) {
+      try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
+    }
+    setDownloadProgress(key, null);
+    setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
+  };
+
   const handleDownload = async (modelId: string, file: ModelFile) => {
     const key = `${modelId}/${file.name}`;
+    cancelledKeys.current.delete(key);
     setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
     const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', error.message)); };
     try {
-      const info = await modelManager.downloadModelBackground(modelId, file, (p) => setDownloadProgress(key, p));
+      const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
+        if (cancelledKeys.current.has(key)) return;
+        const now = Date.now();
+        if (now - (lastProgressUpdate.current[key] ?? 0) < 500) return;
+        lastProgressUpdate.current[key] = now;
+        setDownloadProgress(key, p);
+      });
+      // If the user cancelled before downloadModelBackground resolved, kill it now
+      if (cancelledKeys.current.has(key)) {
+        try { await modelManager.cancelBackgroundDownload(info.downloadId); } catch { /* ignore */ }
+        return;
+      }
+      setDownloadIds(prev => ({ ...prev, [key]: info.downloadId }));
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
+        if (cancelledKeys.current.has(key)) return;
         setDownloadProgress(key, null);
+        setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
         addDownloadedModel(model);
-        setAlertState(showAlert('Download Complete!', `${model.name} has been downloaded successfully.`, [{ text: 'OK' }]));
       }, onError);
     } catch (error) { onError(error as Error); }
   };
@@ -136,31 +195,22 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     setConnectingServerId(server.id);
     try {
       const result = await remoteServerManager.testConnection(server.id);
-      if (result.success) {
-        setConnectedServerId(server.id);
-        const models = discoveredModels[server.id] || result.models || [];
-        if (models.length === 0) {
-          setAlertState(showAlert(
-            'Connected — No Models Found',
-            `${server.name} is reachable but has no models loaded. Start a model in Ollama/LM Studio, then reconnect.`,
-          ));
-          return;
-        }
-        const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
-        if (textModel) await remoteServerManager.setActiveRemoteTextModel(server.id, textModel.id);
-        setAlertState(showAlert(
-          'Connected!',
-          `${server.name} is ready with ${models.length} model${models.length !== 1 ? 's' : ''}. You can start chatting now.`,
-          [{ text: 'Continue', onPress: () => { setAlertState(hideAlert()); navigation.replace('Main'); } }],
-        ));
-      } else {
+      if (!result.success) {
         setAlertState(showAlert('Connection Failed', result.error || 'Could not connect to server.'));
+        return;
       }
-    } catch (e) {
-      setAlertState(showAlert('Connection Failed', (e as Error).message));
-    } finally {
-      setConnectingServerId(null);
-    }
+      setConnectedServerId(server.id);
+      const models = discoveredModels[server.id] || result.models || [];
+      if (models.length === 0) {
+        setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Ollama/LM Studio, then reconnect.`));
+        return;
+      }
+      const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
+      if (textModel) await remoteServerManager.setActiveRemoteTextModel(server.id, textModel.id);
+      setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length === 1 ? '' : 's'}. You can start chatting now.`,
+        [{ text: 'Continue', onPress: () => { setAlertState(hideAlert()); navigation.replace('Main'); } }]));
+    } catch (e) { setAlertState(showAlert('Connection Failed', (e as Error).message)); }
+    finally { setConnectingServerId(null); }
   };
 
   const handleServerSaved = useCallback(() => {
@@ -169,18 +219,29 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   }, [refreshServerHealth]);
 
   const totalRamGB = hardwareService.getTotalMemoryGB();
+
+  // One best-fit trending model per family (highest params that fits device RAM)
+  const trendingModelIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const familyIds of Object.values(TRENDING_FAMILIES)) {
+      const best = RECOMMENDED_MODELS
+        .filter(m => familyIds.includes(m.id) && m.minRam <= totalRamGB)
+        .sort((a, b) => b.params - a.params)[0];
+      if (best) ids.add(best.id);
+    }
+    return ids;
+  }, [totalRamGB]);
+
   const liveServers = servers.filter((s) => reachableServerIds.has(s.id));
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View testID="model-download-loading" style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Analyzing your device...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (isLoading) return (
+    <SafeAreaView style={styles.container}>
+      <View testID="model-download-loading" style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Analyzing your device...</Text>
+      </View>
+    </SafeAreaView>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -219,23 +280,21 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </Card>
 
-          {recommendedModels.map((model, index) => {
-            const files = modelFiles[model.id] || [];
-            const recFile = files[0];
-            const key = recFile ? `${model.id}/${recFile.name}` : '';
-            const progress = downloadProgress[key];
+          {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
+            const recFile = modelFiles[model.id][0];
+            const key = `${model.id}/${recFile.name}`;
             return (
-              <ModelCard
+              <RecommendedModelCard
                 key={model.id}
-                testID={`recommended-model-${index}`}
-                compact
-                model={{ id: model.id, name: model.name, author: model.id.split('/')[0], description: model.description, modelType: model.type, paramCount: model.params, minRamGB: model.minRam }}
-                file={recFile}
-                isDownloading={!!progress}
-                downloadProgress={progress?.progress}
-                isCompatible={model.minRam <= totalRamGB}
-                onPress={() => {}}
-                onDownload={recFile ? () => handleDownload(model.id, recFile) : undefined}
+                model={model}
+                recFile={recFile}
+                index={index}
+                progress={downloadProgress[key]}
+                downloaded={downloadedModels.find(d => d.id === `${model.id}/${recFile.name}`)}
+                totalRamGB={totalRamGB}
+                isTrending={trendingModelIds.has(model.id)}
+                onDownload={() => handleDownload(model.id, recFile)}
+                onCancel={() => handleCancelDownload(key)}
               />
             );
           })}
@@ -243,9 +302,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
           {recommendedModels.length === 0 && (
             <Card style={styles.warningCard}>
               <Text style={styles.warningTitle}>Limited Compatibility</Text>
-              <Text style={styles.warningText}>
-                Your device has limited memory. You can still browse and download smaller models from the model browser.
-              </Text>
+              <Text style={styles.warningText}>Your device has limited memory. You can still browse and download smaller models from the model browser.</Text>
             </Card>
           )}
         </ScrollView>

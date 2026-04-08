@@ -1,7 +1,9 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 export type RootStackParamList = {
   Onboarding: undefined;
   ModelDownload: undefined;
-  Main: undefined;
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
   // Former ChatsStack
   Chat: { conversationId?: string; projectId?: string };
   // Former ProjectsStack
@@ -27,6 +29,6 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ChatsTab: undefined;
   ProjectsTab: undefined;
-  ModelsTab: { initialTab?: 'text' | 'image' } | undefined;
+  ModelsTab: { initialTab?: 'text' | 'image'; repairModelId?: string } | undefined;
   SettingsTab: undefined;
 };

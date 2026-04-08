@@ -182,22 +182,26 @@ jest.mock('react-native-vector-icons/Feather', () => {
 // Mock the NetworkSection component to simplify screen-level tests
 const mockOnScanNetwork = jest.fn();
 const mockOnAddManually = jest.fn();
+const mockOnConnectServer = jest.fn();
 jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
   const actual = jest.requireActual('../../../src/screens/ModelDownloadHelpers');
   return {
     ...actual,
-    NetworkSection: ({ onScanNetwork, onAddManually, servers, isCheckingNetwork, isScanning }: any) => {
+    NetworkSection: ({ onScanNetwork, onAddManually, onConnectServer, servers, isCheckingNetwork, isScanning }: any) => {
       const { View, Text, TouchableOpacity } = require('react-native');
       // Store refs so tests can call them
       mockOnScanNetwork.mockImplementation(onScanNetwork);
       mockOnAddManually.mockImplementation(onAddManually);
+      mockOnConnectServer.mockImplementation(onConnectServer);
       return (
         <View testID="network-section">
           <Text>Network Models</Text>
           {isCheckingNetwork && <Text testID="network-checking">Scanning...</Text>}
           {isScanning && <Text testID="network-scanning">Scanning network...</Text>}
           {servers && servers.map((s: any) => (
-            <Text key={s.id} testID={`network-server-${s.id}`}>{s.name}</Text>
+            <TouchableOpacity key={s.id} testID={`connect-server-${s.id}`} onPress={() => onConnectServer(s)}>
+              <Text testID={`network-server-${s.id}`}>{s.name}</Text>
+            </TouchableOpacity>
           ))}
           <TouchableOpacity testID="scan-network-btn" onPress={onScanNetwork}>
             <Text>Scan Network</Text>
@@ -393,14 +397,15 @@ describe('ModelDownloadScreen', () => {
     return { result, completedModel };
   }
 
-  it('download calls onComplete callback and shows alert', async () => {
+  it('download calls onComplete callback and marks model as downloaded', async () => {
     const { completedModel } = await setupDownloadCompletion();
 
     expect(mockAppState.addDownloadedModel).toHaveBeenCalledWith(completedModel);
-    expect(mockShowAlert).toHaveBeenCalledWith(
+    // No alert on completion — success is shown via the tick on the card
+    expect(mockShowAlert).not.toHaveBeenCalledWith(
       'Download Complete!',
-      expect.stringContaining('downloaded successfully'),
-      expect.any(Array),
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -455,5 +460,102 @@ describe('ModelDownloadScreen', () => {
     });
 
     expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to initialize. Please try again.');
+  });
+
+  // ===========================================================================
+  // handleConnectServer
+  // ===========================================================================
+
+  const MOCK_SERVER = { id: 'srv-1', name: 'My Server', endpoint: 'http://192.168.1.10:11434', providerType: 'openai-compatible' as const };
+
+  it('handleConnectServer — success with models shows connected alert and sets active model', async () => {
+    const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
+    const mockModels = [
+      { id: 'llama3', capabilities: { supportsVision: false } },
+      { id: 'llava', capabilities: { supportsVision: true } },
+    ];
+    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: mockModels });
+    mockRemoteServerState.servers = [MOCK_SERVER];
+    mockRemoteServerState.discoveredModels = {};
+
+    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    await act(async () => {
+      await mockOnConnectServer(MOCK_SERVER);
+    });
+
+    expect(mockRsm.setActiveRemoteTextModel).toHaveBeenCalledWith('srv-1', 'llama3');
+    expect(mockShowAlert).toHaveBeenCalledWith('Connected!', expect.stringContaining('My Server'), expect.any(Array));
+  });
+
+  it('handleConnectServer — success with no models shows "No Models Found" alert', async () => {
+    const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
+    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: [] });
+    mockRemoteServerState.servers = [MOCK_SERVER];
+    mockRemoteServerState.discoveredModels = {};
+
+    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    await act(async () => {
+      await mockOnConnectServer(MOCK_SERVER);
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledWith('Connected — No Models Found', expect.stringContaining('My Server'));
+    expect(mockRsm.setActiveRemoteTextModel).not.toHaveBeenCalled();
+  });
+
+  it('handleConnectServer — connection failure shows Connection Failed alert', async () => {
+    const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
+    mockRsm.testConnection.mockResolvedValueOnce({ success: false, error: 'Timeout' });
+
+    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    await act(async () => {
+      await mockOnConnectServer(MOCK_SERVER);
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledWith('Connection Failed', 'Timeout');
+  });
+
+  // ===========================================================================
+  // handleScanNetwork
+  // ===========================================================================
+
+  it('handleScanNetwork — scan error shows Scan Failed alert', async () => {
+    const { discoverLANServers } = jest.requireMock('../../../src/services/networkDiscovery');
+    discoverLANServers.mockRejectedValueOnce(new Error('wifi off'));
+
+    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    const scanBtn = result.getByTestId('scan-network-btn');
+    await act(async () => {
+      fireEvent.press(scanBtn);
+      await flushPromises();
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledWith('Scan Failed', expect.stringContaining('Could not scan'));
+  });
+
+  it('handleScanNetwork — no reachable servers shows No Servers Found alert', async () => {
+    const { discoverLANServers } = jest.requireMock('../../../src/services/networkDiscovery');
+    discoverLANServers.mockResolvedValueOnce([]);
+    // testConnection returns failure so reachable set is empty
+    mockRemoteServerState.testConnection.mockResolvedValue({ success: false });
+    mockRemoteServerState.servers = [];
+
+    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    await flushPromises();
+
+    const scanBtn = result.getByTestId('scan-network-btn');
+    await act(async () => {
+      fireEvent.press(scanBtn);
+      await flushPromises();
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledWith('No Servers Found', expect.stringContaining('WiFi'));
   });
 });

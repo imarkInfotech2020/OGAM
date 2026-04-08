@@ -131,6 +131,8 @@ export const useChatScreen = () => {
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
     setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
+    createConversation,
+    pendingProjectId: route.params?.projectId,
   };
 
   const modelDeps = {
@@ -164,12 +166,11 @@ export const useChatScreen = () => {
   }, [handleQueuedSend]);
 
   useEffect(() => {
-    const { conversationId, projectId } = route.params || {};
+    const { conversationId } = route.params || {};
     if (conversationId) { setActiveConversation(conversationId); }
-    // Use modelId from activeModelInfo for both local and remote models
-    else if (activeModelInfo.modelId) { createConversation(activeModelInfo.modelId, undefined, projectId); }
+    else { setActiveConversation(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.params?.conversationId, route.params?.projectId]);
+  }, [route.params?.conversationId]);
 
   useEffect(() => {
     if (generatingForConversationRef.current && generatingForConversationRef.current !== activeConversationId) {

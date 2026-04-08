@@ -85,6 +85,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
 jest.mock('../../../src/services/modelManager', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
+      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
 }));
@@ -420,7 +421,7 @@ describe('HomeScreen', () => {
       expect(getByText('Browse Models')).toBeTruthy();
     });
 
-    it('navigates to ChatsTab when New Chat pressed', () => {
+    it('navigates to Chat when New Chat pressed', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
@@ -430,13 +431,10 @@ describe('HomeScreen', () => {
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('new-chat-button'));
 
-      expect(mockNavigate).toHaveBeenCalledWith(
-        'Chat',
-        expect.objectContaining({ conversationId: expect.any(String) })
-      );
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
 
-    it('creates conversation in chat store when New Chat pressed', () => {
+    it('does not create a conversation eagerly when New Chat pressed', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
@@ -446,9 +444,9 @@ describe('HomeScreen', () => {
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('new-chat-button'));
 
+      // Conversation is created lazily on first send, not on navigation
       const conversations = useChatStore.getState().conversations;
-      expect(conversations.length).toBe(1);
-      expect(conversations[0].modelId).toBe(model.id);
+      expect(conversations.length).toBe(0);
     });
 
     it('navigates to ModelsTab when Browse Models pressed', () => {

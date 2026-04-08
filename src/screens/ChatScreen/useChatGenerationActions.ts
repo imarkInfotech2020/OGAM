@@ -63,6 +63,8 @@ export type GenerationDeps = {
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
+  createConversation: (modelId: string, title?: string, projectId?: string) => string;
+  pendingProjectId?: string;
 };
 function applyCompactionPrefix(conversation: any, systemPrompt: string, messages: Message[]): { prefix: Message[]; filtered: Message[] } {
   const prefix: Message[] = [{ id: 'system', role: 'system', content: systemPrompt, timestamp: 0 }];
@@ -274,11 +276,16 @@ let _msgIdSeq = 0; const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toStri
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
   const { text, attachments, imageMode, startGeneration } = call;
-  if (!deps.activeConversationId || !deps.hasActiveModel) {
+  if (!deps.hasActiveModel) {
     deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
     return;
   }
-  const targetConversationId = deps.activeConversationId;
+  let targetConversationId = deps.activeConversationId;
+  if (!targetConversationId) {
+    const fallbackModelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;
+    targetConversationId = deps.createConversation(fallbackModelId!, undefined, deps.pendingProjectId);
+    deps.setActiveConversation(targetConversationId);
+  }
   let messageText = appendAttachmentText(text, attachments);
   const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
   if (shouldGenerateImage && deps.activeImageModel) {

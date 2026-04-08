@@ -339,7 +339,7 @@ describe('fetchModelFiles', () => {
     expect(result['test/model']).toEqual([q4kmFile]);
   });
 
-  it('does not treat Q4_K_S or Q4_0 as Q4_K_M', async () => {
+  it('does not treat Q4_K_S or Q4_0 as Q4_K_M — model excluded', async () => {
     const files = [
       { name: 'model-Q4_K_S.gguf', size: 3800000000, quantization: 'Q4_K_S', downloadUrl: 'https://example.com/q4ks' },
       { name: 'model-Q4_0.gguf', size: 3500000000, quantization: 'Q4_0', downloadUrl: 'https://example.com/q40' },
@@ -348,11 +348,11 @@ describe('fetchModelFiles', () => {
     mockGetModelFiles.mockResolvedValueOnce(files);
 
     const result = await fetchModelFiles([{ id: 'test/model' }]);
-    // No Q4_K_M → falls back to first 2 files
-    expect(result['test/model']).toEqual([files[0], files[1]]);
+    // No Q4_K_M → model excluded from results
+    expect(result['test/model']).toBeUndefined();
   });
 
-  it('falls back to first 2 files when no Q4_K_M present', async () => {
+  it('excludes model from results when no Q4_K_M present', async () => {
     const files = [
       { name: 'model-Q8_0.gguf', size: 8e9, quantization: 'Q8_0', downloadUrl: 'https://example.com/1' },
       { name: 'model-Q5_1.gguf', size: 5e9, quantization: 'Q5_1', downloadUrl: 'https://example.com/2' },
@@ -361,7 +361,7 @@ describe('fetchModelFiles', () => {
     mockGetModelFiles.mockResolvedValueOnce(files);
 
     const result = await fetchModelFiles([{ id: 'test/model' }]);
-    expect(result['test/model']).toEqual([files[0], files[1]]);
+    expect(result['test/model']).toBeUndefined();
   });
 
   it('handles fetch errors gracefully', async () => {

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -6,6 +6,7 @@ import { MainTabParamList } from '../../navigation/types';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
+import { RECOMMENDED_MODELS } from '../../constants';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useModelsScreen } from './useModelsScreen';
 import { createStyles } from './styles';
@@ -23,18 +24,23 @@ export const ModelsScreen: React.FC = () => {
   // vm.setSelectedModel / vm.setModelFiles are useState setters — stable across renders.
   // Do NOT use [vm] as dependency — vm is a new object every render, which would
   // cause the cleanup to fire on every re-render and immediately undo model selection.
+  const didAutoSelect = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      const initialTab = route.params?.initialTab;
-      if (initialTab) {
-        vm.setActiveTab(initialTab);
+      const { initialTab, repairModelId } = route.params ?? {};
+      if (initialTab) vm.setActiveTab(initialTab);
+      if (repairModelId && !didAutoSelect.current) {
+        didAutoSelect.current = true;
+        const match = RECOMMENDED_MODELS.find(m => m.id === repairModelId);
+        if (match) vm.handleSelectModel({ id: match.id, name: match.name, author: match.id.split('/')[0], description: match.description, modelType: match.type, paramCount: match.params, minRamGB: match.minRam, downloads: 0, likes: 0, tags: [], lastModified: '', files: [] });
       }
       return () => {
+        didAutoSelect.current = false;
         vm.setSelectedModel(null);
         vm.setModelFiles([]);
       };
-
-    }, [route.params?.initialTab]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [route.params?.initialTab, route.params?.repairModelId]),
   );
 
   const isShowingDetail = vm.activeTab === 'text' && vm.selectedModel !== null;
@@ -138,6 +144,7 @@ export const ModelsScreen: React.FC = () => {
           setTextFiltersVisible={vm.setTextFiltersVisible}
           filteredResults={vm.filteredResults}
           recommendedAsModelInfo={vm.recommendedAsModelInfo}
+          trendingAsModelInfo={vm.trendingAsModelInfo}
           ramGB={vm.ramGB}
           deviceRecommendation={vm.deviceRecommendation}
           hasActiveFilters={vm.hasActiveFilters}
@@ -161,6 +168,7 @@ export const ModelsScreen: React.FC = () => {
           setSourceFilter={vm.setSourceFilter}
           setSizeFilter={vm.setSizeFilter}
           setQuantFilter={vm.setQuantFilter}
+          setSortOption={vm.setSortOption}
           isModelDownloaded={vm.isModelDownloaded}
           getDownloadedModel={vm.getDownloadedModel}
         />

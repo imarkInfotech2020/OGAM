@@ -173,12 +173,12 @@ describe('proceedWithModelLoadFn', () => {
     expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
   });
 
-  it('calls createConversation when no active conversation and showGenerationDetails=false', async () => {
+  it('does not create a conversation when no active conversation and showGenerationDetails=false', async () => {
     mockLoadTextModel.mockResolvedValueOnce(undefined);
     const deps = makeDeps({ activeConversationId: null, settings: { showGenerationDetails: false } });
     const model = createDownloadedModel({ id: 'model-2' });
     await proceedWithModelLoadFn(deps, model);
-    expect(deps.createConversation).toHaveBeenCalledWith('model-2');
+    expect(deps.createConversation).not.toHaveBeenCalled();
     expect(deps.addMessage).not.toHaveBeenCalled();
   });
 

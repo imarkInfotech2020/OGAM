@@ -32,6 +32,7 @@ interface ChatInputProps {
   enabledToolCount?: number;
   supportsToolCalling?: boolean;
   supportsThinking?: boolean;
+  onRepairVision?: () => void;
   /** When set, mounts a single AttachStep for that index. Only one at a time to avoid waypoint dots. */
   activeSpotlight?: number | null;
 }
@@ -58,6 +59,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   enabledToolCount = 0,
   supportsToolCalling = false,
   supportsThinking = false,
+  onRepairVision,
   activeSpotlight = null,
 }) => {
   const { colors } = useTheme();
@@ -114,7 +116,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleVisionPress = () => {
-    if (!supportsVision) { setAlertState(showAlert('Vision Not Supported', 'Load a vision-capable model (with mmproj) to enable image input.', [{ text: 'OK' }])); return; }
+    if (!supportsVision) {
+      setAlertState(showAlert(
+        'Vision Not Supported',
+        'The loaded model does not have vision support.\n\nIf this model supports vision, use the repair option in the Models screen.',
+        [
+          { text: 'Cancel', onPress: () => setAlertState(hideAlert()) },
+          ...(onRepairVision ? [{ text: 'Go to Models', onPress: () => { setAlertState(hideAlert()); onRepairVision(); } }] : [{ text: 'OK' }]),
+        ],
+      ));
+      return;
+    }
     handlePickImage();
   };
 

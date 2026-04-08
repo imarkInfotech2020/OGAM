@@ -190,6 +190,7 @@ jest.mock('../../../src/services/hardware', () => ({
 jest.mock('../../../src/services/modelManager', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
+      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
     deleteModel: jest.fn(() => Promise.resolve()),
   },
@@ -1101,7 +1102,7 @@ describe('ChatScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('creates new conversation when no conversationId in route params', () => {
+    it('does not create a conversation on render when no conversationId in route params', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
@@ -1112,8 +1113,9 @@ describe('ChatScreen', () => {
 
       renderChatScreen();
 
+      // Conversation is deferred until the first message is sent
       const conversations = useChatStore.getState().conversations;
-      expect(conversations.length).toBeGreaterThan(0);
+      expect(conversations.length).toBe(0);
     });
 
     it('shows "New Chat" as title for conversations without a title', () => {
@@ -1138,7 +1140,8 @@ describe('ChatScreen', () => {
   // ============================================================================
   describe('delete conversation', () => {
     it('shows delete button in settings modal', () => {
-      setupFullChat();
+      const { conversationId } = setupFullChat();
+      mockRoute.params = { conversationId };
 
       const { getByTestId } = renderChatScreen();
       fireEvent.press(getByTestId('chat-settings-icon'));
@@ -1146,7 +1149,8 @@ describe('ChatScreen', () => {
     });
 
     it('shows confirmation alert when delete is pressed', () => {
-      setupFullChat();
+      const { conversationId } = setupFullChat();
+      mockRoute.params = { conversationId };
 
       const { getByTestId, queryByTestId } = renderChatScreen();
       fireEvent.press(getByTestId('chat-settings-icon'));
@@ -1157,7 +1161,8 @@ describe('ChatScreen', () => {
     });
 
     it('shows Cancel and Delete buttons in confirmation alert', () => {
-      setupFullChat();
+      const { conversationId } = setupFullChat();
+      mockRoute.params = { conversationId };
 
       const { getByTestId } = renderChatScreen();
       fireEvent.press(getByTestId('chat-settings-icon'));
@@ -1168,7 +1173,8 @@ describe('ChatScreen', () => {
     });
 
     it('closes alert when Cancel is pressed', () => {
-      setupFullChat();
+      const { conversationId } = setupFullChat();
+      mockRoute.params = { conversationId };
 
       const { getByTestId, queryByTestId } = renderChatScreen();
       fireEvent.press(getByTestId('chat-settings-icon'));
@@ -1590,7 +1596,7 @@ describe('ChatScreen', () => {
       expect(getByText('Existing Chat')).toBeTruthy();
     });
 
-    it('handles projectId in route params for new conversation', () => {
+    it('does not create a conversation on render when only projectId is in route params', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
@@ -1605,8 +1611,9 @@ describe('ChatScreen', () => {
 
       renderChatScreen();
 
+      // Conversation is deferred until the first message is sent
       const conversations = useChatStore.getState().conversations;
-      expect(conversations.length).toBeGreaterThan(0);
+      expect(conversations.length).toBe(0);
     });
   });
 
@@ -3292,8 +3299,8 @@ describe('ChatScreen', () => {
   // ============================================================================
   // proceedWithModelLoad with showGenerationDetails and no activeConversationId — lines 485-495
   // ============================================================================
-  describe('proceedWithModelLoad creates conversation when none exists', () => {
-    it('creates new conversation when model loads and no conversation exists', async () => {
+  describe('proceedWithModelLoad with no active conversation', () => {
+    it('does not create a conversation when model loads and no conversation exists', async () => {
       const model1 = createDownloadedModel({ id: 'proc-model-1', name: 'Current' });
       const model2 = createDownloadedModel({ id: 'proc-model-2', name: 'New Model', filePath: '/proc2.gguf' });
       useAppStore.setState({
@@ -3321,9 +3328,9 @@ describe('ChatScreen', () => {
       await act(async () => { fireEvent.press(getByTestId('select-model-proc-model-2')); });
       await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
-      // A new conversation should have been created
+      // Conversation creation is deferred until user sends a message
       const conversations = useChatStore.getState().conversations;
-      expect(conversations.length).toBeGreaterThan(0);
+      expect(conversations.length).toBe(0);
     });
   });
 
