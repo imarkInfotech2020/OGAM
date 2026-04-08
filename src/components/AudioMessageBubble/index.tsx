@@ -565,7 +565,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     height: 12,
     borderRadius: 6,
     marginLeft: -6,
-    top: 7,
+    top: 6,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,
