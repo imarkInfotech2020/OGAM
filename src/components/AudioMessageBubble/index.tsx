@@ -292,6 +292,25 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     updateSettings({ speed: SPEED_STEPS[next] });
   }, [speedIndex, updateSettings]);
 
+  /** Seek to a position by re-speaking from a character offset in the transcript */
+  const handleSeek = useCallback((fraction: number) => {
+    if (!transcript || audioPath) return; // only for AI TTS bubbles
+    const text = stripMarkdownForSpeech(transcript);
+    const charOffset = Math.floor(fraction * text.length);
+    // Find the nearest sentence boundary to avoid cutting mid-word
+    const seekPoint = text.lastIndexOf('. ', charOffset) + 2 || charOffset;
+    const remaining = text.slice(seekPoint).trim();
+    if (!remaining) return;
+    // Set elapsed to the seek position so progress bar updates
+    const seekSeconds = Math.floor(fraction * totalDurationRef.current);
+    startTimeRef.current = Date.now() - seekSeconds * 1000;
+    pausedAtRef.current = 0;
+    setLocalElapsed(seekSeconds);
+    // Stop current playback and re-speak from the seek point
+    stop();
+    setTimeout(() => speak(remaining, messageId), 100);
+  }, [transcript, audioPath, stop, speak, messageId]);
+
   const speedChip = (
     <TouchableOpacity
       onPress={handleSpeedCycle}
@@ -325,6 +344,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   );
 
   // Estimated total duration — adjusted by current playback speed
+  const totalDurationRef = useRef(0);
   const currentSpeed = SPEED_STEPS[speedIndex] ?? 1;
   const totalDuration = (() => {
     if (!audioPath && transcript) {
@@ -333,6 +353,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     }
     return durationSeconds;
   })();
+  totalDurationRef.current = totalDuration;
 
   const isThisActive = (isThisPlaying || isThisPaused) && currentMessageId === messageId;
   const progress = isThisActive ? Math.min(1, localElapsed / Math.max(1, totalDuration)) : 0;
@@ -343,11 +364,24 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </Text>
   );
 
-  // ── Progress bar — thin line under waveform showing listening position ──
+  // ── Seekable progress bar — tap to jump to a position ──
+  const handleProgressTap = useCallback((e: any) => {
+    e.target.measure((_x: number, _y: number, width: number) => {
+      const fraction = Math.max(0, Math.min(1, e.nativeEvent.locationX / width));
+      handleSeek(fraction);
+    });
+  }, [handleSeek]);
+
   const progressBar = isThisActive ? (
-    <View style={styles.progressTrack}>
-      <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
-    </View>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={handleProgressTap}
+      style={styles.progressTouchable}
+    >
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: colors.primary }]} />
+      </View>
+    </TouchableOpacity>
   ) : null;
 
   return (
@@ -453,12 +487,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.metaSmall,
     color: colors.textSecondary,
   },
+  progressTouchable: {
+    paddingVertical: 6,
+    marginTop: -SPACING.xs,
+  },
   progressTrack: {
     height: 3,
     backgroundColor: `${colors.primary}15`,
     borderRadius: 2,
     overflow: 'hidden' as const,
-    marginTop: -SPACING.xs,
   },
   progressFill: {
     height: '100%' as const,
