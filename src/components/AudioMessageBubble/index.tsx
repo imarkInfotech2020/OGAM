@@ -316,7 +316,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     <TouchableOpacity
       onPress={handleSpeedCycle}
       style={styles.speedChip}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      hitSlop={{ top: 8, left: 8, right: 8 }}
     >
       <Text style={styles.speedText}>{speed}x</Text>
     </TouchableOpacity>
@@ -334,7 +334,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     <TouchableOpacity
       onPress={handlePlayPause}
       style={styles.playButton}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      hitSlop={{ top: 8, left: 8, right: 8 }}
     >
       <Icon
         name={isThisPlaying ? 'pause' : 'play'}
