@@ -43,7 +43,6 @@ export const TranscribingState: React.FC<TranscribingStateProps> = ({ asSendButt
       <Animated.View style={[styles.button, asSendButton ? styles.buttonAsSendLoading : styles.buttonTranscribing, { transform: [{ rotate: spin }] }]}>
         {asSendButton ? <Icon name="mic" size={18} color={colors.info} /> : <View style={styles.loadingIndicator} />}
       </Animated.View>
-      {!asSendButton && <Text style={styles.transcribingText}>Transcribing...</Text>}
     </View>
   );
 };
