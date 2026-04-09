@@ -290,8 +290,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   seekOverlay: {
     position: 'absolute' as const,
     top: 0,
-    left: -4,
-    right: -4,
+    left: -16,
+    right: -16,
     bottom: 0,
     justifyContent: 'center' as const,
   },

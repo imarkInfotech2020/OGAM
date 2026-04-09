@@ -165,7 +165,6 @@ export const SeekBar: React.FC<{
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
 
-  const isActive = displayProgress > 0 || isSeeking;
   return (
     <Slider
       style={styles.seekSlider}
@@ -174,7 +173,7 @@ export const SeekBar: React.FC<{
       maximumValue={1}
       minimumTrackTintColor="transparent"
       maximumTrackTintColor="transparent"
-      thumbTintColor={isActive ? colors.primary : 'transparent'}
+      thumbTintColor={colors.primary}
       onSlidingStart={(val) => { setIsSeeking(true); setSeekValue(val); }}
       onValueChange={(val) => { if (isSeeking) setSeekValue(val); }}
       onSlidingComplete={(val) => { setIsSeeking(false); onSeek(val); }}
