@@ -50,13 +50,21 @@ export const KokoroTTSManager: React.FC = () => {
   const audioCtxRef = useRef<AudioContext | null>(null);
   _audioCtxRef = audioCtxRef; // Expose to module-level kokoroRef for pause/resume
 
-  // Only update the voice config when NOT speaking to avoid crashing ExecuTorch
-  // mid-stream. Queue the change and apply when idle.
+  // Only update the voice config after speaking fully stops AND native ExecuTorch
+  // has time to clean up. A 500ms cooldown after isSpeaking→false prevents SIGABRT.
   const [activeVoiceId, setActiveVoiceId] = React.useState(kokoroVoiceId);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
-    if (!isSpeaking && kokoroVoiceId !== activeVoiceId) {
-      setActiveVoiceId(kokoroVoiceId);
+    if (isSpeaking || kokoroVoiceId === activeVoiceId) {
+      if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; }
+      return;
     }
+    // Delay voice switch to let native thread fully terminate
+    cooldownRef.current = setTimeout(() => {
+      setActiveVoiceId(kokoroVoiceId);
+      cooldownRef.current = null;
+    }, 500);
+    return () => { if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; } };
   }, [kokoroVoiceId, isSpeaking, activeVoiceId]);
 
   const tts = useTextToSpeech({

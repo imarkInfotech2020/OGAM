@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { stripMarkdownForSpeech } from '../../utils/messageContent';
@@ -220,34 +221,59 @@ export const TranscriptSection: React.FC<{
   );
 };
 
-/** Renders transcript with words highlighted up to the current playback position */
+/** Renders transcript with the currently spoken word highlighted + auto-scroll */
 const HighlightedTranscript: React.FC<{
   text: string;
   progress: number;
   colors: ThemeColors;
   styles: any;
-}> = ({ text, progress, colors, styles }) => {
-  const words = text.split(/(\s+)/); // preserve whitespace
+}> = ({ text, progress, styles }) => {
+  const scrollRef = useRef<ScrollView>(null);
+  const words = useRef(text.split(/(\s+)/)).current; // preserve whitespace
   const totalChars = text.length;
-  const highlightUpTo = Math.floor(progress * totalChars);
+  const cursorPos = Math.floor(progress * totalChars);
 
+  // Find which word the cursor is in
   let charCount = 0;
+  let activeWordIndex = -1;
+  for (let i = 0; i < words.length; i++) {
+    const wordEnd = charCount + words[i].length;
+    if (charCount <= cursorPos && cursorPos < wordEnd && words[i].trim()) {
+      activeWordIndex = i;
+      break;
+    }
+    charCount += words[i].length;
+  }
+
+  // Auto-scroll: estimate Y from word index ratio
+  useEffect(() => {
+    if (activeWordIndex < 0 || !scrollRef.current) return;
+    const wordRatio = activeWordIndex / words.length;
+    // Rough estimate: 20px line height, ~8 words per line
+    const estimatedY = Math.max(0, (wordRatio * words.length / 8) * 20 - 40);
+    scrollRef.current.scrollTo({ y: estimatedY, animated: true });
+  }, [activeWordIndex, words.length]);
+
+  charCount = 0;
   return (
-    <Text style={styles.transcriptText}>
-      {words.map((word, i) => {
-        const wordStart = charCount;
-        charCount += word.length;
-        const isSpoken = wordStart < highlightUpTo;
-        return (
-          <Text
-            key={i}
-            style={{ color: isSpoken ? colors.text : colors.textMuted }}
-          >
-            {word}
-          </Text>
-        );
-      })}
-    </Text>
+    <ScrollView ref={scrollRef} style={styles.transcriptScroll} nestedScrollEnabled>
+      <Text style={styles.transcriptText}>
+        {words.map((word, i) => {
+          charCount += word.length;
+          const isCurrent = i === activeWordIndex;
+          return (
+            <Text
+              key={i}
+              style={isCurrent
+                ? styles.transcriptWordActive
+                : styles.transcriptWordInactive}
+            >
+              {word}
+            </Text>
+          );
+        })}
+      </Text>
+    </ScrollView>
   );
 };
 

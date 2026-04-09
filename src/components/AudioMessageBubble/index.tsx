@@ -287,8 +287,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   transcriptContent: {
     paddingTop: SPACING.xs,
   },
+  transcriptScroll: {
+    maxHeight: 120,
+  },
   transcriptText: {
     ...TYPOGRAPHY.bodySmall,
     lineHeight: 20,
+  },
+  transcriptWordActive: {
+    color: colors.primary,
+    fontWeight: '400' as const,
+    backgroundColor: `${colors.primary}15`,
+    borderRadius: 2,
+  },
+  transcriptWordInactive: {
+    color: colors.textMuted,
   },
 });
