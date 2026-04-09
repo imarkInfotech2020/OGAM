@@ -30,6 +30,10 @@ import java.util.concurrent.Executors
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
+    init {
+        DownloadEventBridge.attach(reactContext)
+    }
+
     private fun safeReject(promise: Promise, code: String, message: String, throwable: Throwable? = null) =
         SafePromise(promise, NAME).reject(code, message, throwable)
 
@@ -200,6 +204,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     private val pollRunnable = object : Runnable {
         override fun run() {
             if (isPolling) {
+                pollWorkerDownloads()
                 pollAllDownloads()
                 handler.postDelayed(this, POLL_INTERVAL_MS)
             }
@@ -224,6 +229,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     // --- Network connectivity ---
     @Volatile private var networkAvailable = true
     private var networkCallbackRegistered = false
+    private val useWorkerDownloader = true
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -272,6 +278,49 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         if (parsedHost == null || !allowedDownloadHosts.any { parsedHost == it || parsedHost.endsWith(".$it") }) {
             safeReject(promise, "DOWNLOAD_ERROR", "Download URL host not allowed: $parsedHost")
             return
+        }
+
+        if (useWorkerDownloader) {
+            try {
+                val downloadId = System.currentTimeMillis()
+                val downloadInfo = JSONObject().apply {
+                    put("downloadId", downloadId)
+                    put("url", url)
+                    put("fileName", fileName)
+                    put("modelId", modelId)
+                    put("title", title)
+                    put("description", description)
+                    put("totalBytes", totalBytes)
+                    put("bytesDownloaded", 0)
+                    put("status", WorkerDownloadStore.STATUS_PENDING)
+                    put("startedAt", System.currentTimeMillis())
+                    put("backend", "worker")
+                    put("localUri", Uri.fromFile(File(
+                        reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                        fileName
+                    )).toString())
+                }
+                WorkerDownloadStore.put(reactApplicationContext, downloadInfo)
+                DownloadEventBridge.log("I", "[Module] startDownload routed to worker id=$downloadId file=$fileName model=$modelId")
+                WorkerDownload.enqueue(
+                    reactApplicationContext,
+                    downloadId,
+                    url,
+                    fileName,
+                    modelId,
+                    title,
+                    totalBytes,
+                )
+                val result = Arguments.createMap().apply {
+                    putDouble("downloadId", downloadId.toDouble())
+                    putString("fileName", fileName)
+                    putString("modelId", modelId)
+                }
+                safeResolve(promise, result)
+                return
+            } catch (e: Exception) {
+                DownloadEventBridge.log("E", "[Module] worker start failed, falling back to legacy: ${e.message}")
+            }
         }
 
         // Resolve redirects on a background thread (network I/O)
@@ -351,6 +400,22 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun cancelDownload(downloadId: Double, promise: Promise) {
         try {
             val id = downloadId.toLong()
+            val workerInfo = WorkerDownloadStore.get(reactApplicationContext, id)
+            if (workerInfo != null) {
+                DownloadEventBridge.log("W", "[Module] Cancelling worker download id=$id")
+                WorkerDownload.cancel(reactApplicationContext, id)
+                workerInfo.optString("fileName")?.let { fileName ->
+                    val file = File(
+                        reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                        fileName
+                    )
+                    if (file.exists()) file.delete()
+                }
+                WorkerDownloadStore.remove(reactApplicationContext, id)
+                WorkerDownloadStore.stopForegroundServiceIfIdle(reactApplicationContext, "worker cancelled")
+                safeResolve(promise, true)
+                return
+            }
             android.util.Log.d("DownloadService", "Cancelling download - id: $id")
 
             // Get download info BEFORE removing from SharedPreferences
@@ -381,8 +446,25 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getActiveDownloads(promise: Promise) {
         try {
-            val downloads = getAllPersistedDownloads()
             val result = Arguments.createArray()
+            val workerDownloads = WorkerDownloadStore.all(reactApplicationContext)
+
+            for (i in 0 until workerDownloads.length()) {
+                val download = workerDownloads.getJSONObject(i)
+                result.pushMap(Arguments.createMap().apply {
+                    putDouble("downloadId", download.optLong("downloadId").toDouble())
+                    putString("fileName", download.optString("fileName"))
+                    putString("modelId", download.optString("modelId"))
+                    putString("title", download.optString("title"))
+                    putDouble("totalBytes", download.optDouble("totalBytes", 0.0))
+                    putString("status", download.optString("status", WorkerDownloadStore.STATUS_UNKNOWN))
+                    putDouble("bytesDownloaded", download.optDouble("bytesDownloaded", 0.0))
+                    putString("localUri", download.optString("localUri"))
+                    putDouble("startedAt", download.optDouble("startedAt", 0.0))
+                })
+            }
+
+            val downloads = getAllPersistedDownloads()
 
             for (i in 0 until downloads.length()) {
                 val download = downloads.getJSONObject(i)
@@ -415,6 +497,19 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun getDownloadProgress(downloadId: Double, promise: Promise) {
         try {
             val id = downloadId.toLong()
+            val workerInfo = WorkerDownloadStore.get(reactApplicationContext, id)
+            if (workerInfo != null) {
+                val result = Arguments.createMap().apply {
+                    putDouble("downloadId", id.toDouble())
+                    putDouble("bytesDownloaded", workerInfo.optDouble("bytesDownloaded", 0.0))
+                    putDouble("totalBytes", workerInfo.optDouble("totalBytes", 0.0))
+                    putString("status", workerInfo.optString("status", WorkerDownloadStore.STATUS_UNKNOWN))
+                    putString("localUri", workerInfo.optString("localUri"))
+                    putString("reason", workerInfo.optString("reason"))
+                }
+                safeResolve(promise, result)
+                return
+            }
             val statusInfo = queryDownloadStatus(id)
             val downloadInfo = getDownloadInfo(id)
 
@@ -437,6 +532,38 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun moveCompletedDownload(downloadId: Double, targetPath: String, promise: Promise) {
         try {
             val id = downloadId.toLong()
+            val workerInfo = WorkerDownloadStore.get(reactApplicationContext, id)
+            if (workerInfo != null) {
+                val fileName = workerInfo.optString("fileName")
+                val sourceFile = File(
+                    reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    fileName
+                )
+                if (!sourceFile.exists()) {
+                    throw IllegalArgumentException("Worker download file not found: ${sourceFile.absolutePath}")
+                }
+                if (targetPath.isEmpty()) {
+                    DownloadEventBridge.log("I", "[Module] moveCompletedDownload cleanup-only for worker id=$id file=${sourceFile.absolutePath}")
+                    WorkerDownloadStore.remove(reactApplicationContext, id)
+                    WorkerDownloadStore.stopForegroundServiceIfIdle(reactApplicationContext, "worker cleanup")
+                    safeResolve(promise, sourceFile.absolutePath)
+                    return
+                }
+                val targetFile = File(targetPath)
+                targetFile.parentFile?.mkdirs()
+                val moved = if (sourceFile.renameTo(targetFile)) {
+                    targetFile
+                } else {
+                    sourceFile.copyTo(targetFile, overwrite = true)
+                    sourceFile.delete()
+                    targetFile
+                }
+                DownloadEventBridge.log("I", "[Module] Worker file moved id=$id from=${sourceFile.absolutePath} to=${moved.absolutePath}")
+                WorkerDownloadStore.remove(reactApplicationContext, id)
+                WorkerDownloadStore.stopForegroundServiceIfIdle(reactApplicationContext, "worker moved")
+                safeResolve(promise, moved.absolutePath)
+                return
+            }
             val downloadInfo = getDownloadInfo(id)
             val fileName = downloadInfo?.optString("fileName")
                 ?: throw IllegalArgumentException("Download info not found")
@@ -498,6 +625,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun startProgressPolling() {
         if (!isPolling) {
+            DownloadEventBridge.log("I", "[Module] startProgressPolling")
             isPolling = true
             handler.post(pollRunnable)
             watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_INTERVAL_MS)
@@ -507,6 +635,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun stopProgressPolling() {
+        DownloadEventBridge.log("I", "[Module] stopProgressPolling")
         isPolling = false
         handler.removeCallbacks(pollRunnable)
         watchdogHandler.removeCallbacks(watchdogRunnable)
@@ -963,6 +1092,25 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         reactApplicationContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit(eventName, params)
+    }
+
+    private fun pollWorkerDownloads() {
+        val downloads = WorkerDownloadStore.all(reactApplicationContext)
+        for (i in 0 until downloads.length()) {
+            val download = downloads.getJSONObject(i)
+            val status = download.optString("status", WorkerDownloadStore.STATUS_UNKNOWN)
+            if (status != WorkerDownloadStore.STATUS_RUNNING && status != WorkerDownloadStore.STATUS_PENDING) continue
+            val downloadId = download.optLong("downloadId")
+            DownloadEventBridge.progress(
+                downloadId,
+                download.optString("fileName"),
+                download.optString("modelId"),
+                download.optLong("bytesDownloaded"),
+                download.optLong("totalBytes"),
+                status,
+                download.optString("reason").ifEmpty { null },
+            )
+        }
     }
 
     // -------------------------------------------------------------------------
