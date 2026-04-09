@@ -45,35 +45,42 @@ export function usePlaybackState(messageId: string): PlaybackState {
 
 /** Hook for wall-clock elapsed timer */
 export function useElapsedTimer(
-  isThisAudible: boolean,
-  isThisPaused: boolean,
+  playback: { isThisAudible: boolean; isThisPaused: boolean },
   seekOffsetRef: React.MutableRefObject<number>,
 ) {
+  const { isThisAudible, isThisPaused } = playback;
+  // playSessionId is a monotonic counter that increments on every new play —
+  // guarantees the effect re-runs even if boolean deps appear unchanged.
+  const playSessionId = useTTSStore((s) => s.playSessionId);
   const [localElapsed, setLocalElapsed] = useState(0);
   const startTimeRef = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);
 
   useEffect(() => {
+    console.log('[Timer] effect: isThisAudible=', isThisAudible, 'isThisPaused=', isThisPaused, 'playSessionId=', playSessionId);
     if (!isThisAudible && !isThisPaused) {
       if (seekOffsetRef.current === 0) {
         setLocalElapsed(0);
         pausedAtRef.current = 0;
       }
+      console.log('[Timer] not audible, not paused — resetting');
       return;
     }
     if (isThisPaused) {
       pausedAtRef.current = localElapsed;
+      console.log('[Timer] paused at', localElapsed);
       return;
     }
     const offset = seekOffsetRef.current || pausedAtRef.current;
     seekOffsetRef.current = 0;
     startTimeRef.current = Date.now() - offset * 1000;
+    console.log('[Timer] STARTING interval, offset=', offset);
     const id = setInterval(() => {
-      setLocalElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
-    }, 500);
-    return () => clearInterval(id);
+      setLocalElapsed((Date.now() - startTimeRef.current) / 1000);
+    }, 50);
+    return () => { console.log('[Timer] CLEARING interval'); clearInterval(id); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isThisAudible, isThisPaused]);
+  }, [isThisAudible, isThisPaused, playSessionId]);
 
   return { localElapsed, setLocalElapsed };
 }
@@ -182,40 +189,42 @@ export const SeekBar: React.FC<{
 };
 
 /** Transcript toggle and content */
-export const TranscriptSection: React.FC<{
+export const TranscriptToggle: React.FC<{
   transcript?: string;
   colors: ThemeColors;
   styles: any;
-}> = ({ transcript, colors, styles }) => {
-  const [showTranscript, setShowTranscript] = useState(false);
-
+  isOpen: boolean;
+  onToggle: (v: boolean) => void;
+}> = ({ transcript, colors, styles, isOpen, onToggle }) => {
   if (!transcript) return null;
 
   return (
-    <>
-      <TouchableOpacity
-        onPress={() => setShowTranscript((v) => !v)}
-        style={styles.transcriptToggle}
-      >
-        <Text style={styles.transcriptToggleText}>
-          {showTranscript ? 'Hide transcript' : 'Show transcript'}
-        </Text>
-        <Icon
-          name={showTranscript ? 'chevron-up' : 'chevron-down'}
-          size={11}
-          color={colors.textMuted}
-        />
-      </TouchableOpacity>
-      {showTranscript && (
-        <ScrollView style={styles.transcriptScroll} nestedScrollEnabled>
-          <View style={styles.transcriptContent}>
-            <MarkdownText>{transcript}</MarkdownText>
-          </View>
-        </ScrollView>
-      )}
-    </>
+    <TouchableOpacity
+      onPress={() => onToggle(!isOpen)}
+      style={styles.transcriptToggle}
+    >
+      <Text style={styles.transcriptToggleText}>
+        {isOpen ? 'Hide transcript' : 'Show transcript'}
+      </Text>
+      <Icon
+        name={isOpen ? 'chevron-up' : 'chevron-down'}
+        size={11}
+        color={colors.textMuted}
+      />
+    </TouchableOpacity>
   );
 };
+
+export const TranscriptContent: React.FC<{
+  transcript: string;
+  styles: any;
+}> = ({ transcript, styles }) => (
+  <ScrollView style={styles.transcriptScroll} nestedScrollEnabled>
+    <View style={styles.transcriptContent}>
+      <MarkdownText>{transcript}</MarkdownText>
+    </View>
+  </ScrollView>
+);
 
 /** Hook for seek logic */
 interface SeekHandlerParams {

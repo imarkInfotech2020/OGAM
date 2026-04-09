@@ -141,10 +141,11 @@ const KokoroCard: React.FC<{
   kokoroReady: boolean;
   kokoroDownloadProgress: number;
   selectedVoiceId: KokoroVoiceId;
+  isChangingVoice: boolean;
   onVoiceChange: (id: KokoroVoiceId) => void;
   styles: Styles;
   colors: ThemeColors;
-}> = ({ kokoroReady, kokoroDownloadProgress, selectedVoiceId, onVoiceChange, styles, colors }) => {
+}> = ({ kokoroReady, kokoroDownloadProgress, selectedVoiceId, isChangingVoice, onVoiceChange, styles, colors }) => {
   const supported = isExecutorchSupported();
   return (
     <Card style={styles.section}>
@@ -179,7 +180,11 @@ const KokoroCard: React.FC<{
               <Text style={styles.voiceName}>{voice.label}</Text>
               <Text style={styles.voiceMeta}>{voice.accent} · {voice.gender}</Text>
             </View>
-            {active && <Icon name="check" size={14} color={colors.primary} />}
+            {active && (
+              isChangingVoice
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <Icon name="check" size={14} color={colors.primary} />
+            )}
           </TouchableOpacity>
         );
       })}
@@ -202,7 +207,7 @@ export const TTSSettingsScreen: React.FC = () => {
     backboneDownloadProgress, vocoderDownloadProgress,
     isModelLoaded, isModelLoading,
     audioCacheSizeMB, settings, error,
-    kokoroReady, kokoroDownloadProgress,
+    kokoroReady, kokoroDownloadProgress, kokoroActiveVoiceId,
     downloadModels, deleteModels, loadModels, unloadModels,
     checkDownloadStatus, refreshCacheSize, clearAudioCache, updateSettings, clearError,
   } = useTTSStore();
@@ -298,6 +303,7 @@ export const TTSSettingsScreen: React.FC = () => {
           kokoroReady={kokoroReady}
           kokoroDownloadProgress={kokoroDownloadProgress}
           selectedVoiceId={settings.kokoroVoiceId as KokoroVoiceId}
+          isChangingVoice={(settings.kokoroVoiceId as KokoroVoiceId) !== kokoroActiveVoiceId}
           onVoiceChange={(id) => updateSettings({ kokoroVoiceId: id })}
           styles={styles}
           colors={colors}

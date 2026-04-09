@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
@@ -278,6 +278,7 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
 }) => {
   const { colors } = useTheme();
   const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
+  const isChangingVoice = useTTSStore((s) => s.settings.kokoroVoiceId !== s.kokoroActiveVoiceId);
   const { isSpeaking, stop, updateSettings } = useTTSStore();
 
   if (!visible) return null;
@@ -324,7 +325,9 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
                       </Text>
                     </View>
                     {isActive && (
-                      <Icon name="check" size={14} color={colors.primary} />
+                      isChangingVoice
+                        ? <ActivityIndicator size="small" color={colors.primary} />
+                        : <Icon name="check" size={14} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 );

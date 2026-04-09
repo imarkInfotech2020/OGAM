@@ -111,7 +111,8 @@ const ModePicker: React.FC<{ areBothDownloaded: boolean }> = ({ areBothDownloade
 const VoicePicker: React.FC = () => {
   const { colors } = useTheme();
   const local = useThemedStyles(createLocalStyles);
-  const { settings, updateSettings, kokoroReady, kokoroDownloadProgress } = useTTSStore();
+  const { settings, updateSettings, kokoroReady, kokoroDownloadProgress, kokoroActiveVoiceId } = useTTSStore();
+  const isChangingVoice = settings.kokoroVoiceId !== kokoroActiveVoiceId;
   const supported = isExecutorchSupported();
 
   return (
@@ -146,7 +147,11 @@ const VoicePicker: React.FC = () => {
               </Text>
               <Text style={local.voiceMeta}>{voice.accent} · {voice.gender}</Text>
             </View>
-            {active && <Icon name="check" size={13} color={colors.primary} />}
+            {active && (
+              isChangingVoice
+                ? <ActivityIndicator size="small" color={colors.primary} />
+                : <Icon name="check" size={13} color={colors.primary} />
+            )}
           </TouchableOpacity>
         );
       })}

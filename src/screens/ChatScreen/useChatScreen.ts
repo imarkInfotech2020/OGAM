@@ -255,6 +255,13 @@ export const useChatScreen = () => {
 
     if (!ref.isPlaying) {
       const playNext = () => {
+        // If another message took over playback (e.g. user tapped a recording), stop the chain
+        const currentId = useTTSStore.getState().currentMessageId;
+        if (currentId !== null && currentId !== 'streaming') {
+          ref.pending = [];
+          ref.isPlaying = false;
+          return;
+        }
         const next = ref.pending.shift();
         if (!next) { ref.isPlaying = false; return; }
         ref.isPlaying = true;

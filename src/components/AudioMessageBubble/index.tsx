@@ -17,7 +17,8 @@ import {
   SpeedChip,
   DurationText,
   SeekBar,
-  TranscriptSection,
+  TranscriptToggle,
+  TranscriptContent,
 } from './PlaybackControls';
 
 const WAVEFORM_BARS = 48;
@@ -159,9 +160,10 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   const { isThisPlaying, isThisPaused, isThisAudible, isThisLoading } = usePlaybackState(messageId);
   const currentMessageId = useTTSStore((s) => s.currentMessageId);
+  const [showTranscript, setShowTranscript] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const seekOffsetRef = useRef<number>(0);
-  const { localElapsed, setLocalElapsed } = useElapsedTimer(isThisAudible, isThisPaused, seekOffsetRef);
+  const { localElapsed, setLocalElapsed } = useElapsedTimer({ isThisAudible, isThisPaused }, seekOffsetRef);
 
   const handlePlayPause = useCallback(() => {
     const { pause, resume } = useTTSStore.getState();
@@ -215,12 +217,15 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
       </View>
 
       <View style={styles.metaRow}>
-        <TranscriptSection transcript={transcript} colors={colors} styles={styles} />
+        <TranscriptToggle transcript={transcript} colors={colors} styles={styles} onToggle={setShowTranscript} isOpen={showTranscript} />
         <View style={styles.metaRight}>
           <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
           <SpeedChip styles={styles} />
         </View>
       </View>
+      {showTranscript && transcript ? (
+        <TranscriptContent transcript={transcript} styles={styles} />
+      ) : null}
     </View>
   );
 };

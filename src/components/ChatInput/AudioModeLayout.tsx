@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Text } from 'react-native';
+import { View, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -96,6 +96,7 @@ export const AudioModeLayout: React.FC<AudioModeLayoutProps> = ({
   setAlertState,
 }) => {
   const { colors } = useTheme();
+  const isChangingVoice = useTTSStore((s) => s.settings.kokoroVoiceId !== s.kokoroActiveVoiceId);
 
   const handleStop = () => {
     if (onStop && isGenerating) {
@@ -174,7 +175,9 @@ export const AudioModeLayout: React.FC<AudioModeLayoutProps> = ({
           onPress={() => voicePicker.show()}
           hitSlop={{ top: 4, bottom: 4, left: 8, right: 8 }}
         >
-          <Icon name="user" size={14} color={colors.textSecondary} />
+          {isChangingVoice
+            ? <ActivityIndicator size="small" color={colors.textMuted} />
+            : <Icon name="user" size={14} color={colors.textSecondary} />}
           <Text style={styles.audioVoiceLabel}>{currentVoice.label}</Text>
         </TouchableOpacity>
 
