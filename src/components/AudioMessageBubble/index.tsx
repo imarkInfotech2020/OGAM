@@ -338,28 +338,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.metaSmall,
     color: colors.textSecondary,
   },
-  seekBarTouchable: {
-    paddingVertical: 10,
-    position: 'relative' as const,
-    justifyContent: 'center' as const,
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: `${colors.primary}15`,
-    borderRadius: 2,
-  },
-  progressFill: {
-    height: '100%' as const,
-    borderRadius: 2,
-    opacity: 0.7,
-  },
-  progressThumb: {
-    position: 'absolute' as const,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginLeft: -6,
-    top: 6,
+  seekSlider: {
+    height: 28,
+    marginHorizontal: -SPACING.xs,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,

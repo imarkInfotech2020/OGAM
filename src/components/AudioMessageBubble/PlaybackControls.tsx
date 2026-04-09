@@ -4,8 +4,8 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  PanResponder,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { stripMarkdownForSpeech } from '../../utils/messageContent';
 import { MarkdownText } from '../MarkdownText';
 import Icon from 'react-native-vector-icons/Feather';
@@ -154,69 +154,29 @@ export const DurationText: React.FC<{
   </Text>
 );
 
-/** Seekable progress bar with drag support */
+/** Seekable progress bar using native Slider component */
 export const SeekBar: React.FC<{
   displayProgress: number;
   colors: ThemeColors;
   styles: any;
   onSeek: (fraction: number) => void;
 }> = ({ displayProgress, colors, styles, onSeek }) => {
-  const seekBarWidth = useRef(0);
-  const seekBarX = useRef(0);
-  const [dragProgress, setDragProgress] = useState<number | null>(null);
-  const isDragging = useRef(false);
-  const dragFractionRef = useRef(0);
-  const onSeekRef = useRef(onSeek);
-  onSeekRef.current = onSeek;
-
-  const seekPanResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => {
-      if (!seekBarWidth.current) return;
-      isDragging.current = true;
-      const fraction = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekBarWidth.current));
-      dragFractionRef.current = fraction;
-      setDragProgress(fraction);
-    },
-    onPanResponderMove: (e) => {
-      if (!seekBarWidth.current || !isDragging.current) return;
-      const fraction = Math.max(0, Math.min(1, (e.nativeEvent.pageX - seekBarX.current) / seekBarWidth.current));
-      dragFractionRef.current = fraction;
-      setDragProgress(fraction);
-    },
-    onPanResponderRelease: () => {
-      if (isDragging.current) {
-        onSeekRef.current(dragFractionRef.current);
-      }
-      isDragging.current = false;
-      setDragProgress(null);
-    },
-    onPanResponderTerminate: () => {
-      isDragging.current = false;
-      setDragProgress(null);
-    },
-  })).current;
-
-  const effectiveProgress = dragProgress !== null ? dragProgress : displayProgress;
-  const pct = `${Math.round(effectiveProgress * 100)}%` as any;
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
 
   return (
-    <View
-      {...seekPanResponder.panHandlers}
-      onLayout={(e) => {
-        seekBarWidth.current = e.nativeEvent.layout.width;
-        e.target.measure((...args: number[]) => {
-          seekBarX.current = args[4]; // pageX
-        });
-      }}
-      style={styles.seekBarTouchable}
-    >
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: pct, backgroundColor: colors.primary }]} />
-      </View>
-      <View style={[styles.progressThumb, { left: pct, backgroundColor: colors.primary }]} />
-    </View>
+    <Slider
+      style={styles.seekSlider}
+      value={isSeeking ? seekValue : displayProgress}
+      minimumValue={0}
+      maximumValue={1}
+      minimumTrackTintColor={colors.primary}
+      maximumTrackTintColor={`${colors.primary}20`}
+      thumbTintColor={colors.primary}
+      onSlidingStart={(val) => { setIsSeeking(true); setSeekValue(val); }}
+      onValueChange={(val) => { if (isSeeking) setSeekValue(val); }}
+      onSlidingComplete={(val) => { setIsSeeking(false); onSeek(val); }}
+    />
   );
 };
 

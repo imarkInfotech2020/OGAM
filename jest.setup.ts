@@ -177,6 +177,12 @@ jest.mock('react-native-audio-api', () => ({
   FileDirectory: { Document: 0, Cache: 1 },
 }), { virtual: true });
 
+// @react-native-community/slider mock
+jest.mock('@react-native-community/slider', () => {
+  const { View } = require('react-native');
+  return { __esModule: true, default: View };
+});
+
 // react-native-executorch mock
 const mockVoiceConfig = { id: 'mock_voice' };
 jest.mock('react-native-executorch', () => ({
