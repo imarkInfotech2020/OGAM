@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import ai.offgridmobile.SafePromise
 
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -158,17 +159,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 withContext(Dispatchers.IO) {
                     val download = downloadDao.getDownload(id) ?: return@withContext
                     downloadDao.updateStatus(id, DownloadStatus.QUEUED)
-                    // Only re-enqueue if WorkManager has no live work for this id
-                    val workName = WorkerDownload.workName(id)
-                    val workInfos = try {
-                        workManager.getWorkInfosForUniqueWork(workName).get()
-                    } catch (_: Exception) {
-                        null
-                    }
-                    val workInfo = workInfos?.firstOrNull()
-                    if (workInfo == null || workInfo.state.isFinished) {
-                        WorkerDownload.enqueue(reactApplicationContext, id)
-                    }
+                    // KEEP policy: leave running work untouched, restart only if finished/missing
+                    WorkerDownload.enqueueResume(reactApplicationContext, id)
                 }
                 registerObserver(id)
                 DownloadEventBridge.log("I", "[Module] resumeDownload id=$id")

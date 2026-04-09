@@ -277,6 +277,20 @@ class WorkerDownload(
             return request
         }
 
+        /** Re-enqueue with KEEP policy — leaves running work untouched, restarts finished work. */
+        fun enqueueResume(context: Context, downloadId: Long, progressInterval: Long = DEFAULT_PROGRESS_INTERVAL) {
+            val request = OneTimeWorkRequestBuilder<WorkerDownload>()
+                .setConstraints(
+                    androidx.work.Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, WorkRequest.MIN_BACKOFF_MILLIS, TimeUnit.MILLISECONDS)
+                .setInputData(workDataOf(KEY_DOWNLOAD_ID to downloadId, KEY_PROGRESS_INTERVAL to progressInterval))
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(workName(downloadId), ExistingWorkPolicy.KEEP, request)
+        }
+
         fun cancel(context: Context, downloadId: Long) {
             WorkManager.getInstance(context).cancelUniqueWork(workName(downloadId))
         }
