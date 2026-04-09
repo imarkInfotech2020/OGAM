@@ -209,12 +209,12 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
 
   return (
     <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-${messageId}`}>
-      <View style={styles.playRow}>
-        <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
-        {waveformWithSeek}
-      </View>
+      {/* Waveform — full width of the bubble */}
+      {waveformWithSeek}
 
+      {/* Play button + transcript + duration + speed in one row */}
       <View style={styles.metaRow}>
+        <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
         <TranscriptSection transcript={transcript} colors={colors} styles={styles} />
         <View style={styles.metaRight}>
           <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
