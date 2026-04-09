@@ -93,7 +93,7 @@ const barStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   bar: {
-    width: 3,
+    flex: 1,
     borderRadius: 2,
   },
 });
