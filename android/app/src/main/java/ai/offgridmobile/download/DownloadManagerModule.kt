@@ -160,7 +160,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     downloadDao.updateStatus(id, DownloadStatus.QUEUED)
                     // Only re-enqueue if WorkManager has no live work for this id
                     val workName = WorkerDownload.workName(id)
-                    val workInfo = workManager.getWorkInfosForUniqueWork(workName).get().firstOrNull()
+                    val workInfos = try {
+                        workManager.getWorkInfosForUniqueWork(workName).get()
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val workInfo = workInfos?.firstOrNull()
                     if (workInfo == null || workInfo.state.isFinished) {
                         WorkerDownload.enqueue(reactApplicationContext, id)
                     }
@@ -443,5 +448,16 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     companion object {
         const val NAME = "DownloadManagerModule"
+
+        // Legacy SharedPreferences constants — retained so WorkerDownloadStore compiles
+        // during the transition period while both download paths coexist.
+        const val PREFS_NAME = "OffgridMobileDownloads"
+        const val DOWNLOADS_KEY = "active_downloads"
+        const val STATUS_PENDING = "pending"
+        const val STATUS_RUNNING = "running"
+        const val STATUS_PAUSED = "paused"
+        const val STATUS_COMPLETED = "completed"
+        const val STATUS_FAILED = "failed"
+        const val STATUS_UNKNOWN = "unknown"
     }
 }

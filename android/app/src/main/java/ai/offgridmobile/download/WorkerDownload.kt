@@ -232,18 +232,3 @@ class WorkerDownload(
     }
 }
 
-/**
- * Thin shim so WorkerDownload can call stopForegroundServiceIfIdle without depending
- * on the old WorkerDownloadStore. Checks both Room and legacy SharedPrefs are idle.
- * Legacy path is empty now that DownloadManagerModule no longer uses SharedPrefs.
- */
-private object WorkerDownloadStore {
-    fun stopForegroundServiceIfIdle(context: Context, reason: String) {
-        // With Room as the single source of truth the foreground service is stopped
-        // by the module's LiveData observer on COMPLETED/FAILED/CANCELLED.
-        // The worker calls this as a belt-and-suspenders stop when the app is backgrounded
-        // and the module observer may not be alive.
-        DownloadEventBridge.log("I", "[WorkerStore] stopForegroundServiceIfIdle: $reason")
-        DownloadForegroundService.stop(context, reason)
-    }
-}
