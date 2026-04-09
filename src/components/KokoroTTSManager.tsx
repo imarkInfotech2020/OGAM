@@ -25,6 +25,8 @@ let _audioCtxRef: { current: AudioContext | null } = { current: null };
 const _pendingResolvers: Set<() => void> = new Set();
 // When true, onEnd skips ctx.suspend() so the next chunk can start cleanly
 let _skipSuspendOnEnd = false;
+/** Timestamp of the last stream completion/stop — used by voice change cooldown */
+let _lastStreamEndTime = 0;
 
 export const kokoroRef = {
   speak: (text: string, speed = 1.0): Promise<void> =>
@@ -35,6 +37,7 @@ export const kokoroRef = {
     _pendingResolvers.forEach((resolve) => resolve());
     _pendingResolvers.clear();
     _stopFn?.(instant);
+    _lastStreamEndTime = Date.now();
   },
   /** Pause playback — suspends AudioContext, Kokoro waits for onNext to resolve */
   pause: () => { _audioCtxRef.current?.suspend().catch(() => {}); },
@@ -51,7 +54,7 @@ export const KokoroTTSManager: React.FC = () => {
   _audioCtxRef = audioCtxRef; // Expose to module-level kokoroRef for pause/resume
 
   // Only update the voice config after speaking fully stops AND native ExecuTorch
-  // has time to clean up. A 500ms cooldown after isSpeaking→false prevents SIGABRT.
+  // has had enough time to clean up. Uses _lastStreamEndTime for accurate timing.
   const [activeVoiceId, setActiveVoiceId] = React.useState(kokoroVoiceId);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
@@ -59,11 +62,13 @@ export const KokoroTTSManager: React.FC = () => {
       if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; }
       return;
     }
-    // Delay voice switch to let native ExecuTorch thread fully terminate
+    // Wait at least 2s after the last stream ended before changing voice config
+    const elapsed = Date.now() - _lastStreamEndTime;
+    const waitMs = Math.max(100, 2000 - elapsed);
     cooldownRef.current = setTimeout(() => {
       setActiveVoiceId(kokoroVoiceId);
       cooldownRef.current = null;
-    }, 1500);
+    }, waitMs);
     return () => { if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; } };
   }, [kokoroVoiceId, isSpeaking, activeVoiceId]);
 

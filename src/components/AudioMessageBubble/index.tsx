@@ -20,7 +20,7 @@ import {
   TranscriptSection,
 } from './PlaybackControls';
 
-const WAVEFORM_BARS = 28;
+const WAVEFORM_BARS = 48;
 
 interface AudioMessageBubbleProps {
   messageId: string;
@@ -88,7 +88,7 @@ const barStyles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 1.5,
     height: 40,
     overflow: 'hidden',
   },
@@ -276,9 +276,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   speedChip: {
     backgroundColor: colors.surfaceLight,
-    borderRadius: 6,
-    paddingHorizontal: SPACING.xs,
-    paddingVertical: 2,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
     borderWidth: 1,
     borderColor: colors.border,
   },
