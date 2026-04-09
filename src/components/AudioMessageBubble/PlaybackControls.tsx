@@ -181,14 +181,12 @@ export const SeekBar: React.FC<{
   );
 };
 
-/** Transcript with word-level highlighting based on playback progress */
+/** Transcript toggle and content */
 export const TranscriptSection: React.FC<{
   transcript?: string;
   colors: ThemeColors;
   styles: any;
-  /** 0–1 playback progress, used for word highlighting */
-  progress?: number;
-}> = ({ transcript, colors, styles, progress = 0 }) => {
+}> = ({ transcript, colors, styles }) => {
   const [showTranscript, setShowTranscript] = useState(false);
 
   if (!transcript) return null;
@@ -209,71 +207,13 @@ export const TranscriptSection: React.FC<{
         />
       </TouchableOpacity>
       {showTranscript && (
-        <View style={styles.transcriptContent}>
-          {progress > 0 ? (
-            <HighlightedTranscript text={transcript} progress={progress} colors={colors} styles={styles} />
-          ) : (
+        <ScrollView style={styles.transcriptScroll} nestedScrollEnabled>
+          <View style={styles.transcriptContent}>
             <MarkdownText>{transcript}</MarkdownText>
-          )}
-        </View>
+          </View>
+        </ScrollView>
       )}
     </>
-  );
-};
-
-/** Renders transcript with the currently spoken word highlighted + auto-scroll */
-const HighlightedTranscript: React.FC<{
-  text: string;
-  progress: number;
-  colors: ThemeColors;
-  styles: any;
-}> = ({ text, progress, styles }) => {
-  const scrollRef = useRef<ScrollView>(null);
-  const words = useRef(text.split(/(\s+)/)).current; // preserve whitespace
-  const totalChars = text.length;
-  const cursorPos = Math.floor(progress * totalChars);
-
-  // Find which word the cursor is in
-  let charCount = 0;
-  let activeWordIndex = -1;
-  for (let i = 0; i < words.length; i++) {
-    const wordEnd = charCount + words[i].length;
-    if (charCount <= cursorPos && cursorPos < wordEnd && words[i].trim()) {
-      activeWordIndex = i;
-      break;
-    }
-    charCount += words[i].length;
-  }
-
-  // Auto-scroll: estimate Y from word index ratio
-  useEffect(() => {
-    if (activeWordIndex < 0 || !scrollRef.current) return;
-    const wordRatio = activeWordIndex / words.length;
-    // Rough estimate: 20px line height, ~8 words per line
-    const estimatedY = Math.max(0, (wordRatio * words.length / 8) * 20 - 40);
-    scrollRef.current.scrollTo({ y: estimatedY, animated: true });
-  }, [activeWordIndex, words.length]);
-
-  charCount = 0;
-  return (
-    <ScrollView ref={scrollRef} style={styles.transcriptScroll} nestedScrollEnabled>
-      <Text style={styles.transcriptText}>
-        {words.map((word, i) => {
-          charCount += word.length;
-          const isCurrent = i === activeWordIndex;
-          return (
-            <Text
-              key={i}
-              style={isCurrent
-                ? styles.transcriptWordActive
-                : styles.transcriptWordInactive}
-            >
-              {word}
-            </Text>
-          );
-        })}
-      </Text>
-    </ScrollView>
   );
 };
 

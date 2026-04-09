@@ -56,7 +56,8 @@ function normalize(data: number[]): number[] {
 const WaveformBars: React.FC<{
   data: number[];
   colors: ThemeColors;
-}> = ({ data, colors }) => {
+  isPlaying?: boolean;
+}> = ({ data, colors, isPlaying }) => {
   const bars = useMemo(() => normalize(subsample(data, WAVEFORM_BARS)), [data]);
 
   return (
@@ -69,7 +70,7 @@ const WaveformBars: React.FC<{
             {
               height: Math.max(8, Math.round(shape * 36)),
               backgroundColor: colors.primary,
-              opacity: 0.4 + shape * 0.5,
+              opacity: isPlaying ? (0.6 + shape * 0.4) : (0.25 + shape * 0.35),
             },
           ]}
         />
@@ -195,7 +196,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <>
             <SpeedChip styles={styles} />
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
-            <WaveformBars data={waveformData} colors={colors} />
+            <WaveformBars data={waveformData} colors={colors} isPlaying={isThisPlaying} />
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
           </>
         ) : (
@@ -203,7 +204,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
             {isLoading
               ? <ThinkingDots colors={colors} />
-              : <WaveformBars data={waveformData} colors={colors} />}
+              : <WaveformBars data={waveformData} colors={colors} isPlaying={isThisActive} />}
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
             <SpeedChip styles={styles} />
           </>
@@ -214,7 +215,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
         <SeekBar displayProgress={progress} colors={colors} styles={styles} onSeek={handleSeek} />
       )}
 
-      <TranscriptSection transcript={transcript} colors={colors} styles={styles} progress={progress} />
+      <TranscriptSection transcript={transcript} colors={colors} styles={styles} />
     </View>
   );
 };
@@ -293,14 +294,5 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   transcriptText: {
     ...TYPOGRAPHY.bodySmall,
     lineHeight: 20,
-  },
-  transcriptWordActive: {
-    color: colors.primary,
-    fontWeight: '400' as const,
-    backgroundColor: `${colors.primary}15`,
-    borderRadius: 2,
-  },
-  transcriptWordInactive: {
-    color: colors.textMuted,
   },
 });
