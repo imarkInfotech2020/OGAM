@@ -26,11 +26,7 @@ class WorkerDownload(
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
 
-    private val client = OkHttpClient.Builder()
-        .retryOnConnectionFailure(true)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val client = httpClient
 
     override suspend fun doWork(): Result {
         val downloadId = inputData.getLong(KEY_DOWNLOAD_ID, -1L)
@@ -178,6 +174,13 @@ class WorkerDownload(
     }
 
     companion object {
+        // Shared across all WorkerDownload instances — reuses connection and thread pools.
+        val httpClient: OkHttpClient = OkHttpClient.Builder()
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+
         private const val PROGRESS_INTERVAL_MS = 750L
         const val KEY_DOWNLOAD_ID = "download_id"
         const val KEY_URL = "url"

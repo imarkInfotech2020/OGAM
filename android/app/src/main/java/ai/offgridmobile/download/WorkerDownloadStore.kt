@@ -74,12 +74,13 @@ object WorkerDownloadStore {
     @Synchronized
     fun remove(context: Context, downloadId: Long) {
         val downloads = all(context)
-        val updated = JSONArray()
         for (i in 0 until downloads.length()) {
-            val item = downloads.getJSONObject(i)
-            if (item.optLong("downloadId") != downloadId) updated.put(item)
+            if (downloads.getJSONObject(i).optLong("downloadId") == downloadId) {
+                downloads.remove(i)
+                saveAll(context, downloads)
+                return
+            }
         }
-        saveAll(context, updated)
     }
 
     @Synchronized
@@ -98,11 +99,14 @@ object WorkerDownloadStore {
             Context.MODE_PRIVATE
         ).getString(DownloadManagerModule.DOWNLOADS_KEY, "[]") ?: "[]"
         val downloads = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+        val activeLegacyStatuses = setOf(
+            DownloadManagerModule.STATUS_PENDING,
+            DownloadManagerModule.STATUS_RUNNING,
+            DownloadManagerModule.STATUS_PAUSED,
+        )
         for (i in 0 until downloads.length()) {
             val status = downloads.getJSONObject(i).optString("status", DownloadManagerModule.STATUS_PENDING)
-            if (status == DownloadManagerModule.STATUS_PENDING ||
-                status == DownloadManagerModule.STATUS_RUNNING ||
-                status == DownloadManagerModule.STATUS_PAUSED) return true
+            if (status in activeLegacyStatuses) return true
         }
         return false
     }

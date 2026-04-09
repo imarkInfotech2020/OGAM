@@ -280,47 +280,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             return
         }
 
-        if (useWorkerDownloader) {
-            try {
-                val downloadId = System.currentTimeMillis()
-                val downloadInfo = JSONObject().apply {
-                    put("downloadId", downloadId)
-                    put("url", url)
-                    put("fileName", fileName)
-                    put("modelId", modelId)
-                    put("title", title)
-                    put("description", description)
-                    put("totalBytes", totalBytes)
-                    put("bytesDownloaded", 0)
-                    put("status", WorkerDownloadStore.STATUS_PENDING)
-                    put("startedAt", System.currentTimeMillis())
-                    put("backend", "worker")
-                    put("localUri", Uri.fromFile(File(
-                        reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                        fileName
-                    )).toString())
-                }
-                WorkerDownloadStore.put(reactApplicationContext, downloadInfo)
-                DownloadEventBridge.log("I", "[Module] startDownload routed to worker id=$downloadId file=$fileName model=$modelId")
-                WorkerDownload.enqueue(
-                    reactApplicationContext,
-                    downloadId,
-                    url,
-                    fileName,
-                    modelId,
-                    title,
-                    totalBytes,
-                )
-                val result = Arguments.createMap().apply {
-                    putDouble("downloadId", downloadId.toDouble())
-                    putString("fileName", fileName)
-                    putString("modelId", modelId)
-                }
-                safeResolve(promise, result)
-                return
-            } catch (e: Exception) {
-                DownloadEventBridge.log("E", "[Module] worker start failed, falling back to legacy: ${e.message}")
-            }
+        if (useWorkerDownloader && tryStartWorkerDownload(url, fileName, modelId, title, description, totalBytes, promise)) {
+            return
         }
 
         // Resolve redirects on a background thread (network I/O)
@@ -393,6 +354,62 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             } catch (e: Exception) {
                 safeReject(promise, "DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
             }
+        }
+    }
+
+    /**
+     * Attempts to start a download via WorkManager. Returns true on success (promise resolved),
+     * false if it fails (caller should fall back to the legacy DownloadManager path).
+     */
+    private fun tryStartWorkerDownload(
+        url: String,
+        fileName: String,
+        modelId: String,
+        title: String,
+        description: String,
+        totalBytes: Long,
+        promise: Promise,
+    ): Boolean {
+        return try {
+            val downloadId = System.currentTimeMillis()
+            val downloadInfo = JSONObject().apply {
+                put("downloadId", downloadId)
+                put("url", url)
+                put("fileName", fileName)
+                put("modelId", modelId)
+                put("title", title)
+                put("description", description)
+                put("totalBytes", totalBytes)
+                put("bytesDownloaded", 0)
+                put("status", WorkerDownloadStore.STATUS_PENDING)
+                put("startedAt", System.currentTimeMillis())
+                put("backend", "worker")
+                put("localUri", Uri.fromFile(File(
+                    reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+                    fileName
+                )).toString())
+            }
+            WorkerDownloadStore.put(reactApplicationContext, downloadInfo)
+            DownloadEventBridge.log("I", "[Module] startDownload routed to worker id=$downloadId file=$fileName model=$modelId")
+            WorkerDownload.enqueue(
+                reactApplicationContext,
+                downloadId,
+                url,
+                fileName,
+                modelId,
+                title,
+                totalBytes,
+            )
+            val result = Arguments.createMap().apply {
+                putDouble("downloadId", downloadId.toDouble())
+                putString("fileName", fileName)
+                putString("modelId", modelId)
+            }
+            safeResolve(promise, result)
+            true
+        } catch (e: Exception) {
+            DownloadEventBridge.log("E", "[Module] worker start failed, falling back to legacy: ${e.message}")
+            false
         }
     }
 
@@ -532,6 +549,22 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun moveCompletedDownload(downloadId: Double, targetPath: String, promise: Promise) {
         try {
             val id = downloadId.toLong()
+
+            // Validate target path against app sandbox directories to prevent path traversal.
+            // Skip validation only when targetPath is empty (cleanup-only mode).
+            if (targetPath.isNotEmpty()) {
+                val targetFile = File(targetPath)
+                val allowedDirs = listOfNotNull(
+                    reactApplicationContext.filesDir?.canonicalPath,
+                    reactApplicationContext.cacheDir?.canonicalPath,
+                    reactApplicationContext.getExternalFilesDir(null)?.canonicalPath,
+                )
+                if (allowedDirs.none { targetFile.canonicalPath.startsWith(it) }) {
+                    safeReject(promise, "MOVE_ERROR", "Target path is outside the app sandbox.")
+                    return
+                }
+            }
+
             val workerInfo = WorkerDownloadStore.get(reactApplicationContext, id)
             if (workerInfo != null) {
                 val fileName = workerInfo.optString("fileName")
