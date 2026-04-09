@@ -289,6 +289,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   waveformSeekContainer: {
     flex: 1,
     position: 'relative' as const,
+    marginLeft: SPACING.xs,
   },
   seekOverlay: {
     position: 'absolute' as const,
