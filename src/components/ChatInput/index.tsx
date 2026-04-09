@@ -15,7 +15,7 @@ import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useTTSStore } from '../../stores/ttsStore';
 import { useAppStore } from '../../stores';
-import { KOKORO_VOICES } from '../../constants/kokoroModels';
+import type { TTSVoice } from '../../engine';
 import { AudioModeLayout } from './AudioModeLayout';
 
 interface ChatInputProps {
@@ -89,11 +89,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
   attachmentsRef.current = attachments;
   const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
-  const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
+  const activeVoiceId = useTTSStore((s) => s.activeVoiceId);
+  const voices = useTTSStore((s) => s.voices);
   const isAudioMode = ttsInterfaceMode === 'audio';
-  const currentVoice = useMemo(
-    () => KOKORO_VOICES.find((v) => v.id === kokoroVoiceId) ?? KOKORO_VOICES[0],
-    [kokoroVoiceId],
+  const currentVoice: TTSVoice = useMemo(
+    () => voices.find((v) => v.id === activeVoiceId) ?? voices[0] ?? { id: 'default', label: 'Default', metadata: {} },
+    [activeVoiceId, voices],
   );
 
   const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({

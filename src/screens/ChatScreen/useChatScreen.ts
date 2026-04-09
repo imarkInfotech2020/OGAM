@@ -249,7 +249,7 @@ export const useChatScreen = () => {
       isAudioModeMessage: true,
       audioDurationSeconds: estDuration,
     });
-    if (!tts.kokoroReady && !tts.isModelLoaded) return;
+    if (!tts.isReady) return;
     const fullText = stripMarkdownForSpeech(stripControlTokens(last.content)).trim();
     if (fullText) {
       useTTSStore.getState().speak(fullText, last.id);

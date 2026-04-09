@@ -6,8 +6,6 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING } from '../../constants';
 import { useTTSStore } from '../../stores/ttsStore';
-import { KOKORO_VOICES, isExecutorchSupported } from '../../constants/kokoroModels';
-import type { KokoroVoiceId } from '../../constants/kokoroModels';
 import { createStyles as createModalStyles } from './styles';
 
 const createLocalStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
@@ -53,25 +51,18 @@ const createLocalStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   downloadText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
 });
 
-// ─── Mode Picker ──────────────────────────────────────────────────────────────
+// ── Mode Picker ──────────────────────────────────────────────────────────────
 
-const ModePicker: React.FC<{ areBothDownloaded: boolean }> = ({ areBothDownloaded }) => {
+const ModePicker: React.FC<{ audioAvailable: boolean }> = ({ audioAvailable }) => {
   const modal = useThemedStyles(createModalStyles);
   const local = useThemedStyles(createLocalStyles);
-  const {
-    settings, updateSettings,
-    isModelLoaded, loadModels, unloadModels,
-    kokoroReady,
-  } = useTTSStore();
+  const { settings, updateSettings, initializeEngine } = useTTSStore();
   const mode = settings.interfaceMode;
-  // Audio mode needs OuteTTS (waveform generation)
-  const audioEnabled = areBothDownloaded;
 
   const handleModeChange = (next: 'chat' | 'audio') => {
-    if (next === 'audio' && !audioEnabled) { return; }
+    if (next === 'audio' && !audioAvailable) return;
     updateSettings({ interfaceMode: next });
-    if (next === 'audio' && !isModelLoaded && areBothDownloaded) { loadModels(); }
-    if (next === 'chat' && isModelLoaded && !kokoroReady) { unloadModels(); }
+    if (next === 'audio') initializeEngine();
   };
 
   return (
@@ -87,7 +78,7 @@ const ModePicker: React.FC<{ areBothDownloaded: boolean }> = ({ areBothDownloade
       <View style={modal.modeToggleButtons}>
         {(['chat', 'audio'] as const).map((m) => {
           const active = mode === m;
-          const disabled = m === 'audio' && !audioEnabled;
+          const disabled = m === 'audio' && !audioAvailable;
           return (
             <TouchableOpacity
               key={m}
@@ -106,52 +97,44 @@ const ModePicker: React.FC<{ areBothDownloaded: boolean }> = ({ areBothDownloade
   );
 };
 
-// ─── Voice Picker ─────────────────────────────────────────────────────────────
+// ── Voice Picker ─────────────────────────────────────────────────────────────
 
 const VoicePicker: React.FC = () => {
   const { colors } = useTheme();
   const local = useThemedStyles(createLocalStyles);
-  const { settings, updateSettings, kokoroReady, kokoroDownloadProgress, kokoroActiveVoiceId } = useTTSStore();
-  const isChangingVoice = settings.kokoroVoiceId !== kokoroActiveVoiceId;
-  const supported = isExecutorchSupported();
+  const { voices, activeVoiceId, isReady, isDownloading, overallDownloadProgress, setVoice } = useTTSStore();
 
   return (
     <View>
       <View style={local.voiceSectionHeader}>
         <Text style={local.voiceSectionLabel}>Voice</Text>
-        {supported && !kokoroReady && (
-          kokoroDownloadProgress > 0
-            ? <Text style={local.voiceSectionLabel}>{Math.round(kokoroDownloadProgress * 100)}%</Text>
-            : <ActivityIndicator size="small" color={colors.textMuted} />
+        {isDownloading && (
+          <Text style={local.voiceSectionLabel}>{Math.round(overallDownloadProgress * 100)}%</Text>
         )}
-        {supported && kokoroReady && (
+        {!isReady && !isDownloading && (
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        )}
+        {isReady && (
           <Icon name="check-circle" size={12} color={colors.primary} />
-        )}
-        {!supported && (
-          <Text style={local.voiceSectionLabel}>Android 13+ only</Text>
         )}
       </View>
 
-      {KOKORO_VOICES.map((voice, i) => {
-        const active = settings.kokoroVoiceId === voice.id;
+      {voices.map((voice, i) => {
+        const active = voice.id === activeVoiceId;
         return (
           <TouchableOpacity
             key={voice.id}
             style={[local.voiceRow, i > 0 && local.voiceRowBorder]}
-            onPress={() => updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId })}
-            disabled={!supported}
+            onPress={() => setVoice(voice.id)}
           >
             <View style={local.voiceInfo}>
-              <Text style={[local.voiceName, { color: supported ? colors.text : colors.textMuted }]}>
-                {voice.label}
+              <Text style={local.voiceName}>{voice.label}</Text>
+              <Text style={local.voiceMeta}>
+                {voice.metadata.accent ? `${voice.metadata.accent} · ` : ''}
+                {voice.metadata.gender || ''}
               </Text>
-              <Text style={local.voiceMeta}>{voice.accent} · {voice.gender}</Text>
             </View>
-            {active && (
-              isChangingVoice
-                ? <ActivityIndicator size="small" color={colors.primary} />
-                : <Icon name="check" size={13} color={colors.primary} />
-            )}
+            {active && <Icon name="check" size={13} color={colors.primary} />}
           </TouchableOpacity>
         );
       })}
@@ -161,7 +144,7 @@ const VoicePicker: React.FC = () => {
   );
 };
 
-// ─── Main TTS Section ─────────────────────────────────────────────────────────
+// ── Main TTS Section ─────────────────────────────────────────────────────────
 
 interface TTSSectionProps {
   onNavigateToTTSSettings?: () => void;
@@ -171,18 +154,12 @@ export const TTSSection: React.FC<TTSSectionProps> = ({ onNavigateToTTSSettings 
   const { colors } = useTheme();
   const modal = useThemedStyles(createModalStyles);
   const local = useThemedStyles(createLocalStyles);
-  const {
-    settings, updateSettings,
-    isBackboneDownloaded, isVocoderDownloaded,
-    kokoroReady,
-  } = useTTSStore();
+  const { settings, updateSettings, isReady } = useTTSStore();
 
-  const areBothDownloaded = isBackboneDownloaded && isVocoderDownloaded;
-  const hasAnySpeech = kokoroReady || areBothDownloaded;
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const isChatMode = settings.interfaceMode === 'chat';
 
-  if (!hasAnySpeech) {
+  if (!isReady) {
     return (
       <View style={modal.sectionCard}>
         <Text style={modal.settingDescription}>
@@ -202,7 +179,7 @@ export const TTSSection: React.FC<TTSSectionProps> = ({ onNavigateToTTSSettings 
 
   return (
     <View style={modal.sectionCard}>
-      <ModePicker areBothDownloaded={areBothDownloaded} />
+      <ModePicker audioAvailable={isReady} />
 
       {isChatMode && (
         <View style={local.toggleRow}>

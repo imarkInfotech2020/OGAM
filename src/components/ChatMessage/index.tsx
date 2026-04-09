@@ -193,7 +193,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const ttsCanSpeak = useTTSStore(
-    s => s.settings.enabled && s.isBackboneDownloaded && s.isVocoderDownloaded,
+    s => s.settings.enabled && s.isReady,
   );
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -261,12 +261,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       onSpeakProp();
       return;
     }
-    const tts = useTTSStore.getState();
-    if (!tts.isModelLoaded) {
-      tts.loadModels().then(() => useTTSStore.getState().speak(displayContent, message.id));
-    } else {
-      tts.speak(displayContent, message.id);
-    }
+    useTTSStore.getState().speak(displayContent, message.id);
   };
 
   if (message.isSystemInfo) {

@@ -10,7 +10,7 @@ import { QueueRow } from './Toolbar';
 import { AttachmentPreview } from './Attachments';
 import { AttachPickerPopover, VoicePickerPopover, QuickSettingsPopover } from './Popovers';
 import { useTTSStore } from '../../stores/ttsStore';
-import type { KOKORO_VOICES } from '../../constants/kokoroModels';
+import type { TTSVoice } from '../../engine';
 
 interface AudioModeLayoutProps {
   styles: any;
@@ -22,7 +22,7 @@ interface AudioModeLayoutProps {
   supportsToolCalling: boolean;
   enabledToolCount: number;
   thinkingEnabled: boolean;
-  currentVoice: typeof KOKORO_VOICES[number];
+  currentVoice: TTSVoice;
   // Attachments
   attachments: MediaAttachment[];
   onRemoveAttachment: (id: string) => void;
@@ -96,7 +96,7 @@ export const AudioModeLayout: React.FC<AudioModeLayoutProps> = ({
   setAlertState,
 }) => {
   const { colors } = useTheme();
-  const isChangingVoice = useTTSStore((s) => s.settings.kokoroVoiceId !== s.kokoroActiveVoiceId);
+  const isChangingVoice = false; // Voice change state is handled by the engine internally
 
   const handleStop = () => {
     if (onStop && isGenerating) {

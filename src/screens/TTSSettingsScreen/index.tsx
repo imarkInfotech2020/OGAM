@@ -10,37 +10,36 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useTTSStore } from '../../stores/ttsStore';
+import { ttsRegistry } from '../../engine';
 import { hardwareService } from '../../services/hardware';
-import { TTS_BACKBONE_MODEL, TTS_WARN_RAM_GB, TTS_BLOCK_RAM_GB } from '../../constants/ttsModels';
-import { KOKORO_VOICES, isExecutorchSupported } from '../../constants/kokoroModels';
-import type { KokoroVoiceId } from '../../constants/kokoroModels';
+import { TTS_WARN_RAM_GB, TTS_BLOCK_RAM_GB } from '../../constants/ttsModels';
 import type { InterfaceMode } from '../../stores/ttsStore';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 type Styles = ReturnType<typeof createStyles>;
 
-const ProgressRow: React.FC<{
+const AssetRow: React.FC<{
   label: string;
   sizeMB: number;
-  downloaded: boolean;
-  downloading: boolean;
+  status: string;
   progress: number;
   styles: Styles;
   colors: ThemeColors;
   border?: boolean;
-}> = ({ label, sizeMB, downloaded, downloading, progress, styles, colors, border }) => (
+}> = ({ label, sizeMB, status, progress, styles, colors, border }) => (
   <View>
     <View style={[styles.modelRow, border ? styles.modelRowBorder : undefined]}>
       <View style={styles.modelInfo}>
         <Text style={styles.modelName}>{label}</Text>
         <Text style={styles.modelSize}>{sizeMB} MB</Text>
       </View>
-      {downloaded && <Icon name="check-circle" size={14} color={colors.primary} />}
-      {downloading && <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>}
-      {!downloaded && !downloading && <Icon name="download" size={14} color={colors.textMuted} />}
+      {status === 'downloaded' && <Icon name="check-circle" size={14} color={colors.primary} />}
+      {status === 'downloading' && <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>}
+      {status === 'not-downloaded' && <Icon name="download" size={14} color={colors.textMuted} />}
+      {status === 'error' && <Icon name="alert-circle" size={14} color={colors.error} />}
     </View>
-    {downloading && (
+    {status === 'downloading' && (
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
       </View>
@@ -51,10 +50,10 @@ const ProgressRow: React.FC<{
 const InterfaceModeCard: React.FC<{
   mode: InterfaceMode;
   deviceBlocked: boolean;
-  areBothDownloaded: boolean;
+  engineReady: boolean;
   onModeChange: (m: InterfaceMode) => void;
   styles: Styles;
-}> = ({ mode, deviceBlocked, areBothDownloaded, onModeChange, styles }) => (
+}> = ({ mode, deviceBlocked, engineReady, onModeChange, styles }) => (
   <Card style={styles.section}>
     <Text style={styles.sectionLabel}>Interface Mode</Text>
     <Text style={styles.description}>
@@ -63,7 +62,7 @@ const InterfaceModeCard: React.FC<{
     <View style={styles.modeRow}>
       {(['chat', 'audio'] as InterfaceMode[]).map((m) => {
         const active = mode === m;
-        const blocked = m === 'audio' && (deviceBlocked || !areBothDownloaded);
+        const blocked = m === 'audio' && (deviceBlocked || !engineReady);
         return (
           <TouchableOpacity
             key={m}
@@ -78,7 +77,7 @@ const InterfaceModeCard: React.FC<{
         );
       })}
     </View>
-    {!areBothDownloaded && (
+    {!engineReady && (
       <Text style={styles.hintText}>Download models below to enable Audio Mode.</Text>
     )}
   </Card>
@@ -137,54 +136,93 @@ const CompatibilityCard: React.FC<{
   );
 };
 
-const KokoroCard: React.FC<{
-  kokoroReady: boolean;
-  kokoroDownloadProgress: number;
-  selectedVoiceId: KokoroVoiceId;
-  isChangingVoice: boolean;
-  onVoiceChange: (id: KokoroVoiceId) => void;
+const EnginePickerCard: React.FC<{
   styles: Styles;
   colors: ThemeColors;
-}> = ({ kokoroReady, kokoroDownloadProgress, selectedVoiceId, isChangingVoice, onVoiceChange, styles, colors }) => {
-  const supported = isExecutorchSupported();
+}> = ({ styles, colors }) => {
+  const { settings, setEngine } = useTTSStore();
+  const engineIds = ttsRegistry.getRegisteredIds();
+
+  const handleSelect = async (id: string) => {
+    if (id === settings.engineId) return;
+    await setEngine(id);
+  };
+
+  return (
+    <Card style={styles.section}>
+      <Text style={styles.sectionLabel}>Engine</Text>
+      <Text style={styles.description}>
+        Choose which on-device TTS engine powers speech synthesis.
+      </Text>
+      {engineIds.map((id, i) => {
+        const engine = ttsRegistry.getEngine(id);
+        const active = id === settings.engineId;
+        const supported = engine.isSupported();
+        return (
+          <TouchableOpacity
+            key={id}
+            style={[styles.voiceRow, i > 0 && styles.voiceRowBorder]}
+            onPress={() => handleSelect(id)}
+            disabled={!supported}
+          >
+            <View style={styles.voiceInfo}>
+              <Text style={[styles.voiceName, !supported && { color: colors.textMuted }]}>
+                {engine.displayName}
+              </Text>
+              <Text style={styles.voiceMeta}>
+                {engine.capabilities.peakRamMB} MB
+                {engine.capabilities.voiceCloning ? ' · Voice cloning' : ''}
+                {engine.capabilities.streaming ? ' · Streaming' : ''}
+                {!supported ? ' · Not supported on this device' : ''}
+              </Text>
+            </View>
+            {active && <Icon name="check" size={14} color={colors.primary} />}
+          </TouchableOpacity>
+        );
+      })}
+    </Card>
+  );
+};
+
+const VoiceCard: React.FC<{
+  styles: Styles;
+  colors: ThemeColors;
+}> = ({ styles, colors }) => {
+  const { voices, activeVoiceId, isReady, isDownloading, overallDownloadProgress, setVoice } = useTTSStore();
+
   return (
     <Card style={styles.section}>
       <View style={styles.kokoroHeader}>
         <Text style={styles.sectionLabel}>Voice</Text>
-        {!supported && (
-          <Text style={styles.hintText}>Requires Android 13+ / iOS 17</Text>
+        {isDownloading && overallDownloadProgress > 0 && (
+          <Text style={styles.hintText}>{Math.round(overallDownloadProgress * 100)}%</Text>
         )}
-        {supported && !kokoroReady && kokoroDownloadProgress > 0 && (
-          <Text style={styles.hintText}>{Math.round(kokoroDownloadProgress * 100)}%</Text>
-        )}
-        {supported && !kokoroReady && kokoroDownloadProgress === 0 && (
+        {!isReady && !isDownloading && (
           <ActivityIndicator size="small" color={colors.textMuted} />
         )}
-        {supported && kokoroReady && (
+        {isReady && (
           <Icon name="check-circle" size={14} color={colors.primary} />
         )}
       </View>
       <Text style={styles.description}>
         Fast on-device voice synthesis. Used for the speak button in Chat Mode.
       </Text>
-      {KOKORO_VOICES.map((voice, i) => {
-        const active = selectedVoiceId === voice.id;
+      {voices.map((voice, i) => {
+        const active = activeVoiceId === voice.id;
         return (
           <TouchableOpacity
             key={voice.id}
             style={[styles.voiceRow, i > 0 && styles.voiceRowBorder]}
-            onPress={() => onVoiceChange(voice.id)}
-            disabled={!supported}
+            onPress={() => setVoice(voice.id)}
           >
             <View style={styles.voiceInfo}>
               <Text style={styles.voiceName}>{voice.label}</Text>
-              <Text style={styles.voiceMeta}>{voice.accent} · {voice.gender}</Text>
+              <Text style={styles.voiceMeta}>
+                {voice.metadata.accent ? `${voice.metadata.accent} · ` : ''}
+                {voice.metadata.gender || ''}
+              </Text>
             </View>
-            {active && (
-              isChangingVoice
-                ? <ActivityIndicator size="small" color={colors.primary} />
-                : <Icon name="check" size={14} color={colors.primary} />
-            )}
+            {active && <Icon name="check" size={14} color={colors.primary} />}
           </TouchableOpacity>
         );
       })}
@@ -202,14 +240,11 @@ export const TTSSettingsScreen: React.FC = () => {
   const [ramGB, setRamGB] = useState<number>(8);
 
   const {
-    isBackboneDownloaded, isVocoderDownloaded,
-    isDownloadingBackbone, isDownloadingVocoder,
-    backboneDownloadProgress, vocoderDownloadProgress,
-    isModelLoaded, isModelLoading,
+    assets, isReady, isDownloading, isLoading,
     audioCacheSizeMB, settings, error,
-    kokoroReady, kokoroDownloadProgress, kokoroActiveVoiceId,
-    downloadModels, deleteModels, loadModels, unloadModels,
+    downloadModels, deleteModels,
     checkDownloadStatus, refreshCacheSize, clearAudioCache, updateSettings, clearError,
+    initializeEngine,
   } = useTTSStore();
 
   useEffect(() => {
@@ -219,15 +254,14 @@ export const TTSSettingsScreen: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const areBothDownloaded = isBackboneDownloaded && isVocoderDownloaded;
-  const isDownloading = isDownloadingBackbone || isDownloadingVocoder;
   const deviceBlocked = ramGB < TTS_BLOCK_RAM_GB;
   const deviceWarning = !deviceBlocked && ramGB < TTS_WARN_RAM_GB;
-  const totalSizeMB = TTS_BACKBONE_MODEL.backboneSizeMB + TTS_BACKBONE_MODEL.vocoderSizeMB;
+  const totalSizeMB = Math.round(assets.reduce((sum, a) => sum + a.asset.sizeBytes, 0) / (1024 * 1024));
+  const allDownloaded = assets.every(a => a.status === 'downloaded');
 
   const handleDelete = () => {
     setAlertState(
-      showAlert('Remove TTS Models', 'This will delete both model files and disable text-to-speech.', [
+      showAlert('Remove TTS Models', 'This will delete all model files and disable text-to-speech.', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => { setAlertState(hideAlert()); deleteModels(); } },
       ]),
@@ -244,10 +278,9 @@ export const TTSSettingsScreen: React.FC = () => {
   };
 
   const handleModeChange = (mode: InterfaceMode) => {
-    if (mode === 'audio' && deviceBlocked) { return; }
+    if (mode === 'audio' && deviceBlocked) return;
     updateSettings({ interfaceMode: mode });
-    if (mode === 'audio' && !isModelLoaded && areBothDownloaded) { loadModels(); }
-    if (mode === 'chat' && isModelLoaded) { unloadModels(); }
+    if (mode === 'audio') initializeEngine();
   };
 
   return (
@@ -257,15 +290,17 @@ export const TTSSettingsScreen: React.FC = () => {
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Text to Speech</Text>
-        {isModelLoading && <ActivityIndicator size="small" color={colors.primary} />}
+        {isLoading && <ActivityIndicator size="small" color={colors.primary} />}
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
 
+        <EnginePickerCard styles={styles} colors={colors} />
+
         <InterfaceModeCard
           mode={settings.interfaceMode}
           deviceBlocked={deviceBlocked}
-          areBothDownloaded={areBothDownloaded}
+          engineReady={isReady}
           onModeChange={handleModeChange}
           styles={styles}
         />
@@ -283,33 +318,31 @@ export const TTSSettingsScreen: React.FC = () => {
         )}
 
         <Card style={styles.section}>
-          <Text style={styles.sectionLabel}>Models ({totalSizeMB} MB total)</Text>
-          <ProgressRow label="Voice model" sizeMB={TTS_BACKBONE_MODEL.backboneSizeMB}
-            downloaded={isBackboneDownloaded} downloading={isDownloadingBackbone}
-            progress={backboneDownloadProgress} styles={styles} colors={colors} />
-          <ProgressRow label="Audio decoder" sizeMB={TTS_BACKBONE_MODEL.vocoderSizeMB}
-            downloaded={isVocoderDownloaded} downloading={isDownloadingVocoder}
-            progress={vocoderDownloadProgress} styles={styles} colors={colors} border />
+          <Text style={styles.sectionLabel}>Models{totalSizeMB > 0 ? ` (${totalSizeMB} MB total)` : ''}</Text>
+          {assets.map((assetState, i) => (
+            <AssetRow
+              key={assetState.asset.id}
+              label={assetState.asset.label}
+              sizeMB={Math.round(assetState.asset.sizeBytes / (1024 * 1024))}
+              status={assetState.status}
+              progress={assetState.progress}
+              styles={styles}
+              colors={colors}
+              border={i > 0}
+            />
+          ))}
           <View style={styles.downloadActions}>
-            {areBothDownloaded
+            {allDownloaded
               ? <Button title="Remove Models" variant="outline" size="small" onPress={handleDelete} style={styles.removeButton} />
-              : <Button title={isDownloading ? 'Downloading...' : `Download (${totalSizeMB} MB)`}
+              : <Button title={isDownloading ? 'Downloading...' : `Download${totalSizeMB > 0 ? ` (${totalSizeMB} MB)` : ''}`}
                   variant="primary" size="small" onPress={downloadModels} disabled={isDownloading || deviceBlocked} />}
           </View>
           {error && <TouchableOpacity onPress={clearError}><Text style={styles.error}>{error}</Text></TouchableOpacity>}
         </Card>
 
-        <KokoroCard
-          kokoroReady={kokoroReady}
-          kokoroDownloadProgress={kokoroDownloadProgress}
-          selectedVoiceId={settings.kokoroVoiceId as KokoroVoiceId}
-          isChangingVoice={(settings.kokoroVoiceId as KokoroVoiceId) !== kokoroActiveVoiceId}
-          onVoiceChange={(id) => updateSettings({ kokoroVoiceId: id })}
-          styles={styles}
-          colors={colors}
-        />
+        <VoiceCard styles={styles} colors={colors} />
 
-        {(areBothDownloaded || kokoroReady) && (
+        {isReady && (
           <PlaybackCard settings={settings} onUpdate={updateSettings} colors={colors} styles={styles} />
         )}
 
@@ -389,11 +422,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     downloadActions: { marginTop: SPACING.md },
     removeButton: { borderColor: colors.error },
     error: { ...TYPOGRAPHY.bodySmall, color: colors.error, marginTop: SPACING.md, textAlign: 'center' as const },
-    sliderRow: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: SPACING.xs },
     sliderLabel: { ...TYPOGRAPHY.body, color: colors.text },
-    sliderValue: { ...TYPOGRAPHY.body, color: colors.primary },
-    sliderMarks: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginBottom: SPACING.xs },
-    sliderMark: { ...TYPOGRAPHY.meta, color: colors.textMuted },
     compatRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: SPACING.sm },
     compatText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, flex: 1, lineHeight: 18 },
     errorText: { color: colors.error },

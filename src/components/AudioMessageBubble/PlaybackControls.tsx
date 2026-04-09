@@ -32,7 +32,7 @@ interface PlaybackState {
 export function usePlaybackState(messageId: string): PlaybackState {
   const isSpeaking = useTTSStore((s) => s.isSpeaking);
   const isPaused = useTTSStore((s) => s.isPaused);
-  const isAudioPlaying = useTTSStore((s) => s.isAudioPlaying);
+  const isAudioPlaying = useTTSStore((s) => s.isSpeaking);
   const currentMessageId = useTTSStore((s) => s.currentMessageId);
 
   const isThisPlaying = isSpeaking && currentMessageId === messageId && !isPaused;

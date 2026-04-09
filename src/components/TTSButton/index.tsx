@@ -24,24 +24,15 @@ export const TTSButton: React.FC<TTSButtonProps> = ({ text, messageId }) => {
     stop,
     isSpeaking,
     isGeneratingAudio,
-    isModelLoading,
-    isModelLoaded,
+    isLoading,
+    isReady,
     currentMessageId,
     settings,
-    isBackboneDownloaded,
-    isVocoderDownloaded,
-    kokoroReady,
-    loadModels,
   } = useTTSStore();
 
-  const areBothDownloaded = isBackboneDownloaded && isVocoderDownloaded;
   const isThisMessage = currentMessageId === messageId;
-  // Kokoro streams so no separate generation phase — only OuteTTS sets isGeneratingAudio
   const isThisMessageGenerating = isGeneratingAudio && isThisMessage;
   const isThisMessageSpeaking = isSpeaking && !isGeneratingAudio && isThisMessage;
-
-  // Button is usable if Kokoro is ready (fast path) OR OuteTTS is downloaded (slow path)
-  const canSpeak = kokoroReady || areBothDownloaded;
 
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -62,31 +53,19 @@ export const TTSButton: React.FC<TTSButtonProps> = ({ text, messageId }) => {
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
-  // Don't render if TTS disabled or no model is usable (Kokoro or OuteTTS)
-  if (!settings.enabled || !canSpeak) {
+  // Don't render if TTS disabled or engine not ready
+  if (!settings.enabled || !isReady) {
     return null;
   }
 
-  // Show spinner while model is loading for this message, or while generating audio tokens
-  if ((isModelLoading && isThisMessage) || isThisMessageGenerating) {
+  // Show spinner while loading or generating audio tokens
+  if ((isLoading && isThisMessage) || isThisMessageGenerating) {
     return <ActivityIndicator size="small" color={colors.textMuted} style={styles.button} />;
   }
 
   const handlePress = () => {
     if (isThisMessageSpeaking || isThisMessageGenerating) {
       stop();
-      return;
-    }
-    // Kokoro: ready immediately, no model loading step needed
-    if (kokoroReady) {
-      speak(text, messageId);
-      return;
-    }
-    // OuteTTS fallback: load models on first press if needed
-    if (!isModelLoaded) {
-      loadModels().then(() => {
-        useTTSStore.getState().speak(text, messageId);
-      });
       return;
     }
     speak(text, messageId);

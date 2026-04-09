@@ -1,29 +1,67 @@
 /**
  * TTS Integration Tests
  *
- * Tests the wiring between ttsStore and ttsService:
- * - Chat Mode full flow: download → load → speak → stop
- * - Audio Mode full flow: download → load → generateAndSave → playMessage → stop
- * - Auto-play triggering in Chat Mode
- * - Mode switching
+ * Tests the wiring between ttsStore and the engine registry.
+ * Verifies full flows delegate correctly through the engine interface.
  */
 
-jest.mock('../../../src/services/ttsService', () => ({
-  ttsService: {
-    isBackboneDownloaded: jest.fn(),
-    isVocoderDownloaded: jest.fn(),
-    downloadBackbone: jest.fn(),
-    downloadVocoder: jest.fn(),
-    deleteModels: jest.fn(),
-    loadModels: jest.fn(),
-    unloadModels: jest.fn(),
-    speak: jest.fn(),
-    stop: jest.fn(),
-    generateAndSave: jest.fn(),
-    playFromFile: jest.fn(),
-    getAudioCacheSizeMB: jest.fn(),
-    clearAudioCache: jest.fn(),
+const mockEngine = {
+  id: 'mock-tts',
+  displayName: 'Mock TTS',
+  capabilities: {
+    streaming: false,
+    voiceCloning: false,
+    pauseResume: true,
+    generateAndSave: true,
+    peakRamMB: 100,
   },
+  getPhase: jest.fn(() => 'ready' as const),
+  on: jest.fn(() => jest.fn()),
+  off: jest.fn(),
+  once: jest.fn(() => jest.fn()),
+  isSupported: jest.fn(() => true),
+  initialize: jest.fn().mockResolvedValue(undefined),
+  release: jest.fn().mockResolvedValue(undefined),
+  destroy: jest.fn().mockResolvedValue(undefined),
+  getRequiredAssets: jest.fn(() => [
+    { id: 'backbone', label: 'Voice Model', url: 'https://example.com/bb.gguf', sizeBytes: 454 * 1024 * 1024, filename: 'bb.gguf' },
+    { id: 'vocoder', label: 'Decoder', url: 'https://example.com/voc.gguf', sizeBytes: 73 * 1024 * 1024, filename: 'voc.gguf' },
+  ]),
+  checkAssetStatus: jest.fn().mockResolvedValue([
+    { asset: { id: 'backbone', label: 'Voice Model', url: '', sizeBytes: 454 * 1024 * 1024, filename: 'bb.gguf' }, status: 'downloaded', progress: 1 },
+    { asset: { id: 'vocoder', label: 'Decoder', url: '', sizeBytes: 73 * 1024 * 1024, filename: 'voc.gguf' }, status: 'downloaded', progress: 1 },
+  ]),
+  downloadAssets: jest.fn().mockResolvedValue(undefined),
+  deleteAssets: jest.fn().mockResolvedValue(undefined),
+  getOverallDownloadProgress: jest.fn(() => 1),
+  isFullyDownloaded: jest.fn(() => true),
+  getBridgeComponent: jest.fn(() => null),
+  getVoices: jest.fn(() => [{ id: '0', label: 'Default', metadata: {} }]),
+  getActiveVoice: jest.fn(() => ({ id: '0', label: 'Default', metadata: {} })),
+  setVoice: jest.fn().mockResolvedValue(undefined),
+  speak: jest.fn().mockResolvedValue(undefined),
+  generateAndSave: jest.fn().mockResolvedValue({
+    filePath: '/cache/c1/m1.pcm',
+    durationSeconds: 1.5,
+    waveformData: new Array(200).fill(0.2),
+  }),
+  playFromFile: jest.fn().mockResolvedValue(undefined),
+  stop: jest.fn(),
+  pause: jest.fn(),
+  resume: jest.fn(),
+};
+
+jest.mock('../../../src/engine', () => ({
+  ttsRegistry: {
+    register: jest.fn(),
+    has: jest.fn(() => true),
+    getEngine: jest.fn(() => mockEngine),
+    setActiveEngine: jest.fn().mockResolvedValue(mockEngine),
+    getActiveEngine: jest.fn(() => mockEngine),
+    getActiveEngineId: jest.fn(() => 'mock-tts'),
+    getRegisteredIds: jest.fn(() => ['mock-tts']),
+  },
+  OuteTTSEngine: class {},
 }));
 
 jest.mock('../../../src/utils/logger', () => ({
@@ -32,26 +70,36 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import { useTTSStore } from '../../../src/stores/ttsStore';
-import { ttsService } from '../../../src/services/ttsService';
 
-const mockTTS = ttsService as jest.Mocked<typeof ttsService>;
 const getState = () => useTTSStore.getState();
 
 const resetStore = () => {
   useTTSStore.setState({
-    isBackboneDownloaded: false,
-    isVocoderDownloaded: false,
-    isDownloadingBackbone: false,
-    isDownloadingVocoder: false,
-    backboneDownloadProgress: 0,
-    vocoderDownloadProgress: 0,
-    isModelLoading: false,
-    isModelLoaded: false,
-    isSpeaking: false,
+    phase: 'ready',
     currentMessageId: null,
-    audioCacheSizeMB: 0,
-    settings: { interfaceMode: 'chat', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
+    currentAmplitude: 0,
+    playbackElapsed: 0,
+    playSessionId: 0,
     error: null,
+    isReady: true,
+    isDownloading: false,
+    isLoading: false,
+    isSpeaking: false,
+    isPaused: false,
+    isGeneratingAudio: false,
+    assets: [],
+    overallDownloadProgress: 1,
+    voices: [{ id: '0', label: 'Default', metadata: {} }],
+    activeVoiceId: '0',
+    audioCacheSizeMB: 0,
+    settings: {
+      interfaceMode: 'chat',
+      enabled: true,
+      autoPlay: false,
+      speed: 1.0,
+      engineId: 'mock-tts',
+      voiceByEngine: {},
+    },
   });
 };
 
@@ -59,106 +107,66 @@ describe('TTS integration', () => {
   beforeEach(() => {
     resetStore();
     jest.clearAllMocks();
-    mockTTS.getAudioCacheSizeMB.mockResolvedValue(0);
   });
 
-  // ─── Chat Mode ────────────────────────────────────────────────────────────
+  // ── Chat Mode full flow ───────────────────────────────────────────────
 
-  describe('Chat Mode: download → load → speak → stop', () => {
+  describe('Chat Mode: speak → stop', () => {
     it('completes the full Chat Mode flow', async () => {
-      // 1. Download
-      mockTTS.downloadBackbone.mockResolvedValue('/bb.gguf');
-      mockTTS.downloadVocoder.mockResolvedValue('/voc.gguf');
-      await getState().downloadModels();
-
-      expect(getState().isBackboneDownloaded).toBe(true);
-      expect(getState().isVocoderDownloaded).toBe(true);
-
-      // 2. Load
-      mockTTS.loadModels.mockResolvedValue(undefined);
-      await getState().loadModels();
-      expect(getState().isModelLoaded).toBe(true);
-
-      // 3. Speak
-      mockTTS.speak.mockResolvedValue(undefined);
-      mockTTS.stop.mockReturnValue(undefined);
-
+      // Speak
       const speakPromise = getState().speak('hello', 'msg1');
-      expect(getState().isSpeaking).toBe(true);
       expect(getState().currentMessageId).toBe('msg1');
 
       await speakPromise;
-      expect(getState().isSpeaking).toBe(false);
+      expect(mockEngine.speak).toHaveBeenCalledWith('hello', expect.objectContaining({
+        speed: 1.0,
+        messageId: 'msg1',
+      }));
       expect(getState().currentMessageId).toBeNull();
 
-      // 4. Stop mid-speech
-      mockTTS.speak.mockImplementation(
+      // Stop mid-speech
+      mockEngine.speak.mockImplementation(
         () => new Promise((resolve) => setTimeout(resolve, 1000)),
       );
       getState().speak('second', 'msg2');
       getState().stop();
-      expect(getState().isSpeaking).toBe(false);
+      expect(mockEngine.stop).toHaveBeenCalled();
     });
   });
 
-  // ─── Audio Mode ───────────────────────────────────────────────────────────
+  // ── Audio Mode full flow ──────────────────────────────────────────────
 
-  describe('Audio Mode: download → load → generateAndSave → playMessage → stop', () => {
+  describe('Audio Mode: generateAndSave → playMessage → stop', () => {
     beforeEach(() => {
       useTTSStore.setState({
-        settings: { interfaceMode: 'audio', enabled: true, autoPlay: false, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
+        settings: { ...getState().settings, interfaceMode: 'audio' },
       });
     });
 
     it('completes the full Audio Mode flow', async () => {
-      // 1. Download
-      mockTTS.downloadBackbone.mockResolvedValue('/bb.gguf');
-      mockTTS.downloadVocoder.mockResolvedValue('/voc.gguf');
-      await getState().downloadModels();
-
-      // 2. Load
-      mockTTS.loadModels.mockResolvedValue(undefined);
-      await getState().loadModels();
-      expect(getState().isModelLoaded).toBe(true);
-
-      // 3. GenerateAndSave
-      const mockAudio = {
-        samples: new Float32Array(100),
-        durationSeconds: 1.5,
-        sampleRate: 24000,
-        waveformData: new Array(200).fill(0.2),
-      };
-      mockTTS.generateAndSave.mockResolvedValue({ path: '/cache/c1/m1.pcm', audio: mockAudio } as any);
-      mockTTS.getAudioCacheSizeMB.mockResolvedValue(1.5);
-
+      // GenerateAndSave
       const result = await getState().generateAndSave('hello audio', 'conv1', 'msg1');
 
       expect(result.path).toBe('/cache/c1/m1.pcm');
       expect(result.waveformData).toHaveLength(200);
       expect(result.durationSeconds).toBe(1.5);
-      expect(getState().audioCacheSizeMB).toBeCloseTo(1.5);
 
-      // 4. PlayMessage
-      mockTTS.playFromFile.mockResolvedValue(undefined);
-      mockTTS.stop.mockReturnValue(undefined);
-
+      // PlayMessage
       const playPromise = getState().playMessage('msg1', '/cache/c1/m1.pcm');
-      expect(getState().isSpeaking).toBe(true);
       expect(getState().currentMessageId).toBe('msg1');
 
       await playPromise;
-      expect(getState().isSpeaking).toBe(false);
 
-      // 5. StopPlayback
+      // StopPlayback
       getState().stopPlayback();
-      expect(mockTTS.stop).toHaveBeenCalled();
+      expect(mockEngine.stop).toHaveBeenCalled();
     });
   });
 
-  // ─── Mode switching ───────────────────────────────────────────────────────
+  // ── Mode switching ────────────────────────────────────────────────────
 
   describe('mode switching', () => {
-    it('switching interfaceMode to audio takes effect immediately', () => {
+    it('switching interfaceMode to audio takes effect', () => {
       expect(getState().settings.interfaceMode).toBe('chat');
       getState().updateSettings({ interfaceMode: 'audio' });
       expect(getState().settings.interfaceMode).toBe('audio');
@@ -171,25 +179,19 @@ describe('TTS integration', () => {
     });
   });
 
-  // ─── Auto-play ────────────────────────────────────────────────────────────
+  // ── Engine-agnostic speak ─────────────────────────────────────────────
 
   describe('auto-play', () => {
-    it('speak is called when autoPlay is true and model is loaded', async () => {
+    it('speak delegates to engine when autoPlay and engine ready', async () => {
       useTTSStore.setState({
-        isModelLoaded: true,
-        settings: { interfaceMode: 'chat', enabled: true, autoPlay: true, speed: 1.0, voiceId: '0', kokoroVoiceId: 'af_heart' },
+        settings: { ...getState().settings, autoPlay: true },
       });
-      mockTTS.speak.mockResolvedValue(undefined);
-      mockTTS.stop.mockReturnValue(undefined);
 
-      // Simulate chat completion triggering speak
-      await getState().speak('AI response text', 'last-msg-id');
+      await getState().speak('AI response', 'last-msg');
 
-      expect(mockTTS.speak).toHaveBeenCalledWith(
-        'AI response text',
-        expect.objectContaining({ voiceId: '0', speed: 1.0 }),
-        expect.any(Function),
-      );
+      expect(mockEngine.speak).toHaveBeenCalledWith('AI response', expect.objectContaining({
+        messageId: 'last-msg',
+      }));
     });
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
@@ -7,8 +7,7 @@ import { ImageModeState } from '../../types';
 import { useAppStore, useTTSStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS, TYPOGRAPHY } from '../../constants';
-import { KOKORO_VOICES } from '../../constants/kokoroModels';
-import type { KokoroVoiceId } from '../../constants/kokoroModels';
+import type { TTSVoice } from '../../engine';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -105,16 +104,15 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 }) => {
   const { colors } = useTheme();
   const { settings, updateSettings } = useAppStore();
-  const { settings: ttsSettings, isBackboneDownloaded, isVocoderDownloaded, isModelLoaded, loadModels, unloadModels, updateSettings: updateTTSSettings } = useTTSStore();
+  const { settings: ttsSettings, isReady: ttsReady, updateSettings: updateTTSSettings, initializeEngine } = useTTSStore();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   if (!visible) return null;
 
   const imgBadge = getImageModeBadge(imageMode, colors);
   const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
-  const ttsAvailable = isBackboneDownloaded && isVocoderDownloaded;
   const ttsMode = ttsSettings.interfaceMode;
-  const ttsBadge = !ttsAvailable
+  const ttsBadge = !ttsReady
     ? { label: 'N/A', bg: colors.textMuted }
     : ttsMode === 'audio'
       ? { label: 'Audio', bg: colors.primary }
@@ -122,12 +120,11 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 
   const handleTTSToggle = () => {
     triggerHaptic('impactLight');
-    if (!ttsAvailable) { onClose(); navigation.navigate('TTSSettings'); return; }
+    if (!ttsReady) { onClose(); navigation.navigate('TTSSettings'); return; }
     onClose();
     const next = ttsMode === 'audio' ? 'chat' : 'audio';
     updateTTSSettings({ interfaceMode: next });
-    if (next === 'audio' && !isModelLoaded) { loadModels(); }
-    if (next === 'chat' && isModelLoaded) { unloadModels(); }
+    if (next === 'audio') initializeEngine();
   };
 
   return (
@@ -179,8 +176,8 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                 style={popoverStyles.row}
                 onPress={handleTTSToggle}
               >
-                <Icon name={ttsMode === 'audio' ? 'volume-2' : 'volume-1'} size={16} color={ttsAvailable ? colors.text : colors.textMuted} />
-                <Text style={[popoverStyles.rowLabel, { color: ttsAvailable ? colors.text : colors.textMuted }]}>Voice</Text>
+                <Icon name={ttsMode === 'audio' ? 'volume-2' : 'volume-1'} size={16} color={ttsReady ? colors.text : colors.textMuted} />
+                <Text style={[popoverStyles.rowLabel, { color: ttsReady ? colors.text : colors.textMuted }]}>Voice</Text>
                 <View style={[popoverStyles.badge, { backgroundColor: ttsBadge.bg }]}>
                   <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{ttsBadge.label}</Text>
                 </View>
@@ -277,18 +274,14 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
   visible, onClose, anchorY, anchorX,
 }) => {
   const { colors } = useTheme();
-  const kokoroVoiceId = useTTSStore((s) => s.settings.kokoroVoiceId);
-  const isChangingVoice = useTTSStore((s) => s.settings.kokoroVoiceId !== s.kokoroActiveVoiceId);
-  const { isSpeaking, stop, updateSettings } = useTTSStore();
+  const { voices, activeVoiceId, isSpeaking, stop, setVoice } = useTTSStore();
 
   if (!visible) return null;
 
-  const handleSelect = (voice: typeof KOKORO_VOICES[number]) => {
+  const handleSelect = (voice: TTSVoice) => {
     triggerHaptic('impactLight');
-    // Stop playback first — KokoroTTSManager defers voice config changes
-    // until isSpeaking is false, so no native crash
     if (isSpeaking) { stop(); }
-    updateSettings({ kokoroVoiceId: voice.id as KokoroVoiceId, speed: voice.defaultSpeed });
+    setVoice(voice.id);
     onClose();
   };
 
@@ -303,8 +296,8 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
               bottom: anchorY + 8,
               right: anchorX,
             }]}>
-              {KOKORO_VOICES.map((voice) => {
-                const isActive = voice.id === kokoroVoiceId;
+              {voices.map((voice) => {
+                const isActive = voice.id === activeVoiceId;
                 return (
                   <TouchableOpacity
                     key={voice.id}
@@ -321,14 +314,10 @@ export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
                         {voice.label}
                       </Text>
                       <Text style={[voicePickerStyles.accent, { color: colors.textMuted }]}>
-                        {voice.persona}
+                        {voice.metadata.persona || ''}
                       </Text>
                     </View>
-                    {isActive && (
-                      isChangingVoice
-                        ? <ActivityIndicator size="small" color={colors.primary} />
-                        : <Icon name="check" size={14} color={colors.primary} />
-                    )}
+                    {isActive && <Icon name="check" size={14} color={colors.primary} />}
                   </TouchableOpacity>
                 );
               })}
