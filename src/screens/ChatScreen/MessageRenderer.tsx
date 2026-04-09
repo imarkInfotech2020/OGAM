@@ -58,12 +58,14 @@ interface AudioBubbleProps {
 }
 
 function buildAudioBubbleProps(msg: Message): AudioBubbleProps {
+  const transcript = stripControlTokens(msg.content);
+  console.log('[AudioBubble] buildProps: msgId=', msg.id, 'contentLen=', msg.content.length, 'transcriptLen=', transcript.length);
   return {
     messageId: msg.id,
     audioPath: msg.audioPath ?? '',
     waveformData: msg.waveformData ?? [],
     durationSeconds: msg.audioDurationSeconds ?? 0,
-    transcript: stripControlTokens(msg.content),
+    transcript,
     _reasoningContent: msg.reasoningContent,
   };
 }
@@ -75,11 +77,10 @@ function wrapAnimated(content: React.ReactElement, shouldAnimate: boolean): Reac
 
 /** Renders a user voice message as an audio bubble */
 function renderUserAudioBubble(
-  msg: Message,
-  audioAtt: any,
-  shouldAnimate: boolean,
+  opts: { msg: Message; audioAtt: any; shouldAnimate: boolean },
   props: MessageRendererProps,
 ): React.ReactElement {
+  const { msg, audioAtt, shouldAnimate } = opts;
   const bubble = (
     <View style={audioStyles.userContainer}>
       <AudioMessageBubble
@@ -119,13 +120,37 @@ function renderAudioStreamingMessage(
   );
 }
 
-/** Renders a completed assistant audio bubble */
+/** Renders a completed assistant audio bubble, with optional tool call UI */
 function renderAudioAssistantBubble(
   msg: Message,
   shouldAnimate: boolean,
   props: MessageRendererProps,
 ): React.ReactElement {
   const hasThinking = !!msg.reasoningContent || !!parseThinkingContent(msg.content).thinking;
+  const hasToolCalls = !!msg.toolCalls?.length;
+
+  // For messages with tool calls, render as a regular ChatMessage (has proper tool call UI)
+  // followed by the audio bubble for the spoken text
+  if (hasToolCalls) {
+    const element = (
+      <View style={audioStyles.assistantContainer}>
+        <ChatMessage
+          message={msg}
+          isStreaming={false}
+          onCopy={props.onCopy}
+          onRetry={props.onRetry}
+          onEdit={props.onEdit}
+          onGenerateImage={props.onGenerateImage}
+          onImagePress={props.onImagePress}
+          canGenerateImage={false}
+          showGenerationDetails={props.showGenerationDetails}
+          animateEntry={false}
+        />
+      </View>
+    );
+    return wrapAnimated(element, shouldAnimate);
+  }
+
   const bubble = (
     <View style={audioStyles.assistantContainer}>
       {hasThinking && <AudioModeThinkingBlock msg={msg} />}
@@ -165,11 +190,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = (props) => {
   if (msg.role === 'user') {
     const audioAtt = msg.attachments?.find((a) => a.type === 'audio');
     if (audioAtt) {
-      return renderUserAudioBubble(msg, audioAtt, animateEntry, props);
+      return renderUserAudioBubble({ msg, audioAtt, shouldAnimate: animateEntry }, props);
     }
   }
 
-  const isAudioAssistant = msg.role === 'assistant' && !msg.isSystemInfo && !msg.toolCalls?.length;
+  const isAudioAssistant = msg.role === 'assistant' && !msg.isSystemInfo;
 
   // Thinking placeholder + audio streaming
   const isThinkingItem = !!(msg as any).isThinking;

@@ -4,8 +4,8 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import Slider from '@react-native-community/slider';
 import { stripMarkdownForSpeech } from '../../utils/messageContent';
 import { MarkdownText } from '../MarkdownText';

@@ -234,31 +234,32 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   const showActions = !!(onCopy || onRetry || onEdit);
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onLongPress={handleLongPress}
-      delayLongPress={300}
-      disabled={!showActions}
-      style={[styles.bubble, isUser && styles.bubbleUser]}
-      testID={`audio-bubble-${messageId}`}
-    >
-      <View style={styles.playRow}>
-        <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
-        {waveformWithSeek}
-      </View>
-
-      <View style={styles.metaRow}>
-        <TranscriptToggle transcript={transcript} colors={colors} styles={styles} onToggle={setShowTranscript} isOpen={showTranscript} />
-        <View style={styles.metaRight}>
-          <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
-          <SpeedChip styles={styles} />
-          {showActions && !isLoading && (
-            <TouchableOpacity style={styles.actionHint} onPress={() => { triggerHaptic('impactLight'); setShowActionMenu(true); }}>
-              <Text style={styles.actionHintText}>•••</Text>
-            </TouchableOpacity>
-          )}
+    <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-${messageId}`}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onLongPress={handleLongPress}
+        delayLongPress={300}
+        disabled={!showActions}
+      >
+        <View style={styles.playRow}>
+          <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
+          {waveformWithSeek}
         </View>
-      </View>
+
+        <View style={styles.metaRow}>
+          <TranscriptToggle transcript={transcript} colors={colors} styles={styles} onToggle={setShowTranscript} isOpen={showTranscript} />
+          <View style={styles.metaRight}>
+            <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
+            <SpeedChip styles={styles} />
+            {showActions && !isLoading && (
+              <TouchableOpacity style={styles.actionHint} onPress={() => { triggerHaptic('impactLight'); setShowActionMenu(true); }}>
+                <Text style={styles.actionHintText}>•••</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+
       {showTranscript && transcript ? (
         <TranscriptContent transcript={transcript} styles={styles} />
       ) : null}
@@ -278,7 +279,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
         onGenerateImage={() => setShowActionMenu(false)}
         onSpeak={() => setShowActionMenu(false)}
       />
-    </TouchableOpacity>
+    </View>
   );
 };
 
