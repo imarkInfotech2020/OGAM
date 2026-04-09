@@ -74,7 +74,12 @@ function wrapAnimated(content: React.ReactElement, shouldAnimate: boolean): Reac
 }
 
 /** Renders a user voice message as an audio bubble */
-function renderUserAudioBubble(msg: Message, audioAtt: any, shouldAnimate: boolean): React.ReactElement {
+function renderUserAudioBubble(
+  msg: Message,
+  audioAtt: any,
+  shouldAnimate: boolean,
+  props: MessageRendererProps,
+): React.ReactElement {
   const bubble = (
     <View style={audioStyles.userContainer}>
       <AudioMessageBubble
@@ -84,6 +89,8 @@ function renderUserAudioBubble(msg: Message, audioAtt: any, shouldAnimate: boole
         durationSeconds={audioAtt.audioDurationSeconds ?? 0}
         transcript={msg.content}
         isUser
+        onCopy={props.onCopy}
+        onRetry={() => props.onRetry(msg)}
       />
     </View>
   );
@@ -113,12 +120,20 @@ function renderAudioStreamingMessage(
 }
 
 /** Renders a completed assistant audio bubble */
-function renderAudioAssistantBubble(msg: Message, shouldAnimate: boolean): React.ReactElement {
+function renderAudioAssistantBubble(
+  msg: Message,
+  shouldAnimate: boolean,
+  props: MessageRendererProps,
+): React.ReactElement {
   const hasThinking = !!msg.reasoningContent || !!parseThinkingContent(msg.content).thinking;
   const bubble = (
     <View style={audioStyles.assistantContainer}>
       {hasThinking && <AudioModeThinkingBlock msg={msg} />}
-      <AudioMessageBubble {...buildAudioBubbleProps(msg)} />
+      <AudioMessageBubble
+        {...buildAudioBubbleProps(msg)}
+        onCopy={props.onCopy}
+        onRetry={() => props.onRetry(msg)}
+      />
     </View>
   );
   return wrapAnimated(bubble, shouldAnimate);
@@ -150,7 +165,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = (props) => {
   if (msg.role === 'user') {
     const audioAtt = msg.attachments?.find((a) => a.type === 'audio');
     if (audioAtt) {
-      return renderUserAudioBubble(msg, audioAtt, animateEntry);
+      return renderUserAudioBubble(msg, audioAtt, animateEntry, props);
     }
   }
 
@@ -164,7 +179,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = (props) => {
 
   // Audio Mode: show assistant messages as audio bubbles after streaming ends
   if (isAudioAssistant && ttsMode === 'audio' && !isStreamingThis) {
-    return renderAudioAssistantBubble(msg, animateEntry);
+    return renderAudioAssistantBubble(msg, animateEntry, props);
   }
 
   // Chat Mode: TTSButton lives in the meta row

@@ -1,14 +1,19 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   View,
+  Text,
+  TouchableOpacity,
   StyleSheet,
   Animated,
 } from 'react-native';
 import { stripMarkdownForSpeech } from '../../utils/messageContent';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useTTSStore } from '../../stores/ttsStore';
+import { triggerHaptic } from '../../utils/haptics';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import type { ThemeColors, ThemeShadows } from '../../theme';
+import { ActionMenuSheet } from '../ChatMessage/components/ActionMenuSheet';
+import { createStyles as createChatStyles } from '../ChatMessage/styles';
 import {
   usePlaybackState,
   useElapsedTimer,
@@ -31,8 +36,10 @@ interface AudioMessageBubbleProps {
   transcript?: string;
   isUser?: boolean;
   isLoading?: boolean;
-  /** Thinking/reasoning content from the model — shown as collapsible block above waveform */
   _reasoningContent?: string;
+  onCopy?: (content: string) => void;
+  onRetry?: () => void;
+  onEdit?: (newContent: string) => void;
 }
 
 function subsample(data: number[], count: number): number[] {
@@ -151,15 +158,24 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
   isUser = false,
   isLoading = false,
   _reasoningContent,
+  onCopy,
+  onRetry,
+  onEdit,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const chatStyles = useThemedStyles(createChatStyles);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const speed = useTTSStore((s) => s.settings.speed);
   const playMessage = useTTSStore((s) => s.playMessage);
   const speak = useTTSStore((s) => s.speak);
 
   const { isThisPlaying, isThisPaused, isThisAudible, isThisLoading } = usePlaybackState(messageId);
   const currentMessageId = useTTSStore((s) => s.currentMessageId);
+
+  useEffect(() => {
+    console.log('[AudioBubble] state: messageId=', messageId, 'currentMessageId=', currentMessageId, 'isThisAudible=', isThisAudible, 'isThisPlaying=', isThisPlaying);
+  }, [messageId, currentMessageId, isThisAudible, isThisPlaying]);
   const [showTranscript, setShowTranscript] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
   const seekOffsetRef = useRef<number>(0);
@@ -209,8 +225,23 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
     </View>
   );
 
+  const handleLongPress = useCallback(() => {
+    if (isLoading) return;
+    triggerHaptic('impactMedium');
+    setShowActionMenu(true);
+  }, [isLoading]);
+
+  const showActions = !!(onCopy || onRetry || onEdit);
+
   return (
-    <View style={[styles.bubble, isUser && styles.bubbleUser]} testID={`audio-bubble-${messageId}`}>
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onLongPress={handleLongPress}
+      delayLongPress={300}
+      disabled={!showActions}
+      style={[styles.bubble, isUser && styles.bubbleUser]}
+      testID={`audio-bubble-${messageId}`}
+    >
       <View style={styles.playRow}>
         <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
         {waveformWithSeek}
@@ -221,12 +252,33 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
         <View style={styles.metaRight}>
           <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
           <SpeedChip styles={styles} />
+          {showActions && !isLoading && (
+            <TouchableOpacity style={styles.actionHint} onPress={() => { triggerHaptic('impactLight'); setShowActionMenu(true); }}>
+              <Text style={styles.actionHintText}>•••</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
       {showTranscript && transcript ? (
         <TranscriptContent transcript={transcript} styles={styles} />
       ) : null}
-    </View>
+
+      <ActionMenuSheet
+        visible={showActionMenu}
+        onClose={() => setShowActionMenu(false)}
+        isUser={isUser}
+        canEdit={isUser && !!onEdit}
+        canRetry={!!onRetry}
+        canGenerateImage={false}
+        canSpeak={false}
+        styles={chatStyles}
+        onCopy={() => { onCopy?.(transcript ?? ''); setShowActionMenu(false); }}
+        onEdit={() => setShowActionMenu(false)}
+        onRetry={() => { onRetry?.(); setShowActionMenu(false); }}
+        onGenerateImage={() => setShowActionMenu(false)}
+        onSpeak={() => setShowActionMenu(false)}
+      />
+    </TouchableOpacity>
   );
 };
 
@@ -325,5 +377,13 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   transcriptText: {
     ...TYPOGRAPHY.bodySmall,
     lineHeight: 20,
+  },
+  actionHint: {
+    padding: 4,
+  },
+  actionHintText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textMuted,
+    letterSpacing: 1,
   },
 });

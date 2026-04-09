@@ -45,6 +45,7 @@ function App() {
   const clearImageModelDownloading = useAppStore((s) => s.clearImageModelDownloading);
 
   const { colors, isDark } = useTheme();
+  const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
 
   const {
     isEnabled: authEnabled,
@@ -247,7 +248,7 @@ function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-        {isExecutorchSupported() && <KokoroTTSManager />}
+        {isExecutorchSupported() && ttsInterfaceMode === 'audio' && <KokoroTTSManager />}
         <NavigationContainer
           theme={{
             dark: isDark,

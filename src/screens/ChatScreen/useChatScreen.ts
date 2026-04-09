@@ -252,19 +252,22 @@ export const useChatScreen = () => {
     if (!chunk) return;
 
     ref.pending.push(stripMarkdownForSpeech(chunk));
+    logger.log('[StreamTTS] chunk queued, pending=', ref.pending.length, 'isPlaying=', ref.isPlaying);
 
     if (!ref.isPlaying) {
       const playNext = () => {
         // If another message took over playback (e.g. user tapped a recording), stop the chain
         const currentId = useTTSStore.getState().currentMessageId;
         if (currentId !== null && currentId !== 'streaming') {
+          logger.log('[StreamTTS] chain interrupted, currentId=', currentId);
           ref.pending = [];
           ref.isPlaying = false;
           return;
         }
         const next = ref.pending.shift();
-        if (!next) { ref.isPlaying = false; return; }
+        if (!next) { ref.isPlaying = false; logger.log('[StreamTTS] chain done, no more pending'); return; }
         ref.isPlaying = true;
+        logger.log('[StreamTTS] playing next chunk, remaining=', ref.pending.length);
         useTTSStore.getState().speak(next, 'streaming').finally(playNext);
       };
       playNext();
@@ -286,17 +289,24 @@ export const useChatScreen = () => {
     const wordCount = last.content.split(/\s+/).filter(Boolean).length;
     const speed = useTTSStore.getState().settings.speed || 1;
     const estDuration = Math.max(1, wordCount / (2.5 * speed));
+    logger.log('[StreamTTS] post-stream: messageId=', last.id, 'alreadySpoken=', alreadySpoken, 'wordCount=', wordCount, 'estDuration=', estDuration);
     useChatStore.getState().updateMessageAudio(activeConversationId, last.id, {
       isAudioModeMessage: true,
       audioDurationSeconds: estDuration,
     });
     // Only speak if a TTS engine is available
-    if (!tts.kokoroReady && !tts.isModelLoaded) return;
+    if (!tts.kokoroReady && !tts.isModelLoaded) { logger.log('[StreamTTS] post-stream: no TTS engine available'); return; }
     // Strip thinking/control tokens — must match how positions were tracked during streaming
     const cleanContent = stripMarkdownForSpeech(stripControlTokens(last.content));
     const remaining = cleanContent.slice(alreadySpoken).trim();
+    logger.log('[StreamTTS] post-stream: remaining chars=', remaining.length, 'isSpeaking=', tts.isSpeaking, 'currentMessageId=', tts.currentMessageId);
     if (remaining) {
       useTTSStore.getState().speak(remaining, last.id);
+    } else if (useTTSStore.getState().currentMessageId === 'streaming') {
+      // All text was already spoken by streaming chunks — transfer ownership
+      // to the real message ID so the AudioMessageBubble's seekbar works.
+      logger.log('[StreamTTS] post-stream: transferring ownership from streaming to', last.id);
+      useTTSStore.setState({ currentMessageId: last.id });
     }
   }, [isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
 
