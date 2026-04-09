@@ -51,96 +51,29 @@ function normalize(data: number[]): number[] {
   return data.map((v) => v / max);
 }
 
-/**
- * Waveform bar display — three modes:
- *
- *  1. `amplitude` provided (0–1): VU-meter driven by live Kokoro chunk RMS.
- *  2. `isPlaying` true but no `amplitude`: wave animation (staggered bounce).
- *  3. Neither: static bars at resting shape.
- */
+/** Static waveform bars — shape derived from data, no animation needed.
+ *  Progress indication is handled by the native Slider below. */
 const WaveformBars: React.FC<{
   data: number[];
   colors: ThemeColors;
-  amplitude?: number;
-  isPlaying?: boolean;
-}> = ({ data, colors, amplitude, isPlaying }) => {
+}> = ({ data, colors }) => {
   const bars = useMemo(() => normalize(subsample(data, WAVEFORM_BARS)), [data]);
-
-  const ampAnim = useRef(new Animated.Value(0)).current;
-  const ampAnimRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  useEffect(() => {
-    if (amplitude === undefined) return;
-    ampAnimRef.current?.stop();
-    const current = (ampAnim as any)._value ?? 0;
-    if (amplitude >= current) {
-      ampAnim.setValue(amplitude);
-    } else {
-      ampAnimRef.current = Animated.timing(ampAnim, {
-        toValue: amplitude,
-        duration: 250,
-        useNativeDriver: false,
-      });
-      ampAnimRef.current.start();
-    }
-  }, [amplitude, ampAnim]);
-
-  const waveAnims = useRef(bars.map(() => new Animated.Value(0))).current;
-  const waveRef = useRef<Animated.CompositeAnimation[]>([]);
-
-  useEffect(() => {
-    const shouldWave = isPlaying && amplitude === undefined;
-    if (!shouldWave) {
-      waveRef.current.forEach(a => a.stop());
-      waveAnims.forEach(v => v.setValue(0));
-      return;
-    }
-    waveRef.current = waveAnims.map((v, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 25),
-          Animated.timing(v, { toValue: 1, duration: 250, useNativeDriver: false }),
-          Animated.timing(v, { toValue: 0, duration: 250, useNativeDriver: false }),
-        ]),
-      ),
-    );
-    waveRef.current.forEach(a => a.start());
-    return () => waveRef.current.forEach(a => a.stop());
-  }, [isPlaying, amplitude, waveAnims]);
-
-  useEffect(() => {
-    if (!isPlaying && amplitude === undefined) {
-      ampAnim.setValue(0);
-    }
-  }, [isPlaying, amplitude, ampAnim]);
 
   return (
     <View style={barStyles.container}>
-      {bars.map((shape, i) => {
-        const maxH = Math.max(8, Math.round(shape * 36));
-        const minH = Math.max(5, Math.round(shape * 10));
-
-        let heightStyle: number | Animated.AnimatedInterpolation<number> = maxH;
-        if (amplitude !== undefined) {
-          heightStyle = ampAnim.interpolate({ inputRange: [0, 1], outputRange: [minH, maxH] });
-        } else if (isPlaying) {
-          heightStyle = waveAnims[i].interpolate({ inputRange: [0, 1], outputRange: [minH, maxH] });
-        }
-
-        return (
-          <Animated.View
-            key={i}
-            style={[
-              barStyles.bar,
-              {
-                height: heightStyle,
-                backgroundColor: colors.primary,
-                opacity: 0.5 + shape * 0.5,
-              },
-            ]}
-          />
-        );
-      })}
+      {bars.map((shape, i) => (
+        <View
+          key={i}
+          style={[
+            barStyles.bar,
+            {
+              height: Math.max(8, Math.round(shape * 36)),
+              backgroundColor: colors.primary,
+              opacity: 0.4 + shape * 0.5,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 };
@@ -262,7 +195,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <>
             <SpeedChip styles={styles} />
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
-            <WaveformBars data={waveformData} colors={colors} isPlaying={isThisPlaying} />
+            <WaveformBars data={waveformData} colors={colors} />
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
           </>
         ) : (
@@ -270,7 +203,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
             {isLoading
               ? <ThinkingDots colors={colors} />
-              : <WaveformBars data={waveformData} colors={colors} isPlaying={isThisAudible} />}
+              : <WaveformBars data={waveformData} colors={colors} />}
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
             <SpeedChip styles={styles} />
           </>
