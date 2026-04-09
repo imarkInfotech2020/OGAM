@@ -88,7 +88,7 @@ const barStyles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'space-between',
     height: 40,
     overflow: 'hidden',
   },
