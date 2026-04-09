@@ -51,30 +51,34 @@ function normalize(data: number[]): number[] {
   return data.map((v) => v / max);
 }
 
-/** Static waveform bars — shape derived from data, no animation needed.
- *  Progress indication is handled by the native Slider below. */
+/** WhatsApp-style waveform — bars tint as the playhead passes over them.
+ *  Played bars are full color, unplayed bars are muted. */
 const WaveformBars: React.FC<{
   data: number[];
   colors: ThemeColors;
-  isPlaying?: boolean;
-}> = ({ data, colors, isPlaying }) => {
+  /** 0–1 playback progress — bars behind the playhead are tinted */
+  progress?: number;
+}> = ({ data, colors, progress = 0 }) => {
   const bars = useMemo(() => normalize(subsample(data, WAVEFORM_BARS)), [data]);
 
   return (
     <View style={barStyles.container}>
-      {bars.map((shape, i) => (
-        <View
-          key={i}
-          style={[
-            barStyles.bar,
-            {
-              height: Math.max(8, Math.round(shape * 36)),
-              backgroundColor: colors.primary,
-              opacity: isPlaying ? (0.6 + shape * 0.4) : (0.25 + shape * 0.35),
-            },
-          ]}
-        />
-      ))}
+      {bars.map((shape, i) => {
+        const played = progress > 0 && (i / bars.length) < progress;
+        return (
+          <View
+            key={i}
+            style={[
+              barStyles.bar,
+              {
+                height: Math.max(6, Math.round(shape * 32)),
+                backgroundColor: colors.primary,
+                opacity: played ? (0.7 + shape * 0.3) : (0.2 + shape * 0.25),
+              },
+            ]}
+          />
+        );
+      })}
     </View>
   );
 };
@@ -196,7 +200,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
           <>
             <SpeedChip styles={styles} />
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
-            <WaveformBars data={waveformData} colors={colors} isPlaying={isThisPlaying} />
+            <WaveformBars data={waveformData} colors={colors} progress={progress} />
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
           </>
         ) : (
@@ -204,7 +208,7 @@ export const AudioMessageBubble: React.FC<AudioMessageBubbleProps> = ({
             <PlayButton isLoading={isLoading} isThisLoading={isThisLoading} isThisPlaying={isThisPlaying} onPlayPause={handlePlayPause} colors={colors} styles={styles} />
             {isLoading
               ? <ThinkingDots colors={colors} />
-              : <WaveformBars data={waveformData} colors={colors} isPlaying={isThisActive} />}
+              : <WaveformBars data={waveformData} colors={colors} progress={progress} />}
             <DurationText isLoading={isLoading} totalDuration={totalDuration} styles={styles} />
             <SpeedChip styles={styles} />
           </>
@@ -273,8 +277,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textSecondary,
   },
   seekSlider: {
-    height: 28,
+    height: 20,
     marginHorizontal: -SPACING.xs,
+    marginTop: -SPACING.xs,
   },
   transcriptToggle: {
     flexDirection: 'row' as const,

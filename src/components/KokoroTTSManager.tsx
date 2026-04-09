@@ -59,11 +59,11 @@ export const KokoroTTSManager: React.FC = () => {
       if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; }
       return;
     }
-    // Delay voice switch to let native thread fully terminate
+    // Delay voice switch to let native ExecuTorch thread fully terminate
     cooldownRef.current = setTimeout(() => {
       setActiveVoiceId(kokoroVoiceId);
       cooldownRef.current = null;
-    }, 500);
+    }, 1500);
     return () => { if (cooldownRef.current) { clearTimeout(cooldownRef.current); cooldownRef.current = null; } };
   }, [kokoroVoiceId, isSpeaking, activeVoiceId]);
 
