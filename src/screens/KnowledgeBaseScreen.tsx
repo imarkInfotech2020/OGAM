@@ -24,6 +24,28 @@ import { RootStackParamList } from '../navigation/types';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'KnowledgeBase'>;
 
+const resolveLocalPath = async (uri: string, fileName: string): Promise<string> => {
+  if (Platform.OS === 'android') {
+    try {
+      const copyResult = await keepLocalCopy({
+        files: [{ uri, fileName }],
+        destination: 'documentDirectory',
+      });
+      if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+        return decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
+      }
+    } catch {
+      // fall through with original uri
+    }
+    return uri;
+  }
+  try {
+    return decodeURIComponent(uri).replace(/^file:\/\//, '');
+  } catch {
+    return uri;
+  }
+};
+
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -71,26 +93,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        let pathForDb = file.uri;
-        if (Platform.OS === 'android') {
-          try {
-            const copyResult = await keepLocalCopy({
-              files: [{ uri: file.uri, fileName }],
-              destination: 'documentDirectory',
-            });
-            if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-              pathForDb = decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
-            }
-          } catch {
-            // fall through with original uri
-          }
-        } else {
-          try {
-            pathForDb = decodeURIComponent(file.uri).replace(/^file:\/\//, '');
-          } catch {
-            // use uri as-is
-          }
-        }
+        const pathForDb = await resolveLocalPath(file.uri, fileName);
 
         try {
           await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
