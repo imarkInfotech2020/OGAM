@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick, keepLocalCopy } from '@react-native-documents/picker';
+import { pick } from '@react-native-documents/picker';
+import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
 import { useProjectStore } from '../stores';
@@ -24,23 +25,6 @@ import { RootStackParamList } from '../navigation/types';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'KnowledgeBase'>;
 
-const resolveLocalPath = async (uri: string, fileName: string): Promise<string> => {
-  if (Platform.OS === 'android') {
-    const copyResult = await keepLocalCopy({
-      files: [{ uri, fileName }],
-      destination: 'documentDirectory',
-    });
-    if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-      return decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
-    }
-    throw new Error('Failed to create a local copy of the document');
-  }
-  try {
-    return decodeURIComponent(uri).replace(/^file:\/\//, '');
-  } catch {
-    return uri;
-  }
-};
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -89,7 +73,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        const pathForDb = await resolveLocalPath(file.uri, fileName);
+        const pathForDb = await resolvePickedFileUri(file.uri, fileName);
 
         try {
           await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
