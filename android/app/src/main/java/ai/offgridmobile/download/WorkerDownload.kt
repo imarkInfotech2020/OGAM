@@ -195,15 +195,9 @@ class WorkerDownload(
 
                     val now = System.currentTimeMillis()
                     if (now - lastProgressAt >= progressInterval) {
-                        val intervalMs = (now - lastSpeedTs).coerceAtLeast(1L)
-                        val speedKBps = (bytesWritten - lastSpeedBytes) * 1000L / intervalMs / 1024L
-                        val pct = if (totalBytes > 0) (bytesWritten * 100L / totalBytes) else 0L
-                        DownloadEventBridge.log("I", "[Worker] Progress id=$downloadId ${pct}% ${bytesWritten / 1024 / 1024}MB/${totalBytes / 1024 / 1024}MB speed=${speedKBps}KB/s")
+                        emitProgressUpdate(downloadId, bytesWritten, totalBytes, lastSpeedBytes, lastSpeedTs, now)
                         lastSpeedBytes = bytesWritten
                         lastSpeedTs = now
-
-                        setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
-                        downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
                         lastProgressAt = now
                     }
                     read = src.read(buffer)
@@ -233,6 +227,22 @@ class WorkerDownload(
             return Result.retry()
         }
         return null
+    }
+
+    private suspend fun emitProgressUpdate(
+        downloadId: Long,
+        bytesWritten: Long,
+        totalBytes: Long,
+        lastSpeedBytes: Long,
+        lastSpeedTs: Long,
+        now: Long,
+    ) {
+        val intervalMs = (now - lastSpeedTs).coerceAtLeast(1L)
+        val speedKBps = (bytesWritten - lastSpeedBytes) * 1000L / intervalMs / 1024L
+        val pct = if (totalBytes > 0) bytesWritten * 100L / totalBytes else 0L
+        DownloadEventBridge.log("I", "[Worker] Progress id=$downloadId ${pct}% ${bytesWritten / 1024 / 1024}MB/${totalBytes / 1024 / 1024}MB speed=${speedKBps}KB/s")
+        setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
+        downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
     }
 
     private suspend fun failDownload(downloadId: Long, download: DownloadEntity, reason: String, serviceReason: String): Result {
