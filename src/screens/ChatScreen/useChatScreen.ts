@@ -51,7 +51,7 @@ export const useChatScreen = () => {
   const [supportsToolCalling, setSupportsToolCalling] = useState(false);
   const [supportsThinking, setSupportsThinking] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
-  const [pendingProjectId, setPendingProjectId] = useState<string | null>(route.params?.projectId ?? null);
+  const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(route.params?.projectId);
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
   const modelLoadStartTimeRef = useRef<number | null>(null);
@@ -118,9 +118,8 @@ export const useChatScreen = () => {
   const hasActiveModel = activeModelInfo.modelId !== null;
   const activeModelName = activeModelInfo.modelName;
 
-  const activeProject = activeConversation?.projectId
-    ? getProject(activeConversation.projectId)
-    : (pendingProjectId ? getProject(pendingProjectId) : null);
+  const effectiveProjectId = activeConversation ? activeConversation.projectId : pendingProjectId;
+  const activeProject = effectiveProjectId ? getProject(effectiveProjectId) : null;
   const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
@@ -134,7 +133,7 @@ export const useChatScreen = () => {
     setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
     createConversation,
-    pendingProjectId: pendingProjectId ?? undefined,
+    pendingProjectId,
   };
 
   const modelDeps = {
@@ -173,6 +172,10 @@ export const useChatScreen = () => {
     else { setActiveConversation(null); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.conversationId]);
+
+  useEffect(() => {
+    setPendingProjectId(route.params?.projectId);
+  }, [route.params?.projectId]);
 
   useEffect(() => {
     if (generatingForConversationRef.current && generatingForConversationRef.current !== activeConversationId) {
@@ -265,7 +268,7 @@ export const useChatScreen = () => {
       handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
     handleSelectProject: (project: Project | null) => {
       if (!activeConversationId) {
-        setPendingProjectId(project?.id ?? null);
+        setPendingProjectId(project?.id);
         setShowProjectSelector(false);
       } else {
         handleSelectProjectFn({ activeConversationId, setConversationProject, setShowProjectSelector }, project);
