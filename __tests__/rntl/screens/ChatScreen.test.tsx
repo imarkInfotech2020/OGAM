@@ -587,6 +587,36 @@ describe('ChatScreen', () => {
       // Modal should open
       expect(queryByTestId('model-selector-modal')).toBeTruthy();
     });
+
+    it('shows existing chat messages when no model is active (read-only mode)', () => {
+      // Set up an existing conversation with messages but NO active model
+      const conversation = createConversation({
+        messages: [
+          createUserMessage('Hello from before'),
+          createAssistantMessage('Hi there!'),
+        ],
+      });
+      useChatStore.setState({
+        conversations: [conversation],
+        activeConversationId: conversation.id,
+      });
+      mockRoute.params = { conversationId: conversation.id };
+
+      const { queryByText, getByTestId } = renderChatScreen();
+
+      // Should NOT show NoModelScreen when there are messages to display
+      expect(queryByText('No Model Selected')).toBeNull();
+
+      // Should show the existing messages
+      expect(getByTestId(`message-content-${conversation.messages[0].id}`).props.children).toBe('Hello from before');
+      expect(getByTestId(`message-content-${conversation.messages[1].id}`).props.children).toBe('Hi there!');
+    });
+
+    it('shows NoModelScreen when no model and no existing messages', () => {
+      // No model active and no conversation with messages
+      const { getByText } = renderChatScreen();
+      expect(getByText('No Model Selected')).toBeTruthy();
+    });
   });
 
   // ============================================================================
