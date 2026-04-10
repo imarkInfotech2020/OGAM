@@ -267,8 +267,8 @@ export const useChatScreen = () => {
     handleEditMessage: (message: Message, newContent: string) =>
       handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
     handleSelectProject: (project: Project | null) => {
+      setPendingProjectId(project?.id);
       if (!activeConversationId) {
-        setPendingProjectId(project?.id);
         setShowProjectSelector(false);
       } else {
         handleSelectProjectFn({ activeConversationId, setConversationProject, setShowProjectSelector }, project);
