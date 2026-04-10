@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick } from '@react-native-documents/picker';
+import { pick, keepLocalCopy } from '@react-native-documents/picker';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 
+
+async function resolveAndroidPath(uri: string, fileName: string): Promise<string> {
+  const copyResult = await keepLocalCopy({
+    files: [{ uri, fileName }],
+    destination: 'documentDirectory',
+  });
+  if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+    return decodeFilePath(copyResult[0].localUri);
+  }
+  throw new Error('Failed to create a local copy of the document');
+}
 
 function decodeFilePath(filePath: string): string {
   try {
@@ -43,7 +54,11 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
 
   const handleAddDocument = async () => {
     try {
-      const files = await pick({ mode: 'import', allowMultiSelection: true });
+      // iOS: 'import' → Apple copies the file before handing it to us, original untouched.
+      // Android: 'open' → returns a content:// URI; keepLocalCopy() copies it to a real path.
+      const files = Platform.OS === 'android'
+        ? await pick({ mode: 'open', allowMultiSelection: true })
+        : await pick({ mode: 'import', allowMultiSelection: true });
       if (!files?.length) return;
 
       for (let i = 0; i < files.length; i++) {
@@ -51,7 +66,9 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        const pathForDb = decodeFilePath(file.uri);
+        const pathForDb = Platform.OS === 'android'
+          ? await resolveAndroidPath(file.uri, fileName)
+          : decodeFilePath(file.uri);
 
         await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
         await loadKbDocs();
