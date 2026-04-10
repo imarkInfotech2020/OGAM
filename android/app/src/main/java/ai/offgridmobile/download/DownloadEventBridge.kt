@@ -74,6 +74,17 @@ object DownloadEventBridge {
         }
     }
 
+    fun retrying(downloadId: Long, fileName: String, modelId: String, reason: String, attempt: Int) {
+        emit("DownloadRetrying") {
+            putDouble("downloadId", downloadId.toDouble())
+            putString("fileName", fileName)
+            putString("modelId", modelId)
+            putString("reason", reason)
+            putInt("attempt", attempt)
+            putString("status", "retrying")
+        }
+    }
+
     private inline fun emit(eventName: String, crossinline build: com.facebook.react.bridge.WritableMap.() -> Unit) {
         val reactContext = reactContextRef?.get() ?: return
         if (!reactContext.hasActiveReactInstance()) return

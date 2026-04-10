@@ -37,11 +37,11 @@ class WorkerDownload(
         DownloadEventBridge.log("I", "[Worker] doWork start id=$downloadId attempt=$runAttemptCount file=${download.fileName}")
 
         if (isStopped) {
-            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, "Download cancelled")
+            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
             return Result.failure()
         }
         if (download.status == DownloadStatus.PAUSED) {
-            DownloadEventBridge.log("I", "[Worker] Paused — returning retry id=$downloadId")
+            DownloadEventBridge.log("I", "[Worker] Paused on start — will retry when resumed id=$downloadId")
             return Result.retry()
         }
 
@@ -53,17 +53,23 @@ class WorkerDownload(
         syncFileSizeWithDb(downloadId, targetFile, download)
 
         val existingBytes = if (targetFile.exists()) targetFile.length() else 0L
+        DownloadEventBridge.log("I", "[Worker] Resume offset=${existingBytes}B file=${targetFile.absolutePath}")
         downloadDao.updateStatus(downloadId, DownloadStatus.RUNNING)
 
+        val requestStartMs = System.currentTimeMillis()
         return try {
             client.newCall(buildRequest(download.url, existingBytes)).execute().use { response ->
+                val ttfbMs = System.currentTimeMillis() - requestStartMs
+                DownloadEventBridge.log("I", "[Worker] TTFB id=$downloadId: ${ttfbMs}ms (time to first byte / server response)")
                 handleResponse(response, existingBytes, download, downloadId, targetFile, progressInterval)
             }
         } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - requestStartMs
             val reason = e.message ?: e.javaClass.simpleName
-            DownloadEventBridge.log("E", "[Worker] Exception id=$downloadId attempt=$runAttemptCount reason=$reason")
-            downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reason)
-            DownloadEventBridge.error(downloadId, download.fileName, download.modelId, reason)
+            DownloadEventBridge.log("E", "[Worker] Exception id=$downloadId attempt=$runAttemptCount elapsed=${elapsed}ms reason=$reason")
+            DownloadEventBridge.log("E", "[Worker] Stack: ${e.stackTraceToString().take(400)}")
+            downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reason)
+            DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, reason, runAttemptCount)
             WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker exception")
             Result.retry()
         }
@@ -97,7 +103,10 @@ class WorkerDownload(
         progressInterval: Long,
     ): Result {
         val code = response.code
-        DownloadEventBridge.log("I", "[Worker] Response id=$downloadId code=$code")
+        val acceptRanges = response.header("Accept-Ranges") ?: "not-set"
+        val contentLengthHeader = response.header("Content-Length") ?: "unknown"
+        val contentRange = response.header("Content-Range") ?: ""
+        DownloadEventBridge.log("I", "[Worker] Response id=$downloadId code=$code Accept-Ranges=$acceptRanges Content-Length=$contentLengthHeader${if (contentRange.isNotEmpty()) " Content-Range=$contentRange" else ""}")
 
         val earlyResult = handleResponseCode(response, code, existingBytes, download, downloadId, targetFile)
         if (earlyResult != null) return earlyResult
@@ -125,7 +134,7 @@ class WorkerDownload(
     ): Result? {
         return when {
             existingBytes > 0L && code == 200 -> {
-                DownloadEventBridge.log("W", "[Worker] Server ignored Range, restarting id=$downloadId")
+                DownloadEventBridge.log("W", "[Worker] Server returned 200 despite Range header — resume not supported, restarting from 0. id=$downloadId existingBytes=$existingBytes")
                 targetFile.delete()
                 null
             }
@@ -167,6 +176,11 @@ class WorkerDownload(
         val appendMode = targetFile.exists() && code == 206
         var bytesWritten = currentFileBytes
         var lastProgressAt = 0L
+        var lastSpeedBytes = currentFileBytes
+        var lastSpeedTs = System.currentTimeMillis()
+        val transferStartMs = lastSpeedTs
+
+        DownloadEventBridge.log("I", "[Worker] Stream start id=$downloadId append=$appendMode offset=${currentFileBytes}B total=${totalBytes}B")
 
         FileOutputStream(targetFile, appendMode).buffered().use { output ->
             input.use { src ->
@@ -181,6 +195,13 @@ class WorkerDownload(
 
                     val now = System.currentTimeMillis()
                     if (now - lastProgressAt >= progressInterval) {
+                        val intervalMs = (now - lastSpeedTs).coerceAtLeast(1L)
+                        val speedKBps = (bytesWritten - lastSpeedBytes) * 1000L / intervalMs / 1024L
+                        val pct = if (totalBytes > 0) (bytesWritten * 100L / totalBytes) else 0L
+                        DownloadEventBridge.log("I", "[Worker] Progress id=$downloadId ${pct}% ${bytesWritten / 1024 / 1024}MB/${totalBytes / 1024 / 1024}MB speed=${speedKBps}KB/s")
+                        lastSpeedBytes = bytesWritten
+                        lastSpeedTs = now
+
                         setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
                         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
                         lastProgressAt = now
@@ -190,8 +211,10 @@ class WorkerDownload(
             }
         }
 
+        val totalElapsedMs = (System.currentTimeMillis() - transferStartMs).coerceAtLeast(1L)
+        val avgSpeedKBps = (bytesWritten - currentFileBytes) * 1000L / totalElapsedMs / 1024L
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.COMPLETED)
-        DownloadEventBridge.log("I", "[Worker] Completed id=$downloadId bytes=$bytesWritten")
+        DownloadEventBridge.log("I", "[Worker] Completed id=$downloadId bytes=$bytesWritten elapsed=${totalElapsedMs}ms avgSpeed=${avgSpeedKBps}KB/s")
         WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker completed")
         return Result.success()
     }
@@ -199,8 +222,8 @@ class WorkerDownload(
     /** Returns a non-null Result if the loop should stop, null to continue. */
     private suspend fun checkCancellationOrPause(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result? {
         if (isStopped) {
-            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, "Download cancelled")
-            DownloadEventBridge.error(downloadId, download.fileName, download.modelId, "Download cancelled", "cancelled")
+            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
+            DownloadEventBridge.error(downloadId, download.fileName, download.modelId, MSG_DOWNLOAD_CANCELLED, "cancelled")
             WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker stopped")
             return Result.failure()
         }
@@ -222,6 +245,8 @@ class WorkerDownload(
     // -------------------------------------------------------------------------
 
     companion object {
+        const val MSG_DOWNLOAD_CANCELLED = MSG_DOWNLOAD_CANCELLED
+
         // Shared across all WorkerDownload instances — reuses connection and thread pools.
         val httpClient: OkHttpClient = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)

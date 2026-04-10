@@ -146,13 +146,19 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   };
 
   const removeProgressListener = backgroundDownloadService.onProgress(
-    downloadInfo.downloadId, (event) => { mainBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+    downloadInfo.downloadId, (event) => {
+      if (event.status === 'retrying') return; // keep existing bytes on transient failure
+      mainBytesDownloaded = event.bytesDownloaded; reportProgress();
+    },
   );
 
   let removeMmProjProgressListener: (() => void) | undefined;
   if (mmProjDownloadId) {
     removeMmProjProgressListener = backgroundDownloadService.onProgress(
-      mmProjDownloadId, (event) => { mmProjBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+      mmProjDownloadId, (event) => {
+        if (event.status === 'retrying') return;
+        mmProjBytesDownloaded = event.bytesDownloaded; reportProgress();
+      },
     );
   }
 

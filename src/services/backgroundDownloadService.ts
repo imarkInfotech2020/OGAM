@@ -343,6 +343,26 @@ class BackgroundDownloadService {
         this.errorListeners.get('error_all')?.(e);
       }
     }));
+    // DownloadRetrying — worker hit a transient error and will retry automatically.
+    // Route it as a progress event with status='retrying' so the UI shows
+    // "Retrying..." instead of surfacing a false error to the user.
+    push(this.eventEmitter.addListener('DownloadRetrying', (e: {
+      downloadId: number; fileName: string; modelId: string; reason: string; attempt: number;
+    }) => {
+      const retryEvent: DownloadProgressEvent = {
+        downloadId: e.downloadId,
+        fileName: e.fileName,
+        modelId: e.modelId,
+        bytesDownloaded: 0,
+        totalBytes: 0,
+        status: 'retrying',
+        reason: `Connection lost — retrying (attempt ${e.attempt + 1})`,
+      };
+      this.progressListeners.get(`progress_${e.downloadId}`)?.(retryEvent);
+      if (!this.silentDownloadIds.has(e.downloadId)) {
+        this.progressListeners.get('progress_all')?.(retryEvent);
+      }
+    }));
   }
 }
 export const backgroundDownloadService = new BackgroundDownloadService();

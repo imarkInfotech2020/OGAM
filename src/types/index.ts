@@ -322,7 +322,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
 }
-export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown';
+export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown' | 'retrying';
 export interface BackgroundDownloadInfo {
   downloadId: number;
   fileName: string;

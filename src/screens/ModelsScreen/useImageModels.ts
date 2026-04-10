@@ -177,6 +177,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
       }),
     ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
+      if (ev.status === 'retrying') return;
       const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
       deps.updateModelProgress(modelId, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0);
     }));

@@ -191,7 +191,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         putString("title", d.title)
                         putDouble("totalBytes", d.totalBytes.toDouble())
                         putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
-                        putString("status", d.status.name.lowercase())
+                        // QUEUED = WorkManager backoff retry — surface as "pending" to JS
+                        // so the download stays visible in the active list during retry.
+                        putString("status", if (d.status == DownloadStatus.QUEUED) "pending" else d.status.name.lowercase())
                         putString("localUri", Uri.fromFile(File(d.destination)).toString())
                         putDouble("startedAt", d.createdAt.toDouble())
                     })
@@ -217,7 +219,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     putDouble("downloadId", d.id.toDouble())
                     putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
                     putDouble("totalBytes", d.totalBytes.toDouble())
-                    putString("status", d.status.name.lowercase())
+                    putString("status", if (d.status == DownloadStatus.QUEUED) "pending" else d.status.name.lowercase())
                     putString("localUri", Uri.fromFile(File(d.destination)).toString())
                     putString("reason", d.error ?: "")
                 }
@@ -374,6 +376,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
         val observer = Observer<List<WorkInfo>> { workInfos ->
             val info = workInfos.firstOrNull() ?: return@Observer
+            DownloadEventBridge.log("D", "[Observer] id=$downloadId WorkInfo.state=${info.state}")
             when (info.state) {
                 WorkInfo.State.RUNNING -> {
                     val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)
