@@ -7,12 +7,13 @@ import {
   Switch,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick } from '@react-native-documents/picker';
+import { pick, keepLocalCopy } from '@react-native-documents/picker';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
 import { useProjectStore } from '../stores';
@@ -58,7 +59,11 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
   const handleAddDocument = async () => {
     try {
-      const files = await pick({ mode: 'import', allowMultiSelection: true });
+      // iOS: 'import' → Apple copies the file before handing it to us, original untouched.
+      // Android: 'open' → returns a content:// URI; keepLocalCopy() copies it to a real path.
+      const files = Platform.OS === 'android'
+        ? await pick({ mode: 'open', allowMultiSelection: true })
+        : await pick({ mode: 'import', allowMultiSelection: true });
       if (!files?.length) return;
 
       for (let i = 0; i < files.length; i++) {
@@ -66,12 +71,25 @@ export const KnowledgeBaseScreen: React.FC = () => {
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        // mode: 'import' means iOS already provided a local copy — original is untouched
         let pathForDb = file.uri;
-        try {
-          pathForDb = decodeURIComponent(file.uri).replace(/^file:\/\//, '');
-        } catch {
-          // use uri as-is
+        if (Platform.OS === 'android') {
+          try {
+            const copyResult = await keepLocalCopy({
+              files: [{ uri: file.uri, fileName }],
+              destination: 'documentDirectory',
+            });
+            if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+              pathForDb = decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
+            }
+          } catch {
+            // fall through with original uri
+          }
+        } else {
+          try {
+            pathForDb = decodeURIComponent(file.uri).replace(/^file:\/\//, '');
+          } catch {
+            // use uri as-is
+          }
         }
 
         try {
