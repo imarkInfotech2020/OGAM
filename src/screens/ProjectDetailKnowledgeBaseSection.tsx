@@ -8,6 +8,17 @@ import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 
 
+async function resolveAndroidPath(uri: string, fileName: string): Promise<string> {
+  const copyResult = await keepLocalCopy({
+    files: [{ uri, fileName }],
+    destination: 'documentDirectory',
+  });
+  if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+    return decodeFilePath(copyResult[0].localUri);
+  }
+  throw new Error('Failed to create a local copy of the document');
+}
+
 function decodeFilePath(filePath: string): string {
   try {
     return decodeURIComponent(filePath).replace(/^file:\/\//, '');
@@ -55,20 +66,9 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         const fileName = file.name || 'document';
         setIndexingFile(files.length > 1 ? `${fileName} (${i + 1}/${files.length})` : fileName);
 
-        let pathForDb = decodeFilePath(file.uri);
-        if (Platform.OS === 'android') {
-          try {
-            const copyResult = await keepLocalCopy({
-              files: [{ uri: file.uri, fileName }],
-              destination: 'documentDirectory',
-            });
-            if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-              pathForDb = decodeFilePath(copyResult[0].localUri);
-            }
-          } catch {
-            // fall through with original uri
-          }
-        }
+        const pathForDb = Platform.OS === 'android'
+          ? await resolveAndroidPath(file.uri, fileName)
+          : decodeFilePath(file.uri);
 
         await ragService.indexDocument({ projectId, filePath: pathForDb, fileName, fileSize: file.size || 0 });
         await loadKbDocs();

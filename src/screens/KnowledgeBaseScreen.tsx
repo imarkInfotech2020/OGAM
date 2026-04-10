@@ -26,18 +26,14 @@ type RouteProps = RouteProp<RootStackParamList, 'KnowledgeBase'>;
 
 const resolveLocalPath = async (uri: string, fileName: string): Promise<string> => {
   if (Platform.OS === 'android') {
-    try {
-      const copyResult = await keepLocalCopy({
-        files: [{ uri, fileName }],
-        destination: 'documentDirectory',
-      });
-      if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
-        return decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
-      }
-    } catch {
-      // fall through with original uri
+    const copyResult = await keepLocalCopy({
+      files: [{ uri, fileName }],
+      destination: 'documentDirectory',
+    });
+    if (copyResult[0]?.status === 'success' && copyResult[0].localUri) {
+      return decodeURIComponent(copyResult[0].localUri).replace(/^file:\/\//, '');
     }
-    return uri;
+    throw new Error('Failed to create a local copy of the document');
   }
   try {
     return decodeURIComponent(uri).replace(/^file:\/\//, '');
