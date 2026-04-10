@@ -245,7 +245,7 @@ class WorkerDownload(
     // -------------------------------------------------------------------------
 
     companion object {
-        const val MSG_DOWNLOAD_CANCELLED = MSG_DOWNLOAD_CANCELLED
+        const val MSG_DOWNLOAD_CANCELLED = "Download cancelled"
 
         // Shared across all WorkerDownload instances — reuses connection and thread pools.
         val httpClient: OkHttpClient = OkHttpClient.Builder()

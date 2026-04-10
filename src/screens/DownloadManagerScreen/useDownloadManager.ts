@@ -127,7 +127,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       unsubError();
     };
 
-  }, []);
+  }, [setDownloadProgress]);
 
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
@@ -144,7 +144,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
 
-  }, []);
+  }, [setDownloadedModels, setDownloadedImageModels]);
 
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
