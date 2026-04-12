@@ -45,6 +45,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         internal const val STUCK_THRESHOLD = 3             // 3 × 15s = 45 seconds of zero progress after first byte
         internal const val STARTUP_TIMEOUT_POLLS = 8       // 8 × 15s = 2 minutes waiting for first byte before giving up
         internal const val MAX_RETRY_ATTEMPTS = 3          // give up after 3 retries
+        // How many watchdog cycles a download can stay in PAUSED_WAITING_TO_RETRY before we
+        // force-cancel and re-enqueue with a freshly resolved URL. Signed CDN URLs (e.g.
+        // cas-bridge.xethub.hf.co) can expire quickly; DownloadManager would retry forever
+        // with the same stale URL, so we intervene after PAUSED_RETRY_THRESHOLD × 15s = 30s.
+        internal const val PAUSED_RETRY_THRESHOLD = 2
 
         internal const val STATUS_PENDING = "pending"
         internal const val STATUS_RUNNING = "running"
@@ -209,6 +214,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     // --- Stuck-download watchdog ---
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private val downloadBytesTracker = mutableMapOf<Long, BytesTrack>()
+    // Counts how many consecutive watchdog cycles a download has been in PAUSED_WAITING_TO_RETRY.
+    // Reset to 0 whenever the download leaves that state (running, queued, completed, etc.).
+    private val pausedRetryTracker = mutableMapOf<Long, Int>()
 
     private val watchdogRunnable = object : Runnable {
         override fun run() {
@@ -358,7 +366,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
             downloadManager.remove(id)
             removeDownload(id)
-            handler.post { downloadBytesTracker.remove(id) }
+            handler.post {
+                downloadBytesTracker.remove(id)
+                pausedRetryTracker.remove(id)
+            }
 
             // Clean up partial file
             downloadInfo?.optString("fileName")?.let { fileName ->
@@ -626,7 +637,37 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             android.util.Log.d("DownloadService", "Download status: ${status.uppercase()} - reason: $reason - id: $downloadId")
 
             if (status != STATUS_RUNNING) {
+                val currentRetryCount = downloadBytesTracker[downloadId]?.retryCount ?: 0
                 downloadBytesTracker.remove(downloadId)
+
+                // When DownloadManager enters PAUSED_WAITING_TO_RETRY it retries internally
+                // using the same (possibly expired) pre-signed CDN URL. For XET bridge URLs
+                // (cas-bridge.xethub.hf.co) this causes an infinite pause loop that only
+                // terminates with ERROR_FILE_ERROR. After PAUSED_RETRY_THRESHOLD watchdog
+                // cycles we cancel and re-enqueue with a freshly resolved URL.
+                if (status == STATUS_PAUSED && reason == "Waiting to retry") {
+                    val pausedCount = (pausedRetryTracker[downloadId] ?: 0) + 1
+                    pausedRetryTracker[downloadId] = pausedCount
+                    val elapsedSeconds = pausedCount * WATCHDOG_INTERVAL_MS / 1000
+                    android.util.Log.d("DownloadService", "Download $downloadId paused-waiting-to-retry for ${elapsedSeconds}s (cycle $pausedCount/$PAUSED_RETRY_THRESHOLD)")
+                    if (pausedCount >= PAUSED_RETRY_THRESHOLD) {
+                        pausedRetryTracker.remove(downloadId)
+                        if (currentRetryCount >= MAX_RETRY_ATTEMPTS) {
+                            android.util.Log.e("DownloadService", "Download $downloadId gave up after $currentRetryCount retries (paused-waiting-to-retry)")
+                            sendEvent("DownloadError", buildEventParams(downloadId, download, queryDownloadStatus(downloadId), STATUS_FAILED).also {
+                                it.putString("reason", "Download stuck after $currentRetryCount retries")
+                            })
+                            downloadManager.remove(downloadId)
+                            removeDownload(downloadId)
+                            stopForegroundServiceIfIdle("failed")
+                            return
+                        }
+                        android.util.Log.w("DownloadService", "Download $downloadId stuck in paused-waiting-to-retry — forcing fresh URL resolution (attempt ${currentRetryCount + 1}/$MAX_RETRY_ATTEMPTS)")
+                        handleStuckDownload(downloadId, 0L, download, currentRetryCount + 1)
+                    }
+                } else {
+                    pausedRetryTracker.remove(downloadId)
+                }
                 continue
             }
 
@@ -863,6 +904,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             android.util.Log.d("DownloadService", "No info for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
             downloadBytesTracker.remove(downloadId)
+            pausedRetryTracker.remove(downloadId)
             stopForegroundServiceIfIdle("unknown")
             return
         }
@@ -878,6 +920,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             android.util.Log.d("DownloadService", "No file found for unknown download $downloadId, removing stale entry")
             removeDownload(downloadId)
             downloadBytesTracker.remove(downloadId)
+            pausedRetryTracker.remove(downloadId)
         }
         stopForegroundServiceIfIdle("completed")
     }
@@ -901,6 +944,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     sendEvent("DownloadError", eventParams)
                     removeDownload(downloadId)
                     downloadBytesTracker.remove(downloadId)
+                    pausedRetryTracker.remove(downloadId)
                     stopForegroundServiceIfIdle("failed")
                 }
                 STATUS_PAUSED -> {

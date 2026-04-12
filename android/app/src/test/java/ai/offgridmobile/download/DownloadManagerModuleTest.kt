@@ -565,4 +565,21 @@ class DownloadManagerModuleTest {
     fun `backoff for retry 3 is 90 seconds`() {
         assertEquals(90_000L, 3 * 30_000L)
     }
+
+    // ── PAUSED_RETRY_THRESHOLD ────────────────────────────────────────────────
+    // Signed CDN URLs (e.g. cas-bridge.xethub.hf.co) can expire quickly, causing
+    // DownloadManager to loop in PAUSED_WAITING_TO_RETRY with the same stale URL.
+    // After PAUSED_RETRY_THRESHOLD watchdog cycles we force-cancel and re-enqueue
+    // with a freshly resolved URL.
+
+    @Test
+    fun `PAUSED_RETRY_THRESHOLD is 2 polls`() {
+        assertEquals(2, DownloadManagerModule.PAUSED_RETRY_THRESHOLD)
+    }
+
+    @Test
+    fun `paused retry intervention window is 30 seconds (2 x 15s)`() {
+        val windowMs = DownloadManagerModule.PAUSED_RETRY_THRESHOLD * DownloadManagerModule.WATCHDOG_INTERVAL_MS
+        assertEquals(30_000L, windowMs)
+    }
 }
