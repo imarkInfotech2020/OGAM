@@ -397,7 +397,7 @@ describe('buildCompletionParams', () => {
   });
 });
 
-describe('initContextWithFallback — HTP device stripping', () => {
+describe('initContextWithFallback — HTP device stripping and timeout', () => {
   const { initLlama } = require('llama.rn');
   const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
 
@@ -438,5 +438,17 @@ describe('initContextWithFallback — HTP device stripping', () => {
     expect(minCtxCall.devices).toBeUndefined();
     expect(minCtxCall.n_gpu_layers).toBe(0);
     expect(minCtxCall.n_ctx).toBe(2048);
+  });
+
+  it('logs backend=HTP when devices contains HTP0', async () => {
+    const mockCtx = { gpu: true, release: jest.fn() };
+    mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
+    const logger = require('../../../src/utils/logger').default;
+
+    await initContextWithFallback(baseParams, 2048, 99);
+
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('backend=HTP'),
+    );
   });
 });

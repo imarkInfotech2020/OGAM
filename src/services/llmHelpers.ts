@@ -77,8 +77,10 @@ export interface ContextInitResult {
   gpuAttemptFailed: boolean;
   actualLength: number;
 }
-/** Timeout for GPU context init on Android -- bail before OS triggers ANR. */
+/** Timeout for Adreno GPU context init on Android -- bail before OS triggers ANR. */
 const GPU_INIT_TIMEOUT_MS = 8000;
+/** Timeout for HTP/NPU context init -- DSP firmware load takes longer than Adreno. */
+const HTP_INIT_TIMEOUT_MS = 30000;
 /** Race a promise against a timeout; rejects with descriptive error on expiry. */
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -92,28 +94,30 @@ async function safeRelease(ctx: LlamaContext | null): Promise<void> {
   if (!ctx) return;
   try { await ctx.release(); } catch (e) { logger.warn('[LLM] Error releasing context during fallback:', e); }
 }
-/** On Android, race GPU init against a timeout to prevent Adreno driver ANRs. */
-async function tryGpuInit(promise: Promise<LlamaContext>, nGpuLayers: number): Promise<LlamaContext> {
+/** On Android, race GPU/HTP init against a timeout to prevent ANRs. */
+async function tryGpuInit(promise: Promise<LlamaContext>, nGpuLayers: number, isHtp: boolean = false): Promise<LlamaContext> {
   if (nGpuLayers <= 0 || Platform.OS !== 'android') return promise;
+  const timeoutMs = isHtp ? HTP_INIT_TIMEOUT_MS : GPU_INIT_TIMEOUT_MS;
   let timedOut = false;
   promise.then(ctx => { if (timedOut) safeRelease(ctx); }).catch(() => {});
-  try { return await withTimeout(promise, GPU_INIT_TIMEOUT_MS, 'GPU context init'); }
+  try { return await withTimeout(promise, timeoutMs, isHtp ? 'HTP context init' : 'GPU context init'); }
   catch (e) { timedOut = true; throw e; }
 }
 
-/** Init llama with GPU, fall back to CPU, then retry with ctx=2048 on failure. */
+/** Init llama with GPU/HTP, fall back to CPU, then retry with ctx=2048 on failure. */
 export async function initContextWithFallback(
   params: object,
   contextLength: number,
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
   const modelPath = (params as any).model || 'unknown';
-  logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}`);
+  const isHtp = Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
+  logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}`);
   let gpuAttemptFailed = false;
   try {
-    logger.log(`[LLM] Attempt 1/3: GPU init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
+    logger.log(`[LLM] Attempt 1/3: ${isHtp ? 'HTP' : 'GPU'} init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
-    const context = await tryGpuInit(gpuInitPromise, nGpuLayers);
+    const context = await tryGpuInit(gpuInitPromise, nGpuLayers, isHtp);
     logger.log('[LLM] GPU init succeeded');
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
