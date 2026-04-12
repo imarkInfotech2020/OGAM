@@ -2442,4 +2442,66 @@ describe('LLMService', () => {
       expect((llmService as any).activeCompletionPromise).toBeNull();
     });
   });
+
+  // ========================================================================
+  // Hexagon HTP (NPU) acceleration
+  // ========================================================================
+  describe('HTP NPU acceleration', () => {
+    const { hardwareService } = require('../../../src/services/hardware');
+
+    beforeEach(() => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      // Clear SoC cache between tests
+      (hardwareService as any).cachedSoCInfo = null;
+    });
+
+    afterEach(() => {
+      (hardwareService as any).cachedSoCInfo = null;
+    });
+
+    it('passes devices:HTP0 and 99 gpu_layers on Snapdragon with HTP', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
+      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({
+        vendor: 'qualcomm', hasNPU: true, qnnVariant: '8gen3',
+      });
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).toHaveBeenCalledWith(
+        expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
+      );
+    });
+
+    it('does not use HTP on Android without NPU', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
+      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({
+        vendor: 'qualcomm', hasNPU: false, qnnVariant: undefined,
+      });
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).not.toHaveBeenCalledWith(
+        expect.objectContaining({ devices: expect.anything() }),
+      );
+    });
+
+    it('does not use HTP on iOS', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('ios');
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).not.toHaveBeenCalledWith(
+        expect.objectContaining({ devices: expect.anything() }),
+      );
+    });
+  });
 });
