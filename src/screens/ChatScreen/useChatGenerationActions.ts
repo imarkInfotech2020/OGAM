@@ -251,8 +251,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
+  // Skip text hint when model supports native Jinja tool calling — the Jinja template
+  // already injects tool schemas, so adding the hint text would double-inject.
+  const useTextHint = !isRemote && activeTools.length > 0 && !llmService.supportsToolCalling();
   const systemPrompt = applyGemma4ThinkToken(
-    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
     isRemote,
   );
   logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
@@ -336,8 +339,9 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+  const useTextHint = !isRemote && activeTools.length > 0 && !llmService.supportsToolCalling();
   const systemPrompt = applyGemma4ThinkToken(
-    (!isRemote && activeTools.length > 0) ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
     isRemote,
   );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
