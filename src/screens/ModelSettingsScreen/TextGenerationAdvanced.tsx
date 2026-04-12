@@ -133,12 +133,7 @@ const KvCacheSection: React.FC<{ cacheDisabled: boolean }> = ({ cacheDisabled })
           />
         ))}
       </View>
-      {cacheDisabled && (
-        <Text style={styles.warningText}>
-          GPU acceleration on Android requires f16 KV cache.
-        </Text>
-      )}
-      {!cacheDisabled && !isFlashAttnOn && (
+      {!isFlashAttnOn && (
         <Text style={styles.warningText}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
         </Text>

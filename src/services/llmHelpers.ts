@@ -59,9 +59,9 @@ export function buildModelParams(
   const useFlashAttn = settings.flashAttn ?? true;
   const gpuEnabled = settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  // Quantized KV cache requires flash_attn; Android GPU only supports f16.
+  // Quantized KV cache requires flash_attn to be enabled.
   const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
-  const needsF16 = !useFlashAttn || (Platform.OS === 'android' && nGpuLayers > 0);
+  const needsF16 = !useFlashAttn;
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {

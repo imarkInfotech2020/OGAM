@@ -149,12 +149,7 @@ export const KvCacheTypeToggle: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
-      {cacheDisabled && (
-        <Text style={styles.settingWarning}>
-          GPU acceleration on Android requires f16 KV cache.
-        </Text>
-      )}
-      {!cacheDisabled && !isFlashAttnOn && (
+      {!isFlashAttnOn && (
         <Text style={styles.settingWarning}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
         </Text>
