@@ -165,6 +165,13 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
   return items;
 }
 
+function getStatusLabel(item: DownloadItem): string {
+  if (item.status === 'retrying' && item.reason) return item.reason;
+  const base = getStatusText(item.status);
+  if (!item.reason) return base;
+  return `${base} · ${item.reason}`;
+}
+
 // ─── Item components ──────────────────────────────────────────────────────────
 
 interface ActiveDownloadCardProps {
@@ -200,9 +207,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.quantText}>{item.quantization}</Text>
         </View>
         <Text style={styles.statusText}>
-          {item.status === 'retrying' && item.reason
-            ? item.reason
-            : `${getStatusText(item.status)}${item.reason ? ` · ${item.reason}` : ''}`}
+          {getStatusLabel(item)}
         </Text>
       </View>
     </Card>

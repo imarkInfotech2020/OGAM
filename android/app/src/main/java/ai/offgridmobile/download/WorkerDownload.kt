@@ -17,7 +17,7 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
-import java.net.URL
+import java.net.URI
 import java.util.concurrent.TimeUnit
 
 class WorkerDownload(
@@ -37,6 +37,8 @@ class WorkerDownload(
         DownloadEventBridge.log("I", "[Worker] doWork start id=$downloadId attempt=$runAttemptCount file=${download.fileName}")
 
         if (isStopped) {
+            val partial = File(download.destination)
+            if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on early cancel id=$downloadId")
             downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
             return Result.failure()
         }
@@ -135,12 +137,12 @@ class WorkerDownload(
         return when {
             existingBytes > 0L && code == 200 -> {
                 DownloadEventBridge.log("W", "[Worker] Server returned 200 despite Range header — resume not supported, restarting from 0. id=$downloadId existingBytes=$existingBytes")
-                targetFile.delete()
+                if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial file for restart id=$downloadId")
                 null
             }
             code == 416 -> {
                 DownloadEventBridge.log("E", "[Worker] Range invalid id=$downloadId, deleting partial")
-                targetFile.delete()
+                if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial file on 416 id=$downloadId")
                 failDownload(downloadId, download, "Server rejected resume (416)", "worker 416")
             }
             !response.isSuccessful -> {
@@ -216,6 +218,8 @@ class WorkerDownload(
     /** Returns a non-null Result if the loop should stop, null to continue. */
     private suspend fun checkCancellationOrPause(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result? {
         if (isStopped) {
+            val partial = File(download.destination)
+            if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on cancel id=$downloadId bytes=$bytesWritten")
             downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
             DownloadEventBridge.error(downloadId, download.fileName, download.modelId, MSG_DOWNLOAD_CANCELLED, "cancelled")
             WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker stopped")
@@ -277,7 +281,8 @@ class WorkerDownload(
         )
 
         fun isHostAllowed(url: String): Boolean {
-            val host = try { URL(url).host } catch (_: Exception) { return false }
+            val host = try { URI(url).host } catch (_: Exception) { return false }
+            if (host == null) return false
             return allowedDownloadHosts.any { host == it || host.endsWith(".$it") }
         }
 

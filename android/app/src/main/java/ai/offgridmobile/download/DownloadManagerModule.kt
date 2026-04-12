@@ -157,7 +157,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             try {
                 val id = downloadId.toLong()
                 withContext(Dispatchers.IO) {
-                    val download = downloadDao.getDownload(id) ?: return@withContext
+                    downloadDao.getDownload(id) ?: return@withContext
                     downloadDao.updateStatus(id, DownloadStatus.QUEUED)
                     // KEEP policy: leave running work untouched, restart only if finished/missing
                     WorkerDownload.enqueueResume(reactApplicationContext, id)

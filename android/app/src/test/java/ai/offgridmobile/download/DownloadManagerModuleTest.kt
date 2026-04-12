@@ -24,57 +24,57 @@ class DownloadManagerModuleTest {
     // ── WorkerDownload.isHostAllowed ──────────────────────────────────────────
 
     @Test
-    fun `isHostAllowed accepts huggingface co`() {
+    fun isHostAllowedAcceptsHuggingfaceCo() {
         assertTrue(WorkerDownload.isHostAllowed("https://huggingface.co/model.gguf"))
     }
 
     @Test
-    fun `isHostAllowed accepts cdn-lfs subdomain`() {
+    fun isHostAllowedAcceptsCdnLfsSubdomain() {
         assertTrue(WorkerDownload.isHostAllowed("https://cdn-lfs.huggingface.co/path/to/model"))
     }
 
     @Test
-    fun `isHostAllowed accepts cas-bridge subdomain`() {
+    fun isHostAllowedAcceptsCasBridgeSubdomain() {
         assertTrue(WorkerDownload.isHostAllowed("https://cas-bridge.xethub.hf.co/file"))
     }
 
     @Test
-    fun `isHostAllowed accepts nested subdomain of allowed host`() {
+    fun isHostAllowedAcceptsNestedSubdomainOfAllowedHost() {
         assertTrue(WorkerDownload.isHostAllowed("https://foo.cdn-lfs.huggingface.co/file"))
     }
 
     @Test
-    fun `isHostAllowed accepts nested subdomain of huggingface co`() {
+    fun isHostAllowedAcceptsNestedSubdomainOfHuggingfaceCo() {
         assertTrue(WorkerDownload.isHostAllowed("https://subdomain.huggingface.co/model"))
     }
 
     @Test
-    fun `isHostAllowed rejects unknown host`() {
+    fun isHostAllowedRejectsUnknownHost() {
         assertFalse(WorkerDownload.isHostAllowed("https://evil.com/malware.gguf"))
     }
 
     @Test
-    fun `isHostAllowed rejects look-alike domain without dot separator`() {
+    fun isHostAllowedRejectsLookAlikeDomainWithoutDotSeparator() {
         assertFalse(WorkerDownload.isHostAllowed("https://nothuggingface.co/model.gguf"))
     }
 
     @Test
-    fun `isHostAllowed rejects subdomain of look-alike host`() {
+    fun isHostAllowedRejectsSubdomainOfLookAlikeHost() {
         assertFalse(WorkerDownload.isHostAllowed("https://cdn.evil-huggingface.co/model.gguf"))
     }
 
     @Test
-    fun `isHostAllowed rejects invalid URL`() {
+    fun isHostAllowedRejectsInvalidUrl() {
         assertFalse(WorkerDownload.isHostAllowed("not a url"))
     }
 
     @Test
-    fun `isHostAllowed rejects empty string`() {
+    fun isHostAllowedRejectsEmptyString() {
         assertFalse(WorkerDownload.isHostAllowed(""))
     }
 
     @Test
-    fun `isHostAllowed rejects http scheme on allowed host`() {
+    fun isHostAllowedAllowsHttpSchemeOnAllowedHost() {
         // The allowlist checks the host, not the scheme — http is still allowed by this
         // function; network security config handles transport-level enforcement.
         assertTrue(WorkerDownload.isHostAllowed("http://huggingface.co/model.gguf"))
@@ -83,22 +83,22 @@ class DownloadManagerModuleTest {
     // ── WorkerDownload.workName ───────────────────────────────────────────────
 
     @Test
-    fun `workName returns download underscore id`() {
+    fun workNameReturnsDownloadUnderscoreId() {
         assertEquals("download_42", WorkerDownload.workName(42L))
     }
 
     @Test
-    fun `workName handles zero id`() {
+    fun workNameHandlesZeroId() {
         assertEquals("download_0", WorkerDownload.workName(0L))
     }
 
     @Test
-    fun `workName handles large timestamp id`() {
+    fun workNameHandlesLargeTimestampId() {
         assertEquals("download_1712345678901", WorkerDownload.workName(1712345678901L))
     }
 
     @Test
-    fun `workName is unique per id`() {
+    fun workNameIsUniquePerDownloadId() {
         val name1 = WorkerDownload.workName(1L)
         val name2 = WorkerDownload.workName(2L)
         assertTrue(name1 != name2)
@@ -107,8 +107,8 @@ class DownloadManagerModuleTest {
     // ── DownloadStatus enum ───────────────────────────────────────────────────
 
     @Test
-    fun `DownloadStatus contains all required values`() {
-        val values = DownloadStatus.values().map { it.name }
+    fun downloadStatusContainsAllRequiredValues() {
+        val values = DownloadStatus.entries.map { it.name }
         assertTrue(values.contains("QUEUED"))
         assertTrue(values.contains("RUNNING"))
         assertTrue(values.contains("PAUSED"))
@@ -118,29 +118,29 @@ class DownloadManagerModuleTest {
     }
 
     @Test
-    fun `DownloadStatus RUNNING lowercased matches legacy constant`() {
+    fun downloadStatusRunningLowercasedMatchesLegacyConstant() {
         assertEquals(DownloadManagerModule.STATUS_RUNNING, DownloadStatus.RUNNING.name.lowercase())
     }
 
     @Test
-    fun `DownloadStatus PAUSED lowercased matches legacy constant`() {
+    fun downloadStatusPausedLowercasedMatchesLegacyConstant() {
         assertEquals(DownloadManagerModule.STATUS_PAUSED, DownloadStatus.PAUSED.name.lowercase())
     }
 
     @Test
-    fun `DownloadStatus COMPLETED lowercased matches legacy constant`() {
+    fun downloadStatusCompletedLowercasedMatchesLegacyConstant() {
         assertEquals(DownloadManagerModule.STATUS_COMPLETED, DownloadStatus.COMPLETED.name.lowercase())
     }
 
     @Test
-    fun `DownloadStatus FAILED lowercased matches legacy constant`() {
+    fun downloadStatusFailedLowercasedMatchesLegacyConstant() {
         assertEquals(DownloadManagerModule.STATUS_FAILED, DownloadStatus.FAILED.name.lowercase())
     }
 
     // ── DownloadManagerModule legacy constants ────────────────────────────────
 
     @Test
-    fun `legacy status constants have correct string values`() {
+    fun legacyStatusConstantsHaveCorrectStringValues() {
         assertEquals("pending", DownloadManagerModule.STATUS_PENDING)
         assertEquals("running", DownloadManagerModule.STATUS_RUNNING)
         assertEquals("paused", DownloadManagerModule.STATUS_PAUSED)
@@ -152,22 +152,22 @@ class DownloadManagerModuleTest {
     // ── WorkerDownload constants ──────────────────────────────────────────────
 
     @Test
-    fun `DEFAULT_PROGRESS_INTERVAL is 1 second`() {
+    fun defaultProgressIntervalIsOneSecond() {
         assertEquals(1_000L, WorkerDownload.DEFAULT_PROGRESS_INTERVAL)
     }
 
     @Test
-    fun `KEY_DOWNLOAD_ID constant is defined`() {
+    fun keyDownloadIdConstantIsDefined() {
         assertEquals("download_id", WorkerDownload.KEY_DOWNLOAD_ID)
     }
 
     @Test
-    fun `KEY_PROGRESS constant is defined`() {
+    fun keyProgressConstantIsDefined() {
         assertEquals("progress", WorkerDownload.KEY_PROGRESS)
     }
 
     @Test
-    fun `KEY_TOTAL constant is defined`() {
+    fun keyTotalConstantIsDefined() {
         assertEquals("total", WorkerDownload.KEY_TOTAL)
     }
 }
