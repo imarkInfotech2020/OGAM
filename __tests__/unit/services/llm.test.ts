@@ -144,11 +144,11 @@ describe('LLMService', () => {
         .mockRejectedValueOnce(new Error('GPU error'))
         .mockResolvedValueOnce(ctx as any);
 
-      // Enable GPU in settings
+      // Enable GPU via Metal backend (iOS test environment)
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
           gpuLayers: 6,
         },
       });
@@ -172,7 +172,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           contextLength: 4096,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
         },
       });
 
@@ -339,7 +339,7 @@ describe('LLMService', () => {
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
           gpuLayers: 99,
         },
       });
@@ -355,11 +355,11 @@ describe('LLMService', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedInitLlama.mockRejectedValue(new Error('fatal'));
 
-      // Disable GPU to skip retries
+      // CPU backend to skip GPU retries
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -830,7 +830,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1133,9 +1133,9 @@ describe('LLMService', () => {
         .mockRejectedValueOnce(new Error('CPU reload failed')) // CPU fallback
         .mockRejectedValueOnce(new Error('CPU reload failed')); // ctx=2048 fallback
 
-      // Enable GPU so both attempts happen
+      // Enable GPU via Metal backend so both attempts happen
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1259,7 +1259,7 @@ describe('LLMService', () => {
   });
 
   describe('getGpuInfo Android branches', () => {
-    it('returns OpenCL when GPU enabled on Android with no devices', async () => {
+    it('returns OpenCL when OpenCL backend selected on Android with no devices', async () => {
       const originalOS = Platform.OS;
       Object.defineProperty(Platform, 'OS', { get: () => 'android' });
 
@@ -1268,7 +1268,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1280,7 +1280,7 @@ describe('LLMService', () => {
       Object.defineProperty(Platform, 'OS', { get: () => originalOS });
     });
 
-    it('returns device names when GPU enabled on Android with devices', async () => {
+    it('returns device names when OpenCL backend selected on Android with devices', async () => {
       const originalOS = Platform.OS;
       Object.defineProperty(Platform, 'OS', { get: () => 'android' });
 
@@ -1289,7 +1289,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1460,7 +1460,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: true,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1490,7 +1490,7 @@ describe('LLMService', () => {
           ...useAppStore.getState().settings,
           flashAttn: false,
           cacheType: 'f16',
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1519,7 +1519,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: undefined as any,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1548,7 +1548,7 @@ describe('LLMService', () => {
         .mockResolvedValueOnce(ctx2 as any); // CPU reload succeeds
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1874,7 +1874,7 @@ describe('LLMService', () => {
         .mockResolvedValueOnce(ctx2 as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1982,7 +1982,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockRejectedValue(new Error('native crash'));
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
@@ -1994,7 +1994,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockRejectedValue('string error');
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
@@ -2012,7 +2012,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -2459,7 +2459,7 @@ describe('LLMService', () => {
       (hardwareService as any).cachedSoCInfo = null;
     });
 
-    it('passes devices:HTP0 and 99 gpu_layers on Snapdragon with HTP', async () => {
+    it('passes devices:HTP0 and 99 gpu_layers when inferenceBackend is htp on Android', async () => {
       jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
       jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({
         vendor: 'qualcomm', hasNPU: true, qnnVariant: '8gen3',
@@ -2468,6 +2468,10 @@ describe('LLMService', () => {
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
 
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'htp' as const, gpuLayers: 99 },
+      });
+
       await llmService.loadModel('/models/test.gguf');
 
       expect(mockedInitLlama).toHaveBeenCalledWith(
@@ -2475,15 +2479,13 @@ describe('LLMService', () => {
       );
     });
 
-    it('does not use HTP on Android without NPU', async () => {
+    it('does not use HTP when inferenceBackend is cpu on Android', async () => {
       jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
-      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({
-        vendor: 'qualcomm', hasNPU: false, qnnVariant: undefined,
-      });
 
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
 
+      // inferenceBackend defaults to 'cpu' from testHelpers resetStores
       await llmService.loadModel('/models/test.gguf');
 
       expect(mockedInitLlama).not.toHaveBeenCalledWith(

@@ -585,18 +585,19 @@ describe('ModelSettingsScreen', () => {
   // GPU Settings (Only visible on non-iOS platforms)
   // ============================================================================
   describe('GPU settings', () => {
-    // Platform.OS is 'ios' in the test environment, so GPU section is hidden
-    it('does not show GPU Acceleration on iOS', () => {
-      const { queryByText } = renderWithSections('text');
-      expect(queryByText('GPU Acceleration')).toBeNull();
+    // Platform.OS is 'ios' in the test environment; Metal is the default backend, GPU Layers hidden when cpu
+    it('shows Inference Backend section on iOS', () => {
+      const { getByText } = renderWithSections('text');
+      expect(getByText('Inference Backend')).toBeTruthy();
     });
 
-    it('does not show GPU Layers on iOS', () => {
+    it('does not show GPU Layers on iOS when backend is cpu', () => {
+      useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' });
       const { queryByText } = renderWithSections('text');
       expect(queryByText('GPU Layers')).toBeNull();
     });
 
-    // Android-specific GPU tests: mock Platform.OS before each, restore after
+    // Android-specific backend tests: mock Platform.OS before each, restore after
     describe('on Android platform', () => {
       let originalOS: string;
       const { Platform } = require('react-native');
@@ -610,15 +611,15 @@ describe('ModelSettingsScreen', () => {
         Object.defineProperty(Platform, 'OS', { get: () => originalOS, configurable: true });
       });
 
-      it('shows GPU Acceleration and GPU Layers slider when GPU enabled', () => {
-        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+      it('shows Inference Backend section and GPU Layers slider when backend is OpenCL', () => {
+        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
         const { getByText } = renderWithSections('text');
-        expect(getByText('GPU Acceleration')).toBeTruthy();
+        expect(getByText('Inference Backend')).toBeTruthy();
         expect(getByText('GPU Layers')).toBeTruthy();
       });
 
       it('does not clamp gpuLayers when flashAttn turned on with layers > 1', () => {
-        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 8 });
+        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 8 });
         const { getByTestId } = renderWithSections('text');
         fireEvent(getByTestId('flash-attn-switch'), 'valueChange', true);
         expect(useAppStore.getState().settings.flashAttn).toBe(true);
@@ -626,26 +627,26 @@ describe('ModelSettingsScreen', () => {
         expect(useAppStore.getState().settings.gpuLayers).toBe(8);
       });
 
-      it('updates enableGpu to false when GPU Acceleration switch is toggled off', () => {
-        useAppStore.getState().updateSettings({ enableGpu: true, gpuLayers: 6 });
+      it('updates inferenceBackend to cpu when CPU button is pressed', () => {
+        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
         const { getByTestId } = renderWithSections('text');
 
-        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', false);
+        fireEvent.press(getByTestId('backend-cpu-button'));
 
-        expect(useAppStore.getState().settings.enableGpu).toBe(false);
+        expect(useAppStore.getState().settings.inferenceBackend).toBe('cpu');
       });
 
-      it('updates enableGpu to true when GPU Acceleration switch is toggled on', () => {
-        useAppStore.getState().updateSettings({ enableGpu: false });
+      it('updates inferenceBackend to opencl when OpenCL button is pressed', () => {
+        useAppStore.getState().updateSettings({ inferenceBackend: 'cpu' });
         const { getByTestId } = renderWithSections('text');
 
-        fireEvent(getByTestId('gpu-acceleration-switch'), 'valueChange', true);
+        fireEvent.press(getByTestId('backend-opencl-button'));
 
-        expect(useAppStore.getState().settings.enableGpu).toBe(true);
+        expect(useAppStore.getState().settings.inferenceBackend).toBe('opencl');
       });
 
       it('updates gpuLayers when GPU Layers slider completes', () => {
-        useAppStore.getState().updateSettings({ enableGpu: true, flashAttn: false, gpuLayers: 6 });
+        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 6 });
         const { getByTestId } = renderWithSections('text');
 
         const slider = getByTestId('gpu-layers-slider');
@@ -820,6 +821,7 @@ describe('ModelSettingsScreen', () => {
           imageUseOpenCL: undefined as any,
           modelLoadingStrategy: undefined as any,
           enableGpu: undefined as any,
+          inferenceBackend: undefined as any,
           gpuLayers: undefined as any,
           flashAttn: undefined as any,
           cacheType: undefined as any,
@@ -971,7 +973,7 @@ describe('ModelSettingsScreen', () => {
         nBatch: 64,
         cacheType: 'f16',
         flashAttn: false,
-        enableGpu: true,
+        inferenceBackend: 'opencl',
         gpuLayers: 20,
       });
 
@@ -986,7 +988,7 @@ describe('ModelSettingsScreen', () => {
       expect(s.nBatch).toBe(512);
       expect(s.cacheType).toBe('q8_0');
       expect(s.flashAttn).toBe(true);
-      expect(s.enableGpu).toBe(true);
+      expect(s.inferenceBackend).toBe('metal'); // iOS default
       expect(s.gpuLayers).toBe(99);
     });
   });

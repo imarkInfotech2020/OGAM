@@ -65,6 +65,7 @@ export const resetStores = (): void => {
       imageUseOpenCL: true,
       modelLoadingStrategy: 'performance',
       enableGpu: true,
+      inferenceBackend: 'cpu' as const,
       gpuLayers: 99,
       flashAttn: false,
       cacheType: 'q8_0',
