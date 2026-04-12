@@ -51,17 +51,20 @@ export interface ModelLoadParams {
 
 export function buildModelParams(
   modelPath: string,
-  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string },
+  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string; inferenceBackend?: string },
 ): ModelLoadParams {
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
   const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
   const useFlashAttn = settings.flashAttn ?? true;
-  const gpuEnabled = settings.enableGpu !== false;
+  // inferenceBackend takes precedence; fall back to legacy enableGpu flag
+  const backend = settings.inferenceBackend;
+  const gpuEnabled = backend ? backend !== 'cpu' : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
   // Quantized KV cache requires flash_attn to be enabled.
+  // OpenCL (Adreno) also requires f16 — quantized KV cache causes native crashes.
   const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
-  const needsF16 = !useFlashAttn;
+  const needsF16 = !useFlashAttn || backend === 'opencl';
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {

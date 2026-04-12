@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -8,7 +8,7 @@ import { createStyles } from './styles';
 import {
   CpuThreadsSlider,
   BatchSizeSlider,
-  GpuAccelerationToggle,
+  BackendSelector,
   FlashAttentionToggle,
   KvCacheTypeToggle,
   ModelLoadingStrategyToggle,
@@ -196,7 +196,7 @@ export const TextGenerationSection: React.FC = () => {
           ))}
           <CpuThreadsSlider />
           <BatchSizeSlider />
-          {Platform.OS !== 'ios' && <GpuAccelerationToggle />}
+          <BackendSelector />
           <FlashAttentionToggle />
           <KvCacheTypeToggle />
           <ModelLoadingStrategyToggle />

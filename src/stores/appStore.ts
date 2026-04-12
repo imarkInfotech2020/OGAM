@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, GeneratedImage, PersistedDownloadInfo } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, GeneratedImage, PersistedDownloadInfo } from '../types';
 
 type DownloadProgressInfo = { progress: number; bytesDownloaded: number; totalBytes: number; reason?: string };
 
@@ -22,6 +22,7 @@ type AppSettings = {
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
+  inferenceBackend: InferenceBackend;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -122,6 +123,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
+  inferenceBackend: Platform.OS === 'ios' ? 'metal' : 'cpu' as InferenceBackend,
   gpuLayers: 99,
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
@@ -148,6 +150,13 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (persistedState?.settings && !persistedState.settings.cacheType) {
     merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };
   }
+  if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
+    merged.settings = {
+      ...merged.settings,
+      inferenceBackend: Platform.OS === 'ios' ? 'metal' : 'cpu',
+    };
+  }
+
   if (typeof merged.imageModelDownloadId === 'number') {
     const ids: Record<string, number> = {};
     if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {

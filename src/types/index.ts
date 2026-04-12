@@ -281,6 +281,7 @@ export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type ModelLoadingStrategy = 'performance' | 'memory';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
+export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
 /** 'auto' = smart detect, 'force' = always generate image, 'disabled' = never */
 export type ImageModeState = 'auto' | 'force' | 'disabled';
 

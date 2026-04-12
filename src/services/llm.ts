@@ -118,14 +118,19 @@ class LLMService {
     if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
-      const socInfo = await hardwareService.getSoCInfo();
       const settings = useAppStore.getState().settings;
-      const gpuEnabled = settings?.enableGpu !== false;
-      if (socInfo.hasNPU && gpuEnabled) {
-        // Use the user's configured GPU layers if set, otherwise all layers
+      const backend = settings?.inferenceBackend ?? 'cpu';
+      if (backend === 'htp') {
         safeGpuLayers = settings?.gpuLayers ?? 99;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
-        logger.log(`[LLM] Snapdragon HTP (${socInfo.qnnVariant}) — offloading ${safeGpuLayers} layers to NPU`);
+        const socInfo = await hardwareService.getSoCInfo();
+        logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
+      } else if (backend === 'opencl') {
+        safeGpuLayers = settings?.gpuLayers ?? 99;
+        logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+      } else {
+        safeGpuLayers = 0;
+        logger.log('[LLM] CPU backend selected');
       }
     }
     const initial = await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers);

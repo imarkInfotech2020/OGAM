@@ -18,15 +18,12 @@ export function useTextGenerationAdvanced() {
   const isQuantizedCache = (settings?.cacheType ?? 'q8_0') !== 'f16';
   const currentCacheType: CacheType = settings?.cacheType ?? 'q8_0';
   const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, GPU_LAYERS_MAX);
-  const isGpuEnabled = settings?.enableGpu !== false;
+  const isGpuEnabled = (settings?.inferenceBackend ?? (Platform.OS === 'ios' ? 'metal' : 'cpu')) !== 'cpu';
   const isAndroid = Platform.OS === 'android';
   const gpuForcesF16 = false;
-  const cacheDisabled = false;
-  const displayCacheType = currentCacheType;
-
-  const handleGpuToggle = (enableGpu: boolean) => {
-    updateSettings({ enableGpu });
-  };
+  // OpenCL forces f16 — disable quantized cache options in the UI
+  const cacheDisabled = (settings?.inferenceBackend ?? 'cpu') === 'opencl';
+  const displayCacheType = cacheDisabled ? 'f16' : currentCacheType;
 
   const handleFlashAttnToggle = (flashAttn: boolean) => {
     if (!flashAttn && isQuantizedCache) {
@@ -60,7 +57,6 @@ export function useTextGenerationAdvanced() {
     cacheDisabled,
 
     // Handlers
-    handleGpuToggle,
     handleFlashAttnToggle,
     handleCacheTypeChange,
   };

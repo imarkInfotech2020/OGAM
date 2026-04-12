@@ -145,12 +145,15 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     const { settings } = ctx.store;
     const reloadSettings = {
       enableGpu: settings.enableGpu,
+      inferenceBackend: settings.inferenceBackend,
       gpuLayers: settings.gpuLayers,
       nThreads: settings.nThreads,
       nBatch: settings.nBatch,
       contextLength: settings.contextLength,
       flashAttn: settings.flashAttn,
-      cacheType: settings.cacheType,
+      // Store the effective cache type (f16 may be forced for OpenCL) so the
+      // banner doesn't show a false mismatch when the user setting differs.
+      cacheType: settings.inferenceBackend === 'opencl' ? 'f16' : settings.cacheType,
     };
     ctx.store.setLoadedSettings(reloadSettings);
 

@@ -217,14 +217,19 @@ export const useChatScreen = () => {
       settings.nBatch !== loadedSettings.nBatch ||
       settings.contextLength !== loadedSettings.contextLength ||
       settings.enableGpu !== loadedSettings.enableGpu ||
+      settings.inferenceBackend !== loadedSettings.inferenceBackend ||
       settings.gpuLayers !== loadedSettings.gpuLayers ||
       settings.flashAttn !== loadedSettings.flashAttn ||
-      settings.cacheType !== loadedSettings.cacheType
+      // Compare effective cache type — OpenCL forces f16 regardless of user setting
+      (settings.inferenceBackend === 'opencl' ? 'f16' : settings.cacheType) !== loadedSettings.cacheType
     );
   })();
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
+    // Open the model selector bottom sheet before unloading so the user sees the
+    // loading state inside it rather than the NoModelScreen ("Select Model").
+    setShowModelSelector(true);
     // Must unload first — loadTextModel skips if the same model ID is already loaded,
     // which means setLoadedSettings would never run and the banner would persist.
     if (llmService.isModelLoaded()) {
