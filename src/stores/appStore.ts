@@ -109,7 +109,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 4096,
-  nThreads: 4,
+  nThreads: 0,
   nBatch: 512,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
@@ -170,6 +170,11 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
+  // nThreads: 4 was the old hard-coded default (before the 0 = auto sentinel).
+  // Migrate it to 0 so users get hardware-appropriate thread counts on next load.
+  if (merged.settings?.nThreads === 4) {
+    merged.settings = { ...merged.settings, nThreads: 0 };
+  }
   return merged as AppState;
 }
 

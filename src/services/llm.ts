@@ -61,11 +61,9 @@ class LLMService {
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
-    // Only substitute recommended threads when the user hasn't changed from the factory
-    // default (4). Explicit choices — including lower values for thermal/battery reasons —
-    // are respected as-is.
-    const DEFAULT_NTHREADS = 4;
-    const effectiveNThreads = settings.nThreads === DEFAULT_NTHREADS ? recommendedThreads : settings.nThreads;
+    // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
+    // Any explicit user choice (1–12) is respected as-is.
+    const effectiveNThreads = settings.nThreads === 0 ? recommendedThreads : settings.nThreads;
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);

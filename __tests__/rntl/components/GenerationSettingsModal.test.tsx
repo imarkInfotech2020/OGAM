@@ -81,7 +81,7 @@ const defaultSettings = {
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 4096,
-  nThreads: 4,
+  nThreads: 0,
   nBatch: 512,
   enableGpu: false,
   inferenceBackend: 'cpu' as const,
@@ -239,7 +239,7 @@ describe('GenerationSettingsModal', () => {
       topP: 0.9,
       repeatPenalty: 1.1,
       contextLength: 4096,
-      nThreads: 4,
+      nThreads: 0,
       nBatch: 512,
     });
   });

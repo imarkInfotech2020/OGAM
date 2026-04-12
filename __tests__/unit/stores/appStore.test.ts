@@ -1242,7 +1242,7 @@ describe('appStore', () => {
     });
 
     it('has correct default nThreads', () => {
-      expect(getAppState().settings.nThreads).toBe(4);
+      expect(getAppState().settings.nThreads).toBe(0);
     });
 
     it('has correct default nBatch', () => {
