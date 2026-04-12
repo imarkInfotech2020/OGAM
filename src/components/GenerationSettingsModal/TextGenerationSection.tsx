@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS: Record<string, number> = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
+  contextLength: 4096,
 };
 
 const FALLBACK_MAX_CONTEXT = 32768;

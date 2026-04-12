@@ -420,7 +420,7 @@ describe('ModelSettingsScreen', () => {
     it('shows Context Length slider label and default value', () => {
       const { getByText } = renderWithSections('text');
       expect(getByText('Context Length')).toBeTruthy();
-      expect(getByText('2K')).toBeTruthy(); // 2048 -> 2K
+      expect(getByText('4K')).toBeTruthy(); // 4096 -> 4K
     });
 
     it('shows context length description', () => {
@@ -531,7 +531,7 @@ describe('ModelSettingsScreen', () => {
       const allViews = UNSAFE_getAllByType(View);
       const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
 
-      const ctxSlider = sliders.find((s: any) => s.props.value === 2048 && s.props.maximumValue === 32768);
+      const ctxSlider = sliders.find((s: any) => s.props.value === 4096 && s.props.maximumValue === 32768);
       if (ctxSlider) {
         fireEvent(ctxSlider, 'slidingComplete', 4096);
         expect(useAppStore.getState().settings.contextLength).toBe(4096);

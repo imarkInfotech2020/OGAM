@@ -80,7 +80,7 @@ const defaultSettings = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
+  contextLength: 4096,
   nThreads: 4,
   nBatch: 512,
   enableGpu: false,
@@ -238,7 +238,7 @@ describe('GenerationSettingsModal', () => {
       maxTokens: 1024,
       topP: 0.9,
       repeatPenalty: 1.1,
-      contextLength: 2048,
+      contextLength: 4096,
       nThreads: 4,
       nBatch: 512,
     });
@@ -609,7 +609,7 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('1.0K')).toBeTruthy(); // maxTokens: 1024
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
-    expect(getByText('2K')).toBeTruthy(); // contextLength: 2048
+    expect(getByText('4K')).toBeTruthy(); // contextLength: 4096
   });
 
   it('shows description for text settings', () => {
