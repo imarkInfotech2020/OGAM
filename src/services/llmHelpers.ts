@@ -56,11 +56,13 @@ export function buildModelParams(
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
   const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
-  // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
-  // Android doesn't support flash attention — always 'off'. iOS: 'auto' unless user disabled.
-  const flash_attn_type = (settings.flashAttn === false || Platform.OS === 'android') ? 'off' : 'auto';
   // inferenceBackend takes precedence; fall back to legacy enableGpu flag
   const backend = settings.inferenceBackend;
+  // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
+  // OpenCL and HTP backends crash with flash attn on — disable for those.
+  // CPU (Android/iOS) and Metal both support it; use 'auto' to let llama.cpp decide.
+  const gpuBackendIncompatible = backend === 'opencl' || backend === 'htp';
+  const flash_attn_type = (settings.flashAttn === false || gpuBackendIncompatible) ? 'off' : 'auto';
   const gpuEnabled = backend ? backend !== 'cpu' : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
   // Quantized KV cache requires flash_attn to be effective.
