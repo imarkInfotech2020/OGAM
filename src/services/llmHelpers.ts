@@ -126,7 +126,10 @@ export async function initContextWithFallback(
     }
     try {
       logger.log(`[LLM] Attempt 2/3: CPU init (ctx=${contextLength}, gpu_layers=0)`);
-      const context = await initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: 0 } as any);
+      // Strip devices — HTP requires n_gpu_layers > 0; CPU fallback must not request it
+      const cpuParams = { ...(params as Record<string, unknown>) };
+      delete cpuParams.devices;
+      const context = await initLlama({ ...cpuParams, n_ctx: contextLength, n_gpu_layers: 0 } as any);
       logger.log('[LLM] CPU init succeeded');
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
@@ -134,7 +137,9 @@ export async function initContextWithFallback(
       logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
       try {
         logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
-        const context = await initLlama({ ...params, n_ctx: 2048, n_gpu_layers: 0 } as any);
+        const cpuMinParams = { ...(params as Record<string, unknown>) };
+        delete cpuMinParams.devices;
+        const context = await initLlama({ ...cpuMinParams, n_ctx: 2048, n_gpu_layers: 0 } as any);
         logger.log('[LLM] CPU init with ctx=2048 succeeded');
         return { context, gpuAttemptFailed, actualLength: 2048 };
       } catch (finalError: any) {

@@ -114,9 +114,18 @@ class LLMService {
   }
   private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
-    const safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
+    let safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
     if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
-    const initial = await initContextWithFallback(params.baseParams, params.ctxLen, safeGpuLayers);
+    let resolvedBaseParams: object = params.baseParams;
+    if (Platform.OS === 'android') {
+      const socInfo = await hardwareService.getSoCInfo();
+      if (socInfo.hasNPU) {
+        safeGpuLayers = 99;
+        resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
+        logger.log(`[LLM] Snapdragon HTP (${socInfo.qnnVariant}) — offloading all layers to NPU`);
+      }
+    }
+    const initial = await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers);
     const modelMax = getModelMaxContext(initial.context);
     const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
     if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) return initial;
@@ -125,7 +134,7 @@ class LLMService {
     if (targetCtx <= initial.actualLength) return initial;
     logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
     try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
-    return initContextWithFallback(params.baseParams, targetCtx, safeGpuLayers);
+    return initContextWithFallback(resolvedBaseParams, targetCtx, safeGpuLayers);
   }
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }
