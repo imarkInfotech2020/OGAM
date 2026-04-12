@@ -127,7 +127,9 @@ class LLMService {
       const settings = useAppStore.getState().settings;
       const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
       if (backend === INFERENCE_BACKENDS.HTP) {
-        safeGpuLayers = settings?.gpuLayers ?? 99;
+        // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
+        // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
+        safeGpuLayers = safeGpuLayers > 0 ? (settings?.gpuLayers ?? 99) : 0;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
@@ -137,7 +139,7 @@ class LLMService {
           logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);
           safeGpuLayers = 0;
         } else {
-          safeGpuLayers = settings?.gpuLayers ?? 99;
+          // Respect the Adreno-specific RAM cap — safeGpuLayers already has it applied.
           logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
         }
       } else {

@@ -339,8 +339,9 @@ class HardwareService {
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
     try {
       const hardware = (await DeviceInfo.getHardware()).toLowerCase();
-      // Support Qualcomm Adreno (qcom) and ARM Mali (mali/arm) GPUs.
-      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali') || hardware.includes('arm');
+      // Support Qualcomm Adreno (qcom) and ARM Mali GPUs.
+      // Avoid 'arm' alone — it matches the CPU architecture string (arm64-v8a), not the GPU vendor.
+      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali');
       if (!hasCompatibleGpu) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_compatible_gpu' });
       return (this.cachedOpenCLCapability = { supported: true });
     } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
