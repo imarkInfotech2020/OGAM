@@ -119,10 +119,13 @@ class LLMService {
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
       const socInfo = await hardwareService.getSoCInfo();
-      if (socInfo.hasNPU) {
-        safeGpuLayers = 99;
+      const settings = useAppStore.getState().settings;
+      const gpuEnabled = settings?.enableGpu !== false;
+      if (socInfo.hasNPU && gpuEnabled) {
+        // Use the user's configured GPU layers if set, otherwise all layers
+        safeGpuLayers = settings?.gpuLayers ?? 99;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
-        logger.log(`[LLM] Snapdragon HTP (${socInfo.qnnVariant}) — offloading all layers to NPU`);
+        logger.log(`[LLM] Snapdragon HTP (${socInfo.qnnVariant}) — offloading ${safeGpuLayers} layers to NPU`);
       }
     }
     const initial = await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers);

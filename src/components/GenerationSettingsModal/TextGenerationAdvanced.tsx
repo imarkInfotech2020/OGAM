@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { Platform, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -12,7 +12,9 @@ import {
 } from '../../hooks/useTextGenerationAdvanced';
 import { createStyles } from './styles';
 
-// ─── GPU Acceleration ─────────────────────────────────────────────────────────
+const isAndroid = Platform.OS === 'android';
+
+// ─── GPU / NPU Acceleration ───────────────────────────────────────────────────
 
 export const GpuAccelerationToggle: React.FC = () => {
   const { colors } = useTheme();
@@ -20,13 +22,20 @@ export const GpuAccelerationToggle: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
   const { gpuLayersEffective, handleGpuToggle } = useTextGenerationAdvanced();
 
+  const accelLabel = isAndroid ? 'NPU Acceleration' : 'GPU Acceleration';
+  const accelDesc = isAndroid
+    ? 'Offload inference to the Hexagon NPU on Snapdragon devices. Faster than CPU. Requires model reload.'
+    : 'Offload inference to GPU using Metal. Faster for large models. Requires model reload.';
+  const layersLabel = isAndroid ? 'NPU Layers' : 'GPU Layers';
+  const layersDesc = isAndroid
+    ? 'Layers offloaded to NPU. Higher = faster. Requires model reload.'
+    : 'Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.';
+
   return (
     <View style={styles.modeToggleContainer}>
       <View style={styles.modeToggleInfo}>
-        <Text style={styles.modeToggleLabel}>GPU Acceleration</Text>
-        <Text style={styles.modeToggleDesc}>
-          Offload inference to GPU when available. Faster for large models, may add overhead for small ones. Requires model reload.
-        </Text>
+        <Text style={styles.modeToggleLabel}>{accelLabel}</Text>
+        <Text style={styles.modeToggleDesc}>{accelDesc}</Text>
       </View>
       <View style={styles.modeToggleButtons}>
         <TouchableOpacity
@@ -52,12 +61,10 @@ export const GpuAccelerationToggle: React.FC = () => {
       {settings.enableGpu && (
         <View style={styles.gpuLayersInline}>
           <View style={styles.settingHeader}>
-            <Text style={styles.settingLabel}>GPU Layers</Text>
+            <Text style={styles.settingLabel}>{layersLabel}</Text>
             <Text style={styles.settingValue}>{gpuLayersEffective}</Text>
           </View>
-          <Text style={styles.settingDescription}>
-            Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
-          </Text>
+          <Text style={styles.settingDescription}>{layersDesc}</Text>
           <Slider
             testID="gpu-layers-slider"
             style={styles.slider}
