@@ -95,7 +95,7 @@ export const APP_CONFIG = {
 
 If asked about yourself, you can mention you're a local AI assistant that prioritizes user privacy.`,
   streamingEnabled: true,
-  maxContextLength: 2048, // Balanced for speed and context (increase to 4096 if you need more history)
+  maxContextLength: 4096, // Default context window; eliminates double-init on models that support ≥4096
 };
 
 // Onboarding slides

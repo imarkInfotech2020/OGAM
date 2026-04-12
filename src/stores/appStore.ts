@@ -108,7 +108,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
+  contextLength: 4096,
   nThreads: 4,
   nBatch: 512,
   imageGenerationMode: 'auto' as ImageGenerationMode,
