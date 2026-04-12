@@ -304,7 +304,7 @@ describe('buildModelParams', () => {
 
   it('uses flashAttn=false settings', () => {
     const params = buildModelParams('/model.gguf', { flashAttn: false });
-    expect((params.baseParams as any).flash_attn).toBe(false);
+    expect((params.baseParams as any).flash_attn_type).toBe('off');
   });
 
   it('uses provided cacheType', () => {

@@ -60,7 +60,9 @@ class LLMService {
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
-    const params = buildModelParams(modelPath, settings);
+    const recommendedThreads = await hardwareService.getRecommendedThreadCount();
+    const effectiveNThreads = settings.nThreads > 4 ? settings.nThreads : recommendedThreads;
+    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
     const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
@@ -126,8 +128,14 @@ class LLMService {
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
       } else if (backend === 'opencl') {
-        safeGpuLayers = settings?.gpuLayers ?? 99;
-        logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+        const capability = await hardwareService.getOpenCLCapability();
+        if (!capability.supported) {
+          logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);
+          safeGpuLayers = 0;
+        } else {
+          safeGpuLayers = settings?.gpuLayers ?? 99;
+          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+        }
       } else {
         safeGpuLayers = 0;
         logger.log('[LLM] CPU backend selected');

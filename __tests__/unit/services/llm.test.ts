@@ -272,7 +272,7 @@ describe('LLMService', () => {
 
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: true,
+          flash_attn_type: 'auto',
           cache_type_k: 'q8_0',
           cache_type_v: 'q8_0',
         })
@@ -296,7 +296,7 @@ describe('LLMService', () => {
 
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: false,
+          flash_attn_type: 'off',
           cache_type_k: 'f16',
           cache_type_v: 'f16',
         })
@@ -317,10 +317,10 @@ describe('LLMService', () => {
 
       await llmService.loadModel('/models/test.gguf');
 
-      // Test env is iOS (Platform.OS = 'ios'), so the ?? fallback evaluates to true
+      // Test env is iOS (Platform.OS = 'ios'), default is 'auto'
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: true,
+          flash_attn_type: 'auto',
           cache_type_k: 'q8_0',
           cache_type_v: 'q8_0',
         })
@@ -1259,6 +1259,17 @@ describe('LLMService', () => {
   });
 
   describe('getGpuInfo Android branches', () => {
+    const { hardwareService: hw } = require('../../../src/services/hardware');
+
+    beforeEach(() => {
+      (hw as any).cachedOpenCLCapability = null;
+      jest.spyOn(hw, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+    });
+
+    afterEach(() => {
+      (hw as any).cachedOpenCLCapability = null;
+    });
+
     it('returns OpenCL when OpenCL backend selected on Android with no devices', async () => {
       const originalOS = Platform.OS;
       Object.defineProperty(Platform, 'OS', { get: () => 'android' });
@@ -1472,7 +1483,7 @@ describe('LLMService', () => {
       });
 
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(true);
+      expect(reloadCall.flash_attn_type).toBe('auto');
       expect(reloadCall.cache_type_k).toBe('q8_0');
       expect(reloadCall.cache_type_v).toBe('q8_0');
     });
@@ -1502,7 +1513,7 @@ describe('LLMService', () => {
       });
 
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(false);
+      expect(reloadCall.flash_attn_type).toBe('off');
       expect(reloadCall.cache_type_k).toBe('f16');
       expect(reloadCall.cache_type_v).toBe('f16');
     });
@@ -1530,9 +1541,9 @@ describe('LLMService', () => {
         contextLength: 2048,
       });
 
-      // Test env is iOS → ?? fallback evaluates to true
+      // Test env is iOS → flash_attn_type defaults to 'auto'
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(true);
+      expect(reloadCall.flash_attn_type).toBe('auto');
       expect(reloadCall.cache_type_k).toBe('q8_0');
     });
   });

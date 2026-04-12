@@ -56,20 +56,24 @@ export function buildModelParams(
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
   const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
-  const useFlashAttn = settings.flashAttn ?? true;
+  // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
+  // Android doesn't support flash attention — always 'off'. iOS: 'auto' unless user disabled.
+  const flash_attn_type = (settings.flashAttn === false || Platform.OS === 'android') ? 'off' : 'auto';
   // inferenceBackend takes precedence; fall back to legacy enableGpu flag
   const backend = settings.inferenceBackend;
   const gpuEnabled = backend ? backend !== 'cpu' : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  // Quantized KV cache requires flash_attn to be enabled.
+  // Quantized KV cache requires flash_attn to be effective.
   // OpenCL (Adreno) also requires f16 — quantized KV cache causes native crashes.
-  const requestedCache = settings.cacheType || (useFlashAttn ? 'q8_0' : 'f16');
-  const needsF16 = !useFlashAttn || backend === 'opencl';
+  const isFlashAttnEffective = flash_attn_type !== 'off';
+  const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
+  const needsF16 = !isFlashAttnEffective || backend === 'opencl';
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
-      use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn: useFlashAttn,
+      use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn_type,
+      kv_unified: true, no_extra_bufts: false,
       cache_type_k: cacheType, cache_type_v: cacheType,
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
