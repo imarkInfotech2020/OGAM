@@ -2,7 +2,7 @@ import { initLlama, LlamaContext } from 'llama.rn';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
-import { Message } from '../types';
+import { Message, INFERENCE_BACKENDS } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 
@@ -61,15 +61,15 @@ export function buildModelParams(
   // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
   // OpenCL and HTP backends crash with flash attn on — disable for those.
   // CPU (Android/iOS) and Metal both support it; use 'auto' to let llama.cpp decide.
-  const gpuBackendIncompatible = backend === 'opencl' || backend === 'htp';
+  const gpuBackendIncompatible = backend === INFERENCE_BACKENDS.OPENCL || backend === INFERENCE_BACKENDS.HTP;
   const flash_attn_type = (settings.flashAttn === false || gpuBackendIncompatible) ? 'off' : 'auto';
-  const gpuEnabled = backend ? backend !== 'cpu' : settings.enableGpu !== false;
+  const gpuEnabled = backend ? backend !== INFERENCE_BACKENDS.CPU : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  // Quantized KV cache requires flash_attn to be effective.
-  // OpenCL (Adreno) also requires f16 — quantized KV cache causes native crashes.
   const isFlashAttnEffective = flash_attn_type !== 'off';
   const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
-  const needsF16 = !isFlashAttnEffective || backend === 'opencl';
+  // OpenCL requires f16 KV cache — quantized cache causes native crashes on Adreno.
+  // HTP and CPU can use quantized cache regardless of flash attention state.
+  const needsF16 = backend === INFERENCE_BACKENDS.OPENCL;
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {

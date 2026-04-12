@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType, InferenceBackend } from '../../types';
+import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
@@ -19,16 +19,16 @@ import { createStyles } from './styles';
 type BackendOption = { id: InferenceBackend; label: string };
 
 const IOS_BACKENDS: BackendOption[] = [
-  { id: 'cpu', label: 'CPU' },
-  { id: 'metal', label: 'Metal' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU' },
+  { id: INFERENCE_BACKENDS.METAL, label: 'Metal' },
 ];
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
-  { id: 'cpu', label: 'CPU' },
-  { id: 'opencl', label: 'OpenCL' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL' },
 ];
 
-const HTP_BACKEND: BackendOption = { id: 'htp', label: 'HTP' };
+const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'HTP' };
 
 const BackendSelectorSection: React.FC = () => {
   const { colors } = useTheme();
@@ -47,8 +47,9 @@ const BackendSelectorSection: React.FC = () => {
     ? IOS_BACKENDS
     : hasNPU ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
 
-  const current = settings.inferenceBackend ?? (Platform.OS === 'ios' ? 'metal' : 'cpu');
-  const showLayers = current !== 'cpu';
+  const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
+  const current = settings.inferenceBackend ?? defaultBackend;
+  const showLayers = current !== INFERENCE_BACKENDS.CPU;
 
   return (
     <>
@@ -56,10 +57,10 @@ const BackendSelectorSection: React.FC = () => {
         <View style={styles.toggleInfo}>
           <Text style={styles.toggleLabel}>Inference Backend</Text>
           <Text style={styles.toggleDesc}>
-            {current === 'cpu' && 'Running on CPU threads only.'}
-            {current === 'opencl' && 'Offloading layers to GPU via OpenCL.'}
-            {current === 'htp' && 'Offloading layers to Hexagon NPU.'}
-            {current === 'metal' && 'Offloading layers to GPU via Metal.'}
+            {current === INFERENCE_BACKENDS.CPU && 'Running on CPU threads only.'}
+            {current === INFERENCE_BACKENDS.OPENCL && 'Offloading layers to GPU via OpenCL.'}
+            {current === INFERENCE_BACKENDS.HTP && 'Offloading layers to Hexagon NPU.'}
+            {current === INFERENCE_BACKENDS.METAL && 'Offloading layers to GPU via Metal.'}
           </Text>
         </View>
       </View>
@@ -82,7 +83,7 @@ const BackendSelectorSection: React.FC = () => {
         <View style={styles.sliderSection}>
           <View style={styles.sliderHeader}>
             <Text style={styles.sliderLabel}>
-              {current === 'htp' ? 'NPU Layers' : 'GPU Layers'}
+              {current === INFERENCE_BACKENDS.HTP ? 'NPU Layers' : 'GPU Layers'}
             </Text>
             <Text style={styles.sliderValue}>{gpuLayersEffective}</Text>
           </View>

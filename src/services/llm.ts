@@ -1,7 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { Message } from '../types';
+import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores';
 import {
@@ -61,7 +61,11 @@ class LLMService {
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
-    const effectiveNThreads = settings.nThreads > 4 ? settings.nThreads : recommendedThreads;
+    // Only substitute recommended threads when the user hasn't changed from the factory
+    // default (4). Explicit choices — including lower values for thermal/battery reasons —
+    // are respected as-is.
+    const DEFAULT_NTHREADS = 4;
+    const effectiveNThreads = settings.nThreads === DEFAULT_NTHREADS ? recommendedThreads : settings.nThreads;
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
@@ -121,13 +125,13 @@ class LLMService {
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
       const settings = useAppStore.getState().settings;
-      const backend = settings?.inferenceBackend ?? 'cpu';
-      if (backend === 'htp') {
+      const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+      if (backend === INFERENCE_BACKENDS.HTP) {
         safeGpuLayers = settings?.gpuLayers ?? 99;
         resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
         const socInfo = await hardwareService.getSoCInfo();
         logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
-      } else if (backend === 'opencl') {
+      } else if (backend === INFERENCE_BACKENDS.OPENCL) {
         const capability = await hardwareService.getOpenCLCapability();
         if (!capability.supported) {
           logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);

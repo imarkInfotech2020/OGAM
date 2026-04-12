@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, GeneratedImage, PersistedDownloadInfo } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage, PersistedDownloadInfo } from '../types';
 
 type DownloadProgressInfo = { progress: number; bytesDownloaded: number; totalBytes: number; reason?: string };
 
@@ -123,7 +123,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
-  inferenceBackend: Platform.OS === 'ios' ? 'metal' : 'cpu' as InferenceBackend,
+  inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
   gpuLayers: 99,
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
@@ -153,7 +153,7 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
     merged.settings = {
       ...merged.settings,
-      inferenceBackend: Platform.OS === 'ios' ? 'metal' : 'cpu',
+      inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
     };
   }
 

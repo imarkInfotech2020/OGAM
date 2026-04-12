@@ -8,7 +8,7 @@ import {
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
-import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn } from './useChatGenerationActions';
@@ -221,7 +221,7 @@ export const useChatScreen = () => {
       settings.gpuLayers !== loadedSettings.gpuLayers ||
       settings.flashAttn !== loadedSettings.flashAttn ||
       // Compare effective cache type — OpenCL forces f16 regardless of user setting
-      (settings.inferenceBackend === 'opencl' ? 'f16' : settings.cacheType) !== loadedSettings.cacheType
+      (settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType) !== loadedSettings.cacheType
     );
   })();
 

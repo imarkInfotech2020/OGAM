@@ -3,7 +3,7 @@ import { Platform, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType, InferenceBackend } from '../../types';
+import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
@@ -20,17 +20,17 @@ const isAndroid = Platform.OS === 'android';
 type BackendOption = { id: InferenceBackend; label: string; desc: string };
 
 const IOS_BACKENDS: BackendOption[] = [
-  { id: 'cpu', label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  { id: 'metal', label: 'Metal', desc: 'Offload layers to GPU via Metal. Faster for larger models. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
+  { id: INFERENCE_BACKENDS.METAL, label: 'Metal', desc: 'Offload layers to GPU via Metal. Faster for larger models. Requires model reload.' },
 ];
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
-  { id: 'cpu', label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  { id: 'opencl', label: 'OpenCL', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
 ];
 
 const HTP_BACKEND: BackendOption = {
-  id: 'htp', label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
+  id: INFERENCE_BACKENDS.HTP, label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
 };
 
 export const BackendSelector: React.FC = () => {
@@ -50,9 +50,10 @@ export const BackendSelector: React.FC = () => {
     ? IOS_BACKENDS
     : hasNPU ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
 
-  const current = settings.inferenceBackend ?? (Platform.OS === 'ios' ? 'metal' : 'cpu');
-  const showLayers = current !== 'cpu';
-  const layersLabel = current === 'htp' ? 'NPU Layers' : current === 'metal' ? 'GPU Layers (Metal)' : 'GPU Layers (OpenCL)';
+  const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
+  const current = settings.inferenceBackend ?? defaultBackend;
+  const showLayers = current !== INFERENCE_BACKENDS.CPU;
+  const layersLabel = current === INFERENCE_BACKENDS.HTP ? 'NPU Layers' : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'GPU Layers (OpenCL)';
 
   return (
     <View style={styles.modeToggleContainer}>

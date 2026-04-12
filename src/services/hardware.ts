@@ -338,16 +338,10 @@ class HardwareService {
     if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
     if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
     try {
-      const [hardware, cpuinfo] = await Promise.all([
-        DeviceInfo.getHardware(),
-        RNFS.readFile('/proc/cpuinfo', 'utf8'),
-      ]);
-      const hasAdreno = hardware.toLowerCase().includes('qcom');
-      const features = cpuinfo.toLowerCase();
-      const hasI8mm = features.includes('i8mm');
-      const hasDotProd = features.includes('asimddp') || features.includes('dotprod');
-      if (!hasAdreno) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_adreno' });
-      if (!hasI8mm || !hasDotProd) return (this.cachedOpenCLCapability = { supported: false, reason: 'missing_cpu_features' });
+      const hardware = (await DeviceInfo.getHardware()).toLowerCase();
+      // Support Qualcomm Adreno (qcom) and ARM Mali (mali/arm) GPUs.
+      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali') || hardware.includes('arm');
+      if (!hasCompatibleGpu) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_compatible_gpu' });
       return (this.cachedOpenCLCapability = { supported: true });
     } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
   }

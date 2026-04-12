@@ -4,7 +4,7 @@
  */
 
 import { useAppStore } from '../../stores';
-import { DownloadedModel, ONNXImageModel } from '../../types';
+import { DownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { modelManager } from '../modelManager';
@@ -153,7 +153,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       flashAttn: settings.flashAttn,
       // Store the effective cache type (f16 may be forced for OpenCL) so the
       // banner doesn't show a false mismatch when the user setting differs.
-      cacheType: settings.inferenceBackend === 'opencl' ? 'f16' : settings.cacheType,
+      cacheType: settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType,
     };
     ctx.store.setLoadedSettings(reloadSettings);
 
