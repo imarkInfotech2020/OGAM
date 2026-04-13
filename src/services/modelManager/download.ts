@@ -118,11 +118,12 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
   let mmProjDownloadId: number | undefined;
   if (needsMmProj) {
+    const mmProjFile = file.mmProjFile!;
     const mmProjInfo = await backgroundDownloadService.startDownload({
-      url: file.mmProjFile!.downloadUrl, fileName: file.mmProjFile!.name, modelId,
-      title: `Downloading ${file.mmProjFile!.name} (vision)`,
-      description: `${modelId} - vision projection`, totalBytes: file.mmProjFile!.size,
-      sha256: file.mmProjFile!.sha256,
+      url: mmProjFile.downloadUrl, fileName: mmProjFile.name, modelId,
+      title: `Downloading ${mmProjFile.name} (vision)`,
+      description: `${modelId} - vision projection`, totalBytes: mmProjFile.size,
+      sha256: mmProjFile.sha256,
     });
     mmProjDownloadId = mmProjInfo.downloadId;
     backgroundDownloadService.markSilent(mmProjDownloadId);

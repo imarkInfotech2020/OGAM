@@ -40,16 +40,9 @@ class WorkerDownload(
         val download = downloadDao.getDownload(downloadId) ?: return Result.failure()
         DownloadEventBridge.log("I", "[Worker] doWork start id=$downloadId attempt=$runAttemptCount file=${download.fileName}")
 
-        if (isStopped) {
-            val partial = File(download.destination)
-            if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on early cancel id=$downloadId")
-            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
-            return Result.failure()
-        }
-        if (download.status == DownloadStatus.PAUSED) {
-            DownloadEventBridge.log("I", "[Worker] Paused on start — will retry when resumed id=$downloadId")
-            return Result.retry()
-        }
+        // Handle early stops and pauses
+        val earlyCheckResult = handleEarlyStopOrPause(downloadId, download)
+        if (earlyCheckResult != null) return earlyCheckResult
 
         DownloadForegroundService.start(applicationContext, download.title, downloadId)
 
@@ -62,23 +55,13 @@ class WorkerDownload(
         DownloadEventBridge.log("I", "[Worker] Resume offset=${existingBytes}B file=${targetFile.absolutePath}")
 
         // Disk space check — fail fast rather than filling the disk mid-download
-        if (download.totalBytes > 0L) {
-            val needed = download.totalBytes - existingBytes
-            val available = StatFs(targetFile.parentFile?.absolutePath ?: download.destination).availableBytes
-            DownloadEventBridge.log("I", "[Worker] Disk space id=$downloadId need=${needed / 1024 / 1024}MB available=${available / 1024 / 1024}MB")
-            if (available < needed) {
-                val reason = "Not enough disk space (need ${needed / 1024 / 1024}MB, have ${available / 1024 / 1024}MB)"
-                return failDownload(downloadId, download, reason, "worker disk space")
-            }
-        }
+        val diskCheckResult = checkDiskSpace(downloadId, download, targetFile, existingBytes)
+        if (diskCheckResult != null) return diskCheckResult
 
         downloadDao.updateStatus(downloadId, DownloadStatus.RUNNING)
 
         val requestStartMs = System.currentTimeMillis()
         val call = client.newCall(buildRequest(download.url, existingBytes))
-        // Cancel the OkHttp socket immediately when WorkManager stops this worker.
-        // CoroutineWorker.onStopped() is final — it cancels the coroutine Job.
-        // invokeOnCompletion fires on cancellation, closing the socket before the next buffer read.
         val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
         return try {
             call.execute().use { response ->
@@ -87,26 +70,57 @@ class WorkerDownload(
                 handleResponse(response, existingBytes, download, downloadId, targetFile, progressInterval)
             }
         } catch (e: Exception) {
-            if (isStopped) {
-                // call.cancel() caused the IOException — treat as user cancellation, not a network error
-                val partial = File(download.destination)
-                if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on cancel id=$downloadId")
-                downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
-                WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker cancelled")
-                Result.failure()
-            } else {
-                val elapsed = System.currentTimeMillis() - requestStartMs
-                val reason = e.message ?: e.javaClass.simpleName
-                DownloadEventBridge.log("E", "[Worker] Exception id=$downloadId attempt=$runAttemptCount elapsed=${elapsed}ms reason=$reason")
-                DownloadEventBridge.log("E", "[Worker] Stack: ${e.stackTraceToString().take(400)}")
-                downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reason)
-                DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, reason, runAttemptCount)
-                WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker exception")
-                Result.retry()
-            }
+            handleDownloadException(e, downloadId, download, requestStartMs)
         } finally {
             cancelHandle?.dispose()
         }
+    }
+
+    /** Returns non-null Result if should exit early, null to continue. */
+    private suspend fun handleEarlyStopOrPause(downloadId: Long, download: DownloadEntity): Result? {
+        if (isStopped) {
+            val partial = File(download.destination)
+            if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on early cancel id=$downloadId")
+            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
+            return Result.failure()
+        }
+        if (download.status == DownloadStatus.PAUSED) {
+            DownloadEventBridge.log("I", "[Worker] Paused on start — will retry when resumed id=$downloadId")
+            return Result.retry()
+        }
+        return null
+    }
+
+    /** Returns non-null Result if disk space check fails, null to continue. */
+    private suspend fun checkDiskSpace(downloadId: Long, download: DownloadEntity, targetFile: File, existingBytes: Long): Result? {
+        if (download.totalBytes <= 0L) return null
+        val needed = download.totalBytes - existingBytes
+        val available = StatFs(targetFile.parentFile?.absolutePath ?: download.destination).availableBytes
+        DownloadEventBridge.log("I", "[Worker] Disk space id=$downloadId need=${needed / 1024 / 1024}MB available=${available / 1024 / 1024}MB")
+        if (available < needed) {
+            val reason = "Not enough disk space (need ${needed / 1024 / 1024}MB, have ${available / 1024 / 1024}MB)"
+            return failDownload(downloadId, download, reason, "worker disk space")
+        }
+        return null
+    }
+
+    /** Handles exceptions during download. */
+    private suspend fun handleDownloadException(e: Exception, downloadId: Long, download: DownloadEntity, requestStartMs: Long): Result {
+        if (isStopped) {
+            val partial = File(download.destination)
+            if (partial.exists() && !partial.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial on cancel id=$downloadId")
+            downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, MSG_DOWNLOAD_CANCELLED)
+            WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker cancelled")
+            return Result.failure()
+        }
+        val elapsed = System.currentTimeMillis() - requestStartMs
+        val reason = e.message ?: e.javaClass.simpleName
+        DownloadEventBridge.log("E", "[Worker] Exception id=$downloadId attempt=$runAttemptCount elapsed=${elapsed}ms reason=$reason")
+        DownloadEventBridge.log("E", "[Worker] Stack: ${e.stackTraceToString().take(400)}")
+        downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reason)
+        DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, reason, runAttemptCount)
+        WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker exception")
+        return Result.retry()
     }
 
     // -------------------------------------------------------------------------
@@ -256,7 +270,7 @@ class WorkerDownload(
                 // File size mismatch > 0.1% — verify integrity with SHA256 before failing
                 DownloadEventBridge.log("I", "[Worker] Size mismatch (${(sizeDiffPercent * 100).toInt()}%) — verifying SHA256 id=$downloadId")
                 val actual = computeFileSha256(targetFile)
-                if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                if (actual.lowercase() != expectedSha256.lowercase()) {
                     DownloadEventBridge.log("E", "[Worker] SHA256 mismatch id=$downloadId expected=$expectedSha256 actual=$actual")
                     if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete corrupt file id=$downloadId")
                     return failDownload(downloadId, download, "File corrupted (size mismatch + hash failure)", "worker sha256 mismatch")

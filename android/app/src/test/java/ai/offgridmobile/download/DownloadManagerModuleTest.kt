@@ -210,7 +210,7 @@ class DownloadManagerModuleTest {
             tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
             val hash = WorkerDownload.computeFileSha256(tmp)
             // Our function always returns lowercase; verify it equals the uppercase version ignoreCase
-            assertTrue(hash.equals(hash.uppercase(), ignoreCase = true))
+            assertTrue(hash == hash.lowercase())
         } finally {
             tmp.delete()
         }
