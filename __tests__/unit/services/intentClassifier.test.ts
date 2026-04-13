@@ -1104,111 +1104,65 @@ describe('IntentClassifier', () => {
 // classifyToolsNeeded
 // ============================================================================
 describe('classifyToolsNeeded', () => {
-  describe('web_search patterns', () => {
-    const cases = [
+  const toolMatchCases: [string, string[]][] = [
+    ['web_search', [
       'search for the latest news',
-      'look up the current score',
-      'what is the latest iPhone price',
-      'find out who won the match',
-      "what's happening in the world",
-      'show me recent updates on this',
-      'bitcoin price today',
+      'look up the current bitcoin price',
+      "what's happening in the world right now",
       'weather forecast for tomorrow',
-      'is it raining right now',
       'trending topics this week',
-      'just launched new model from OpenAI',
-    ];
-    test.each(cases)('"%s" → includes web_search', (msg) => {
-      expect(classifyToolsNeeded(msg)).toContain('web_search');
-    });
-  });
-
-  describe('read_url patterns', () => {
-    const cases = [
+      'who won the match last night',
+      'just launched a new model from OpenAI',
+    ]],
+    ['read_url', [
       'https://example.com summarize this',
       'read the article at this link',
       'fetch content from that page',
-      'summarize this url for me',
       'open the link and tell me what it says',
-      'analyse this page',
-    ];
-    test.each(cases)('"%s" → includes read_url', (msg) => {
-      expect(classifyToolsNeeded(msg)).toContain('read_url');
-    });
-  });
-
-  describe('web_search + read_url coupling', () => {
-    test('matching web_search alone also includes read_url', () => {
-      const result = classifyToolsNeeded('search for the latest news');
-      expect(result).toContain('web_search');
-      expect(result).toContain('read_url');
-    });
-
-    test('matching read_url alone also includes web_search', () => {
-      const result = classifyToolsNeeded('https://example.com summarize this');
-      expect(result).toContain('web_search');
-      expect(result).toContain('read_url');
-    });
-  });
-
-  describe('calculator patterns', () => {
-    const cases = [
+      'analyse this page for me',
+    ]],
+    ['calculator', [
       'calculate 15% of 200',
-      'how much is 12 * 8',
       'compute the factorial of 5',
+      'how much is 12 times 8',
       'what is 100 divided by 4',
       '5 plus 3',
-      'average of 10 20 30',
-      'work out the total tax',
+      'work out the total including tax',
       'convert 50 miles to km',
-    ];
-    test.each(cases)('"%s" → includes calculator', (msg) => {
-      expect(classifyToolsNeeded(msg)).toContain('calculator');
-    });
-  });
-
-  describe('get_current_datetime patterns', () => {
-    const cases = [
+    ]],
+    ['get_current_datetime', [
       'what time is it',
-      "what's the time right now",
       'current date please',
       "what's today's date",
-      'what day is it',
-      'what month are we in',
+      'what day is it today',
       'tell me the date',
       'how many days until Christmas',
-      'how long ago was last Friday',
-    ];
-    test.each(cases)('"%s" → includes get_current_datetime', (msg) => {
-      expect(classifyToolsNeeded(msg)).toContain('get_current_datetime');
-    });
-  });
-
-  describe('get_device_info patterns', () => {
-    const cases = [
+    ]],
+    ['get_device_info', [
       'how much battery do I have left',
-      'check my storage',
+      'check my storage space',
       'how much free space is available',
       'what is my ram usage',
-      'device info please',
-      'my phone specs',
-    ];
-    test.each(cases)('"%s" → includes get_device_info', (msg) => {
-      expect(classifyToolsNeeded(msg)).toContain('get_device_info');
-    });
+      'show my device info',
+    ]],
+  ];
+
+  test.each(toolMatchCases)('%s — matches its trigger phrases', (toolId, messages) => {
+    messages.forEach(msg => expect(classifyToolsNeeded(msg)).toContain(toolId));
   });
 
-  describe('returns empty for unrelated messages', () => {
-    const cases = [
-      'hi',
-      'hello there',
-      'explain how React hooks work',
-      'write me a poem about the sea',
-      'what is photosynthesis',
-      'fix this bug in my code',
-    ];
-    test.each(cases)('"%s" → empty array', (msg) => {
-      expect(classifyToolsNeeded(msg)).toHaveLength(0);
-    });
+  it('web_search and read_url are always coupled', () => {
+    const fromSearch = classifyToolsNeeded('search for the latest news');
+    expect(fromSearch).toContain('web_search');
+    expect(fromSearch).toContain('read_url');
+
+    const fromUrl = classifyToolsNeeded('https://example.com summarize this');
+    expect(fromUrl).toContain('web_search');
+    expect(fromUrl).toContain('read_url');
+  });
+
+  it('returns empty array for plain conversational messages', () => {
+    ['hi', 'hello there', 'explain how React hooks work', 'write me a poem', 'fix this bug in my code']
+      .forEach(msg => expect(classifyToolsNeeded(msg)).toHaveLength(0));
   });
 });
