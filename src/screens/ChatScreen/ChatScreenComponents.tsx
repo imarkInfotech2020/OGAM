@@ -49,8 +49,8 @@ export const NoModelScreen: React.FC<{
       <Text style={styles.noModelTitle}>No Model Selected</Text>
       <Text style={styles.noModelText}>
         {downloadedModelsCount > 0
-          ? 'Select a model to start chatting.'
-          : 'Download a model from the Models tab to start chatting.'}
+          ? 'Select a text or image model to get started.'
+          : 'Download a text or image model from the Models tab to get started.'}
       </Text>
       {downloadedModelsCount > 0 && (
         <TouchableOpacity style={styles.selectModelButton} onPress={() => setShowModelSelector(true)}>
