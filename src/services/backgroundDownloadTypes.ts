@@ -7,6 +7,7 @@ export interface DownloadParams {
   title?: string;
   description?: string;
   totalBytes?: number;
+  sha256?: string;
 }
 
 export interface MultiFileDownloadParams {

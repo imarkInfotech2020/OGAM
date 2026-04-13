@@ -104,10 +104,10 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     triedImageGen: onboardingChecklist.triedImageGen,
   });
 
-  const loadDownloadedImageModels = async () => {
+  const loadDownloadedImageModels = useCallback(async () => {
     const models = await modelManager.getDownloadedImageModels();
     setDownloadedImageModels(models);
-  };
+  }, [setDownloadedImageModels]);
 
   const loadHFModels = useCallback(async (forceRefresh = false) => {
     setHfModelsLoading(true); setHfModelsError(null);
@@ -177,6 +177,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
       }),
     ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
+      if (ev.status === 'retrying') return;
       const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
       deps.updateModelProgress(modelId, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0);
     }));
@@ -233,8 +234,10 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   useEffect(() => {
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
-
-  }, []);
+  // restoreActiveImageDownloads is intentionally mount-only — it reads
+  // current store state via useAppStore.getState() to avoid stale closures.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadDownloadedImageModels]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,6 +254,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     });
     return () => { cancelled = true; };
 
+  // Intentionally mount-only: fetches hardware recommendation once.
+  // userChangedBackendFilter is read inside but should not re-trigger this fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clearImageFilters = useCallback(() => {

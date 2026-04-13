@@ -118,14 +118,20 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
   };
 
   const removeProgressListener = backgroundDownloadService.onProgress(
-    download.downloadId, (event) => { mainBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+    download.downloadId, (event) => {
+      if (event.status === 'retrying') return;
+      mainBytesDownloaded = event.bytesDownloaded; reportProgress();
+    },
   );
 
   let removeMmProjProgressListener: (() => void) | undefined;
   if (mmProjDownloadId && !mmProjCompleted) {
     backgroundDownloadService.markSilent(mmProjDownloadId);
     removeMmProjProgressListener = backgroundDownloadService.onProgress(
-      mmProjDownloadId, (event) => { mmProjBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+      mmProjDownloadId, (event) => {
+        if (event.status === 'retrying') return;
+        mmProjBytesDownloaded = event.bytesDownloaded; reportProgress();
+      },
     );
   }
 
