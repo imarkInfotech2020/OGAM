@@ -505,11 +505,11 @@ describe('DocumentService', () => {
     });
 
     it('truncates content exceeding maxChars', async () => {
-      // maxChars = floor(contextLength * 4 * 0.5) = floor(2048 * 4 * 0.5) = 4096
-      const overMaxChars = 4097;
+      // maxChars = floor(contextLength * 4 * 0.5) = floor(4096 * 4 * 0.5) = 8192
+      const overMaxChars = 8193;
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: overMaxChars, isFile: () => true } as any);
-      const overContent = 'a'.repeat(overMaxChars);
+      const overContent = 'a'.repeat(overMaxChars); // 8193 chars > maxChars (8192)
       mockedRNFS.readFile.mockResolvedValue(overContent);
 
       const result = await documentService.processDocumentFromPath('/path/to/over.txt');
