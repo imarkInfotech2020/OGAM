@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import RNFS from 'react-native-fs';
@@ -17,6 +17,7 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { useNotifRationale } from './useNotifRationale';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
+import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 type ZipImportDeps = {
   addDownloadedImageModel: (model: ONNXImageModel) => void;
@@ -119,15 +120,16 @@ export function useModelsScreen() {
   const handleImportImageModelZip = (sourceUri: string, fileName: string) =>
     importImageModelZip(sourceUri, fileName, { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState });
 
+  const isPickingRef = useRef(false);
+
   const handleImportLocalModel = async () => {
-    if (isImporting) return;
+    if (isImporting || isPickingRef.current) return;
+    isPickingRef.current = true;
+    setIsImporting(true);
     try {
       const result = await pick({ type: [types.allFiles], allowMultiSelection: true });
-      setIsImporting(true);
 
-      if (!result || result.length === 0) {
-        return;
-      }
+      if (!result || result.length === 0) return;
 
       // Resolve filename: use picker name if available, fall back to last path segment of URI
       const resolvedFiles = result.map(f => ({
@@ -164,11 +166,17 @@ export function useModelsScreen() {
 
       await importGgufFiles(resolvedFiles.slice(0, 2), { setAlertState, setImportProgress, addDownloadedModel });
     } catch (error: unknown) {
-      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
+      if (isPickerStuck(error)) {
+        setAlertState(showAlert(
+          'File Picker Unavailable',
+          "The file picker isn't responding. Please close and reopen the app, then try again.",
+        ));
         return;
       }
       setAlertState(showAlert('Import Failed', getErrorMessage(error)));
     } finally {
+      isPickingRef.current = false;
       setIsImporting(false);
       setImportProgress(null);
     }

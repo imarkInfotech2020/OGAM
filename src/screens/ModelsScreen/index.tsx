@@ -88,7 +88,7 @@ export const ModelsScreen: React.FC = () => {
               </Text>
             </View>
           ) : (
-            <TouchableOpacity style={styles.importButton} onPress={vm.handleImportLocalModel} testID="import-local-model">
+            <TouchableOpacity style={styles.importButton} onPress={vm.handleImportLocalModel} testID="import-local-model" disabled={vm.isImporting}>
               <Icon name="folder-plus" size={20} color={colors.primary} />
               <Text style={styles.importButtonText}>Import Local File</Text>
             </TouchableOpacity>
