@@ -33,7 +33,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     private val downloadDao = DownloadDatabase.getInstance(reactContext).downloadDao()
     private val workManager = WorkManager.getInstance(reactContext)
 
-    // LiveData observers keyed by downloadId
+    // LiveData observers keyed by downloadId — enables real-time progress tracking
+    // Future: integrate with device connectivity service to enforce WiFi-only downloads
+    // when requested, allowing models to resume over cellular if necessary.
     private val workObservers = mutableMapOf<Long, Observer<List<WorkInfo>>>()
 
     init {
