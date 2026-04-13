@@ -407,7 +407,7 @@ describe('DownloadManagerScreen', () => {
     });
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('downloading')).toBeTruthy();
+    expect(getByText('Downloading...')).toBeTruthy();
   });
 
   it('does not show storage section when no completed models', () => {

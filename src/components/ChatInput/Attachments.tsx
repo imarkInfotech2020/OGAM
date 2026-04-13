@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 let _attachmentIdSeq = 0;
 const nextAttachmentId = () => `${Date.now()}-${(++_attachmentIdSeq).toString(36)}`;
-import { View, Text, Image, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, Platform, ActionSheetIOS } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import Icon from 'react-native-vector-icons/Feather';
@@ -11,12 +11,13 @@ import { MediaAttachment } from '../../types';
 import { documentService } from '../../services/documentService';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
-import logger from '../../utils/logger';
+import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
 export function useAttachments(setAlertState: (state: AlertState) => void) {
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
+  const isPickingRef = useRef(false);
 
   const addAttachments = (assets: Asset[]) => {
     const newAttachments: MediaAttachment[] = assets
@@ -41,8 +42,8 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     try {
       const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
-    } catch (pickError) {
-      logger.error('Error picking image:', pickError);
+    } catch (_pickError) {
+      // no-op: image picker already reports failure to the user via native UI
     }
   };
 
@@ -50,35 +51,35 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     try {
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
-    } catch (cameraError) {
-      logger.error('Error taking photo:', cameraError);
+    } catch (_cameraError) {
+      // no-op: camera picker already reports failure to the user via native UI
     }
   };
 
   const handlePickImage = () => {
-    setAlertState(showAlert(
-      'Add Image',
-      'Choose image source',
-      [
-        {
-          text: 'Camera',
-          onPress: () => {
-            setAlertState(hideAlert());
-            setTimeout(pickFromCamera, 300);
-          },
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Camera', 'Photo Library', 'Cancel'], cancelButtonIndex: 2 },
+        (index) => {
+          if (index === 0) pickFromCamera();
+          else if (index === 1) pickFromLibrary();
         },
-        {
-          text: 'Photo Library',
-          onPress: () => {
-            setAlertState(hideAlert());
-            setTimeout(pickFromLibrary, 300);
-          },
-        },
-      ],
-    ));
+      );
+    } else {
+      setAlertState(showAlert(
+        'Add Image',
+        'Choose image source',
+        [
+          { text: 'Camera', onPress: () => { setAlertState(hideAlert()); setTimeout(pickFromCamera, 300); } },
+          { text: 'Photo Library', onPress: () => { setAlertState(hideAlert()); setTimeout(pickFromLibrary, 300); } },
+        ],
+      ));
+    }
   };
 
   const handlePickDocument = async () => {
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
     try {
       const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
       const file = result[0];
@@ -96,8 +97,17 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       if (attachment) setAttachments(prev => [...prev, attachment]);
     } catch (pickError: any) {
       if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
-      logger.error('Error picking document:', pickError);
+      if (isPickerStuck(pickError)) {
+        setAlertState(showAlert(
+          'File Picker Unavailable',
+          "The file picker isn't responding. Please close and reopen the app, then try again.",
+          [{ text: 'OK' }],
+        ));
+        return;
+      }
       setAlertState(showAlert('Error', pickError.message || 'Failed to read document', [{ text: 'OK' }]));
+    } finally {
+      isPickingRef.current = false;
     }
   };
 

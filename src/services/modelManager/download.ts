@@ -110,17 +110,20 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl, fileName: file.name, modelId,
-    title: `Downloading ${file.name}`, description: `${modelId} - ${file.quantization}`, totalBytes: file.size,
+    title: `Downloading ${file.name}`, description: `${modelId} - ${file.quantization}`,
+    totalBytes: file.size, sha256: file.sha256,
   });
 
   // Start mmproj download in parallel if needed
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
   let mmProjDownloadId: number | undefined;
   if (needsMmProj) {
+    const mmProjFile = file.mmProjFile!;
     const mmProjInfo = await backgroundDownloadService.startDownload({
-      url: file.mmProjFile!.downloadUrl, fileName: file.mmProjFile!.name, modelId,
-      title: `Downloading ${file.mmProjFile!.name} (vision)`,
-      description: `${modelId} - vision projection`, totalBytes: file.mmProjFile!.size,
+      url: mmProjFile.downloadUrl, fileName: mmProjFile.name, modelId,
+      title: `Downloading ${mmProjFile.name} (vision)`,
+      description: `${modelId} - vision projection`, totalBytes: mmProjFile.size,
+      sha256: mmProjFile.sha256,
     });
     mmProjDownloadId = mmProjInfo.downloadId;
     backgroundDownloadService.markSilent(mmProjDownloadId);
@@ -146,13 +149,19 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   };
 
   const removeProgressListener = backgroundDownloadService.onProgress(
-    downloadInfo.downloadId, (event) => { mainBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+    downloadInfo.downloadId, (event) => {
+      if (event.status === 'retrying') return; // keep existing bytes on transient failure
+      mainBytesDownloaded = event.bytesDownloaded; reportProgress();
+    },
   );
 
   let removeMmProjProgressListener: (() => void) | undefined;
   if (mmProjDownloadId) {
     removeMmProjProgressListener = backgroundDownloadService.onProgress(
-      mmProjDownloadId, (event) => { mmProjBytesDownloaded = event.bytesDownloaded; reportProgress(); },
+      mmProjDownloadId, (event) => {
+        if (event.status === 'retrying') return;
+        mmProjBytesDownloaded = event.bytesDownloaded; reportProgress();
+      },
     );
   }
 

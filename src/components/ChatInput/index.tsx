@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
@@ -139,7 +139,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleQuickSettingsPress = () => quickSettings.show();
 
-  const handleAttachPress = () => attachPicker.show();
+  const handleAttachPress = () => {
+    if (Platform.OS === 'ios') {
+      const options = supportsVision
+        ? ['Photo', 'Document', 'Cancel']
+        : ['Document', 'Cancel'];
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: options.length - 1 },
+        (index) => {
+          if (supportsVision) {
+            if (index === 0) handleVisionPress();
+            else if (index === 1) handlePickDocument();
+          } else {
+            if (index === 0) handlePickDocument();
+          }
+        },
+      );
+    } else {
+      attachPicker.show();
+    }
+  };
 
   const actionButton = canSend ? (
     <TouchableOpacity
@@ -244,15 +263,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         ) : actionButton}
       </View>
 
-      <AttachPickerPopover
-        visible={attachPicker.visible}
-        onClose={attachPicker.hide}
-        anchorY={attachPicker.anchor.y}
-        anchorX={attachPicker.anchor.x}
-        supportsVision={supportsVision}
-        onPhoto={handleVisionPress}
-        onDocument={handlePickDocument}
-      />
+      {Platform.OS !== 'ios' && (
+        <AttachPickerPopover
+          visible={attachPicker.visible}
+          onClose={attachPicker.hide}
+          anchorY={attachPicker.anchor.y}
+          anchorX={attachPicker.anchor.x}
+          supportsVision={supportsVision}
+          onPhoto={handleVisionPress}
+          onDocument={handlePickDocument}
+        />
+      )}
 
       <QuickSettingsPopover
         visible={quickSettings.visible}

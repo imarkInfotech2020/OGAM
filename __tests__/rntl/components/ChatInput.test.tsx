@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Keyboard } from 'react-native';
+import { Keyboard, Platform } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
 
@@ -97,6 +97,10 @@ describe('ChatInput', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.spyOn(Keyboard, 'dismiss');
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: 'android',
+    });
 
     // Set up default mock implementations
     mockUseWhisperStore.mockReturnValue({

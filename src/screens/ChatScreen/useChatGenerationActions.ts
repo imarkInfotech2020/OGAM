@@ -28,6 +28,7 @@ export type GenerationDeps = {
   activeModel: DownloadedModel | null | undefined;
   activeModelInfo?: { isRemote: boolean; model: DownloadedModel | RemoteModel | null; modelId: string | null; modelName: string };
   hasActiveModel?: boolean;
+  hasTextModel?: boolean;
   activeConversationId: string | null | undefined;
   activeConversation: any;
   activeProject: any;
@@ -89,7 +90,7 @@ function buildMessagesForContext(conversationId: string, messageText: string, sy
   return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
 }
 export async function shouldRouteToImageGenerationFn(
-  deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'imageModelLoaded' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage'>,
+  deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'imageModelLoaded' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage' | 'hasTextModel'>,
   text: string,
   forceImageMode?: boolean,
 ): Promise<boolean> {
@@ -97,6 +98,8 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
   if (!deps.imageModelLoaded) return false;
+  // In image-only mode (no text model loaded), always route to image generation
+  if (deps.hasTextModel === false) return true;
   try {
     const useLLM = deps.settings.autoDetectMethod === 'llm';
     const classifierModel = deps.settings.classifierModelId
@@ -134,16 +137,10 @@ export async function handleImageGenerationFn(
   call: ImageGenCall,
 ): Promise<void> {
   const { prompt, conversationId, skipUserMessage = false } = call;
-  if (!deps.activeImageModel) {
-    deps.setAlertState(showAlert('Error', 'No image model loaded.'));
-    return;
-  }
-  if (!skipUserMessage) {
-    deps.addMessage(conversationId, { role: 'user', content: prompt });
-  }
+  if (!deps.activeImageModel) { deps.setAlertState(showAlert('Error', 'No image model loaded.')); return; }
+  if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt }); }
   const result = await imageGenerationService.generateImage({
-    prompt,
-    conversationId,
+    prompt, conversationId,
     steps: deps.settings.imageSteps || 8,
     guidanceScale: deps.settings.imageGuidanceScale || 2,
     previewInterval: 2,
@@ -218,9 +215,8 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
   return prompt;
 }
 /** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode. */
-function applyGemma4ThinkToken(prompt: string, isRemote: boolean): string {
-  return (!isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled()) ? `<|think|>\n${prompt}` : prompt;
-}
+const applyGemma4ThinkToken = (prompt: string, isRemote: boolean): string =>
+  (!isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled()) ? `<|think|>\n${prompt}` : prompt;
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabledTools: string[]; rawPrompt: string } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
@@ -237,6 +233,13 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any): { enabl
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.hasActiveModel) return;
+  // In image-only mode (no text model), route directly to image generation
+  if (deps.imageModelLoaded && deps.hasTextModel === false) {
+    deps.generatingForConversationRef.current = targetConversationId;
+    await handleImageGenerationFn(deps, { prompt: messageText, conversationId: targetConversationId });
+    deps.generatingForConversationRef.current = null;
+    return;
+  }
   deps.generatingForConversationRef.current = targetConversationId;
   // For remote models, skip local model loading
   if (!deps.activeModelInfo?.isRemote && deps.activeModel) {
@@ -282,7 +285,8 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   }
   let targetConversationId = deps.activeConversationId;
   if (!targetConversationId) {
-    targetConversationId = deps.createConversation(deps.activeModelInfo!.modelId!, undefined, deps.pendingProjectId);
+    const fallbackModelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;
+    targetConversationId = deps.createConversation(fallbackModelId!, undefined, deps.pendingProjectId);
     deps.setActiveConversation(targetConversationId);
   }
   let messageText = appendAttachmentText(text, attachments);
@@ -311,8 +315,7 @@ export async function executeDeleteConversationFn(
   if (!deps.activeConversationId) return;
   deps.setAlertState(hideAlert());
   if (deps.isStreaming) { await llmService.stopGeneration(); deps.clearStreamingMessage(); }
-  const imageIds = deps.removeImagesByConversationId(deps.activeConversationId);
-  for (const id of imageIds) await onnxImageGeneratorService.deleteGeneratedImage(id);
+  for (const id of deps.removeImagesByConversationId(deps.activeConversationId)) await onnxImageGeneratorService.deleteGeneratedImage(id);
   contextCompactionService.clearSummary(deps.activeConversationId);
   deps.deleteConversation(deps.activeConversationId);
   deps.setActiveConversation(null);
@@ -355,5 +358,4 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
 export type SelectProjectDeps = { activeConversationId: string | null | undefined; setConversationProject: (convId: string, projectId: string | null) => void; setShowProjectSelector: SetState<boolean> };
 export function handleSelectProjectFn(deps: SelectProjectDeps, project: Project | null): void {
   if (deps.activeConversationId) deps.setConversationProject(deps.activeConversationId, project?.id || null);
-  deps.setShowProjectSelector(false);
-}
+  deps.setShowProjectSelector(false); }

@@ -179,6 +179,7 @@ export async function downloadCoreMLMultiFile(
       }
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
+      if (ev.status === 'retrying') return;
       deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0);
     }));
     backgroundDownloadService.startProgressPolling();
@@ -237,6 +238,7 @@ export async function proceedWithDownload(
       await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
+      if (ev.status === 'retrying') return;
       deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0);
     }));
     backgroundDownloadService.startProgressPolling();

@@ -53,7 +53,7 @@ export const ChatsListScreen: React.FC = () => {
     }
   }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
-  const hasModels = !!activeTextModelId;
+  const hasModels = !!activeTextModelId || !!activeImageModelId;
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -62,7 +62,7 @@ export const ChatsListScreen: React.FC = () => {
 
   const handleNewChat = () => {
     if (!hasModels) {
-      setAlertState(showAlert('No Model', 'Please download a model or add a remote server first.'));
+      setAlertState(showAlert('No Model', 'Please download a text or image model first.'));
       return;
     }
     navigation.navigate('Chat', {});

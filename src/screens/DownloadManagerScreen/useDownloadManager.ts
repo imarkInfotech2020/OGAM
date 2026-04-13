@@ -85,6 +85,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (!metadata) return;
       const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
+      if (event.status === 'retrying') {
+        // Keep existing bytes — just update status and reason so the UI shows "Reconnecting..."
+        const existing = useAppStore.getState().downloadProgress[key];
+        setDownloadProgress(key, {
+          progress: existing?.progress ?? 0,
+          bytesDownloaded: existing?.bytesDownloaded ?? 0,
+          totalBytes: existing?.totalBytes ?? 0,
+          status: 'retrying',
+          reason: event.reason,
+        });
+        return;
+      }
       if ((useAppStore.getState().downloadProgress[key]?.bytesDownloaded ?? -1) >= event.bytesDownloaded) return;
       setDownloadProgress(key, {
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
@@ -115,7 +127,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       unsubError();
     };
 
-  }, []);
+  }, [setDownloadProgress]);
 
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
@@ -132,7 +144,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
 
-  }, []);
+  }, [setDownloadedModels, setDownloadedImageModels]);
 
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());

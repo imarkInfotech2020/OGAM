@@ -224,7 +224,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const startNewChat = () => {
-    if (!activeTextModelId) { return; }
+    // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
+    if (!activeTextModelId && !activeImageModelId) { return; }
     navigation.navigate('Chat', {});
   };
 

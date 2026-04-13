@@ -121,7 +121,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             queueCount={chat.queueCount}
             queuedTexts={chat.queuedTexts}
             onClearQueue={() => generationService.clearQueue()}
-            placeholder={getPlaceholderText(chat.hasActiveModel, chat.supportsVision)}
+            placeholder={getPlaceholderText(chat.hasActiveModel, chat.supportsVision, chat.imageModelLoaded && !chat.hasTextModel)}
             onToolsPress={() => chat.setShowToolPicker(true)}
             enabledToolCount={chat.enabledTools.length}
             supportsToolCalling={chat.supportsToolCalling}
