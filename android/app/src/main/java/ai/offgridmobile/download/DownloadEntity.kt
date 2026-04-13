@@ -17,6 +17,7 @@ data class DownloadEntity(
     val status: DownloadStatus,
     val createdAt: Long,
     val error: String? = null,
+    val expectedSha256: String? = null,
 )
 
 enum class DownloadStatus {

@@ -31,11 +31,13 @@ export interface ModelFile {
   size: number;
   quantization: string;
   downloadUrl: string;
+  sha256?: string;
   // Companion mmproj for vision models
   mmProjFile?: {
     name: string;
     size: number;
     downloadUrl: string;
+    sha256?: string;
   };
 }
 

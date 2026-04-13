@@ -110,7 +110,8 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl, fileName: file.name, modelId,
-    title: `Downloading ${file.name}`, description: `${modelId} - ${file.quantization}`, totalBytes: file.size,
+    title: `Downloading ${file.name}`, description: `${modelId} - ${file.quantization}`,
+    totalBytes: file.size, sha256: file.sha256,
   });
 
   // Start mmproj download in parallel if needed
@@ -121,6 +122,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
       url: file.mmProjFile!.downloadUrl, fileName: file.mmProjFile!.name, modelId,
       title: `Downloading ${file.mmProjFile!.name} (vision)`,
       description: `${modelId} - vision projection`, totalBytes: file.mmProjFile!.size,
+      sha256: file.mmProjFile!.sha256,
     });
     mmProjDownloadId = mmProjInfo.downloadId;
     backgroundDownloadService.markSilent(mmProjDownloadId);

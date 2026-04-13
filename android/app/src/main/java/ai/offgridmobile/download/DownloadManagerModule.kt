@@ -33,7 +33,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     private val downloadDao = DownloadDatabase.getInstance(reactContext).downloadDao()
     private val workManager = WorkManager.getInstance(reactContext)
 
-    // LiveData observers keyed by downloadId — same pattern as PocketPal
+    // LiveData observers keyed by downloadId
     private val workObservers = mutableMapOf<Long, Observer<List<WorkInfo>>>()
 
     init {
@@ -70,6 +70,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val modelId = params.getString("modelId") ?: ""
                 val title = params.getString("title") ?: fileName
                 val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
+                val expectedSha256 = params.getString("sha256")?.lowercase()?.takeIf { it.length == 64 }
 
                 val downloadId = System.currentTimeMillis()
                 val destination = File(
@@ -88,6 +89,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     downloadedBytes = 0L,
                     status = DownloadStatus.QUEUED,
                     createdAt = System.currentTimeMillis(),
+                    expectedSha256 = expectedSha256,
                 )
 
                 withContext(Dispatchers.IO) {
@@ -121,7 +123,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     if (download != null) {
                         downloadDao.updateStatus(id, DownloadStatus.CANCELLED, "Download cancelled by user")
                         val file = File(download.destination)
-                        if (file.exists()) file.delete()
+                        if (file.exists() && !file.delete()) DownloadEventBridge.log("W", "[Module] Could not delete partial file on cancel id=$id")
                     }
                 }
                 WorkerDownload.cancel(reactApplicationContext, id)
@@ -364,7 +366,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     // -------------------------------------------------------------------------
-    // WorkInfo observer management — mirrors PocketPal's pattern exactly
+    // WorkInfo observer management
     // -------------------------------------------------------------------------
 
     private fun registerObserver(downloadId: Long) {

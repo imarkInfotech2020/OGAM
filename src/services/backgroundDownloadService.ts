@@ -40,6 +40,7 @@ class BackgroundDownloadService {
       title: params.title || `Downloading ${params.fileName}`,
       description: params.description || 'Model download in progress...',
       totalBytes: params.totalBytes || 0,
+      sha256: params.sha256,
     });
 
     return {

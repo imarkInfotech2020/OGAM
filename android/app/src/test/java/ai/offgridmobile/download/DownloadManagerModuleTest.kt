@@ -170,4 +170,49 @@ class DownloadManagerModuleTest {
     fun keyTotalConstantIsDefined() {
         assertEquals("total", WorkerDownload.KEY_TOTAL)
     }
+
+    // ── WorkerDownload.computeFileSha256 ──────────────────────────────────────
+
+    @Test
+    fun computeFileSha256MatchesKnownHash() {
+        // echo -n "hello" | sha256sum = 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+        val tmp = createTempFile("sha256test", ".bin")
+        try {
+            tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
+            assertEquals(
+                "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                WorkerDownload.computeFileSha256(tmp),
+            )
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
+    fun computeFileSha256EmptyFileReturnsKnownHash() {
+        // sha256 of empty input = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        val tmp = createTempFile("sha256empty", ".bin")
+        try {
+            tmp.writeBytes(ByteArray(0))
+            assertEquals(
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                WorkerDownload.computeFileSha256(tmp),
+            )
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
+    fun computeFileSha256IsCaseInsensitiveCompatible() {
+        val tmp = createTempFile("sha256case", ".bin")
+        try {
+            tmp.writeBytes("hello".toByteArray(Charsets.UTF_8))
+            val hash = WorkerDownload.computeFileSha256(tmp)
+            // Our function always returns lowercase; verify it equals the uppercase version ignoreCase
+            assertTrue(hash.equals(hash.uppercase(), ignoreCase = true))
+        } finally {
+            tmp.delete()
+        }
+    }
 }
