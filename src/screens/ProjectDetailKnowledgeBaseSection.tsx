@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { pick } from '@react-native-documents/picker';
+import { pick, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
+import logger from '../utils/logger';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
@@ -15,6 +16,16 @@ export const formatFileSize = (bytes: number): string => {
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+function isPickerStuck(err: unknown): boolean {
+  const msg = ((err as any)?.message || '').toLowerCase();
+  const code = ((err as any)?.code || '');
+  return (
+    code === 'ASYNC_OP_IN_PROGRESS' ||
+    msg.includes('async_op_in_progress') ||
+    msg.includes('previous promise did not settle')
+  );
+}
+
 export interface KBSectionProps {
   projectId: string;
   colors: any;
@@ -27,6 +38,8 @@ export interface KBSectionProps {
 export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colors, styles, setAlertState, onNavigateToKb, onDocumentPress }) => {
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
+  const [isPicking, setIsPicking] = useState(false);
+  const isPickingRef = useRef(false);
 
   const loadKbDocs = useCallback(async () => {
     try { setKbDocs(await ragService.getDocumentsByProject(projectId)); }
@@ -36,6 +49,9 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
   useEffect(() => { loadKbDocs(); }, [loadKbDocs]);
 
   const handleAddDocument = async () => {
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
+    setIsPicking(true);
     try {
       // iOS: 'import' → Apple copies the file before handing it to us, original untouched.
       // Android: 'open' → returns a content:// URI; keepLocalCopy() copies it to a real path.
@@ -55,10 +71,18 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         await loadKbDocs();
       }
     } catch (err: any) {
-      if (err && !err.message?.includes('cancel')) {
-        setAlertState(showAlert('Error', err.message || 'Failed to index document'));
+      if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) return;
+      if (isPickerStuck(err)) {
+        setAlertState(showAlert(
+          'File Picker Unavailable',
+          "The file picker isn't responding. Please close and reopen the app, then try again.",
+        ));
+        return;
       }
+      setAlertState(showAlert('Error', err.message || 'Failed to index document'));
     } finally {
+      isPickingRef.current = false;
+      setIsPicking(false);
       setIndexingFile(null);
     }
   };
@@ -95,6 +119,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         </View>
         <View style={styles.sectionActions}>
           <Button title="Add" variant="primary" size="small" onPress={handleAddDocument}
+            disabled={isPicking || !!indexingFile}
             icon={<Icon name="plus" size={16} color={colors.primary} />} />
           <Icon name="chevron-right" size={16} color={colors.textMuted} style={styles.navIcon} />
         </View>
