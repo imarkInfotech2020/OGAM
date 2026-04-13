@@ -6,7 +6,7 @@
  * plus edge cases, caching, and LLM fallback.
  */
 
-import { intentClassifier } from '../../../src/services/intentClassifier';
+import { intentClassifier, classifyToolsNeeded } from '../../../src/services/intentClassifier';
 import { llmService } from '../../../src/services/llm';
 import { activeModelService } from '../../../src/services/activeModelService';
 
@@ -1096,6 +1096,119 @@ describe('IntentClassifier', () => {
     test('should accept boolean false for useLLM', async () => {
       const result = await intentClassifier.classifyIntent('draw a cat', false);
       expect(result).toBe('image');
+    });
+  });
+});
+
+// ============================================================================
+// classifyToolsNeeded
+// ============================================================================
+describe('classifyToolsNeeded', () => {
+  describe('web_search patterns', () => {
+    const cases = [
+      'search for the latest news',
+      'look up the current score',
+      'what is the latest iPhone price',
+      'find out who won the match',
+      "what's happening in the world",
+      'show me recent updates on this',
+      'bitcoin price today',
+      'weather forecast for tomorrow',
+      'is it raining right now',
+      'trending topics this week',
+      'just launched new model from OpenAI',
+    ];
+    test.each(cases)('"%s" → includes web_search', (msg) => {
+      expect(classifyToolsNeeded(msg)).toContain('web_search');
+    });
+  });
+
+  describe('read_url patterns', () => {
+    const cases = [
+      'https://example.com summarize this',
+      'read the article at this link',
+      'fetch content from that page',
+      'summarize this url for me',
+      'open the link and tell me what it says',
+      'analyse this page',
+    ];
+    test.each(cases)('"%s" → includes read_url', (msg) => {
+      expect(classifyToolsNeeded(msg)).toContain('read_url');
+    });
+  });
+
+  describe('web_search + read_url coupling', () => {
+    test('matching web_search alone also includes read_url', () => {
+      const result = classifyToolsNeeded('search for the latest news');
+      expect(result).toContain('web_search');
+      expect(result).toContain('read_url');
+    });
+
+    test('matching read_url alone also includes web_search', () => {
+      const result = classifyToolsNeeded('https://example.com summarize this');
+      expect(result).toContain('web_search');
+      expect(result).toContain('read_url');
+    });
+  });
+
+  describe('calculator patterns', () => {
+    const cases = [
+      'calculate 15% of 200',
+      'how much is 12 * 8',
+      'compute the factorial of 5',
+      'what is 100 divided by 4',
+      '5 plus 3',
+      'average of 10 20 30',
+      'work out the total tax',
+      'convert 50 miles to km',
+    ];
+    test.each(cases)('"%s" → includes calculator', (msg) => {
+      expect(classifyToolsNeeded(msg)).toContain('calculator');
+    });
+  });
+
+  describe('get_current_datetime patterns', () => {
+    const cases = [
+      'what time is it',
+      "what's the time right now",
+      'current date please',
+      "what's today's date",
+      'what day is it',
+      'what month are we in',
+      'tell me the date',
+      'how many days until Christmas',
+      'how long ago was last Friday',
+    ];
+    test.each(cases)('"%s" → includes get_current_datetime', (msg) => {
+      expect(classifyToolsNeeded(msg)).toContain('get_current_datetime');
+    });
+  });
+
+  describe('get_device_info patterns', () => {
+    const cases = [
+      'how much battery do I have left',
+      'check my storage',
+      'how much free space is available',
+      'what is my ram usage',
+      'device info please',
+      'my phone specs',
+    ];
+    test.each(cases)('"%s" → includes get_device_info', (msg) => {
+      expect(classifyToolsNeeded(msg)).toContain('get_device_info');
+    });
+  });
+
+  describe('returns empty for unrelated messages', () => {
+    const cases = [
+      'hi',
+      'hello there',
+      'explain how React hooks work',
+      'write me a poem about the sea',
+      'what is photosynthesis',
+      'fix this bug in my code',
+    ];
+    test.each(cases)('"%s" → empty array', (msg) => {
+      expect(classifyToolsNeeded(msg)).toHaveLength(0);
     });
   });
 });
