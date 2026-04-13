@@ -23,7 +23,7 @@ const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
 
 export async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
   try {
-    const testResult = await testEndpoint(server.endpoint, 10000);
+    const testResult = await testEndpoint(server.endpoint, 10000, server.apiKey);
 
     if (!testResult.success) {
       return {
@@ -61,7 +61,7 @@ export async function testEndpointAndGetModels(
   apiKey?: string,
 ): Promise<ServerTestResult> {
   try {
-    const testResult = await testEndpoint(endpoint, 10000);
+    const testResult = await testEndpoint(endpoint, 10000, apiKey);
 
     if (!testResult.success) {
       return {
@@ -80,7 +80,6 @@ export async function testEndpointAndGetModels(
       createdAt: new Date().toISOString(),
       apiKey,
     };
-
     const models = await fetchModelsFromServer(tempServer);
     const serverType = await detectServerType(endpoint);
 

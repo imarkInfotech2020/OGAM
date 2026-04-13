@@ -144,5 +144,18 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       minHeight: 80,
       textAlignVertical: 'top' as const,
     },
+    apiKeyContainer: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+    },
+    apiKeyInput: {
+      flex: 1,
+      marginRight: 8,
+    },
+    apiKeyToggle: {
+      padding: 12,
+      backgroundColor: colors.surfaceLight,
+      borderRadius: 12,
+    },
   };
 }

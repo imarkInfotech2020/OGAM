@@ -119,7 +119,8 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
  */
 export async function testEndpoint(
   endpoint: string,
-  timeout: number = 5000
+  timeout: number = 5000,
+  apiKey?: string,
 ): Promise<{ success: boolean; error?: string; latency?: number }> {
   const startTime = Date.now();
 
@@ -128,6 +129,9 @@ export async function testEndpoint(
     let url = endpoint;
     while (url.endsWith('/')) url = url.slice(0, -1);
 
+    const authHeaders: Record<string, string> = { Accept: 'application/json' };
+    if (apiKey) authHeaders.Authorization = `Bearer ${apiKey}`;
+
     // Try to reach the base URL first
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -135,9 +139,7 @@ export async function testEndpoint(
     const response = await fetch(`${url}/v1/models`, {
       method: 'GET',
       signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: authHeaders,
     });
 
     clearTimeout(timeoutId);
@@ -151,6 +153,7 @@ export async function testEndpoint(
           const altResponse = await fetch(`${url}${alt}`, {
             method: 'GET',
             signal: controller.signal,
+            headers: authHeaders,
           });
           if (altResponse.ok) {
             return { success: true, latency };
