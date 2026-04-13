@@ -17,16 +17,7 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { useNotifRationale } from './useNotifRationale';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
-
-function isPickerStuck(err: unknown): boolean {
-  const msg = ((err as any)?.message || '').toLowerCase();
-  const code = ((err as any)?.code || '');
-  return (
-    code === 'ASYNC_OP_IN_PROGRESS' ||
-    msg.includes('async_op_in_progress') ||
-    msg.includes('previous promise did not settle')
-  );
-}
+import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 type ZipImportDeps = {
   addDownloadedImageModel: (model: ONNXImageModel) => void;

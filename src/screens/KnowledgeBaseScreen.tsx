@@ -22,19 +22,10 @@ import { useProjectStore } from '../stores';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 import { RootStackParamList } from '../navigation/types';
+import { isPickerStuck } from '../utils/pickerErrorUtils';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'KnowledgeBase'>;
-
-function isPickerStuck(err: unknown): boolean {
-  const msg = ((err as any)?.message || '').toLowerCase();
-  const code = ((err as any)?.code || '');
-  return (
-    code === 'ASYNC_OP_IN_PROGRESS' ||
-    msg.includes('async_op_in_progress') ||
-    msg.includes('previous promise did not settle')
-  );
-}
 
 
 const formatFileSize = (bytes: number): string => {

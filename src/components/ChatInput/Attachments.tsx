@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 let _attachmentIdSeq = 0;
 const nextAttachmentId = () => `${Date.now()}-${(++_attachmentIdSeq).toString(36)}`;
@@ -11,21 +11,13 @@ import { MediaAttachment } from '../../types';
 import { documentService } from '../../services/documentService';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
-
-function isPickerStuck(err: any): boolean {
-  const msg = (err?.message || '').toLowerCase();
-  const code = (err?.code || '');
-  return (
-    code === 'ASYNC_OP_IN_PROGRESS' ||
-    msg.includes('async_op_in_progress') ||
-    msg.includes('previous promise did not settle')
-  );
-}
+import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
 export function useAttachments(setAlertState: (state: AlertState) => void) {
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
+  const isPickingRef = useRef(false);
 
   const addAttachments = (assets: Asset[]) => {
     const newAttachments: MediaAttachment[] = assets
@@ -86,6 +78,8 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
   };
 
   const handlePickDocument = async () => {
+    if (isPickingRef.current) return;
+    isPickingRef.current = true;
     try {
       const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
       const file = result[0];
@@ -112,6 +106,8 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
         return;
       }
       setAlertState(showAlert('Error', pickError.message || 'Failed to read document', [{ text: 'OK' }]));
+    } finally {
+      isPickingRef.current = false;
     }
   };
 

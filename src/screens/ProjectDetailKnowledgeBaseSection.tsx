@@ -2,29 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { pick, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
-import logger from '../utils/logger';
+
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
-
-
+import { isPickerStuck } from '../utils/pickerErrorUtils';
 
 export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
-
-function isPickerStuck(err: unknown): boolean {
-  const msg = ((err as any)?.message || '').toLowerCase();
-  const code = ((err as any)?.code || '');
-  return (
-    code === 'ASYNC_OP_IN_PROGRESS' ||
-    msg.includes('async_op_in_progress') ||
-    msg.includes('previous promise did not settle')
-  );
-}
 
 export interface KBSectionProps {
   projectId: string;
