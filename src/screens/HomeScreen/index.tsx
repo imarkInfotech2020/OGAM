@@ -104,7 +104,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
           {/* New Chat Button */}
           {
-            activeTextModel ? (
+            (activeTextModel || activeImageModelId) ? (
               <Button
                 title="New Chat"
                 onPress={startNewChat}
@@ -115,7 +115,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Card style={styles.setupCard} testID="setup-card">
                 <Text style={styles.setupText}>
                   {downloadedModels.length > 0 || remoteTextModels.length > 0
-                    ? 'Select a text model to start chatting'
+                    ? 'Select a text or image model to start'
                     : 'Add a remote server or download a model to start chatting'}
                 </Text>
                 <View style={styles.setupActions}>

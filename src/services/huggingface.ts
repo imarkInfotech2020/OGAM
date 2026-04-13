@@ -98,7 +98,7 @@ class HuggingFaceService {
     };
   };
 
-  private transformFileInfo(modelId: string, file: { rfilename: string; size?: number; lfs?: { size: number } }): ModelFile {
+  private transformFileInfo(modelId: string, file: { rfilename: string; size?: number; lfs?: { size: number; sha256: string } }): ModelFile {
     const fileName = file.rfilename;
     const size = file.lfs?.size || file.size || 0;
     const quantization = this.extractQuantization(fileName);
@@ -108,6 +108,7 @@ class HuggingFaceService {
       size,
       quantization,
       downloadUrl: this.getDownloadUrl(modelId, fileName),
+      sha256: file.lfs?.sha256,
     };
   }
 

@@ -30,7 +30,7 @@ export type DownloadItem = {
 };
 
 export interface DownloadItemsData {
-  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; reason?: string }>;
+  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string }>;
   activeDownloads: BackgroundDownloadInfo[];
   activeBackgroundDownloads: Record<number, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
   downloadedModels: DownloadedModel[];
@@ -60,9 +60,10 @@ export function extractQuantization(fileName: string): string {
 }
 
 export function getStatusText(status: string): string {
-  if (status === 'running') return 'Downloading...';
+  if (status === 'running' || status === 'downloading') return 'Downloading...';
   if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
+  if (status === 'retrying') return 'Reconnecting...';
   if (status === 'unknown') return 'Stuck - Remove & retry';
   return status;
 }
@@ -92,7 +93,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       fileSize: progress.totalBytes,
       bytesDownloaded: progress.bytesDownloaded,
       progress: progress.progress,
-      status: 'downloading',
+      status: progress.status ?? 'downloading',
       reason: progress.reason,
     });
   });
@@ -164,6 +165,13 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
   return items;
 }
 
+function getStatusLabel(item: DownloadItem): string {
+  if (item.status === 'retrying' && item.reason) return item.reason;
+  const base = getStatusText(item.status);
+  if (!item.reason) return base;
+  return `${base} · ${item.reason}`;
+}
+
 // ─── Item components ──────────────────────────────────────────────────────────
 
 interface ActiveDownloadCardProps {
@@ -199,7 +207,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.quantText}>{item.quantization}</Text>
         </View>
         <Text style={styles.statusText}>
-          {getStatusText(item.status)}{item.reason ? ` · ${item.reason}` : ''}
+          {getStatusLabel(item)}
         </Text>
       </View>
     </Card>

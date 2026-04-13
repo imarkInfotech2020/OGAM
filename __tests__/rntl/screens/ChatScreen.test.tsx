@@ -551,12 +551,12 @@ describe('ChatScreen', () => {
       useAppStore.setState({ downloadedModels: [model] });
 
       const { getByText } = renderChatScreen();
-      expect(getByText('Select a model to start chatting.')).toBeTruthy();
+      expect(getByText('Select a text or image model to get started.')).toBeTruthy();
     });
 
     it('shows "Download a model" text when no models downloaded', () => {
       const { getByText } = renderChatScreen();
-      expect(getByText('Download a model from the Models tab to start chatting.')).toBeTruthy();
+      expect(getByText('Download a text or image model from the Models tab to get started.')).toBeTruthy();
     });
 
     it('shows "Select Model" button when models exist but none active', () => {
