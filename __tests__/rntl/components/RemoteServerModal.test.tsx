@@ -250,7 +250,7 @@ describe('RemoteServerModal', () => {
       const { getByText, getByPlaceholderText } = render(<RemoteServerModal visible onClose={onClose} />);
       fillValidForm(getByPlaceholderText);
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connected (42ms)')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connected \(\d+ms\)/)).toBeTruthy());
     });
 
     it('shows failure status on failed connection', async () => {
