@@ -291,6 +291,7 @@
         }, 50);
       }
       function closeSearch() { modal.hidden = true; document.body.style.overflow = ''; }
+      window.openSearch = openSearch;
       if (trigger) trigger.addEventListener('click', openSearch);
       if (backdrop) backdrop.addEventListener('click', closeSearch);
       document.addEventListener('keydown', function(e) {
