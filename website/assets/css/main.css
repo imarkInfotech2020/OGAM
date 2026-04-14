@@ -176,18 +176,20 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 }
 
 /* Sidebar store buttons */
+.sidebar-store-btns { display: flex; gap: 6px; margin-bottom: 7px; }
 .sidebar-cta {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 13px;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
   background: var(--accent);
   color: #fff;
   border-radius: var(--radius);
   text-decoration: none;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  margin-bottom: 7px;
+  flex: 1;
   transition: background 0.15s;
   letter-spacing: -0.01em;
 }
@@ -196,7 +198,6 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   background: transparent;
   color: var(--accent);
   border: 1.5px solid var(--accent);
-  margin-top: 0;
 }
 .sidebar-cta-android:hover { background: var(--accent-subtle); color: var(--accent); }
 
