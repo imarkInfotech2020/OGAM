@@ -259,7 +259,6 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   gap: 6px;
   font-size: 0.8125rem;
   color: var(--text-muted);
-  margin-bottom: 32px;
 }
 .breadcrumb a { color: var(--text-muted); text-decoration: none; }
 .breadcrumb a:hover { color: var(--text-primary); }
@@ -477,35 +476,42 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 #pagefind-search .pagefind-ui__result-excerpt { font-family: var(--font) !important; font-size: 0.8125rem !important; color: var(--text-muted) !important; margin-top: 3px !important; line-height: 1.5 !important; }
 #pagefind-search mark { background: var(--accent-subtle); color: var(--accent); border-radius: 2px; padding: 0 2px; }
 
+/* ─── Content topbar (breadcrumb + reactions row) ───────────────────────────── */
+.content-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  min-height: 32px;
+}
+
 /* ─── Essay Reactions ───────────────────────────────────────────────────────── */
 .essay-reactions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 48px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .essay-reactions-label {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 .essay-reactions-buttons {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 .reaction-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  font-family: var(--font);
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
+  border-radius: 6px;
+  color: var(--text-muted);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
@@ -520,8 +526,9 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   color: var(--accent);
 }
 .essay-reaction-thanks {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* ─── Early Access Page ─────────────────────────────────────────────────────── */
@@ -569,7 +576,11 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 
 .early-access-form-section { margin: 8px 0 32px; }
 .early-access-form-section h2 { margin-top: 0; }
-.early-access-form { margin-top: 20px; max-width: 440px; }
+.early-access-form { margin-top: 20px; max-width: 480px; }
+.ea-form-top { margin-bottom: 0; }
+.ea-inline-group { display: flex; gap: 8px; }
+.ea-inline-group .ea-input { flex: 1; }
+.ea-inline-group .ea-submit { white-space: nowrap; flex-shrink: 0; margin-top: 0; width: auto; padding: 10px 20px; }
 .ea-field-group { margin-bottom: 16px; }
 .ea-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 7px; }
 .ea-input {

@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Guides
-nav_order: 3
+nav_order: 5
 has_children: true
 description: Step-by-step guides for running AI locally on your iPhone and Android phone with Off Grid.
 ---
