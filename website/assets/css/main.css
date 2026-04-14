@@ -211,32 +211,31 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 /* ─── Newsletter form ────────────────────────────────────────────────────────── */
 .newsletter-form { margin: 10px 0 10px; }
 .newsletter-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; }
-.newsletter-form form { display: flex; gap: 4px; }
+.newsletter-form form { display: flex; flex-direction: column; gap: 6px; }
 .newsletter-form input[type=email] {
-  flex: 1;
+  width: 100%;
   font-family: var(--font);
-  font-size: 0.75rem;
-  padding: 6px 8px;
+  font-size: 0.8rem;
+  padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--text-primary);
   outline: none;
-  min-width: 0;
 }
 .newsletter-form input[type=email]::placeholder { color: var(--text-muted); }
 .newsletter-form input[type=email]:focus { border-color: var(--accent); }
 .newsletter-form button {
+  width: 100%;
   font-family: var(--font);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  padding: 6px 10px;
+  padding: 7px 10px;
   background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  white-space: nowrap;
   transition: background 0.15s;
 }
 .newsletter-form button:hover { background: var(--accent-hover); }
