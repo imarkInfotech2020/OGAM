@@ -110,7 +110,7 @@ export const ChatScreen: React.FC = () => {
       onClose={() => chat.setAlertState(hideAlert())}
     />
   );
-  if (!chat.hasActiveModel) {
+  if (!chat.hasActiveModel && chat.displayMessages.length === 0) {
     return (
       <>
         <NoModelScreen
