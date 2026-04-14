@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Knowledge Base and RAG — On-Device Document Search
+title: Knowledge Base and RAG - On-Device Document Search
 parent: Guides
 nav_order: 13
 description: Upload PDFs and documents to Off Grid's project knowledge base. The app embeds and indexes them on-device using MiniLM, then retrieves relevant context automatically during your conversations.
@@ -13,9 +13,9 @@ faq:
     a: At query time, your question is embedded with the same MiniLM model. Off Grid scores all document chunks by cosine similarity and passes the top results to your LLM as context via the search_knowledge_base tool.
 ---
 
-# Knowledge Base and RAG — On-Device Document Search
+# Knowledge Base and RAG - On-Device Document Search
 
-Each Off Grid project can have its own knowledge base. Upload PDFs, text files, or code — the app processes them entirely on-device and makes them searchable in your conversations.
+Each Off Grid project can have its own knowledge base. Upload PDFs, text files, or code - the app processes them entirely on-device and makes them searchable in your conversations.
 
 This is Retrieval-Augmented Generation (RAG) running completely locally. No document leaves your device.
 
@@ -54,10 +54,10 @@ Off Grid extracts the text and runs it through the embedding pipeline. This take
 
 ## Supported document formats
 
-- **PDF** — native text extraction via platform APIs (PDFKit on iOS, PdfRenderer on Android)
-- **Text files** — `.txt`, `.md`, `.log`
-- **Code files** — `.py`, `.js`, `.ts`, `.java`, `.swift`, `.kt`, `.go`, `.rs`, `.sql`, `.sh`, and more
-- **Data files** — `.csv`, `.json`, `.xml`, `.yaml`, `.toml`, `.html`
+- **PDF** - native text extraction via platform APIs (PDFKit on iOS, PdfRenderer on Android)
+- **Text files** - `.txt`, `.md`, `.log`
+- **Code files** - `.py`, `.js`, `.ts`, `.java`, `.swift`, `.kt`, `.go`, `.rs`, `.sql`, `.sh`, and more
+- **Data files** - `.csv`, `.json`, `.xml`, `.yaml`, `.toml`, `.html`
 
 ---
 
@@ -75,7 +75,7 @@ You can also trigger it explicitly:
 
 ## Embedding model
 
-**all-MiniLM-L6-v2-Q8_0.gguf** — ships bundled with Off Grid (~24MB). It's always available, no download required, and runs fast enough that embedding a 20-page PDF takes under 10 seconds on a modern phone.
+**all-MiniLM-L6-v2-Q8_0.gguf** - ships bundled with Off Grid (~24MB). It's always available, no download required, and runs fast enough that embedding a 20-page PDF takes under 10 seconds on a modern phone.
 
 ---
 

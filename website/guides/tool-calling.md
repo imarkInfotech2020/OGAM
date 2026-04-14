@@ -3,17 +3,17 @@ layout: default
 title: Tool Calling
 parent: Guides
 nav_order: 10
-description: How to use Off Grid's built-in tools — web search, calculator, date/time, device info, and knowledge base search — with any function-calling model.
+description: How to use Off Grid's built-in tools - web search, calculator, date/time, device info, and knowledge base search - with any function-calling model.
 faq:
   - q: Which models support tool calling in Off Grid?
-    a: Any model that supports function calling in GGUF format. Qwen 3.5, Gemma 4, Mistral 7B, and Phi-4 Mini all support it. Check the model card — if it lists "function calling" or "tool use", it works.
+    a: Any model that supports function calling in GGUF format. Qwen 3.5, Gemma 4, Mistral 7B, and Phi-4 Mini all support it. Check the model card - if it lists "function calling" or "tool use", it works.
   - q: Does tool calling require internet?
     a: The calculator, date/time, and device info tools are fully offline. Web search requires an internet connection. Knowledge base search is fully local.
 ---
 
 # Tool Calling
 
-Off Grid ships with built-in tools that compatible models can call automatically during a conversation. The model decides when to use them — you don't need to trigger them manually.
+Off Grid ships with built-in tools that compatible models can call automatically during a conversation. The model decides when to use them - you don't need to trigger them manually.
 
 ---
 
@@ -36,7 +36,7 @@ When you send a message, the model reads the available tool definitions and deci
 1. The model emits a function call (e.g. `search("best offline AI apps 2026")`)
 2. Off Grid executes the tool and returns the result to the model
 3. The model reads the result and generates its final response
-4. This loop repeats until the model has enough information — with runaway prevention to avoid infinite loops
+4. This loop repeats until the model has enough information - with runaway prevention to avoid infinite loops
 
 You see the tool calls inline in the conversation as collapsible cards.
 
@@ -64,7 +64,7 @@ If you're downloading a custom GGUF from Hugging Face, check the model card for 
 
 ## Using web search
 
-Web search is automatic — just ask a question that requires current information:
+Web search is automatic - just ask a question that requires current information:
 
 > "What is the latest version of llama.cpp?"
 

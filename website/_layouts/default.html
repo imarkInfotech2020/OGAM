@@ -10,6 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ '/assets/css/main.css' | relative_url }}">
   <link rel="stylesheet" href="{{ '/pagefind/pagefind-ui.css' | relative_url }}">
+  <link rel="icon" href="{{ '/assets/favicon.ico' | relative_url }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ '/assets/favicon-32x32.png' | relative_url }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ '/assets/favicon-16x16.png' | relative_url }}">
+  <link rel="apple-touch-icon" href="{{ '/assets/apple-touch-icon.png' | relative_url }}">
   <meta property="og:image" content="{{ site.url }}{{ site.cover }}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="{{ site.url }}{{ site.cover }}">
@@ -186,6 +190,14 @@
             GitHub
           </a>
         </div>
+        <div class="newsletter-form">
+          <p class="newsletter-label">Updates from the creator</p>
+          <form id="newsletterForm" novalidate>
+            <input type="email" id="newsletterEmail" placeholder="your@email.com" autocomplete="email" required>
+            <button type="submit">Subscribe</button>
+          </form>
+          <p class="newsletter-status" id="newsletterStatus" aria-live="polite"></p>
+        </div>
         <p class="sidebar-copy">Built by <a href="https://www.wednesday.is?utm_source=offgrid-docs&utm_medium=referral" target="_blank" rel="noopener">Wednesday Solutions</a></p>
       </div>
     </aside>
@@ -298,6 +310,33 @@
         }
       }
     });
+  </script>
+
+  <!-- Newsletter signup -->
+  <script>
+    (function() {
+      var form = document.getElementById('newsletterForm');
+      var emailInput = document.getElementById('newsletterEmail');
+      var status = document.getElementById('newsletterStatus');
+      if (!form) return;
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var email = emailInput.value.trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          status.textContent = 'Enter a valid email address.';
+          status.className = 'newsletter-status error';
+          return;
+        }
+        if (typeof posthog !== 'undefined') {
+          posthog.identify(email, { email: email });
+          posthog.capture('newsletter_signup', { email: email, source: window.location.pathname });
+        }
+        emailInput.value = '';
+        status.textContent = 'You\'re in. Updates on their way.';
+        status.className = 'newsletter-status success';
+        form.querySelector('button').disabled = true;
+      });
+    })();
   </script>
 
   <!-- PostHog Analytics -->

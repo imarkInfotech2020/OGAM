@@ -10,7 +10,7 @@ faq:
   - q: Do I need an account to run LLMs locally on Android?
     a: No. Off Grid requires no account, no login, and no API key. Download the app and a model and you're done.
   - q: What Android phones can run LLMs locally in 2026?
-    a: Any Android phone with 4GB RAM running Android 10 or later can run Qwen 3.5 2B. For larger models like Qwen 3.5 9B you need 8GB RAM — flagship devices like the Pixel 8 Pro, Samsung S24, or OnePlus 12.
+    a: Any Android phone with 4GB RAM running Android 10 or later can run Qwen 3.5 2B. For larger models like Qwen 3.5 9B you need 8GB RAM - flagship devices like the Pixel 8 Pro, Samsung S24, or OnePlus 12.
   - q: Which LLM runs best on Android in 2026?
     a: For 4GB RAM devices, Qwen 3.5 2B (Q4_K_M). For 8GB+ devices, Qwen 3.5 9B or Gemma 4 E4B. Both support thinking mode for complex tasks.
 ---
@@ -29,19 +29,19 @@ Here's how to set it up.
 
 - Android phone with 4GB RAM or more (Android 10+)
 - 2–5GB free storage depending on the model you choose
-- Internet once for the initial download — then never again
+- Internet once for the initial download - then never again
 
 ---
 
-## Step 1 — Download Off Grid
+## Step 1 - Download Off Grid
 
 [Get Off Grid on Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 ---
 
-## Step 2 — Choose a model
+## Step 2 - Choose a model
 
-All models use Q4_K_M quantisation by default — the best balance of quality and size for mobile.
+All models use Q4_K_M quantisation by default - the best balance of quality and size for mobile.
 
 | Model | Min RAM | Size | Best for |
 |---|---|---|---|
@@ -56,7 +56,7 @@ Start with **Qwen 3.5 2B** on a 4–6GB device. Start with **Qwen 3.5 9B** if yo
 
 ---
 
-## Step 3 — Download and load
+## Step 3 - Download and load
 
 1. Open Off Grid → tap **Models**
 2. Select your model → tap **Download**
@@ -67,7 +67,7 @@ The model runs entirely on your device from this point. No network requests.
 
 ---
 
-## Step 4 — Go offline
+## Step 4 - Go offline
 
 Turn on airplane mode. Open a chat. It still works.
 
@@ -100,7 +100,7 @@ Off Grid uses llama.cpp on ARM64 with NEON, i8mm, and dotprod SIMD instructions.
 
 **Offline.** Works on planes, in areas with bad signal, in countries where cloud AI services are restricted.
 
-**Speed.** For short queries, local inference on modern ARM chips is surprisingly fast — often faster than waiting for a cloud response on a slow connection.
+**Speed.** For short queries, local inference on modern ARM chips is surprisingly fast - often faster than waiting for a cloud response on a slow connection.
 
 ---
 
@@ -110,4 +110,4 @@ Off Grid uses llama.cpp on ARM64 with NEON, i8mm, and dotprod SIMD instructions.
 - [Which model should I use?]({{ '/guides/which-model' | relative_url }})
 - [How to Run Stable Diffusion on Your Android Phone]({{ '/guides/stable-diffusion-android' | relative_url }})
 - [How to Use Ollama From Your Android Phone in 2026]({{ '/guides/ollama-android' | relative_url }})
-- [Vision AI — Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})
+- [Vision AI - Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})

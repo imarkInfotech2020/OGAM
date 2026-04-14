@@ -3,7 +3,7 @@ layout: default
 title: Document Analysis and Attachments
 parent: Guides
 nav_order: 14
-description: Attach PDFs, code files, CSVs, and other documents to your Off Grid conversations. The app extracts and passes content to your local model for analysis — entirely on-device.
+description: Attach PDFs, code files, CSVs, and other documents to your Off Grid conversations. The app extracts and passes content to your local model for analysis - entirely on-device.
 faq:
   - q: What file types can I attach?
     a: PDF, txt, md, most code file types (py, js, ts, java, swift, kt, go, rs, sql, sh, etc.), CSV, JSON, YAML, XML, HTML, and more. Maximum 5MB per file.
@@ -15,7 +15,7 @@ faq:
 
 # Document Analysis and Attachments
 
-Attach files directly to your conversations and ask your local model questions about them. PDFs, code, CSV data, config files — anything text-based works.
+Attach files directly to your conversations and ask your local model questions about them. PDFs, code, CSV data, config files - anything text-based works.
 
 All processing happens on your device.
 
@@ -50,7 +50,7 @@ The file is copied to app storage (so it survives temp cleanup), and the extract
 
 ## Tapping to view
 
-Tap any document badge in the chat to open it with the system viewer — QuickLook on iOS, the system intent viewer on Android.
+Tap any document badge in the chat to open it with the system viewer - QuickLook on iOS, the system intent viewer on Android.
 
 ---
 
@@ -78,9 +78,9 @@ If you paste a large block of text into the message field, Off Grid offers to co
 
 ## Difference vs knowledge base
 
-Document attachments are **per-conversation** — you attach something to a specific message and the model sees it in that context window. They're not indexed or searchable.
+Document attachments are **per-conversation** - you attach something to a specific message and the model sees it in that context window. They're not indexed or searchable.
 
-The [Knowledge Base]({{ '/guides/knowledge-base' | relative_url }}) is **project-wide** — documents are embedded and indexed, and the model can retrieve relevant chunks from them automatically across many conversations.
+The [Knowledge Base]({{ '/guides/knowledge-base' | relative_url }}) is **project-wide** - documents are embedded and indexed, and the model can retrieve relevant chunks from them automatically across many conversations.
 
 Use attachments for one-off analysis. Use the knowledge base for documents you want to reference repeatedly.
 
@@ -89,5 +89,5 @@ Use attachments for one-off analysis. Use the knowledge base for documents you w
 ## Related guides
 
 - [Knowledge Base and RAG]({{ '/guides/knowledge-base' | relative_url }})
-- [Vision AI — Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})
+- [Vision AI - Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})
 - [Tool Calling]({{ '/guides/tool-calling' | relative_url }})

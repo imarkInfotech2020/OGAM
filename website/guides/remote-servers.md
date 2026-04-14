@@ -1,21 +1,21 @@
 ---
 layout: default
-title: Remote Servers — Connect Ollama, LM Studio, and LocalAI
+title: Remote Servers - Connect Ollama, LM Studio, and LocalAI
 parent: Guides
 nav_order: 9
-description: Connect Off Grid to any OpenAI-compatible server on your local network — Ollama, LM Studio, LocalAI, vLLM. Access larger models from your desktop via your phone over WiFi.
+description: Connect Off Grid to any OpenAI-compatible server on your local network - Ollama, LM Studio, LocalAI, vLLM. Access larger models from your desktop via your phone over WiFi.
 faq:
   - q: Which remote servers does Off Grid support?
-    a: Any OpenAI-compatible server — Ollama, LM Studio, LocalAI, vLLM, and others. If it exposes a /v1/chat/completions endpoint, it works.
+    a: Any OpenAI-compatible server - Ollama, LM Studio, LocalAI, vLLM, and others. If it exposes a /v1/chat/completions endpoint, it works.
   - q: Does connecting to a remote server require internet?
     a: No. Off Grid connects over your local WiFi network. No traffic goes to the internet. For access outside your home, use Tailscale.
   - q: Where are API keys stored?
     a: In your device's system keychain via react-native-keychain. Never in plain storage.
 ---
 
-# Remote Servers — Connect Ollama, LM Studio, and LocalAI
+# Remote Servers - Connect Ollama, LM Studio, and LocalAI
 
-Your phone can run impressive models locally, but your desktop or Mac can run much larger ones — Llama 3.1 70B, Mistral Large, DeepSeek, CodeLlama 34B.
+Your phone can run impressive models locally, but your desktop or Mac can run much larger ones - Llama 3.1 70B, Mistral Large, DeepSeek, CodeLlama 34B.
 
 Off Grid connects to any OpenAI-compatible server on your local network, giving you access to those models from your phone over WiFi. No internet required.
 
@@ -46,7 +46,7 @@ curl -fsSL https://ollama.ai/install.sh | sh
 
 **2. Allow remote connections** (Ollama only listens on localhost by default):
 ```bash
-# macOS/Linux — run Ollama with remote access
+# macOS/Linux - run Ollama with remote access
 OLLAMA_HOST=0.0.0.0 ollama serve
 
 # Or set permanently in ~/.zshrc / ~/.bashrc
@@ -61,7 +61,7 @@ ollama pull qwen2.5:14b
 
 **4. Find your desktop's local IP:**
 - macOS: System Settings → Network → Wi-Fi → Details → IP address
-- Linux: `ip addr show` — look for your WiFi interface
+- Linux: `ip addr show` - look for your WiFi interface
 
 ---
 
@@ -102,7 +102,7 @@ Off Grid streams responses via Server-Sent Events (SSE) in real time. Switching 
 
 Off Grid detects vision and tool calling support from model name patterns. If the model name includes `vision`, `vl`, `vlm`, or similar, Off Grid enables the camera attachment. Tool calling is similarly detected.
 
-For servers that support it (Ollama with compatible models, LM Studio), tool calling and vision both work seamlessly over the remote connection.
+For servers that support it (Ollama with compatible models, LM Studio), tool calling and vision both work without friction over the remote connection.
 
 ---
 
@@ -110,7 +110,7 @@ For servers that support it (Ollama with compatible models, LM Studio), tool cal
 
 [Tailscale](https://tailscale.com) creates a private VPN between your devices. Install it on both your desktop and phone, then use the Tailscale IP of your desktop as the server URL.
 
-This gives you access to your home desktop's models from anywhere — coffee shop, travel, office — without exposing anything to the public internet.
+This gives you access to your home desktop's models from anywhere - coffee shop, travel, office - without exposing anything to the public internet.
 
 ---
 

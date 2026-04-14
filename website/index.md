@@ -2,10 +2,10 @@
 layout: default
 title: Home
 nav_order: 1
-description: Off Grid lets you run powerful AI models directly on your iPhone or Android — no internet, no subscriptions, no cloud. Chat, generate images, use voice, analyse documents. Your data never leaves your device.
+description: Off Grid lets you run powerful AI models directly on your iPhone or Android - no internet, no subscriptions, no cloud. Chat, generate images, use voice, analyse documents. Your data never leaves your device.
 ---
 
-<img src="{{ '/assets/cover.png' | relative_url }}" alt="Off Grid — Private AI. No cloud. No compromise." class="hero-cover">
+<img src="{{ '/assets/cover.png' | relative_url }}" alt="Off Grid - Private AI. No cloud. No compromise." class="hero-cover">
 
 # Off Grid
 
@@ -34,8 +34,8 @@ Chat. Generate images. Use tools. See. Listen. All on your phone. All offline. Z
 
 | Capability | Details |
 |---|---|
-| **Text generation** | Llama, Qwen 3, Gemma 3, Phi-4, Mistral and any GGUF model — 15–30 tok/s on flagship devices |
-| **Image generation** | On-device Stable Diffusion — 5–10s on NPU (Snapdragon), Core ML on iOS. 20+ models |
+| **Text generation** | Llama, Qwen 3, Gemma 3, Phi-4, Mistral and any GGUF model - 15–30 tok/s on flagship devices |
+| **Image generation** | On-device Stable Diffusion - 5–10s on NPU (Snapdragon), Core ML on iOS. 20+ models |
 | **Vision AI** | Point your camera at anything and ask questions. SmolVLM, Qwen3-VL, Gemma 3n |
 | **Voice input** | On-device Whisper speech-to-text. Hold to record, auto-transcribe. No audio leaves your phone |
 | **Tool calling** | Web search, calculator, date/time, device info. Automatic tool loop |
@@ -47,7 +47,7 @@ Chat. Generate images. Use tools. See. Listen. All on your phone. All offline. Z
 
 ## Why local AI matters
 
-When you run a query on a cloud AI service — ChatGPT, Gemini, Claude — it's logged on a server. Your prompt, the response, the time, your account. Stored indefinitely. Used to train future models. Subject to law enforcement requests. Readable by employees.
+When you run a query on a cloud AI service - ChatGPT, Gemini, Claude - it's logged on a server. Your prompt, the response, the time, your account. Stored indefinitely. Used to train future models. Subject to law enforcement requests. Readable by employees.
 
 With Off Grid, none of that applies. The model runs in your phone's memory. Inference happens on your CPU and GPU. Nothing is sent anywhere. Ever.
 
@@ -55,7 +55,7 @@ With Off Grid, none of that applies. The model runs in your phone's memory. Infe
 
 ## Get started
 
-- [Quick Start — first model in 5 minutes]({{ '/quick-start' | relative_url }})
+- [Quick Start - first model in 5 minutes]({{ '/quick-start' | relative_url }})
 - [iOS Setup]({{ '/guides/ios-setup' | relative_url }})
 - [Android Setup]({{ '/guides/android-setup' | relative_url }})
 - [Which model should I use?]({{ '/guides/which-model' | relative_url }})
@@ -71,16 +71,16 @@ With Off Grid, none of that applies. The model runs in your phone's memory. Infe
 - [How to Run Stable Diffusion on Your iPhone]({{ '/guides/stable-diffusion-iphone' | relative_url }})
 
 **Vision, Voice and Documents**
-- [Vision AI — Analyse Images and Documents On-Device]({{ '/guides/vision-ai' | relative_url }})
-- [Voice Input — On-Device Speech-to-Text with Whisper]({{ '/guides/voice-stt' | relative_url }})
+- [Vision AI - Analyse Images and Documents On-Device]({{ '/guides/vision-ai' | relative_url }})
+- [Voice Input - On-Device Speech-to-Text with Whisper]({{ '/guides/voice-stt' | relative_url }})
 - [Document Analysis and Attachments]({{ '/guides/document-analysis' | relative_url }})
 - [Knowledge Base and RAG]({{ '/guides/knowledge-base' | relative_url }})
 
 **Tools and Intelligence**
-- [Tool Calling — Web Search, Calculator, and More]({{ '/guides/tool-calling' | relative_url }})
+- [Tool Calling - Web Search, Calculator, and More]({{ '/guides/tool-calling' | relative_url }})
 
 **Remote Servers**
-- [Remote Servers — Connect Ollama, LM Studio, and LocalAI]({{ '/guides/remote-servers' | relative_url }})
+- [Remote Servers - Connect Ollama, LM Studio, and LocalAI]({{ '/guides/remote-servers' | relative_url }})
 - [How to Use Ollama From Your Android Phone in 2026]({{ '/guides/ollama-android' | relative_url }})
 - [How to Use LM Studio From Your Android Phone in 2026]({{ '/guides/lm-studio-android' | relative_url }})
 
@@ -88,6 +88,6 @@ With Off Grid, none of that applies. The model runs in your phone's memory. Infe
 
 ## Community
 
-Questions, feedback, and feature requests — [join the Slack community](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA).
+Questions, feedback, and feature requests - [join the Slack community](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA).
 
-Source code is open — [star the repo on GitHub](https://github.com/alichherawalla/off-grid-mobile?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github).
+Source code is open - [star the repo on GitHub](https://github.com/alichherawalla/off-grid-mobile?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github).

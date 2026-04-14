@@ -17,9 +17,9 @@ Thought leadership, feature deep-dives, and the futurism we think about while bu
 
 - The year AI leaves the cloud for good
 - What happens when every phone has a 100B parameter model
-- Why local AI isn't a niche — it's the default mode for the next decade
+- Why local AI isn't a niche - it's the default mode for the next decade
 - Voice AI that works in a tunnel
-- The privacy case for on-device AI isn't just about data — it's about power
+- The privacy case for on-device AI isn't just about data - it's about power
 
 ---
 

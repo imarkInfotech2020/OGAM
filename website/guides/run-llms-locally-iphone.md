@@ -10,14 +10,14 @@ faq:
   - q: Which iPhones can run LLMs locally in 2026?
     a: iPhone 12 or newer (A14 chip or later). Smaller models like Qwen 3.5 0.8B and Qwen 3.5 2B run on any supported iPhone. Larger models like Qwen 3.5 9B need iPhone 15 Pro or newer with 8GB RAM.
   - q: Is running LLMs on iPhone as good as ChatGPT?
-    a: For everyday tasks — summarisation, Q&A, writing help — Qwen 3.5 9B on iPhone 15 Pro is comparable to GPT-3.5. Gemma 4 and Qwen 3.5 models also support thinking mode for complex reasoning tasks.
+    a: For everyday tasks - summarisation, Q&A, writing help - Qwen 3.5 9B on iPhone 15 Pro is comparable to GPT-3.5. Gemma 4 and Qwen 3.5 models also support thinking mode for complex reasoning tasks.
 ---
 
 # How to Run LLMs Locally on Your iPhone in 2026 (Completely Offline, No Subscription)
 
 Apple's Metal GPU and Neural Engine exist in every iPhone since 2017. They're dedicated AI accelerators, sitting mostly idle while you pay a monthly subscription to send queries to someone else's server.
 
-Off Grid changes that. Run Qwen 3.5, Gemma 4, Mistral, and other leading models directly on your iPhone — offline, private, with no ongoing cost. Inference runs via llama.cpp with Metal GPU acceleration.
+Off Grid changes that. Run Qwen 3.5, Gemma 4, Mistral, and other leading models directly on your iPhone - offline, private, with no ongoing cost. Inference runs via llama.cpp with Metal GPU acceleration.
 
 ---
 
@@ -30,15 +30,15 @@ Off Grid changes that. Run Qwen 3.5, Gemma 4, Mistral, and other leading models 
 
 ---
 
-## Step 1 — Install Off Grid
+## Step 1 - Install Off Grid
 
 [Download from the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 ---
 
-## Step 2 — Choose your model
+## Step 2 - Choose your model
 
-All models use Q4_K_M quantisation — the best balance of quality and size for mobile.
+All models use Q4_K_M quantisation - the best balance of quality and size for mobile.
 
 | Model | Min iPhone | RAM needed | Size | Best for |
 |---|---|---|---|---|
@@ -53,11 +53,11 @@ iPhone 12/13 users: start with **Qwen 3.5 2B**. iPhone 15 Pro / 16 users: try **
 
 ---
 
-## Step 3 — Download, load, chat
+## Step 3 - Download, load, chat
 
 1. Open Off Grid → **Models**
 2. Tap a model → **Download**
-3. Tap **Load** — the model loads via Metal (Apple's GPU framework)
+3. Tap **Load** - the model loads via Metal (Apple's GPU framework)
 4. Open **Chat**
 
 You're now running inference locally on Apple Silicon. Nothing leaves your phone.
@@ -93,4 +93,4 @@ Thinking mode (Qwen 3.5, Gemma 4) works particularly well on iPhone because Meta
 - [How to Run LLMs Locally on Your Android Phone in 2026]({{ '/guides/run-llms-locally-android' | relative_url }})
 - [Which model should I use?]({{ '/guides/which-model' | relative_url }})
 - [How to Run Stable Diffusion on Your iPhone]({{ '/guides/stable-diffusion-iphone' | relative_url }})
-- [Vision AI — Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})
+- [Vision AI - Analyse Images On-Device]({{ '/guides/vision-ai' | relative_url }})
