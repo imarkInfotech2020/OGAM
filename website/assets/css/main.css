@@ -604,7 +604,8 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 .ea-input::placeholder { color: var(--text-muted); }
 .ea-input:focus { border-color: var(--accent); }
 
-.ea-platform-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
+.ea-form-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.ea-platform-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
 .ea-platform-option { cursor: pointer; }
 .ea-platform-option input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .ea-platform-option span {
