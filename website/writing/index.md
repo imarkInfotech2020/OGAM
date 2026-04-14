@@ -29,7 +29,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/why-personal-ai-should-never-live-in-cloud' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Why Your Personal AI Should Never Live in the Cloud</div>
-    <div class="guide-card-desc">Not a privacy rant — a structural argument. Cloud-dependent personal AI is broken by design, independent of whether the company behind it is trustworthy.</div>
+    <div class="guide-card-desc">Not a privacy rant - a structural argument. Cloud-dependent personal AI is broken by design, independent of whether the company behind it is trustworthy.</div>
   </a>
 </div>
 
@@ -39,16 +39,16 @@ Essays on where personal AI is going, how it should work, and why it matters.
 
 <div class="guide-grid">
   <a href="{{ '/writing/what-personal-ai-should-know' | relative_url }}" class="guide-card">
-    <div class="guide-card-title">What a Personal AI OS Should Know About You — And What It Shouldn't</div>
+    <div class="guide-card-title">What a Personal AI OS Should Know About You - And What It Shouldn't</div>
     <div class="guide-card-desc">The right level of context makes it genuinely useful. The wrong level creates a system you don't want near your life. Here's where the line is.</div>
   </a>
   <a href="{{ '/writing/how-personal-ai-should-act' | relative_url }}" class="guide-card">
-    <div class="guide-card-title">How a Personal AI OS Should Act on Your Behalf — Without Becoming Your Boss</div>
+    <div class="guide-card-title">How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss</div>
     <div class="guide-card-desc">Proactive assistance is useful. Autonomous action without consent is not. The line between helpful and creepy, and consent as the operating principle.</div>
   </a>
   <a href="{{ '/writing/architecture-of-trust' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Architecture of Trust</div>
-    <div class="guide-card-desc">Policy is words. Architecture is structure. On-device, open source, no telemetry — the only combination that earns the right to your full context.</div>
+    <div class="guide-card-desc">Policy is words. Architecture is structure. On-device, open source, no telemetry - the only combination that earns the right to your full context.</div>
   </a>
   <a href="{{ '/writing/cross-device-sync-without-server' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Cross-Device Sync Without a Server</div>
@@ -63,7 +63,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
 <div class="guide-grid">
   <a href="{{ '/writing/a-day-with-personal-ai-os' | relative_url }}" class="guide-card">
     <div class="guide-card-title">A Day With a Personal AI OS</div>
-    <div class="guide-card-desc">From morning to night — a narrative walkthrough of what your day looks like when your devices share context and handle the low-value work themselves.</div>
+    <div class="guide-card-desc">From morning to night - a narrative walkthrough of what your day looks like when your devices share context and handle the low-value work themselves.</div>
   </a>
   <a href="{{ '/writing/end-of-app-switching' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Personal AI OS and the End of App Switching</div>
@@ -71,7 +71,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/phone-is-the-most-important-device' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Why Your Phone Is the Most Important Device</div>
-    <div class="guide-card-desc">80+ unlocks a day. Messages, location, health, camera. No device owns more of your context — no device matters more for local AI.</div>
+    <div class="guide-card-desc">80+ unlocks a day. Messages, location, health, camera. No device owns more of your context - no device matters more for local AI.</div>
   </a>
   <a href="{{ '/writing/personal-ai-os-for-knowledge-workers' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Personal AI OS for Knowledge Workers</div>
@@ -94,7 +94,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/regulatory-case-for-on-device-ai' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Regulatory Case for On-Device AI</div>
-    <div class="guide-card-desc">Every major privacy regulation — GDPR, DPDP, EU AI Act — is a tailwind for on-device AI. The architecture that's right for users ages well with regulators.</div>
+    <div class="guide-card-desc">Every major privacy regulation - GDPR, DPDP, EU AI Act - is a tailwind for on-device AI. The architecture that's right for users ages well with regulators.</div>
   </a>
 </div>
 
@@ -105,7 +105,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
 <div class="guide-grid">
   <a href="{{ '/writing/intelligence-should-be-personal' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Intelligence Should Be Personal. Here's What That Actually Means.</div>
-    <div class="guide-card-desc">Not personalised in the engagement-optimisation sense. Personal in the sense that it's yours — on your hardware, under your control, with no corporation in between.</div>
+    <div class="guide-card-desc">Not personalised in the engagement-optimisation sense. Personal in the sense that it's yours - on your hardware, under your control, with no corporation in between.</div>
   </a>
   <a href="{{ '/writing/privacy-is-not-a-feature' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Privacy Is Not a Feature. It's an Architecture Decision.</div>
@@ -117,7 +117,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/who-owns-your-ai-memory' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Who Owns Your AI's Memory?</div>
-    <div class="guide-card-desc">When your AI remembers years of your context, who owns that memory? The most important digital rights question of the decade — and almost nobody is asking it.</div>
+    <div class="guide-card-desc">When your AI remembers years of your context, who owns that memory? The most important digital rights question of the decade - and almost nobody is asking it.</div>
   </a>
 </div>
 

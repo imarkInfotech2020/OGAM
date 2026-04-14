@@ -3,7 +3,7 @@ layout: default
 title: "The WhatsApp Moment for AI: Why Privacy Will Define the Next Platform"
 parent: Perspectives
 nav_order: 4
-description: WhatsApp adopted end-to-end encryption because the market demanded it. AI is the next communication infrastructure. The arc is the same — and the outcome will be the same.
+description: WhatsApp adopted end-to-end encryption because the market demanded it. AI is the next communication infrastructure. The arc is the same - and the outcome will be the same.
 ---
 
 # The WhatsApp Moment for AI: Why Privacy Will Define the Next Platform

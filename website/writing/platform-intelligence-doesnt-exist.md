@@ -1,12 +1,12 @@
 ---
 layout: default
-title: "Why Platform Intelligence Doesn't Exist Yet — And What It Would Take to Build It"
+title: "Why Platform Intelligence Doesn't Exist Yet - And What It Would Take to Build It"
 parent: Perspectives
 nav_order: 22
 description: iOS and Android are still app-centric operating systems. The AI features built into them are bolted onto that model. A true Personal AI OS requires a fundamentally different architecture where context is the primitive, not apps.
 ---
 
-# Why Platform Intelligence Doesn't Exist Yet — And What It Would Take to Build It
+# Why Platform Intelligence Doesn't Exist Yet - And What It Would Take to Build It
 
 The major mobile platforms have shipped AI features. Notification summaries. Text generation. Image description. On-device models that handle some tasks without a network connection.
 

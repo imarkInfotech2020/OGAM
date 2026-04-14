@@ -6,7 +6,7 @@ nav_order: 6
 description: The rules that define the category. Runs on-device, never phones home, works across devices, acts on your behalf, remembers your context, open and auditable, no subscription required.
 faq:
   - q: What are the principles of a Personal AI OS?
-    a: "A Personal AI OS must: run on-device, never phone home, maintain persistent context, act on your behalf with consent, work across your devices over a local network, be open and auditable, and require no subscription. Any system missing one of these properties is not a Personal AI OS — it is a cloud AI assistant with some local features."
+    a: "A Personal AI OS must: run on-device, never phone home, maintain persistent context, act on your behalf with consent, work across your devices over a local network, be open and auditable, and require no subscription. Any system missing one of these properties is not a Personal AI OS - it is a cloud AI assistant with some local features."
   - q: Why does a Personal AI OS need to be open source?
     a: Because the only meaningful privacy guarantee is one you can verify. A closed system asks you to trust the vendor's claims. An open system lets you inspect what the software actually does with your data. For a system with access to your messages, health data, and files, auditability is not optional.
 ---

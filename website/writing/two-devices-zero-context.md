@@ -3,7 +3,7 @@ layout: default
 title: "Two Devices, Zero Shared Context: The Problem the Personal AI OS Was Built to Solve"
 parent: Perspectives
 nav_order: 24
-description: Your laptop sees your work. Your phone sees your life. Neither talks to the other. A Personal AI OS bridges them — locally, privately, without a server in between. This is the product-thesis piece.
+description: Your laptop sees your work. Your phone sees your life. Neither talks to the other. A Personal AI OS bridges them - locally, privately, without a server in between. This is the product-thesis piece.
 ---
 
 # Two Devices, Zero Shared Context: The Problem the Personal AI OS Was Built to Solve

@@ -3,12 +3,12 @@ layout: default
 title: "Personal AI OS vs AI Assistant vs AI Agent: What's the Difference and Why It Matters"
 parent: Perspectives
 nav_order: 7
-description: Siri answers questions. ChatGPT generates text. Autonomous agents take actions. A Personal AI OS does something different from all three — and the distinction is worth understanding precisely.
+description: Siri answers questions. ChatGPT generates text. Autonomous agents take actions. A Personal AI OS does something different from all three - and the distinction is worth understanding precisely.
 faq:
   - q: What is the difference between a Personal AI OS and an AI assistant?
-    a: An AI assistant (Siri, Alexa, Google Assistant) answers isolated questions using cloud infrastructure. It has minimal persistent context and no ability to act across your apps. A Personal AI OS runs on-device, maintains persistent context about your life, and can act on your behalf — it's a system, not a query interface.
+    a: An AI assistant (Siri, Alexa, Google Assistant) answers isolated questions using cloud infrastructure. It has minimal persistent context and no ability to act across your apps. A Personal AI OS runs on-device, maintains persistent context about your life, and can act on your behalf - it's a system, not a query interface.
   - q: What is the difference between a Personal AI OS and an AI agent?
-    a: AI agents are autonomous systems that make decisions and take actions with minimal human oversight, often connected to external APIs and services. A Personal AI OS is explicitly not autonomous — it acts with your consent, stays within your local hardware, and defers decisions to you. The operating principle is assistance, not autonomy.
+    a: AI agents are autonomous systems that make decisions and take actions with minimal human oversight, often connected to external APIs and services. A Personal AI OS is explicitly not autonomous - it acts with your consent, stays within your local hardware, and defers decisions to you. The operating principle is assistance, not autonomy.
   - q: What is the difference between a Personal AI OS and ChatGPT?
     a: ChatGPT is a cloud-based generative AI product. It has no persistent knowledge of you between sessions (unless you opt into memory features), runs on OpenAI's servers, and is a general-purpose text interface. A Personal AI OS is specific to you, runs locally, maintains your context over time, and is designed to act on your behalf across your apps and devices.
 ---

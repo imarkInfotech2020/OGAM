@@ -6,7 +6,7 @@ nav_order: 2
 description: Privacy toggles, data deletion tools, and privacy policies are theater. The only meaningful privacy guarantee is an architecture where the data never left your device in the first place.
 faq:
   - q: What is the difference between privacy as a feature and privacy as an architecture?
-    a: Privacy as a feature means controls layered on top of a system that already collects your data — deletion tools, opt-outs, consent banners. Privacy as an architecture means the system was never designed to collect your data in the first place. On-device AI is an example of the latter — there is nothing to delete because nothing was ever sent.
+    a: Privacy as a feature means controls layered on top of a system that already collects your data - deletion tools, opt-outs, consent banners. Privacy as an architecture means the system was never designed to collect your data in the first place. On-device AI is an example of the latter - there is nothing to delete because nothing was ever sent.
   - q: Why aren't privacy policies sufficient?
     a: A privacy policy is a legal document that describes what a company promises to do with your data. It doesn't change what's technically possible once the data is on their servers. Architecture determines what is possible. Policy determines what is promised. Only one of those is enforceable by design.
 ---

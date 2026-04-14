@@ -1,6 +1,6 @@
 ---
 layout: default
-title: "What a Personal AI OS Should Know About You — And What It Shouldn't"
+title: "What a Personal AI OS Should Know About You - And What It Shouldn't"
 parent: Perspectives
 nav_order: 9
 description: The right level of context makes a Personal AI OS genuinely useful. The wrong level makes it something you don't want near your life. Here's where the line is and why it matters.

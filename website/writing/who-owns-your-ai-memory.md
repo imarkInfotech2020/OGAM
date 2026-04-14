@@ -3,7 +3,7 @@ layout: default
 title: "Who Owns Your AI's Memory? The Question Nobody Is Asking."
 parent: Perspectives
 nav_order: 20
-description: When your AI remembers everything about you — your patterns, your preferences, years of your context — who owns that memory? It's the most important digital rights question of the decade, and almost nobody is asking it.
+description: When your AI remembers everything about you - your patterns, your preferences, years of your context - who owns that memory? It's the most important digital rights question of the decade, and almost nobody is asking it.
 ---
 
 # Who Owns Your AI's Memory? The Question Nobody Is Asking.

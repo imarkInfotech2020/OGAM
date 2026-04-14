@@ -3,7 +3,7 @@ layout: default
 title: "A Day With a Personal AI OS: What It Looks Like When Your Devices Actually Work Together"
 parent: Perspectives
 nav_order: 13
-description: From morning to night — a narrative walkthrough of what your day looks like when your phone and laptop share context, act on your behalf, and handle the low-value work you currently do yourself.
+description: From morning to night - a narrative walkthrough of what your day looks like when your phone and laptop share context, act on your behalf, and handle the low-value work you currently do yourself.
 ---
 
 # A Day With a Personal AI OS: What It Looks Like When Your Devices Actually Work Together

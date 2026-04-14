@@ -3,14 +3,14 @@ layout: default
 title: What Is a Personal AI OS?
 parent: Perspectives
 nav_order: 1
-description: A Personal AI OS is intelligence that lives on your device, knows your full context, and acts on your behalf — without ever sending data to a server. Here's what defines the category and why it matters.
+description: A Personal AI OS is intelligence that lives on your device, knows your full context, and acts on your behalf - without ever sending data to a server. Here's what defines the category and why it matters.
 faq:
   - q: What is a Personal AI OS?
-    a: A Personal AI OS is an intelligence layer that runs entirely on your own hardware — phone, laptop, or both — with access to your full personal context (messages, calendar, files, health data) and the ability to act on your behalf. Unlike cloud AI assistants, it never sends your data to a server. It runs offline, owns no subscription model, and is auditable by design.
+    a: A Personal AI OS is an intelligence layer that runs entirely on your own hardware - phone, laptop, or both - with access to your full personal context (messages, calendar, files, health data) and the ability to act on your behalf. Unlike cloud AI assistants, it never sends your data to a server. It runs offline, owns no subscription model, and is auditable by design.
   - q: How is a Personal AI OS different from an AI assistant like Siri or Alexa?
-    a: Siri and Alexa are cloud-dependent voice interfaces. They send your queries to remote servers, return responses, and retain minimal context between sessions. A Personal AI OS runs locally on your device, maintains persistent context about your life and work, and can act across apps on your behalf — not just answer isolated questions.
+    a: Siri and Alexa are cloud-dependent voice interfaces. They send your queries to remote servers, return responses, and retain minimal context between sessions. A Personal AI OS runs locally on your device, maintains persistent context about your life and work, and can act across apps on your behalf - not just answer isolated questions.
   - q: How is a Personal AI OS different from an AI agent?
-    a: AI agents are typically autonomous systems that make decisions and take actions with minimal human oversight, often connected to external services. A Personal AI OS is explicitly non-autonomous — it acts on your behalf with your consent, defers to you on decisions, and operates within the boundary of your own hardware and local network.
+    a: AI agents are typically autonomous systems that make decisions and take actions with minimal human oversight, often connected to external services. A Personal AI OS is explicitly non-autonomous - it acts on your behalf with your consent, defers to you on decisions, and operates within the boundary of your own hardware and local network.
   - q: Does a Personal AI OS require an internet connection?
     a: No. A Personal AI OS runs on-device. It does not require an internet connection for inference, context retrieval, or action execution. Network access may be used optionally for specific tasks (web search, calendar sync) but the core intelligence operates entirely offline.
 ---

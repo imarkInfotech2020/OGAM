@@ -1,6 +1,6 @@
 ---
 layout: default
-title: "How a Personal AI OS Should Act on Your Behalf — Without Becoming Your Boss"
+title: "How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss"
 parent: Perspectives
 nav_order: 10
 description: Proactive AI assistance is genuinely useful. But the line between helpful and creepy is thin, and crossing it produces a system you stop trusting. Consent is the operating principle.

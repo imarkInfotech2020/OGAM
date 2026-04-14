@@ -3,7 +3,7 @@ layout: default
 title: "The Case Against AI Subscriptions: Why Intelligence Should Be a One-Time Investment"
 parent: Perspectives
 nav_order: 19
-description: You don't pay a monthly fee to use your calculator. You don't subscribe to access your contacts. Intelligence — the most useful tool in your personal software stack — should work the same way.
+description: You don't pay a monthly fee to use your calculator. You don't subscribe to access your contacts. Intelligence - the most useful tool in your personal software stack - should work the same way.
 ---
 
 # The Case Against AI Subscriptions: Why Intelligence Should Be a One-Time Investment
