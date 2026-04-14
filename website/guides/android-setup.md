@@ -3,12 +3,12 @@ layout: default
 title: Android Setup
 parent: Guides
 nav_order: 3
-description: How to run LLMs locally on your Android phone in 2026 — no cloud, no account, no subscription. Complete setup guide for Off Grid on Android.
+description: How to run LLMs locally on your Android phone in 2026 - no cloud, no account, no subscription. Complete setup guide for Off Grid on Android.
 ---
 
 # Android Setup
 
-Run a local AI model on your Android phone — completely offline, no account, no API key.
+Run a local AI model on your Android phone - completely offline, no account, no API key.
 
 ---
 
@@ -21,22 +21,22 @@ Run a local AI model on your Android phone — completely offline, no account, n
 
 ---
 
-## Step 1 — Install Off Grid
+## Step 1 - Install Off Grid
 
-[Download from Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile){: .btn .btn-green }
+[Download from Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 ---
 
-## Step 2 — Download a model
+## Step 2 - Download a model
 
 1. Open Off Grid
 2. Tap **Models**
-3. Choose a model — **Phi-3 Mini** or **Gemma 2B** are good starting points for most Android devices
+3. Choose a model - **Qwen 3.5 0.8B** or **Qwen 3.5 2B** are the best starting points for most Android devices
 4. Tap **Download**
 
 ---
 
-## Step 3 — Load and chat
+## Step 3 - Load and chat
 
 1. Tap **Load** next to your downloaded model
 2. The model loads into RAM (5–20 seconds depending on device)
@@ -46,11 +46,11 @@ Run a local AI model on your Android phone — completely offline, no account, n
 
 ## Android-specific notes
 
-**Vulkan acceleration** — On supported devices, Off Grid uses Vulkan for GPU inference. This significantly reduces response time compared to CPU-only. Devices with Snapdragon 8 Gen 2 and newer, Dimensity 9000+, and Exynos 2400 support this.
+**Vulkan acceleration** - On supported devices, Off Grid uses Vulkan for GPU inference. This significantly reduces response time compared to CPU-only. Devices with Snapdragon 8 Gen 2 and newer, Dimensity 9000+, and Exynos 2400 support this.
 
-**Background behaviour** — Android may kill the model process if the app is backgrounded for too long. Keep Off Grid in the foreground during long conversations, or enable "Don't optimise battery" for the app in settings.
+**Background behaviour** - Android may kill the model process if the app is backgrounded for too long. Keep Off Grid in the foreground during long conversations, or enable "Don't optimise battery" for the app in settings.
 
-**Storage** — Models are stored in app-private storage. They don't appear in your gallery or Files app, which means they also won't be accidentally deleted by a cleaner app.
+**Storage** - Models are stored in app-private storage. They don't appear in your gallery or Files app, which means they also won't be accidentally deleted by a cleaner app.
 
 ---
 

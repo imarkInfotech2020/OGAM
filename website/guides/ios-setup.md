@@ -3,7 +3,7 @@ layout: default
 title: iOS Setup
 parent: Guides
 nav_order: 2
-description: How to run LLMs locally on your iPhone in 2026 — no cloud, no account, no subscription. Step-by-step setup guide for Off Grid on iOS.
+description: How to run LLMs locally on your iPhone in 2026 - no cloud, no account, no subscription. Step-by-step setup guide for Off Grid on iOS.
 ---
 
 # iOS Setup
@@ -21,26 +21,26 @@ Run a local AI model on your iPhone with no cloud dependency. This guide covers 
 
 ---
 
-## Step 1 — Install Off Grid
+## Step 1 - Install Off Grid
 
-[Download from the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882){: .btn .btn-green }
+[Download from the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 The app itself is under 50MB. Models are downloaded separately inside the app.
 
 ---
 
-## Step 2 — Download a model
+## Step 2 - Download a model
 
 1. Open Off Grid
 2. Tap **Models** in the tab bar
-3. Select a model — if you're starting out, pick **Phi-3 Mini** (~2GB)
+3. Select a model - if you're starting out, pick **Phi-3 Mini** (~2GB)
 4. Tap **Download**
 
 The download goes to your device. This is the only step that requires internet.
 
 ---
 
-## Step 3 — Load and chat
+## Step 3 - Load and chat
 
 1. Tap **Load** next to your downloaded model
 2. Wait 5–15 seconds for it to load into memory
@@ -52,11 +52,11 @@ You're now running AI entirely on your iPhone.
 
 ## Tips for better performance
 
-**Use Metal acceleration** — Off Grid automatically uses Apple's Metal GPU for inference. This makes models 3–5x faster than CPU-only.
+**Use Metal acceleration** - Off Grid automatically uses Apple's Metal GPU for inference. This makes models 3–5x faster than CPU-only.
 
-**Close background apps** — iOS may reclaim RAM from background apps. If the model unloads unexpectedly, close other apps and reload.
+**Close background apps** - iOS may reclaim RAM from background apps. If the model unloads unexpectedly, close other apps and reload.
 
-**Quantisation matters** — For 4GB RAM devices (iPhone 12/13), stick to Q4 models. For 8GB+ (iPhone 15 Pro+), you can use Q5 or Q8 for slightly better quality.
+**Quantisation matters** - For 4GB RAM devices (iPhone 12/13), stick to Q4 models. For 8GB+ (iPhone 15 Pro+), you can use Q5 or Q8 for slightly better quality.
 
 ---
 
