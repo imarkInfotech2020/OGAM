@@ -524,6 +524,116 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   color: var(--text-muted);
 }
 
+/* ─── Early Access Page ─────────────────────────────────────────────────────── */
+.early-access-hero { margin-bottom: 40px; }
+.early-access-badge {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-subtle-border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  margin-bottom: 18px;
+}
+.early-access-hero h1 { font-size: 2.5rem; line-height: 1.1; letter-spacing: -0.04em; margin-bottom: 16px; }
+.early-access-sub { font-size: 1rem; color: var(--text-muted); line-height: 1.7; max-width: 560px; }
+
+.early-access-perks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 32px 0 40px; }
+.perk-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.perk-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-subtle-border);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.perk-title { font-size: 0.875rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.01em; }
+.perk-desc { font-size: 0.8125rem; color: var(--text-muted); line-height: 1.55; }
+
+.early-access-form-section { margin: 8px 0 32px; }
+.early-access-form-section h2 { margin-top: 0; }
+.early-access-form { margin-top: 20px; max-width: 440px; }
+.ea-field-group { margin-bottom: 16px; }
+.ea-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 7px; }
+.ea-input {
+  width: 100%;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ea-input::placeholder { color: var(--text-muted); }
+.ea-input:focus { border-color: var(--accent); }
+
+.ea-platform-toggle { display: flex; gap: 8px; flex-wrap: wrap; }
+.ea-platform-option { cursor: pointer; }
+.ea-platform-option input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.ea-platform-option span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  user-select: none;
+}
+.ea-platform-option input[type="radio"]:checked + span {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.ea-platform-option span:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+.ea-submit {
+  width: 100%;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 12px 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+  letter-spacing: -0.01em;
+  margin-top: 4px;
+}
+.ea-submit:hover { background: var(--accent-hover); }
+.ea-submit:disabled { background: var(--text-muted); cursor: default; }
+
+.ea-status { font-size: 0.8125rem; margin-top: 10px; min-height: 1.2em; }
+.ea-status-success { color: var(--accent); }
+.ea-status-error { color: #ef4444; }
+
 /* ─── Mobile ────────────────────────────────────────────────────────────────── */
 .mobile-topbar {
   display: none;
@@ -552,4 +662,6 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   .content h1 { font-size: 1.5rem; }
   .hero-buttons { gap: 8px; }
   .btn { padding: 10px 14px; font-size: 0.8125rem; }
+  .early-access-perks { grid-template-columns: 1fr; }
+  .early-access-hero h1 { font-size: 1.875rem; }
 }
