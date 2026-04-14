@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if page.title == "Home" %}Off Grid — Run AI Locally on Your Phone{% else %}{{ page.title }} — Off Grid{% endif %}</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ '/assets/css/main.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/pagefind/pagefind-ui.css' | relative_url }}">
+  {% seo %}
+
+  <!-- WebSite schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Off Grid",
+    "url": "{{ site.url }}{{ site.baseurl }}/",
+    "description": {{ site.description | jsonify }},
+    "publisher": {
+      "@type": "Organization",
+      "name": "Wednesday Solutions",
+      "url": "https://www.wednesday.is"
+    }
+  }
+  </script>
+
+  <!-- WebPage schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": {{ page.title | jsonify }},
+    "description": {{ page.description | default: site.description | jsonify }},
+    "url": "{{ site.url }}{{ page.url }}",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Off Grid",
+      "url": "{{ site.url }}{{ site.baseurl }}/"
+    }
+  }
+  </script>
+
+  <!-- BreadcrumbList schema -->
+  {% if page.parent %}
+  {% assign parent_page = site.pages | where: "title", page.parent | first %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Off Grid", "item": "{{ site.url }}{{ site.baseurl }}/"},
+      {"@type": "ListItem", "position": 2, "name": {{ page.parent | jsonify }}, "item": "{{ site.url }}{{ parent_page.url }}"},
+      {"@type": "ListItem", "position": 3, "name": {{ page.title | jsonify }}, "item": "{{ site.url }}{{ page.url }}"}
+    ]
+  }
+  </script>
+  {% endif %}
+
+  <!-- FAQ schema -->
+  {% if page.faq %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {% for item in page.faq %}
+      {
+        "@type": "Question",
+        "name": {{ item.q | jsonify }},
+        "acceptedAnswer": {"@type": "Answer", "text": {{ item.a | jsonify }}}
+      }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ]
+  }
+  </script>
+  {% endif %}
+</head>
+<body>
+  <!-- Mobile top bar -->
+  <header class="mobile-topbar" data-pagefind-ignore>
+    <a href="{{ '/' | relative_url }}" class="mobile-topbar-logo">
+      <span>Off Grid</span>
+    </a>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button class="mobile-search-btn" id="mobileSearchBtn" aria-label="Search">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M12 12l4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open navigation">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Search modal — outside sidebar so it works on mobile -->
+  <div id="searchModal" class="search-modal" role="dialog" aria-modal="true" aria-label="Search" hidden>
+    <div class="search-modal-backdrop" id="searchBackdrop"></div>
+    <div class="search-modal-box">
+      <div id="pagefind-search"></div>
+    </div>
+  </div>
+
+  <div class="mobile-overlay" id="mobileOverlay"></div>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" data-pagefind-ignore>
+      <div class="sidebar-logo">
+        <a href="{{ '/' | relative_url }}">
+          <span class="logo-text">Off Grid</span>
+        </a>
+      </div>
+
+      <button class="search-trigger" id="searchTrigger" aria-label="Search docs">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M9.5 9.5L12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span>Search</span>
+        <kbd>⌘K</kbd>
+      </button>
+
+      <nav class="sidebar-nav">
+        {% assign top_pages = site.pages | where_exp: "p", "p.nav_order != nil and p.parent == nil" | sort: "nav_order" %}
+        {% for p in top_pages %}
+          {% assign is_current = false %}
+          {% if page.url == p.url %}{% assign is_current = true %}{% endif %}
+          {% assign in_section = false %}
+          {% if page.parent == p.title %}{% assign in_section = true %}{% endif %}
+
+          <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}{% if in_section %} section-open{% endif %}">
+            {{ p.title }}
+            {% if p.has_children %}
+              <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            {% endif %}
+          </a>
+
+          {% if p.has_children %}
+            {% assign children = site.pages | where: "parent", p.title | sort: "nav_order" %}
+            {% if children.size > 0 %}
+              <div class="nav-children{% if in_section or is_current %} open{% endif %}">
+                {% for child in children %}
+                  {% assign child_active = false %}
+                  {% if page.url == child.url %}{% assign child_active = true %}{% endif %}
+                  <a href="{{ child.url | relative_url }}" class="nav-child{% if child_active %} active{% endif %}">
+                    {{ child.title }}
+                  </a>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <a href="https://apps.apple.com/us/app/off-grid-local-ai/id6759299882" target="_blank" rel="noopener" class="sidebar-cta">
+          <span>Download for iOS</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="https://play.google.com/store/apps/details?id=ai.offgridmobile" target="_blank" rel="noopener" class="sidebar-cta sidebar-cta-android">
+          <span>Download for Android</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <div class="sidebar-links">
+          <a href="https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA" target="_blank" rel="noopener">Slack</a>
+          <a href="https://github.com/alichherawalla/off-grid-mobile" target="_blank" rel="noopener">GitHub</a>
+        </div>
+        <p class="sidebar-copy">Built by <a href="https://www.wednesday.is?utm_source=offgrid-docs&utm_medium=referral" target="_blank" rel="noopener">Wednesday Solutions</a></p>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      {% if page.parent %}
+        <nav class="breadcrumb" aria-label="breadcrumb">
+          <a href="{{ '/' | relative_url }}">Docs</a>
+          <span aria-hidden="true">›</span>
+          {% assign parent_page = site.pages | where: "title", page.parent | first %}
+          {% if parent_page %}
+            <a href="{{ parent_page.url | relative_url }}">{{ page.parent }}</a>
+            <span aria-hidden="true">›</span>
+          {% endif %}
+          <span>{{ page.title }}</span>
+        </nav>
+      {% endif %}
+
+      <article class="content" data-pagefind-body>
+        {{ content }}
+      </article>
+
+      {% if page.parent %}
+        {% assign siblings = site.pages | where: "parent", page.parent | sort: "nav_order" %}
+        {% assign current_index = 0 %}
+        {% for s in siblings %}
+          {% if s.url == page.url %}{% assign current_index = forloop.index0 %}{% endif %}
+        {% endfor %}
+        {% assign prev_index = current_index | minus: 1 %}
+        {% assign next_index = current_index | plus: 1 %}
+        <nav class="page-nav">
+          {% if prev_index >= 0 %}
+            {% assign prev_page = siblings[prev_index] %}
+            {% if prev_page %}
+              <a href="{{ prev_page.url | relative_url }}" class="page-nav-item prev">
+                <span class="page-nav-label">Previous</span>
+                <span class="page-nav-title">{{ prev_page.title }}</span>
+              </a>
+            {% endif %}
+          {% else %}
+            <span></span>
+          {% endif %}
+          {% assign next_page = siblings[next_index] %}
+          {% if next_page %}
+            <a href="{{ next_page.url | relative_url }}" class="page-nav-item next">
+              <span class="page-nav-label">Next</span>
+              <span class="page-nav-title">{{ next_page.title }}</span>
+            </a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    </div>
+  </div>
+
+  <script src="{{ '/pagefind/pagefind-ui.js' | relative_url }}"></script>
+  <script>
+    (function() {
+      var modal = document.getElementById('searchModal');
+      var trigger = document.getElementById('searchTrigger');
+      var backdrop = document.getElementById('searchBackdrop');
+      var pf = null;
+      function openSearch() {
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (!pf) {
+          pf = new PagefindUI({ element: '#pagefind-search', showImages: false, showSubResults: false, resetStyles: false });
+        }
+        setTimeout(function() {
+          var input = modal.querySelector('input[type=text]');
+          if (input) input.focus();
+        }, 50);
+      }
+      function closeSearch() { modal.hidden = true; document.body.style.overflow = ''; }
+      if (trigger) trigger.addEventListener('click', openSearch);
+      if (backdrop) backdrop.addEventListener('click', closeSearch);
+      document.addEventListener('keydown', function(e) {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); modal.hidden ? openSearch() : closeSearch(); }
+        if (e.key === 'Escape' && !modal.hidden) closeSearch();
+      });
+    })();
+  </script>
+  <script>
+    var menuBtn = document.getElementById('mobileMenuBtn');
+    var overlay = document.getElementById('mobileOverlay');
+    var sidebar = document.getElementById('sidebar');
+    var mobileSearchBtn = document.getElementById('mobileSearchBtn');
+    function openMenu() { sidebar.classList.add('open'); overlay.classList.add('visible'); }
+    function closeMenu() { sidebar.classList.remove('open'); overlay.classList.remove('visible'); }
+    if (menuBtn) menuBtn.addEventListener('click', function() { sidebar.classList.contains('open') ? closeMenu() : openMenu(); });
+    if (overlay) overlay.addEventListener('click', closeMenu);
+    if (mobileSearchBtn) mobileSearchBtn.addEventListener('click', openSearch);
+    document.querySelectorAll('.content h2, .content h3, .content h4').forEach(function(h) {
+      if (!h.id) return;
+      var a = document.createElement('a');
+      a.className = 'heading-anchor';
+      a.href = '#' + h.id;
+      a.setAttribute('aria-hidden', 'true');
+      a.textContent = '#';
+      h.appendChild(a);
+    });
+    // Track outbound download clicks
+    document.addEventListener('click', function(e) {
+      var el = e.target.closest('a');
+      if (!el) return;
+      var href = el.getAttribute('href') || '';
+      if (href.indexOf('apps.apple.com') !== -1 || href.indexOf('play.google.com') !== -1) {
+        if (typeof posthog !== 'undefined') {
+          posthog.capture('docs_download_click', { href: href, page: window.location.pathname });
+        }
+      }
+    });
+  </script>
+
+  <!-- PostHog Analytics -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog && window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init Dr qr Ci Br Zr Pr capture calculateEventProperties Ur register register_once register_for_session unregister unregister_for_session Xr getFeatureFlag getFeatureFlagPayload getFeatureFlagResult isFeatureEnabled reloadFeatureFlags updateFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey displaySurvey cancelPendingSurvey canRenderSurvey canRenderSurveyAsync Jr identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset setIdentity clearIdentity get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException captureLog startExceptionAutocapture stopExceptionAutocapture loadToolbar get_property getSessionProperty Wr Hr createPersonProfile setInternalOrTestUser Gr Fr tn opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing $r debug ki Yr getPageViewId captureTraceFeedback captureTraceMetric Rr".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('{{ site.posthog_token }}', {
+      api_host: 'https://us.i.posthog.com',
+      defaults: '2026-01-30',
+      person_profiles: 'identified_only',
+    });
+  </script>
+</body>
+</html>
