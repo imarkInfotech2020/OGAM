@@ -83,6 +83,7 @@
   <!-- Mobile top bar -->
   <header class="mobile-topbar" data-pagefind-ignore>
     <a href="{{ '/' | relative_url }}" class="mobile-topbar-logo">
+      <img src="{{ '/assets/logo.png' | relative_url }}" alt="Off Grid" width="28" height="28">
       <span>Off Grid</span>
     </a>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -115,6 +116,7 @@
     <aside class="sidebar" id="sidebar" data-pagefind-ignore>
       <div class="sidebar-logo">
         <a href="{{ '/' | relative_url }}">
+          <img src="{{ '/assets/logo.png' | relative_url }}" alt="Off Grid" width="32" height="32" style="border-radius:8px;flex-shrink:0;">
           <span class="logo-text">Off Grid</span>
         </a>
       </div>
@@ -164,16 +166,22 @@
 
       <div class="sidebar-footer">
         <a href="https://apps.apple.com/us/app/off-grid-local-ai/id6759299882" target="_blank" rel="noopener" class="sidebar-cta">
-          <span>Download for iOS</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 814 1000" fill="currentColor" aria-hidden="true"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 790.7 0 663 0 541.8c0-207.5 135.4-317.3 269-317.3 70.1 0 128.4 46.4 172.5 46.4 42.8 0 109.1-49 192.5-49 31.2 0 103.7 2.6 163.1 62.2zm-106.3-140.9C656 147.6 696.2 75.6 696.2 3.7c0-2.6 0-5.2-.3-7.7-58.1 2.3-126.7 39.1-168.5 92.4-37.5 47.6-73.5 124.8-73.5 203.4 0 3.2.3 6.5.6 9.7 4.2.6 10.9 1.3 17.5 1.3 52 0 117.3-34.5 149.8-103.8z"/></svg>
+          <span>App Store</span>
         </a>
         <a href="https://play.google.com/store/apps/details?id=ai.offgridmobile" target="_blank" rel="noopener" class="sidebar-cta sidebar-cta-android">
-          <span>Download for Android</span>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.18 23.76c.3.17.64.24.99.2l12.35-11.66L12.86 8.7 3.18 23.76zM.6 1.18A1.6 1.6 0 0 0 0 2.4v19.2c0 .5.22.94.6 1.22l.1.08 10.76-10.16v-.24L.7 1.1l-.1.08zm20.7 9.24-3.03-1.73-3.4 3.22 3.4 3.21 3.06-1.74a1.62 1.62 0 0 0 0-2.96zM3.18.24l9.68 9.15-3.66-3.45L3.18.24z"/></svg>
+          <span>Google Play</span>
         </a>
         <div class="sidebar-links">
-          <a href="https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA" target="_blank" rel="noopener">Slack</a>
-          <a href="https://github.com/alichherawalla/off-grid-mobile" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA" target="_blank" rel="noopener">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.122 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.268 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zm-2.523 10.122a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.268a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>
+            Slack
+          </a>
+          <a href="https://github.com/alichherawalla/off-grid-mobile" target="_blank" rel="noopener">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+            GitHub
+          </a>
         </div>
         <p class="sidebar-copy">Built by <a href="https://www.wednesday.is?utm_source=offgrid-docs&utm_medium=referral" target="_blank" rel="noopener">Wednesday Solutions</a></p>
       </div>
