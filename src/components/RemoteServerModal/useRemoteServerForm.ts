@@ -74,10 +74,14 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     try {
       const result = await remoteServerManager.testConnectionByEndpoint(endpoint, apiKey || undefined);
       if (result.success) {
-        setTestResult({ success: true, message: `Connected (${result.latency}ms)` });
-        if (result.models) setDiscoveredModels(result.models);
+        const resolvedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
+        setTestResult({ success: true, message: `Connected (${result.latency}ms)\n${resolvedUrl}` });
+        if (result.models && result.models.length > 0) {
+          setDiscoveredModels(result.models);
+        }
       } else {
-        setTestResult({ success: false, message: result.error || 'Connection failed' });
+        const triedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
+        setTestResult({ success: false, message: `${result.error || 'Connection failed'}\nTried: ${triedUrl}` });
       }
     } catch (error) {
       setTestResult({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });

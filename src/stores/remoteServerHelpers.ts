@@ -37,7 +37,7 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
     const models = await fetchModelsFromServer(server);
 
     // Detect server type
-    const serverType = await detectServerType(server.endpoint);
+    const serverType = await detectServerType(server.endpoint, 5000, server.apiKey);
 
     return {
       success: true,
@@ -81,7 +81,7 @@ export async function testEndpointAndGetModels(
       apiKey,
     };
     const models = await fetchModelsFromServer(tempServer);
-    const serverType = await detectServerType(endpoint);
+    const serverType = await detectServerType(endpoint, 5000, apiKey);
 
     return {
       success: true,
@@ -183,12 +183,13 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     logger.warn('[RemoteServer] Failed to fetch from /v1/models:', error);
   }
 
-  // Try Ollama-specific endpoint
+  // Try Ollama-specific endpoint (use origin to avoid double-path if endpoint has a prefix)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
 
-    const response = await fetch(`${url}/api/tags`, {
+    const ollamaUrl = `${new URL(url).origin}/api/tags`;
+    const response = await fetch(ollamaUrl, {
       method: 'GET',
       headers,
       signal: controller.signal,

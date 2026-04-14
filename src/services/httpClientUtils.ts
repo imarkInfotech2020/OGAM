@@ -183,12 +183,17 @@ export async function testEndpoint(
 
 async function checkOllamaEndpoint(
   url: string,
-  timeout: number
+  timeout: number,
+  apiKey?: string,
 ): Promise<{ type: string } | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    const response = await fetch(`${url}/api/tags`, { signal: controller.signal });
+    // Use origin only to avoid double-path when endpoint already has a prefix (e.g. /api)
+    const origin = new URL(url).origin;
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const response = await fetch(`${origin}/api/tags`, { signal: controller.signal, headers });
     clearTimeout(timeoutId);
     if (response.ok) return { type: 'ollama' };
   } catch {
@@ -199,12 +204,15 @@ async function checkOllamaEndpoint(
 
 async function checkLmStudioEndpoint(
   url: string,
-  timeout: number
+  timeout: number,
+  apiKey?: string,
 ): Promise<{ type: string } | null> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
-    const response = await fetch(`${url}/v1/models`, { signal: controller.signal });
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
@@ -223,7 +231,8 @@ async function checkLmStudioEndpoint(
  */
 export async function detectServerType(
   endpoint: string,
-  timeout: number = 5000
+  timeout: number = 5000,
+  apiKey?: string,
 ): Promise<{ type: string; version?: string } | null> {
   try {
     let url = endpoint;
@@ -234,7 +243,9 @@ export async function detectServerType(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(`${url}/v1/models`, { signal: controller.signal });
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
       clearTimeout(timeoutId);
 
       if (response.ok) {
@@ -255,10 +266,10 @@ export async function detectServerType(
       clearTimeout(timeoutId);
     }
 
-    const ollamaResult = await checkOllamaEndpoint(url, timeout);
+    const ollamaResult = await checkOllamaEndpoint(url, timeout, apiKey);
     if (ollamaResult) return ollamaResult;
 
-    return await checkLmStudioEndpoint(url, timeout);
+    return await checkLmStudioEndpoint(url, timeout, apiKey);
   } catch {
     return null;
   }
