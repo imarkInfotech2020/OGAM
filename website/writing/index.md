@@ -138,6 +138,14 @@ Essays on where personal AI is going, how it should work, and why it matters.
     <div class="guide-card-title">Why Platform Intelligence Doesn't Exist Yet</div>
     <div class="guide-card-desc">iOS and Android are app-centric operating systems. The AI bolted onto that model can't be a true intelligence layer. Here's what it would take to build one.</div>
   </a>
+  <a href="{{ '/writing/phone-laptop-know-nothing' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">Your Phone and Laptop Know Nothing About You</div>
+    <div class="guide-card-desc">You unlock your phone 80+ times a day. You're on your laptop 8+ hours. At the platform level, neither can answer "what's this person's day been like?"</div>
+  </a>
+  <a href="{{ '/writing/two-devices-zero-context' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">Two Devices, Zero Shared Context</div>
+    <div class="guide-card-desc">Your laptop sees your work. Your phone sees your life. Neither talks to the other. This is the problem the Personal AI OS was built to solve.</div>
+  </a>
 </div>
 
 ---
