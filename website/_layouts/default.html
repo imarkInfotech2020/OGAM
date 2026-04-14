@@ -208,34 +208,30 @@
 
     <!-- Main -->
     <div class="main">
-      <div class="content-topbar">
-        {% if page.parent %}
-          <nav class="breadcrumb" aria-label="breadcrumb">
-            <a href="{{ '/' | relative_url }}">Docs</a>
+      {% if page.parent %}
+        <nav class="breadcrumb" aria-label="breadcrumb">
+          <a href="{{ '/' | relative_url }}">Docs</a>
+          <span aria-hidden="true">›</span>
+          {% assign parent_page = site.pages | where: "title", page.parent | first %}
+          {% if parent_page %}
+            <a href="{{ parent_page.url | relative_url }}">{{ page.parent }}</a>
             <span aria-hidden="true">›</span>
-            {% assign parent_page = site.pages | where: "title", page.parent | first %}
-            {% if parent_page %}
-              <a href="{{ parent_page.url | relative_url }}">{{ page.parent }}</a>
-              <span aria-hidden="true">›</span>
-            {% endif %}
-            <span>{{ page.title }}</span>
-          </nav>
-        {% else %}
-          <span></span>
-        {% endif %}
+          {% endif %}
+          <span>{{ page.title }}</span>
+        </nav>
+      {% endif %}
 
-        <div class="essay-reactions" id="essayReactions">
-          <span class="essay-reactions-label">Did this land?</span>
-          <div class="essay-reactions-buttons">
-            <button class="reaction-btn" id="reaction-agree" data-reaction="agree" aria-label="Agree with this">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-            </button>
-            <button class="reaction-btn" id="reaction-disagree" data-reaction="disagree" aria-label="Disagree with this">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
-            </button>
-          </div>
-          <span class="essay-reaction-thanks" id="reactionThanks" hidden></span>
+      <div class="essay-reactions" id="essayReactions" data-pagefind-ignore>
+        <span class="essay-reactions-label">Did this land?</span>
+        <div class="essay-reactions-buttons">
+          <button class="reaction-btn" id="reaction-agree" data-reaction="agree" aria-label="Agree with this">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+          </button>
+          <button class="reaction-btn" id="reaction-disagree" data-reaction="disagree" aria-label="Disagree with this">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+          </button>
         </div>
+        <span class="essay-reaction-thanks" id="reactionThanks" hidden></span>
       </div>
 
       <article class="content" data-pagefind-body>

@@ -476,21 +476,23 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 #pagefind-search .pagefind-ui__result-excerpt { font-family: var(--font) !important; font-size: 0.8125rem !important; color: var(--text-muted) !important; margin-top: 3px !important; line-height: 1.5 !important; }
 #pagefind-search mark { background: var(--accent-subtle); color: var(--accent); border-radius: 2px; padding: 0 2px; }
 
-/* ─── Content topbar (breadcrumb + reactions row) ───────────────────────────── */
-.content-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 32px;
-  min-height: 32px;
-}
+/* ─── Breadcrumb margin ─────────────────────────────────────────────────────── */
+.breadcrumb { margin-bottom: 32px; }
 
-/* ─── Essay Reactions ───────────────────────────────────────────────────────── */
+/* ─── Essay Reactions — floating pill ──────────────────────────────────────── */
 .essay-reactions {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  padding: 8px 12px 8px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  z-index: 50;
 }
 .essay-reactions-label {
   font-size: 0.75rem;
@@ -508,9 +510,9 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   width: 30px;
   height: 30px;
   padding: 0;
-  background: var(--bg-subtle);
+  background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 50%;
   color: var(--text-muted);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
@@ -529,6 +531,9 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   font-size: 0.75rem;
   color: var(--text-muted);
   white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .essay-reactions { bottom: 16px; right: 16px; }
 }
 
 /* ─── Early Access Page ─────────────────────────────────────────────────────── */
