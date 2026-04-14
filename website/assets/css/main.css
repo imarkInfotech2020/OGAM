@@ -407,6 +407,43 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 }
 .btn-outline:hover { border-color: var(--text-muted); background: var(--bg-subtle); color: var(--text-primary); }
 
+/* ─── Guide card grid ───────────────────────────────────────────────────────── */
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.guide-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  background: var(--bg-subtle);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.guide-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+.guide-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.guide-card-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 /* ─── Prev/Next nav ─────────────────────────────────────────────────────────── */
 .page-nav { display: flex; justify-content: space-between; gap: 16px; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border-light); }
 .page-nav-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; flex: 1; transition: border-color 0.15s, background 0.15s; }
