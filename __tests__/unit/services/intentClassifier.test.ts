@@ -6,7 +6,7 @@
  * plus edge cases, caching, and LLM fallback.
  */
 
-import { intentClassifier } from '../../../src/services/intentClassifier';
+import { intentClassifier, classifyToolsNeeded } from '../../../src/services/intentClassifier';
 import { llmService } from '../../../src/services/llm';
 import { activeModelService } from '../../../src/services/activeModelService';
 
@@ -1097,5 +1097,72 @@ describe('IntentClassifier', () => {
       const result = await intentClassifier.classifyIntent('draw a cat', false);
       expect(result).toBe('image');
     });
+  });
+});
+
+// ============================================================================
+// classifyToolsNeeded
+// ============================================================================
+describe('classifyToolsNeeded', () => {
+  const toolMatchCases: [string, string[]][] = [
+    ['web_search', [
+      'search for the latest news',
+      'look up the current bitcoin price',
+      "what's happening in the world right now",
+      'weather forecast for tomorrow',
+      'trending topics this week',
+      'who won the match last night',
+      'just launched a new model from OpenAI',
+    ]],
+    ['read_url', [
+      'https://example.com summarize this',
+      'read the article at this link',
+      'fetch content from that page',
+      'open the link and tell me what it says',
+      'analyse this page for me',
+    ]],
+    ['calculator', [
+      'calculate 15% of 200',
+      'compute the factorial of 5',
+      'how much is 12 times 8',
+      'what is 100 divided by 4',
+      '5 plus 3',
+      'work out the total including tax',
+      'convert 50 miles to km',
+    ]],
+    ['get_current_datetime', [
+      'what time is it',
+      'current date please',
+      "what's today's date",
+      'what day is it today',
+      'tell me the date',
+      'how many days until Christmas',
+    ]],
+    ['get_device_info', [
+      'how much battery do I have left',
+      'check my storage space',
+      'how much free space is available',
+      'what is my ram usage',
+      'show my device info',
+    ]],
+  ];
+
+  test.each(toolMatchCases)('%s — matches its trigger phrases', (toolId, messages) => {
+    messages.forEach(msg => expect(classifyToolsNeeded(msg)).toContain(toolId));
+  });
+
+  it('web_search and read_url are always coupled', () => {
+    const fromSearch = classifyToolsNeeded('search for the latest news');
+    expect(fromSearch).toContain('web_search');
+    expect(fromSearch).toContain('read_url');
+
+    const fromUrl = classifyToolsNeeded('https://example.com summarize this');
+    expect(fromUrl).toContain('web_search');
+    expect(fromUrl).toContain('read_url');
+  });
+
+  it('returns empty array for plain conversational messages', () => {
+    ['hi', 'hello there', 'explain how React hooks work', 'write me a poem', 'fix this bug in my code']
+      .forEach(msg => expect(classifyToolsNeeded(msg)).toHaveLength(0));
   });
 });

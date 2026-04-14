@@ -335,3 +335,81 @@ Answer:`;
 }
 
 export const intentClassifier = new IntentClassifier();
+
+// ---------------------------------------------------------------------------
+// Tool heuristics — pure local regex, zero LLM cost, runs in ~0.1ms
+// web_search and read_url are coupled: if either matches, both are included.
+// ---------------------------------------------------------------------------
+
+const TOOL_PATTERNS: Record<string, RegExp[]> = {
+  web_search: [
+    /\b(search|look up|look it up|google|find out|look for|look into)\b/i,
+    /\b(latest|current|recent|live|real.?time|up.?to.?date|right now)\b/i,
+    /\b(news|headlines|breaking|update|updates|announcement)\b/i,
+    /\b(weather|forecast|temperature|humidity|climate|rain|snow|sunny)\b/i,
+    /\b(price|cost|how much does|stock|market|exchange rate|crypto|bitcoin|ethereum|nft)\b/i,
+    /\b(score|standings|match|fixture|result|leaderboard|ranking)\b/i,
+    /\b(trending|viral|popular right now|who won|who is winning|what happened)\b/i,
+    /what('s| is) (happening|going on|the latest|the news|new|out now)/i,
+    /\b(just released|just launched|came out|available now)\b/i,
+  ],
+  read_url: [
+    /https?:\/\//i,
+    /\b(visit|open|read|fetch|check|scrape|summarize|summarise|analyse|analyze)\b.{0,30}\b(link|url|site|page|article|post|blog)\b/i,
+    /\b(this link|that link|the link|the url|the article|the page|this page|that page)\b/i,
+    /\b(from this|from that|from the)\b.{0,20}\b(link|url|site|page|article)\b/i,
+  ],
+  calculator: [
+    /\b(calculat|evaluat|compute|how much is|solve|work out|figure out)/i,
+    /\b(percent(age)?|discount|tax|tip|interest|convert|exchange|split)\b/i,
+    /^\s*[\d\s()]*[+\-*/^%][\d\s()]+/,
+    /\b\d+\s*(plus|minus|times|divided by|over|squared|cubed|mod)\s*\d+\b/i,
+    /\b(sum|total|add up|average|mean|median|factorial|square root|sqrt|power of)\b/i,
+    /\b(how many|how long|how far|how tall|how heavy)\b.{0,30}\b(in|to|from|is)\b/i,
+  ],
+  get_current_datetime: [
+    /\b(what time|current time|what is the time|what's the time)\b/i,
+    /\b(current date|today's date|what is today|what's today|date today|today is)\b/i,
+    /\b(what day|what day is it|which day|day of the week)\b/i,
+    /\b(what month|what year|current month|current year)\b/i,
+    /\b(what's the date|tell me the date|give me the date)\b/i,
+    /\b(right now|at the moment|at this moment)\b.{0,20}\b(time|date|day)\b/i,
+    /\b(how long (until|till|before)|how long ago|how many days (until|till|since|left))\b/i,
+  ],
+  get_device_info: [
+    /\b(battery|battery level|battery percentage|battery life|charge|charging|low battery)\b/i,
+    /\b(storage|free space|disk space|available space|how much space|running out of space)\b/i,
+    /\b(memory|ram|device info|phone info|device details|phone details|my device)\b/i,
+    /\b(cpu|processor|performance|my phone specs|phone model)\b/i,
+  ],
+};
+
+// Tools that must always travel together
+const COUPLED_TOOLS: string[][] = [['web_search', 'read_url']];
+
+/**
+ * Classify which tools are needed for a given message using local regex patterns.
+ * Runs in ~0.1ms — no LLM call, no network.
+ * web_search and read_url are always coupled: matching either includes both.
+ *
+ * @param message - The user's raw message text
+ * @returns Array of tool IDs that the heuristic thinks are needed
+ */
+export function classifyToolsNeeded(message: string): string[] {
+  const needed = new Set<string>();
+
+  for (const [toolId, patterns] of Object.entries(TOOL_PATTERNS)) {
+    if (patterns.some(p => p.test(message))) {
+      needed.add(toolId);
+    }
+  }
+
+  // Apply coupling rules — if any tool in a group matched, add all siblings
+  for (const group of COUPLED_TOOLS) {
+    if (group.some(t => needed.has(t))) {
+      group.forEach(t => needed.add(t));
+    }
+  }
+
+  return Array.from(needed);
+}

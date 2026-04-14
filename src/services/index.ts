@@ -3,7 +3,7 @@ export { huggingFaceService } from './huggingface';
 export { modelManager } from './modelManager';
 export { llmService } from './llm';
 export { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
-export { intentClassifier } from './intentClassifier';
+export { intentClassifier, classifyToolsNeeded } from './intentClassifier';
 export type { Intent } from './intentClassifier';
 export { voiceService } from './voiceService';
 export { authService } from './authService';
