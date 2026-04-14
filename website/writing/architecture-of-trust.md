@@ -42,7 +42,7 @@ These three properties together create an architecture that earns the right to y
 
 ## The open source argument
 
-Open source is not just about developer community or contribution models. For personal AI specifically, it is a trust mechanism.
+Open source, for personal AI specifically, is a trust mechanism.
 
 A closed personal AI asks you to trust the vendor's claims about what the software does. An open personal AI lets you or someone you trust verify those claims. The source code is the ground truth, not the privacy policy.
 

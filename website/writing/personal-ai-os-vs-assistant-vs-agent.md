@@ -75,7 +75,7 @@ A Personal AI OS shares surface similarities with all three - it responds to que
 
 **How it works:** Inference runs on your device. Context is built and stored locally - your messages, calendar, files, health data, location patterns. The system maintains a continuous model of your life and work, accessible across your devices over a local network.
 
-**What it knows about you:** Everything you allow it to access, persistently. Not just what you say in a session but what it has learned about your patterns over time. This is the defining property - the AI knows you specifically.
+**What it knows about you:** Everything you allow it to access, persistently. What you say in a session and what it has learned about your patterns over time. This is the defining property - the AI knows you specifically.
 
 **What it can do:** Everything the assistant and chatbot categories can do, plus context-aware actions that require knowing you: triaging your inbox in your priority system, preparing you for a meeting based on the history you have with that person, noticing that you're overcommitted next week before you've noticed it yourself.
 

@@ -46,7 +46,7 @@ Deep work - the focused, uninterrupted time where knowledge workers produce thei
 
 A Personal AI OS that manages your notifications intelligently can protect deep work in a way that static Do Not Disturb settings cannot.
 
-It knows you're in a focused session. It reads incoming notifications and classifies them by your definition of urgency - which it has built from observing your responses over months. It surfaces genuinely urgent things immediately. Everything else waits.
+It knows you're in a focused session. It reads incoming notifications and classifies them by your definition of urgency - which it has built from observing your responses over months. It surfaces urgent things immediately. Everything else waits.
 
 When your focused session ends, it presents a consolidated view of what came in, already prioritised. You haven't missed anything important. You also haven't been interrupted six times by things that could have waited.
 

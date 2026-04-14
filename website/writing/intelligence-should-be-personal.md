@@ -50,7 +50,7 @@ For most of human history, having intelligent, knowledgeable people in your corn
 
 These relationships are valuable partly because the person is capable and partly because they know you. Generic advice from a capable person is less useful than specific advice from someone who understands your situation.
 
-AI has the capability to make genuinely contextualised intelligence available to everyone. Not a generic assistant that answers questions, but a system that knows your situation, understands your goals, and can reason about your specific circumstances.
+AI has the capability to make contextualised intelligence available to everyone. Not a generic assistant that answers questions, but a system that knows your situation, understands your goals, and can reason about your specific circumstances.
 
 But this requires personal AI - AI that has your context and acts for you. It requires the architecture to support it: on-device, private, owned by the user. AI as a service owned by a corporation is not the democratisation of intelligence. It's access to capability, mediated by a subscription and subject to corporate decisions about availability and terms.
 

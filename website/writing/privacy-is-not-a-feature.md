@@ -49,7 +49,7 @@ This distinction matters more as the data becomes more sensitive. General search
 
 Personal AI is uniquely difficult to make private by policy, because the value proposition requires access to your most sensitive data.
 
-An AI that can genuinely help you needs to know your calendar, your messages, your work patterns, your health. That's what makes it useful. The more context it has, the better it works.
+An AI that can help you needs to know your calendar, your messages, your work patterns, your health. That's what makes it useful. The more context it has, the better it works.
 
 A cloud AI asks you to hand over that context in exchange for its capabilities. The implicit contract is: give us your data, we'll give you a useful assistant, and we promise to be responsible with it.
 

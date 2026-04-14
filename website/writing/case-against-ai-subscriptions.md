@@ -52,7 +52,7 @@ The subscription model tries to maintain a paid gate on a tool whose cost struct
 
 ## The open source alternative
 
-The open-weight model ecosystem has produced genuinely capable models available for free. Llama, Qwen, Gemma, Phi - models trained by major AI labs, released with weights that anyone can download and run.
+The open-weight model ecosystem has produced capable models available for free. Llama, Qwen, Gemma, Phi - models trained by major AI labs, released with weights that anyone can download and run.
 
 These models run on current consumer hardware. They are good enough for the majority of personal AI use cases. The primary bottleneck to using them is the software that makes them usable - the interface, the context management, the integration with your device.
 

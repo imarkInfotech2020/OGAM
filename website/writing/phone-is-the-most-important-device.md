@@ -18,7 +18,7 @@ Context is what separates a useful AI from a generic one. Any cloud model can su
 
 Your phone has more of that context than any other device you own.
 
-It has every message you've sent and received across the apps you use daily. It has your calendar - not just the events but the pattern of your week, the rhythm of your meetings, the time you typically go quiet in the evenings. It has your location history, which tells a story about your life that no other data source replicates. It has your health data - sleep, activity, heart rate trends.
+It has every message you've sent and received across the apps you use daily. It has your calendar - the events and the pattern of your week, the rhythm of your meetings, the time you typically go quiet in the evenings. It has your location history, which tells a story about your life that no other data source replicates. It has your health data - sleep, activity, heart rate trends.
 
 No laptop has this. No tablet. No wearable alone. The phone is the only device that is with you, awake, for essentially your entire conscious day.
 

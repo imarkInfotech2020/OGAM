@@ -3,7 +3,7 @@ layout: default
 title: "Cross-Device Sync Without a Server: How a Personal AI OS Should Move Your Context"
 parent: Perspectives
 nav_order: 12
-description: Your laptop context on your phone. Your phone context on your laptop. All over your local network, with no cloud relay. Here's how cross-device Personal AI OS sync should work - and why the server-free model is not just possible but better.
+description: Your laptop context on your phone. Your phone context on your laptop. All over your local network, with no cloud relay. Here's how cross-device Personal AI OS sync should work - and why a server is the wrong place to do it.
 ---
 
 # Cross-Device Sync Without a Server: How a Personal AI OS Should Move Your Context

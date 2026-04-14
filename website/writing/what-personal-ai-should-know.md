@@ -3,7 +3,7 @@ layout: default
 title: "What a Personal AI OS Should Know About You - And What It Shouldn't"
 parent: Perspectives
 nav_order: 9
-description: The right level of context makes a Personal AI OS genuinely useful. The wrong level makes it something you don't want near your life. Here's where the line is and why it matters.
+description: The right level of context makes a Personal AI OS useful. The wrong level makes it something you don't want near your life. Here's where the line is and why it matters.
 ---
 
 # What a Personal AI OS Should Know About You - And What It Shouldn't
@@ -18,7 +18,7 @@ The question is not "how much context should a Personal AI OS have?" It's "what 
 
 ## What a Personal AI OS should know
 
-**Your schedule.** Not just what's on your calendar, but the pattern of your week - when you do focused work, when you take calls, when you're typically unavailable, how often plans change. This lets the AI reason about your time in ways that a simple calendar view can't.
+**Your schedule.** The pattern of your week - when you do focused work, when you take calls, when you're typically unavailable, how often plans change. This lets the AI reason about your time in ways that a simple calendar view can't.
 
 **Your communication patterns.** The rhythm of your messages - how quickly you typically respond, which conversations you prioritise, which you defer. Not the content of every message, but the structure of your communication life.
 
@@ -32,7 +32,7 @@ The question is not "how much context should a Personal AI OS have?" It's "what 
 
 ## What a Personal AI OS should not know
 
-**Historical records you don't need it to have.** The value of persistent context comes from understanding patterns, not from storing everything indefinitely. A Personal AI OS that retains five years of messages and location history is building a liability, not a feature. Context should have a horizon - enough to be useful, not so much that it becomes a comprehensive record of your life.
+**Historical records you don't need it to have.** The value of persistent context comes from understanding patterns, not from storing everything indefinitely. A Personal AI OS that retains five years of messages and location history is building a liability, not a feature. Context should have a horizon - enough to be useful, not so much that it becomes a permanent record of your life.
 
 **Sensitive personal domains you haven't explicitly opened.** Your financial accounts, your medical records, your private relationships - these require explicit, intentional access grants. The AI should not assume that access to your calendar means access to everything connected to it.
 

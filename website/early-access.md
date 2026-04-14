@@ -2,7 +2,7 @@
 layout: default
 title: Early Access
 nav_order: 6
-description: Get early access to Off Grid nightly builds. Be the first to test new features of the personal AI OS — and get 6 months free when you ship.
+description: Get early access to Off Grid nightly builds. Be the first to test new features of the personal AI OS - and get 6 months free when you ship.
 ---
 
 <div class="early-access-hero">
@@ -18,7 +18,7 @@ description: Get early access to Off Grid nightly builds. Be the first to test n
     </div>
     <div>
       <div class="perk-title">Nightly Builds</div>
-      <div class="perk-desc">New builds straight from main — every night. Features land in your hands days or weeks before the public release.</div>
+      <div class="perk-desc">New builds straight from main, every night. Features land in your hands days or weeks before the public release.</div>
     </div>
   </div>
   <div class="perk-card">
@@ -45,7 +45,7 @@ description: Get early access to Off Grid nightly builds. Be the first to test n
     </div>
     <div>
       <div class="perk-title">Shape What Gets Built</div>
-      <div class="perk-desc">Your feedback decides what ships next. Early testers have already pushed features into the roadmap. This is not a waiting list — it's a build loop.</div>
+      <div class="perk-desc">Your feedback decides what ships next. Early testers have already pushed features into the roadmap. Drop a bug and watch it get fixed.</div>
     </div>
   </div>
 </div>
@@ -96,14 +96,14 @@ description: Get early access to Off Grid nightly builds. Be the first to test n
 Nightly builds come straight off the development branch. They contain features that are complete enough to run but not yet through the full QA pass. That means:
 
 - You will see features that do not exist in the public app
-- You will occasionally hit bugs — report them and watch them get fixed fast
+- You will occasionally hit bugs - report them and watch them get fixed fast
 - Build quality improves with every tester who reports back
 
 This is not beta. Beta is polished. Nightly is raw, fast, and real.
 
 ## What the personal AI OS is
 
-Off Grid today is a powerful local AI app. The personal AI OS is the next layer — a system where the AI knows your context across every app, every conversation, every device, without a single byte leaving your phone.
+Off Grid today is a powerful local AI app. The personal AI OS is the next layer - a system where the AI knows your context across every app, every conversation, every device, without a single byte leaving your phone.
 
 It understands what you're working on, what you've read, what you care about. It acts when you ask, and stays silent when you don't. It does not report home. It does not train on your data. It is entirely yours.
 

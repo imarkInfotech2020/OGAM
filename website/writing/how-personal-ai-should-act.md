@@ -3,12 +3,12 @@ layout: default
 title: "How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss"
 parent: Perspectives
 nav_order: 10
-description: Proactive AI assistance is genuinely useful. But the line between helpful and creepy is thin, and crossing it produces a system you stop trusting. Consent is the operating principle.
+description: Proactive AI assistance is useful. But the line between helpful and creepy is thin, and crossing it produces a system you stop trusting. Consent is the operating principle.
 ---
 
 # How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss
 
-There is a version of personal AI that is genuinely useful - one that handles the low-value work you repeat every day and gives you back the mental space it was consuming. And there is a version that is suffocating - one that takes over decisions you wanted to make yourself, surfaces information you didn't want surfaced, and makes you feel monitored rather than helped.
+There is a version of personal AI that is useful - one that handles the low-value work you repeat every day and gives you back the mental space it was consuming. And there is a version that is suffocating - one that takes over decisions you wanted to make yourself, surfaces information you didn't want surfaced, and makes you feel monitored rather than helped.
 
 The difference is not capability. It's design philosophy.
 

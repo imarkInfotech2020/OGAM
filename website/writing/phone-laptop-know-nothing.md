@@ -28,7 +28,7 @@ Your laptop has the documents you have written for the past five years, the emai
 
 Your laptop's AI can autocomplete a sentence if you are lucky.
 
-The data to make personal computing genuinely intelligent has existed for years. The intelligence layer has never been built.
+The data to make personal computing intelligent has existed for years. The intelligence layer has never been built.
 
 ---
 

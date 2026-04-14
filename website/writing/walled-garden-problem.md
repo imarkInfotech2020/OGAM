@@ -8,7 +8,7 @@ description: Platform AI is real, capable, and useful. But the architecture of p
 
 # The Walled Garden Problem: Why the Personal AI OS Must Be Open
 
-Platform AI - the AI features built into iOS, Android, and the major operating systems - is genuinely impressive. It summarises notifications. It generates text in the keyboard. It describes images for accessibility. It answers questions about your device.
+Platform AI - the AI features built into iOS, Android, and the major operating systems - is impressive. It summarises notifications. It generates text in the keyboard. It describes images for accessibility. It answers questions about your device.
 
 Acknowledging this matters. Platform AI represents billions of dollars of investment and genuine engineering capability. It is making devices meaningfully smarter.
 
@@ -20,7 +20,7 @@ Platform AI has one advantage that independent software cannot easily replicate:
 
 It can read notifications across all apps because it has OS-level permission to do so. It can generate text in any text field because it's built into the keyboard at the system level. It can take actions - setting reminders, making calls, sending messages - because it has the permissions granted to the OS itself.
 
-This integration is genuinely valuable. The friction of independent AI apps is that they have to ask for each permission explicitly and work within the sandboxing model the OS imposes. Platform AI doesn't have this constraint.
+This integration is valuable. The friction of independent AI apps is that they have to ask for each permission explicitly and work within the sandboxing model the OS imposes. Platform AI doesn't have this constraint.
 
 ## What platform AI cannot do
 

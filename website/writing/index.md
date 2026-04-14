@@ -40,7 +40,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
 <div class="guide-grid">
   <a href="{{ '/writing/what-personal-ai-should-know' | relative_url }}" class="guide-card">
     <div class="guide-card-title">What a Personal AI OS Should Know About You - And What It Shouldn't</div>
-    <div class="guide-card-desc">The right level of context makes it genuinely useful. The wrong level creates a system you don't want near your life. Here's where the line is.</div>
+    <div class="guide-card-desc">The right level of context makes it useful. The wrong level creates a system you don't want near your life. Here's where the line is.</div>
   </a>
   <a href="{{ '/writing/how-personal-ai-should-act' | relative_url }}" class="guide-card">
     <div class="guide-card-title">How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss</div>
