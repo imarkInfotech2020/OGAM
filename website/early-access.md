@@ -80,6 +80,31 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
 
 ---
 
+## Read the thinking
+
+Not sure what a personal AI OS actually is? Start here.
+
+<div class="ea-essay-links">
+  <a href="{{ '/writing/what-is-personal-ai-os' | relative_url }}" class="ea-essay-card">
+    <div class="ea-essay-title">What Is a Personal AI OS?</div>
+    <div class="ea-essay-desc">The clearest explanation of what we are building and why it is different from every AI product you have already tried.</div>
+  </a>
+  <a href="{{ '/writing/phone-laptop-know-nothing' | relative_url }}" class="ea-essay-card">
+    <div class="ea-essay-title">Your Phone and Laptop Know Nothing About You</div>
+    <div class="ea-essay-desc">The core problem. Your most personal devices are also the least intelligent things you own. That is not acceptable.</div>
+  </a>
+  <a href="{{ '/writing/intelligence-should-be-personal' | relative_url }}" class="ea-essay-card">
+    <div class="ea-essay-title">Intelligence Should Be Personal</div>
+    <div class="ea-essay-desc">Why AI that runs on a server can never be truly personal — and what it means for intelligence to actually belong to you.</div>
+  </a>
+  <a href="{{ '/writing/a-day-with-personal-ai-os' | relative_url }}" class="ea-essay-card">
+    <div class="ea-essay-title">A Day With a Personal AI OS</div>
+    <div class="ea-essay-desc">What it actually looks like when your devices work together. Concrete, specific, and closer than you think.</div>
+  </a>
+</div>
+
+---
+
 ## What this is
 
 Off Grid today is a powerful on-device AI app. The personal AI OS is the next layer.

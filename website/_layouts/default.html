@@ -240,6 +240,16 @@
         {{ content }}
       </article>
 
+      {% if page.parent == "Perspectives" %}
+      <div class="essay-early-access" data-pagefind-ignore>
+        <div class="essay-ea-text">
+          <strong>Run the personal AI OS before anyone else.</strong>
+          Join the waitlist — early access members get 6 months free.
+        </div>
+        <a href="{{ '/early-access' | relative_url }}" class="essay-ea-btn">Join the waitlist</a>
+      </div>
+      {% endif %}
+
       {% if page.parent %}
         {% assign siblings = site.pages | where: "parent", page.parent | sort: "nav_order" %}
         {% assign current_index = 0 %}

@@ -646,6 +646,76 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 .ea-status-success { color: var(--accent); }
 .ea-status-error { color: #ef4444; }
 
+/* ─── Essay early access CTA banner ────────────────────────────────────────── */
+.essay-early-access {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 48px;
+  padding: 18px 22px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-subtle-border);
+  border-radius: 10px;
+}
+.essay-ea-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.essay-ea-text strong { color: var(--text-primary); }
+.essay-ea-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.essay-ea-btn:hover { background: var(--accent-hover); color: #fff; }
+
+/* ─── Early access essay link cards ────────────────────────────────────────── */
+.ea-essay-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 16px 0 8px;
+}
+.ea-essay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ea-essay-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  text-decoration: none;
+}
+.ea-essay-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+.ea-essay-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 /* ─── Mobile ────────────────────────────────────────────────────────────────── */
 .mobile-topbar {
   display: none;
@@ -676,4 +746,6 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   .btn { padding: 10px 14px; font-size: 0.8125rem; }
   .early-access-perks { grid-template-columns: 1fr; }
   .early-access-hero h1 { font-size: 1.875rem; }
+  .ea-essay-links { grid-template-columns: 1fr; }
+  .essay-early-access { flex-direction: column; align-items: flex-start; }
 }
