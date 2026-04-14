@@ -7,7 +7,10 @@ description: Off Grid lets you run powerful AI models directly on your iPhone or
 
 <img src="{{ '/assets/cover.png' | relative_url }}" alt="Off Grid - Private AI. No cloud. No compromise." class="hero-cover">
 
-# Off Grid
+<div class="page-title-row">
+  <img src="{{ '/assets/logo.png' | relative_url }}" alt="" width="40" height="40">
+  <h1>Off Grid</h1>
+</div>
 
 **The Swiss Army Knife of On-Device AI.**
 
