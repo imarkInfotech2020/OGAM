@@ -2,7 +2,7 @@
 layout: default
 title: Ethos
 nav_order: 5
-description: Why Off Grid exists. Intelligence should live on the devices you already own — private by architecture, not by policy.
+description: Why Off Grid exists. Intelligence should live on the devices you already own - private by architecture, not by policy.
 ---
 
 # Ethos
@@ -17,7 +17,7 @@ The most useful AI is the one with your full context. Your messages. Your calend
 
 But getting that context today means handing it to a server you don't control and paying a subscription for the privilege. Every query leaves your device. Every response comes back from somewhere else. You don't know what's stored, for how long, or what it's used for.
 
-Privacy by policy — "we promise not to misuse your data" — is not the same as privacy by architecture — "the data never left your device."
+Privacy by policy - "we promise not to misuse your data" - is not the same as privacy by architecture - "the data never left your device."
 
 ---
 
@@ -35,9 +35,9 @@ This is possible today. The models fit. The hardware is fast enough. The only th
 
 AI is the next communication infrastructure. And communication infrastructure, historically, moves toward privacy when users demand it.
 
-The market will demand it here too. Not because privacy is a talking point, but because people will eventually notice that their most personal context — the things that would make AI genuinely useful — is exactly what they're least willing to hand over.
+The market will demand it here too. Not because privacy is a talking point, but because people will eventually notice that their most personal context - the things that would make AI useful - is exactly what they're least willing to hand over.
 
-The devices people already carry will become genuinely intelligent. They will speak to each other over local networks. Context will stay on-person. That future doesn't require new hardware or new platforms. It requires software built on the right assumption from the start.
+The devices people already carry will become intelligent. They will speak to each other over local networks. Context will stay on-person. That future doesn't require new hardware or new platforms. It requires software built on the right assumption from the start.
 
 ---
 

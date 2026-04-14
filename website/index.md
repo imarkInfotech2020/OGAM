@@ -22,7 +22,7 @@ Chat. Generate images. Use tools. See. Listen. All on your phone. All offline. Z
     App Store
   </a>
   <a href="https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download" target="_blank" rel="noopener" class="btn btn-outline">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.49 1.49 0 0 0-.227.103l-.002.002-.002.003L13.988 14l-3.517 3.497L1.338 8.376a1.49 1.49 0 0 1-.001-1.446V.924zM13.55 13.66L.726 24.076a1.49 1.49 0 0 1-.389-.397L13.988 10l-.438.66zm8.187-1.256l-3.892-2.204L14.33 14l3.515 3.498 3.892-2.203a1.49 1.49 0 0 0 0-2.891z"/></svg>
+    <svg width="16" height="16" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1zM47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256-256L47 0zm425.6 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c17.1-9.8 17.1-34.4-.1-60.8zM104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/></svg>
     Google Play
   </a>
   <a href="https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA" target="_blank" rel="noopener" class="btn btn-outline">
