@@ -18,13 +18,19 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
       <button type="submit" class="ea-submit">Join the waitlist</button>
     </div>
     <div class="ea-form-footer">
-      <p class="ea-pricing-note">$199 / year &nbsp;·&nbsp; $19.99 / month &nbsp;·&nbsp; 6 months free for early access</p>
+      <p class="ea-pricing-note">6 months free for early access members</p>
       <div class="ea-platform-links">
         <span class="ea-platform-label">I'm on</span>
         <button type="button" class="ea-platform-link active" data-platform="ios">iOS</button>
         <button type="button" class="ea-platform-link" data-platform="android">Android</button>
         <button type="button" class="ea-platform-link" data-platform="both">Both</button>
         <input type="hidden" name="platform" id="eaPlatform" value="ios">
+      </div>
+      <div class="ea-platform-links">
+        <span class="ea-platform-label">I'd prefer</span>
+        <button type="button" class="ea-platform-link active" data-plan="yearly">$199 / year</button>
+        <button type="button" class="ea-platform-link" data-plan="monthly">$19.99 / month</button>
+        <input type="hidden" name="plan" id="eaPlan" value="yearly">
       </div>
     </div>
     <p class="ea-status" id="eaStatus" aria-live="polite"></p>
@@ -101,11 +107,13 @@ When it ships, it will be $199/year or $19.99/month. Early access members get th
         return;
       }
       var platform = (document.getElementById('eaPlatform') || {}).value || 'ios';
+      var plan = (document.getElementById('eaPlan') || {}).value || 'yearly';
       if (typeof posthog !== 'undefined') {
         posthog.identify(email, { email: email });
         posthog.capture('early_access_signup', {
           email: email,
           platform: platform,
+          plan: plan,
           source: window.location.pathname
         });
       }
@@ -117,11 +125,21 @@ When it ships, it will be $199/year or $19.99/month. Early access members get th
 
     // Platform text link toggle
     var platformInput = document.getElementById('eaPlatform');
-    document.querySelectorAll('.ea-platform-link').forEach(function(btn) {
+    document.querySelectorAll('[data-platform]').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        document.querySelectorAll('.ea-platform-link').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelectorAll('[data-platform]').forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
         platformInput.value = btn.dataset.platform;
+      });
+    });
+
+    // Plan text link toggle
+    var planInput = document.getElementById('eaPlan');
+    document.querySelectorAll('[data-plan]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('[data-plan]').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        planInput.value = btn.dataset.plan;
       });
     });
   })();
