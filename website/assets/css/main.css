@@ -304,8 +304,8 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 }
 .content p { margin-bottom: 16px; color: var(--text-secondary); font-size: 0.9375rem; line-height: 1.7; }
 .content strong { color: var(--text-primary); font-weight: 600; }
-.content a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-subtle-border); }
-.content a:hover { text-decoration-color: var(--accent); }
+.content a:not(.btn) { color: var(--accent); text-decoration: underline; text-decoration-color: var(--accent-subtle-border); }
+.content a:not(.btn):hover { text-decoration-color: var(--accent); }
 .content ul, .content ol { margin: 12px 0 16px 20px; }
 .content li { margin-bottom: 6px; font-size: 0.9375rem; color: var(--text-secondary); line-height: 1.65; }
 
