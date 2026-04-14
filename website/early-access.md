@@ -17,7 +17,7 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
       <input type="email" id="eaEmail" class="ea-input" placeholder="your@email.com" autocomplete="email" required>
       <button type="submit" class="ea-submit">Join the waitlist</button>
     </div>
-    <div class="ea-field-group" style="margin-top:12px;">
+    <div class="ea-form-meta">
       <div class="ea-platform-toggle">
         <label class="ea-platform-option">
           <input type="radio" name="platform" value="ios" checked>
@@ -36,6 +36,16 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
         <label class="ea-platform-option">
           <input type="radio" name="platform" value="both">
           <span>Both</span>
+        </label>
+      </div>
+      <div class="ea-platform-toggle">
+        <label class="ea-platform-option">
+          <input type="radio" name="plan" value="yearly" checked>
+          <span>$199 / year</span>
+        </label>
+        <label class="ea-platform-option">
+          <input type="radio" name="plan" value="monthly">
+          <span>$19.99 / month</span>
         </label>
       </div>
     </div>
@@ -61,7 +71,7 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
     </div>
     <div>
       <div class="perk-title">6 months free</div>
-      <div class="perk-desc">When the personal AI OS ships, early access members get 6 months free. That is the return on putting your name down now.</div>
+      <div class="perk-desc">When it ships, early access members get 6 months free. After that, <strong>$199/year</strong> or <strong>$19.99/month</strong>. No surprise pricing.</div>
     </div>
   </div>
   <div class="perk-card">
@@ -94,7 +104,9 @@ It is a system where your AI understands context across every app, every convers
 
 It does not send your data anywhere. It does not train on your activity. It is entirely yours.
 
-A small number of people will run this before it ships publicly. They will see it break, watch it get fixed, and have a real say in what it becomes. If that is you, put your email in.
+A small number of people will run this before it ships publicly. They will see it break, watch it get fixed, and have a real say in what it becomes.
+
+When it ships, it will be $199/year or $19.99/month. Early access members get the first 6 months free. If that deal and that kind of access interests you, put your email in.
 
 <script>
   (function() {
@@ -111,11 +123,13 @@ A small number of people will run this before it ships publicly. They will see i
         return;
       }
       var platform = (form.querySelector('input[name="platform"]:checked') || {}).value || 'ios';
+      var plan = (form.querySelector('input[name="plan"]:checked') || {}).value || 'yearly';
       if (typeof posthog !== 'undefined') {
         posthog.identify(email, { email: email });
         posthog.capture('early_access_signup', {
           email: email,
           platform: platform,
+          plan: plan,
           source: window.location.pathname
         });
       }
