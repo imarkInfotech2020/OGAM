@@ -576,7 +576,11 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 
 .early-access-form-section { margin: 8px 0 32px; }
 .early-access-form-section h2 { margin-top: 0; }
-.early-access-form { margin-top: 20px; max-width: 440px; }
+.early-access-form { margin-top: 20px; max-width: 480px; }
+.ea-form-top { margin-bottom: 0; }
+.ea-inline-group { display: flex; gap: 8px; }
+.ea-inline-group .ea-input { flex: 1; }
+.ea-inline-group .ea-submit { white-space: nowrap; flex-shrink: 0; margin-top: 0; width: auto; padding: 10px 20px; }
 .ea-field-group { margin-bottom: 16px; }
 .ea-label { display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 7px; }
 .ea-input {

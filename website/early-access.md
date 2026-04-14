@@ -2,67 +2,22 @@
 layout: default
 title: Early Access
 nav_order: 4
-description: Get early access to Off Grid nightly builds. Be the first to test new features of the personal AI OS - and get 6 months free when you ship.
+description: Join the waitlist for early access to Off Grid. Be among the first to run the personal AI OS, shape what gets built, and get 6 months free.
 ---
 
 <div class="early-access-hero">
-  <div class="early-access-badge">Nightly Builds</div>
-  <h1>Be First.<br>Test Everything.</h1>
-  <p class="early-access-sub">Join the early access programme and get nightly builds of Off Grid delivered before anyone else. Shape the personal AI OS. Break things. Tell us what's broken.</p>
+  <div class="early-access-badge">Alpha Access</div>
+  <h1>Run it before<br>anyone else does.</h1>
+  <p class="early-access-sub">We are building a personal AI OS. It runs entirely on your phone. It knows your context. It never leaves your device. A small group of people will get access before it ships publicly. Join the waitlist.</p>
 </div>
 
-<div class="early-access-perks">
-  <div class="perk-card">
-    <div class="perk-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    </div>
-    <div>
-      <div class="perk-title">Nightly Builds</div>
-      <div class="perk-desc">New builds straight from main, every night. Features land in your hands days or weeks before the public release.</div>
-    </div>
-  </div>
-  <div class="perk-card">
-    <div class="perk-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    </div>
-    <div>
-      <div class="perk-title">6 Months Free</div>
-      <div class="perk-desc">When the personal AI OS ships, your account is activated for 6 months at no cost. No card required to join.</div>
-    </div>
-  </div>
-  <div class="perk-card">
-    <div class="perk-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    </div>
-    <div>
-      <div class="perk-title">Direct Line to the Team</div>
-      <div class="perk-desc">Early testers get a private Slack channel with the core team. File bugs, request features, and watch them get fixed in real time.</div>
-    </div>
-  </div>
-  <div class="perk-card">
-    <div class="perk-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    </div>
-    <div>
-      <div class="perk-title">Shape What Gets Built</div>
-      <div class="perk-desc">Your feedback decides what ships next. Early testers have already pushed features into the roadmap. Drop a bug and watch it get fixed.</div>
-    </div>
-  </div>
-</div>
-
----
-
-<div class="early-access-form-section">
-  <h2>Request Access</h2>
-  <p>We roll out builds in batches. Drop your email and we'll send your invite as soon as the next batch opens.</p>
-
+<div class="early-access-form-section ea-form-top">
   <form id="earlyAccessForm" class="early-access-form" novalidate>
-    <div class="ea-field-group">
-      <label for="eaEmail" class="ea-label">Email address</label>
-      <input type="email" id="eaEmail" class="ea-input" placeholder="you@example.com" autocomplete="email" required>
+    <div class="ea-inline-group">
+      <input type="email" id="eaEmail" class="ea-input" placeholder="your@email.com" autocomplete="email" required>
+      <button type="submit" class="ea-submit">Join the waitlist</button>
     </div>
-    <div class="ea-field-group">
-      <label class="ea-label">Platform</label>
+    <div class="ea-field-group" style="margin-top:12px;">
       <div class="ea-platform-toggle">
         <label class="ea-platform-option">
           <input type="radio" name="platform" value="ios" checked>
@@ -84,30 +39,62 @@ description: Get early access to Off Grid nightly builds. Be the first to test n
         </label>
       </div>
     </div>
-    <button type="submit" class="ea-submit">Request early access</button>
     <p class="ea-status" id="eaStatus" aria-live="polite"></p>
   </form>
 </div>
 
 ---
 
-## What nightly builds mean
+<div class="early-access-perks">
+  <div class="perk-card">
+    <div class="perk-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    <div>
+      <div class="perk-title">Early builds</div>
+      <div class="perk-desc">You get access before the public release. Features land in your hands first. You run things most people have not seen yet.</div>
+    </div>
+  </div>
+  <div class="perk-card">
+    <div class="perk-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <div>
+      <div class="perk-title">6 months free</div>
+      <div class="perk-desc">When the personal AI OS ships, early access members get 6 months free. That is the return on putting your name down now.</div>
+    </div>
+  </div>
+  <div class="perk-card">
+    <div class="perk-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    </div>
+    <div>
+      <div class="perk-title">Direct line to the team</div>
+      <div class="perk-desc">A private channel with the people building it. File a bug and watch it get fixed. Request a feature and see it move up the list.</div>
+    </div>
+  </div>
+  <div class="perk-card">
+    <div class="perk-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <div>
+      <div class="perk-title">Shape what gets built</div>
+      <div class="perk-desc">The roadmap moves based on what early users actually run into. Your feedback is not going into a void. It is going into the next build.</div>
+    </div>
+  </div>
+</div>
 
-Nightly builds come straight off the development branch. They contain features that are complete enough to run but not yet through the full QA pass. That means:
+---
 
-- You will see features that do not exist in the public app
-- You will occasionally hit bugs - report them and watch them get fixed fast
-- Build quality improves with every tester who reports back
+## What this is
 
-This is not beta. Beta is polished. Nightly is raw, fast, and real.
+Off Grid today is a powerful on-device AI app. The personal AI OS is the next layer.
 
-## What the personal AI OS is
+It is a system where your AI understands context across every app, every conversation, every device — without a single byte leaving your phone. It knows what you are working on. It knows what you have read. It acts when you ask and stays out of the way when you do not.
 
-Off Grid today is a powerful local AI app. The personal AI OS is the next layer - a system where the AI knows your context across every app, every conversation, every device, without a single byte leaving your phone.
+It does not send your data anywhere. It does not train on your activity. It is entirely yours.
 
-It understands what you're working on, what you've read, what you care about. It acts when you ask, and stays silent when you don't. It does not report home. It does not train on your data. It is entirely yours.
-
-Early testers are the first people outside the team to run it.
+A small number of people will run this before it ships publicly. They will see it break, watch it get fixed, and have a real say in what it becomes. If that is you, put your email in.
 
 <script>
   (function() {
@@ -133,7 +120,7 @@ Early testers are the first people outside the team to run it.
         });
       }
       emailInput.value = '';
-      status.textContent = 'You\'re on the list. We\'ll be in touch when your batch opens.';
+      status.textContent = "You're on the list.";
       status.className = 'ea-status ea-status-success';
       form.querySelector('.ea-submit').disabled = true;
     });
