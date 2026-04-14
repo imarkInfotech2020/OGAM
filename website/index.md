@@ -5,6 +5,8 @@ nav_order: 1
 description: Off Grid lets you run powerful AI models directly on your iPhone or Android — no internet, no subscriptions, no cloud. Chat, generate images, use voice, analyse documents. Your data never leaves your device.
 ---
 
+<img src="{{ '/assets/cover.png' | relative_url }}" alt="Off Grid — Private AI. No cloud. No compromise." class="hero-cover">
+
 # Off Grid
 
 **The Swiss Army Knife of On-Device AI.**

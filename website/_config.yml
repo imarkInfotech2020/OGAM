@@ -18,6 +18,9 @@ plugins:
 
 posthog_token: "phc_u7cnV9P3cTovsfPTE2nhB7g5G4qdtZJ5dgMzv7ryfKWs"
 
+logo: /assets/logo.png
+cover: /assets/cover.png
+
 exclude:
   - README.md
   - Gemfile
