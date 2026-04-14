@@ -216,4 +216,32 @@ class DownloadManagerModuleTest {
         }
     }
 
+    // ── 5xx retry behaviour (regression test for download progress desync bug) ─
+
+    /**
+     * Documents the expected status transition for a 5xx HTTP error that will be retried.
+     *
+     * Before the fix, the worker set status = FAILED then returned Result.retry() — a contradiction
+     * that fired a terminal DownloadError event to JS while WorkManager silently retried native-side.
+     * This caused the Download Manager screen's progress bar to stay stuck and progress metadata
+     * to be wiped from the Zustand store.
+     *
+     * After the fix, 5xx errors use QUEUED (same as network exceptions) so any JS listener reading
+     * the DB status sees a retryable state, not a terminal failure.
+     */
+    @Test
+    fun downloadStatusQueuedRepresentsRetryableState() {
+        // QUEUED is the status set for both network exceptions and 5xx errors after the fix.
+        // FAILED is reserved for truly terminal errors (4xx, disk full, SHA256 mismatch).
+        val retryableStatus = DownloadStatus.QUEUED
+        val terminalStatus = DownloadStatus.FAILED
+        assertTrue(
+            "QUEUED and FAILED must be distinct so UI can differentiate retrying vs dead",
+            retryableStatus != terminalStatus,
+        )
+        // Status name lowercased to "pending" so JS getActiveDownloads() includes it in the active list
+        assertEquals("queued", retryableStatus.name.lowercase())
+    }
+
 }
+

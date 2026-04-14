@@ -204,6 +204,7 @@ export const ModelsScreen: React.FC = () => {
           imageModelDownloading={vm.imageModelDownloading}
           imageModelProgress={vm.imageModelProgress}
           handleDownloadImageModel={vm.handleDownloadImageModel}
+          handleCancelImageDownload={vm.handleCancelImageDownload}
           loadHFModels={vm.loadHFModels}
           clearImageFilters={vm.clearImageFilters}
           setUserChangedBackendFilter={vm.setUserChangedBackendFilter}

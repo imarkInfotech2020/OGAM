@@ -289,6 +289,7 @@ export function useModelsScreen() {
     clearImageFilters: image.clearImageFilters,
     isRecommendedModel: image.isRecommendedModel,
     handleDownloadImageModel,
+    handleCancelImageDownload: image.handleCancelImageDownload,
     showNotifRationale,
     handleNotifRationaleAllow,
     handleNotifRationaleDismiss,

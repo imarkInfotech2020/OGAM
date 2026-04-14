@@ -51,7 +51,7 @@ async function handleCompletedImageDownload(opts: {
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
   } else if (metadata.imageDownloadType === 'multifile') {
     // Clean up native download entry in background (files already at final location)
-    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => {});
+    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => { });
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -61,7 +61,7 @@ async function handleCompletedImageDownload(opts: {
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
     // Fetch tokenizer files in background after model is registered
     if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
-      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => {});
+      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => { });
     }
   }
 }
@@ -86,7 +86,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     downloadedImageModels, setDownloadedImageModels, addDownloadedImageModel,
     activeImageModelId, setActiveImageModelId,
     imageModelDownloading, addImageModelDownloading, removeImageModelDownloading,
-    setImageModelDownloadId, setBackgroundDownload,
+    imageModelDownloadIds, setImageModelDownloadId, setBackgroundDownload,
     onboardingChecklist,
   } = useAppStore();
 
@@ -195,8 +195,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         if (!d.modelId.startsWith('image:')) return false;
         const imageId = d.modelId.replace('image:', '');
         if (downloadedImageIds.has(imageId)) {
-          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
-          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => { });
+          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => { });
           return false;
         }
         return true;
@@ -234,9 +234,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   useEffect(() => {
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
-  // restoreActiveImageDownloads is intentionally mount-only — it reads
-  // current store state via useAppStore.getState() to avoid stale closures.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // restoreActiveImageDownloads is intentionally mount-only — it reads
+    // current store state via useAppStore.getState() to avoid stale closures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadDownloadedImageModels]);
 
   useEffect(() => {
@@ -254,9 +254,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     });
     return () => { cancelled = true; };
 
-  // Intentionally mount-only: fetches hardware recommendation once.
-  // userChangedBackendFilter is read inside but should not re-trigger this fetch.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally mount-only: fetches hardware recommendation once.
+    // userChangedBackendFilter is read inside but should not re-trigger this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clearImageFilters = useCallback(() => {
@@ -296,6 +296,16 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleDownloadImageModel = (modelInfo: ImageModelDescriptor) =>
     downloadImageModel(modelInfo, makeDeps());
 
+  const handleCancelImageDownload = useCallback(async (modelId: string) => {
+    const downloadId = imageModelDownloadIds[modelId];
+    clearModelProgress(modelId);
+    removeImageModelDownloading(modelId);
+    if (downloadId != null) {
+      setBackgroundDownload(downloadId, null);
+      await backgroundDownloadService.cancelDownload(downloadId).catch(() => { });
+    }
+  }, [imageModelDownloadIds, clearModelProgress, removeImageModelDownloading, setBackgroundDownload]);
+
   return {
     availableHFModels, hfModelsLoading, hfModelsError,
     backendFilter, setBackendFilter,
@@ -310,6 +320,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     hasActiveImageFilters, filteredHFModels, imageRecommendation,
     loadHFModels, loadDownloadedImageModels, restoreActiveImageDownloads,
     clearImageFilters, isRecommendedModel, handleDownloadImageModel,
+    handleCancelImageDownload,
     setUserChangedBackendFilter,
   };
 }
