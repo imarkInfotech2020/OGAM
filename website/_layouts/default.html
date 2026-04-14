@@ -325,9 +325,9 @@
       var children = item.nextElementSibling;
       if (!children || !children.classList.contains('nav-children')) return;
       item.addEventListener('click', function(e) {
+        e.preventDefault();
         var isOpen = children.classList.contains('open');
         if (isOpen) {
-          e.preventDefault();
           children.classList.remove('open');
           item.classList.remove('section-open');
         } else {
