@@ -225,7 +225,6 @@
         {{ content }}
       </article>
 
-      {% if page.parent == "Perspectives" %}
       <div class="essay-reactions" id="essayReactions">
         <span class="essay-reactions-label">Did this land?</span>
         <div class="essay-reactions-buttons">
@@ -240,7 +239,6 @@
         </div>
         <span class="essay-reaction-thanks" id="reactionThanks" hidden></span>
       </div>
-      {% endif %}
 
       {% if page.parent %}
         {% assign siblings = site.pages | where: "parent", page.parent | sort: "nav_order" %}
@@ -384,8 +382,7 @@
     })();
   </script>
 
-  <!-- Essay reactions -->
-  {% if page.parent == "Perspectives" %}
+  <!-- Page reactions -->
   <script>
     (function() {
       var slug = {{ page.url | jsonify }};
@@ -411,14 +408,13 @@
             localStorage.setItem(storageKey, r);
             updateUI(r);
             if (typeof posthog !== 'undefined') {
-              posthog.capture('essay_reaction', { slug: slug, reaction: r, title: title });
+              posthog.capture('page_reaction', { slug: slug, reaction: r, title: title });
             }
           });
         });
       });
     })();
   </script>
-  {% endif %}
 
   <!-- PostHog Analytics -->
   <script>
