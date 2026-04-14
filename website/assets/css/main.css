@@ -604,31 +604,25 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 .ea-input::placeholder { color: var(--text-muted); }
 .ea-input:focus { border-color: var(--accent); }
 
-.ea-form-meta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
-.ea-platform-toggle { display: flex; gap: 6px; flex-wrap: wrap; }
-.ea-platform-option { cursor: pointer; }
-.ea-platform-option input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
-.ea-platform-option span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 20px;
-  font-size: 0.8125rem;
+.ea-form-footer { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ea-pricing-note { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
+.ea-platform-links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ea-platform-label { font-size: 0.75rem; color: var(--text-muted); }
+.ea-platform-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font);
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--bg-subtle);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-  user-select: none;
+  transition: color 0.12s;
+  text-decoration: underline;
+  text-decoration-color: transparent;
 }
-.ea-platform-option input[type="radio"]:checked + span {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-subtle);
-}
-.ea-platform-option span:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.ea-platform-link:hover { color: var(--text-primary); }
+.ea-platform-link.active { color: var(--accent); text-decoration-color: var(--accent-subtle-border); }
 
 .ea-submit {
   width: 100%;

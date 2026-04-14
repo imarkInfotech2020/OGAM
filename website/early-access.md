@@ -17,36 +17,20 @@ description: Join the waitlist for early access to Off Grid. Be among the first 
       <input type="email" id="eaEmail" class="ea-input" placeholder="your@email.com" autocomplete="email" required>
       <button type="submit" class="ea-submit">Join the waitlist</button>
     </div>
-    <div class="ea-form-meta">
-      <div class="ea-platform-toggle">
-        <label class="ea-platform-option">
-          <input type="radio" name="platform" value="ios" checked>
-          <span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.029 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
-            iOS
-          </span>
-        </label>
-        <label class="ea-platform-option">
-          <input type="radio" name="platform" value="android">
-          <span>
-            <svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor" aria-hidden="true"><path d="M325.3 234.3L104.6 13l280.8 161.2-60.1 60.1zM47 0C34 6.8 25.3 19.2 25.3 35.3v441.3c0 16.1 8.7 28.5 21.7 35.3l256-256L47 0zm425.6 225.6l-58.9-34.1-65.7 64.5 65.7 64.5 60.1-34.1c17.1-9.8 17.1-34.4-.1-60.8zM104.6 499l280.8-161.2-60.1-60.1L104.6 499z"/></svg>
-            Android
-          </span>
-        </label>
-        <label class="ea-platform-option">
-          <input type="radio" name="platform" value="both">
-          <span>Both</span>
-        </label>
+    <div class="ea-form-footer">
+      <p class="ea-pricing-note">6 months free for early access members</p>
+      <div class="ea-platform-links">
+        <span class="ea-platform-label">I'm on</span>
+        <button type="button" class="ea-platform-link active" data-platform="ios">iOS</button>
+        <button type="button" class="ea-platform-link" data-platform="android">Android</button>
+        <button type="button" class="ea-platform-link" data-platform="both">Both</button>
+        <input type="hidden" name="platform" id="eaPlatform" value="ios">
       </div>
-      <div class="ea-platform-toggle">
-        <label class="ea-platform-option">
-          <input type="radio" name="plan" value="yearly" checked>
-          <span>$199 / year</span>
-        </label>
-        <label class="ea-platform-option">
-          <input type="radio" name="plan" value="monthly">
-          <span>$19.99 / month</span>
-        </label>
+      <div class="ea-platform-links">
+        <span class="ea-platform-label">I'd prefer</span>
+        <button type="button" class="ea-platform-link active" data-plan="yearly">$199 / year</button>
+        <button type="button" class="ea-platform-link" data-plan="monthly">$19.99 / month</button>
+        <input type="hidden" name="plan" id="eaPlan" value="yearly">
       </div>
     </div>
     <p class="ea-status" id="eaStatus" aria-live="polite"></p>
@@ -122,8 +106,8 @@ When it ships, it will be $199/year or $19.99/month. Early access members get th
         status.className = 'ea-status ea-status-error';
         return;
       }
-      var platform = (form.querySelector('input[name="platform"]:checked') || {}).value || 'ios';
-      var plan = (form.querySelector('input[name="plan"]:checked') || {}).value || 'yearly';
+      var platform = (document.getElementById('eaPlatform') || {}).value || 'ios';
+      var plan = (document.getElementById('eaPlan') || {}).value || 'yearly';
       if (typeof posthog !== 'undefined') {
         posthog.identify(email, { email: email });
         posthog.capture('early_access_signup', {
@@ -137,6 +121,26 @@ When it ships, it will be $199/year or $19.99/month. Early access members get th
       status.textContent = "You're on the list.";
       status.className = 'ea-status ea-status-success';
       form.querySelector('.ea-submit').disabled = true;
+    });
+
+    // Platform text link toggle
+    var platformInput = document.getElementById('eaPlatform');
+    document.querySelectorAll('[data-platform]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('[data-platform]').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        platformInput.value = btn.dataset.platform;
+      });
+    });
+
+    // Plan text link toggle
+    var planInput = document.getElementById('eaPlan');
+    document.querySelectorAll('[data-plan]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('[data-plan]').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        planInput.value = btn.dataset.plan;
+      });
     });
   })();
 </script>
