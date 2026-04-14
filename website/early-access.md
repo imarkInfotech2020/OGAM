@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Early Access
-nav_order: 6
+nav_order: 4
 description: Get early access to Off Grid nightly builds. Be the first to test new features of the personal AI OS - and get 6 months free when you ship.
 ---
 

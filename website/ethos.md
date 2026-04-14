@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Ethos
-nav_order: 5
+nav_order: 3
 description: Why Off Grid exists. Intelligence should live on the devices you already own - private by architecture, not by policy.
 ---
 
