@@ -17,7 +17,7 @@ faq:
 
 The word "AI" is doing a lot of work right now. It describes voice assistants that set timers, chatbots that write emails, autonomous systems that browse the internet, and personal software that runs entirely on your phone.
 
-These are not the same thing. The differences matter — for what you can trust with your data, what you can expect from each, and which one is actually useful for your life.
+These are not the same thing. The differences matter - for what you can trust with your data, what you can expect from each, and which one is actually useful for your life.
 
 ---
 
@@ -49,7 +49,7 @@ ChatGPT, Claude, Gemini (in their standard forms) are a step up in capability bu
 
 **The privacy model:** Cloud-dependent. Your conversations are sent to external servers. Your data may be used for model training depending on product settings.
 
-Generative AI products are powerful general tools. They are not personal. The more personal the task, the less suited they are — because they don't know you.
+Generative AI products are powerful general tools. They are not personal. The more personal the task, the less suited they are - because they don't know you.
 
 ---
 
@@ -57,13 +57,13 @@ Generative AI products are powerful general tools. They are not personal. The mo
 
 AI agents are the newest and most distinct category. They are systems designed to take sequences of actions toward a goal with minimal human guidance.
 
-**How they work:** You define an objective. The agent plans and executes a series of steps — browsing the web, writing and running code, calling APIs, sending emails — until the goal is reached or it encounters a blocker.
+**How they work:** You define an objective. The agent plans and executes a series of steps - browsing the web, writing and running code, calling APIs, sending emails - until the goal is reached or it encounters a blocker.
 
 **What they know about you:** Variable, depending on what context the agent is given at the start of a task. Most current agents have limited persistent knowledge of the user.
 
 **What they can do:** Sequences of actions across external services. Research, code execution, web interaction, communication. Capable of completing complex multi-step tasks without human involvement at each step.
 
-**The privacy model:** Typically cloud-dependent and highly permissive — an autonomous agent needs broad access to external services to do its job. This creates significant surface area for data exposure.
+**The privacy model:** Typically cloud-dependent and highly permissive - an autonomous agent needs broad access to external services to do its job. This creates significant surface area for data exposure.
 
 AI agents are powerful for specific, bounded tasks where you want automation. They are not personal assistants. They are task executors.
 
@@ -71,15 +71,15 @@ AI agents are powerful for specific, bounded tasks where you want automation. Th
 
 ## Personal AI OS: the intelligence layer
 
-A Personal AI OS shares surface similarities with all three — it responds to queries like an assistant, generates text like a chatbot, and takes actions like an agent — but the architecture and purpose are fundamentally different.
+A Personal AI OS shares surface similarities with all three - it responds to queries like an assistant, generates text like a chatbot, and takes actions like an agent - but the architecture and purpose are fundamentally different.
 
-**How it works:** Inference runs on your device. Context is built and stored locally — your messages, calendar, files, health data, location patterns. The system maintains a continuous model of your life and work, accessible across your devices over a local network.
+**How it works:** Inference runs on your device. Context is built and stored locally - your messages, calendar, files, health data, location patterns. The system maintains a continuous model of your life and work, accessible across your devices over a local network.
 
-**What it knows about you:** Everything you allow it to access, persistently. Not just what you say in a session but what it has learned about your patterns over time. This is the defining property — the AI knows you specifically.
+**What it knows about you:** Everything you allow it to access, persistently. Not just what you say in a session but what it has learned about your patterns over time. This is the defining property - the AI knows you specifically.
 
 **What it can do:** Everything the assistant and chatbot categories can do, plus context-aware actions that require knowing you: triaging your inbox in your priority system, preparing you for a meeting based on the history you have with that person, noticing that you're overcommitted next week before you've noticed it yourself.
 
-**The privacy model:** On-device. Nothing leaves your hardware. The context that makes it useful — the data that would be most valuable to an external party — never becomes available to one.
+**The privacy model:** On-device. Nothing leaves your hardware. The context that makes it useful - the data that would be most valuable to an external party - never becomes available to one.
 
 ---
 
@@ -87,11 +87,11 @@ A Personal AI OS shares surface similarities with all three — it responds to q
 
 The difference is not capability. Current AI assistants are capable. Generative AI products are very capable. Agents are capable of things no prior software could do.
 
-The difference is architecture, and architecture determines trust.
+The difference is architecture. Architecture determines trust.
 
 A system that runs on your device with your context, acting with your consent, is one you can give your full context to. A system that routes your data through a server is one where the privacy model is determined by policy rather than by design.
 
-The most useful AI for your life requires your full context — your messages, your health, your finances, your relationships. You should only give that context to a system whose architecture earns it. The Personal AI OS is that system.
+The most useful AI for your life requires your full context - your messages, your health, your finances, your relationships. You should only give that context to a system whose architecture earns it. The Personal AI OS is that system.
 
 ---
 

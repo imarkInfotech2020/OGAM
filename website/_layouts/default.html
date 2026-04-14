@@ -225,6 +225,23 @@
         {{ content }}
       </article>
 
+      {% if page.parent == "Perspectives" %}
+      <div class="essay-reactions" id="essayReactions">
+        <span class="essay-reactions-label">Did this land?</span>
+        <div class="essay-reactions-buttons">
+          <button class="reaction-btn" id="reaction-agree" data-reaction="agree" aria-label="Agree with this">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+            <span>Agree</span>
+          </button>
+          <button class="reaction-btn" id="reaction-disagree" data-reaction="disagree" aria-label="Disagree with this">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+            <span>Disagree</span>
+          </button>
+        </div>
+        <span class="essay-reaction-thanks" id="reactionThanks" hidden></span>
+      </div>
+      {% endif %}
+
       {% if page.parent %}
         {% assign siblings = site.pages | where: "parent", page.parent | sort: "nav_order" %}
         {% assign current_index = 0 %}
@@ -366,6 +383,42 @@
       });
     })();
   </script>
+
+  <!-- Essay reactions -->
+  {% if page.parent == "Perspectives" %}
+  <script>
+    (function() {
+      var slug = {{ page.url | jsonify }};
+      var title = {{ page.title | jsonify }};
+      var storageKey = 'reaction:' + slug;
+      var stored = localStorage.getItem(storageKey);
+      function updateUI(r) {
+        ['agree', 'disagree'].forEach(function(k) {
+          var btn = document.getElementById('reaction-' + k);
+          if (btn) btn.classList.toggle('active', r === k);
+        });
+        var thanks = document.getElementById('reactionThanks');
+        if (thanks) { thanks.textContent = r === 'agree' ? 'Glad it landed.' : 'Thanks for the feedback.'; thanks.hidden = false; }
+      }
+      document.addEventListener('DOMContentLoaded', function() {
+        if (stored) updateUI(stored);
+        ['agree', 'disagree'].forEach(function(r) {
+          var btn = document.getElementById('reaction-' + r);
+          if (!btn) return;
+          btn.addEventListener('click', function() {
+            if (stored === r) return;
+            stored = r;
+            localStorage.setItem(storageKey, r);
+            updateUI(r);
+            if (typeof posthog !== 'undefined') {
+              posthog.capture('essay_reaction', { slug: slug, reaction: r, title: title });
+            }
+          });
+        });
+      });
+    })();
+  </script>
+  {% endif %}
 
   <!-- PostHog Analytics -->
   <script>

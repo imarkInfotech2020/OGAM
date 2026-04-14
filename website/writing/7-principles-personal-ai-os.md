@@ -13,7 +13,7 @@ faq:
 
 # The 7 Principles of a Personal AI OS
 
-Every new software category needs a definition sharp enough to be useful — precise enough to include what belongs and exclude what doesn't.
+Every new software category needs a definition sharp enough to be useful - precise enough to include what belongs and exclude what doesn't.
 
 Personal AI OS is still being defined. Vendors will claim it. Analysts will debate it. Products will market toward it without meeting its actual requirements.
 
@@ -23,7 +23,7 @@ These are the 7 principles. They are not aspirational guidelines. They are the s
 
 ## 1. Runs on-device
 
-Inference happens on your hardware. Not on a server you access via API, not on a cloud instance provisioned on your behalf — on the device in your hand or on your desk.
+Inference happens on your hardware. Not on a server you access via API, not on a cloud instance provisioned on your behalf - on the device in your hand or on your desk.
 
 This is the foundational property. Everything else in this list depends on it. If inference runs on a server, the data had to get there somehow, which means the other properties cannot be guaranteed by architecture.
 
@@ -37,7 +37,7 @@ No telemetry. No usage logging. No data collection of any kind.
 
 Not "we anonymise before sending." Not "you can opt out in settings." Nothing leaves your device related to your queries, your context, or your usage.
 
-This is a binary property. Either the software sends data to external servers or it doesn't. Partial compliance — "we only collect aggregate statistics" — is not compliance. The architecture must be designed from the start to produce no outbound data.
+This is a binary property. Either the software sends data to external servers or it doesn't. Partial compliance - "we only collect aggregate statistics" - is not compliance. The architecture must be designed from the start to produce no outbound data.
 
 ---
 
@@ -45,7 +45,7 @@ This is a binary property. Either the software sends data to external servers or
 
 The AI maintains a working model of your life between sessions.
 
-A system that forgets everything when you close it is not a Personal AI OS. It is a local chatbot. The defining capability of a Personal AI OS is that it knows you — not from a single conversation, but from accumulated context built over time.
+A system that forgets everything when you close it is not a Personal AI OS. It is a local chatbot. The defining capability of a Personal AI OS is that it knows you - not from a single conversation, but from accumulated context built over time.
 
 This means your calendar, your messages, your files, your work patterns, your preferences. Stored locally. Queryable by the model. Updated continuously as your life changes.
 
@@ -55,7 +55,7 @@ This means your calendar, your messages, your files, your work patterns, your pr
 
 The AI can take actions, not just answer questions.
 
-Drafting messages. Setting reminders. Summarising documents. Searching your files. Preparing you for a meeting. The output is not just text to read — it is action taken on your behalf, with your consent as the operating principle.
+Drafting messages. Setting reminders. Summarising documents. Searching your files. Preparing you for a meeting. The output is not just text to read - it is action taken on your behalf, with your consent as the operating principle.
 
 The line between helpful and intrusive is consent. A Personal AI OS acts when you ask, suggests when relevant, and defers when uncertain. It does not take consequential actions without your approval.
 
@@ -65,7 +65,7 @@ The line between helpful and intrusive is consent. A Personal AI OS acts when yo
 
 Your phone and laptop are used by the same person. The AI should have a unified view of both.
 
-Context built on your phone — messages, location, health — should be available on your laptop. Context from your laptop — files, email, work patterns — should be available on your phone. This sync happens over your local network, not through a cloud relay.
+Context built on your phone - messages, location, health - should be available on your laptop. Context from your laptop - files, email, work patterns - should be available on your phone. This sync happens over your local network, not through a cloud relay.
 
 No server in between. No data leaving your home. One person, one intelligence layer, two devices.
 
@@ -77,7 +77,7 @@ The model weights are open. The application code is open. Anyone can inspect wha
 
 This is not a nice-to-have. For a system with access to your messages, health data, calendar, and files, the privacy guarantee must be verifiable. A closed system asks you to trust the vendor. An open system lets you verify.
 
-Auditable by default means: build logs, no hidden endpoints, no obfuscated data paths. The architecture should be transparent enough that a technical user can confirm what leaves the device and what doesn't — and the answer should be nothing.
+Auditable by default means: build logs, no hidden endpoints, no obfuscated data paths. The architecture should be transparent enough that a technical user can confirm what leaves the device and what doesn't - and the answer should be nothing.
 
 ---
 
@@ -85,7 +85,7 @@ Auditable by default means: build logs, no hidden endpoints, no obfuscated data 
 
 You own the software. You run the model. You pay once, or you run open-source software for free.
 
-A subscription model for personal AI recreates the cloud dependency through economics. Even if inference runs locally, a subscription gives the vendor ongoing leverage — they can change terms, reduce capabilities, or discontinue the product and take your assistant with them.
+A subscription model for personal AI recreates the cloud dependency through economics. Even if inference runs locally, a subscription gives the vendor ongoing leverage - they can change terms, reduce capabilities, or discontinue the product and take your assistant with them.
 
 Intelligence should be a tool you own, like your calculator or your contacts app. The economics of on-device AI support this. There is no server cost to recover. The model runs on your hardware. The marginal cost of inference is your electricity bill.
 
@@ -95,7 +95,7 @@ Intelligence should be a tool you own, like your calculator or your contacts app
 
 Remove any one of these principles and the system is no longer a Personal AI OS.
 
-On-device inference without persistent context is a local chatbot. Persistent context without auditability is surveillance software you run on yourself. Acts on your behalf without consent is an autonomous agent. Cross-device without local sync is a cloud product with a different name.
+On-device inference without persistent context is a local chatbot. Persistent context without auditability is surveillance software you run on yourself. Acting on your behalf without consent is an autonomous agent. Cross-device without local sync is a cloud product with a different name.
 
 The 7 principles work as a system. A product that meets all 7 is a Personal AI OS. A product that meets 6 is something else, and the one it's missing usually explains what the vendor is getting from the arrangement.
 

@@ -477,6 +477,53 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 #pagefind-search .pagefind-ui__result-excerpt { font-family: var(--font) !important; font-size: 0.8125rem !important; color: var(--text-muted) !important; margin-top: 3px !important; line-height: 1.5 !important; }
 #pagefind-search mark { background: var(--accent-subtle); color: var(--accent); border-radius: 2px; padding: 0 2px; }
 
+/* ─── Essay Reactions ───────────────────────────────────────────────────────── */
+.essay-reactions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.essay-reactions-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.essay-reactions-buttons {
+  display: flex;
+  gap: 8px;
+}
+.reaction-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.reaction-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.reaction-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.essay-reaction-thanks {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
 /* ─── Mobile ────────────────────────────────────────────────────────────────── */
 .mobile-topbar {
   display: none;

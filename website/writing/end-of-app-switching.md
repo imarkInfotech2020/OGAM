@@ -18,8 +18,6 @@ This is the defining friction of modern knowledge work. Not any one task being h
 
 A Personal AI OS is the layer that ends this.
 
----
-
 ## Why apps can't solve it themselves
 
 The app model was the right solution to a real problem. Specialised tools are better than general ones. A calendar app built specifically for scheduling is better than a general-purpose productivity tool that does scheduling among many other things.
@@ -28,9 +26,7 @@ But the app model has a structural limitation: apps are sandboxed. Your calendar
 
 This isn't a bug in any individual app. It's a property of how platforms are designed. Apps compete on features, not on their ability to share context with each other. The incentive structure actively works against the coordination layer that users need.
 
-Integrations exist — Zapier, calendar plugins, Slack connectors — but they are point-to-point connections between specific apps, not a general intelligence layer. They automate individual workflows, not the judgment required to orchestrate across all of them.
-
----
+Integrations exist - Zapier, calendar plugins, Slack connectors - but they are point-to-point connections between specific apps, not a general intelligence layer. They automate individual workflows, not the judgment required to orchestrate across all of them.
 
 ## What the intelligence layer does differently
 
@@ -40,11 +36,9 @@ When you ask it to help you prepare for a meeting, it already has access to your
 
 When you ask it to find a time for a call, it knows your calendar, your energy patterns, and the priority of the meeting relative to what else is on your day. It suggests a time that actually makes sense for you, not just a time that's technically available.
 
-When you need to delegate a follow-up, it can draft the message, add it to your task list, and set a reminder — not as three separate actions in three apps, but as one thing.
+When you need to delegate a follow-up, it can draft the message, add it to your task list, and set a reminder - not as three separate actions in three apps, but as one thing.
 
 The intelligence layer is the coordination that each individual app was never designed to provide.
-
----
 
 ## The multi-app tax
 
@@ -52,7 +46,7 @@ Knowledge workers pay a multi-app tax every day. It takes the form of:
 
 **Context switching overhead.** Every time you move between apps, you lose a few seconds to mental reorientation. Across dozens of switches a day, this adds up to significant time and, more importantly, significant cognitive load.
 
-**Duplicated information.** The same piece of information — a meeting time, a contact's last message, a document name — lives in multiple apps in slightly different forms. Keeping them consistent is work you're doing manually.
+**Duplicated information.** The same piece of information - a meeting time, a contact's last message, a document name - lives in multiple apps in slightly different forms. Keeping them consistent is work you're doing manually.
 
 **Missed connections.** The email with the context for the meeting and the calendar invite for the meeting are in different apps. Your brain has to hold the connection. Sometimes it doesn't, and you arrive at a meeting unprepared.
 
@@ -60,11 +54,9 @@ Knowledge workers pay a multi-app tax every day. It takes the form of:
 
 A Personal AI OS reduces all four. Not by eliminating apps, but by providing an intelligence layer that manages the coordination between them.
 
----
-
 ## The first step
 
-The full vision — an AI layer that coordinates across all your apps in real time — requires deep platform integration that takes time to build.
+The full vision - an AI layer that coordinates across all your apps in real time - requires deep platform integration that takes time to build.
 
 The first step is on-device AI that has the context of your phone and responds to natural language. Instead of opening six apps, you ask one question and get an answer that synthesised all six.
 
