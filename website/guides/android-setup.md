@@ -70,4 +70,4 @@ Run a local AI model on your Android phone — completely offline, no account, n
 
 - [Which model should I use?]({{ '/guides/which-model' | relative_url }})
 - [Run Stable Diffusion on Android]({{ '/guides/stable-diffusion-android' | relative_url }})
-- [Connect Ollama from your phone]({{ '/guides/ollama-remote' | relative_url }})
+- [Connect Ollama from your phone]({{ '/guides/ollama-android' | relative_url }})

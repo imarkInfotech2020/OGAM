@@ -97,5 +97,4 @@ No. SD 1.5 is older than current cloud models. The tradeoff is complete privacy 
 ## Related guides
 
 - [How to Run Stable Diffusion on Your iPhone]({{ '/guides/stable-diffusion-iphone' | relative_url }})
-- [How to Generate AI Images Locally on Your Android Phone in 2026]({{ '/guides/generate-ai-images-android' | relative_url }})
 - [How to Run LLMs Locally on Your Android Phone in 2026]({{ '/guides/run-llms-locally-android' | relative_url }})

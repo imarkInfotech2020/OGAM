@@ -92,5 +92,4 @@ Any model loaded on your desktop works. `llama3.1:70b` and `mistral-large` are p
 
 ## Related guides
 
-- [How to Use LM Studio From Your Android Phone in 2026]({{ '/guides/lm-studio-android' | relative_url }})
 - [How to Run LLMs Locally on Your Android Phone in 2026]({{ '/guides/run-llms-locally-android' | relative_url }})

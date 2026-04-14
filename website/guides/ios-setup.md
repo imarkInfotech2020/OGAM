@@ -69,4 +69,4 @@ Once a model is downloaded, Off Grid works in airplane mode. Put your phone offl
 ## Related guides
 
 - [Which model should I use?]({{ '/guides/which-model' | relative_url }})
-- [Connecting Ollama from your iPhone]({{ '/guides/ollama-remote' | relative_url }})
+- [Connecting Ollama from your phone]({{ '/guides/ollama-android' | relative_url }})
