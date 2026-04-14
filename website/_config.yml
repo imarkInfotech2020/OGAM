@@ -1,0 +1,24 @@
+title: Off Grid
+description: Run powerful AI models directly on your iPhone or Android phone — no internet required, no subscriptions, no cloud. Your data never leaves your device.
+url: https://docs.offgrid.app
+baseurl: ""
+
+permalink: pretty
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    css_class: highlight
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
