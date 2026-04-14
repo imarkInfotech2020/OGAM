@@ -13,11 +13,11 @@ Run your first local AI model in under 5 minutes. No account. No API key. No int
 
 ## Step 1 — Download Off Grid
 
-**iOS:** [Download on the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882) — requires iPhone 12 or newer (4GB RAM+)
+**iOS:** [Download on the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=download) — requires iPhone 12 or newer (4GB RAM+)
 
-**Android:** [Get it on Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile) — requires Android 10+, 4GB RAM+
+**Android:** [Get it on Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download) — requires Android 10+, 4GB RAM+
 
-Or grab the latest APK directly from [GitHub Releases](https://github.com/alichherawalla/off-grid-mobile/releases/latest).
+Or grab the latest APK directly from [GitHub Releases](https://github.com/alichherawalla/off-grid-mobile/releases/latest?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github).
 
 ---
 
@@ -27,12 +27,13 @@ When you open the app, you'll see the model picker. If you're unsure, start here
 
 | You want | Start with | Size |
 |---|---|---|
-| Fast chat, low RAM | Phi-3 Mini | ~2GB |
-| Good quality chat | Llama 3.2 3B | ~2GB |
-| Best quality on-device | Llama 3.1 8B | ~5GB |
-| Image generation | Stable Diffusion 1.5 | ~1GB |
+| Fast chat, 3–4GB RAM | Qwen 3.5 0.8B | ~0.8GB |
+| Best for most phones | Qwen 3.5 2B | ~1.7GB |
+| Best quality (8GB RAM) | Qwen 3.5 9B | ~5.5GB |
+| Vision + reasoning | Gemma 4 E2B | ~1.5GB |
+| Image generation | SD 1.5 Palettized (iOS) / Absolute Reality (Android) | ~1GB |
 
-> **Not sure?** Pick Phi-3 Mini first. It runs on any modern phone and gives you a feel for local inference before you commit to a larger download.
+> **Not sure?** Pick Qwen 3.5 2B. It fits comfortably in 4GB RAM, supports 262K context, and is the best starting point for most phones.
 
 ---
 
@@ -64,4 +65,4 @@ Put your phone in airplane mode. Everything still works.
 
 Stuck, or want to share what you're building? [Join the Slack community](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA).
 
-The app is open source — [view it on GitHub](https://github.com/alichherawalla/off-grid-mobile).
+The app is open source — [view it on GitHub](https://github.com/alichherawalla/off-grid-mobile?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github).

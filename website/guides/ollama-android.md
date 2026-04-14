@@ -20,7 +20,7 @@ Ollama lets you run large language models on your desktop. Models that are too b
 ## What you need
 
 - Desktop or laptop running [Ollama](https://ollama.ai) with at least one model loaded
-- Android phone with [Off Grid](https://play.google.com/store/apps/details?id=ai.offgridmobile) installed
+- Android phone with [Off Grid](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download) installed
 - Both devices on the same WiFi network (or Ollama accessible via VPN/Tailscale)
 
 ---

@@ -23,7 +23,7 @@ Run a local AI model on your Android phone — completely offline, no account, n
 
 ## Step 1 — Install Off Grid
 
-[Download from Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile){: .btn .btn-green }
+[Download from Google Play](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 ---
 
@@ -31,7 +31,7 @@ Run a local AI model on your Android phone — completely offline, no account, n
 
 1. Open Off Grid
 2. Tap **Models**
-3. Choose a model — **Phi-3 Mini** or **Gemma 2B** are good starting points for most Android devices
+3. Choose a model — **Qwen 3.5 0.8B** or **Qwen 3.5 2B** are the best starting points for most Android devices
 4. Tap **Download**
 
 ---

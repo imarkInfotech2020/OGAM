@@ -23,7 +23,7 @@ Run a local AI model on your iPhone with no cloud dependency. This guide covers 
 
 ## Step 1 — Install Off Grid
 
-[Download from the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882){: .btn .btn-green }
+[Download from the App Store](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=download){: .btn .btn-green }
 
 The app itself is under 50MB. Models are downloaded separately inside the app.
 
