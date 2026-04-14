@@ -215,4 +215,5 @@ class DownloadManagerModuleTest {
             tmp.delete()
         }
     }
+
 }

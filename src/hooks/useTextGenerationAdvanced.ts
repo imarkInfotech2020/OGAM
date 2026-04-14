@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { useAppStore } from '../stores';
-import { CacheType } from '../types';
+import { CacheType, INFERENCE_BACKENDS } from '../types';
 
 export const CACHE_TYPE_DESCRIPTIONS: Record<CacheType, string> = {
   f16: 'Full precision — best quality, highest memory usage',
@@ -18,19 +18,13 @@ export function useTextGenerationAdvanced() {
   const isQuantizedCache = (settings?.cacheType ?? 'q8_0') !== 'f16';
   const currentCacheType: CacheType = settings?.cacheType ?? 'q8_0';
   const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, GPU_LAYERS_MAX);
-  const isGpuEnabled = settings?.enableGpu !== false;
+  const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
+  const isGpuEnabled = (settings?.inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
   const isAndroid = Platform.OS === 'android';
-  const gpuForcesF16 = isAndroid && isGpuEnabled;
-  const cacheDisabled = gpuForcesF16;
+  const gpuForcesF16 = false;
+  // OpenCL forces f16 — disable quantized cache options in the UI
+  const cacheDisabled = (settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU) === INFERENCE_BACKENDS.OPENCL;
   const displayCacheType = cacheDisabled ? 'f16' : currentCacheType;
-
-  const handleGpuToggle = (enableGpu: boolean) => {
-    if (enableGpu && isAndroid && isQuantizedCache) {
-      updateSettings({ enableGpu: true, cacheType: 'f16' });
-    } else {
-      updateSettings({ enableGpu: enableGpu });
-    }
-  };
 
   const handleFlashAttnToggle = (flashAttn: boolean) => {
     if (!flashAttn && isQuantizedCache) {
@@ -64,7 +58,6 @@ export function useTextGenerationAdvanced() {
     cacheDisabled,
 
     // Handlers
-    handleGpuToggle,
     handleFlashAttnToggle,
     handleCacheTypeChange,
   };

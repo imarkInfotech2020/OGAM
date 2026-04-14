@@ -1,7 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { Message } from '../types';
+import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores';
 import {
@@ -60,7 +60,11 @@ class LLMService {
     if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
-    const params = buildModelParams(modelPath, settings);
+    const recommendedThreads = await hardwareService.getRecommendedThreadCount();
+    // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
+    // Any explicit user choice (1–12) is respected as-is.
+    const effectiveNThreads = settings.nThreads === 0 ? recommendedThreads : settings.nThreads;
+    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
     const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
@@ -114,9 +118,34 @@ class LLMService {
   }
   private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
-    const safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
+    let safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
     if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
-    const initial = await initContextWithFallback(params.baseParams, params.ctxLen, safeGpuLayers);
+    let resolvedBaseParams: object = params.baseParams;
+    if (Platform.OS === 'android') {
+      const settings = useAppStore.getState().settings;
+      const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+      if (backend === INFERENCE_BACKENDS.HTP) {
+        // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
+        // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
+        safeGpuLayers = safeGpuLayers > 0 ? (settings?.gpuLayers ?? 99) : 0;
+        resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
+        const socInfo = await hardwareService.getSoCInfo();
+        logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
+      } else if (backend === INFERENCE_BACKENDS.OPENCL) {
+        const capability = await hardwareService.getOpenCLCapability();
+        if (!capability.supported) {
+          logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);
+          safeGpuLayers = 0;
+        } else {
+          // Respect the Adreno-specific RAM cap — safeGpuLayers already has it applied.
+          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
+        }
+      } else {
+        safeGpuLayers = 0;
+        logger.log('[LLM] CPU backend selected');
+      }
+    }
+    const initial = await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers);
     const modelMax = getModelMaxContext(initial.context);
     const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
     if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) return initial;
@@ -125,7 +154,7 @@ class LLMService {
     if (targetCtx <= initial.actualLength) return initial;
     logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
     try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
-    return initContextWithFallback(params.baseParams, targetCtx, safeGpuLayers);
+    return initContextWithFallback(resolvedBaseParams, targetCtx, safeGpuLayers);
   }
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
     if (!this.context) { logger.warn('[LLM] initializeMultimodal: no context'); return false; }

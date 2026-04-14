@@ -395,6 +395,16 @@ describe('ModelCard', () => {
       );
       expect(queryByText('Vision')).toBeNull();
     });
+
+    it('shows Needs repair badge when downloaded vision model is missing mmproj', () => {
+      const visionFile = createModelFileWithMmProj();
+      const brokenModel = createDownloadedModel({ isVisionModel: true });
+      const { getByText, queryByText } = render(
+        <ModelCard model={baseModel} file={visionFile} downloadedModel={brokenModel} />
+      );
+      expect(getByText('Needs repair')).toBeTruthy();
+      expect(queryByText('Vision')).toBeNull();
+    });
   });
 
   // ============================================================================

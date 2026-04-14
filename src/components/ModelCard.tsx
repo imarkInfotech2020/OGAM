@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useThemedStyles } from '../theme';
 import { QUANTIZATION_INFO, CREDIBILITY_LABELS } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
+import { needsVisionRepair } from '../utils/visionRepair';
 import { createStyles } from './ModelCard.styles';
 import {
   CompactModelCardContent,
@@ -111,6 +112,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
   const isVisionModel = !!(file?.mmProjFile || downloadedModel?.isVisionModel);
+  const needsRepair = needsVisionRepair(downloadedModel, file);
 
   const sizeRange = React.useMemo(() => {
     if (fileSize > 0 || !model.files || model.files.length === 0) return null;
@@ -164,6 +166,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             quantInfo={quantInfo}
             quantization={quantization}
             isVisionModel={isVisionModel}
+            needsRepair={needsRepair}
             isCompatible={isCompatible}
             incompatibleReason={incompatibleReason}
           />

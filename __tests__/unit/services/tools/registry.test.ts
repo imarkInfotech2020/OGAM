@@ -60,13 +60,13 @@ describe('Tool Registry', () => {
         type: 'function',
         function: {
           name: 'calculator',
-          description: 'Evaluate mathematical expressions',
+          description: 'Evaluate math expressions',
           parameters: {
             type: 'object',
             properties: {
               expression: {
                 type: 'string',
-                description: 'The mathematical expression to evaluate',
+                description: 'Math expression',
               },
             },
             required: ['expression'],
@@ -131,30 +131,30 @@ describe('Tool Registry', () => {
     it('includes tool names and descriptions for enabled tools', () => {
       const hint = buildToolSystemPromptHint(['calculator', 'web_search']);
 
-      expect(hint).toContain('- calculator: Evaluate mathematical expressions');
-      expect(hint).toContain('- web_search: Search the web for current information');
-      expect(hint).toContain('You have access to the following tools');
+      expect(hint).toContain('- calculator: Evaluate math expressions');
+      expect(hint).toContain('- web_search: Search the web');
+      expect(hint).toContain('Tools available');
     });
 
     it('only includes enabled tools, not all tools', () => {
       const hint = buildToolSystemPromptHint(['calculator']);
 
-      expect(hint).toContain('calculator: Evaluate mathematical expressions');
+      expect(hint).toContain('calculator: Evaluate math expressions');
       expect(hint).not.toContain('web_search');
       expect(hint).not.toContain('get_current_datetime');
       expect(hint).not.toContain('get_device_info');
     });
 
-    it('includes read_url usage hint when read_url is enabled', () => {
+    it('includes read_url when read_url is enabled', () => {
       const hint = buildToolSystemPromptHint(['read_url']);
       expect(hint).toContain('read_url');
-      expect(hint).toContain('URL');
+      expect(hint).toContain('web page');
     });
 
-    it('includes get_current_datetime usage hint when enabled', () => {
+    it('includes get_current_datetime when enabled', () => {
       const hint = buildToolSystemPromptHint(['get_current_datetime']);
       expect(hint).toContain('get_current_datetime');
-      expect(hint).toContain('time or date');
+      expect(hint).toContain('date and time');
     });
   });
 });

@@ -5,13 +5,13 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'web_search',
     name: 'web_search',
     displayName: 'Web Search',
-    description: 'Search the web for current information',
+    description: 'Search the web',
     icon: 'globe',
     requiresNetwork: true,
     parameters: {
       query: {
         type: 'string',
-        description: 'The search query',
+        description: 'Search query',
         required: true,
       },
     },
@@ -20,12 +20,12 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'calculator',
     name: 'calculator',
     displayName: 'Calculator',
-    description: 'Evaluate mathematical expressions',
+    description: 'Evaluate math expressions',
     icon: 'hash',
     parameters: {
       expression: {
         type: 'string',
-        description: 'The mathematical expression to evaluate',
+        description: 'Math expression',
         required: true,
       },
     },
@@ -34,12 +34,12 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'get_current_datetime',
     name: 'get_current_datetime',
     displayName: 'Date & Time',
-    description: 'Get the current date and time',
+    description: 'Get current date and time',
     icon: 'clock',
     parameters: {
       timezone: {
         type: 'string',
-        description: 'IANA timezone (e.g. America/New_York). Defaults to device timezone.',
+        description: 'IANA timezone, e.g. America/New_York',
       },
     },
   },
@@ -47,12 +47,12 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'get_device_info',
     name: 'get_device_info',
     displayName: 'Device Info',
-    description: 'Get device hardware information',
+    description: 'Get device hardware info',
     icon: 'smartphone',
     parameters: {
       info_type: {
         type: 'string',
-        description: 'Type of info to retrieve',
+        description: 'Info type',
         enum: ['battery', 'storage', 'memory', 'all'],
       },
     },
@@ -61,12 +61,12 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'search_knowledge_base',
     name: 'search_knowledge_base',
     displayName: 'Knowledge Base',
-    description: 'Search the project knowledge base for information from uploaded documents',
+    description: 'Search uploaded project documents',
     icon: 'book-open',
     parameters: {
       query: {
         type: 'string',
-        description: 'The search query to find relevant information',
+        description: 'Search query',
         required: true,
       },
     },
@@ -75,13 +75,13 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'read_url',
     name: 'read_url',
     displayName: 'URL Reader',
-    description: 'Fetch and read the content of a web page',
+    description: 'Fetch and read a web page',
     icon: 'link',
     requiresNetwork: true,
     parameters: {
       url: {
         type: 'string',
-        description: 'The URL to fetch and read',
+        description: 'URL to fetch',
         required: true,
       },
     },
@@ -120,29 +120,6 @@ export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
   const enabledTools = AVAILABLE_TOOLS.filter(t => enabledToolIds.includes(t.id));
   if (enabledTools.length === 0) return '';
 
-  const toolList = enabledTools
-    .map(t => `- ${t.name}: ${t.description}`)
-    .join('\n');
-
-  const enabledNames = new Set(enabledTools.map(t => t.name));
-
-  const hints: string[] = [];
-  if (enabledNames.has('web_search')) {
-    hints.push('- The user asks about recent events, real-time data, or current news — use web_search');
-    hints.push('- The user asks for specific facts you cannot reliably answer from training data — use web_search');
-    hints.push('- The user asks you to look up or research a specific entity (company, person, product) — use web_search');
-  }
-  if (enabledNames.has('read_url')) {
-    hints.push('- The user provides a URL — use read_url');
-  }
-  if (enabledNames.has('calculator')) {
-    hints.push('- The user asks for calculations — use calculator');
-  }
-  if (enabledNames.has('get_current_datetime')) {
-    hints.push('- The user asks about the current time or date — use get_current_datetime');
-  }
-
-  const hintsBlock = hints.length > 0 ? `\n\nIMPORTANT: You MUST use the appropriate tool when:\n${hints.join('\n')}\nDo NOT say you cannot help or lack internet access. USE your tools instead.` : '';
-
-  return `\n\nYou have access to the following tools and MUST use them proactively:\n${toolList}${hintsBlock}`;
+  const toolList = enabledTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+  return `\n\nTools available:\n${toolList}\nUse them when relevant.`;
 }
