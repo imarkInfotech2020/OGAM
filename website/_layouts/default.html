@@ -318,6 +318,23 @@
       a.textContent = '#';
       h.appendChild(a);
     });
+    // Accordion toggle for sidebar nav sections
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(item) {
+      var children = item.nextElementSibling;
+      if (!children || !children.classList.contains('nav-children')) return;
+      item.addEventListener('click', function(e) {
+        var isOpen = children.classList.contains('open');
+        if (isOpen) {
+          e.preventDefault();
+          children.classList.remove('open');
+          item.classList.remove('section-open');
+        } else {
+          children.classList.add('open');
+          item.classList.add('section-open');
+        }
+      });
+    });
+
     // Track outbound download clicks
     document.addEventListener('click', function(e) {
       var el = e.target.closest('a');
