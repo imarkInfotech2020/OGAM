@@ -34,5 +34,5 @@ Cloud AI providers have routine access to every query sent to their models. Off 
 - GitHub: https://github.com/alichherawalla/off-grid-mobile
 - GitHub Releases (APK): https://github.com/alichherawalla/off-grid-mobile/releases/latest
 - Slack Community: https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA
-- Docs: https://docs.offgrid.app
+- Docs: https://docs.offgridmobileai.co
 - Author: Mohammed Ali Chherawalla (https://dev.to/alichherawalla)
