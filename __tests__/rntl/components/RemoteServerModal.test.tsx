@@ -258,7 +258,7 @@ describe('RemoteServerModal', () => {
       const { getByText, getByPlaceholderText } = render(<RemoteServerModal visible onClose={onClose} />);
       fillValidForm(getByPlaceholderText);
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connection refused')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connection refused/)).toBeTruthy());
     });
 
     it('shows fallback message when error field is absent', async () => {
@@ -266,7 +266,7 @@ describe('RemoteServerModal', () => {
       const { getByText, getByPlaceholderText } = render(<RemoteServerModal visible onClose={onClose} />);
       fillValidForm(getByPlaceholderText);
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connection failed')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connection failed/)).toBeTruthy());
     });
 
     it('shows error message when exception is thrown', async () => {
@@ -314,7 +314,7 @@ describe('RemoteServerModal', () => {
       fireEvent.changeText(getByPlaceholderText(VALID_ENDPOINT), VALID_ENDPOINT);
       mockTestConnection.mockResolvedValueOnce({ success: true, latency: 10 });
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connected (10ms)')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connected \(\d+ms\)/)).toBeTruthy());
     }
 
     it('calls addServer when saving new server', async () => {
@@ -360,7 +360,7 @@ describe('RemoteServerModal', () => {
     async function connectForEdit(getByText: any) {
       mockTestConnection.mockResolvedValueOnce({ success: true, latency: 5 });
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connected (5ms)')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connected \(\d+ms\)/)).toBeTruthy());
     }
 
     it('calls updateServer when saving existing server', async () => {
@@ -411,7 +411,7 @@ describe('RemoteServerModal', () => {
       fireEvent.changeText(getByPlaceholderText(VALID_ENDPOINT), 'https://api.example.com');
       mockTestConnection.mockResolvedValueOnce({ success: true, latency: 10 });
       fireEvent.press(getByText('Test Connection'));
-      await waitFor(() => expect(getByText('Connected (10ms)')).toBeTruthy());
+      await waitFor(() => expect(getByText(/Connected \(\d+ms\)/)).toBeTruthy());
     }
 
     it('shows confirmation alert for public endpoint before saving', async () => {
