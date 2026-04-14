@@ -197,6 +197,7 @@ interface ModelInfoBadgesProps {
   quantInfo: { quality: string; recommended: boolean } | null;
   quantization: string | undefined;
   isVisionModel: boolean;
+  needsRepair: boolean;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
 }
@@ -207,6 +208,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
   quantInfo,
   quantization,
   isVisionModel,
+  needsRepair,
   isCompatible,
   incompatibleReason,
 }) => {
@@ -247,9 +249,14 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
           <Text style={styles.infoText}>{quantInfo.quality}</Text>
         </View>
       )}
-      {isVisionModel && (
+      {isVisionModel && !needsRepair && (
         <View style={styles.visionBadge}>
           <Text style={styles.visionText}>Vision</Text>
+        </View>
+      )}
+      {isVisionModel && needsRepair && (
+        <View style={styles.warningBadge}>
+          <Text style={styles.warningText}>Needs repair</Text>
         </View>
       )}
       {!isCompatible && (

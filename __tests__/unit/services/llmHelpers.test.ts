@@ -12,6 +12,7 @@ import {
   shouldDisableMmap,
   captureGpuInfo,
   logContextMetadata,
+  initContextWithFallback,
 } from '../../../src/services/llmHelpers';
 import { Platform } from 'react-native';
 
@@ -303,7 +304,7 @@ describe('buildModelParams', () => {
 
   it('uses flashAttn=false settings', () => {
     const params = buildModelParams('/model.gguf', { flashAttn: false });
-    expect((params.baseParams as any).flash_attn).toBe(false);
+    expect((params.baseParams as any).flash_attn_type).toBe('off');
   });
 
   it('uses provided cacheType', () => {
@@ -393,5 +394,61 @@ describe('buildCompletionParams', () => {
     expect(params.top_p).toBe(0.95);
     expect(params.penalty_repeat).toBe(1.1);
     expect(params.stop).toBeDefined();
+  });
+});
+
+describe('initContextWithFallback — HTP device stripping and timeout', () => {
+  const { initLlama } = require('llama.rn');
+  const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
+
+  const baseParams = { model: '/model.gguf', devices: ['HTP0'] };
+
+  it('passes devices to initLlama on the first (GPU/HTP) attempt', async () => {
+    const mockCtx = { gpu: true, release: jest.fn() };
+    mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
+
+    await initContextWithFallback(baseParams, 2048, 99);
+
+    expect(mockedInitLlama).toHaveBeenCalledWith(
+      expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
+    );
+  });
+
+  it('strips devices from params on CPU fallback (attempt 2)', async () => {
+    mockedInitLlama.mockRejectedValueOnce(new Error('HTP init failed'));
+    const mockCtx = { gpu: false, release: jest.fn() };
+    mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
+
+    await initContextWithFallback(baseParams, 2048, 99);
+
+    const cpuCall = mockedInitLlama.mock.calls[1][0] as Record<string, unknown>;
+    expect(cpuCall.devices).toBeUndefined();
+    expect(cpuCall.n_gpu_layers).toBe(0);
+  });
+
+  it('strips devices from params on minimal CPU fallback (attempt 3)', async () => {
+    mockedInitLlama.mockRejectedValueOnce(new Error('HTP init failed'));
+    mockedInitLlama.mockRejectedValueOnce(new Error('CPU init failed'));
+    const mockCtx = { gpu: false, release: jest.fn() };
+    mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
+
+    await initContextWithFallback(baseParams, 8192, 99);
+
+    const minCtxCall = mockedInitLlama.mock.calls[2][0] as Record<string, unknown>;
+    expect(minCtxCall.devices).toBeUndefined();
+    expect(minCtxCall.n_gpu_layers).toBe(0);
+    expect(minCtxCall.n_ctx).toBe(2048);
+  });
+
+  it('logs backend=HTP when devices contains HTP0', async () => {
+    const mockCtx = { gpu: true, release: jest.fn() };
+    mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
+    const logger = require('../../../src/utils/logger').default;
+
+    await initContextWithFallback(baseParams, 2048, 99);
+
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('backend=HTP'),
+    );
   });
 });

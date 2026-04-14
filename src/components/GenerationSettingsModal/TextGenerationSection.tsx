@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -8,7 +8,7 @@ import { createStyles } from './styles';
 import {
   CpuThreadsSlider,
   BatchSizeSlider,
-  GpuAccelerationToggle,
+  BackendSelector,
   FlashAttentionToggle,
   KvCacheTypeToggle,
   ModelLoadingStrategyToggle,
@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS: Record<string, number> = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
+  contextLength: 4096,
 };
 
 const FALLBACK_MAX_CONTEXT = 32768;
@@ -196,7 +196,7 @@ export const TextGenerationSection: React.FC = () => {
           ))}
           <CpuThreadsSlider />
           <BatchSizeSlider />
-          {Platform.OS !== 'ios' && <GpuAccelerationToggle />}
+          <BackendSelector />
           <FlashAttentionToggle />
           <KvCacheTypeToggle />
           <ModelLoadingStrategyToggle />

@@ -314,7 +314,7 @@ describe('appStore', () => {
       expect(settings.temperature).toBe(0.7);
       expect(settings.maxTokens).toBe(1024);
       expect(settings.topP).toBe(0.9);
-      expect(settings.contextLength).toBe(2048);
+      expect(settings.contextLength).toBe(4096);
       expect(settings.imageGenerationMode).toBe('auto');
       // Test env is iOS, so GPU is enabled by default
       expect(settings.enableGpu).toBe(true);
@@ -1242,7 +1242,7 @@ describe('appStore', () => {
     });
 
     it('has correct default nThreads', () => {
-      expect(getAppState().settings.nThreads).toBe(4);
+      expect(getAppState().settings.nThreads).toBe(0);
     });
 
     it('has correct default nBatch', () => {

@@ -1,64 +1,92 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Switch, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType } from '../../types';
+import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
   GPU_LAYERS_MAX,
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
+import { hardwareService } from '../../services/hardware';
 import { createStyles } from './styles';
 
-// ─── GPU Section ──────────────────────────────────────────────────────────────
+// ─── Inference Backend ────────────────────────────────────────────────────────
 
-interface GpuSectionProps {
-  isGpuEnabled: boolean;
-  gpuLayersEffective: number;
-  trackColor: { false: string; true: string };
-  onGpuChange: (value: boolean) => void;
-}
+type BackendOption = { id: InferenceBackend; label: string };
 
-const GpuSection: React.FC<GpuSectionProps> = ({
-  isGpuEnabled,
-  gpuLayersEffective,
-  trackColor,
-  onGpuChange,
-}) => {
+const IOS_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU' },
+  { id: INFERENCE_BACKENDS.METAL, label: 'Metal' },
+];
+
+const ANDROID_BASE_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL' },
+];
+
+const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'HTP' };
+
+const BackendSelectorSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { updateSettings } = useAppStore();
+  const { settings, updateSettings } = useAppStore();
+  const { gpuLayersEffective } = useTextGenerationAdvanced();
+  const [hasNPU, setHasNPU] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      hardwareService.getSoCInfo().then(info => setHasNPU(info.hasNPU));
+    }
+  }, []);
+
+  const backends: BackendOption[] = Platform.OS === 'ios'
+    ? IOS_BACKENDS
+    : hasNPU ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
+
+  const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
+  const current = settings.inferenceBackend ?? defaultBackend;
+  const showLayers = current !== INFERENCE_BACKENDS.CPU;
 
   return (
     <>
       <View style={styles.toggleRow}>
         <View style={styles.toggleInfo}>
-          <Text style={styles.toggleLabel}>GPU Acceleration</Text>
+          <Text style={styles.toggleLabel}>Inference Backend</Text>
           <Text style={styles.toggleDesc}>
-            Offload model layers to GPU. Requires model reload.
+            {current === INFERENCE_BACKENDS.CPU && 'Running on CPU threads only.'}
+            {current === INFERENCE_BACKENDS.OPENCL && 'Offloading layers to GPU via OpenCL.'}
+            {current === INFERENCE_BACKENDS.HTP && 'Offloading layers to Hexagon NPU.'}
+            {current === INFERENCE_BACKENDS.METAL && 'Offloading layers to GPU via Metal.'}
           </Text>
         </View>
-        <Switch
-          testID="gpu-acceleration-switch"
-          value={isGpuEnabled}
-          onValueChange={onGpuChange}
-          trackColor={trackColor}
-          thumbColor={isGpuEnabled ? colors.primary : colors.textMuted}
-        />
+      </View>
+      <View style={styles.strategyButtons}>
+        {backends.map(b => (
+          <Button
+            key={b.id}
+            title={b.label}
+            variant="secondary"
+            size="small"
+            testID={`backend-${b.id}-button`}
+            active={current === b.id}
+            onPress={() => updateSettings({ inferenceBackend: b.id })}
+            style={styles.flex1}
+          />
+        ))}
       </View>
 
-      {isGpuEnabled && (
+      {showLayers && (
         <View style={styles.sliderSection}>
           <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>GPU Layers</Text>
+            <Text style={styles.sliderLabel}>
+              {current === INFERENCE_BACKENDS.HTP ? 'NPU Layers' : 'GPU Layers'}
+            </Text>
             <Text style={styles.sliderValue}>{gpuLayersEffective}</Text>
           </View>
-          <Text style={styles.sliderDesc}>
-            Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices.
-          </Text>
           <Slider
             testID="gpu-layers-slider"
             style={styles.slider}
@@ -133,12 +161,7 @@ const KvCacheSection: React.FC<{ cacheDisabled: boolean }> = ({ cacheDisabled })
           />
         ))}
       </View>
-      {cacheDisabled && (
-        <Text style={styles.warningText}>
-          GPU acceleration on Android requires f16 KV cache.
-        </Text>
-      )}
-      {!cacheDisabled && !isFlashAttnOn && (
+      {!isFlashAttnOn && (
         <Text style={styles.warningText}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
         </Text>
@@ -195,12 +218,7 @@ export const TextGenerationAdvanced: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
-  const {
-    gpuLayersEffective,
-    isGpuEnabled,
-    cacheDisabled,
-    handleGpuToggle,
-  } = useTextGenerationAdvanced();
+  const { cacheDisabled } = useTextGenerationAdvanced();
 
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
 
@@ -282,15 +300,7 @@ export const TextGenerationAdvanced: React.FC = () => {
         />
       </View>
 
-      {Platform.OS !== 'ios' && (
-        <GpuSection
-          isGpuEnabled={isGpuEnabled}
-          gpuLayersEffective={gpuLayersEffective}
-          trackColor={trackColor}
-          onGpuChange={handleGpuToggle}
-        />
-      )}
-
+      <BackendSelectorSection />
       <FlashAttentionSection trackColor={trackColor} />
       <KvCacheSection cacheDisabled={cacheDisabled} />
       <ModelLoadingStrategySection />

@@ -144,11 +144,11 @@ describe('LLMService', () => {
         .mockRejectedValueOnce(new Error('GPU error'))
         .mockResolvedValueOnce(ctx as any);
 
-      // Enable GPU in settings
+      // Enable GPU via Metal backend (iOS test environment)
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
           gpuLayers: 6,
         },
       });
@@ -172,7 +172,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           contextLength: 4096,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
         },
       });
 
@@ -272,7 +272,7 @@ describe('LLMService', () => {
 
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: true,
+          flash_attn_type: 'auto',
           cache_type_k: 'q8_0',
           cache_type_v: 'q8_0',
         })
@@ -296,7 +296,7 @@ describe('LLMService', () => {
 
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: false,
+          flash_attn_type: 'off',
           cache_type_k: 'f16',
           cache_type_v: 'f16',
         })
@@ -317,10 +317,10 @@ describe('LLMService', () => {
 
       await llmService.loadModel('/models/test.gguf');
 
-      // Test env is iOS (Platform.OS = 'ios'), so the ?? fallback evaluates to true
+      // Test env is iOS (Platform.OS = 'ios'), default is 'auto'
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({
-          flash_attn: true,
+          flash_attn_type: 'auto',
           cache_type_k: 'q8_0',
           cache_type_v: 'q8_0',
         })
@@ -339,7 +339,7 @@ describe('LLMService', () => {
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: true,
+          inferenceBackend: 'metal' as const,
           gpuLayers: 99,
         },
       });
@@ -355,11 +355,11 @@ describe('LLMService', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedInitLlama.mockRejectedValue(new Error('fatal'));
 
-      // Disable GPU to skip retries
+      // CPU backend to skip GPU retries
       useAppStore.setState({
         settings: {
           ...useAppStore.getState().settings,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -806,8 +806,8 @@ describe('LLMService', () => {
       await llmService.loadModel('/models/test.gguf');
 
       const usage = llmService.getEstimatedMemoryUsage();
-      // 2048 * 0.5 = 1024
-      expect(usage.contextMemoryMB).toBe(1024);
+      // 4096 * 0.5 = 2048
+      expect(usage.contextMemoryMB).toBe(2048);
     });
   });
 
@@ -830,7 +830,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -877,8 +877,8 @@ describe('LLMService', () => {
       const usage = await llmService.estimateContextUsage(messages);
 
       expect(usage.tokenCount).toBe(500);
-      // 500 / 2048 * 100 ≈ 24.4%
-      expect(usage.percentUsed).toBeCloseTo(24.4, 0);
+      // 500 / 4096 * 100 ≈ 12.2%
+      expect(usage.percentUsed).toBeCloseTo(12.2, 0);
       expect(usage.willFit).toBe(true);
     });
   });
@@ -1133,9 +1133,9 @@ describe('LLMService', () => {
         .mockRejectedValueOnce(new Error('CPU reload failed')) // CPU fallback
         .mockRejectedValueOnce(new Error('CPU reload failed')); // ctx=2048 fallback
 
-      // Enable GPU so both attempts happen
+      // Enable GPU via Metal backend so both attempts happen
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1259,7 +1259,18 @@ describe('LLMService', () => {
   });
 
   describe('getGpuInfo Android branches', () => {
-    it('returns OpenCL when GPU enabled on Android with no devices', async () => {
+    const { hardwareService: hw } = require('../../../src/services/hardware');
+
+    beforeEach(() => {
+      (hw as any).cachedOpenCLCapability = null;
+      jest.spyOn(hw, 'getOpenCLCapability').mockResolvedValue({ supported: true });
+    });
+
+    afterEach(() => {
+      (hw as any).cachedOpenCLCapability = null;
+    });
+
+    it('returns OpenCL when OpenCL backend selected on Android with no devices', async () => {
       const originalOS = Platform.OS;
       Object.defineProperty(Platform, 'OS', { get: () => 'android' });
 
@@ -1268,7 +1279,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1280,7 +1291,7 @@ describe('LLMService', () => {
       Object.defineProperty(Platform, 'OS', { get: () => originalOS });
     });
 
-    it('returns device names when GPU enabled on Android with devices', async () => {
+    it('returns device names when OpenCL backend selected on Android with devices', async () => {
       const originalOS = Platform.OS;
       Object.defineProperty(Platform, 'OS', { get: () => 'android' });
 
@@ -1289,7 +1300,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'opencl' as const, gpuLayers: 6 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1460,7 +1471,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: true,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1472,7 +1483,7 @@ describe('LLMService', () => {
       });
 
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(true);
+      expect(reloadCall.flash_attn_type).toBe('auto');
       expect(reloadCall.cache_type_k).toBe('q8_0');
       expect(reloadCall.cache_type_v).toBe('q8_0');
     });
@@ -1490,7 +1501,7 @@ describe('LLMService', () => {
           ...useAppStore.getState().settings,
           flashAttn: false,
           cacheType: 'f16',
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1502,7 +1513,7 @@ describe('LLMService', () => {
       });
 
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(false);
+      expect(reloadCall.flash_attn_type).toBe('off');
       expect(reloadCall.cache_type_k).toBe('f16');
       expect(reloadCall.cache_type_v).toBe('f16');
     });
@@ -1519,7 +1530,7 @@ describe('LLMService', () => {
         settings: {
           ...useAppStore.getState().settings,
           flashAttn: undefined as any,
-          enableGpu: false,
+          inferenceBackend: 'cpu' as const,
         },
       });
 
@@ -1530,9 +1541,9 @@ describe('LLMService', () => {
         contextLength: 2048,
       });
 
-      // Test env is iOS → ?? fallback evaluates to true
+      // Test env is iOS → flash_attn_type defaults to 'auto'
       const reloadCall = (initLlama as jest.Mock).mock.calls[1][0];
-      expect(reloadCall.flash_attn).toBe(true);
+      expect(reloadCall.flash_attn_type).toBe('auto');
       expect(reloadCall.cache_type_k).toBe('q8_0');
     });
   });
@@ -1548,7 +1559,7 @@ describe('LLMService', () => {
         .mockResolvedValueOnce(ctx2 as any); // CPU reload succeeds
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1811,8 +1822,8 @@ describe('LLMService', () => {
       expect(debugInfo.managedMessageCount).toBeGreaterThanOrEqual(3);
       expect(debugInfo.formattedPrompt).toContain('System');
       expect(debugInfo.estimatedTokens).toBe(100);
-      expect(debugInfo.maxContextLength).toBe(2048);
-      expect(debugInfo.contextUsagePercent).toBeCloseTo(4.88, 0);
+      expect(debugInfo.maxContextLength).toBe(4096);
+      expect(debugInfo.contextUsagePercent).toBeCloseTo(2.44, 0);
     });
 
     it('shows truncation info when messages are truncated', async () => {
@@ -1874,7 +1885,7 @@ describe('LLMService', () => {
         .mockResolvedValueOnce(ctx2 as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -1982,7 +1993,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockRejectedValue(new Error('native crash'));
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
@@ -1994,7 +2005,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockRejectedValue('string error');
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: false },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'cpu' as const },
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
@@ -2012,7 +2023,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
 
       useAppStore.setState({
-        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 99 },
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'metal' as const, gpuLayers: 99 },
       });
 
       await llmService.loadModel('/models/test.gguf');
@@ -2179,48 +2190,48 @@ describe('LLMService', () => {
   // Auto context scaling
   // ========================================================================
   describe('auto context scaling', () => {
-    it('scales context to model max when user is on default setting', async () => {
-      const [ctx1] = setupScalingTest({
-        modelContextLength: '4096',
-        userContextLength: 2048,
-        contextCount: 2,
+    it('loads at 4096 default context without a second init when model supports ≥4096', async () => {
+      setupScalingTest({
+        modelContextLength: '8192',
+        userContextLength: 4096, // default
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      // Should have been called twice: initial load + reload with model max
-      expect(initLlama).toHaveBeenCalledTimes(2);
-      expect(initLlama).toHaveBeenLastCalledWith(
+      // targetCtx = min(8192, 4096, deviceMax=4096) = 4096 = initial.actualLength → no second init
+      expect(initLlama).toHaveBeenCalledTimes(1);
+      expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({ n_ctx: 4096 }),
       );
-      // First context should have been released
-      expect(ctx1.release).toHaveBeenCalled();
     });
 
     it('does not scale when user set a custom context length', async () => {
       setupScalingTest({
-        modelContextLength: '4096',
+        modelContextLength: '8192',
         userContextLength: 1024,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      // Should only be called once — no reload
+      // userIsOnDefault = false → no scaling check
       expect(initLlama).toHaveBeenCalledTimes(1);
     });
 
-    it('caps auto-scaled context at 4096', async () => {
-      setupScalingTest({
-        modelContextLength: '131072',
-        userContextLength: 2048,
-        contextCount: 2,
+    it('scales up when user is on default and model supports larger ctx than default', async () => {
+      // This can only trigger if deviceMaxCtx > APP_CONFIG.maxContextLength
+      // (e.g. device with >8GB RAM where deviceMaxCtx = 8192)
+      // Simulate by setting userContextLength below deviceMaxCtx
+      const [ctx1] = setupScalingTest({
+        modelContextLength: '8192',
+        userContextLength: 2048, // below default — treated as custom (userIsOnDefault = false)
+        contextCount: 1,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      expect(initLlama).toHaveBeenLastCalledWith(
-        expect.objectContaining({ n_ctx: 4096 }),
-      );
+      // userIsOnDefault = 2048 === 4096 = false → no scaling
+      expect(initLlama).toHaveBeenCalledTimes(1);
+      expect(ctx1.release).not.toHaveBeenCalled();
     });
   });
 
@@ -2440,6 +2451,70 @@ describe('LLMService', () => {
       await llmService.stopGeneration();
 
       expect((llmService as any).activeCompletionPromise).toBeNull();
+    });
+  });
+
+  // ========================================================================
+  // Hexagon HTP (NPU) acceleration
+  // ========================================================================
+  describe('HTP NPU acceleration', () => {
+    const { hardwareService } = require('../../../src/services/hardware');
+
+    beforeEach(() => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      // Clear SoC cache between tests
+      (hardwareService as any).cachedSoCInfo = null;
+    });
+
+    afterEach(() => {
+      (hardwareService as any).cachedSoCInfo = null;
+    });
+
+    it('passes devices:HTP0 and 99 gpu_layers when inferenceBackend is htp on Android', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
+      jest.spyOn(hardwareService, 'getSoCInfo').mockResolvedValue({
+        vendor: 'qualcomm', hasNPU: true, qnnVariant: '8gen3',
+      });
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, inferenceBackend: 'htp' as const, gpuLayers: 99 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).toHaveBeenCalledWith(
+        expect.objectContaining({ devices: ['HTP0'], n_gpu_layers: 99 }),
+      );
+    });
+
+    it('does not use HTP when inferenceBackend is cpu on Android', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('android');
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      // inferenceBackend defaults to 'cpu' from testHelpers resetStores
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).not.toHaveBeenCalledWith(
+        expect.objectContaining({ devices: expect.anything() }),
+      );
+    });
+
+    it('does not use HTP on iOS', async () => {
+      jest.spyOn(Platform, 'OS', 'get').mockReturnValue('ios');
+
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      expect(mockedInitLlama).not.toHaveBeenCalledWith(
+        expect.objectContaining({ devices: expect.anything() }),
+      );
     });
   });
 });

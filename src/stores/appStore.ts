@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, GeneratedImage, PersistedDownloadInfo } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage, PersistedDownloadInfo } from '../types';
 
 type DownloadProgressInfo = { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string };
 
@@ -22,6 +22,7 @@ type AppSettings = {
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
+  inferenceBackend: InferenceBackend;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -107,8 +108,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
-  nThreads: 4,
+  contextLength: 4096,
+  nThreads: 0,
   nBatch: 512,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
@@ -122,6 +123,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
+  inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
   gpuLayers: 99,
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
@@ -148,6 +150,13 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (persistedState?.settings && !persistedState.settings.cacheType) {
     merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };
   }
+  if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
+    merged.settings = {
+      ...merged.settings,
+      inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
+    };
+  }
+
   if (typeof merged.imageModelDownloadId === 'number') {
     const ids: Record<string, number> = {};
     if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
@@ -161,6 +170,11 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
+  // nThreads: 4 was the old hard-coded default (before the 0 = auto sentinel).
+  // Migrate it to 0 so users get hardware-appropriate thread counts on next load.
+  if (merged.settings?.nThreads === 4) {
+    merged.settings = { ...merged.settings, nThreads: 0 };
+  }
   return merged as AppState;
 }
 

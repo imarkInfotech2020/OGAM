@@ -283,6 +283,13 @@ export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type ModelLoadingStrategy = 'performance' | 'memory';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
+export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
+export const INFERENCE_BACKENDS = {
+  CPU: 'cpu' as InferenceBackend,
+  OPENCL: 'opencl' as InferenceBackend,
+  HTP: 'htp' as InferenceBackend,
+  METAL: 'metal' as InferenceBackend,
+} as const;
 /** 'auto' = smart detect, 'force' = always generate image, 'disabled' = never */
 export type ImageModeState = 'auto' | 'force' | 'disabled';
 

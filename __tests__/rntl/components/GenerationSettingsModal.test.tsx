@@ -80,10 +80,11 @@ const defaultSettings = {
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
-  contextLength: 2048,
-  nThreads: 4,
+  contextLength: 4096,
+  nThreads: 0,
   nBatch: 512,
   enableGpu: false,
+  inferenceBackend: 'cpu' as const,
   gpuLayers: 99,
   flashAttn: false,
   modelLoadingStrategy: 'memory',
@@ -237,8 +238,8 @@ describe('GenerationSettingsModal', () => {
       maxTokens: 1024,
       topP: 0.9,
       repeatPenalty: 1.1,
-      contextLength: 2048,
-      nThreads: 4,
+      contextLength: 4096,
+      nThreads: 0,
       nBatch: 512,
     });
   });
@@ -608,7 +609,7 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('1.0K')).toBeTruthy(); // maxTokens: 1024
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
-    expect(getByText('2K')).toBeTruthy(); // contextLength: 2048
+    expect(getByText('4K')).toBeTruthy(); // contextLength: 4096
   });
 
   it('shows description for text settings', () => {
@@ -968,8 +969,8 @@ describe('GenerationSettingsModal', () => {
         Object.defineProperty(Platform, 'OS', { get: () => originalOS, configurable: true });
       });
 
-      it('renders GPU layers slider with gpuLayersEffective when GPU enabled', () => {
-        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 8, flashAttn: false };
+      it('renders GPU layers slider with gpuLayersEffective when backend is OpenCL', () => {
+        mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'opencl' as const, gpuLayers: 8, flashAttn: false };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));
@@ -978,7 +979,7 @@ describe('GenerationSettingsModal', () => {
 
       it('shows GPU layers at full value when flash attention is On (no clamping)', () => {
         // Flash attention no longer caps GPU layers — gpuLayersMax is always 99
-        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 8, flashAttn: true };
+        mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'opencl' as const, gpuLayers: 8, flashAttn: true };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));
@@ -989,7 +990,7 @@ describe('GenerationSettingsModal', () => {
       it('uses default gpuLayers value of 1 when gpuLayers is undefined (covers ?? fallback)', () => {
         mockStoreValues.settings = {
           ...defaultSettings,
-          enableGpu: true,
+          inferenceBackend: 'opencl' as const,
           gpuLayers: undefined as any,
           flashAttn: false,
         };
@@ -1045,33 +1046,32 @@ describe('GenerationSettingsModal', () => {
         );
       });
 
-      it('calls updateSettings with enableGpu: false when GPU Off button pressed', () => {
-        mockStoreValues.settings = { ...defaultSettings, enableGpu: true };
+      it('calls updateSettings with inferenceBackend: cpu when CPU button pressed', () => {
+        mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'opencl' as const };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));
         mockUpdateSettings.mockClear();
 
-        fireEvent.press(getByTestId('gpu-off-button'));
+        fireEvent.press(getByTestId('backend-cpu-button'));
 
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: false });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'cpu' });
       });
 
-      it('calls updateSettings with enableGpu: true and cacheType: f16 when GPU On button pressed on Android with quantized cache', () => {
-        mockStoreValues.settings = { ...defaultSettings, enableGpu: false };
+      it('calls updateSettings with inferenceBackend: opencl when OpenCL button pressed on Android', () => {
+        mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'cpu' as const };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));
         mockUpdateSettings.mockClear();
 
-        fireEvent.press(getByTestId('gpu-on-button'));
+        fireEvent.press(getByTestId('backend-opencl-button'));
 
-        // On Android, enabling GPU with quantized cache (no cacheType defaults to q8_0) auto-switches to f16
-        expect(mockUpdateSettings).toHaveBeenCalledWith({ enableGpu: true, cacheType: 'f16' });
+        expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl' });
       });
 
       it('calls updateSettings with gpuLayers value from GPU layers slider', () => {
-        mockStoreValues.settings = { ...defaultSettings, enableGpu: true, gpuLayers: 6, flashAttn: false };
+        mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'opencl' as const, gpuLayers: 6, flashAttn: false };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));

@@ -431,8 +431,8 @@ describe('DebugSheet', () => {
       const { getByText } = render(
         <DebugSheet {...defaultProps} debugInfo={null} />
       );
-      // Default is 2048 from APP_CONFIG
-      expect(getByText('2048')).toBeTruthy();
+      // Default is 4096 from APP_CONFIG
+      expect(getByText('4096')).toBeTruthy();
     });
 
     it('uses 0.0% as default usage', () => {

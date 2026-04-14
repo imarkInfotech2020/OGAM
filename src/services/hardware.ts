@@ -1,5 +1,6 @@
 import { Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import RNFS from 'react-native-fs';
 // Access NativeModules.LocalDreamModule dynamically (not destructured)
 // so it can be mocked in tests after module import.
 const getLocalDreamModule = () => NativeModules.LocalDreamModule;
@@ -25,6 +26,7 @@ class HardwareService {
   private cachedDeviceInfo: DeviceInfoType | null = null;
   private cachedSoCInfo: SoCInfo | null = null;
   private cachedImageRecommendation: ImageModelRecommendation | null = null;
+  private cachedOpenCLCapability: { supported: boolean; reason?: string } | null = null;
   async getDeviceInfo(): Promise<DeviceInfoType> {
     if (this.cachedDeviceInfo) {
       return this.cachedDeviceInfo;
@@ -319,6 +321,30 @@ class HardwareService {
     if (ramGB < 6) return 'medium';
     if (ramGB < 8) return 'high';
     return 'flagship';
+  }
+  async getCpuCoreCount(): Promise<number> {
+    if (Platform.OS !== 'android') return 4;
+    try {
+      const cpuinfo = await RNFS.readFile('/proc/cpuinfo', 'utf8');
+      const matches = cpuinfo.match(/^processor\s*:/gm);
+      return matches ? matches.length : 4;
+    } catch { return 4; }
+  }
+  async getRecommendedThreadCount(): Promise<number> {
+    const cores = await this.getCpuCoreCount();
+    return cores <= 4 ? cores : Math.floor(cores * 0.8);
+  }
+  async getOpenCLCapability(): Promise<{ supported: boolean; reason?: string }> {
+    if (this.cachedOpenCLCapability) return this.cachedOpenCLCapability;
+    if (Platform.OS !== 'android') return { supported: false, reason: 'not_android' };
+    try {
+      const hardware = (await DeviceInfo.getHardware()).toLowerCase();
+      // Support Qualcomm Adreno (qcom) and ARM Mali GPUs.
+      // Avoid 'arm' alone — it matches the CPU architecture string (arm64-v8a), not the GPU vendor.
+      const hasCompatibleGpu = hardware.includes('qcom') || hardware.includes('mali');
+      if (!hasCompatibleGpu) return (this.cachedOpenCLCapability = { supported: false, reason: 'no_compatible_gpu' });
+      return (this.cachedOpenCLCapability = { supported: true });
+    } catch { return (this.cachedOpenCLCapability = { supported: false, reason: 'detection_failed' }); }
   }
 }
 export const hardwareService = new HardwareService();

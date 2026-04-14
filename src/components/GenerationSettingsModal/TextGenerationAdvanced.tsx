@@ -1,63 +1,89 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType } from '../../types';
+import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
   GPU_LAYERS_MAX,
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
+import { hardwareService } from '../../services/hardware';
 import { createStyles } from './styles';
 
-// ─── GPU Acceleration ─────────────────────────────────────────────────────────
+const isAndroid = Platform.OS === 'android';
 
-export const GpuAccelerationToggle: React.FC = () => {
+// ─── Inference Backend ────────────────────────────────────────────────────────
+
+type BackendOption = { id: InferenceBackend; label: string; desc: string };
+
+const IOS_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
+  { id: INFERENCE_BACKENDS.METAL, label: 'Metal', desc: 'Offload layers to GPU via Metal. Faster for larger models. Requires model reload.' },
+];
+
+const ANDROID_BASE_BACKENDS: BackendOption[] = [
+  { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
+];
+
+const HTP_BACKEND: BackendOption = {
+  id: INFERENCE_BACKENDS.HTP, label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
+};
+
+export const BackendSelector: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
-  const { gpuLayersEffective, handleGpuToggle } = useTextGenerationAdvanced();
+  const { gpuLayersEffective } = useTextGenerationAdvanced();
+  const [hasNPU, setHasNPU] = useState(false);
+
+  useEffect(() => {
+    if (isAndroid) {
+      hardwareService.getSoCInfo().then(info => setHasNPU(info.hasNPU));
+    }
+  }, []);
+
+  const backends: BackendOption[] = Platform.OS === 'ios'
+    ? IOS_BACKENDS
+    : hasNPU ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
+
+  const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
+  const current = settings.inferenceBackend ?? defaultBackend;
+  const showLayers = current !== INFERENCE_BACKENDS.CPU;
+  const layersLabel = current === INFERENCE_BACKENDS.HTP ? 'NPU Layers' : current === INFERENCE_BACKENDS.METAL ? 'GPU Layers (Metal)' : 'GPU Layers (OpenCL)';
 
   return (
     <View style={styles.modeToggleContainer}>
       <View style={styles.modeToggleInfo}>
-        <Text style={styles.modeToggleLabel}>GPU Acceleration</Text>
+        <Text style={styles.modeToggleLabel}>Inference Backend</Text>
         <Text style={styles.modeToggleDesc}>
-          Offload inference to GPU when available. Faster for large models, may add overhead for small ones. Requires model reload.
+          {backends.find(b => b.id === current)?.desc ?? ''}
         </Text>
       </View>
       <View style={styles.modeToggleButtons}>
-        <TouchableOpacity
-          testID="gpu-off-button"
-          style={[styles.modeButton, !settings.enableGpu && styles.modeButtonActive]}
-          onPress={() => handleGpuToggle(false)}
-        >
-          <Text style={[styles.modeButtonText, !settings.enableGpu && styles.modeButtonTextActive]}>
-            Off
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          testID="gpu-on-button"
-          style={[styles.modeButton, settings.enableGpu && styles.modeButtonActive]}
-          onPress={() => handleGpuToggle(true)}
-        >
-          <Text style={[styles.modeButtonText, settings.enableGpu && styles.modeButtonTextActive]}>
-            On
-          </Text>
-        </TouchableOpacity>
+        {backends.map(b => (
+          <TouchableOpacity
+            key={b.id}
+            testID={`backend-${b.id}-button`}
+            style={[styles.modeButton, current === b.id && styles.modeButtonActive]}
+            onPress={() => updateSettings({ inferenceBackend: b.id })}
+          >
+            <Text style={[styles.modeButtonText, current === b.id && styles.modeButtonTextActive]}>
+              {b.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {settings.enableGpu && (
+      {showLayers && (
         <View style={styles.gpuLayersInline}>
           <View style={styles.settingHeader}>
-            <Text style={styles.settingLabel}>GPU Layers</Text>
+            <Text style={styles.settingLabel}>{layersLabel}</Text>
             <Text style={styles.settingValue}>{gpuLayersEffective}</Text>
           </View>
-          <Text style={styles.settingDescription}>
-            Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
-          </Text>
           <Slider
             testID="gpu-layers-slider"
             style={styles.slider}
@@ -142,12 +168,7 @@ export const KvCacheTypeToggle: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
-      {cacheDisabled && (
-        <Text style={styles.settingWarning}>
-          GPU acceleration on Android requires f16 KV cache.
-        </Text>
-      )}
-      {!cacheDisabled && !isFlashAttnOn && (
+      {!isFlashAttnOn && (
         <Text style={styles.settingWarning}>
           Quantized cache (q8_0/q4_0) will auto-enable flash attention.
         </Text>

@@ -39,6 +39,7 @@ jest.mock('../../../src/services/activeModelService/index', () => ({
 }));
 jest.mock('../../../src/services/intentClassifier', () => ({
   intentClassifier: { classifyIntent: jest.fn() },
+  classifyToolsNeeded: jest.fn(() => ['get_current_datetime', 'web_search', 'read_url', 'search_knowledge_base']),
 }));
 jest.mock('../../../src/services/generationService', () => ({
   generationService: {
@@ -529,7 +530,22 @@ describe('startGenerationFn', () => {
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
-  it('uses tool loop for all messages when tools are enabled', async () => {
+  it('uses tool loop when heuristic matches an enabled tool', async () => {
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
+    });
+
+    // classifyToolsNeeded mock returns get_current_datetime, so it survives the filter
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
+
+    expect(mockGenerateWithTools).toHaveBeenCalled();
+    expect(mockGenerateResponse).not.toHaveBeenCalled();
+  });
+
+  it('falls back to pure text path when heuristic matches no enabled tools', async () => {
+    const { classifyToolsNeeded: mockClassifyToolsNeeded } = require('../../../src/services/intentClassifier');
+    (mockClassifyToolsNeeded as jest.Mock).mockReturnValueOnce([]);
     (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
     const deps = makeGenerationDeps({
       settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
@@ -537,9 +553,9 @@ describe('startGenerationFn', () => {
 
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
 
-    // Tools are always passed when enabled — no heuristic gate
-    expect(mockGenerateWithTools).toHaveBeenCalled();
-    expect(mockGenerateResponse).not.toHaveBeenCalled();
+    // No tools matched → generateResponse (pure text), not generateWithTools
+    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
   });
 
   it('uses the tool loop when the message clearly needs a tool', async () => {

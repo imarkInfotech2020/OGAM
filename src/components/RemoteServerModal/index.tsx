@@ -4,7 +4,7 @@
  * Modal for adding and editing remote LLM server configurations.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { AppSheet } from '../AppSheet';
 import { CustomAlert } from '../CustomAlert';
@@ -65,9 +66,12 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
 
+  const [showApiKey, setShowApiKey] = useState(false);
+
   const {
     name, setName,
     endpoint, setEndpoint,
+    apiKey, setApiKey,
     notes, setNotes,
     errors,
     isTesting,
@@ -120,7 +124,29 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
           </View>
         )}
         <Text style={styles.helperText}>
-          Enter the base URL of your LLM server (Ollama, LM Studio, etc.)
+          {endpoint.trim()
+            ? `Will connect to: ${endpoint.trim().replace(/\/+$/, '')}/v1/models`
+            : 'Enter the base URL — /v1/models will be appended automatically'}
+        </Text>
+
+        <Text style={styles.label}>API Key (Optional)</Text>
+        <View style={styles.apiKeyContainer}>
+          <TextInput
+            style={[styles.input, styles.apiKeyInput]}
+            placeholder="sk-..."
+            placeholderTextColor={theme.colors.textMuted}
+            value={apiKey}
+            onChangeText={setApiKey}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry={!showApiKey}
+          />
+          <TouchableOpacity style={styles.apiKeyToggle} onPress={() => setShowApiKey(v => !v)}>
+            <Icon name={showApiKey ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.helperText}>
+          Required for cloud APIs (Groq, OpenAI, OpenRouter, etc.)
         </Text>
 
         <Text style={styles.label}>Notes (Optional)</Text>
