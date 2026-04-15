@@ -77,6 +77,10 @@ Essays on where personal AI is going, how it should work, and why it matters.
     <div class="guide-card-title">The Personal AI OS for Knowledge Workers</div>
     <div class="guide-card-desc">Email triage, meeting prep, deep work protection, status updates. What reclaiming 2+ hours a day actually looks like.</div>
   </a>
+  <a href="{{ '/writing/the-small-things' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">It's Not About Productivity. It's About the 35 Tabs.</div>
+    <div class="guide-card-desc">Hiring a secretary doesn't 5x your business. It just means life is easier. We spend 90% of our time on digital devices and almost none of that time is actually easy.</div>
+  </a>
 </div>
 
 ---
