@@ -10,7 +10,7 @@ description: For two centuries, having a personal secretary was the defining adv
 
 For most of human history, if you wanted to get things done at scale, you needed people around you to handle the parts that didn't require your direct judgment.
 
-You needed someone to manage your correspondence. To prepare you before important meetings. To track your commitments and remind you of what was outstanding. To handle the administrative surface area of a productive life — the triage, the follow-up, the scheduling, the note-taking — so that your attention could go where it was most valuable.
+You needed someone to manage your correspondence. To prepare you before important meetings. To track your commitments and remind you of what was outstanding. To handle the administrative surface area of a productive life -- the triage, the follow-up, the scheduling, the note-taking -- so that your attention could go where it was most valuable.
 
 This role has existed for as long as there have been powerful people. It has had different names across different eras. But its function has been constant: a private intelligence layer, available to you, that handles everything except the decisions only you can make.
 
@@ -20,7 +20,7 @@ For two hundred years, that intelligence layer came in human form. And for two h
 
 ## The era of the private secretary
 
-Before the 20th century, a private secretary was the essential tool of anyone with significant responsibilities — a statesman, a business magnate, a senior military officer. They maintained correspondence, prepared briefings, tracked obligations, drafted communications, and organised the flow of information so that the principal could focus on the work that actually required their capabilities.
+Before the 20th century, a private secretary was the essential tool of anyone with significant responsibilities -- a statesman, a business magnate, a senior military officer. They maintained correspondence, prepared briefings, tracked obligations, drafted communications, and organised the flow of information so that the principal could focus on the work that actually required their capabilities.
 
 This was not a luxury. It was infrastructure. The people who operated at the highest levels of consequence understood that their most scarce resource was focused attention, and they built systems to protect it.
 
@@ -30,7 +30,7 @@ Access to that system required employing a person full-time. It was expensive, p
 
 ## The corporate era and the EA
 
-The 20th century industrialised the secretary function. As organisations scaled, the personal secretary became the executive assistant. Large organisations employed entire administrative departments. Access expanded — but only within the corporate hierarchy.
+The 20th century industrialised the secretary function. As organisations scaled, the personal secretary became the executive assistant. Large organisations employed entire administrative departments. Access expanded -- but only within the corporate hierarchy.
 
 If you were a senior executive, you had an assistant. If you were a manager, you shared one. If you were an individual contributor, you had none. The intelligence layer was distributed according to organisational status.
 
@@ -42,7 +42,7 @@ This solved the scaling problem for corporations but left the fundamental access
 
 The last two decades introduced a new model: the virtual assistant. Remote workers who could provide administrative support across time zones, at lower cost than hiring locally.
 
-The virtual assistant model genuinely expanded access. For the first time, individuals outside large organisations — entrepreneurs, independent professionals, small business owners — could afford a version of the intelligence layer that had historically been reserved for executives.
+The virtual assistant model genuinely expanded access. For the first time, individuals outside large organisations -- entrepreneurs, independent professionals, small business owners -- could afford a version of the intelligence layer that had historically been reserved for executives.
 
 But the model had hard limits. A human VA costs hundreds to thousands of dollars a month. They work business hours. They need onboarding. They can't be in the middle of a task and instantly available for another. And most critically: they require you to share the full context of your work and life with another person, in ongoing detail.
 
@@ -54,7 +54,7 @@ Access expanded. The inequality remained.
 
 A Personal AI OS changes the equation permanently.
 
-The tasks that defined the secretary, the executive assistant, and the virtual assistant — triage, preparation, drafting, tracking, retrieval — are exactly the tasks that a system with your full context can handle automatically.
+The tasks that defined the secretary, the executive assistant, and the virtual assistant -- triage, preparation, drafting, tracking, retrieval -- are exactly the tasks that a system with your full context can handle automatically.
 
 It knows which messages require a response and when. It prepares you for every meeting with the relevant history, open items, and context from your recent communications. It drafts the follow-up after a call using your tone and the specifics of what was discussed. It surfaces the document you need before you know you need it. It notices that you've over-committed next week and that something will have to give.
 
@@ -68,11 +68,11 @@ The intelligence layer that was reserved for the powerful for two centuries is n
 
 The productivity gap between people with strong administrative support and those without is not a trivial efficiency difference. It is a compounding structural advantage.
 
-The person with a great EA arrives at every meeting prepared. They never drop a commitment. They respond to important things quickly and let the rest wait appropriately. They protect their focused time. They don't spend cognitive resources on the administrative surface area of their work — they spend it on the work itself.
+The person with a great EA arrives at every meeting prepared. They never drop a commitment. They respond to important things quickly and let the rest wait appropriately. They protect their focused time. They don't spend cognitive resources on the administrative surface area of their work -- they spend it on the work itself.
 
-Over time, that difference compounds. Better prepared means more effective. More effective means more trusted. More trusted means more responsibility. The administrative support doesn't just save time — it changes outcomes.
+Over time, that difference compounds. Better prepared means more effective. More effective means more trusted. More trusted means more responsibility. The administrative support doesn't just save time -- it changes outcomes.
 
-For two hundred years, that compounding advantage accrued only to people who could afford to employ it. The Personal AI OS breaks that exclusivity — not by making the rich secretary available to everyone, but by making the function available on hardware that 4 billion people already own.
+For two hundred years, that compounding advantage accrued only to people who could afford to employ it. The Personal AI OS breaks that exclusivity -- not by making the rich secretary available to everyone, but by making the function available on hardware that 4 billion people already own.
 
 That's a bigger change than it looks.
 
