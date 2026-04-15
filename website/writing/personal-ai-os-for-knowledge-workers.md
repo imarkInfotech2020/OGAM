@@ -18,7 +18,7 @@ A Personal AI OS that runs locally, with access to your full context, is the fir
 
 ## Email triage
 
-The average knowledge worker receives 120 emails per day and spends over two hours processing them. The vast majority of that time is spent on triage - reading enough of each email to decide whether it needs a response, when, and what kind.
+The average knowledge worker spends over two hours a day on email. The vast majority of that time is triage - reading enough of each message to decide whether it needs a response, when, and what kind.
 
 A Personal AI OS with access to your email history and your patterns can do this triage automatically.
 

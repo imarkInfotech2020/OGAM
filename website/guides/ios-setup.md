@@ -33,7 +33,7 @@ The app itself is under 50MB. Models are downloaded separately inside the app.
 
 1. Open Off Grid
 2. Tap **Models** in the tab bar
-3. Select a model - if you're starting out, pick **Phi-3 Mini** (~2GB)
+3. Select a model - if you're starting out, pick **Qwen 3.5 2B** (~1.5GB)
 4. Tap **Download**
 
 The download goes to your device. This is the only step that requires internet.

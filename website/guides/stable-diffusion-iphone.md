@@ -89,5 +89,4 @@ You'll see a real-time preview update as the model denoises the image step by st
 ## Related guides
 
 - [How to Run Stable Diffusion on Your Android Phone]({{ '/guides/stable-diffusion-android' | relative_url }})
-- [How to Generate AI Images Locally on Your iPhone in 2026]({{ '/guides/generate-ai-images-iphone' | relative_url }})
 - [How to Run LLMs Locally on Your iPhone in 2026]({{ '/guides/run-llms-locally-iphone' | relative_url }})

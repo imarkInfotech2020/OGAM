@@ -48,7 +48,7 @@ In the 1970s, calculators were expensive enough that access to one was a genuine
 
 AI capability is following the same arc. The models are getting smaller and more capable at the same time. The hardware to run them is becoming standard on every new device. The cost of running a capable AI locally is approaching zero.
 
-The subscription model tries to maintain a paid gate on a tool whose cost structure no longer justifies it. It's the equivalent of charging a monthly fee for a calculator in 2024.
+The cloud AI subscription model tries to maintain a paid gate on compute that you increasingly own yourself. You are paying a monthly fee not for the intelligence - the open-weight models are free - but to rent access to someone else's hardware to run it on. As local hardware catches up, that rent becomes harder to justify.
 
 ## The open source alternative
 
