@@ -1,8 +1,8 @@
 ---
 layout: default
 title: Ethos
-parent: Mission
-nav_order: 1
+nav_order: 3
+has_children: true
 description: Why Off Grid exists. Intelligence should live on the devices you already own - private by architecture, not by policy.
 ---
 

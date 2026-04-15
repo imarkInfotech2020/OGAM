@@ -1,8 +1,8 @@
 ---
 layout: default
 title: Vision
-parent: Mission
-nav_order: 2
+parent: Ethos
+nav_order: 1
 description: What the world looks like when intelligence is ambient, personal, and private. One intelligence layer across all your devices — always on, always yours, never leaving your hands.
 ---
 
