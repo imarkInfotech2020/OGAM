@@ -89,6 +89,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
       visible={visible}
       onClose={onClose}
       title={server ? 'Edit Server' : 'Add Remote Server'}
+      closeLabel="Cancel"
       snapPoints={['80%']}
       enableDynamicSizing
     >
@@ -161,6 +162,11 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         />
 
         <TestResultSection testResult={testResult} discoveredModels={discoveredModels} styles={styles} />
+        {!testResult?.success && (
+          <Text style={styles.helperText}>
+            Test connection first to enable {server ? 'Update Server' : 'Add Server'}.
+          </Text>
+        )}
 
         <View style={styles.buttonRow}>
           <TouchableOpacity
