@@ -150,17 +150,19 @@
           {% if page.parent == p.title %}{% assign in_section = true %}{% endif %}
 
           {% if p.has_children %}
-            <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}{% if in_section %} section-open{% endif %}">
-              {{ p.title }}
-              <span class="nav-toggle-icon" aria-hidden="true">
-                <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            {% assign section_open = false %}
+            {% if in_section or is_current %}{% assign section_open = true %}{% endif %}
+            <div class="nav-item-wrap">
+              <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}">{{ p.title }}</a>
+              <button class="nav-toggle{% if section_open %} open{% endif %}" aria-label="Toggle {{ p.title }} section" aria-expanded="{% if section_open %}true{% else %}false{% endif %}">
+                <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                   <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-              </span>
-            </a>
+              </button>
+            </div>
             {% assign children = site.pages | where: "parent", p.title | sort: "nav_order" %}
             {% if children.size > 0 %}
-              <div class="nav-children{% if in_section or is_current %} open{% endif %}">
+              <div class="nav-children{% if section_open %} open{% endif %}">
                 {% for child in children %}
                   {% assign child_active = false %}
                   {% if page.url == child.url %}{% assign child_active = true %}{% endif %}
@@ -329,23 +331,22 @@
       h.appendChild(a);
     });
     // Accordion toggle for sidebar nav sections
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(item) {
-      var children = item.nextElementSibling;
+    document.querySelectorAll('.sidebar-nav .nav-toggle').forEach(function(btn) {
+      var wrap = btn.closest('.nav-item-wrap');
+      var children = wrap && wrap.nextElementSibling;
       if (!children || !children.classList.contains('nav-children')) return;
-      item.addEventListener('click', function(e) {
-        var inToggle = e.target.closest('.nav-toggle-icon');
-        if (inToggle) {
-          e.preventDefault();
-          var isOpen = children.classList.contains('open');
-          if (isOpen) {
-            children.classList.remove('open');
-            item.classList.remove('section-open');
-          } else {
-            children.classList.add('open');
-            item.classList.add('section-open');
-          }
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var isOpen = children.classList.contains('open');
+        if (isOpen) {
+          children.classList.remove('open');
+          btn.classList.remove('open');
+          btn.setAttribute('aria-expanded', 'false');
+        } else {
+          children.classList.add('open');
+          btn.classList.add('open');
+          btn.setAttribute('aria-expanded', 'true');
         }
-        // else: let the link navigate naturally
       });
     });
 
