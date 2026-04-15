@@ -8,7 +8,7 @@ description: Proactive AI assistance is useful. But the line between helpful and
 
 # How a Personal AI OS Should Act on Your Behalf - Without Becoming Your Boss
 
-There is a version of personal AI that is useful - one that handles the low-value work you repeat every day and gives you back the mental space it was consuming. And there is a version that is suffocating - one that takes over decisions you wanted to make yourself, surfaces information you didn't want surfaced, and makes you feel monitored rather than helped.
+There is a version of personal AI that is useful: one that handles the low-value work you repeat every day and gives you back the mental space it was consuming. And there is a version that is suffocating, one that takes over decisions you wanted to make yourself, surfaces information you didn't want surfaced, and makes you feel monitored rather than helped.
 
 The difference is not capability. It's design philosophy.
 
@@ -30,7 +30,7 @@ These actions are useful because they happen within a clear boundary: the AI is 
 
 The line between helpful and creepy is consent and transparency.
 
-An AI that defers a notification is helpful if you set up that rule and know it's happening. An AI that starts suppressing notifications on its own judgement - even if that judgement is usually right - is one that's making decisions about your information diet without your input.
+An AI that defers a notification is helpful if you set up that rule and know it's happening. An AI that starts suppressing notifications on its own judgement, even if that judgement is usually right, is one that's making decisions about your information diet without your input.
 
 An AI that suggests a reply to a message is helpful if you asked for it. An AI that learns your communication style and generates pre-written replies for you to approve is useful. An AI that starts sending messages without showing them to you first is something else entirely.
 
@@ -58,7 +58,7 @@ Proactive assistance means the AI notices things, surfaces them, and makes the n
 
 Autonomous action means the AI takes the action without asking. It resolves the calendar conflict by declining one invite. It responds to messages. It rearranges your day.
 
-Proactive is good. Autonomous requires explicit delegation - tasks where you've clearly said "handle this without asking me."
+Proactive is good. Autonomous requires explicit delegation: tasks where you've clearly said "handle this without asking me."
 
 The default should be proactive. Autonomy should be the exception, granted task by task, with full transparency about what the AI is doing and the ability to review its actions.
 
@@ -74,7 +74,7 @@ A Personal AI OS with good defaults:
 - Prepares context before meetings rather than summarising after without being asked
 - Tells you what it's doing when it takes action in the background
 
-The goal is to be the assistant who handles the work you'd delegate to a smart person who knows your priorities - not the one who starts making calls on your behalf before you've decided you trust them that much.
+The goal is to be the assistant who handles the work you'd delegate to a smart person who knows your priorities. Not the one who starts making calls on your behalf before you've decided you trust them that much.
 
 Trust is earned incrementally. A Personal AI OS should behave the same way.
 
