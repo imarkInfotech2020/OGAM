@@ -4,14 +4,14 @@ title: Mission
 parent: Ethos
 nav_order: 2
 has_children: false
-description: Intelligence will become ambient. Always on, always yours, always private. We're building the architecture that makes that possible -- on the devices you already own, without asking you to trust anyone but yourself.
+description: Intelligence will become ambient. Always on, always yours, always private. We're building the architecture that makes that possible - on the devices you already own, without asking you to trust anyone but yourself.
 ---
 
 # Intelligence belongs to everyone.
 
 ---
 
-Navigation used to belong to experts. You needed a map, a compass, training. Then it became ambient -- built into the device in your pocket, free, always on, available to anyone going anywhere. You stopped thinking about navigation as a tool. It just became part of how you move through the world.
+Navigation used to belong to experts. You needed a map, a compass, training. Then it became ambient - built into the device in your pocket, free, always on, available to anyone going anywhere. You stopped thinking about navigation as a tool. It just became part of how you move through the world.
 
 Intelligence is next.
 
@@ -27,7 +27,7 @@ To use AI today, you hand your most private thoughts to someone else's infrastru
 
 Your health questions. Your relationship problems. Your financial decisions. Your half-formed ideas at 2am. All of it travelling to a server you don't control, stored under terms you didn't read, in the hands of companies whose revenue model is built around having your data and keeping you dependent on their compute.
 
-Some of them promised to do it differently. Local-first. Private by default. Yours, not theirs. They made the right noises -- and then the economics shifted. They went cloud. Then they got acquired. Then they shut down overnight. Users who had given years of their most personal context to these products woke up one day and had nothing. Lost access to their own memories. Gone.
+Some of them promised to do it differently. Local-first. Private by default. Yours, not theirs. They made the right noises - and then the economics shifted. They went cloud. Then they got acquired. Then they shut down overnight. Users who had given years of their most personal context to these products woke up one day and had nothing. Lost access to their own memories. Gone.
 
 **That's not a hypothetical. It already happened.**
 
@@ -41,7 +41,7 @@ The problem isn't the companies. The problem is the architecture.
 
 The device in your pocket is more powerful than the servers that ran the first generation of cloud AI.
 
-A current flagship phone runs AI at 30 tokens a second -- fast enough for real-time conversation, fully offline, using dedicated neural hardware that was designed for exactly this workload. That hardware has been shipping to billions of people for years. It sits mostly idle while they pay monthly fees to send their thoughts to someone else's GPU.
+A current flagship phone runs AI at 30 tokens a second - fast enough for real-time conversation, fully offline, using dedicated neural hardware that was designed for exactly this workload. That hardware has been shipping to billions of people for years. It sits mostly idle while they pay monthly fees to send their thoughts to someone else's GPU.
 
 **The infrastructure for a private, personal, ambient intelligence layer already exists. It's in the pocket of 4 billion people. What's been missing is the software that takes that seriously.**
 
@@ -59,7 +59,7 @@ The only guarantee that your data stays yours is that it never leaves your devic
 
 Not a toggle. Not a promise. Not a trust-us. **Architecture.**
 
-Open source, so anyone can verify what the software actually does. No account required. No telemetry. No analytics. No data collection of any kind. If you can't audit it, you can't trust it -- and you shouldn't.
+Open source, so anyone can verify what the software actually does. No account required. No telemetry. No analytics. No data collection of any kind. If you can't audit it, you can't trust it - and you shouldn't.
 
 We hold this as a non-negotiable. Not because it's a better marketing position. Because it's the only honest answer to the question of who owns your intelligence.
 
@@ -69,17 +69,17 @@ We hold this as a non-negotiable. Not because it's a better marketing position. 
 
 For two hundred years, the people who operated at the highest levels of consequence had something everyone else didn't: a private intelligence layer.
 
-Someone who knew their priorities, managed their correspondence, prepared them for every meeting, tracked their commitments, drafted their communications, handled the coordination overhead of a productive life -- so they could focus their attention on the work that actually required them.
+Someone who knew their priorities, managed their correspondence, prepared them for every meeting, tracked their commitments, drafted their communications, handled the coordination overhead of a productive life - so they could focus their attention on the work that actually required them.
 
 It was called a secretary. Then an executive assistant. Then a virtual assistant. Whatever the name, the function was the same: an intelligence layer available to you, handling everything except the decisions only you can make.
 
-For two hundred years, access to that layer was determined entirely by wealth and seniority. You had it if you could afford it. Everyone else managed the coordination overhead themselves -- with their own attention, their own time, their own focus.
+For two hundred years, access to that layer was determined entirely by wealth and seniority. You had it if you could afford it. Everyone else managed the coordination overhead themselves - with their own attention, their own time, their own focus.
 
 **The device in your pocket changes that equation permanently.**
 
-A Personal AI OS -- one intelligence layer, running on your hardware, spanning your phone and laptop over your own network, with no server in between. It knows your messages, your calendar, your work, your life -- because it lives with you, not above you. It preps you for meetings before you ask. It defers what can wait and surfaces what can't. It handles the coordination overhead of your day the way a great assistant has always handled it for the people who could afford one.
+A Personal AI OS - one intelligence layer, running on your hardware, spanning your phone and laptop over your own network, with no server in between. It knows your messages, your calendar, your work, your life - because it lives with you, not above you. It preps you for meetings before you ask. It defers what can wait and surfaces what can't. It handles the coordination overhead of your day the way a great assistant has always handled it for the people who could afford one.
 
-Not AI making decisions while you sleep. Not autonomous agents acting on your behalf in ways you didn't sanction. A private digital secretary -- proactive, aware, yours -- that makes your day a little easier and your attention a little freer.
+Not AI making decisions while you sleep. Not autonomous agents acting on your behalf in ways you didn't sanction. A private digital secretary - proactive, aware, yours - that makes your day a little easier and your attention a little freer.
 
 The same thing that secretaries have been doing for the powerful for 200 years. Now running on a device that billions of people already carry. On models that cost nothing to run. With data that never leaves your hands.
 

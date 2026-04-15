@@ -8,9 +8,9 @@ description: The VA market is worth billions and growing. On-device AI doesn't c
 
 # Why the Virtual Assistant Industry Is About to Be Disrupted by On-Device AI
 
-The market for virtual assistance -- human remote workers who handle the administrative work of knowledge workers and small businesses -- is a multi-billion dollar industry and growing.
+The market for virtual assistance - human remote workers who handle the administrative work of knowledge workers and small businesses - is a multi-billion dollar industry and growing.
 
-The growth makes sense. There is a genuine and expanding need for administrative intelligence at the individual level. The knowledge worker's day is full of work that requires judgment but not their specific judgment -- coordination, triage, drafting, scheduling, research. Offloading that work to a capable assistant makes the principal demonstrably more effective. The value proposition is not in question.
+The growth makes sense. There is a genuine and expanding need for administrative intelligence at the individual level. The knowledge worker's day is full of work that requires judgment but not their specific judgment - coordination, triage, drafting, scheduling, research. Offloading that work to a capable assistant makes the principal demonstrably more effective. The value proposition is not in question.
 
 What is about to change is where that intelligence comes from.
 
@@ -36,7 +36,7 @@ An assistant can only act on what they know. And what they know is limited to wh
 
 They don't have access to your full message history. They can't see your health data or understand that you're running on three hours of sleep. They don't know the backstory of every relationship in your contact list. They can't read between the lines of your calendar and notice the pattern that you systematically overbook yourself on Wednesdays and regret it by Thursday morning.
 
-The intelligence they provide is bounded by the context you're willing to share -- which is always less than the full picture, because sharing the full picture with another person is its own kind of exposure.
+The intelligence they provide is bounded by the context you're willing to share - which is always less than the full picture, because sharing the full picture with another person is its own kind of exposure.
 
 This creates a paradox. The most valuable administrative intelligence would come from a system with complete context. But the more complete the context, the more you're sharing with someone else. Human VAs resolve this by having limited context. Which limits the intelligence.
 
@@ -48,7 +48,7 @@ A Personal AI OS changes the information asymmetry completely.
 
 It has access to your full context: your messages, your calendar, your files, your communication history, your work patterns, your health data, your location patterns. Not as a snapshot you've deliberately shared, but as a live, continuously updated picture of your life.
 
-And crucially -- it has that context without you handing it to another person. The data stays on your device. The processing happens on your hardware. Nothing leaves.
+And crucially - it has that context without you handing it to another person. The data stays on your device. The processing happens on your hardware. Nothing leaves.
 
 This is the dimension the human model structurally cannot match. No human VA can have your full context without you giving it to them. An on-device AI has your full context precisely because it never leaves your hands.
 
@@ -59,7 +59,7 @@ The intelligence that results from full context is categorically different from 
 - It can draft a follow-up in your voice with the specifics of what was actually discussed, not a generic template.
 - It can notice that the email that just arrived is related to the calendar event you've been anxious about and surface them together.
 
-These are not incremental improvements on what a human VA does. They are capabilities that require a different kind of context access -- one that a human assistant can't have by design.
+These are not incremental improvements on what a human VA does. They are capabilities that require a different kind of context access - one that a human assistant can't have by design.
 
 ---
 
@@ -67,7 +67,7 @@ These are not incremental improvements on what a human VA does. They are capabil
 
 The disruption of the VA industry by on-device AI won't look like a sudden cliff. It will look like two things happening simultaneously.
 
-At the bottom of the market -- the use cases that were already best suited to automation -- AI takes over. The clients who used VAs for templated, repeatable administrative work find that an on-device system does it better, faster, and without the relationship overhead.
+At the bottom of the market - the use cases that were already best suited to automation - AI takes over. The clients who used VAs for templated, repeatable administrative work find that an on-device system does it better, faster, and without the relationship overhead.
 
 At the top of the market, human VAs move up the value chain. The work that remains for human assistants is the work that genuinely requires human judgment, interpersonal skill, and real-world presence. The coordinators and schedulers become relationship managers and strategic operators. The function that couldn't be automated becomes more valued because the function that could be automated now is.
 
@@ -77,7 +77,7 @@ This is the pattern technology disruption always follows: the lowest value-add w
 
 ## The people this actually reaches
 
-The VA industry, for all its growth, remained a service primarily available to knowledge workers above a certain income threshold. The cost of a skilled human VA -- even remote, even part-time -- was prohibitive for most people who could have benefited from it.
+The VA industry, for all its growth, remained a service primarily available to knowledge workers above a certain income threshold. The cost of a skilled human VA - even remote, even part-time - was prohibitive for most people who could have benefited from it.
 
 The individuals who needed administrative support most urgently were often the ones least able to afford it: sole traders, early-stage entrepreneurs, freelancers managing multiple clients, mid-level professionals drowning in coordination overhead.
 
