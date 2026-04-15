@@ -28,7 +28,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'showRecHint' | 'setShowRecHint'
   | 'imageRec' | 'ramGB' | 'imageRecommendation'
   | 'imageModelDownloading' | 'imageModelProgress'
-  | 'handleDownloadImageModel' | 'loadHFModels'
+  | 'handleDownloadImageModel' | 'handleCancelImageDownload' | 'loadHFModels'
   | 'clearImageFilters' | 'setUserChangedBackendFilter'
   | 'isRecommendedModel'
 >;
@@ -41,11 +41,12 @@ interface ImageModelCardProps {
   imageModelProgress: Record<string, number>;
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
+  handleCancelImageDownload: Props['handleCancelImageDownload'];
 }
 
 const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   model, index, imageRec, imageModelDownloading, imageModelProgress,
-  isRecommendedModel, handleDownloadImageModel,
+  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
   const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
@@ -80,6 +81,11 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
           imageModelDownloading.includes(model.id)
             ? undefined
             : () => handleDownloadImageModel(hfModelToDescriptor(model))
+        }
+        onCancel={
+          imageModelDownloading.includes(model.id)
+            ? () => handleCancelImageDownload(model.id)
+            : undefined
         }
       />
     </View>
@@ -118,6 +124,7 @@ interface ScrollContentProps {
   imageModelProgress: Record<string, number>;
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
+  handleCancelImageDownload: Props['handleCancelImageDownload'];
   imageSearchQuery: string;
 }
 
@@ -131,7 +138,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
   hfModelsLoading, hfModelsError, loadHFModels,
   filteredHFModels, availableHFModels,
   imageModelDownloading, imageModelProgress,
-  isRecommendedModel, handleDownloadImageModel,
+  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
   imageSearchQuery,
 }) => {
   const { colors } = useTheme();
@@ -220,6 +227,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
                 imageModelProgress={imageModelProgress}
                 isRecommendedModel={isRecommendedModel}
                 handleDownloadImageModel={handleDownloadImageModel}
+                handleCancelImageDownload={handleCancelImageDownload}
               />
             );
             // Spotlight the first image model card for the onboarding flow
@@ -252,7 +260,7 @@ export const ImageModelsTab: React.FC<Props> = ({
   showRecHint, setShowRecHint,
   imageRec, ramGB, imageRecommendation,
   imageModelDownloading, imageModelProgress,
-  handleDownloadImageModel, loadHFModels,
+  handleDownloadImageModel, handleCancelImageDownload, loadHFModels,
   clearImageFilters, setUserChangedBackendFilter,
   isRecommendedModel,
 }) => {
@@ -321,6 +329,7 @@ export const ImageModelsTab: React.FC<Props> = ({
         imageModelProgress={imageModelProgress}
         isRecommendedModel={isRecommendedModel}
         handleDownloadImageModel={handleDownloadImageModel}
+        handleCancelImageDownload={handleCancelImageDownload}
         imageSearchQuery={imageSearchQuery}
       />
     </View>

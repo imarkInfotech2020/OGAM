@@ -205,10 +205,22 @@ class WorkerDownload(
             !response.isSuccessful -> {
                 val reason = "HTTP $code"
                 DownloadEventBridge.log("E", "[Worker] Request failed id=$downloadId reason=$reason")
-                downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reason)
-                DownloadEventBridge.error(downloadId, download.fileName, download.modelId, reason)
-                WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker http error")
-                if (code in 500..599) Result.retry() else Result.failure()
+                if (code in 500..599) {
+                    // 5xx = transient server error — treat identically to a network exception.
+                    // Do NOT emit DownloadError here: that would tell JS the download is dead
+                    // (wiping all listeners/metadata) while WorkManager silently retries — causing
+                    // the Download Manager screen to stay stuck and the Models screen to desync.
+                    downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reason)
+                    DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, reason, runAttemptCount)
+                    WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker http error")
+                    Result.retry()
+                } else {
+                    // 4xx = client error — permanent failure, do not retry.
+                    downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reason)
+                    DownloadEventBridge.error(downloadId, download.fileName, download.modelId, reason)
+                    WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker http error")
+                    Result.failure()
+                }
             }
             else -> null
         }

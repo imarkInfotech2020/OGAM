@@ -15,6 +15,17 @@ import { ImageModelDescriptor } from './types';
 export function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, downloadId?: number) {
   deps.removeImageModelDownloading(modelId);
   deps.clearModelProgress(modelId);
+  const progressKeys = new Set<string>([
+    `image:${modelId}/${modelId}`,
+    `image:${modelId}/${modelId}.zip`,
+  ]);
+  if (downloadId != null) {
+    const metadata = deps.getBackgroundDownload(downloadId);
+    if (metadata?.modelId && metadata?.fileName) {
+      progressKeys.add(`${metadata.modelId}/${metadata.fileName}`);
+    }
+  }
+  progressKeys.forEach((key) => deps.setDownloadProgress(key, null));
   if (downloadId != null) deps.setBackgroundDownload(downloadId, null);
 }
 
@@ -62,13 +73,24 @@ export interface ImageDownloadDeps {
   addImageModelDownloading: (id: string) => void;
   removeImageModelDownloading: (id: string) => void;
   updateModelProgress: (id: string, n: number) => void;
+  syncSharedProgress: (opts: {
+    modelId: string;
+    progress: number;
+    totalBytes: number;
+    downloadId?: number;
+    fileName?: string;
+    status?: string;
+    bytesDownloaded?: number;
+  }) => void;
   clearModelProgress: (id: string) => void;
   addDownloadedImageModel: (m: ONNXImageModel) => void;
   activeImageModelId: string | null;
   setActiveImageModelId: (id: string) => void;
   setImageModelDownloadId: (modelId: string, downloadId: number | null) => void;
   setBackgroundDownload: (downloadId: number, data: any) => void;
+  getBackgroundDownload: (downloadId: number) => { modelId?: string; fileName?: string } | null;
   setAlertState: (s: AlertState) => void;
+  setDownloadProgress: (key: string, progress: { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string } | null) => void;
   /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
   triedImageGen: boolean;
 }
@@ -83,6 +105,12 @@ export async function downloadHuggingFaceModel(
   }
   deps.addImageModelDownloading(modelInfo.id);
   deps.updateModelProgress(modelInfo.id, 0);
+  deps.syncSharedProgress({
+    modelId: modelInfo.id,
+    progress: 0,
+    totalBytes: modelInfo.size,
+    status: 'downloading',
+  });
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
@@ -148,6 +176,13 @@ export async function downloadCoreMLMultiFile(
 
   deps.addImageModelDownloading(modelInfo.id);
   deps.updateModelProgress(modelInfo.id, 0);
+  deps.syncSharedProgress({
+    modelId: modelInfo.id,
+    progress: 0,
+    totalBytes: modelInfo.size,
+    fileName: modelInfo.id,
+    status: 'pending',
+  });
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
@@ -162,6 +197,14 @@ export async function downloadCoreMLMultiFile(
       imageModelSize: modelInfo.size, imageModelStyle: modelInfo.style,
       imageModelBackend: modelInfo.backend, imageModelRepo: modelInfo.repo,
       imageDownloadType: 'multifile',
+    });
+    deps.syncSharedProgress({
+      modelId: modelInfo.id,
+      progress: 0,
+      totalBytes: modelInfo.size,
+      downloadId: downloadInfo.downloadId,
+      fileName: modelInfo.id,
+      status: 'pending',
     });
     const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       // Remove the native download entry in background (no-op for multi-file — files already moved)
@@ -180,7 +223,16 @@ export async function downloadCoreMLMultiFile(
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
       if (ev.status === 'retrying') return;
-      deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0);
+      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0;
+      deps.updateModelProgress(modelInfo.id, progress);
+      deps.syncSharedProgress({
+        modelId: modelInfo.id,
+        progress,
+        totalBytes: modelInfo.size,
+        downloadId: downloadInfo.downloadId,
+        fileName: modelInfo.id,
+        status: ev.status,
+      });
     }));
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
@@ -204,6 +256,13 @@ export async function proceedWithDownload(
 
   deps.addImageModelDownloading(modelInfo.id);
   deps.updateModelProgress(modelInfo.id, 0);
+  deps.syncSharedProgress({
+    modelId: modelInfo.id,
+    progress: 0,
+    totalBytes: modelInfo.size,
+    fileName: `${modelInfo.id}.zip`,
+    status: 'downloading',
+  });
   try {
     const fileName = `${modelInfo.id}.zip`;
     const downloadInfo = await backgroundDownloadService.startDownload({
@@ -217,18 +276,50 @@ export async function proceedWithDownload(
       imageModelSize: modelInfo.size, imageModelStyle: modelInfo.style,
       imageModelBackend: modelInfo.backend, imageDownloadType: 'zip',
     });
+    deps.syncSharedProgress({
+      modelId: modelInfo.id,
+      progress: 0,
+      totalBytes: modelInfo.size,
+      downloadId: downloadInfo.downloadId,
+      fileName,
+      status: 'pending',
+    });
     const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       deps.updateModelProgress(modelInfo.id, 0.9);
+      deps.syncSharedProgress({
+        modelId: modelInfo.id,
+        progress: 0.9,
+        totalBytes: modelInfo.size,
+        downloadId: downloadInfo.downloadId,
+        fileName,
+        status: 'processing',
+      });
       const imageModelsDir = modelManager.getImageModelsDirectory();
       const zipPath = `${imageModelsDir}/${fileName}`;
       const modelDir = `${imageModelsDir}/${modelInfo.id}`;
       if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
       await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
       deps.updateModelProgress(modelInfo.id, 0.92);
+      deps.syncSharedProgress({
+        modelId: modelInfo.id,
+        progress: 0.92,
+        totalBytes: modelInfo.size,
+        downloadId: downloadInfo.downloadId,
+        fileName,
+        status: 'processing',
+      });
       if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
       await unzip(zipPath, modelDir);
       const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
       deps.updateModelProgress(modelInfo.id, 0.95);
+      deps.syncSharedProgress({
+        modelId: modelInfo.id,
+        progress: 0.95,
+        totalBytes: modelInfo.size,
+        downloadId: downloadInfo.downloadId,
+        fileName,
+        status: 'processing',
+      });
       await RNFS.unlink(zipPath).catch(() => {});
       const imageModel: ONNXImageModel = {
         id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
@@ -239,7 +330,16 @@ export async function proceedWithDownload(
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
       if (ev.status === 'retrying') return;
-      deps.updateModelProgress(modelInfo.id, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0);
+      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0;
+      deps.updateModelProgress(modelInfo.id, progress);
+      deps.syncSharedProgress({
+        modelId: modelInfo.id,
+        progress,
+        totalBytes: modelInfo.size,
+        downloadId: downloadInfo.downloadId,
+        fileName,
+        status: ev.status,
+      });
     }));
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {

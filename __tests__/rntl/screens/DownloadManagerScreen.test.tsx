@@ -595,6 +595,46 @@ describe('DownloadManagerScreen', () => {
     expect(setDownloadProgress).not.toHaveBeenCalled();
   });
 
+  it('progress event callback ignores image downloads so shared image progress is not overwritten', async () => {
+    const setDownloadProgress = jest.fn();
+    const state = createDefaultState({
+      setDownloadProgress,
+      downloadProgress: {},
+      activeBackgroundDownloads: {
+        321: {
+          modelId: 'image:sd-turbo',
+          fileName: 'sd-turbo.zip',
+          totalBytes: 1000,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      if (typeof selector === 'function') return selector(state);
+      return state;
+    });
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    let progressCallback: any;
+    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
+      progressCallback = cb;
+      return jest.fn();
+    });
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      progressCallback({
+        downloadId: 321,
+        modelId: 'image:sd-turbo',
+        fileName: 'sd-turbo.zip',
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+      });
+    });
+
+    expect(setDownloadProgress).not.toHaveBeenCalled();
+  });
+
   it('complete event callback reloads active downloads for text models', async () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let completeCallback: any;
@@ -616,7 +656,7 @@ describe('DownloadManagerScreen', () => {
     expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
   });
 
-  it('complete event callback clears progress for image models', async () => {
+  it('complete event callback reloads active downloads for image models without clearing shared progress', async () => {
     const setDownloadProgress = jest.fn();
     const state = createDefaultState({ setDownloadProgress });
     mockUseAppStore.mockImplementation((selector?: any) => {
@@ -641,8 +681,7 @@ describe('DownloadManagerScreen', () => {
       });
     });
 
-    // Should clear progress for image downloads
-    expect(setDownloadProgress).toHaveBeenCalledWith('image:sd-turbo/sd-turbo.zip', null);
+    expect(setDownloadProgress).not.toHaveBeenCalled();
     expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
   });
 

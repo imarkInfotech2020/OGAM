@@ -36,11 +36,27 @@ async function handleCompletedImageDownload(opts: {
     if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
     await backgroundDownloadService.moveCompletedDownload(downloadId, zipPath);
     deps.updateModelProgress(modelId, 0.92);
+    deps.syncSharedProgress({
+      modelId,
+      progress: 0.92,
+      totalBytes: metadata.imageModelSize ?? 0,
+      downloadId,
+      fileName: metadata.fileName,
+      status: 'processing',
+    });
     if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
     await unzip(zipPath, modelDir);
     const resolvedModelDir = metadata.imageModelBackend === 'coreml'
       ? await resolveCoreMLModelDir(modelDir) : modelDir;
     deps.updateModelProgress(modelId, 0.95);
+    deps.syncSharedProgress({
+      modelId,
+      progress: 0.95,
+      totalBytes: metadata.imageModelSize ?? 0,
+      downloadId,
+      fileName: metadata.fileName,
+      status: 'processing',
+    });
     await RNFS.unlink(zipPath).catch(() => { });
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
@@ -51,7 +67,7 @@ async function handleCompletedImageDownload(opts: {
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
   } else if (metadata.imageDownloadType === 'multifile') {
     // Clean up native download entry in background (files already at final location)
-    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => {});
+    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => { });
     const imageModel: ONNXImageModel = {
       id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -61,7 +77,7 @@ async function handleCompletedImageDownload(opts: {
     await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
     // Fetch tokenizer files in background after model is registered
     if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
-      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => {});
+      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => { });
     }
   }
 }
@@ -86,7 +102,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     downloadedImageModels, setDownloadedImageModels, addDownloadedImageModel,
     activeImageModelId, setActiveImageModelId,
     imageModelDownloading, addImageModelDownloading, removeImageModelDownloading,
-    setImageModelDownloadId, setBackgroundDownload,
+    imageModelDownloadIds, setImageModelDownloadId, setBackgroundDownload,
+    setDownloadProgress,
     onboardingChecklist,
   } = useAppStore();
 
@@ -94,13 +111,36 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     setImageModelProgress(prev => ({ ...prev, [modelId]: n }));
   const clearModelProgress = (modelId: string) =>
     setImageModelProgress(prev => { const next = { ...prev }; delete next[modelId]; return next; });
+  const syncSharedProgress = (opts: {
+    modelId: string;
+    progress: number;
+    totalBytes: number;
+    downloadId?: number;
+    fileName?: string;
+    status?: string;
+    bytesDownloaded?: number;
+  }) => {
+    const { modelId, progress, totalBytes, downloadId, fileName, status, bytesDownloaded } = opts;
+    const metadata = downloadId != null ? useAppStore.getState().activeBackgroundDownloads[downloadId] : null;
+    const keyModelId = metadata?.modelId ?? `image:${modelId}`;
+    const keyFileName = metadata?.fileName ?? fileName ?? modelId;
+    const key = `${keyModelId}/${keyFileName}`;
+    setDownloadProgress(key, {
+      progress,
+      bytesDownloaded: bytesDownloaded ?? Math.round(progress * totalBytes),
+      totalBytes,
+      status,
+    });
+  };
 
   const makeDeps = (): ImageDownloadDeps => ({
     addImageModelDownloading, removeImageModelDownloading,
-    updateModelProgress, clearModelProgress,
+    updateModelProgress, syncSharedProgress, clearModelProgress,
     addDownloadedImageModel, activeImageModelId,
     setActiveImageModelId, setImageModelDownloadId,
     setBackgroundDownload, setAlertState,
+    getBackgroundDownload: (downloadId: number) => useAppStore.getState().activeBackgroundDownloads[downloadId] ?? null,
+    setDownloadProgress,
     triedImageGen: onboardingChecklist.triedImageGen,
   });
 
@@ -150,6 +190,14 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     const modelDir = `${imageModelsDir}/${modelId}`;
     addImageModelDownloading(modelId);
     updateModelProgress(modelId, 0.9);
+    syncSharedProgress({
+      modelId,
+      progress: 0.9,
+      totalBytes: metadata.imageModelSize ?? 0,
+      downloadId: download.downloadId,
+      fileName: metadata.fileName,
+      status: 'processing',
+    });
     try {
       await handleCompletedImageDownload({
         metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
@@ -161,7 +209,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   };
 
   const restoreInProgressDownload = (
-    download: { downloadId: number; modelId: string; bytesDownloaded: number; totalBytes: number },
+    download: { downloadId: number; modelId: string; bytesDownloaded: number; totalBytes: number; status: string },
     info: { modelId: string; metadata: PersistedDownloadInfo; deps: ImageDownloadDeps },
   ) => {
     const { modelId, metadata, deps } = info;
@@ -169,7 +217,16 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     const modelDir = `${imageModelsDir}/${modelId}`;
     addImageModelDownloading(modelId);
     setImageModelDownloadId(modelId, download.downloadId);
-    updateModelProgress(modelId, download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0);
+    const initialProgress = download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0;
+    updateModelProgress(modelId, initialProgress);
+    syncSharedProgress({
+      modelId,
+      progress: initialProgress,
+      totalBytes: metadata.imageModelSize ?? download.totalBytes,
+      downloadId: download.downloadId,
+      fileName: metadata.fileName,
+      status: download.status,
+    });
 
     wireDownloadListeners(
       { downloadId: download.downloadId, modelId, deps },
@@ -179,7 +236,16 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
       if (ev.status === 'retrying') return;
       const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
-      deps.updateModelProgress(modelId, ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0);
+      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0;
+      deps.updateModelProgress(modelId, progress);
+      deps.syncSharedProgress({
+        modelId,
+        progress,
+        totalBytes: metadata.imageModelSize ?? ev.totalBytes,
+        downloadId: download.downloadId,
+        fileName: metadata.fileName,
+        status: ev.status,
+      });
     }));
   };
 
@@ -195,8 +261,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         if (!d.modelId.startsWith('image:')) return false;
         const imageId = d.modelId.replace('image:', '');
         if (downloadedImageIds.has(imageId)) {
-          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
-          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
+          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => { });
+          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => { });
           return false;
         }
         return true;
@@ -234,9 +300,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   useEffect(() => {
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
-  // restoreActiveImageDownloads is intentionally mount-only — it reads
-  // current store state via useAppStore.getState() to avoid stale closures.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // restoreActiveImageDownloads is intentionally mount-only — it reads
+    // current store state via useAppStore.getState() to avoid stale closures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadDownloadedImageModels]);
 
   useEffect(() => {
@@ -254,9 +320,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     });
     return () => { cancelled = true; };
 
-  // Intentionally mount-only: fetches hardware recommendation once.
-  // userChangedBackendFilter is read inside but should not re-trigger this fetch.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally mount-only: fetches hardware recommendation once.
+    // userChangedBackendFilter is read inside but should not re-trigger this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clearImageFilters = useCallback(() => {
@@ -296,6 +362,14 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleDownloadImageModel = (modelInfo: ImageModelDescriptor) =>
     downloadImageModel(modelInfo, makeDeps());
 
+  const handleCancelImageDownload = async (modelId: string) => {
+    const downloadId = imageModelDownloadIds[modelId];
+    cleanupDownloadState(makeDeps(), modelId, downloadId);
+    if (downloadId != null) {
+      await backgroundDownloadService.cancelDownload(downloadId).catch(() => { });
+    }
+  };
+
   return {
     availableHFModels, hfModelsLoading, hfModelsError,
     backendFilter, setBackendFilter,
@@ -310,6 +384,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     hasActiveImageFilters, filteredHFModels, imageRecommendation,
     loadHFModels, loadDownloadedImageModels, restoreActiveImageDownloads,
     clearImageFilters, isRecommendedModel, handleDownloadImageModel,
+    handleCancelImageDownload,
     setUserChangedBackendFilter,
   };
 }
