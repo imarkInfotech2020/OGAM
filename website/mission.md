@@ -1,7 +1,8 @@
 ---
 layout: default
 title: Mission
-nav_order: 4
+nav_order: 3
+has_children: true
 description: Intelligence will become ambient. Always on, always yours, always private. We're building the architecture that makes that possible — on the devices you already own, without asking you to trust anyone but yourself.
 ---
 
