@@ -84,16 +84,10 @@ interface ButtonIconProps {
 
 export const ButtonIcon: React.FC<ButtonIconProps> = ({ asSendButton, isRecording }) => {
   const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
 
   if (asSendButton) {
     return <Icon name={isRecording ? 'mic' : 'send'} size={18} color={colors.primary} />;
   }
 
-  return (
-    <View style={styles.micIcon}>
-      <View style={[styles.micBody, isRecording && styles.micBodyRecording]} />
-      <View style={[styles.micBase, isRecording && styles.micBodyRecording]} />
-    </View>
-  );
+  return <Icon name="mic" size={18} color={isRecording ? colors.surface : colors.primary} />;
 };

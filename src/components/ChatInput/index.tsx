@@ -188,7 +188,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
       onCancelRecording={() => { stopRecording(); clearResult(); }}
-      asSendButton
     />
   );
 
