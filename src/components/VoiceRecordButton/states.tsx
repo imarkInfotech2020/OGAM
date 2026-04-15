@@ -82,12 +82,8 @@ interface ButtonIconProps {
   isRecording: boolean;
 }
 
-export const ButtonIcon: React.FC<ButtonIconProps> = ({ asSendButton, isRecording }) => {
+export const ButtonIcon: React.FC<ButtonIconProps> = ({ asSendButton: _asSendButton, isRecording }) => {
   const { colors } = useTheme();
-
-  if (asSendButton) {
-    return <Icon name={isRecording ? 'mic' : 'send'} size={18} color={colors.primary} />;
-  }
-
-  return <Icon name="mic" size={18} color={isRecording ? colors.surface : colors.primary} />;
+  const iconColor = isRecording ? colors.surface : colors.primary;
+  return <Icon name="mic" size={18} color={iconColor} />;
 };
