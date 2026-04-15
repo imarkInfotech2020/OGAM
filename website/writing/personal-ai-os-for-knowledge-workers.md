@@ -14,7 +14,7 @@ Email triage. Meeting preparation. Status updates. Follow-up drafts. Summary not
 
 These tasks are not trivial - they require understanding your priorities, your communication style, your work context. But they don't require your creative output or your domain expertise. They are infrastructure work, and they are consuming an enormous amount of the most expensive resource in a knowledge worker's day: focused attention.
 
-A Personal AI OS that runs locally, with access to your full context, is the first system capable of handling this work reliably.
+A Personal AI OS that runs locally, with access to your full context, is the first system capable of handling this work reliably. This is where the category is going. Some of it is close. None of the current cloud tools can do it the right way, because doing it the right way requires your data to stay on your device.
 
 ## Email triage
 
@@ -82,4 +82,4 @@ The output is not just the same work in less time. It is better work, done with 
 
 ---
 
-*Off Grid runs entirely on your device. Your messages, files, and context stay local. [Download for iPhone](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing) or [Android](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing).*
+*Off Grid is building toward this. It starts with on-device AI that works fully offline on your phone - the foundation that makes everything above possible without your data ever leaving your device. [Download for iPhone](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing) or [Android](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing).*

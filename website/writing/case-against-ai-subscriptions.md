@@ -1,20 +1,22 @@
 ---
 layout: default
-title: "The Case Against AI Subscriptions: Why Intelligence Should Be a One-Time Investment"
+title: "The Case Against Cloud AI Subscriptions: Why You Shouldn't Pay to Rent Your Own Intelligence"
 parent: Perspectives
 nav_order: 19
-description: You don't pay a monthly fee to use your calculator. You don't subscribe to access your contacts. Intelligence - the most useful tool in your personal software stack - should work the same way.
+description: Cloud AI subscriptions charge you a monthly fee to access compute on someone else's server. When that intelligence can run on hardware you already own, the rent stops making sense.
 ---
 
-# The Case Against AI Subscriptions: Why Intelligence Should Be a One-Time Investment
+# The Case Against Cloud AI Subscriptions: Why You Shouldn't Pay to Rent Your Own Intelligence
 
-Your calculator doesn't have a subscription tier.
+Your calculator doesn't bill you monthly for arithmetic.
 
 You don't pay $20 a month to access your contacts app. Your notes app doesn't throttle you to 100 notes unless you upgrade. Your camera doesn't limit you to 50 photos per month on the free plan.
 
-These tools work because you own them. You paid once, or they came with your device, and they work indefinitely without any ongoing relationship with the company that made them.
+These tools work because the compute that powers them lives on your device. You paid once, or they came with your hardware, and they work indefinitely without any ongoing relationship with the company that made them.
 
-AI is the most significant tool added to personal computing in a generation. The subscription model being applied to it is not inevitable. It's a choice - one that creates dependency, limits access by income, and is fundamentally mismatched with what the technology actually requires.
+Cloud AI subscriptions are different. They charge you monthly because the compute is theirs, not yours - every query runs on their GPU, their infrastructure, their electricity bill. That cost has to come from somewhere, and the subscription is how they recover it.
+
+That model made sense when running a capable AI model required a data centre. It makes less sense every year as the hardware in your pocket becomes more powerful. AI is the most significant tool added to personal computing in a generation. Paying monthly to rent access to it - when the intelligence can run on hardware you already own - is a choice worth questioning.
 
 ## Why AI subscriptions exist
 
@@ -68,6 +70,6 @@ The models are open-weight. The software runs on your device. The core capabilit
 
 We may offer optional paid features. But the model - the intelligence layer itself - runs locally, is not metered, and is not subject to a price change by a third party.
 
-Your calculator doesn't have a subscription. Your AI shouldn't either.
+You should pay for software. You shouldn't pay rent for intelligence that runs on hardware you already own.
 
 *[Download Off Grid for iPhone](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing) or [Android](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing).*

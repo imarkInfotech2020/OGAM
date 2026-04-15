@@ -6,7 +6,7 @@ nav_order: 1
 description: A Personal AI OS is intelligence that lives on your device, knows your full context, and acts on your behalf - without ever sending data to a server. Here's what defines the category and why it matters.
 faq:
   - q: What is a Personal AI OS?
-    a: A Personal AI OS is an intelligence layer that runs entirely on your own hardware - phone, laptop, or both - with access to your full personal context (messages, calendar, files, health data) and the ability to act on your behalf. Unlike cloud AI assistants, it never sends your data to a server. It runs offline, owns no subscription model, and is auditable by design.
+    a: A Personal AI OS is an intelligence layer that runs entirely on your own hardware - phone, laptop, or both - with access to your full personal context (messages, calendar, files, health data) and the ability to act on your behalf. Unlike cloud AI assistants, it never sends your data to a server. It runs offline, charges no ongoing fees for AI compute, and is auditable by design.
   - q: How is a Personal AI OS different from an AI assistant like Siri or Alexa?
     a: Siri and Alexa are cloud-dependent voice interfaces. They send your queries to remote servers, return responses, and retain minimal context between sessions. A Personal AI OS runs locally on your device, maintains persistent context about your life and work, and can act across apps on your behalf - not just answer isolated questions.
   - q: How is a Personal AI OS different from an AI agent?
@@ -68,7 +68,7 @@ These are the properties that define a true Personal AI OS. They are structural 
 
 **6. Open and auditable.** The model weights and application code are inspectable. You can verify what the AI does and does not do with your data. Trust through transparency, not through policy.
 
-**7. No subscription required.** You own the software. You run the model. Intelligence is a tool you own, not a service you rent. The economics of on-device AI allow for this - there is no server cost to recover.
+**7. No cloud compute rent.** You do not pay ongoing fees for someone else's servers to process your queries. The model runs on your hardware. There is no server cost to recover from you. Software may have a price - building it takes work - but the AI itself is not metered.
 
 ---
 
