@@ -82,13 +82,16 @@ function makeDeps(overrides: Partial<ImageDownloadDeps> = {}): ImageDownloadDeps
     addImageModelDownloading: jest.fn(),
     removeImageModelDownloading: jest.fn(),
     updateModelProgress: jest.fn(),
+    syncSharedProgress: jest.fn(),
     clearModelProgress: jest.fn(),
     addDownloadedImageModel: jest.fn(),
     activeImageModelId: null,
     setActiveImageModelId: jest.fn(),
     setImageModelDownloadId: jest.fn(),
     setBackgroundDownload: jest.fn(),
+    getBackgroundDownload: jest.fn(() => null),
     setAlertState: jest.fn(),
+    setDownloadProgress: jest.fn(),
     triedImageGen: true,
     ...overrides,
   };
@@ -547,6 +550,24 @@ describe('imageDownloadActions', () => {
       expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
       expect(deps.clearModelProgress).toHaveBeenCalledWith('model-1');
       expect(deps.setBackgroundDownload).toHaveBeenCalledWith(42, null);
+    });
+
+    it('clears the metadata-derived progress key for zip downloads', () => {
+      const deps = makeDeps({
+        getBackgroundDownload: jest.fn(() => ({
+          modelId: 'image:model-1',
+          fileName: 'model-1.zip',
+        })),
+      });
+
+      cleanupDownloadState(deps, 'model-1', 42);
+
+      expect((deps.setDownloadProgress as jest.Mock).mock.calls).toEqual(
+        expect.arrayContaining([
+          ['image:model-1/model-1.zip', null],
+          ['image:model-1/model-1', null],
+        ]),
+      );
     });
 
     it('skips setBackgroundDownload when downloadId is undefined', () => {

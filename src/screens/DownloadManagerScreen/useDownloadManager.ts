@@ -83,6 +83,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
       const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
       if (!metadata) return;
+      if (metadata.modelId.startsWith('image:')) return;
       const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
       if (event.status === 'retrying') {
@@ -106,13 +107,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       });
     });
 
-    const unsubComplete = backgroundDownloadService.onAnyComplete(async (event) => {
-      // Clear progress for image downloads (their per-download callbacks don't use the global store).
-      // Text model cleanup is handled by useTextModels.onComplete.
-      if (event.modelId.startsWith('image:')) {
-        const key = `${event.modelId}/${event.fileName}`;
-        setDownloadProgress(key, null);
-      }
+    const unsubComplete = backgroundDownloadService.onAnyComplete(async (_event) => {
       await loadActiveDownloads();
     });
 

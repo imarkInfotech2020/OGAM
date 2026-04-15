@@ -86,6 +86,7 @@ const mockRemoveImageModelDownloading = jest.fn();
 const mockAddImageModelDownloading = jest.fn();
 const mockSetImageModelDownloadId = jest.fn();
 const mockSetBackgroundDownload = jest.fn();
+const mockSetDownloadProgress = jest.fn();
 const mockSetDownloadedImageModels = jest.fn();
 const mockStoreAddDownloadedImageModel = jest.fn();
 const mockSetActiveImageModelId = jest.fn();
@@ -108,6 +109,7 @@ jest.mock('../../../../src/stores', () => ({
       removeImageModelDownloading: mockRemoveImageModelDownloading,
       setImageModelDownloadId: mockSetImageModelDownloadId,
       setBackgroundDownload: mockSetBackgroundDownload,
+      setDownloadProgress: mockSetDownloadProgress,
       onboardingChecklist: { triedImageGen: true },
     })),
     {
