@@ -151,10 +151,10 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
 }
 .nav-item:hover { color: var(--text-primary); background: var(--bg-hover); }
 .nav-item.active { color: var(--accent); font-weight: 600; }
-.nav-item-wrap { display: flex; align-items: center; }
-.nav-item-wrap .nav-item { flex: 1; }
-.nav-toggle { background: none; border: none; padding: 4px 6px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; flex-shrink: 0; }
-.nav-toggle .chevron { transition: transform 0.2s; }
+.nav-item-wrap { display: flex; align-items: stretch; width: 100%; }
+.nav-item-wrap .nav-item { flex: 1; padding-right: 4px; }
+.nav-toggle { background: none; border: none; padding: 0 14px 0 10px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; flex-shrink: 0; min-width: 36px; }
+.nav-toggle .chevron { transition: transform 0.2s; pointer-events: none; }
 .nav-toggle.open .chevron { transform: rotate(180deg); }
 
 .nav-children { display: none; padding-left: 12px; }
