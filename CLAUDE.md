@@ -22,7 +22,7 @@ Key rules that are easy to miss:
 | Proof-first | "fast" | "15-30 tok/s on flagship devices" |
 | Privacy as mechanism | "we value your privacy" | "the model runs in your phone's RAM, nothing is sent anywhere" |
 | No exclamation marks | "It works!" | "It works." |
-| No em dashes | "private — always" | "private -- always" |
+| No em dashes | "private — always" | "private - always" |
 | No forbidden words | revolutionary, seamlessly, empower, leverage, robust, comprehensive, crucial, pivotal, delve, tapestry, testament, underscore, foster, cultivate, showcase, enhance | use specific, plain words instead |
 | No AI slop phrases | "serves as", "stands as", "represents a", "marks a turning point", "it is worth noting" | just say "is" |
 | No structural clichés | "Not just X, but Y" / "It's not X, it's Y" | state the thing directly |
