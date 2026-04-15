@@ -149,28 +149,27 @@
           {% assign in_section = false %}
           {% if page.parent == p.title %}{% assign in_section = true %}{% endif %}
 
-          <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}{% if in_section %} section-open{% endif %}">
-            {{ p.title }}
-            {% if p.has_children %}
-              <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            {% endif %}
-          </a>
-
           {% if p.has_children %}
+            <div class="nav-item-wrap">
+              <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}{% if in_section %} section-open{% endif %}">{{ p.title }}</a>
+              <button class="nav-toggle{% if in_section or is_current %} open{% endif %}" aria-label="Toggle section">
+                <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
             {% assign children = site.pages | where: "parent", p.title | sort: "nav_order" %}
             {% if children.size > 0 %}
               <div class="nav-children{% if in_section or is_current %} open{% endif %}">
                 {% for child in children %}
                   {% assign child_active = false %}
                   {% if page.url == child.url %}{% assign child_active = true %}{% endif %}
-                  <a href="{{ child.url | relative_url }}" class="nav-child{% if child_active %} active{% endif %}">
-                    {{ child.title }}
-                  </a>
+                  <a href="{{ child.url | relative_url }}" class="nav-child{% if child_active %} active{% endif %}">{{ child.title }}</a>
                 {% endfor %}
               </div>
             {% endif %}
+          {% else %}
+            <a href="{{ p.url | relative_url }}" class="nav-item{% if is_current %} active{% endif %}">{{ p.title }}</a>
           {% endif %}
         {% endfor %}
       </nav>
@@ -330,18 +329,20 @@
       h.appendChild(a);
     });
     // Accordion toggle for sidebar nav sections
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(item) {
-      var children = item.nextElementSibling;
+    document.querySelectorAll('.sidebar-nav .nav-toggle').forEach(function(toggle) {
+      var wrap = toggle.closest('.nav-item-wrap');
+      var children = wrap ? wrap.nextElementSibling : null;
       if (!children || !children.classList.contains('nav-children')) return;
-      item.addEventListener('click', function(e) {
+      toggle.addEventListener('click', function(e) {
         e.preventDefault();
+        e.stopPropagation();
         var isOpen = children.classList.contains('open');
         if (isOpen) {
           children.classList.remove('open');
-          item.classList.remove('section-open');
+          toggle.classList.remove('open');
         } else {
           children.classList.add('open');
-          item.classList.add('section-open');
+          toggle.classList.add('open');
         }
       });
     });
