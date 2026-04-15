@@ -37,8 +37,13 @@ export function getDisplayMessages(
   return allMessages;
 }
 
-export function getPlaceholderText(isModelLoaded: boolean, supportsVision: boolean, imageOnly?: boolean): string {
-  if (!isModelLoaded) return 'Loading model...';
+export function getPlaceholderText(
+  hasModel: boolean,
+  isModelLoading: boolean,
+  supportsVision: boolean,
+  imageOnly?: boolean,
+): string {
+  if (!hasModel) return isModelLoading ? 'Loading model...' : 'Load a model to use chat';
   if (imageOnly) return 'Describe an image...';
   return supportsVision ? 'Type a message or add an image...' : 'Type a message...';
 }

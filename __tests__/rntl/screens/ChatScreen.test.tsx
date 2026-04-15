@@ -612,6 +612,26 @@ describe('ChatScreen', () => {
       expect(getByTestId(`message-content-${conversation.messages[1].id}`).props.children).toBe('Hi there!');
     });
 
+    it('locks the input and shows the load-model placeholder for old chats when no model is active', () => {
+      const conversation = createConversation({
+        messages: [
+          createUserMessage('Hello from before'),
+          createAssistantMessage('Hi there!'),
+        ],
+      });
+      useChatStore.setState({
+        conversations: [conversation],
+        activeConversationId: conversation.id,
+      });
+      mockRoute.params = { conversationId: conversation.id };
+
+      const { getByTestId } = renderChatScreen();
+      const input = getByTestId('chat-text-input');
+
+      expect(input.props.editable).toBe(false);
+      expect(input.props.placeholder).toBe('Load a model to use chat');
+    });
+
     it('shows NoModelScreen when no model and no existing messages', () => {
       // No model active and no conversation with messages
       const { getByText } = renderChatScreen();
@@ -4195,4 +4215,3 @@ describe('ChatScreen', () => {
     });
   });
 });
-
