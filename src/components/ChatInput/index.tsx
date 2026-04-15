@@ -182,13 +182,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       isAvailable={voiceAvailable}
       isModelLoading={isModelLoading}
       isTranscribing={isTranscribing}
+      asSendButton
       partialResult={partialResult}
       error={error}
       disabled={disabled}
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
       onCancelRecording={() => { stopRecording(); clearResult(); }}
-      asSendButton
     />
   );
 
