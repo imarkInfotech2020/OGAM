@@ -2,88 +2,95 @@
 layout: default
 title: Mission
 nav_order: 4
-description: Why Off Grid exists. Intelligence will become ambient - always on, always yours. We're building the architecture that makes that possible without asking you to trust anyone but yourself.
+description: Intelligence will become ambient. Always on, always yours, always private. We're building the architecture that makes that possible — on the devices you already own, without asking you to trust anyone but yourself.
 ---
 
-# Mission
-
----
-
-<div class="mission-statement">
-  <p class="mission-tagline">Democratize intelligence on-person.</p>
-  <p class="mission-sub">Private by architecture. On the devices you already own.</p>
-</div>
+# Intelligence belongs to everyone.
 
 ---
 
-## The belief
+Navigation used to belong to experts. You needed a map, a compass, training. Then it became ambient — built into the device in your pocket, free, always on, available to anyone going anywhere. You stopped thinking about navigation as a tool. It just became part of how you move through the world.
 
-Intelligence will become ambient.
+Intelligence is next.
 
-Just like navigation became ambient — so embedded in daily life that you no longer think about it as a separate tool — intelligence will disappear into the background. You won't "open an AI app." You'll just have an intelligence layer that's always there, always on, always yours.
+Not intelligence you open an app to access. Not intelligence you pay rent to use. Not intelligence that lives on someone else's server and answers your questions when you remember to ask. **Ambient intelligence. Always on. Always yours. Woven into the fabric of your day the way navigation is woven into every journey.**
 
-That's inevitable. The question is who builds it and on whose terms.
-
----
-
-## The problem with how it's being built today
-
-Right now, to use AI, you hand your most private thoughts to someone else's server.
-
-Your health questions. Your relationship problems. Your financial decisions. Your half-formed ideas at 2am. All of it sitting on infrastructure you don't control, governed by terms you didn't read, in the hands of companies whose business model depends on having your data.
-
-The ones who promised to do it differently have had a pattern of not following through. Companies that launched with local-first, private-by-default commitments, then went cloud when the economics shifted, then got acquired, then shut down overnight. Users lost access to their own memories. That's not a hypothetical risk. It has already happened.
-
-The problem is structural. When your intelligence lives on someone else's server, you are always one acquisition, one policy change, or one pricing decision away from losing it.
+That's where this is going. The question isn't whether it happens. The question is who builds it, on whose terms, and whose data pays for it.
 
 ---
 
-## The conviction
+## The way it's being built today is wrong.
 
-Your phone and your laptop are insanely powerful.
+To use AI today, you hand your most private thoughts to someone else's infrastructure.
 
-A flagship phone today runs AI at 30 tokens a second — fast enough for real-time conversation, fully offline. These devices were designed for this workload. They have dedicated neural processing hardware that sits mostly idle while you pay monthly fees to send your queries to someone else's GPU.
+Your health questions. Your relationship problems. Your financial decisions. Your half-formed ideas at 2am. All of it travelling to a server you don't control, stored under terms you didn't read, in the hands of companies whose revenue model is built around having your data and keeping you dependent on their compute.
 
-The infrastructure is already in your pocket. What's missing is the product that makes it intelligent and makes your devices talk to each other.
+Some of them promised to do it differently. Local-first. Private by default. Yours, not theirs. They made the right noises — and then the economics shifted. They went cloud. Then they got acquired. Then they shut down overnight. Users who had given years of their most personal context to these products woke up one day and had nothing. Lost access to their own memories. Gone.
 
-We are not waiting for new hardware. We are not waiting for a new platform. The devices 4 billion people already carry are enough.
+**That's not a hypothetical. It already happened.**
 
----
+And it will happen again, to every product that builds intelligence on top of someone else's infrastructure, because the structural incentive never goes away. When your intelligence lives on a server you don't own, you are always one acquisition, one pricing change, one bad quarter away from losing it.
 
-## The ethos
-
-Privacy is not a feature. It's an architecture decision.
-
-The only guarantee that your data stays yours is that it never leaves your device in the first place. Not a policy. Not a toggle. Not a promise from a company that could be acquired tomorrow.
-
-Architecture.
-
-Open source so anyone can verify it. No account required. No telemetry. No analytics. If you can't audit it, you can't trust it.
-
-We hold this as a non-negotiable. Not because it's a good marketing position — but because it's the only honest answer to the question of who owns your intelligence.
+The problem isn't the companies. The problem is the architecture.
 
 ---
 
-## The vision
+## The infrastructure is already in your hands.
 
-A Personal AI OS. One intelligence layer across all your devices.
+The device in your pocket is more powerful than the servers that ran the first generation of cloud AI.
 
-It knows your messages, your calendar, your work, your life — because it lives on your hardware. Your phone and your laptop talk to each other over your own network, with no server in between. It preps you for meetings before you ask. It defers your notifications when you need to focus. It creates a calendar entry when someone messages about dinner three weeks out. It surfaces what matters and lets everything else wait.
+A current flagship phone runs AI at 30 tokens a second — fast enough for real-time conversation, fully offline, using dedicated neural hardware that was designed for exactly this workload. That hardware has been shipping to billions of people for years. It sits mostly idle while they pay monthly fees to send their thoughts to someone else's GPU.
 
-Not an AI agent making decisions while you sleep. A private digital secretary that makes your life a little easier — the same thing that secretaries have been doing for the powerful for 200 years, but now running on a device that billions of people already carry, on models that cost nothing to run, with data that never leaves your hands.
+**The infrastructure for a private, personal, ambient intelligence layer already exists. It's in the pocket of 4 billion people. What's been missing is the software that takes that seriously.**
 
----
-
-## The mission
-
-For two centuries, the intelligence layer — the assistant that handles the coordination overhead of a productive life — was a privilege of wealth and seniority.
-
-The device in your pocket has changed that equation. The models are free. The hardware is there. The only thing that was missing was software that took it seriously.
-
-That's what we're building.
-
-**Democratize intelligence. Make it personal, private, and ambient. On the hardware people already own. Without asking them to trust anyone but themselves.**
+We are not waiting for a new device. We are not waiting for a new platform. We are not betting on hardware that takes a decade to get adopted. The phone you already carry is enough. The laptop you already own is enough. The revolution doesn't require a purchase.
 
 ---
 
-*Off Grid is open source. [View on GitHub](https://github.com/alichherawalla/off-grid-mobile?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github) or [join the community on Slack](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3swt3s84k-R0CHRwISaUpExV2~3qUUdQ).*
+## Privacy is not a feature. It's an architecture decision.
+
+You cannot solve a structural problem with a policy.
+
+"We anonymise before storing." "You can opt out in settings." "We take your privacy seriously." These are words. They describe intent, not architecture. They are revocable. They change when the company changes, when the terms change, when the acquisition happens.
+
+The only guarantee that your data stays yours is that it never leaves your device in the first place.
+
+Not a toggle. Not a promise. Not a trust-us. **Architecture.**
+
+Open source, so anyone can verify what the software actually does. No account required. No telemetry. No analytics. No data collection of any kind. If you can't audit it, you can't trust it — and you shouldn't.
+
+We hold this as a non-negotiable. Not because it's a better marketing position. Because it's the only honest answer to the question of who owns your intelligence.
+
+---
+
+## What we're building.
+
+For two hundred years, the people who operated at the highest levels of consequence had something everyone else didn't: a private intelligence layer.
+
+Someone who knew their priorities, managed their correspondence, prepared them for every meeting, tracked their commitments, drafted their communications, handled the coordination overhead of a productive life — so they could focus their attention on the work that actually required them.
+
+It was called a secretary. Then an executive assistant. Then a virtual assistant. Whatever the name, the function was the same: an intelligence layer available to you, handling everything except the decisions only you can make.
+
+For two hundred years, access to that layer was determined entirely by wealth and seniority. You had it if you could afford it. Everyone else managed the coordination overhead themselves — with their own attention, their own time, their own focus.
+
+**The device in your pocket changes that equation permanently.**
+
+A Personal AI OS — one intelligence layer, running on your hardware, spanning your phone and laptop over your own network, with no server in between. It knows your messages, your calendar, your work, your life — because it lives with you, not above you. It preps you for meetings before you ask. It defers what can wait and surfaces what can't. It handles the coordination overhead of your day the way a great assistant has always handled it for the people who could afford one.
+
+Not AI making decisions while you sleep. Not autonomous agents acting on your behalf in ways you didn't sanction. A private digital secretary — proactive, aware, yours — that makes your day a little easier and your attention a little freer.
+
+The same thing that secretaries have been doing for the powerful for 200 years. Now running on a device that billions of people already carry. On models that cost nothing to run. With data that never leaves your hands.
+
+---
+
+## The mission.
+
+**Democratize intelligence.**
+
+Make it personal. Make it private. Make it ambient. On the hardware people already own. Without asking them to trust anyone but themselves.
+
+That's what we're building with Off Grid.
+
+---
+
+*Open source. No account. No telemetry. [View on GitHub](https://github.com/alichherawalla/off-grid-mobile?utm_source=offgrid-docs&utm_medium=website&utm_campaign=github) · [Join the community](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3swt3s84k-R0CHRwISaUpExV2~3qUUdQ) · [Download the app](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=mission)*
