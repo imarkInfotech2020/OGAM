@@ -3,7 +3,7 @@ layout: default
 title: "Why Platform Intelligence Doesn't Exist Yet - And What It Would Take to Build It"
 parent: Perspectives
 nav_order: 22
-description: iOS and Android are still app-centric operating systems. The AI features built into them are bolted onto that model. A true Personal AI OS requires a fundamentally different architecture where context is the primitive, not apps.
+description: Mobile platforms are still app-centric operating systems. The AI features built into them are bolted onto that model. A true Personal AI OS requires a fundamentally different architecture where context is the primitive, not apps.
 ---
 
 # Why Platform Intelligence Doesn't Exist Yet - And What It Would Take to Build It
@@ -18,7 +18,7 @@ The distinction matters because the architecture determines the ceiling.
 
 ## The app-centric model
 
-iOS and Android are app-centric operating systems. The fundamental unit of the platform is the app. Apps are:
+Mobile platforms are app-centric operating systems. The fundamental unit of the platform is the app. Apps are:
 
 - **Sandboxed.** Each app has access only to the data it has been explicitly granted. Your calendar app cannot read your messages. Your AI assistant cannot, by default, access the files in your notes app.
 - **Isolated.** Apps do not share state with each other except through explicit, narrow API integrations. The mental model is a collection of independent tools, not a unified system.
@@ -32,7 +32,7 @@ But it creates a fundamental limitation for personal AI: there is no coherent vi
 
 ## What current platform AI actually is
 
-Current platform AI - Apple Intelligence, Google Gemini on Android - is AI built within the constraints of the existing app-centric model.
+Current platform AI is built within the constraints of the existing app-centric model.
 
 It can summarise notifications because the notification system already exposes text from all apps in one place. It can generate text in keyboards because the keyboard already operates across apps at the system level. It can answer questions about the current document because it is running in the context of the document editor.
 
@@ -62,7 +62,7 @@ The platforms have the engineering capability to build platform intelligence. Th
 
 **Privacy and regulatory risk.** A system with the depth of context that true platform intelligence requires would face significant scrutiny. The same capabilities that make it useful - knowing your messages, health, files, and location at once - create regulatory exposure in jurisdictions with strong privacy frameworks.
 
-**Ecosystem conflict.** Many of the most valuable sources of personal context live in apps built by competitors. Building intelligence that spans Google Maps, iMessage, Spotify, and your bank's app requires those apps to contribute context to a platform-level model. The companies behind those apps have no incentive to help the platform build a model that aggregates their users' data.
+**Ecosystem conflict.** Many of the most valuable sources of personal context live in apps built by third parties. Building intelligence that spans mapping apps, messaging services, streaming platforms, and banking apps requires those apps to contribute context to a platform-level model. The companies behind those apps have no incentive to help the platform build a model that aggregates their users' data.
 
 **Openness.** True platform intelligence, to be trustworthy, needs to be auditable. The platforms are closed by design. A closed intelligence layer with access to your full context is one you have to trust on faith.
 

@@ -537,6 +537,29 @@ body { font-family: var(--font); color: var(--text-primary); background: var(--b
   .essay-reactions { bottom: 16px; right: 16px; }
 }
 
+/* ─── Mission Page ──────────────────────────────────────────────────────────── */
+.mission-statement {
+  text-align: center;
+  padding: 48px 0 40px;
+}
+.mission-tagline {
+  font-size: 2rem;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  font-weight: 400;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+.mission-sub {
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: 400;
+}
+@media (max-width: 640px) {
+  .mission-tagline { font-size: 1.5rem; }
+}
+
 /* ─── Early Access Page ─────────────────────────────────────────────────────── */
 .early-access-hero { margin-bottom: 40px; }
 .early-access-badge {

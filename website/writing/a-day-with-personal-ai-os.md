@@ -22,7 +22,7 @@ This is not a search feature. Searching requires you to remember that you need t
 
 ## 9:10am
 
-You are on a corporate network that blocks external traffic. No ChatGPT. No Copilot. No cloud anything.
+You are on a corporate network that blocks external traffic. No cloud AI. No external APIs. Nothing.
 
 Your AI still works. It is running on your phone. It does not need a server. You ask it to summarise a long PDF you received this morning. It does.
 

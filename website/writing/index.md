@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Perspectives
-nav_order: 6
+nav_order: 7
 has_children: true
 description: Essays on the future of personal AI, on-device intelligence, and why the most important software of the next decade runs on hardware you already own.
 ---
@@ -21,11 +21,11 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/7-principles-personal-ai-os' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The 7 Principles of a Personal AI OS</div>
-    <div class="guide-card-desc">On-device. No telemetry. Persistent context. Acts on your behalf. Cross-device. Open and auditable. No subscription. The rules that define the category.</div>
+    <div class="guide-card-desc">On-device. No telemetry. Persistent context. Acts on your behalf. Cross-device. Open and auditable. No cloud compute rent. The rules that define the category.</div>
   </a>
   <a href="{{ '/writing/personal-ai-os-vs-assistant-vs-agent' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Personal AI OS vs AI Assistant vs AI Agent</div>
-    <div class="guide-card-desc">Siri answers questions. ChatGPT generates text. Autonomous agents take actions. A Personal AI OS does something different from all three.</div>
+    <div class="guide-card-desc">Voice assistants answer questions. Cloud chatbots generate text. Autonomous agents take actions. A Personal AI OS does something different from all three.</div>
   </a>
   <a href="{{ '/writing/why-personal-ai-should-never-live-in-cloud' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Why Your Personal AI Should Never Live in the Cloud</div>
@@ -85,8 +85,8 @@ Essays on where personal AI is going, how it should work, and why it matters.
 
 <div class="guide-grid">
   <a href="{{ '/writing/whatsapp-moment-for-ai' | relative_url }}" class="guide-card">
-    <div class="guide-card-title">The WhatsApp Moment for AI</div>
-    <div class="guide-card-desc">WhatsApp adopted end-to-end encryption because the market demanded it. AI is next. The arc is the same.</div>
+    <div class="guide-card-title">The Encrypted Messaging Moment for AI</div>
+    <div class="guide-card-desc">Encrypted messaging went mainstream because the market demanded it. AI is next. The arc is the same.</div>
   </a>
   <a href="{{ '/writing/walled-garden-problem' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Walled Garden Problem</div>
@@ -94,7 +94,26 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/regulatory-case-for-on-device-ai' | relative_url }}" class="guide-card">
     <div class="guide-card-title">The Regulatory Case for On-Device AI</div>
-    <div class="guide-card-desc">Every major privacy regulation - GDPR, DPDP, EU AI Act - is a tailwind for on-device AI. The architecture that's right for users ages well with regulators.</div>
+    <div class="guide-card-desc">Every major privacy regulation passed in the last five years is a tailwind for on-device AI. The architecture that's right for users ages well with regulators.</div>
+  </a>
+</div>
+
+---
+
+## The democratization of intelligence
+
+<div class="guide-grid">
+  <a href="{{ '/writing/200-year-secretary' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">The 200-Year Secretary</div>
+    <div class="guide-card-desc">For two centuries, having a personal secretary was the defining advantage of wealth and power. A Personal AI OS running on the device in your pocket changes that equation permanently.</div>
+  </a>
+  <a href="{{ '/writing/next-virtual-assistant' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">Your Next Virtual Assistant Won't Be a Person</div>
+    <div class="guide-card-desc">The VA model built a billion-dollar industry on human judgment at low cost. On-device AI undercuts that model - and delivers something human VAs structurally cannot: your full context, always available, private by architecture.</div>
+  </a>
+  <a href="{{ '/writing/va-industry-disruption' | relative_url }}" class="guide-card">
+    <div class="guide-card-title">Why the VA Industry Is About to Be Disrupted by On-Device AI</div>
+    <div class="guide-card-desc">The VA market is billions and growing. On-device AI competes on a dimension the human model can't match: full personal context, available at any hour, private by design.</div>
   </a>
 </div>
 
@@ -136,7 +155,7 @@ Essays on where personal AI is going, how it should work, and why it matters.
   </a>
   <a href="{{ '/writing/platform-intelligence-doesnt-exist' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Why Platform Intelligence Doesn't Exist Yet</div>
-    <div class="guide-card-desc">iOS and Android are app-centric operating systems. The AI bolted onto that model can't be a true intelligence layer. Here's what it would take to build one.</div>
+    <div class="guide-card-desc">Mobile platforms are app-centric operating systems. The AI bolted onto that model can't be a true intelligence layer. Here's what it would take to build one.</div>
   </a>
   <a href="{{ '/writing/phone-laptop-know-nothing' | relative_url }}" class="guide-card">
     <div class="guide-card-title">Your Phone and Laptop Know Nothing About You</div>

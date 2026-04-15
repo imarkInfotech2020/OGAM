@@ -7,8 +7,8 @@ description: A Personal AI OS is intelligence that lives on your device, knows y
 faq:
   - q: What is a Personal AI OS?
     a: A Personal AI OS is an intelligence layer that runs entirely on your own hardware - phone, laptop, or both - with access to your full personal context (messages, calendar, files, health data) and the ability to act on your behalf. Unlike cloud AI assistants, it never sends your data to a server. It runs offline, charges no ongoing fees for AI compute, and is auditable by design.
-  - q: How is a Personal AI OS different from an AI assistant like Siri or Alexa?
-    a: Siri and Alexa are cloud-dependent voice interfaces. They send your queries to remote servers, return responses, and retain minimal context between sessions. A Personal AI OS runs locally on your device, maintains persistent context about your life and work, and can act across apps on your behalf - not just answer isolated questions.
+  - q: How is a Personal AI OS different from a platform AI assistant?
+    a: Platform AI assistants are cloud-dependent voice interfaces. They send your queries to remote servers, return responses, and retain minimal context between sessions. A Personal AI OS runs locally on your device, maintains persistent context about your life and work, and can act across apps on your behalf - not just answer isolated questions.
   - q: How is a Personal AI OS different from an AI agent?
     a: AI agents are typically autonomous systems that make decisions and take actions with minimal human oversight, often connected to external services. A Personal AI OS is explicitly non-autonomous - it acts on your behalf with your consent, defers to you on decisions, and operates within the boundary of your own hardware and local network.
   - q: Does a Personal AI OS require an internet connection?
@@ -78,7 +78,7 @@ A Personal AI OS is not an autonomous agent. It does not make decisions on your 
 
 It is also not a walled garden. The category requires openness - open models, open source code, open protocols for cross-device communication. A closed Personal AI OS is a contradiction in terms.
 
-And it is not a product tied to a hardware platform. Apple Intelligence and Google Gemini are AI features inside existing platforms. A Personal AI OS is a layer that runs on your hardware regardless of who made it.
+And it is not a product tied to a hardware platform. The AI features built into operating systems are constrained by the platform's architecture and commercial interests. A Personal AI OS is an independent layer that runs on your hardware regardless of who made it.
 
 ---
 

@@ -29,7 +29,7 @@ Your phone is with you 16 hours a day. In that time it collects an extraordinary
 
 This is a detailed record of your life. The phone has all of it. The platform does almost nothing with it.
 
-Siri can set a timer. It can call a contact. It cannot tell you that you have had three difficult conversations this week and your calendar tomorrow is unrealistic given how your Monday went.
+The built-in assistant can set a timer or call a contact. It cannot tell you that you have had three difficult conversations this week and your calendar tomorrow is unrealistic given how your Monday went.
 
 ---
 
@@ -75,7 +75,7 @@ This is what makes the Personal AI OS a new category rather than a smarter assis
 
 The obstacle is not hardware. Modern phones and laptops have enough compute to run capable local models. The obstacle is the assumption that built modern software platforms.
 
-iOS and Android are app-centric operating systems. The primitive is the app, and apps are sandboxed from each other. Intelligence - to the extent the platforms attempt it - is bolt-on, not foundational.
+Mobile platforms are app-centric operating systems. The primitive is the app, and apps are sandboxed from each other. Intelligence - to the extent the platforms attempt it - is bolt-on, not foundational.
 
 A Personal AI OS requires inverting that model. Context is the primitive. Apps are sources of context. The intelligence layer sits above the apps, not inside any one of them, and operates across all your devices as a single system.
 
