@@ -10,7 +10,7 @@ faq:
   - q: Which iPhones can run LLMs locally in 2026?
     a: iPhone 12 or newer (A14 chip or later). Smaller models like Qwen 3.5 0.8B and Qwen 3.5 2B run on any supported iPhone. Larger models like Qwen 3.5 9B need iPhone 15 Pro or newer with 8GB RAM.
   - q: Is running LLMs on iPhone as good as ChatGPT?
-    a: For everyday tasks - summarisation, Q&A, writing help - Qwen 3.5 9B on iPhone 15 Pro is comparable to GPT-3.5. Gemma 4 and Qwen 3.5 models also support thinking mode for complex reasoning tasks.
+    a: For everyday tasks - summarisation, Q&A, writing help - Qwen 3.5 9B on iPhone 15 Pro handles most things you'd reach for ChatGPT for. Larger cloud models still have an edge on complex multi-step reasoning, but the gap is narrower than most people expect.
 ---
 
 # How to Run LLMs Locally on Your iPhone in 2026 (Completely Offline, No Subscription)

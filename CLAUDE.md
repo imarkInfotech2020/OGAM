@@ -8,6 +8,30 @@
 1. Push the branch and open a PR — never `git push origin main`.
 2. If you find yourself on `main`, create a branch first: `git checkout -b <branch-name>`.
 
+## Copy & Content Standards
+
+**Any change to website copy, essays, docs text, UI strings, or marketing content must follow the brand voice guide:**
+
+- Read `docs/brand_tone_voice.md` before writing or editing any copy.
+- The full quality checklist is at the bottom of that file — run every item before committing content changes.
+
+Key rules that are easy to miss:
+
+| Rule | Wrong | Right |
+|---|---|---|
+| Proof-first | "fast" | "15-30 tok/s on flagship devices" |
+| Privacy as mechanism | "we value your privacy" | "the model runs in your phone's RAM, nothing is sent anywhere" |
+| No exclamation marks | "It works!" | "It works." |
+| No em dashes | "private — always" | "private - always" |
+| No forbidden words | revolutionary, seamlessly, empower, leverage, robust, comprehensive, crucial, pivotal, delve, tapestry, testament, underscore, foster, cultivate, showcase, enhance | use specific, plain words instead |
+| No AI slop phrases | "serves as", "stands as", "represents a", "marks a turning point", "it is worth noting" | just say "is" |
+| No structural clichés | "Not just X, but Y" / "It's not X, it's Y" | state the thing directly |
+| No curly quotes | "private" | "private" |
+
+The emotional arc for all content: **Recognition -> Return -> Freedom**. Name what's been happening, show what's being given back, hand over the capability without condition.
+
+---
+
 ## Design Standards
 
 **Any change that touches UI (screens, components, styles) must comply with the design system:**

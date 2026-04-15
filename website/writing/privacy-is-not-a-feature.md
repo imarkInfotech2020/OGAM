@@ -31,7 +31,7 @@ The privacy feature model treats collection as the default and user control as t
 
 A different model starts with a different assumption: the data should never leave the device.
 
-The model runs in your phone's memory. Your query never becomes a network request. Your calendar and messages are never transmitted. Inference runs on your hardware, on your device - nothing reaches an external server.
+The model runs in your phone's memory. Your query never becomes a network request. Your calendar and messages are never transmitted. Inference runs on your hardware, on your device. Nothing reaches an external server.
 
 There is nothing to delete. There is no policy to violate. There is no breach to notify you about.
 
@@ -41,9 +41,9 @@ This is not a stronger version of the privacy feature model. It is a fundamental
 
 A privacy policy is a legal document. It describes what a company promises to do with your data. It does not change what is technically possible once your data is on their servers.
 
-Architecture determines what is possible. Policy determines what is promised. A company can change its policy - by updating a terms of service, by being acquired, by responding to a government request. An architecture that never collected the data in the first place cannot be changed after the fact.
+Architecture determines what is possible. Policy determines what is promised. A company can change its policy: by updating a terms of service, by being acquired, by responding to a government request. An architecture that never collected the data in the first place cannot be changed after the fact.
 
-This distinction matters more as the data becomes more sensitive. General search queries carry limited risk. Persistent personal context - your messages, health data, financial patterns, relationship history - carries significant risk. The architecture question is not abstract when the data at stake is that personal.
+This distinction matters more as the data becomes more sensitive. General search queries carry limited risk. Persistent personal context (your messages, health data, financial patterns, relationship history) carries significant risk. The architecture question is not abstract when the data at stake is that personal.
 
 ## The consent problem
 
@@ -53,18 +53,18 @@ An AI that can help you needs to know your calendar, your messages, your work pa
 
 A cloud AI asks you to hand over that context in exchange for its capabilities. The implicit contract is: give us your data, we'll give you a useful assistant, and we promise to be responsible with it.
 
-An on-device AI inverts that contract. The context lives on your hardware. The model runs locally. The capabilities are the same - or better, because the model has more context than any cloud service would retain. But you never handed anything over.
+An on-device AI inverts that contract. The context lives on your hardware. The model runs locally. The capabilities are the same, or better, because the model has more context than any cloud service would retain. But you never handed anything over.
 
 Consent only matters when there's something to consent to. On-device AI removes the question.
 
 ## What this means for how AI should be built
 
-If privacy is an architecture decision, it has to be made at the beginning - in the choice of where inference runs, where context is stored, and what leaves the device.
+If privacy is an architecture decision, it has to be made at the beginning: in the choice of where inference runs, where context is stored, and what leaves the device.
 
 A product that runs inference in the cloud and adds privacy controls on top is a cloud AI with privacy features.
 
 A product that runs inference on-device, stores context locally, and sends nothing to external servers is a private AI by architecture. There is no feature to ship, no toggle to add, no policy to write. The privacy guarantee is in the design.
 
-This is the only version of personal AI that deserves access to your full context. Not because the company behind it is more trustworthy. But because the architecture makes trust irrelevant - the data never left your device.
+This is the only version of personal AI that deserves access to your full context. Not because the company behind it is more trustworthy. But because the architecture makes trust irrelevant. The data never left your device.
 
 *Off Grid runs every model locally. No data leaves your device. [Download for iPhone](https://apps.apple.com/us/app/off-grid-local-ai/id6759299882?utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing) or [Android](https://play.google.com/store/apps/details?id=ai.offgridmobile&utm_source=offgrid-docs&utm_medium=website&utm_campaign=writing).*

@@ -95,7 +95,7 @@ Not sure what a personal AI OS actually is? Start here.
   </a>
   <a href="{{ '/writing/intelligence-should-be-personal' | relative_url }}" class="ea-essay-card">
     <div class="ea-essay-title">Intelligence Should Be Personal</div>
-    <div class="ea-essay-desc">Why AI that runs on a server can never be truly personal — and what it means for intelligence to actually belong to you.</div>
+    <div class="ea-essay-desc">Why AI that runs on a server can never be truly personal, and what it means for intelligence to actually belong to you.</div>
   </a>
   <a href="{{ '/writing/a-day-with-personal-ai-os' | relative_url }}" class="ea-essay-card">
     <div class="ea-essay-title">A Day With a Personal AI OS</div>
@@ -109,7 +109,7 @@ Not sure what a personal AI OS actually is? Start here.
 
 Off Grid today is a powerful on-device AI app. The personal AI OS is the next layer.
 
-It is a system where your AI understands context across every app, every conversation, every device — without a single byte leaving your phone. It knows what you are working on. It knows what you have read. It acts when you ask and stays out of the way when you do not.
+It is a system where your AI understands context across every app, every conversation, every device. Not a single byte leaves your phone. It knows what you are working on. It knows what you have read. It acts when you ask and stays out of the way when you do not.
 
 It does not send your data anywhere. It does not train on your activity. It is entirely yours.
 
