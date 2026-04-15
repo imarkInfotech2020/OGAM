@@ -301,14 +301,14 @@ describe('VoiceRecordButton', () => {
       expect(defaultStr).not.toEqual(sendStr);
     });
 
-    it('renders send icon when asSendButton and not recording', () => {
+    it('renders mic icon when asSendButton and not recording', () => {
       const { toJSON } = render(
         <VoiceRecordButton {...defaultProps} asSendButton={true} />
       );
 
       const treeStr = JSON.stringify(toJSON());
-      // asSendButton renders Icon with name="send"
-      expect(treeStr).toContain('send');
+      // asSendButton idle state renders Icon with name="mic"
+      expect(treeStr).toContain('mic');
     });
 
     it('renders mic icon when asSendButton and recording', () => {
