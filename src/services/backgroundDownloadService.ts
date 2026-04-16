@@ -213,35 +213,28 @@ class BackgroundDownloadService {
     return moved;
   }
 
+  private registerListener<T>(listeners: Map<string, T>, key: string, callback: T): () => void {
+    listeners.set(key, callback);
+    return () => listeners.delete(key);
+  }
+
   onProgress(downloadId: number, callback: DownloadProgressCallback): () => void {
-    const key = `progress_${downloadId}`;
-    this.progressListeners.set(key, callback);
-    return () => this.progressListeners.delete(key);
+    return this.registerListener(this.progressListeners, `progress_${downloadId}`, callback);
   }
   onComplete(downloadId: number, callback: DownloadCompleteCallback): () => void {
-    const key = `complete_${downloadId}`;
-    this.completeListeners.set(key, callback);
-    return () => this.completeListeners.delete(key);
+    return this.registerListener(this.completeListeners, `complete_${downloadId}`, callback);
   }
   onError(downloadId: number, callback: DownloadErrorCallback): () => void {
-    const key = `error_${downloadId}`;
-    this.errorListeners.set(key, callback);
-    return () => this.errorListeners.delete(key);
+    return this.registerListener(this.errorListeners, `error_${downloadId}`, callback);
   }
   onAnyProgress(callback: DownloadProgressCallback): () => void {
-    const key = 'progress_all';
-    this.progressListeners.set(key, callback);
-    return () => this.progressListeners.delete(key);
+    return this.registerListener(this.progressListeners, 'progress_all', callback);
   }
   onAnyComplete(callback: DownloadCompleteCallback): () => void {
-    const key = 'complete_all';
-    this.completeListeners.set(key, callback);
-    return () => this.completeListeners.delete(key);
+    return this.registerListener(this.completeListeners, 'complete_all', callback);
   }
   onAnyError(callback: DownloadErrorCallback): () => void {
-    const key = 'error_all';
-    this.errorListeners.set(key, callback);
-    return () => this.errorListeners.delete(key);
+    return this.registerListener(this.errorListeners, 'error_all', callback);
   }
   startProgressPolling(): void {
     if (!this.isAvailable() || this.isPolling) {
@@ -405,6 +398,17 @@ class BackgroundDownloadService {
     this.errorListeners.clear();
   }
 
+  private dispatchToListeners<T extends { downloadId: number }>(
+    listeners: Map<string, (e: T) => void>,
+    prefix: string,
+    event: T,
+  ): void {
+    listeners.get(`${prefix}_${event.downloadId}`)?.(event);
+    if (!this.silentDownloadIds.has(event.downloadId)) {
+      listeners.get(`${prefix}_all`)?.(event);
+    }
+  }
+
   private setupEventListeners(): void {
     if (!this.eventEmitter) return;
     const push = (s: { remove: () => void }) => this.subscriptions.push(s);
@@ -422,10 +426,7 @@ class BackgroundDownloadService {
           reasonCode: e.reasonCode || '',
         } });
       }
-      this.progressListeners.get(`progress_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.progressListeners.get('progress_all')?.(e);
-      }
+      this.dispatchToListeners(this.progressListeners, 'progress', e);
     }));
     push(this.eventEmitter.addListener('DownloadComplete', (e: DownloadCompleteEvent) => {
       logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'DownloadComplete event', meta: {
@@ -434,10 +435,7 @@ class BackgroundDownloadService {
         modelId: e.modelId,
         localUri: e.localUri || '',
       } });
-      this.completeListeners.get(`complete_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.completeListeners.get('complete_all')?.(e);
-      }
+      this.dispatchToListeners(this.completeListeners, 'complete', e);
     }));
     push(this.eventEmitter.addListener('DownloadError', (e: DownloadErrorEvent) => {
       logDownloadDebug({ level: 'error', scope: 'BackgroundDownloadService', message: 'DownloadError event', meta: {
@@ -448,10 +446,7 @@ class BackgroundDownloadService {
         reasonCode: e.reasonCode || '',
         status: e.status,
       } });
-      this.errorListeners.get(`error_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.errorListeners.get('error_all')?.(e);
-      }
+      this.dispatchToListeners(this.errorListeners, 'error', e);
     }));
     // DownloadRetrying — worker hit a transient error and will retry automatically.
     // Route it as a progress event with status='retrying' so the UI shows
@@ -477,10 +472,7 @@ class BackgroundDownloadService {
         reason: e.reason,
         reasonCode: e.reasonCode as any,
       };
-      this.progressListeners.get(`progress_${e.downloadId}`)?.(retryEvent);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.progressListeners.get('progress_all')?.(retryEvent);
-      }
+      this.dispatchToListeners(this.progressListeners, 'progress', retryEvent);
     }));
   }
 }

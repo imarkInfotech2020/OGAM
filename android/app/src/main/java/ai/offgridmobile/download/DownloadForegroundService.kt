@@ -37,6 +37,7 @@ class DownloadForegroundService : Service() {
         private const val EXTRA_SECONDARY_TOTAL = "secondary_total"
         private const val EXTRA_IS_SECONDARY = "is_secondary"
         private const val DEFAULT_TITLE = "Downloading model…"
+        private const val PROGRESS_MAX = 100
 
         fun start(
             context: Context,
@@ -163,8 +164,8 @@ class DownloadForegroundService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
             .setProgress(
-                if (combinedTotal > Int.MAX_VALUE) Int.MAX_VALUE else combinedTotal.toInt(),
-                if (combinedDownloaded > Int.MAX_VALUE) Int.MAX_VALUE else combinedDownloaded.toInt(),
+                PROGRESS_MAX,
+                if (combinedTotal > 0L) (combinedDownloaded * PROGRESS_MAX / combinedTotal).toInt() else 0,
                 combinedTotal <= 0L,
             )
             .setContentIntent(contentIntent)
