@@ -222,14 +222,14 @@ export const ModelLoadingStrategyToggle: React.FC = () => {
 export const CpuThreadsSlider: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-  const value = settings.nThreads ?? 6;
+  const { updateSettings } = useAppStore();
+  const { cpuThreadsDisplayValue, cpuThreadsSliderValue } = useTextGenerationAdvanced();
 
   return (
     <View style={styles.modeToggleContainer}>
       <View style={styles.settingHeader}>
         <Text style={styles.settingLabel}>CPU Threads</Text>
-        <Text style={styles.settingValue}>{value}</Text>
+        <Text style={styles.settingValue}>{cpuThreadsDisplayValue}</Text>
       </View>
       <Text style={styles.settingDescription}>Parallel threads for inference</Text>
       <Slider
@@ -237,7 +237,7 @@ export const CpuThreadsSlider: React.FC = () => {
         minimumValue={1}
         maximumValue={12}
         step={1}
-        value={value}
+        value={cpuThreadsSliderValue}
         onSlidingComplete={(v: number) => updateSettings({ nThreads: v })}
         minimumTrackTintColor={colors.primary}
         maximumTrackTintColor={colors.surfaceLight}

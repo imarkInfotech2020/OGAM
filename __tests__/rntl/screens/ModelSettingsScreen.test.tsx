@@ -433,10 +433,10 @@ describe('ModelSettingsScreen', () => {
   // Performance Settings
   // ============================================================================
   describe('performance settings', () => {
-    it('shows CPU Threads slider label and default value', () => {
+    it('shows CPU Threads slider label and auto value when nThreads uses the auto sentinel', () => {
       const { getByText } = renderWithSections('text');
       expect(getByText('CPU Threads')).toBeTruthy();
-      expect(getByText('6')).toBeTruthy();
+      expect(getByText('Auto')).toBeTruthy();
     });
 
     it('shows Batch Size slider label and default value', () => {
@@ -518,7 +518,7 @@ describe('ModelSettingsScreen', () => {
       const allViews = UNSAFE_getAllByType(View);
       const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
 
-      const threadsSlider = sliders.find((s: any) => s.props.value === 6 && s.props.maximumValue === 12);
+      const threadsSlider = sliders.find((s: any) => s.props.value === 1 && s.props.maximumValue === 12);
       if (threadsSlider) {
         fireEvent(threadsSlider, 'slidingComplete', 8);
         expect(useAppStore.getState().settings.nThreads).toBe(8);
@@ -837,7 +837,7 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('0.70')).toBeTruthy(); // temperature || 0.7
       expect(getByText('0.90')).toBeTruthy(); // topP || 0.9
       expect(getByText('1.10')).toBeTruthy(); // repeatPenalty || 1.1
-      expect(getByText('6')).toBeTruthy(); // nThreads || 6
+      expect(getByText('6')).toBeTruthy(); // undefined still falls back to 6
       expect(getByText('8')).toBeTruthy(); // imageSteps || 8
       expect(getByText('7.5')).toBeTruthy(); // imageGuidanceScale || 7.5
     });
@@ -910,6 +910,12 @@ describe('ModelSettingsScreen', () => {
       useAppStore.getState().updateSettings({ cacheType: 'q4_0' });
       const { getByText } = renderWithSections('text');
       expect(getByText(/4-bit quantized/)).toBeTruthy();
+    });
+
+    it('locks KV cache display to f16 on HTP backend', () => {
+      useAppStore.getState().updateSettings({ inferenceBackend: 'htp', cacheType: 'q4_0' });
+      const { getByText } = renderWithSections('text');
+      expect(getByText(/Full precision/)).toBeTruthy();
     });
   });
 

@@ -21,10 +21,15 @@ export function useTextGenerationAdvanced() {
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const isGpuEnabled = (settings?.inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
   const isAndroid = Platform.OS === 'android';
-  const gpuForcesF16 = false;
-  // OpenCL forces f16 — disable quantized cache options in the UI
-  const cacheDisabled = (settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU) === INFERENCE_BACKENDS.OPENCL;
+  const selectedBackend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+  const gpuForcesF16 =
+    selectedBackend === INFERENCE_BACKENDS.OPENCL ||
+    selectedBackend === INFERENCE_BACKENDS.HTP;
+  // OpenCL and HTP force f16 in the native loader, so lock the UI to match.
+  const cacheDisabled = gpuForcesF16;
   const displayCacheType = cacheDisabled ? 'f16' : currentCacheType;
+  const cpuThreadsSliderValue = settings?.nThreads && settings.nThreads > 0 ? settings.nThreads : 1;
+  const cpuThreadsDisplayValue = settings?.nThreads === 0 ? 'Auto' : String(settings?.nThreads ?? 6);
 
   const handleFlashAttnToggle = (flashAttn: boolean) => {
     if (!flashAttn && isQuantizedCache) {
@@ -56,6 +61,8 @@ export function useTextGenerationAdvanced() {
     isAndroid,
     gpuForcesF16,
     cacheDisabled,
+    cpuThreadsSliderValue,
+    cpuThreadsDisplayValue,
 
     // Handlers
     handleFlashAttnToggle,
