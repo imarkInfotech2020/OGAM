@@ -218,7 +218,7 @@ export const TextGenerationAdvanced: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
-  const { cacheDisabled } = useTextGenerationAdvanced();
+  const { cacheDisabled, cpuThreadsDisplayValue, cpuThreadsSliderValue } = useTextGenerationAdvanced();
 
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
 
@@ -265,7 +265,7 @@ export const TextGenerationAdvanced: React.FC = () => {
       <View style={styles.sliderSection}>
         <View style={styles.sliderHeader}>
           <Text style={styles.sliderLabel}>CPU Threads</Text>
-          <Text style={styles.sliderValue}>{settings?.nThreads || 6}</Text>
+          <Text style={styles.sliderValue}>{cpuThreadsDisplayValue}</Text>
         </View>
         <Text style={styles.sliderDesc}>Parallel threads for inference</Text>
         <Slider
@@ -273,7 +273,7 @@ export const TextGenerationAdvanced: React.FC = () => {
           minimumValue={1}
           maximumValue={12}
           step={1}
-          value={settings?.nThreads || 6}
+          value={cpuThreadsSliderValue}
           onSlidingComplete={(value) => updateSettings({ nThreads: value })}
           minimumTrackTintColor={colors.primary}
           maximumTrackTintColor={colors.surface}
