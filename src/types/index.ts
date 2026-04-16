@@ -331,7 +331,32 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
 }
-export type BackgroundDownloadStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'unknown' | 'retrying';
+export type BackgroundDownloadStatus =
+  | 'pending'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'unknown'
+  | 'retrying'
+  | 'waiting_for_network'
+  | 'cancelled';
+export type BackgroundDownloadReasonCode =
+  | 'none'
+  | 'network_lost'
+  | 'network_timeout'
+  | 'server_unavailable'
+  | 'download_interrupted'
+  | 'disk_full'
+  | 'file_corrupted'
+  | 'empty_response'
+  | 'user_cancelled'
+  | 'http_401'
+  | 'http_403'
+  | 'http_404'
+  | 'http_416'
+  | 'client_error'
+  | 'unknown_error';
 export interface BackgroundDownloadInfo {
   downloadId: number;
   fileName: string;
@@ -344,6 +369,8 @@ export interface BackgroundDownloadInfo {
   startedAt: number;
   completedAt?: number;
   failureReason?: string;
+  reason?: string;
+  reasonCode?: BackgroundDownloadReasonCode;
 }
 export interface DebugInfo {
   systemPrompt: string;

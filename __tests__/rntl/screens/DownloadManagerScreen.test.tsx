@@ -24,12 +24,13 @@ import { TouchableOpacity } from 'react-native';
 // Navigation is globally mocked in jest.setup.ts
 
 const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {
     ...actual,
     useNavigation: () => ({
-      navigate: jest.fn(),
+      navigate: mockNavigate,
       goBack: mockGoBack,
       setOptions: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
@@ -211,10 +212,114 @@ describe('DownloadManagerScreen', () => {
     expect(getByText('Download Manager')).toBeTruthy();
   });
 
+  it('navigates to download logs from terminal button', () => {
+    const { getByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getByTestId('download-logs-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('DownloadLogs');
+  });
+
   it('shows empty state when no downloads', () => {
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('No active downloads')).toBeTruthy();
     expect(getByText('No models downloaded yet')).toBeTruthy();
+  });
+
+  it('keeps failed downloads visible with their reason', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 42,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+        status: 'failed',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        startedAt: Date.now(),
+        reason: 'HTTP 416',
+      },
+    ]);
+
+    const state = createDefaultState({
+      activeBackgroundDownloads: {
+        42: {
+          modelId: 'test/model',
+          fileName: 'model.gguf',
+          author: 'test',
+          quantization: 'Q4_K_M',
+          totalBytes: 4096,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByText, queryByText } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByText('model.gguf')).toBeTruthy();
+    expect(getByText('The server could not resume this download. Please retry it.')).toBeTruthy();
+    expect(queryByText('No active downloads')).toBeNull();
+  });
+
+  it('shows network retry messaging when polling refreshes a stale running entry', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 77,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+        status: 'pending',
+        bytesDownloaded: 2048,
+        totalBytes: 4096,
+        startedAt: Date.now(),
+        reason: 'Network connection lost. Waiting to resume.',
+      },
+    ]);
+
+    const setDownloadProgress = jest.fn();
+    const state = createDefaultState({
+      downloadProgress: {
+        'test/model/model.gguf': {
+          progress: 0.5,
+          bytesDownloaded: 2048,
+          totalBytes: 4096,
+          status: 'running',
+        },
+      },
+      setDownloadProgress,
+      activeBackgroundDownloads: {
+        77: {
+          modelId: 'test/model',
+          fileName: 'model.gguf',
+          author: 'test',
+          quantization: 'Q4_K_M',
+          totalBytes: 4096,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByText } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setDownloadProgress).toHaveBeenCalledWith(
+      'test/model/model.gguf',
+      expect.objectContaining({
+        status: 'retrying',
+        reason: 'Network connection lost. Waiting to resume.',
+      }),
+    );
+    expect(getByText('Network connection lost - waiting to resume...')).toBeTruthy();
   });
 
   it('shows section headers for active and completed', () => {
@@ -342,12 +447,8 @@ describe('DownloadManagerScreen', () => {
       return selector ? selector(state) : state;
     });
 
-    const { UNSAFE_getAllByType } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    if (cancelButtons.length > 0) {
-      fireEvent.press(cancelButtons[0]);
-    }
+    const { getAllByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getAllByTestId('remove-download-button')[0]);
 
     expect(mockShowAlert).toHaveBeenCalledWith(
       'Remove Download',
@@ -705,7 +806,7 @@ describe('DownloadManagerScreen', () => {
     });
 
     // Shows alert but does NOT clear progress or background download state
-    expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'Network error');
+    expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'The connection dropped while downloading. Please try again.');
     expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
   });
 
@@ -857,11 +958,8 @@ describe('DownloadManagerScreen', () => {
       return selector ? selector(state) : state;
     });
 
-    const { UNSAFE_getAllByType, getByTestId } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    // Press the cancel button (second touchable after back button)
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    fireEvent.press(cancelButtons[0]);
+    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getAllByTestId('remove-download-button')[0]);
 
     // Press "Yes" to confirm
     await act(async () => {
@@ -889,10 +987,8 @@ describe('DownloadManagerScreen', () => {
       return selector ? selector(state) : state;
     });
 
-    const { UNSAFE_getAllByType, getByTestId } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    fireEvent.press(cancelButtons[0]);
+    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getAllByTestId('remove-download-button')[0]);
 
     await act(async () => {
       fireEvent.press(getByTestId('alert-button-Yes'));
@@ -917,10 +1013,8 @@ describe('DownloadManagerScreen', () => {
       return selector ? selector(state) : state;
     });
 
-    const { UNSAFE_getAllByType, getByTestId } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    fireEvent.press(cancelButtons[0]);
+    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getAllByTestId('remove-download-button')[0]);
 
     await act(async () => {
       fireEvent.press(getByTestId('alert-button-Yes'));
@@ -1067,20 +1161,16 @@ describe('DownloadManagerScreen', () => {
     });
 
     // Find the cancel button for the RNFS download (which has no downloadId)
-    const touchables = result.UNSAFE_getAllByType(TouchableOpacity);
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    if (cancelButtons.length > 0) {
-      fireEvent.press(cancelButtons[0]);
+    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
 
-      // Confirm
-      await act(async () => {
-        fireEvent.press(result.getByTestId('alert-button-Yes'));
-      });
+    // Confirm
+    await act(async () => {
+      fireEvent.press(result.getByTestId('alert-button-Yes'));
+    });
 
-      // Should have cross-referenced and found downloadId 301
-      expect(setBackgroundDownload).toHaveBeenCalledWith(301, null);
-      expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith(301);
-    }
+    // Should have cross-referenced and found downloadId 301
+    expect(setBackgroundDownload).toHaveBeenCalledWith(301, null);
+    expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith(301);
   });
 
   it('skips invalid background download metadata entries', async () => {
@@ -1405,22 +1495,204 @@ describe('DownloadManagerScreen', () => {
     });
 
     // Find and press cancel button on the active download
-    const touchables = result.UNSAFE_getAllByType(TouchableOpacity);
-    // Find cancel buttons (skip back button)
-    const cancelButtons = touchables.filter((_: any, i: number) => i > 0);
-    if (cancelButtons.length > 0) {
-      fireEvent.press(cancelButtons[0]);
+    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
 
-      // Confirm removal
-      await act(async () => {
-        fireEvent.press(result.getByTestId('alert-button-Yes'));
-      });
+    // Confirm removal
+    await act(async () => {
+      fireEvent.press(result.getByTestId('alert-button-Yes'));
+    });
 
-      // After 1 second timeout, reload should happen
-      await act(async () => {
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
-      });
-    }
+    // After 1 second timeout, reload should happen
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+  });
+
+  // ===== RETRY BUTTON TESTS =====
+
+  it('shows retry and remove buttons for failed downloads', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 42,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+        status: 'failed',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        startedAt: Date.now(),
+        reason: 'HTTP 404',
+      },
+    ]);
+
+    const state = createDefaultState({
+      activeBackgroundDownloads: {
+        42: {
+          modelId: 'test/model',
+          fileName: 'model.gguf',
+          author: 'test',
+          quantization: 'Q4_K_M',
+          totalBytes: 4096,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('retry-download-button')).toBeTruthy();
+    expect(getByTestId('failed-remove-button')).toBeTruthy();
+    expect(queryByTestId('remove-download-button')).toBeNull();
+  });
+
+  it('does not show retry button for failed image downloads', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 99,
+        fileName: 'image.zip',
+        modelId: 'image:img-model',
+        status: 'failed',
+        bytesDownloaded: 512,
+        totalBytes: 2048,
+        startedAt: Date.now(),
+        reason: 'Network error',
+      },
+    ]);
+
+    const state = createDefaultState({
+      activeBackgroundDownloads: {
+        99: {
+          modelId: 'image:img-model',
+          fileName: 'image.zip',
+          author: 'system',
+          quantization: '',
+          totalBytes: 2048,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('failed-remove-button')).toBeTruthy();
+    expect(queryByTestId('retry-download-button')).toBeNull();
+  });
+
+  it('pressing retry button shows confirmation alert', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 42,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+        status: 'failed',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        startedAt: Date.now(),
+        reason: 'timeout',
+      },
+    ]);
+
+    const state = createDefaultState({
+      activeBackgroundDownloads: {
+        42: {
+          modelId: 'test/model',
+          fileName: 'model.gguf',
+          author: 'test',
+          quantization: 'Q4_K_M',
+          totalBytes: 4096,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByTestId } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.press(getByTestId('retry-download-button'));
+
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      'Retry Download',
+      expect.stringContaining('restart'),
+      expect.any(Array),
+    );
+  });
+
+  it('shows reconnecting status with icon for retrying downloads', async () => {
+    const state = createDefaultState({
+      downloadProgress: {
+        'test/model/model.gguf': {
+          progress: 0.5,
+          bytesDownloaded: 2048,
+          totalBytes: 4096,
+          status: 'retrying',
+          reason: 'Connection dropped. Waiting to retry (attempt 2).',
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByText } = render(<DownloadManagerScreen />);
+    expect(getByText(/Reconnecting/)).toBeTruthy();
+  });
+
+  it('shows failed status with error color and icon', async () => {
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 42,
+        fileName: 'model.gguf',
+        modelId: 'test/model',
+        status: 'failed',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        startedAt: Date.now(),
+        reason: 'HTTP 404',
+      },
+    ]);
+
+    const state = createDefaultState({
+      activeBackgroundDownloads: {
+        42: {
+          modelId: 'test/model',
+          fileName: 'model.gguf',
+          author: 'test',
+          quantization: 'Q4_K_M',
+          totalBytes: 4096,
+        },
+      },
+    });
+    mockUseAppStore.mockImplementation((selector?: any) => {
+      return selector ? selector(state) : state;
+    });
+
+    const { getByText } = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByText('The file could not be found on the download server.')).toBeTruthy();
   });
 });

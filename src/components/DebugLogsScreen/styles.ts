@@ -25,8 +25,13 @@ export function createStyles(_colors: ThemeColors, _shadows: ThemeShadows) {
       color: colors.textSecondary,
       marginTop: 4,
     },
+    headerSpacer: {
+      width: 24,
+      height: 24,
+    },
     actionBar: {
       flexDirection: 'row' as const,
+      flexWrap: 'wrap' as const,
       paddingHorizontal: 12,
       paddingVertical: 12,
       borderBottomWidth: 1,
@@ -34,7 +39,7 @@ export function createStyles(_colors: ThemeColors, _shadows: ThemeShadows) {
       gap: 8,
     },
     actionButton: {
-      flex: 1 as const,
+      minWidth: 88,
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
@@ -52,12 +57,21 @@ export function createStyles(_colors: ThemeColors, _shadows: ThemeShadows) {
       fontWeight: '500' as const,
       color: colors.primary,
     },
+    copyStatusRow: {
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+    },
+    copyStatusText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
     listContent: {
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
     logEntry: {
       flexDirection: 'row' as const,
+      alignItems: 'flex-start' as const,
       paddingVertical: 8,
       paddingHorizontal: 12,
       marginBottom: 8,
@@ -75,7 +89,7 @@ export function createStyles(_colors: ThemeColors, _shadows: ThemeShadows) {
       fontSize: 12,
       fontWeight: '600' as const,
       fontFamily: 'monospace',
-      minWidth: 50,
+      minWidth: 54,
     },
     logMessage: {
       flex: 1 as const,

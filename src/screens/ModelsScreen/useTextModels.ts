@@ -10,6 +10,7 @@ import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeF
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
 import { getModelType } from './utils';
 import logger from '../../utils/logger';
+import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 
 const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
 
@@ -224,7 +225,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const onError = (err: Error) => {
       setDownloadProgress(downloadKey, null);
       setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
-      setAlertState(showAlert('Download Failed', err.message));
+      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message)));
     };
     try {
       const info = await modelManager.downloadModelBackground(model.id, file, onProgress);

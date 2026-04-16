@@ -8,6 +8,7 @@ import { unzip } from 'react-native-zip-archive';
 import { showAlert, hideAlert, AlertState } from '../../components/CustomAlert';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
+import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import { ONNXImageModel } from '../../types';
 import { ImageModelDescriptor } from './types';
 
@@ -55,13 +56,13 @@ export function wireDownloadListeners(
   const unsubComplete = backgroundDownloadService.onComplete(downloadId, async () => {
     unsubProgress?.(); unsubComplete(); unsubError();
     try { await onCompleteWork(); } catch (e: any) {
-      deps.setAlertState(showAlert('Download Failed', e?.message || 'Failed to process model'));
+      deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(e?.message || 'Failed to process model')));
       cleanupDownloadState(deps, modelId, downloadId);
     }
   });
   const unsubError = backgroundDownloadService.onError(downloadId, (ev) => {
     unsubProgress?.(); unsubComplete(); unsubError();
-    deps.setAlertState(showAlert('Download Failed', ev.reason || 'Unknown error'));
+    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(ev.reason)));
     cleanupDownloadState(deps, modelId, downloadId);
   });
   return {
@@ -155,7 +156,7 @@ export async function downloadHuggingFaceModel(
     };
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
   } catch (error: any) {
-    deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
+    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     try {
       const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
       if (await RNFS.exists(dir)) await RNFS.unlink(dir);
@@ -222,7 +223,7 @@ export async function downloadCoreMLMultiFile(
       }
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying') return;
+      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
       const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0;
       deps.updateModelProgress(modelInfo.id, progress);
       deps.syncSharedProgress({
@@ -236,7 +237,7 @@ export async function downloadCoreMLMultiFile(
     }));
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
-    deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
+    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     cleanupDownloadState(deps, modelInfo.id);
   }
 }
@@ -329,7 +330,7 @@ export async function proceedWithDownload(
       await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying') return;
+      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
       const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0;
       deps.updateModelProgress(modelInfo.id, progress);
       deps.syncSharedProgress({
@@ -343,7 +344,7 @@ export async function proceedWithDownload(
     }));
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
-    deps.setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
+    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     cleanupDownloadState(deps, modelInfo.id);
   }
 }

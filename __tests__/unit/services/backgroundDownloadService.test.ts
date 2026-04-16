@@ -254,6 +254,7 @@ describe('BackgroundDownloadService', () => {
           bytesDownloaded: 1000,
           totalBytes: 5000,
           startedAt: 12345,
+          reason: 'still downloading',
         },
       ]);
 
@@ -263,6 +264,7 @@ describe('BackgroundDownloadService', () => {
       expect(result[0].downloadId).toBe(1);
       expect(result[0].status).toBe('running');
       expect(result[0].bytesDownloaded).toBe(1000);
+      expect(result[0].reason).toBe('still downloading');
     });
   });
 

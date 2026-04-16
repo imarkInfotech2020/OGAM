@@ -11,6 +11,7 @@ import { Button, Card, ModelCard } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
+import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
@@ -167,7 +168,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     const key = `${modelId}/${file.name}`;
     cancelledKeys.current.delete(key);
     setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
-    const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', error.message)); };
+    const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message))); };
     try {
       const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
         if (cancelledKeys.current.has(key)) return;

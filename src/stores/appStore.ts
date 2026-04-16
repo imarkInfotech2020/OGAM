@@ -2,9 +2,16 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage, PersistedDownloadInfo } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage, PersistedDownloadInfo, BackgroundDownloadReasonCode, BackgroundDownloadStatus } from '../types';
 
-type DownloadProgressInfo = { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string };
+type DownloadProgressInfo = {
+  progress: number;
+  bytesDownloaded: number;
+  totalBytes: number;
+  status?: BackgroundDownloadStatus | string;
+  reason?: string;
+  reasonCode?: BackgroundDownloadReasonCode;
+};
 
 type OnboardingChecklist = {
   downloadedModel: boolean; loadedModel: boolean; sentMessage: boolean;

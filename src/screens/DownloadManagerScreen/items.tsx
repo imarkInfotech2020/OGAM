@@ -4,8 +4,9 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import { hardwareService } from '../../services';
-import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
+import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel, BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
+import { getDownloadStatusLabel } from '../../utils/downloadErrors';
 import { createStyles } from './styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -27,10 +28,11 @@ export type DownloadItem = {
   isVisionModel?: boolean;
   mmProjPath?: string;
   reason?: string;
+  reasonCode?: BackgroundDownloadReasonCode;
 };
 
 export interface DownloadItemsData {
-  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string }>;
+  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
   activeDownloads: BackgroundDownloadInfo[];
   activeBackgroundDownloads: Record<number, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
   downloadedModels: DownloadedModel[];
@@ -63,7 +65,9 @@ export function getStatusText(status: string): string {
   if (status === 'running' || status === 'downloading') return 'Downloading...';
   if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
-  if (status === 'retrying') return 'Reconnecting...';
+  if (status === 'retrying') return 'Retrying connection...';
+  if (status === 'waiting_for_network') return 'Waiting for network';
+  if (status === 'failed') return 'Needs attention';
   if (status === 'unknown') return 'Stuck - Remove & retry';
   return status;
 }
@@ -74,6 +78,10 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
   Object.entries(data.downloadProgress).forEach(([key, progress]) => {
     const [_modelId, fileName] = key.split('/').slice(-2);
     const fullModelId = key.substring(0, key.lastIndexOf('/'));
+    const matchingActiveDownload = data.activeDownloads.find(download => {
+      const metadata = data.activeBackgroundDownloads[download.downloadId];
+      return metadata?.modelId === fullModelId && metadata?.fileName === fileName;
+    });
     if (!fileName || !fullModelId || fileName === 'undefined' || fullModelId === 'undefined' ||
         Number.isNaN(progress.totalBytes) || Number.isNaN(progress.bytesDownloaded)) {
       return;
@@ -93,8 +101,9 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       fileSize: progress.totalBytes,
       bytesDownloaded: progress.bytesDownloaded,
       progress: progress.progress,
-      status: progress.status ?? 'downloading',
-      reason: progress.reason,
+      status: matchingActiveDownload?.status ?? progress.status ?? 'downloading',
+      reason: matchingActiveDownload?.reason || matchingActiveDownload?.failureReason || progress.reason,
+      reasonCode: matchingActiveDownload?.reasonCode || progress.reasonCode,
     });
   });
 
@@ -121,6 +130,8 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       bytesDownloaded: download.bytesDownloaded,
       progress: metadata.totalBytes > 0 ? download.bytesDownloaded / metadata.totalBytes : 0,
       status: download.status,
+      reason: download.reason || download.failureReason,
+      reasonCode: download.reasonCode,
     });
   });
 
@@ -166,10 +177,11 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
 }
 
 function getStatusLabel(item: DownloadItem): string {
-  if (item.status === 'retrying' && item.reason) return item.reason;
-  const base = getStatusText(item.status);
-  if (!item.reason) return base;
-  return `${base} · ${item.reason}`;
+  if (item.status === 'failed' || item.status === 'retrying' || item.status === 'pending' || item.status === 'waiting_for_network') {
+    return getDownloadStatusLabel(item.status, item.reasonCode, item.reason);
+  }
+  if (!item.reason && !item.reasonCode) return getStatusText(item.status);
+  return getDownloadStatusLabel(item.status, item.reasonCode, item.reason);
 }
 
 // ─── Item components ──────────────────────────────────────────────────────────
@@ -177,11 +189,32 @@ function getStatusLabel(item: DownloadItem): string {
 interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
+  onRetry?: (item: DownloadItem) => void;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const progressColor =
+    item.status === 'failed'
+      ? colors.error
+      : item.status === 'retrying' || item.status === 'waiting_for_network'
+        ? colors.warning
+        : colors.primary;
+
+  const getStatusIcon = () => {
+    if (item.status === 'failed') return 'alert-circle';
+    if (item.status === 'retrying') return 'refresh-cw';
+    if (item.status === 'waiting_for_network') return 'wifi-off';
+    return null;
+  };
+
+  const getStatusIconColor = () => {
+    if (item.status === 'failed') return colors.error;
+    if (item.status === 'retrying') return colors.warning;
+    if (item.status === 'waiting_for_network') return colors.warning;
+    return colors.textMuted;
+  };
 
   return (
     <Card style={styles.downloadCard}>
@@ -190,13 +223,19 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        <TouchableOpacity style={styles.cancelButton} onPress={() => onRemove(item)}>
-          <Icon name="x" size={20} color={colors.error} />
-        </TouchableOpacity>
+        {item.status !== 'failed' && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            testID="remove-download-button"
+            onPress={() => onRemove(item)}
+          >
+            <Icon name="x" size={20} color={colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.progressContainer}>
         <View style={styles.progressBarBackground}>
-          <View style={[styles.progressBarFill, { width: `${Math.round(item.progress * 100)}%` as const }]} />
+          <View style={[styles.progressBarFill, { width: `${Math.round(item.progress * 100)}%` as const, backgroundColor: progressColor }]} />
         </View>
         <Text style={styles.progressText}>
           {formatBytes(item.bytesDownloaded)} / {formatBytes(item.fileSize)}
@@ -206,10 +245,37 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
         <View style={styles.quantBadge}>
           <Text style={styles.quantText}>{item.quantization}</Text>
         </View>
-        <Text style={styles.statusText}>
-          {getStatusLabel(item)}
-        </Text>
+        <View style={styles.statusIconRow}>
+          {getStatusIcon() && (
+            <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
+          )}
+          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
+            {getStatusLabel(item)}
+          </Text>
+        </View>
       </View>
+      {item.status === 'failed' && (
+        <View style={styles.failedActionsRow}>
+          <TouchableOpacity
+            style={styles.removeButton}
+            testID="failed-remove-button"
+            onPress={() => onRemove(item)}
+          >
+            <Icon name="trash-2" size={14} color={colors.error} />
+            <Text style={styles.removeButtonText}>Remove</Text>
+          </TouchableOpacity>
+          {onRetry && item.modelType !== 'image' && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              testID="retry-download-button"
+              onPress={() => onRetry(item)}
+            >
+              <Icon name="rotate-cw" size={14} color={colors.primary} />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </Card>
   );
 };

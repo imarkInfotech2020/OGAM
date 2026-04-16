@@ -1,0 +1,124 @@
+package ai.offgridmobile.download
+
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
+
+data class DownloadUiState(
+    val status: String,
+    val reason: String? = null,
+    val reasonCode: String? = null,
+)
+
+object DownloadReason {
+    const val NONE = "none"
+    const val NETWORK_LOST = "network_lost"
+    const val NETWORK_TIMEOUT = "network_timeout"
+    const val SERVER_UNAVAILABLE = "server_unavailable"
+    const val DOWNLOAD_INTERRUPTED = "download_interrupted"
+    const val DISK_FULL = "disk_full"
+    const val FILE_CORRUPTED = "file_corrupted"
+    const val EMPTY_RESPONSE = "empty_response"
+    const val USER_CANCELLED = "user_cancelled"
+    const val HTTP_401 = "http_401"
+    const val HTTP_403 = "http_403"
+    const val HTTP_404 = "http_404"
+    const val HTTP_416 = "http_416"
+    const val CLIENT_ERROR = "client_error"
+    const val UNKNOWN_ERROR = "unknown_error"
+
+    private val retryableCodes = setOf(
+        NETWORK_LOST,
+        NETWORK_TIMEOUT,
+        SERVER_UNAVAILABLE,
+        DOWNLOAD_INTERRUPTED,
+    )
+
+    fun fromThrowable(error: Exception): String {
+        return when (error) {
+            is SocketTimeoutException -> NETWORK_TIMEOUT
+            is InterruptedIOException -> NETWORK_TIMEOUT
+            is UnknownHostException -> NETWORK_LOST
+            is ConnectException -> NETWORK_LOST
+            is SocketException -> NETWORK_LOST
+            is SSLException -> NETWORK_LOST
+            else -> UNKNOWN_ERROR
+        }
+    }
+
+    fun fromHttpCode(code: Int): String {
+        return when (code) {
+            401 -> HTTP_401
+            403 -> HTTP_403
+            404 -> HTTP_404
+            416 -> HTTP_416
+            in 500..599 -> SERVER_UNAVAILABLE
+            in 400..499 -> CLIENT_ERROR
+            else -> UNKNOWN_ERROR
+        }
+    }
+
+    fun isRetryable(code: String?): Boolean = code != null && retryableCodes.contains(code)
+
+    fun messageFor(code: String?): String? {
+        return when (code) {
+            NETWORK_LOST -> "Network connection lost. Waiting to resume."
+            NETWORK_TIMEOUT -> "The download timed out. Retrying automatically."
+            SERVER_UNAVAILABLE -> "The download server is temporarily unavailable. Retrying automatically."
+            DOWNLOAD_INTERRUPTED -> "The download was interrupted. Retrying automatically."
+            DISK_FULL -> "Not enough storage space for this download."
+            FILE_CORRUPTED -> "The downloaded file failed verification."
+            EMPTY_RESPONSE -> "The download server returned an empty response."
+            USER_CANCELLED -> "Download cancelled."
+            HTTP_401 -> "The download server rejected access to this file."
+            HTTP_403 -> "The download server rejected access to this file."
+            HTTP_404 -> "The file could not be found on the download server."
+            HTTP_416 -> "The server could not resume this download. Please retry it."
+            CLIENT_ERROR -> "The download request was rejected by the server."
+            UNKNOWN_ERROR -> "Something went wrong while downloading."
+            else -> null
+        }
+    }
+
+    fun toUiState(status: DownloadStatus, code: String?): DownloadUiState {
+        val normalizedCode = code?.ifBlank { null }
+        return when (status) {
+            DownloadStatus.RUNNING -> DownloadUiState(status = "running")
+            DownloadStatus.PAUSED -> DownloadUiState(status = "paused")
+            DownloadStatus.COMPLETED -> DownloadUiState(status = "completed")
+            DownloadStatus.CANCELLED -> DownloadUiState(
+                status = "cancelled",
+                reason = messageFor(USER_CANCELLED),
+                reasonCode = USER_CANCELLED,
+            )
+            DownloadStatus.FAILED -> DownloadUiState(
+                status = "failed",
+                reason = messageFor(normalizedCode ?: UNKNOWN_ERROR),
+                reasonCode = normalizedCode ?: UNKNOWN_ERROR,
+            )
+            DownloadStatus.QUEUED -> when (normalizedCode) {
+                NETWORK_LOST -> DownloadUiState(
+                    status = "waiting_for_network",
+                    reason = messageFor(NETWORK_LOST),
+                    reasonCode = NETWORK_LOST,
+                )
+                NETWORK_TIMEOUT,
+                SERVER_UNAVAILABLE,
+                DOWNLOAD_INTERRUPTED,
+                -> DownloadUiState(
+                    status = "retrying",
+                    reason = messageFor(normalizedCode),
+                    reasonCode = normalizedCode,
+                )
+                else -> DownloadUiState(
+                    status = "pending",
+                    reason = messageFor(normalizedCode),
+                    reasonCode = normalizedCode,
+                )
+            }
+        }
+    }
+}

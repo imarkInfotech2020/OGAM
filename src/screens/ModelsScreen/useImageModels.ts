@@ -234,7 +234,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
       }),
     ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
-      if (ev.status === 'retrying') return;
+      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
       const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
       const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0;
       deps.updateModelProgress(modelId, progress);
