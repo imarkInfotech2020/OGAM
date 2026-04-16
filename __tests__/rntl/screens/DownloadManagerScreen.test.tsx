@@ -149,6 +149,14 @@ const standardModel = {
 };
 
 // Default store state
+const mockStoreState = (state: any) => {
+  mockUseAppStore.mockImplementation((selector?: any) => {
+    if (typeof selector === 'function') return selector(state);
+    return selector ? selector(state) : state;
+  });
+  return state;
+};
+
 const createDefaultState = (overrides: any = {}) => ({
   downloadedModels: [],
   setDownloadedModels: jest.fn(),
@@ -172,9 +180,7 @@ const setupSingleModelState = (extras: any = {}, modelSize = 1024) => {
     ...extras,
   });
   delete state.modelOverrides;
-  mockUseAppStore.mockImplementation((selector?: any) => {
-    return selector ? selector(state) : state;
-  });
+  mockStoreState(state);
   mockHardwareService.getModelTotalSize.mockReturnValue(modelSize);
   return state;
 };
@@ -198,9 +204,7 @@ describe('DownloadManagerScreen', () => {
     mockHardwareService.getModelTotalSize.mockImplementation((model: any) => model.fileSize || 0);
 
     const defaultState = createDefaultState();
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(defaultState) : defaultState;
-    });
+    mockStoreState(defaultState);
   });
 
   afterEach(() => {
@@ -244,9 +248,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
 
@@ -295,9 +297,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
 
@@ -342,9 +342,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
     mockHardwareService.getModelTotalSize.mockReturnValue(4 * 1024 * 1024 * 1024);
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
@@ -369,9 +367,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('SD Turbo')).toBeTruthy();
@@ -388,9 +384,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
     expect(getByText('model-file.gguf')).toBeTruthy();
@@ -437,9 +431,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -476,9 +468,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
     mockHardwareService.getModelTotalSize.mockReturnValue(1024);
 
     const { getByText } = render(<DownloadManagerScreen />);
@@ -497,9 +487,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('Downloading...')).toBeTruthy();
@@ -525,9 +513,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId } = render(<DownloadManagerScreen />);
     const deleteButtons = getAllByTestId('delete-model-button');
@@ -583,10 +569,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      if (typeof selector === 'function') return selector(state);
-      return state;
-    });
+    mockStoreState(state);
     // getState() returns the same state (no existing progress)
 
 
@@ -631,10 +614,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      if (typeof selector === 'function') return selector(state);
-      return state;
-    });
+    mockStoreState(state);
 
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
@@ -663,10 +643,7 @@ describe('DownloadManagerScreen', () => {
   it('progress event callback ignores events without persisted metadata', async () => {
     const setDownloadProgress = jest.fn();
     const state = createDefaultState({ setDownloadProgress, downloadProgress: {}, activeBackgroundDownloads: {} });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      if (typeof selector === 'function') return selector(state);
-      return state;
-    });
+    mockStoreState(state);
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let progressCallback: any;
@@ -703,10 +680,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      if (typeof selector === 'function') return selector(state);
-      return state;
-    });
+    mockStoreState(state);
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     let progressCallback: any;
@@ -754,10 +728,7 @@ describe('DownloadManagerScreen', () => {
   it('complete event callback reloads active downloads for image models without clearing shared progress', async () => {
     const setDownloadProgress = jest.fn();
     const state = createDefaultState({ setDownloadProgress });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      if (typeof selector === 'function') return selector(state);
-      return state;
-    });
+    mockStoreState(state);
 
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
@@ -808,9 +779,7 @@ describe('DownloadManagerScreen', () => {
     const setDownloadedModels = jest.fn();
     const setDownloadedImageModels = jest.fn();
     const state = createDefaultState({ setDownloadedModels, setDownloadedImageModels });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { UNSAFE_root } = render(<DownloadManagerScreen />);
 
@@ -882,9 +851,7 @@ describe('DownloadManagerScreen', () => {
       ],
       removeDownloadedImageModel,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
 
@@ -915,9 +882,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
     mockActiveModelService.unloadImageModel.mockRejectedValueOnce(new Error('fail'));
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
@@ -948,9 +913,7 @@ describe('DownloadManagerScreen', () => {
       setBackgroundDownload,
       removeImageModelDownloading,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -977,9 +940,7 @@ describe('DownloadManagerScreen', () => {
       setDownloadProgress,
       removeImageModelDownloading,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -1003,9 +964,7 @@ describe('DownloadManagerScreen', () => {
       },
       setDownloadProgress,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -1029,9 +988,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     // Set active downloads via loadActiveDownloads
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
@@ -1073,9 +1030,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('valid-file.gguf')).toBeTruthy();
@@ -1132,9 +1087,7 @@ describe('DownloadManagerScreen', () => {
       setDownloadProgress,
       setBackgroundDownload,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
@@ -1186,9 +1139,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
@@ -1245,9 +1196,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     // Render with matching model — delete button exists
     const { getAllByTestId } = render(<DownloadManagerScreen />);
@@ -1309,9 +1258,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('Core ML')).toBeTruthy();
@@ -1329,9 +1276,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     // 'F16' is matched by the regex [QqFf]\d+ and returned uppercased
@@ -1349,9 +1294,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('Unknown')).toBeTruthy();
@@ -1379,9 +1322,7 @@ describe('DownloadManagerScreen', () => {
         },
       ],
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
     // Image model is shown
@@ -1404,7 +1345,7 @@ describe('DownloadManagerScreen', () => {
         11: { modelId: 'a/m', fileName: 'run.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => selector ? selector(state) : state);
+    mockStoreState(state);
 
     const result = render(<DownloadManagerScreen />);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -1422,7 +1363,7 @@ describe('DownloadManagerScreen', () => {
         12: { modelId: 'a/m', fileName: 'pend.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => selector ? selector(state) : state);
+    mockStoreState(state);
 
     const result = render(<DownloadManagerScreen />);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -1440,7 +1381,7 @@ describe('DownloadManagerScreen', () => {
         13: { modelId: 'a/m', fileName: 'paus.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => selector ? selector(state) : state);
+    mockStoreState(state);
 
     const result = render(<DownloadManagerScreen />);
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -1466,9 +1407,7 @@ describe('DownloadManagerScreen', () => {
       setBackgroundDownload,
       setDownloadProgress,
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
@@ -1531,9 +1470,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
 
@@ -1572,9 +1509,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
 
@@ -1612,9 +1547,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByTestId } = render(<DownloadManagerScreen />);
 
@@ -1643,9 +1576,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText(/Reconnecting/)).toBeTruthy();
@@ -1677,9 +1608,7 @@ describe('DownloadManagerScreen', () => {
         },
       },
     });
-    mockUseAppStore.mockImplementation((selector?: any) => {
-      return selector ? selector(state) : state;
-    });
+    mockStoreState(state);
 
     const { getByText } = render(<DownloadManagerScreen />);
 

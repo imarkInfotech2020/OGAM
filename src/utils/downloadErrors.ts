@@ -50,44 +50,44 @@ function getLegacyMessage(reason?: string | null): string {
   const displayRaw = raw.length > 120 ? 'Something went wrong while downloading.' : raw;
   const normalized = raw.toLowerCase();
 
-  const matchers: Array<{ message: string; test: (value: string) => boolean }> = [
-    { message: 'Download cancelled.', test: value => value.includes('download cancelled') },
+  const matchers: Array<{ message: string; keywords: string[] }> = [
+    { message: 'Download cancelled.', keywords: ['download cancelled'] },
     {
       message: 'Network connection lost - waiting to resume...',
-      test: value => value.includes('waiting for network') || value.includes('network connection lost'),
+      keywords: ['waiting for network', 'network connection lost'],
     },
     {
       message: 'The download took too long to respond. Please try again.',
-      test: value => value.includes('timed out') || value.includes('timeout'),
+      keywords: ['timed out', 'timeout'],
     },
     {
       message: 'The connection dropped while downloading. Please try again.',
-      test: value => (
-        value.includes('connection abort') ||
-        value.includes('connection reset') ||
-        value.includes('broken pipe') ||
-        value.includes('failed to connect') ||
-        value.includes('unable to resolve host') ||
-        value.includes('network') ||
-        value.includes('socket')
-      ),
+      keywords: [
+        'connection abort',
+        'connection reset',
+        'broken pipe',
+        'failed to connect',
+        'unable to resolve host',
+        'network',
+        'socket',
+        'interrupted'
+      ],
     },
     {
       message: 'The download server rejected access to this file.',
-      test: value => value.includes('http 401') || value.includes('http 403'),
+      keywords: ['http 401', 'http 403'],
     },
-    { message: 'The file could not be found on the download server.', test: value => value.includes('http 404') },
-    { message: 'The server could not resume this download. Please retry it.', test: value => value.includes('http 416') },
-    { message: 'The download server is temporarily unavailable. Please try again later.', test: value => value.includes('http 5') },
+    { message: 'The file could not be found on the download server.', keywords: ['http 404'] },
+    { message: 'The server could not resume this download. Please retry it.', keywords: ['http 416'] },
+    { message: 'The download server is temporarily unavailable. Please try again later.', keywords: ['http 5'] },
     {
       message: 'The downloaded file failed verification.',
-      test: value => value.includes('file corrupted') || value.includes('sha256 mismatch'),
+      keywords: ['file corrupted', 'sha256 mismatch'],
     },
-    { message: 'The connection dropped while downloading. Please try again.', test: value => value.includes('interrupted') },
   ];
 
   for (const matcher of matchers) {
-    if (matcher.test(normalized)) {
+    if (matcher.keywords.some(kw => normalized.includes(kw))) {
       return matcher.message;
     }
   }
@@ -125,36 +125,48 @@ export function getUserFacingDownloadMessage(
   return getReasonMessageFromCode(reasonCode) ?? getLegacyMessage(reason);
 }
 
+const NETWORK_LOST_LABEL = 'Network connection lost - waiting to resume...';
+
+const SIMPLE_STATUS_LABELS: Partial<Record<string, string>> = {
+  waiting_for_network: 'Waiting for network',
+  paused: 'Paused',
+  running: 'Downloading...',
+  downloading: 'Downloading...',
+  cancelled: 'Cancelled',
+};
+
+function getPendingLabel(
+  reasonCode?: BackgroundDownloadReasonCode | string | null,
+  reason?: string | null,
+): string {
+  const effectiveReason = reason ?? (typeof reasonCode === 'string' ? reasonCode : null);
+  if (effectiveReason && getUserFacingDownloadMessage(effectiveReason) === NETWORK_LOST_LABEL) {
+    return NETWORK_LOST_LABEL;
+  }
+  return 'Queued';
+}
+
+function getRetryingLabel(
+  reasonCode?: BackgroundDownloadReasonCode | string | null,
+  reason?: string | null,
+): string {
+  if (reasonCode === 'server_unavailable') return 'Server unavailable. Retrying...';
+  if (reasonCode === 'network_timeout') return 'Connection timed out. Retrying...';
+  if (reason && getUserFacingDownloadMessage(reason, reasonCode) === NETWORK_LOST_LABEL) {
+    return NETWORK_LOST_LABEL;
+  }
+  return 'Reconnecting...';
+}
+
 export function getDownloadStatusLabel(
   status: BackgroundDownloadStatus | string,
   reasonCode?: BackgroundDownloadReasonCode | string | null,
   reason?: string | null,
 ): string {
-  if (status === 'waiting_for_network') return 'Waiting for network';
-  if (status === 'pending') {
-    const effectiveReason = reason ?? (typeof reasonCode === 'string' ? reasonCode : null);
-    if (effectiveReason) {
-      const pendingMessage = getUserFacingDownloadMessage(effectiveReason);
-      if (pendingMessage === 'Network connection lost - waiting to resume...') {
-        return pendingMessage;
-      }
-    }
-  }
-  if (status === 'retrying') {
-    if (reasonCode === 'server_unavailable') return 'Server unavailable. Retrying...';
-    if (reasonCode === 'network_timeout') return 'Connection timed out. Retrying...';
-    if (reason) {
-      const retryMessage = getUserFacingDownloadMessage(reason, reasonCode);
-      if (retryMessage === 'Network connection lost - waiting to resume...') {
-        return retryMessage;
-      }
-    }
-    return 'Reconnecting...';
-  }
+  const simple = SIMPLE_STATUS_LABELS[status as string];
+  if (simple) return simple;
+  if (status === 'pending') return getPendingLabel(reasonCode, reason);
+  if (status === 'retrying') return getRetryingLabel(reasonCode, reason);
   if (status === 'failed') return getUserFacingDownloadMessage(reason, reasonCode);
-  if (status === 'pending') return 'Queued';
-  if (status === 'paused') return 'Paused';
-  if (status === 'running' || status === 'downloading') return 'Downloading...';
-  if (status === 'cancelled') return 'Cancelled';
   return typeof status === 'string' ? status : 'Unknown';
 }

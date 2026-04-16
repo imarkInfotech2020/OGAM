@@ -48,15 +48,9 @@ describe('downloadErrors', () => {
       expect(isRetryableError('Unknown error')).toBe(true);
     });
 
-    it('returns false for 401 auth errors', () => {
+    it('returns false for HTTP client errors (401, 403, 404)', () => {
       expect(isRetryableError('HTTP 401')).toBe(false);
-    });
-
-    it('returns false for 403 forbidden', () => {
       expect(isRetryableError('HTTP 403')).toBe(false);
-    });
-
-    it('returns false for 404 not found', () => {
       expect(isRetryableError('HTTP 404')).toBe(false);
     });
 
