@@ -84,12 +84,21 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
     dismissAlert,
   } = useRemoteServerForm({ server, visible, onSave, onClose });
 
+  const handleDonePress = () => {
+    if (testResult?.success) {
+      handleSave();
+      return;
+    }
+    onClose();
+  };
+
   return (
     <AppSheet
       visible={visible}
       onClose={onClose}
+      onHeaderClosePress={handleDonePress}
       title={server ? 'Edit Server' : 'Add Remote Server'}
-      closeLabel="Cancel"
+      closeLabel="Done"
       snapPoints={['80%']}
       enableDynamicSizing
     >
