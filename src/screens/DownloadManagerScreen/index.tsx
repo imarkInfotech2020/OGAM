@@ -37,13 +37,6 @@ export const DownloadManagerScreen: React.FC = () => {
           <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
-        <TouchableOpacity
-          testID="download-logs-button"
-          style={styles.backButton}
-          onPress={() => navigation.navigate('DownloadLogs')}
-        >
-          <Icon name="terminal" size={20} color={colors.text} />
-        </TouchableOpacity>
       </View>
 
       <FlatList
