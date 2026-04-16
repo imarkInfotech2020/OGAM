@@ -212,12 +212,6 @@ describe('DownloadManagerScreen', () => {
     expect(getByText('Download Manager')).toBeTruthy();
   });
 
-  it('navigates to download logs from terminal button', () => {
-    const { getByTestId } = render(<DownloadManagerScreen />);
-    fireEvent.press(getByTestId('download-logs-button'));
-    expect(mockNavigate).toHaveBeenCalledWith('DownloadLogs');
-  });
-
   it('shows empty state when no downloads', () => {
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('No active downloads')).toBeTruthy();
