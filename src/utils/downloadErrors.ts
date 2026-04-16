@@ -80,10 +80,6 @@ function getLegacyMessage(reason?: string | null): string {
     { message: 'The server could not resume this download. Please retry it.', test: value => value.includes('http 416') },
     { message: 'The download server is temporarily unavailable. Please try again later.', test: value => value.includes('http 5') },
     {
-      message: 'Not enough storage space for this download.',
-      test: value => value.includes('not enough disk space') || value.includes('insufficient space'),
-    },
-    {
       message: 'The downloaded file failed verification.',
       test: value => value.includes('file corrupted') || value.includes('sha256 mismatch'),
     },
@@ -135,10 +131,13 @@ export function getDownloadStatusLabel(
   reason?: string | null,
 ): string {
   if (status === 'waiting_for_network') return 'Waiting for network';
-  if (status === 'pending' && reason) {
-    const pendingMessage = getUserFacingDownloadMessage(reason, reasonCode);
-    if (pendingMessage === 'Network connection lost - waiting to resume...') {
-      return pendingMessage;
+  if (status === 'pending') {
+    const effectiveReason = reason ?? (typeof reasonCode === 'string' ? reasonCode : null);
+    if (effectiveReason) {
+      const pendingMessage = getUserFacingDownloadMessage(effectiveReason);
+      if (pendingMessage === 'Network connection lost - waiting to resume...') {
+        return pendingMessage;
+      }
     }
   }
   if (status === 'retrying') {
