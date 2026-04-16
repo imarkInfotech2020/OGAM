@@ -4,10 +4,12 @@
  */
 
 import { useAppStore } from '../../stores';
+import { useDebugLogsStore } from '../../stores/debugLogsStore';
 import { DownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { modelManager } from '../modelManager';
+import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
 
 // ---------------------------------------------------------------------------
@@ -96,13 +98,17 @@ export interface TextLoadContext {
 }
 
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
+  const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
+    addDebugLog('log', `[Reload] Starting text model load: ${ctx.model.fileName}`);
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
+      addDebugLog('log', '[Reload] Unloading previous text model before load.');
       try {
         await llmService.unloadModel();
       } catch (unloadErr) {
         // Log but continue — loadModel will also attempt to release the old context
-        console.warn('[ActiveModel] Error unloading previous model, continuing:', unloadErr);
+        logger.warn('[ActiveModel] Error unloading previous model, continuing:', unloadErr);
+        addDebugLog('warn', `[Reload] Previous model unload warning: ${String(unloadErr)}`);
       }
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
@@ -124,6 +130,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     });
 
     try {
+      addDebugLog('log', `[Reload] Calling llmService.loadModel (timeout ${ctx.timeoutMs / 1000}s).`);
       await Promise.race([
         llmService.loadModel(ctx.model.filePath, mmProjPath),
         timeoutPromise,
@@ -159,7 +166,10 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
+    addDebugLog('log', `[Reload] Text model load complete: ${ctx.model.fileName}`);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addDebugLog('error', `[Reload] Text model load failed: ${message}`);
     ctx.onError();
     throw error;
   } finally {

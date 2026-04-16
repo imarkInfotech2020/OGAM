@@ -15,6 +15,7 @@ import {
   initContextWithFallback,
 } from '../../../src/services/llmHelpers';
 import { Platform } from 'react-native';
+import { INFERENCE_BACKENDS } from '../../../src/types';
 
 jest.mock('../../../src/utils/logger', () => ({
   __esModule: true,
@@ -315,6 +316,15 @@ describe('buildModelParams', () => {
   it('uses provided gpuLayers', () => {
     const params = buildModelParams('/model.gguf', { gpuLayers: 16 });
     expect(params.nGpuLayers).toBe(16);
+  });
+
+  it('forces f16 KV cache for HTP backend', () => {
+    const params = buildModelParams('/model.gguf', {
+      inferenceBackend: INFERENCE_BACKENDS.HTP,
+      cacheType: 'q8_0',
+    });
+    expect((params.baseParams as any).cache_type_k).toBe('f16');
+    expect((params.baseParams as any).cache_type_v).toBe('f16');
   });
 });
 

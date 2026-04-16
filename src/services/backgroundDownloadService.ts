@@ -8,6 +8,42 @@ import type {
 } from './backgroundDownloadTypes';
 const { DownloadManagerModule } = NativeModules;
 
+function logDownloadDebug(entry: {
+  level: 'log' | 'warn' | 'error';
+  scope: string;
+  message: string;
+  meta?: Record<string, unknown>;
+}): void {
+  const payload = entry.meta ? ` ${JSON.stringify(entry.meta)}` : '';
+  logger[entry.level](`[${entry.scope}] ${entry.message}${payload}`);
+}
+
+function formatBytesForLog(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = unitIndex >= 2 ? 1 : 0;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function describeProgressForLog(bytesDownloaded: number, totalBytes: number): {
+  transferred: string;
+  percent: string;
+} {
+  const transferred = totalBytes > 0
+    ? `${formatBytesForLog(bytesDownloaded)} / ${formatBytesForLog(totalBytes)}`
+    : formatBytesForLog(bytesDownloaded);
+  const percent = totalBytes > 0
+    ? `${Math.max(0, Math.min(100, (bytesDownloaded / totalBytes) * 100)).toFixed(1)}%`
+    : 'unknown';
+  return { transferred, percent };
+}
+
 class BackgroundDownloadService {
   private eventEmitter: NativeEventEmitter | null = null;
   private progressListeners: Map<string, DownloadProgressCallback> = new Map();
@@ -32,6 +68,12 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'startDownload requested', meta: {
+      fileName: params.fileName,
+      modelId: params.modelId,
+      totalBytes: params.totalBytes ?? 0,
+      hasSha256: !!params.sha256,
+    } });
 
     const result = await DownloadManagerModule.startDownload({
       url: params.url,
@@ -42,6 +84,11 @@ class BackgroundDownloadService {
       totalBytes: params.totalBytes || 0,
       sha256: params.sha256,
     });
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'startDownload native success', meta: {
+      downloadId: result.downloadId,
+      fileName: result.fileName,
+      modelId: result.modelId,
+    } });
 
     return {
       downloadId: result.downloadId,
@@ -83,9 +130,15 @@ class BackgroundDownloadService {
       throw new Error('Background downloads not available on this platform');
     }
     try {
+      logDownloadDebug({ level: 'warn', scope: 'BackgroundDownloadService', message: 'cancelDownload requested', meta: { downloadId } });
       await DownloadManagerModule.cancelDownload(downloadId);
+      logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'cancelDownload native success', meta: { downloadId } });
     } catch (e) {
       logger.log('[BackgroundDownload] cancelDownload failed (bridge may be torn down):', e);
+      logDownloadDebug({ level: 'error', scope: 'BackgroundDownloadService', message: 'cancelDownload native failed', meta: {
+        downloadId,
+        error: e instanceof Error ? e.message : String(e),
+      } });
     }
   }
 
@@ -94,6 +147,10 @@ class BackgroundDownloadService {
       return [];
     }
     const downloads = await DownloadManagerModule.getActiveDownloads();
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'getActiveDownloads resolved', meta: {
+      count: downloads.length,
+      statuses: downloads.map((d: any) => d.status).join(','),
+    } });
     return downloads.map((d: any) => ({
       downloadId: d.downloadId,
       fileName: d.fileName,
@@ -103,6 +160,9 @@ class BackgroundDownloadService {
       totalBytes: d.totalBytes,
       localUri: d.localUri,
       startedAt: d.startedAt,
+      reason: d.reason || undefined,
+      reasonCode: d.reasonCode || undefined,
+      failureReason: d.reason || undefined,
     }));
   }
 
@@ -112,17 +172,28 @@ class BackgroundDownloadService {
     status: BackgroundDownloadStatus;
     localUri?: string;
     reason?: string;
+    reasonCode?: string;
   }> {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'getDownloadProgress requested', meta: { downloadId } });
     const progress = await DownloadManagerModule.getDownloadProgress(downloadId);
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'getDownloadProgress resolved', meta: {
+      downloadId,
+      status: progress.status,
+      bytesDownloaded: progress.bytesDownloaded,
+      totalBytes: progress.totalBytes,
+      reason: progress.reason || '',
+      reasonCode: progress.reasonCode || '',
+    } });
     return {
       bytesDownloaded: progress.bytesDownloaded,
       totalBytes: progress.totalBytes,
       status: progress.status as BackgroundDownloadStatus,
       localUri: progress.localUri || undefined,
       reason: progress.reason || undefined,
+      reasonCode: progress.reasonCode || undefined,
     };
   }
 
@@ -130,44 +201,47 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
-    return await DownloadManagerModule.moveCompletedDownload(downloadId, targetPath);
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'moveCompletedDownload requested', meta: {
+      downloadId,
+      targetPath,
+    } });
+    const moved = await DownloadManagerModule.moveCompletedDownload(downloadId, targetPath);
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'moveCompletedDownload resolved', meta: {
+      downloadId,
+      movedPath: moved,
+    } });
+    return moved;
+  }
+
+  private registerListener<T>(listeners: Map<string, T>, key: string, callback: T): () => void {
+    listeners.set(key, callback);
+    return () => listeners.delete(key);
   }
 
   onProgress(downloadId: number, callback: DownloadProgressCallback): () => void {
-    const key = `progress_${downloadId}`;
-    this.progressListeners.set(key, callback);
-    return () => this.progressListeners.delete(key);
+    return this.registerListener(this.progressListeners, `progress_${downloadId}`, callback);
   }
   onComplete(downloadId: number, callback: DownloadCompleteCallback): () => void {
-    const key = `complete_${downloadId}`;
-    this.completeListeners.set(key, callback);
-    return () => this.completeListeners.delete(key);
+    return this.registerListener(this.completeListeners, `complete_${downloadId}`, callback);
   }
   onError(downloadId: number, callback: DownloadErrorCallback): () => void {
-    const key = `error_${downloadId}`;
-    this.errorListeners.set(key, callback);
-    return () => this.errorListeners.delete(key);
+    return this.registerListener(this.errorListeners, `error_${downloadId}`, callback);
   }
   onAnyProgress(callback: DownloadProgressCallback): () => void {
-    const key = 'progress_all';
-    this.progressListeners.set(key, callback);
-    return () => this.progressListeners.delete(key);
+    return this.registerListener(this.progressListeners, 'progress_all', callback);
   }
   onAnyComplete(callback: DownloadCompleteCallback): () => void {
-    const key = 'complete_all';
-    this.completeListeners.set(key, callback);
-    return () => this.completeListeners.delete(key);
+    return this.registerListener(this.completeListeners, 'complete_all', callback);
   }
   onAnyError(callback: DownloadErrorCallback): () => void {
-    const key = 'error_all';
-    this.errorListeners.set(key, callback);
-    return () => this.errorListeners.delete(key);
+    return this.registerListener(this.errorListeners, 'error_all', callback);
   }
   startProgressPolling(): void {
     if (!this.isAvailable() || this.isPolling) {
       return;
     }
     this.isPolling = true;
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'startProgressPolling', meta: {} });
     DownloadManagerModule.startProgressPolling();
   }
 
@@ -176,6 +250,7 @@ class BackgroundDownloadService {
       return;
     }
     this.isPolling = false;
+    logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'stopProgressPolling', meta: {} });
     DownloadManagerModule.stopProgressPolling();
   }
 
@@ -323,46 +398,81 @@ class BackgroundDownloadService {
     this.errorListeners.clear();
   }
 
+  private dispatchToListeners<T extends { downloadId: number }>(
+    listeners: Map<string, (e: T) => void>,
+    prefix: string,
+    event: T,
+  ): void {
+    listeners.get(`${prefix}_${event.downloadId}`)?.(event);
+    if (!this.silentDownloadIds.has(event.downloadId)) {
+      listeners.get(`${prefix}_all`)?.(event);
+    }
+  }
+
   private setupEventListeners(): void {
     if (!this.eventEmitter) return;
     const push = (s: { remove: () => void }) => this.subscriptions.push(s);
     push(this.eventEmitter.addListener('DownloadProgress', (e: DownloadProgressEvent) => {
-      this.progressListeners.get(`progress_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.progressListeners.get('progress_all')?.(e);
+      // Only log progress every 10% to reduce spam
+      const pct = Math.floor((e.bytesDownloaded / e.totalBytes) * 100) || 0;
+      if (pct % 10 === 0) {
+        const progress = describeProgressForLog(e.bytesDownloaded, e.totalBytes);
+        logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'DownloadProgress event', meta: {
+          downloadId: e.downloadId,
+          status: e.status,
+          percent: progress.percent,
+          transferred: progress.transferred,
+          reason: e.reason || '',
+          reasonCode: e.reasonCode || '',
+        } });
       }
+      this.dispatchToListeners(this.progressListeners, 'progress', e);
     }));
     push(this.eventEmitter.addListener('DownloadComplete', (e: DownloadCompleteEvent) => {
-      this.completeListeners.get(`complete_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.completeListeners.get('complete_all')?.(e);
-      }
+      logDownloadDebug({ level: 'log', scope: 'BackgroundDownloadService', message: 'DownloadComplete event', meta: {
+        downloadId: e.downloadId,
+        fileName: e.fileName,
+        modelId: e.modelId,
+        localUri: e.localUri || '',
+      } });
+      this.dispatchToListeners(this.completeListeners, 'complete', e);
     }));
     push(this.eventEmitter.addListener('DownloadError', (e: DownloadErrorEvent) => {
-      this.errorListeners.get(`error_${e.downloadId}`)?.(e);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.errorListeners.get('error_all')?.(e);
-      }
+      logDownloadDebug({ level: 'error', scope: 'BackgroundDownloadService', message: 'DownloadError event', meta: {
+        downloadId: e.downloadId,
+        fileName: e.fileName,
+        modelId: e.modelId,
+        reason: e.reason || '',
+        reasonCode: e.reasonCode || '',
+        status: e.status,
+      } });
+      this.dispatchToListeners(this.errorListeners, 'error', e);
     }));
     // DownloadRetrying — worker hit a transient error and will retry automatically.
     // Route it as a progress event with status='retrying' so the UI shows
     // "Retrying..." instead of surfacing a false error to the user.
     push(this.eventEmitter.addListener('DownloadRetrying', (e: {
-      downloadId: number; fileName: string; modelId: string; reason: string; attempt: number;
+      downloadId: number; fileName: string; modelId: string; reason: string; reasonCode?: string; attempt: number; status?: BackgroundDownloadStatus;
     }) => {
+      logDownloadDebug({ level: 'warn', scope: 'BackgroundDownloadService', message: 'DownloadRetrying event', meta: {
+        downloadId: e.downloadId,
+        fileName: e.fileName,
+        modelId: e.modelId,
+        reason: e.reason,
+        reasonCode: e.reasonCode || '',
+        attempt: e.attempt + 1,
+      } });
       const retryEvent: DownloadProgressEvent = {
         downloadId: e.downloadId,
         fileName: e.fileName,
         modelId: e.modelId,
         bytesDownloaded: 0,
         totalBytes: 0,
-        status: 'retrying',
-        reason: `Connection lost — retrying (attempt ${e.attempt + 1})`,
+        status: e.status || 'retrying',
+        reason: e.reason,
+        reasonCode: e.reasonCode as any,
       };
-      this.progressListeners.get(`progress_${e.downloadId}`)?.(retryEvent);
-      if (!this.silentDownloadIds.has(e.downloadId)) {
-        this.progressListeners.get('progress_all')?.(retryEvent);
-      }
+      this.dispatchToListeners(this.progressListeners, 'progress', retryEvent);
     }));
   }
 }

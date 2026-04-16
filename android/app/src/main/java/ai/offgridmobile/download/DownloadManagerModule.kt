@@ -73,6 +73,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val title = params.getString("title") ?: fileName
                 val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
                 val expectedSha256 = params.getString("sha256")?.lowercase()?.takeIf { it.length == 64 }
+                DownloadEventBridge.log(
+                    "I",
+                    "[Module] startDownload params file=$fileName model=$modelId totalBytes=$totalBytes hasSha=${expectedSha256 != null} urlHost=${Uri.parse(url).host ?: "unknown"}",
+                )
 
                 val downloadId = System.currentTimeMillis()
                 val destination = File(
@@ -123,7 +127,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 withContext(Dispatchers.IO) {
                     val download = downloadDao.getDownload(id)
                     if (download != null) {
-                        downloadDao.updateStatus(id, DownloadStatus.CANCELLED, "Download cancelled by user")
+                        downloadDao.updateStatus(id, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
                         val file = File(download.destination)
                         if (file.exists() && !file.delete()) DownloadEventBridge.log("W", "[Module] Could not delete partial file on cancel id=$id")
                     }
@@ -181,13 +185,18 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             try {
                 val downloads = withContext(Dispatchers.IO) {
                     downloadDao.getAllDownloads().first().filter {
-                        it.status == DownloadStatus.QUEUED ||
-                        it.status == DownloadStatus.RUNNING ||
-                        it.status == DownloadStatus.PAUSED
+                        it.status != DownloadStatus.COMPLETED &&
+                        it.status != DownloadStatus.CANCELLED
                     }
                 }
+                DownloadEventBridge.log("I", "[Module] getActiveDownloads count=${downloads.size}")
                 val result = Arguments.createArray()
                 downloads.forEach { d ->
+                    val uiState = DownloadReason.toUiState(d.status, d.error)
+                    DownloadEventBridge.log(
+                        "I",
+                        "[Module] active id=${d.id} status=${d.status}/${uiState.status} bytes=${d.downloadedBytes}/${d.totalBytes} file=${d.fileName} model=${d.modelId} code=${uiState.reasonCode ?: ""}",
+                    )
                     result.pushMap(Arguments.createMap().apply {
                         putDouble("downloadId", d.id.toDouble())
                         putString("fileName", d.fileName)
@@ -195,10 +204,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         putString("title", d.title)
                         putDouble("totalBytes", d.totalBytes.toDouble())
                         putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
-                        // QUEUED = WorkManager backoff retry — surface as "pending" to JS
-                        // so the download stays visible in the active list during retry.
-                        putString("status", if (d.status == DownloadStatus.QUEUED) "pending" else d.status.name.lowercase())
+                        putString("status", uiState.status)
                         putString("localUri", Uri.fromFile(File(d.destination)).toString())
+                        putString("reason", uiState.reason ?: "")
+                        putString("reasonCode", uiState.reasonCode ?: "")
                         putDouble("startedAt", d.createdAt.toDouble())
                     })
                 }
@@ -219,13 +228,19 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     SafePromise(promise, NAME).reject("QUERY_ERROR", "Download not found")
                     return@launch
                 }
+                DownloadEventBridge.log(
+                    "I",
+                    "[Module] getDownloadProgress id=$id status=${d.status} bytes=${d.downloadedBytes}/${d.totalBytes} error=${d.error ?: ""}",
+                )
+                val uiState = DownloadReason.toUiState(d.status, d.error)
                 val result = Arguments.createMap().apply {
                     putDouble("downloadId", d.id.toDouble())
                     putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
                     putDouble("totalBytes", d.totalBytes.toDouble())
-                    putString("status", if (d.status == DownloadStatus.QUEUED) "pending" else d.status.name.lowercase())
+                    putString("status", uiState.status)
                     putString("localUri", Uri.fromFile(File(d.destination)).toString())
-                    putString("reason", d.error ?: "")
+                    putString("reason", uiState.reason ?: "")
+                    putString("reasonCode", uiState.reasonCode ?: "")
                 }
                 SafePromise(promise, NAME).resolve(result)
             } catch (e: Exception) {
@@ -325,6 +340,46 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         DownloadEventBridge.log("I", "[Module] stopProgressPolling — all observers removed")
     }
 
+    /**
+     * Update foreground notification with combined progress for vision models.
+     * This shows combined GGUF + mmproj progress in a single notification.
+     */
+    @ReactMethod
+    fun updateCombinedProgress(
+        modelId: String,
+        fileName: String,
+        mmprojFileName: String,
+        mainBytes: Double,
+        mainTotal: Double,
+        mmprojBytes: Double,
+        mmprojTotal: Double,
+    ) {
+        val mainBytesL = mainBytes.toLong()
+        val mainTotalL = mainTotal.toLong()
+        val mmprojBytesL = mmprojBytes.toLong()
+        val mmprojTotalL = mmprojTotal.toLong()
+
+        val combinedBytes = mainBytesL + mmprojBytesL
+        val combinedTotal = mainTotalL + mmprojTotalL
+        val statusText = "Vision model"
+
+        try {
+            DownloadForegroundService.start(
+                reactApplicationContext,
+                fileName, // Use file name as title
+                0L,
+                combinedBytes,
+                combinedTotal,
+                statusText,
+                fileName,
+                mmprojBytesL,
+                mmprojTotalL,
+            )
+        } catch (e: Exception) {
+            DownloadEventBridge.log("W", "[Module] updateCombinedProgress failed: ${e.message}")
+        }
+    }
+
     @ReactMethod
     fun addListener(eventName: String) { /* required for RN event emitter */ }
 
@@ -380,7 +435,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
         val observer = Observer<List<WorkInfo>> { workInfos ->
             val info = workInfos.firstOrNull() ?: return@Observer
-            DownloadEventBridge.log("D", "[Observer] id=$downloadId WorkInfo.state=${info.state}")
+            DownloadEventBridge.log(
+                "D",
+                "[Observer] id=$downloadId WorkInfo.state=${info.state} attempts=${info.runAttemptCount} progress=${info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)}/${info.progress.getLong(WorkerDownload.KEY_TOTAL, 0L)}",
+            )
             when (info.state) {
                 WorkInfo.State.RUNNING -> {
                     val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)
@@ -388,16 +446,49 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                             ?: return@launch
+                        DownloadEventBridge.log(
+                            "I",
+                            "[Observer] running id=$downloadId dbStatus=${d.status} bytes=${bytes}/${total} file=${d.fileName}",
+                        )
                         DownloadEventBridge.progress(
                             downloadId, d.fileName, d.modelId, bytes, total,
                             DownloadStatus.RUNNING.name.lowercase(),
                         )
                     }
                 }
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.BLOCKED,
+                -> {
+                    scope.launch {
+                        val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                            ?: return@launch
+                        val uiState = DownloadReason.toUiState(d.status, d.error)
+                        if (uiState.status == "pending" || uiState.status == "retrying" || uiState.status == "waiting_for_network" || uiState.status == "paused") {
+                            DownloadEventBridge.log(
+                                "I",
+                                "[Observer] queued-like id=$downloadId dbStatus=${d.status} uiStatus=${uiState.status} code=${uiState.reasonCode ?: ""}",
+                            )
+                            DownloadEventBridge.progress(
+                                downloadId,
+                                d.fileName,
+                                d.modelId,
+                                d.downloadedBytes,
+                                d.totalBytes,
+                                uiState.status,
+                                uiState.reason,
+                                uiState.reasonCode,
+                            )
+                        }
+                    }
+                }
                 WorkInfo.State.SUCCEEDED -> {
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                         if (d != null) {
+                            DownloadEventBridge.log(
+                                "I",
+                                "[Observer] succeeded id=$downloadId finalBytes=${d.downloadedBytes}/${d.totalBytes} file=${d.fileName}",
+                            )
                             DownloadEventBridge.complete(
                                 downloadId, d.fileName, d.modelId,
                                 Uri.fromFile(File(d.destination)).toString(),
@@ -411,11 +502,17 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 WorkInfo.State.FAILED -> {
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                        val uiState = DownloadReason.toUiState(d?.status ?: DownloadStatus.FAILED, d?.error)
+                        DownloadEventBridge.log(
+                            "E",
+                            "[Observer] failed id=$downloadId file=${d?.fileName ?: ""} reason=${uiState.reason ?: "Something went wrong while downloading."} code=${uiState.reasonCode ?: ""}",
+                        )
                         DownloadEventBridge.error(
                             downloadId,
                             d?.fileName ?: "",
                             d?.modelId ?: "",
-                            d?.error ?: "Unknown error",
+                            uiState.reason ?: "Something went wrong while downloading.",
+                            uiState.reasonCode,
                         )
                         DownloadForegroundService.stop(reactApplicationContext, "failed")
                         removeWorkObserver(downloadId)
@@ -423,6 +520,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
                 WorkInfo.State.CANCELLED -> {
                     scope.launch {
+                        DownloadEventBridge.log("W", "[Observer] cancelled id=$downloadId")
                         DownloadForegroundService.stop(reactApplicationContext, "cancelled")
                         removeWorkObserver(downloadId)
                     }

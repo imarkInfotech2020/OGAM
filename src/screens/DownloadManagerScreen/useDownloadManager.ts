@@ -1,3 +1,4 @@
+/* eslint-disable max-lines, max-lines-per-function */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
@@ -11,6 +12,7 @@ import {
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
 import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
 import logger from '../../utils/logger';
+import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 
 export interface UseDownloadManagerResult {
   isRefreshing: boolean;
@@ -20,9 +22,41 @@ export interface UseDownloadManagerResult {
   setAlertState: (state: AlertState) => void;
   handleRefresh: () => Promise<void>;
   handleRemoveDownload: (item: DownloadItem) => void;
+  handleRetryDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   totalStorageUsed: number;
+}
+
+function formatBytesForLog(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = unitIndex >= 2 ? 1 : 0;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function formatProgressForLog(bytesDownloaded: number, totalBytes: number): string {
+  if (totalBytes > 0) {
+    const percent = Math.max(0, Math.min(100, (bytesDownloaded / totalBytes) * 100));
+    return `${percent.toFixed(1)}% (${formatBytesForLog(bytesDownloaded)} / ${formatBytesForLog(totalBytes)})`;
+  }
+  return formatBytesForLog(bytesDownloaded);
+}
+
+function isNetworkRetryReason(reason?: string, reasonCode?: string): boolean {
+  const normalized = (reason || '').toLowerCase();
+  return (
+    reasonCode === 'network_lost' ||
+    normalized.includes('network connection lost') ||
+    normalized.includes('waiting to resume') ||
+    normalized.includes('network error')
+  );
 }
 
 async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
@@ -36,9 +70,53 @@ async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Pr
     }
   }
   return downloads.filter(d =>
-    (d.status === 'running' || d.status === 'pending' || d.status === 'paused') &&
+    (
+      d.status === 'running' ||
+      d.status === 'pending' ||
+      d.status === 'paused' ||
+      d.status === 'failed' ||
+      d.status === 'retrying' ||
+      d.status === 'waiting_for_network'
+    ) &&
     !(d.modelId.startsWith('image:') && downloadedIds.has(d.modelId.replace('image:', ''))),
   );
+}
+
+function syncDownloadSnapshot(
+  download: BackgroundDownloadInfo,
+  setDownloadProgress: (key: string, value: any) => void,
+): { modelId: string } | null {
+  const metadata = useAppStore.getState().activeBackgroundDownloads[download.downloadId];
+  if (!metadata) return null;
+
+  const key = `${metadata.modelId}/${metadata.fileName}`;
+  const existing = useAppStore.getState().downloadProgress[key];
+  const totalBytes = metadata.totalBytes || download.totalBytes || existing?.totalBytes || 0;
+  const bytesDownloaded = Math.max(existing?.bytesDownloaded ?? 0, download.bytesDownloaded);
+  const shouldSyncProgress =
+    !existing ||
+    download.status !== (existing.status ?? 'downloading') ||
+    download.reason !== existing.reason ||
+    download.reasonCode !== existing.reasonCode ||
+    download.bytesDownloaded !== existing.bytesDownloaded ||
+    totalBytes !== existing.totalBytes;
+
+  if (!shouldSyncProgress) {
+    return { modelId: metadata.modelId };
+  }
+
+  const resolvedStatus = download.status === 'pending' && isNetworkRetryReason(download.reason, download.reasonCode)
+    ? 'retrying'
+    : download.status;
+  setDownloadProgress(key, {
+    progress: totalBytes > 0 ? bytesDownloaded / totalBytes : existing?.progress ?? 0,
+    bytesDownloaded,
+    totalBytes,
+    status: resolvedStatus,
+    reason: download.reason || existing?.reason,
+    reasonCode: download.reasonCode || existing?.reasonCode,
+  });
+  return { modelId: metadata.modelId };
 }
 
 export function useDownloadManager(): UseDownloadManagerResult {
@@ -59,19 +137,25 @@ export function useDownloadManager(): UseDownloadManagerResult {
     removeDownloadedImageModel,
     removeImageModelDownloading,
   } = useAppStore();
+  const logDownload = useCallback((_level: 'log' | 'warn' | 'error', _message: string) => {}, []);
+  const retryLoggedRef = useRef<Record<string, string>>({});
 
   // Load active background downloads on mount + start/stop polling
   useEffect(() => {
+    logDownload('log', 'Screen mounted. Loading active downloads.');
     loadActiveDownloads();
 
     if (backgroundDownloadService.isAvailable()) {
       modelManager.startBackgroundDownloadPolling();
+      logDownload('log', 'Background polling started.');
+    } else {
+      logDownload('warn', 'Background download service unavailable on this device.');
     }
     // Do NOT stop polling on unmount — other screens (Models tab) rely on
     // the same native polling timer for progress events. Polling is cheap
     // (no-op when no active downloads) and stops automatically when all
     // downloads complete.
-  }, []);
+  }, [logDownload]);
 
   // Subscribe to background download service events
   useEffect(() => {
@@ -86,15 +170,21 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (metadata.modelId.startsWith('image:')) return;
       const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
-      if (event.status === 'retrying') {
+      if (event.status === 'retrying' || event.status === 'waiting_for_network') {
+        const retryReason = event.reason || 'network issue';
+        if (retryLoggedRef.current[event.downloadId] !== retryReason) {
+          retryLoggedRef.current[event.downloadId] = retryReason;
+          logDownload('warn', `${event.status === 'waiting_for_network' ? 'Waiting for network' : 'Retrying'} ${metadata.fileName} (${event.downloadId}): ${retryReason}`);
+        }
         // Keep existing bytes — just update status and reason so the UI shows "Reconnecting..."
         const existing = useAppStore.getState().downloadProgress[key];
         setDownloadProgress(key, {
           progress: existing?.progress ?? 0,
           bytesDownloaded: existing?.bytesDownloaded ?? 0,
           totalBytes: existing?.totalBytes ?? 0,
-          status: 'retrying',
+          status: event.status,
           reason: event.reason,
+          reasonCode: event.reasonCode,
         });
         return;
       }
@@ -103,16 +193,39 @@ export function useDownloadManager(): UseDownloadManagerResult {
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
         totalBytes: event.totalBytes,
+        status: event.status,
         reason: event.reason || undefined,
+        reasonCode: event.reasonCode,
       });
+      logDownload(
+        'log',
+        `Progress ${metadata.fileName} (${event.downloadId}): ${formatProgressForLog(event.bytesDownloaded, event.totalBytes)}${event.reason ? ` · ${event.reason}` : ''}`,
+      );
     });
 
     const unsubComplete = backgroundDownloadService.onAnyComplete(async (_event) => {
+      logDownload('log', `Download completed: ${_event.downloadId}`);
+      delete retryLoggedRef.current[_event.downloadId];
       await loadActiveDownloads();
     });
 
     const unsubError = backgroundDownloadService.onAnyError(async (event) => {
-      setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
+      logDownload('error', `Download failed (${event.downloadId}): ${event.reason || 'Something went wrong while downloading.'}`);
+      delete retryLoggedRef.current[event.downloadId];
+      const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
+      if (metadata) {
+        const key = `${metadata.modelId}/${metadata.fileName}`;
+        const existing = useAppStore.getState().downloadProgress[key];
+        setDownloadProgress(key, {
+          progress: existing?.progress ?? 0,
+          bytesDownloaded: existing?.bytesDownloaded ?? 0,
+          totalBytes: existing?.totalBytes ?? metadata.totalBytes ?? 0,
+          status: 'failed',
+          reason: event.reason || 'Something went wrong while downloading.',
+          reasonCode: event.reasonCode,
+        });
+      }
+      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(event.reason, event.reasonCode)));
       await loadActiveDownloads();
     });
 
@@ -122,28 +235,40 @@ export function useDownloadManager(): UseDownloadManagerResult {
       unsubError();
     };
 
-  }, [setDownloadProgress]);
+  }, [setDownloadProgress, logDownload]);
 
   const loadActiveDownloads = async () => {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
-      setActiveDownloads(await purgeStaleImageDownloads(downloads));
+      const filteredDownloads = await purgeStaleImageDownloads(downloads);
+      setActiveDownloads(filteredDownloads);
+      logDownload('log', `Active downloads refreshed: ${filteredDownloads.length}`);
+      filteredDownloads.forEach(download => {
+        const snapshot = syncDownloadSnapshot(download, setDownloadProgress);
+        logDownload(
+          'log',
+          `Download snapshot ${download.downloadId}: ${download.status} ${formatProgressForLog(download.bytesDownloaded, download.totalBytes)} model=${snapshot?.modelId || download.modelId}${download.reason ? ` · ${download.reason}` : ''}`,
+        );
+      });
     }
   };
   const handleRefresh = useCallback(async () => {
+    logDownload('log', 'Manual refresh requested.');
     setIsRefreshing(true);
     await loadActiveDownloads();
     const models = await modelManager.getDownloadedModels();
     setDownloadedModels(models);
     const imageModels = await modelManager.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
+    logDownload('log', `Refresh complete. Downloaded models: ${models.length}, image models: ${imageModels.length}`);
     setIsRefreshing(false);
 
-  }, [setDownloadedModels, setDownloadedImageModels]);
+  }, [setDownloadedModels, setDownloadedImageModels, logDownload]);
 
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
+      logDownload('warn', `Removing download: ${item.fileName}`);
       const key = `${item.modelId}/${item.fileName}`;
       cancelledKeysRef.current.add(key);
       setDownloadProgress(key, null);
@@ -166,6 +291,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       }, 1000);
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
+      logDownload('error', `Failed to remove download ${item.fileName}`);
       setAlertState(showAlert('Error', 'Failed to remove download'));
     }
   };
@@ -187,13 +313,106 @@ export function useDownloadManager(): UseDownloadManagerResult {
     );
   };
 
+  const executeRetryDownload = async (item: DownloadItem) => {
+    setAlertState(hideAlert());
+    try {
+      logDownload('log', `Retrying download: ${item.fileName}`);
+      const key = `${item.modelId}/${item.fileName}`;
+
+      // Look up metadata
+      let metadata = item.downloadId ? activeBackgroundDownloads[item.downloadId] : undefined;
+      if (!metadata) {
+        const found = Object.values(activeBackgroundDownloads).find(m => m?.fileName === item.fileName);
+        metadata = found || undefined;
+      }
+
+      if (!metadata) {
+        logDownload('error', `Could not find metadata for retry: ${item.fileName}`);
+        setAlertState(showAlert('Error', 'Could not retry download - metadata not found'));
+        return;
+      }
+
+      // Clean up old state
+      const oldDownloadId = item.downloadId;
+      if (oldDownloadId) {
+        setBackgroundDownload(oldDownloadId, null);
+        cancelledKeysRef.current.add(key);
+      }
+      setDownloadProgress(key, null);
+
+      // Set fresh progress
+      setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: metadata.totalBytes });
+
+      // Build ModelFile from metadata
+      const downloadUrl = huggingFaceService.getDownloadUrl(metadata.modelId, metadata.fileName);
+      const modelFile = {
+        name: metadata.fileName,
+        size: metadata.mainFileSize ?? metadata.totalBytes,
+        quantization: metadata.quantization,
+        downloadUrl,
+      };
+
+      // Start retry download
+      const info = await modelManager.downloadModelBackground(metadata.modelId, modelFile as any);
+      logDownload('log', `Retry started with new downloadId: ${info.downloadId}`);
+
+      modelManager.watchDownload(
+        info.downloadId,
+        async () => {
+          logDownload('log', `Retry completed for ${item.fileName}`);
+          setDownloadProgress(key, null);
+          if (oldDownloadId) {
+            cancelledKeysRef.current.delete(key);
+          }
+          const models = await modelManager.getDownloadedModels();
+          setDownloadedModels(models);
+          setAlertState(showAlert('Download Complete', `${item.fileName} downloaded successfully`));
+        },
+        (error) => {
+          logDownload('error', `Retry failed for ${item.fileName}: ${error.message}`);
+          setDownloadProgress(key, {
+            progress: (downloadProgress[key]?.progress ?? 0),
+            bytesDownloaded: (downloadProgress[key]?.bytesDownloaded ?? 0),
+            totalBytes: metadata.totalBytes,
+            status: 'failed',
+            reason: error.message,
+          });
+        },
+      );
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to retry download:', error);
+      logDownload('error', `Retry failed for ${item.fileName}: ${error}`);
+      setAlertState(showAlert('Error', 'Failed to retry download'));
+    }
+  };
+
+  const handleRetryDownload = (item: DownloadItem) => {
+    setAlertState(
+      showAlert(
+        'Retry Download',
+        'This will restart the download from the beginning. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Retry',
+            style: 'default',
+            onPress: () => { executeRetryDownload(item); },
+          },
+        ],
+      ),
+    );
+  };
+
   const executeDeleteModel = async (model: DownloadedModel) => {
     setAlertState(hideAlert());
     try {
+      logDownload('warn', `Deleting downloaded model: ${model.fileName}`);
       await modelManager.deleteModel(model.id);
       removeDownloadedModel(model.id);
+      logDownload('log', `Deleted model: ${model.fileName}`);
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete model:', error);
+      logDownload('error', `Failed to delete model: ${model.fileName}`);
       setAlertState(showAlert('Error', 'Failed to delete model'));
     }
   };
@@ -218,11 +437,14 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeDeleteImageModel = async (model: ONNXImageModel) => {
     setAlertState(hideAlert());
     try {
+      logDownload('warn', `Deleting image model: ${model.name}`);
       await activeModelService.unloadImageModel();
       await modelManager.deleteImageModel(model.id);
       removeDownloadedImageModel(model.id);
+      logDownload('log', `Deleted image model: ${model.name}`);
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete image model:', error);
+      logDownload('error', `Failed to delete image model: ${model.name}`);
       setAlertState(showAlert('Error', 'Failed to delete image model'));
     }
   };
@@ -258,6 +480,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const fileName = item.modelId.substring(lastSlash + 1);
     const downloadKey = `${repoId}/${fileName}-mmproj`;
     setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: 0 });
+    logDownload('log', `Repair vision started for ${item.fileName}`);
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
       if (!file?.mmProjFile) { setDownloadProgress(downloadKey, null); setAlertState(showAlert('Error', 'Could not find vision projection file for this model')); return; }
@@ -267,7 +490,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
       const models = await modelManager.getDownloadedModels();
       setDownloadedModels(models);
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
-    }).catch((e: Error) => { setDownloadProgress(downloadKey, null); setAlertState(showAlert('Repair Failed', e.message)); });
+      logDownload('log', `Repair vision completed for ${item.fileName}`);
+    }).catch((e: Error) => {
+      setDownloadProgress(downloadKey, null);
+      setAlertState(showAlert('Repair Failed', e.message));
+      logDownload('error', `Repair vision failed for ${item.fileName}: ${e.message}`);
+    });
   };
 
   // Build items from store state
@@ -291,6 +519,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setAlertState,
     handleRefresh,
     handleRemoveDownload,
+    handleRetryDownload,
     handleDeleteItem,
     handleRepairVision,
     totalStorageUsed,

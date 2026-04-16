@@ -160,4 +160,20 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.primary,
     fontWeight: '600' as const,
   },
+  debugLogsButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    backgroundColor: colors.surfaceLight,
+  },
+  debugLogsButtonText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.primary,
+  },
 });

@@ -21,6 +21,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 export interface AppSheetProps {
   visible: boolean;
   onClose: () => void;
+  onHeaderClosePress?: () => void;
   snapPoints?: (string | number)[];
   enableDynamicSizing?: boolean;
   title?: string;
@@ -90,6 +91,7 @@ function createSheetPanResponder({
 export const AppSheet: React.FC<AppSheetProps> = ({
   visible,
   onClose,
+  onHeaderClosePress,
   snapPoints,
   enableDynamicSizing = false,
   title,
@@ -315,7 +317,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
                 {title}
               </Text>
               <TouchableOpacity
-                onPress={dismiss}
+                onPress={onHeaderClosePress || dismiss}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.headerClose}>{closeLabel}</Text>

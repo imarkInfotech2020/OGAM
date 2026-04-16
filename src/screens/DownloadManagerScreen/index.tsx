@@ -9,9 +9,11 @@ import { useNavigation } from '@react-navigation/native';
 import { createStyles } from './styles';
 import { ActiveDownloadCard, CompletedDownloadCard, formatBytes } from './items';
 import { useDownloadManager } from './useDownloadManager';
+import type { RootStackParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export const DownloadManagerScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
@@ -22,6 +24,7 @@ export const DownloadManagerScreen: React.FC = () => {
     setAlertState,
     handleRefresh,
     handleRemoveDownload,
+    handleRetryDownload,
     handleDeleteItem,
     handleRepairVision,
     totalStorageUsed,
@@ -34,7 +37,6 @@ export const DownloadManagerScreen: React.FC = () => {
           <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
-        <View style={styles.headerSpacer} />
       </View>
 
       <FlatList
@@ -53,7 +55,7 @@ export const DownloadManagerScreen: React.FC = () => {
               {activeItems.length > 0 ? (
                 activeItems.map(item => (
                   <View key={`active-${item.modelId}-${item.fileName}`}>
-                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} />
+                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} onRetry={handleRetryDownload} />
                   </View>
                 ))
               ) : (

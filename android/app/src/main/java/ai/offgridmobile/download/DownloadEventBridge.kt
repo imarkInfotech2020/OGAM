@@ -39,6 +39,7 @@ object DownloadEventBridge {
         totalBytes: Long,
         status: String,
         reason: String? = null,
+        reasonCode: String? = null,
     ) {
         emit("DownloadProgress") {
             putDouble("downloadId", downloadId.toDouble())
@@ -48,6 +49,7 @@ object DownloadEventBridge {
             putDouble("totalBytes", totalBytes.toDouble())
             putString("status", status)
             putString("reason", reason ?: "")
+            putString("reasonCode", reasonCode ?: "")
             putDouble("percent", if (totalBytes > 0) (bytesDownloaded.toDouble() / totalBytes.toDouble()) * 100.0 else 0.0)
         }
     }
@@ -64,24 +66,41 @@ object DownloadEventBridge {
         }
     }
 
-    fun error(downloadId: Long, fileName: String, modelId: String, reason: String, status: String = "failed") {
+    fun error(
+        downloadId: Long,
+        fileName: String,
+        modelId: String,
+        reason: String,
+        reasonCode: String? = null,
+        status: String = "failed",
+    ) {
         emit("DownloadError") {
             putDouble("downloadId", downloadId.toDouble())
             putString("fileName", fileName)
             putString("modelId", modelId)
             putString("reason", reason)
+            putString("reasonCode", reasonCode ?: "")
             putString("status", status)
         }
     }
 
-    fun retrying(downloadId: Long, fileName: String, modelId: String, reason: String, attempt: Int) {
+    fun retrying(
+        downloadId: Long,
+        fileName: String,
+        modelId: String,
+        reason: String,
+        reasonCode: String? = null,
+        attempt: Int,
+        status: String = "retrying",
+    ) {
         emit("DownloadRetrying") {
             putDouble("downloadId", downloadId.toDouble())
             putString("fileName", fileName)
             putString("modelId", modelId)
             putString("reason", reason)
+            putString("reasonCode", reasonCode ?: "")
             putInt("attempt", attempt)
-            putString("status", "retrying")
+            putString("status", status)
         }
     }
 

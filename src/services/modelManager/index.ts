@@ -290,7 +290,7 @@ class ModelManager {
     let resolvedPath = mmProjLocalPath;
     await new Promise<void>((resolve, reject) => {
       const removeProgress = backgroundDownloadService.onProgress(info.downloadId, (event) => {
-        if (event.status === 'retrying') return;
+        if (event.status === 'retrying' || event.status === 'waiting_for_network') return;
         opts?.onProgress?.({ modelId, fileName: file.mmProjFile!.name, bytesDownloaded: event.bytesDownloaded, totalBytes, progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0 });
       });
       const removeComplete = backgroundDownloadService.onComplete(info.downloadId, async (event) => {

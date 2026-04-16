@@ -26,9 +26,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
     color: colors.text,
   },
-  headerSpacer: {
-    width: 40,
-  },
   content: {
     flex: 1,
   },
@@ -187,5 +184,44 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   storageText: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
+  },
+  failedActionsRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  retryButton: {
+    backgroundColor: `${colors.primary}15`,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 6,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.xs,
+  },
+  retryButtonText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+    fontWeight: '400' as const,
+  },
+  removeButton: {
+    backgroundColor: `${colors.error}15`,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 6,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.xs,
+  },
+  removeButtonText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.error,
+    fontWeight: '400' as const,
+  },
+  statusIconRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.xs,
   },
 });

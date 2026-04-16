@@ -1,4 +1,4 @@
-import { BackgroundDownloadStatus } from '../types';
+import { BackgroundDownloadReasonCode, BackgroundDownloadStatus } from '../types';
 
 export interface DownloadParams {
   url: string;
@@ -26,6 +26,7 @@ export interface DownloadProgressEvent {
   totalBytes: number;
   status: BackgroundDownloadStatus;
   reason?: string;
+  reasonCode?: BackgroundDownloadReasonCode;
 }
 
 export interface DownloadCompleteEvent {
@@ -44,6 +45,7 @@ export interface DownloadErrorEvent {
   modelId: string;
   status: 'failed';
   reason: string;
+  reasonCode?: BackgroundDownloadReasonCode;
 }
 
 export type DownloadProgressCallback = (event: DownloadProgressEvent) => void;
