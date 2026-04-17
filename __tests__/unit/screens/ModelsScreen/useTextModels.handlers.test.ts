@@ -32,6 +32,7 @@ const mockStoreState: any = {
   addDownloadedModel: mockAddDownloadedModel,
   removeDownloadedModel: mockRemoveDownloadedModel,
   activeModelId: null,
+  activeBackgroundDownloads: {},
 };
 
 jest.mock('../../../../src/stores', () => ({
@@ -83,6 +84,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStoreState.downloadedModels = [];
   mockStoreState.activeModelId = null;
+  mockStoreState.activeBackgroundDownloads = {};
+  const { useAppStore } = jest.requireMock('../../../../src/stores') as any;
+  useAppStore.getState = () => mockStoreState;
 });
 
 // ── handleCancelDownload ──────────────────────────────────────────────
