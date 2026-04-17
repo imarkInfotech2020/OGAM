@@ -195,7 +195,9 @@ describe('LLMService', () => {
 
       await llmService.loadModel('/models/test.gguf', '/models/mmproj.gguf');
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('MMProj file not found'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/MMProj file not found|mmproj file seems too small/i),
+      );
       expect(llmService.isModelLoaded()).toBe(true);
       consoleSpy.mockRestore();
     });

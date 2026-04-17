@@ -14,7 +14,6 @@ object DownloadEventBridge {
 
     fun attach(reactContext: ReactApplicationContext) {
         reactContextRef = WeakReference(reactContext)
-        log("I", "[Bridge] React context attached")
     }
 
     fun log(level: String, msg: String) {

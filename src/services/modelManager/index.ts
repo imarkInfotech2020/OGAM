@@ -200,6 +200,21 @@ class ModelManager {
     });
   }
 
+  private async cleanupCancelledTextArtifacts(ctx: Extract<BackgroundDownloadContext, { file: ModelFile }>): Promise<void> {
+    const cleanupTargets = [ctx.localPath, ctx.mmProjLocalPath].filter((path): path is string => !!path);
+
+    await Promise.all(cleanupTargets.map(async targetPath => {
+      try {
+        const exists = await RNFS.exists(targetPath);
+        if (!exists) return;
+        await RNFS.unlink(targetPath);
+        logger.warn(`[ModelManagerDownload] removed cancelled artifact ${targetPath}`);
+      } catch (error) {
+        logger.warn(`[ModelManagerDownload] failed to remove cancelled artifact ${targetPath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }));
+  }
+
   async cancelBackgroundDownload(downloadId: number): Promise<void> {
     if (!this.isBackgroundDownloadSupported()) {
       throw new Error('Background downloads not supported on this platform');
@@ -211,6 +226,9 @@ class ModelManager {
     }
 
     await backgroundDownloadService.cancelDownload(downloadId);
+    if (ctx && 'file' in ctx) {
+      await this.cleanupCancelledTextArtifacts(ctx);
+    }
     this.backgroundDownloadMetadataCallback?.(downloadId, null);
   }
 

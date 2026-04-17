@@ -108,6 +108,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
   const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
   const lastProgressUpdate = useRef<Record<string, number>>({});
+  const downloadIdsRef = useRef<Record<string, number>>({});
 
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
@@ -214,22 +215,46 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       const now = Date.now();
       if (now - (lastProgressUpdate.current[downloadKey] ?? 0) < 500) return;
       lastProgressUpdate.current[downloadKey] = now;
-      setDownloadProgress(downloadKey, p);
+      const ownerDownloadId = downloadIdsRef.current[downloadKey];
+      setDownloadProgress(downloadKey, ownerDownloadId != null
+        ? { ...p, ownerDownloadId, status: 'running', reason: undefined, reasonCode: undefined }
+        : { ...p, status: 'running', reason: undefined, reasonCode: undefined });
     };
     const onComplete = (dm: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
-      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
+      setDownloadIds(prev => {
+        const { [downloadKey]: _r, ...rest } = prev;
+        downloadIdsRef.current = rest;
+        return rest;
+      });
       addDownloadedModel(dm);
       setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
     };
     const onError = (err: Error) => {
       setDownloadProgress(downloadKey, null);
-      setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
+      setDownloadIds(prev => {
+        const { [downloadKey]: _r, ...rest } = prev;
+        downloadIdsRef.current = rest;
+        return rest;
+      });
       setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message)));
     };
     try {
       const info = await modelManager.downloadModelBackground(model.id, file, onProgress);
-      setDownloadIds(prev => ({ ...prev, [downloadKey]: info.downloadId }));
+      setDownloadIds(prev => {
+        const next = { ...prev, [downloadKey]: info.downloadId };
+        downloadIdsRef.current = next;
+        return next;
+      });
+      setDownloadProgress(downloadKey, {
+        progress: 0,
+        bytesDownloaded: 0,
+        totalBytes,
+        ownerDownloadId: info.downloadId,
+        status: 'pending',
+        reason: undefined,
+        reasonCode: undefined,
+      });
       modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (e) { onError(e as Error); }
   };
@@ -241,7 +266,11 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       await modelManager.cancelBackgroundDownload(downloadId);
     } catch { /* ignore cancel errors */ }
     setDownloadProgress(downloadKey, null);
-    setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; });
+    setDownloadIds(prev => {
+      const { [downloadKey]: _r, ...rest } = prev;
+      downloadIdsRef.current = rest;
+      return rest;
+    });
   };
 
   const handleDeleteModel = async (modelId: string) => {

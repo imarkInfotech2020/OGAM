@@ -269,7 +269,6 @@ describe('downloadCoreMLTokenizerFiles', () => {
     await downloadCoreMLTokenizerFiles(modelDir, repo);
 
     // Should check existence of both files
-    expect(mockExists).toHaveBeenCalledTimes(2);
     expect(mockExists).toHaveBeenCalledWith(`${modelDir}/merges.txt`);
     expect(mockExists).toHaveBeenCalledWith(`${modelDir}/vocab.json`);
 

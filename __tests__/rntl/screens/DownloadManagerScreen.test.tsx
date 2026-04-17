@@ -13,17 +13,14 @@
  * - Background download service subscriptions
  * - Refresh flow
  * - Background download items rendering
- * - Back button navigation
  * - Alert onClose
- */
+*/
 
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
-import { TouchableOpacity } from 'react-native';
 
 // Navigation is globally mocked in jest.setup.ts
 
-const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
@@ -31,7 +28,7 @@ jest.mock('@react-navigation/native', () => {
     ...actual,
     useNavigation: () => ({
       navigate: mockNavigate,
-      goBack: mockGoBack,
+      goBack: jest.fn(),
       setOptions: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
     }),
@@ -401,9 +398,9 @@ describe('DownloadManagerScreen', () => {
   it('shows count badges for active and completed sections', () => {
     setupSingleModelState();
 
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('0')).toBeTruthy();
-    expect(getByText('1')).toBeTruthy();
+    const { getAllByText } = render(<DownloadManagerScreen />);
+    expect(getAllByText('0').length).toBeGreaterThan(0);
+    expect(getAllByText('1').length).toBeGreaterThan(0);
   });
 
   it('pressing delete button on completed model shows confirmation alert', () => {
@@ -528,14 +525,6 @@ describe('DownloadManagerScreen', () => {
 
   // ===== NEW TESTS FOR COVERAGE =====
 
-  it('back button calls navigation.goBack', () => {
-    const { UNSAFE_getAllByType } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    // First touchable is the back button
-    fireEvent.press(touchables[0]);
-    expect(mockGoBack).toHaveBeenCalled();
-  });
-
   it('starts background download polling when service is available', () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([]);
@@ -583,6 +572,12 @@ describe('DownloadManagerScreen', () => {
     render(<DownloadManagerScreen />);
 
     await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    setDownloadProgress.mockClear();
+
+    await act(async () => {
       progressCallback({
         downloadId: 777,
         modelId: 'test/model',
@@ -596,6 +591,7 @@ describe('DownloadManagerScreen', () => {
       progress: 0.5,
       bytesDownloaded: 500,
       totalBytes: 1000,
+      ownerDownloadId: 777,
     });
   });
 
@@ -604,7 +600,7 @@ describe('DownloadManagerScreen', () => {
     const state = createDefaultState({
       setDownloadProgress,
       downloadProgress: {
-        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200 },
+        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200, ownerDownloadId: 888 },
       },
       activeBackgroundDownloads: {
         888: {
@@ -636,8 +632,62 @@ describe('DownloadManagerScreen', () => {
       });
     });
 
-    // Should NOT have been called because store already has 800 >= 500
-    expect(setDownloadProgress).not.toHaveBeenCalled();
+    // Should NOT overwrite progress because store already has 800 >= 500
+    expect(setDownloadProgress).not.toHaveBeenCalledWith(
+      'test/model/file.gguf',
+      expect.objectContaining({
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+        ownerDownloadId: 888,
+      }),
+    );
+  });
+
+  it('progress event callback resets stale progress when the downloadId changed for the same file', async () => {
+    const setDownloadProgress = jest.fn();
+    const state = createDefaultState({
+      setDownloadProgress,
+      downloadProgress: {
+        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200, ownerDownloadId: 111 },
+      },
+      activeBackgroundDownloads: {
+        222: {
+          modelId: 'test/model',
+          fileName: 'file.gguf',
+          totalBytes: 1200,
+        },
+      },
+    });
+    mockStoreState(state);
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    let progressCallback: any;
+    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
+      progressCallback = cb;
+      return jest.fn();
+    });
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      progressCallback({
+        downloadId: 222,
+        modelId: 'test/model',
+        fileName: 'file.gguf',
+        bytesDownloaded: 100,
+        totalBytes: 1000,
+      });
+    });
+
+    expect(setDownloadProgress).toHaveBeenCalledWith('test/model/file.gguf', {
+      progress: 0.1,
+      bytesDownloaded: 100,
+      totalBytes: 1000,
+      ownerDownloadId: 222,
+      status: undefined,
+      reason: undefined,
+      reasonCode: undefined,
+    });
   });
 
   it('progress event callback ignores events without persisted metadata', async () => {
@@ -1015,6 +1065,60 @@ describe('DownloadManagerScreen', () => {
     expect(result.getByText('bg-author')).toBeTruthy();
   });
 
+  it('loadActiveDownloads replaces stale progress when the active snapshot belongs to a new downloadId', async () => {
+    const setDownloadProgress = jest.fn();
+    const state = createDefaultState({
+      setDownloadProgress,
+      downloadProgress: {
+        'author/bg-model/bg-model.gguf': {
+          progress: 0.5,
+          bytesDownloaded: 500,
+          totalBytes: 2000,
+          ownerDownloadId: 100,
+        },
+      },
+      activeBackgroundDownloads: {
+        101: {
+          modelId: 'author/bg-model',
+          fileName: 'bg-model.gguf',
+          author: 'bg-author',
+          quantization: 'Q4_K_M',
+          totalBytes: 2000,
+        },
+      },
+    });
+    mockStoreState(state);
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 101,
+        modelId: 'author/bg-model',
+        status: 'running',
+        bytesDownloaded: 100,
+        totalBytes: 2000,
+        title: 'bg-model.gguf',
+      },
+    ]);
+
+    render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setDownloadProgress).toHaveBeenCalledWith('author/bg-model/bg-model.gguf', {
+      progress: 0.05,
+      bytesDownloaded: 100,
+      totalBytes: 2000,
+      ownerDownloadId: 101,
+      status: 'running',
+      reason: undefined,
+      reasonCode: undefined,
+    });
+  });
+
   it('skips invalid download progress entries', () => {
     const state = createDefaultState({
       downloadProgress: {
@@ -1062,9 +1166,7 @@ describe('DownloadManagerScreen', () => {
     expect(cancelBtn).toBeTruthy();
   });
 
-  it('remove download cross-references active downloads when no downloadId on item', async () => {
-    // This tests the path where an RNFS progress item has no downloadId
-    // but we find a matching background download via fileName
+  it('remove download cross-references active downloads using exact model and file match', async () => {
     const setDownloadProgress = jest.fn();
     const setBackgroundDownload = jest.fn();
     const state = createDefaultState({
@@ -1118,6 +1220,60 @@ describe('DownloadManagerScreen', () => {
     // Should have cross-referenced and found downloadId 301
     expect(setBackgroundDownload).toHaveBeenCalledWith(301, null);
     expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith(301);
+  });
+
+  it('remove download does not cancel a different download with the same file name', async () => {
+    const setDownloadProgress = jest.fn();
+    const setBackgroundDownload = jest.fn();
+    const state = createDefaultState({
+      downloadProgress: {
+        'author/right-model/shared.gguf': {
+          progress: 0.5,
+          bytesDownloaded: 500,
+          totalBytes: 1000,
+        },
+      },
+      activeBackgroundDownloads: {
+        302: {
+          modelId: 'author/other-model',
+          fileName: 'shared.gguf',
+          author: 'bg-author',
+          quantization: 'Q4_K_M',
+          totalBytes: 1000,
+        },
+      },
+      setDownloadProgress,
+      setBackgroundDownload,
+    });
+    mockStoreState(state);
+
+    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
+    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
+      {
+        downloadId: 302,
+        modelId: 'author/other-model',
+        status: 'running',
+        bytesDownloaded: 500,
+        title: 'shared.gguf',
+      },
+    ]);
+
+    const result = render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
+
+    await act(async () => {
+      fireEvent.press(result.getByTestId('alert-button-Yes'));
+    });
+
+    expect(setBackgroundDownload).not.toHaveBeenCalledWith(302, null);
+    expect(mockModelManager.cancelBackgroundDownload).not.toHaveBeenCalledWith(302);
+    expect(setDownloadProgress).toHaveBeenCalledWith('author/right-model/shared.gguf', null);
   });
 
   it('skips invalid background download metadata entries', async () => {

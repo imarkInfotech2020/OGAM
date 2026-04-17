@@ -1,6 +1,7 @@
 package ai.offgridmobile.download
 
 import android.content.Context
+import android.util.Log
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Environment
@@ -40,17 +41,13 @@ class WorkerDownload(
 
         val progressInterval = inputData.getLong(KEY_PROGRESS_INTERVAL, DEFAULT_PROGRESS_INTERVAL)
         val download = downloadDao.getDownload(downloadId) ?: return Result.failure()
-        DownloadEventBridge.log(
-            "I",
-            "[Worker] doWork start id=$downloadId attempt=$runAttemptCount file=${download.fileName} status=${download.status} dbBytes=${download.downloadedBytes}/${download.totalBytes} dest=${download.destination}",
-        )
 
         // Handle early stops and pauses
         val earlyCheckResult = handleEarlyStopOrPause(downloadId, download)
         if (earlyCheckResult != null) return earlyCheckResult
 
         val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.start(applicationContext, download.title, downloadId, isSecondary = isSecondary)
+        DownloadForegroundService.update(applicationContext, downloadId, download.title, isSecondary = isSecondary)
 
         val targetFile = File(download.destination)
         targetFile.parentFile?.mkdirs()
@@ -58,7 +55,6 @@ class WorkerDownload(
         syncFileSizeWithDb(downloadId, targetFile, download)
 
         val existingBytes = if (targetFile.exists()) targetFile.length() else 0L
-        DownloadEventBridge.log("I", "[Worker] Resume offset=${existingBytes}B file=${targetFile.absolutePath}")
 
         // Disk space check — fail fast rather than filling the disk mid-download
         val diskCheckResult = checkDiskSpace(downloadId, download, targetFile, existingBytes)
@@ -71,8 +67,6 @@ class WorkerDownload(
         val cancelHandle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
         return try {
             call.execute().use { response ->
-                val ttfbMs = System.currentTimeMillis() - requestStartMs
-                DownloadEventBridge.log("I", "[Worker] TTFB id=$downloadId: ${ttfbMs}ms (time to first byte / server response)")
                 handleResponse(response, existingBytes, download, downloadId, targetFile, progressInterval)
             }
         } catch (e: Exception) {
@@ -85,10 +79,9 @@ class WorkerDownload(
     /** Returns non-null Result if should exit early, null to continue. */
     private suspend fun handleEarlyStopOrPause(downloadId: Long, download: DownloadEntity): Result? {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, 0L, "early-stop")
+            return handleStoppedState(downloadId, download, 0L)
         }
         if (download.status == DownloadStatus.PAUSED) {
-            DownloadEventBridge.log("I", "[Worker] Paused on start — will retry when resumed id=$downloadId")
             return Result.retry()
         }
         return null
@@ -99,9 +92,8 @@ class WorkerDownload(
         if (download.totalBytes <= 0L) return null
         val needed = download.totalBytes - existingBytes
         val available = StatFs(targetFile.parentFile?.absolutePath ?: download.destination).availableBytes
-        DownloadEventBridge.log("I", "[Worker] Disk space id=$downloadId need=${needed / 1024 / 1024}MB available=${available / 1024 / 1024}MB")
         if (available < needed) {
-            return failDownload(downloadId, download, DownloadReason.DISK_FULL, "worker disk space")
+            return failDownload(downloadId, download, DownloadReason.DISK_FULL)
         }
         return null
     }
@@ -109,30 +101,19 @@ class WorkerDownload(
     /** Handles exceptions during download. */
     private suspend fun handleDownloadException(e: Exception, downloadId: Long, download: DownloadEntity, requestStartMs: Long): Result {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, download.downloadedBytes, "exception-stop")
+            return handleStoppedState(downloadId, download, download.downloadedBytes)
         }
-        val elapsed = System.currentTimeMillis() - requestStartMs
-        val rawReason = e.message ?: e.javaClass.simpleName
         val reasonCode = DownloadReason.fromThrowable(e)
         val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
         val retryStatus = if (!isNetworkConnected() && reasonCode == DownloadReason.NETWORK_LOST) "waiting_for_network" else "retrying"
         val statusText = if (retryStatus == "waiting_for_network") "Waiting for network..." else "Reconnecting..."
-        DownloadEventBridge.log("E", "[Worker] Exception id=$downloadId attempt=$runAttemptCount elapsed=${elapsed}ms reason=$rawReason code=$reasonCode")
-        DownloadEventBridge.log("E", "[Worker] Stack: ${e.stackTraceToString().take(400)}")
-        DownloadEventBridge.log("W", "[Worker] Marking queued for retry id=$downloadId bytes=${download.downloadedBytes}/${download.totalBytes} code=$reasonCode")
         downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
         val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.start(
-            applicationContext,
-            download.title,
-            downloadId,
-            download.downloadedBytes,
-            download.totalBytes,
-            statusText,
-            isSecondary = isSecondary,
+        DownloadForegroundService.update(
+            applicationContext, downloadId, download.title,
+            download.downloadedBytes, download.totalBytes, isSecondary, statusText,
         )
         DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, uiReason, reasonCode, runAttemptCount, retryStatus)
-        WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker exception")
         return Result.retry()
     }
 
@@ -153,10 +134,6 @@ class WorkerDownload(
 
     private suspend fun syncFileSizeWithDb(downloadId: Long, targetFile: File, download: DownloadEntity) {
         if (targetFile.exists() && targetFile.length() != download.downloadedBytes) {
-            DownloadEventBridge.log(
-                "I",
-                "[Worker] Syncing DB bytes from file system id=$downloadId fsBytes=${targetFile.length()} dbBytes=${download.downloadedBytes}",
-            )
             downloadDao.updateProgress(downloadId, targetFile.length(), download.totalBytes, DownloadStatus.RUNNING)
         }
     }
@@ -164,7 +141,6 @@ class WorkerDownload(
     private fun buildRequest(url: String, existingBytes: Long): Request {
         val builder = Request.Builder().url(url)
         if (existingBytes > 0L) {
-            DownloadEventBridge.log("I", "[Worker] Resuming from byte $existingBytes")
             builder.addHeader("Range", "bytes=$existingBytes-")
         }
         return builder.build()
@@ -179,21 +155,14 @@ class WorkerDownload(
         progressInterval: Long,
     ): Result {
         val code = response.code
-        val acceptRanges = response.header("Accept-Ranges") ?: "not-set"
-        val contentLengthHeader = response.header("Content-Length") ?: "unknown"
-        val contentRange = response.header("Content-Range") ?: ""
-        DownloadEventBridge.log("I", "[Worker] Response id=$downloadId code=$code Accept-Ranges=$acceptRanges Content-Length=$contentLengthHeader${if (contentRange.isNotEmpty()) " Content-Range=$contentRange" else ""}")
-
         val earlyResult = handleResponseCode(response, code, existingBytes, download, downloadId, targetFile)
         if (earlyResult != null) return earlyResult
 
-        val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE, "worker no body")
+        val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE)
 
         val currentFileBytes = if (targetFile.exists() && code == 206) targetFile.length() else 0L
         val contentLength = body.contentLength()
         val totalBytes = calculateTotalBytes(code, currentFileBytes, contentLength, download.totalBytes)
-
-        DownloadEventBridge.log("I", "[Worker] Transfer plan id=$downloadId existing=$currentFileBytes body=$contentLength total=$totalBytes")
         downloadDao.updateProgress(downloadId, currentFileBytes, totalBytes, DownloadStatus.RUNNING)
 
         return streamToFile(StreamParams(body.byteStream().buffered(), targetFile, code, download, downloadId, currentFileBytes, totalBytes, progressInterval))
@@ -210,45 +179,34 @@ class WorkerDownload(
     ): Result? {
         return when {
             existingBytes > 0L && code == 200 -> {
-                DownloadEventBridge.log("W", "[Worker] Server returned 200 despite Range header — resume not supported, restarting from 0. id=$downloadId existingBytes=$existingBytes")
-                if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial file for restart id=$downloadId")
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete stale file for re-download: ${targetFile.path}")
                 null
             }
             code == 416 -> {
-                DownloadEventBridge.log("E", "[Worker] Range invalid id=$downloadId, deleting partial")
-                if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete partial file on 416 id=$downloadId")
-                failDownload(downloadId, download, DownloadReason.HTTP_416, "worker 416")
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete file on 416: ${targetFile.path}")
+                failDownload(downloadId, download, DownloadReason.HTTP_416)
             }
             !response.isSuccessful -> {
                 val reasonCode = DownloadReason.fromHttpCode(code)
                 val uiReason = DownloadReason.messageFor(reasonCode) ?: "HTTP $code"
-                DownloadEventBridge.log("E", "[Worker] Request failed id=$downloadId code=$code reasonCode=$reasonCode")
                 if (code in 500..599) {
                     // 5xx = transient server error — treat identically to a network exception.
                     // Do NOT emit DownloadError here: that would tell JS the download is dead
                     // (wiping all listeners/metadata) while WorkManager silently retries — causing
                     // the Download Manager screen to stay stuck and the Models screen to desync.
                     downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
-                    DownloadEventBridge.log("W", "[Worker] HTTP retryable id=$downloadId code=$code -> queued for retry")
                     val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-                    DownloadForegroundService.start(
-                        applicationContext,
-                        download.title,
-                        downloadId,
-                        download.downloadedBytes,
-                        download.totalBytes,
-                        "Reconnecting…",
-                        isSecondary = isSecondary,
+                    DownloadForegroundService.update(
+                        applicationContext, downloadId, download.title,
+                        download.downloadedBytes, download.totalBytes, isSecondary, "Reconnecting…",
                     )
                     DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, uiReason, reasonCode, runAttemptCount)
-                    WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker http error")
                     Result.retry()
                 } else {
                     // 4xx = client error — permanent failure, do not retry.
                     downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reasonCode)
-                    DownloadEventBridge.log("E", "[Worker] HTTP terminal failure id=$downloadId code=$code reasonCode=$reasonCode")
                     DownloadEventBridge.error(downloadId, download.fileName, download.modelId, uiReason, reasonCode)
-                    WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker http error")
+                    DownloadForegroundService.remove(applicationContext, downloadId)
                     Result.failure()
                 }
             }
@@ -273,8 +231,6 @@ class WorkerDownload(
         var lastSpeedTs = System.currentTimeMillis()
         val transferStartMs = lastSpeedTs
 
-        DownloadEventBridge.log("I", "[Worker] Stream start id=$downloadId append=$appendMode offset=${currentFileBytes}B total=${totalBytes}B")
-
         FileOutputStream(targetFile, appendMode).buffered().use { output ->
             input.use { src ->
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -288,7 +244,7 @@ class WorkerDownload(
 
                     val now = System.currentTimeMillis()
                     if (now - lastProgressAt >= progressInterval) {
-                        emitProgressUpdate(downloadId, bytesWritten, totalBytes, lastSpeedBytes, lastSpeedTs, now)
+                        emitProgressUpdate(downloadId, bytesWritten, totalBytes)
                         lastSpeedBytes = bytesWritten
                         lastSpeedTs = now
                         lastProgressAt = now
@@ -298,10 +254,6 @@ class WorkerDownload(
             }
         }
 
-        val totalElapsedMs = (System.currentTimeMillis() - transferStartMs).coerceAtLeast(1L)
-        val avgSpeedKBps = (bytesWritten - currentFileBytes) * 1000L / totalElapsedMs / 1024L
-        DownloadEventBridge.log("I", "[Worker] Stream done id=$downloadId bytes=$bytesWritten elapsed=${totalElapsedMs}ms avgSpeed=${avgSpeedKBps}KB/s")
-
         // SHA256 integrity check — only if file size doesn't match (avoid expensive hash computation on mobile)
         // Most downloads will match size exactly, so this rarely runs.
         // Only check hash if size is off by > 0.1%, indicating truncation or corruption.
@@ -310,38 +262,27 @@ class WorkerDownload(
             val sizeDiffPercent = abs(bytesWritten - download.totalBytes).toDouble() / download.totalBytes
             if (sizeDiffPercent > 0.001) {
                 // File size mismatch > 0.1% — verify integrity with SHA256 before failing
-                DownloadEventBridge.log("I", "[Worker] Size mismatch (${(sizeDiffPercent * 100).toInt()}%) — verifying SHA256 id=$downloadId")
                 val actual = computeFileSha256(targetFile)
                 if (actual.lowercase() != expectedSha256.lowercase()) {
-                    DownloadEventBridge.log("E", "[Worker] SHA256 mismatch id=$downloadId expected=$expectedSha256 actual=$actual")
-                    if (!targetFile.delete()) DownloadEventBridge.log("W", "[Worker] Could not delete corrupt file id=$downloadId")
-                    return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED, "worker sha256 mismatch")
+                    if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
+                    return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
                 }
-                DownloadEventBridge.log("I", "[Worker] SHA256 matches despite size mismatch (server quirk?) id=$downloadId")
-            } else {
-                // File size matches within tolerance — skip expensive hash computation, assume valid
-                DownloadEventBridge.log("I", "[Worker] File size matches expected (within 0.1%) — skipping SHA256 check id=$downloadId")
             }
         }
 
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.COMPLETED)
-        DownloadEventBridge.log("I", "[Worker] Completed id=$downloadId finalBytes=$bytesWritten total=$totalBytes path=${targetFile.absolutePath}")
-        WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker completed")
+        DownloadForegroundService.remove(applicationContext, downloadId)
         return Result.success()
     }
 
     /** Returns a non-null Result if the loop should stop, null to continue. */
     private suspend fun checkCancellationOrPause(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result? {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, bytesWritten, "mid-transfer-stop")
+            return handleStoppedState(downloadId, download, bytesWritten)
         }
         val current = downloadDao.getDownload(downloadId)
         if (current?.status == DownloadStatus.PAUSED) {
-            DownloadEventBridge.log("I", "[Worker] Paused mid-transfer id=$downloadId bytes=$bytesWritten")
             return Result.retry()
-        }
-        if (current == null) {
-            DownloadEventBridge.log("E", "[Worker] DB row missing during transfer id=$downloadId bytes=$bytesWritten")
         }
         return null
     }
@@ -350,35 +291,34 @@ class WorkerDownload(
         downloadId: Long,
         bytesWritten: Long,
         totalBytes: Long,
-        lastSpeedBytes: Long,
-        lastSpeedTs: Long,
-        now: Long,
     ) {
-        val intervalMs = (now - lastSpeedTs).coerceAtLeast(1L)
-        val speedKBps = (bytesWritten - lastSpeedBytes) * 1000L / intervalMs / 1024L
-        val pct = if (totalBytes > 0) bytesWritten * 100L / totalBytes else 0L
-        DownloadEventBridge.log("I", "[Worker] Progress id=$downloadId ${pct}% ${bytesWritten / 1024 / 1024}MB/${totalBytes / 1024 / 1024}MB speed=${speedKBps}KB/s")
-        val fileName = downloadDao.getDownload(downloadId)?.fileName ?: ""
-        val isSecondary = fileName.contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.start(applicationContext, downloadDao.getDownload(downloadId)?.title ?: DEFAULT_TITLE, downloadId, bytesWritten, totalBytes, "Downloading", fileName, isSecondary = isSecondary)
+        val progressDownload = downloadDao.getDownload(downloadId)
+        val isSecondary = (progressDownload?.fileName ?: "").contains("mmproj", ignoreCase = true)
+        DownloadForegroundService.update(
+            applicationContext, downloadId, progressDownload?.title ?: DEFAULT_TITLE,
+            bytesWritten, totalBytes, isSecondary, "Downloading",
+        )
         setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
     }
 
-    private suspend fun failDownload(downloadId: Long, download: DownloadEntity, reasonCode: String, serviceReason: String): Result {
+    private suspend fun failDownload(downloadId: Long, download: DownloadEntity, reasonCode: String): Result {
         val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
-        DownloadEventBridge.log("E", "[Worker] failDownload id=$downloadId file=${download.fileName} reasonCode=$reasonCode serviceReason=$serviceReason")
         downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reasonCode)
         DownloadEventBridge.error(downloadId, download.fileName, download.modelId, uiReason, reasonCode)
-        WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, serviceReason)
+        DownloadForegroundService.remove(applicationContext, downloadId)
         return Result.failure()
     }
 
-    private suspend fun handleStoppedState(downloadId: Long, download: DownloadEntity, bytesWritten: Long, stage: String): Result {
+    private suspend fun handleStoppedState(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result {
         val current = downloadDao.getDownload(downloadId) ?: download
         return if (current.status == DownloadStatus.CANCELLED) {
-            DownloadEventBridge.log("I", "[Worker] User-cancelled stop id=$downloadId stage=$stage bytes=$bytesWritten")
-            WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker user cancelled")
+            // Worker owns the file write — delete partial file here once writing has stopped.
+            // The module also attempts deletion but races with this worker, so this is the
+            // authoritative cleanup.
+            val partialFile = File(current.destination)
+            if (partialFile.exists()) partialFile.delete()
+            DownloadForegroundService.remove(applicationContext, downloadId)
             Result.failure()
         } else {
             val networkConnected = isNetworkConnected()
@@ -386,27 +326,14 @@ class WorkerDownload(
             val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
             val statusText = if (networkConnected) "Reconnecting..." else "Waiting for network..."
             val eventStatus = if (networkConnected) "retrying" else "waiting_for_network"
-            DownloadEventBridge.log(
-                "W",
-                "[Worker] Worker stopped without user cancel id=$downloadId stage=$stage bytes=$bytesWritten network=${if (networkConnected) "connected" else "lost"}",
-            )
-            if (!networkConnected) {
-                DownloadEventBridge.log("W", "[Worker] Network connection lost id=$downloadId while $stage. Waiting to resume when connectivity returns.")
-            }
             downloadDao.updateProgress(downloadId, bytesWritten, current.totalBytes, DownloadStatus.QUEUED)
             downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
             val isSecondary = current.fileName.contains("mmproj", ignoreCase = true)
-            DownloadForegroundService.start(
-                applicationContext,
-                current.title,
-                downloadId,
-                bytesWritten,
-                current.totalBytes,
-                statusText,
-                isSecondary = isSecondary,
+            DownloadForegroundService.update(
+                applicationContext, downloadId, current.title,
+                bytesWritten, current.totalBytes, isSecondary, statusText,
             )
             DownloadEventBridge.retrying(downloadId, current.fileName, current.modelId, uiReason, reasonCode, runAttemptCount, eventStatus)
-            WorkerDownloadStore.stopForegroundServiceIfIdle(applicationContext, "worker interrupted")
             Result.retry()
         }
     }
@@ -424,6 +351,7 @@ class WorkerDownload(
     // -------------------------------------------------------------------------
 
     companion object {
+        private const val TAG = "WorkerDownload"
         private const val DEFAULT_TITLE = "Downloading model…"
 
         // Shared across all WorkerDownload instances — reuses connection and thread pools.

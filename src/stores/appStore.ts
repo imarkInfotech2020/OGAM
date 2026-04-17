@@ -8,6 +8,7 @@ type DownloadProgressInfo = {
   progress: number;
   bytesDownloaded: number;
   totalBytes: number;
+  ownerDownloadId?: number;
   status?: BackgroundDownloadStatus | string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;

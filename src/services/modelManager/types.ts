@@ -32,6 +32,9 @@ export type BackgroundDownloadContext =
       mmProjDownloadId?: number;
       mmProjCompleted: boolean;
       mainCompleted: boolean;
+      mainCompleteHandled?: boolean;
+      mmProjCompleteHandled?: boolean;
+      isFinalizing?: boolean;
       removeMmProjProgressListener?: () => void;
     }
   | { model: DownloadedModel; error: null }

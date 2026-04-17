@@ -1,19 +1,15 @@
 import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useNavigation } from '@react-navigation/native';
 import { createStyles } from './styles';
 import { ActiveDownloadCard, CompletedDownloadCard, formatBytes } from './items';
 import { useDownloadManager } from './useDownloadManager';
-import type { RootStackParamList } from '../../navigation/types';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export const DownloadManagerScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
@@ -33,9 +29,6 @@ export const DownloadManagerScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color={colors.text} />
-        </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
       </View>
 

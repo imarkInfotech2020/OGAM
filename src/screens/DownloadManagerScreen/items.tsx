@@ -32,7 +32,7 @@ export type DownloadItem = {
 };
 
 export interface DownloadItemsData {
-  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
+  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; ownerDownloadId?: number; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
   activeDownloads: BackgroundDownloadInfo[];
   activeBackgroundDownloads: Record<number, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
   downloadedModels: DownloadedModel[];
@@ -94,6 +94,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
     items.push({
       type: 'active',
       modelType: fullModelId.startsWith('image:') ? 'image' : 'text',
+      downloadId: matchingActiveDownload?.downloadId,
       modelId: fullModelId,
       fileName,
       author: fullModelId.split('/')[0] ?? 'Unknown',

@@ -13,16 +13,6 @@ import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, sav
 import { extractBaseName } from './scan';
 import logger from '../../utils/logger';
 
-function logDownloadDebug(entry: {
-  level: 'log' | 'warn' | 'error';
-  scope: string;
-  message: string;
-  meta?: Record<string, unknown>;
-}): void {
-  const payload = entry.meta ? ` ${JSON.stringify(entry.meta)}` : '';
-  logger[entry.level](`[${entry.scope}] ${entry.message}${payload}`);
-}
-
 export {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
@@ -41,12 +31,6 @@ export interface PerformBackgroundDownloadOpts {
 
 export async function performBackgroundDownload(opts: PerformBackgroundDownloadOpts): Promise<BackgroundDownloadInfo> {
   const { modelId, file, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'performBackgroundDownload start', meta: {
-    modelId,
-    fileName: file.name,
-    hasMmProj: !!file.mmProjFile,
-    fileSize: file.size,
-  } });
   const localPath = `${modelsDir}/${file.name}`;
   const mmProjLocalPath = file.mmProjFile
     ? `${modelsDir}/${extractBaseName(file.name)}-${file.mmProjFile.name}`
@@ -56,12 +40,6 @@ export async function performBackgroundDownload(opts: PerformBackgroundDownloadO
   const mmProjExists = await checkMmProjExists(mmProjLocalPath, file.mmProjFile?.size);
 
   if (mainExists && mmProjExists) {
-    logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'performBackgroundDownload already downloaded', meta: {
-      modelId,
-      fileName: file.name,
-      localPath,
-      mmProjExists,
-    } });
     return handleAlreadyDownloaded({ modelId, file, localPath, mmProjLocalPath, backgroundDownloadContext });
   }
 
@@ -135,12 +113,6 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     title: `Downloading ${file.name}`, description: `${modelId} - ${file.quantization}`,
     totalBytes: file.size, sha256: file.sha256,
   });
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'main download started', meta: {
-    modelId,
-    fileName: file.name,
-    downloadId: downloadInfo.downloadId,
-    combinedTotalBytes,
-  } });
 
   // Start mmproj download in parallel if needed
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
@@ -149,18 +121,12 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     const mmProjFile = file.mmProjFile!;
     const mmProjInfo = await backgroundDownloadService.startDownload({
       url: mmProjFile.downloadUrl, fileName: mmProjFile.name, modelId,
-      title: `Downloading ${mmProjFile.name} (vision)`,
+      title: `Downloading ${file.name}`,
       description: `${modelId} - vision projection`, totalBytes: mmProjFile.size,
       sha256: mmProjFile.sha256,
     });
     mmProjDownloadId = mmProjInfo.downloadId;
     backgroundDownloadService.markSilent(mmProjDownloadId);
-    logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'mmproj download started', meta: {
-      modelId,
-      fileName: mmProjFile.name,
-      downloadId: mmProjDownloadId,
-      totalBytes: mmProjFile.size,
-    } });
   }
 
   backgroundDownloadMetadataCallback?.(downloadInfo.downloadId, {
@@ -174,22 +140,9 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   let mainBytesDownloaded = 0;
   let mmProjBytesDownloaded = mmProjExists ? mmProjSize : 0;
   const mmProjFileName = file.mmProjFile?.name || '';
-  let lastLoggedPct = 0; // Track last logged percentage to reduce log spam
 
   const reportProgress = () => {
     const combinedDownloaded = mainBytesDownloaded + mmProjBytesDownloaded;
-    const combinedPct = combinedTotalBytes > 0 ? Math.floor((combinedDownloaded / combinedTotalBytes) * 100) : 0;
-
-    // Log every 10% milestone only to reduce log spam
-    if (combinedPct >= lastLoggedPct + 10) {
-      lastLoggedPct = combinedPct;
-      logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: `progress ${combinedPct}%`, meta: {
-        modelId,
-        fileName: file.name,
-        combinedDownloaded,
-        combinedTotalBytes,
-      } });
-    }
 
     // Update Android notification with combined progress for vision models
     if (needsMmProj && mmProjDownloadId) {
@@ -239,6 +192,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   backgroundDownloadContext.set(downloadInfo.downloadId, {
     modelId, file, localPath, mmProjLocalPath, removeProgressListener,
     mmProjDownloadId, mmProjCompleted: !needsMmProj, mainCompleted: false,
+    mainCompleteHandled: false, mmProjCompleteHandled: false, isFinalizing: false,
     removeMmProjProgressListener,
   });
 
@@ -267,12 +221,6 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   }
 
   if (!ctx || !('file' in ctx)) return;
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'watchBackgroundDownload attached', meta: {
-    downloadId,
-    modelId: ctx.modelId,
-    fileName: ctx.file.name,
-    mmProjDownloadId: ctx.mmProjDownloadId ?? null,
-  } });
 
   let removeMmProjComplete: (() => void) | undefined;
   let removeMmProjError: (() => void) | undefined;
@@ -288,11 +236,6 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   };
 
   const handleError = (error: Error, cancelDownloadId?: number) => {
-    logDownloadDebug({ level: 'error', scope: 'ModelManagerDownload', message: 'watchBackgroundDownload error', meta: {
-      downloadId,
-      cancelDownloadId: cancelDownloadId ?? null,
-      message: error.message,
-    } });
     if (cancelDownloadId) backgroundDownloadService.cancelDownload(cancelDownloadId).catch(() => {});
     cleanupListeners();
     backgroundDownloadContext.delete(downloadId);
@@ -301,12 +244,8 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 
   const tryFinalize = async () => {
     if (!ctx.mainCompleted || !ctx.mmProjCompleted) return;
-    logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'finalizing completed download', meta: {
-      downloadId,
-      modelId: ctx.modelId,
-      fileName: ctx.file.name,
-      mmProjCompleted: ctx.mmProjCompleted,
-    } });
+    if (ctx.isFinalizing) return;
+    ctx.isFinalizing = true;
     cleanupListeners();
     backgroundDownloadContext.delete(downloadId);
     try {
@@ -319,25 +258,17 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       });
       await persistDownloadedModel(model, modelsDir);
       backgroundDownloadMetadataCallback?.(downloadId, null);
-      logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'download finalized successfully', meta: {
-        downloadId,
-        modelId: ctx.modelId,
-        finalPath,
-        finalMmProjPath: finalMmProjPath ?? '',
-      } });
       onComplete?.(model);
     } catch (error) {
-      logDownloadDebug({ level: 'error', scope: 'ModelManagerDownload', message: 'download finalization failed', meta: {
-        downloadId,
-        message: error instanceof Error ? error.message : String(error),
-      } });
+      ctx.isFinalizing = false;
       onError?.(error as Error);
     }
   };
 
   const removeMainComplete = backgroundDownloadService.onComplete(downloadId, async () => {
+    if (ctx.mainCompleteHandled) return;
+    ctx.mainCompleteHandled = true;
     ctx.mainCompleted = true;
-    logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'main download complete event received', meta: { downloadId } });
     await tryFinalize();
   });
   const removeMainError = backgroundDownloadService.onError(downloadId, (event) => {
@@ -346,14 +277,11 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 
   if (ctx.mmProjDownloadId && !ctx.mmProjCompleted) {
     removeMmProjComplete = backgroundDownloadService.onComplete(ctx.mmProjDownloadId, async (event) => {
+      if (ctx.mmProjCompleteHandled) return;
+      ctx.mmProjCompleteHandled = true;
       try {
         await backgroundDownloadService.moveCompletedDownload(event.downloadId, ctx.mmProjLocalPath!);
         ctx.mmProjCompleted = true;
-        logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'mmproj download complete event received', meta: {
-          downloadId,
-          mmProjDownloadId: event.downloadId,
-          mmProjLocalPath: ctx.mmProjLocalPath!,
-        } });
         await tryFinalize();
       } catch (error) { handleError(error as Error, downloadId); }
     });
