@@ -7,6 +7,8 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
@@ -14,10 +16,15 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     ...shadows.small,
     zIndex: 1,
+    gap: SPACING.sm,
+  },
+  backButton: {
+    padding: SPACING.xs,
   },
   title: {
     ...TYPOGRAPHY.h2,
     color: colors.text,
+    flex: 1,
   },
   content: {
     flex: 1,
