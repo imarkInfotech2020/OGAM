@@ -2,6 +2,9 @@ import { Platform } from 'react-native';
 import { useAppStore } from '../stores';
 import { CacheType, INFERENCE_BACKENDS } from '../types';
 
+/** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
+const HTP_ENABLED = false;
+
 export const CACHE_TYPE_DESCRIPTIONS: Record<CacheType, string> = {
   f16: 'Full precision — best quality, highest memory usage',
   q8_0: '8-bit quantized — good balance of quality and memory',
@@ -24,7 +27,7 @@ export function useTextGenerationAdvanced() {
   const selectedBackend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
   const gpuForcesF16 =
     selectedBackend === INFERENCE_BACKENDS.OPENCL ||
-    selectedBackend === INFERENCE_BACKENDS.HTP;
+    (HTP_ENABLED && selectedBackend === INFERENCE_BACKENDS.HTP);
   // OpenCL and HTP force f16 in the native loader, so lock the UI to match.
   const cacheDisabled = gpuForcesF16;
   const displayCacheType = cacheDisabled ? 'f16' : currentCacheType;
