@@ -1,5 +1,6 @@
 /* eslint-disable max-lines, max-lines-per-function */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import {
@@ -10,6 +11,7 @@ import {
   huggingFaceService,
 } from '../../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
+import type { BackgroundDownloadStatus } from '../../types';
 import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
@@ -105,6 +107,58 @@ function shouldSyncSnapshot(
   );
 }
 
+function updateActiveDownloadStatus(
+  setActiveDownloads: Dispatch<SetStateAction<BackgroundDownloadInfo[]>>,
+  event: {
+    downloadId: number;
+    status: BackgroundDownloadStatus;
+    reason?: string;
+    reasonCode?: string;
+  },
+): void {
+  setActiveDownloads(prev => prev.map(d =>
+    d.downloadId === event.downloadId
+      ? { ...d, status: event.status, reason: event.reason, reasonCode: event.reasonCode as any }
+      : d,
+  ));
+}
+
+type RetryProgressContext = {
+  retryLoggedRef: MutableRefObject<Record<string, string>>;
+  setDownloadProgress: (key: string, value: any) => void;
+  setActiveDownloads: Dispatch<SetStateAction<BackgroundDownloadInfo[]>>;
+};
+
+function handleRetryingProgressEvent(
+  event: {
+    downloadId: number;
+    status: BackgroundDownloadStatus;
+    reason?: string;
+    reasonCode?: string;
+  },
+  key: string,
+  ctx: RetryProgressContext,
+): void {
+  const { retryLoggedRef, setDownloadProgress, setActiveDownloads } = ctx;
+  const retryReason = event.reason || 'network issue';
+  if (retryLoggedRef.current[event.downloadId] !== retryReason) {
+    retryLoggedRef.current[event.downloadId] = retryReason;
+  }
+
+  const existing = useAppStore.getState().downloadProgress[key];
+  setDownloadProgress(key, {
+    progress: existing?.progress ?? 0,
+    bytesDownloaded: existing?.bytesDownloaded ?? 0,
+    totalBytes: existing?.totalBytes ?? 0,
+    ownerDownloadId: event.downloadId,
+    status: event.status,
+    reason: event.reason,
+    reasonCode: event.reasonCode,
+  });
+
+  updateActiveDownloadStatus(setActiveDownloads, event);
+}
+
 function syncDownloadSnapshot(
   download: BackgroundDownloadInfo,
   setDownloadProgress: (key: string, value: any) => void,
@@ -161,6 +215,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
   } = useAppStore();
   const retryLoggedRef = useRef<Record<string, string>>({});
 
+  const loadActiveDownloads = useCallback(async () => {
+    if (backgroundDownloadService.isAvailable()) {
+      const downloads = await modelManager.getActiveBackgroundDownloads();
+      const filteredDownloads = await purgeStaleImageDownloads(downloads);
+      clearStaleTextProgressEntries(filteredDownloads, setDownloadProgress);
+      setActiveDownloads(filteredDownloads);
+      filteredDownloads.forEach(download => {
+        syncDownloadSnapshot(download, setDownloadProgress);
+      });
+    }
+  }, [setDownloadProgress]);
+
   // Load active background downloads on mount + start/stop polling
   useEffect(() => {
     loadActiveDownloads();
@@ -172,7 +238,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     // the same native polling timer for progress events. Polling is cheap
     // (no-op when no active downloads) and stops automatically when all
     // downloads complete.
-  }, []);
+  }, [loadActiveDownloads]);
 
   // Subscribe to background download service events
   useEffect(() => {
@@ -189,28 +255,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
       const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
       if (event.status === 'retrying' || event.status === 'waiting_for_network') {
-        const retryReason = event.reason || 'network issue';
-        if (retryLoggedRef.current[event.downloadId] !== retryReason) {
-          retryLoggedRef.current[event.downloadId] = retryReason;
-        }
-        // Keep existing bytes — just update status and reason so the UI shows "Reconnecting..."
-        const existing = useAppStore.getState().downloadProgress[key];
-        setDownloadProgress(key, {
-          progress: existing?.progress ?? 0,
-          bytesDownloaded: existing?.bytesDownloaded ?? 0,
-          totalBytes: existing?.totalBytes ?? 0,
-          ownerDownloadId: event.downloadId,
-          status: event.status,
-          reason: event.reason,
-          reasonCode: event.reasonCode,
+        handleRetryingProgressEvent(event, key, {
+          retryLoggedRef,
+          setDownloadProgress,
+          setActiveDownloads,
         });
-        // Also update activeDownloads so buildDownloadItems reflects the new status immediately
-        // without waiting for the next loadActiveDownloads() call.
-        setActiveDownloads(prev => prev.map(d =>
-          d.downloadId === event.downloadId
-            ? { ...d, status: event.status, reason: event.reason, reasonCode: event.reasonCode as any }
-            : d,
-        ));
         return;
       }
       const existing = useAppStore.getState().downloadProgress[key];
@@ -258,19 +307,8 @@ export function useDownloadManager(): UseDownloadManagerResult {
       unsubError();
     };
 
-  }, [setDownloadProgress]);
+  }, [loadActiveDownloads, setDownloadProgress]);
 
-  const loadActiveDownloads = async () => {
-    if (backgroundDownloadService.isAvailable()) {
-      const downloads = await modelManager.getActiveBackgroundDownloads();
-      const filteredDownloads = await purgeStaleImageDownloads(downloads);
-      clearStaleTextProgressEntries(filteredDownloads, setDownloadProgress);
-      setActiveDownloads(filteredDownloads);
-      filteredDownloads.forEach(download => {
-        syncDownloadSnapshot(download, setDownloadProgress);
-      });
-    }
-  };
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadActiveDownloads();
@@ -280,7 +318,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
 
-  }, [setDownloadedModels, setDownloadedImageModels]);
+  }, [loadActiveDownloads, setDownloadedModels, setDownloadedImageModels]);
 
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
