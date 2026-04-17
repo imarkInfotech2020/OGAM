@@ -66,6 +66,26 @@ export function getModelType(model: ModelInfo): ModelTypeFilter {
   return 'text';
 }
 
+// -- Text model compatibility helper --
+
+export function isPhiModel(modelName: string, modelId: string): boolean {
+  const name = modelName.toLowerCase();
+  const id = modelId.toLowerCase();
+  return name.includes('phi') || id.includes('phi');
+}
+
+export function getTextModelCompatibility(
+  model: ModelInfo,
+): { isCompatible: boolean; incompatibleReason: string | undefined } {
+  if (isPhiModel(model.name, model.id)) {
+    return {
+      isCompatible: false,
+      incompatibleReason: 'Not supported yet',
+    };
+  }
+  return { isCompatible: true, incompatibleReason: undefined };
+}
+
 // -- SD version filter helper --
 
 export function matchesSdVersionFilter(modelName: string, sdVersionFilter: string): boolean {

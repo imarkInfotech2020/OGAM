@@ -7,6 +7,9 @@ import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { useDebugLogsStore } from '../stores/debugLogsStore';
 
+/** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
+const HTP_ENABLED = false;
+
 export const SYSTEM_PROMPT_RESERVE = 256;
 export const RESPONSE_RESERVE = 512;
 export const CONTEXT_SAFETY_MARGIN = 0.85;
@@ -65,7 +68,7 @@ export function buildModelParams(
   // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
   // OpenCL and HTP backends crash with flash attn on — disable for those.
   // CPU (Android/iOS) and Metal both support it; use 'auto' to let llama.cpp decide.
-  const gpuBackendIncompatible = backend === INFERENCE_BACKENDS.OPENCL || backend === INFERENCE_BACKENDS.HTP;
+  const gpuBackendIncompatible = backend === INFERENCE_BACKENDS.OPENCL || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
   const flash_attn_type = (settings.flashAttn === false || gpuBackendIncompatible) ? 'off' : 'auto';
   const gpuEnabled = backend ? backend !== INFERENCE_BACKENDS.CPU : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
@@ -75,7 +78,7 @@ export function buildModelParams(
   // HTP also needs f16 here; quantized KV cache regressed into native loadModel crashes.
   const needsF16 =
     backend === INFERENCE_BACKENDS.OPENCL ||
-    backend === INFERENCE_BACKENDS.HTP;
+    (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
   const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
   return {
     baseParams: {
@@ -126,7 +129,7 @@ export async function initContextWithFallback(
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
   const modelPath = (params as any).model || 'unknown';
-  const isHtp = Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
+  const isHtp = HTP_ENABLED && Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
   logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}`);
   logInferenceInit('log', `Init started: ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}.`);
   let gpuAttemptFailed = false;
