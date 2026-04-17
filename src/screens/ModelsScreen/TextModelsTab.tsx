@@ -16,7 +16,7 @@ import { ModelsScreenViewModel } from './useModelsScreen';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
-import { formatNumber } from './utils';
+import { formatNumber, getTextModelCompatibility } from './utils';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -182,7 +182,8 @@ interface ModelListItemProps {
   isDownloaded: boolean; isTrending: boolean; onPress: () => void;
 }
 const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} onPress={onPress} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
+  const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={onPress} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 
