@@ -75,6 +75,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const styles = useThemedStyles(createStyles);
 
   const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
+  const downloadIdsRef = useRef<Record<string, number>>({});
 
   const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel, downloadedModels } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);
@@ -161,13 +162,18 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
     }
     setDownloadProgress(key, null);
-    setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
+    setDownloadIds(prev => {
+      const { [key]: _r, ...rest } = prev;
+      downloadIdsRef.current = rest;
+      return rest;
+    });
   };
 
   const handleDownload = async (modelId: string, file: ModelFile) => {
     const key = `${modelId}/${file.name}`;
+    const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
     cancelledKeys.current.delete(key);
-    setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: file.size || 0 });
+    setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes });
     const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message))); };
     try {
       const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
@@ -175,18 +181,38 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
         const now = Date.now();
         if (now - (lastProgressUpdate.current[key] ?? 0) < 500) return;
         lastProgressUpdate.current[key] = now;
-        setDownloadProgress(key, p);
+        const ownerDownloadId = downloadIdsRef.current[key];
+        setDownloadProgress(key, ownerDownloadId != null
+          ? { ...p, ownerDownloadId, status: 'running', reason: undefined, reasonCode: undefined }
+          : { ...p, status: 'running', reason: undefined, reasonCode: undefined });
       });
       // If the user cancelled before downloadModelBackground resolved, kill it now
       if (cancelledKeys.current.has(key)) {
         try { await modelManager.cancelBackgroundDownload(info.downloadId); } catch { /* ignore */ }
         return;
       }
-      setDownloadIds(prev => ({ ...prev, [key]: info.downloadId }));
+      setDownloadIds(prev => {
+        const next = { ...prev, [key]: info.downloadId };
+        downloadIdsRef.current = next;
+        return next;
+      });
+      setDownloadProgress(key, {
+        progress: 0,
+        bytesDownloaded: 0,
+        totalBytes,
+        ownerDownloadId: info.downloadId,
+        status: 'pending',
+        reason: undefined,
+        reasonCode: undefined,
+      });
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
         if (cancelledKeys.current.has(key)) return;
         setDownloadProgress(key, null);
-        setDownloadIds(prev => { const { [key]: _r, ...rest } = prev; return rest; });
+        setDownloadIds(prev => {
+          const { [key]: _r, ...rest } = prev;
+          downloadIdsRef.current = rest;
+          return rest;
+        });
         addDownloadedModel(model);
       }, onError);
     } catch (error) { onError(error as Error); }

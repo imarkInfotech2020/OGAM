@@ -26,6 +26,7 @@ export interface UseDownloadManagerResult {
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   totalStorageUsed: number;
+  stats: { eventsPerSec: number };
 }
 
 function formatBytesForLog(bytes: number): string {
@@ -59,6 +60,12 @@ function isNetworkRetryReason(reason?: string, reasonCode?: string): boolean {
   );
 }
 
+function isMmProjSidecar(metadata: { fileName: string; mmProjFileName?: string } | null | undefined): boolean {
+  if (!metadata) return false;
+  if (metadata.mmProjFileName && metadata.fileName === metadata.mmProjFileName) return true;
+  return metadata.fileName.startsWith('mmproj-');
+}
+
 async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
   const { downloadedImageModels } = useAppStore.getState();
   const downloadedIds = new Set(downloadedImageModels.map(m => m.id));
@@ -82,17 +89,53 @@ async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Pr
   );
 }
 
+function clearStaleTextProgressEntries(
+  downloads: BackgroundDownloadInfo[],
+  setDownloadProgress: (key: string, value: any) => void,
+  logDownload: (level: 'log' | 'warn' | 'error', message: string, meta?: Record<string, unknown>) => void,
+): void {
+  const state = useAppStore.getState();
+  const activeDownloadIds = new Set(downloads.map(download => download.downloadId));
+  const activeKeys = new Set<string>();
+
+  downloads.forEach(download => {
+    const metadata = state.activeBackgroundDownloads[download.downloadId];
+    if (!metadata || isMmProjSidecar(metadata) || metadata.modelId.startsWith('image:')) return;
+    activeKeys.add(`${metadata.modelId}/${metadata.fileName}`);
+  });
+
+  Object.entries(state.downloadProgress).forEach(([key, progress]) => {
+    const modelId = key.slice(0, key.lastIndexOf('/'));
+    if (modelId.startsWith('image:')) return;
+    if (activeKeys.has(key)) return;
+    if (progress.ownerDownloadId != null && activeDownloadIds.has(progress.ownerDownloadId)) return;
+
+    logDownload('warn', 'clearing stale progress entry with no active native download', {
+      key,
+      ownerDownloadId: progress.ownerDownloadId ?? null,
+      status: progress.status ?? '',
+      bytesDownloaded: progress.bytesDownloaded,
+      totalBytes: progress.totalBytes,
+    });
+    setDownloadProgress(key, null);
+  });
+}
+
 function syncDownloadSnapshot(
   download: BackgroundDownloadInfo,
   setDownloadProgress: (key: string, value: any) => void,
 ): { modelId: string } | null {
   const metadata = useAppStore.getState().activeBackgroundDownloads[download.downloadId];
   if (!metadata) return null;
+  if (isMmProjSidecar(metadata)) return null;
 
   const key = `${metadata.modelId}/${metadata.fileName}`;
   const existing = useAppStore.getState().downloadProgress[key];
   const totalBytes = metadata.totalBytes || download.totalBytes || existing?.totalBytes || 0;
-  const bytesDownloaded = Math.max(existing?.bytesDownloaded ?? 0, download.bytesDownloaded);
+  const sameDownloadInstance = existing?.ownerDownloadId === download.downloadId;
+  const bytesDownloaded = sameDownloadInstance
+    ? Math.max(existing?.bytesDownloaded ?? 0, download.bytesDownloaded)
+    : download.bytesDownloaded;
   const shouldSyncProgress =
     !existing ||
     download.status !== (existing.status ?? 'downloading') ||
@@ -112,6 +155,7 @@ function syncDownloadSnapshot(
     progress: totalBytes > 0 ? bytesDownloaded / totalBytes : existing?.progress ?? 0,
     bytesDownloaded,
     totalBytes,
+    ownerDownloadId: download.downloadId,
     status: resolvedStatus,
     reason: download.reason || existing?.reason,
     reasonCode: download.reasonCode || existing?.reasonCode,
@@ -137,8 +181,24 @@ export function useDownloadManager(): UseDownloadManagerResult {
     removeDownloadedImageModel,
     removeImageModelDownloading,
   } = useAppStore();
-  const logDownload = useCallback((_level: 'log' | 'warn' | 'error', _message: string) => {}, []);
+  const logDownload = useCallback((level: 'log' | 'warn' | 'error', message: string, meta?: Record<string, unknown>) => {
+    const payload = meta ? ` ${JSON.stringify(meta)}` : '';
+    logger[level](`[DownloadManagerScreen] ${message}${payload}`);
+  }, []);
   const retryLoggedRef = useRef<Record<string, string>>({});
+
+  // ── Dev stats ──────────────────────────────────────────────────────────────
+  const [stats, setStats] = useState<{ eventsPerSec: number }>({ eventsPerSec: 0 });
+  const eventCountRef = useRef(0);
+
+  useEffect(() => {
+    const unsub = backgroundDownloadService.onAnyProgress(() => { eventCountRef.current += 1; });
+    const tick = setInterval(() => {
+      setStats({ eventsPerSec: eventCountRef.current });
+      eventCountRef.current = 0;
+    }, 1000);
+    return () => { unsub(); clearInterval(tick); };
+  }, []);
 
   // Load active background downloads on mount + start/stop polling
   useEffect(() => {
@@ -167,6 +227,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
       const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
       if (!metadata) return;
+      if (isMmProjSidecar(metadata)) return;
       if (metadata.modelId.startsWith('image:')) return;
       const key = `${metadata.modelId}/${metadata.fileName}`;
       if (cancelledKeysRef.current.has(key)) return;
@@ -182,17 +243,27 @@ export function useDownloadManager(): UseDownloadManagerResult {
           progress: existing?.progress ?? 0,
           bytesDownloaded: existing?.bytesDownloaded ?? 0,
           totalBytes: existing?.totalBytes ?? 0,
+          ownerDownloadId: event.downloadId,
           status: event.status,
           reason: event.reason,
           reasonCode: event.reasonCode,
         });
+        // Also update activeDownloads so buildDownloadItems reflects the new status immediately
+        // without waiting for the next loadActiveDownloads() call.
+        setActiveDownloads(prev => prev.map(d =>
+          d.downloadId === event.downloadId
+            ? { ...d, status: event.status, reason: event.reason, reasonCode: event.reasonCode as any }
+            : d,
+        ));
         return;
       }
-      if ((useAppStore.getState().downloadProgress[key]?.bytesDownloaded ?? -1) >= event.bytesDownloaded) return;
+      const existing = useAppStore.getState().downloadProgress[key];
+      if ((existing?.ownerDownloadId === event.downloadId) && (existing.bytesDownloaded >= event.bytesDownloaded)) return;
       setDownloadProgress(key, {
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
         totalBytes: event.totalBytes,
+        ownerDownloadId: event.downloadId,
         status: event.status,
         reason: event.reason || undefined,
         reasonCode: event.reasonCode,
@@ -214,12 +285,14 @@ export function useDownloadManager(): UseDownloadManagerResult {
       delete retryLoggedRef.current[event.downloadId];
       const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
       if (metadata) {
+        if (isMmProjSidecar(metadata)) return;
         const key = `${metadata.modelId}/${metadata.fileName}`;
         const existing = useAppStore.getState().downloadProgress[key];
         setDownloadProgress(key, {
           progress: existing?.progress ?? 0,
           bytesDownloaded: existing?.bytesDownloaded ?? 0,
           totalBytes: existing?.totalBytes ?? metadata.totalBytes ?? 0,
+          ownerDownloadId: event.downloadId,
           status: 'failed',
           reason: event.reason || 'Something went wrong while downloading.',
           reasonCode: event.reasonCode,
@@ -241,6 +314,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     if (backgroundDownloadService.isAvailable()) {
       const downloads = await modelManager.getActiveBackgroundDownloads();
       const filteredDownloads = await purgeStaleImageDownloads(downloads);
+      clearStaleTextProgressEntries(filteredDownloads, setDownloadProgress, logDownload);
       setActiveDownloads(filteredDownloads);
       logDownload('log', `Active downloads refreshed: ${filteredDownloads.length}`);
       filteredDownloads.forEach(download => {
@@ -270,25 +344,52 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       logDownload('warn', `Removing download: ${item.fileName}`);
       const key = `${item.modelId}/${item.fileName}`;
+      logDownload('warn', 'remove requested', {
+        modelId: item.modelId,
+        fileName: item.fileName,
+        itemDownloadId: item.downloadId ?? null,
+        existingProgress: useAppStore.getState().downloadProgress[key] ?? null,
+      });
       cancelledKeysRef.current.add(key);
       setDownloadProgress(key, null);
       let downloadId = item.downloadId;
       if (!downloadId) {
-        const match = activeDownloads.find(d => activeBackgroundDownloads[d.downloadId]?.fileName === item.fileName);
+        const match = activeDownloads.find(d => {
+          const metadata = activeBackgroundDownloads[d.downloadId];
+          return metadata?.modelId === item.modelId && metadata?.fileName === item.fileName;
+        });
         if (match) downloadId = match.downloadId;
       }
       if (downloadId) {
+        logDownload('warn', 'cancelling concrete download', {
+          key,
+          downloadId,
+          metadata: activeBackgroundDownloads[downloadId] ?? null,
+        });
         setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
         setBackgroundDownload(downloadId, null);
         await modelManager.cancelBackgroundDownload(downloadId);
+        logDownload('log', 'cancel completed', { key, downloadId });
+      } else {
+        logDownload('warn', 'remove requested but no concrete downloadId found', { key, item });
       }
       if (item.modelId.startsWith('image:')) removeImageModelDownloading(item.modelId.replace('image:', ''));
-      const dlId = downloadId;
       const capturedKey = key;
+      // Reload after a delay to let the native cancel write reach the DB.
+      // Keep the key blocked in cancelledKeysRef until AFTER reload so that
+      // any in-flight progress events from the dying worker don't resurrect the item.
       setTimeout(() => {
-        loadActiveDownloads().then(() => { if (dlId) cancelledKeysRef.current.delete(capturedKey); })
-          .catch(err => logger.error('[DownloadManager] Failed to reload active downloads:', err));
-      }, 1000);
+        loadActiveDownloads()
+          .catch(err => logger.error('[DownloadManager] Failed to reload active downloads:', err))
+          .finally(() => {
+            logDownload('log', 'post-cancel reload finished', {
+              key: capturedKey,
+              activeCount: activeDownloads.length,
+              persistedProgress: useAppStore.getState().downloadProgress[capturedKey] ?? null,
+            });
+            cancelledKeysRef.current.delete(capturedKey);
+          });
+      }, 2500);
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       logDownload('error', `Failed to remove download ${item.fileName}`);
@@ -316,15 +417,15 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeRetryDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
-      logDownload('log', `Retrying download: ${item.fileName}`);
+      logDownload('log', 'retry requested', {
+        modelId: item.modelId,
+        fileName: item.fileName,
+        itemDownloadId: item.downloadId ?? null,
+      });
       const key = `${item.modelId}/${item.fileName}`;
 
       // Look up metadata
-      let metadata = item.downloadId ? activeBackgroundDownloads[item.downloadId] : undefined;
-      if (!metadata) {
-        const found = Object.values(activeBackgroundDownloads).find(m => m?.fileName === item.fileName);
-        metadata = found || undefined;
-      }
+      const metadata = item.downloadId ? activeBackgroundDownloads[item.downloadId] : undefined;
 
       if (!metadata) {
         logDownload('error', `Could not find metadata for retry: ${item.fileName}`);
@@ -354,7 +455,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
 
       // Start retry download
       const info = await modelManager.downloadModelBackground(metadata.modelId, modelFile as any);
-      logDownload('log', `Retry started with new downloadId: ${info.downloadId}`);
+      logDownload('log', 'retry started', {
+        key,
+        oldDownloadId: oldDownloadId ?? null,
+        newDownloadId: info.downloadId,
+        metadata,
+      });
 
       modelManager.watchDownload(
         info.downloadId,
@@ -523,5 +629,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleDeleteItem,
     handleRepairVision,
     totalStorageUsed,
+    stats,
   };
 }

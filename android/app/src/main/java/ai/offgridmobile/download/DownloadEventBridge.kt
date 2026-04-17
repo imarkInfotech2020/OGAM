@@ -6,11 +6,13 @@ import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.io.File
 import java.lang.ref.WeakReference
 
 object DownloadEventBridge {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var reactContextRef: WeakReference<ReactApplicationContext>? = null
+    private const val LOG_FILE_NAME = "download-debug.log"
 
     fun attach(reactContext: ReactApplicationContext) {
         reactContextRef = WeakReference(reactContext)
@@ -18,6 +20,7 @@ object DownloadEventBridge {
     }
 
     fun log(level: String, msg: String) {
+        appendToFile(level, msg)
         when (level) {
             "E" -> Log.e("DownloadBridge", msg)
             "W" -> Log.w("DownloadBridge", msg)
@@ -112,6 +115,34 @@ object DownloadEventBridge {
             reactContext
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                 .emit(eventName, map)
+        }
+    }
+
+    fun logFilePath(context: ReactApplicationContext): String =
+        File(context.filesDir, LOG_FILE_NAME).absolutePath
+
+    fun readLogFile(context: ReactApplicationContext): String {
+        val file = File(context.filesDir, LOG_FILE_NAME)
+        return if (file.exists()) file.readText() else ""
+    }
+
+    fun clearLogFile(context: ReactApplicationContext) {
+        val file = File(context.filesDir, LOG_FILE_NAME)
+        if (file.exists()) file.writeText("")
+    }
+
+    @Synchronized
+    private fun appendToFile(level: String, msg: String) {
+        val reactContext = reactContextRef?.get() ?: return
+        try {
+            val file = File(reactContext.filesDir, LOG_FILE_NAME)
+            file.parentFile?.mkdirs()
+            file.appendText("[${System.currentTimeMillis()}] $level $msg\n")
+            if (file.length() > 2L * 1024L * 1024L) {
+                val trimmed = file.readLines().takeLast(4000).joinToString("\n")
+                file.writeText(if (trimmed.isEmpty()) "" else "$trimmed\n")
+            }
+        } catch (_: Exception) {
         }
     }
 }

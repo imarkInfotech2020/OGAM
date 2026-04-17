@@ -30,6 +30,7 @@ import {
   KnowledgeBaseScreen,
   DocumentPreviewScreen,
   DownloadManagerScreen,
+  DownloadLogsScreen,
   ModelSettingsScreen,
   VoiceSettingsScreen,
   DeviceInfoScreen,
@@ -235,6 +236,11 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen
           name="DownloadManager"
           component={DownloadManagerScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
+        <RootStack.Screen
+          name="DownloadLogs"
+          component={DownloadLogsScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
         <RootStack.Screen

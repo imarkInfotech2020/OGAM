@@ -149,7 +149,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     const mmProjFile = file.mmProjFile!;
     const mmProjInfo = await backgroundDownloadService.startDownload({
       url: mmProjFile.downloadUrl, fileName: mmProjFile.name, modelId,
-      title: `Downloading ${mmProjFile.name} (vision)`,
+      title: `Downloading ${file.name}`,
       description: `${modelId} - vision projection`, totalBytes: mmProjFile.size,
       sha256: mmProjFile.sha256,
     });
@@ -239,6 +239,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   backgroundDownloadContext.set(downloadInfo.downloadId, {
     modelId, file, localPath, mmProjLocalPath, removeProgressListener,
     mmProjDownloadId, mmProjCompleted: !needsMmProj, mainCompleted: false,
+    mainCompleteHandled: false, mmProjCompleteHandled: false, isFinalizing: false,
     removeMmProjProgressListener,
   });
 
@@ -301,6 +302,15 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 
   const tryFinalize = async () => {
     if (!ctx.mainCompleted || !ctx.mmProjCompleted) return;
+    if (ctx.isFinalizing) {
+      logDownloadDebug({ level: 'warn', scope: 'ModelManagerDownload', message: 'finalize skipped; already in progress', meta: {
+        downloadId,
+        modelId: ctx.modelId,
+        fileName: ctx.file.name,
+      } });
+      return;
+    }
+    ctx.isFinalizing = true;
     logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'finalizing completed download', meta: {
       downloadId,
       modelId: ctx.modelId,
@@ -331,11 +341,17 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
         downloadId,
         message: error instanceof Error ? error.message : String(error),
       } });
+      ctx.isFinalizing = false;
       onError?.(error as Error);
     }
   };
 
   const removeMainComplete = backgroundDownloadService.onComplete(downloadId, async () => {
+    if (ctx.mainCompleteHandled) {
+      logDownloadDebug({ level: 'warn', scope: 'ModelManagerDownload', message: 'duplicate main completion ignored', meta: { downloadId } });
+      return;
+    }
+    ctx.mainCompleteHandled = true;
     ctx.mainCompleted = true;
     logDownloadDebug({ level: 'log', scope: 'ModelManagerDownload', message: 'main download complete event received', meta: { downloadId } });
     await tryFinalize();
@@ -346,6 +362,14 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 
   if (ctx.mmProjDownloadId && !ctx.mmProjCompleted) {
     removeMmProjComplete = backgroundDownloadService.onComplete(ctx.mmProjDownloadId, async (event) => {
+      if (ctx.mmProjCompleteHandled) {
+        logDownloadDebug({ level: 'warn', scope: 'ModelManagerDownload', message: 'duplicate mmproj completion ignored', meta: {
+          downloadId,
+          mmProjDownloadId: event.downloadId,
+        } });
+        return;
+      }
+      ctx.mmProjCompleteHandled = true;
       try {
         await backgroundDownloadService.moveCompletedDownload(event.downloadId, ctx.mmProjLocalPath!);
         ctx.mmProjCompleted = true;

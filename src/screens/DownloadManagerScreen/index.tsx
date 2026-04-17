@@ -28,7 +28,15 @@ export const DownloadManagerScreen: React.FC = () => {
     handleDeleteItem,
     handleRepairVision,
     totalStorageUsed,
+    stats,
   } = useDownloadManager();
+
+  const healthColor =
+    activeItems.length > 2
+      ? colors.error
+      : activeItems.length > 1
+        ? colors.warning
+        : colors.success;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">
@@ -37,6 +45,22 @@ export const DownloadManagerScreen: React.FC = () => {
           <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
+        <TouchableOpacity style={styles.terminalButton} onPress={() => navigation.navigate('DownloadLogs')}>
+          <Icon name="terminal" size={20} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Dev stats bar */}
+      <View style={styles.statsPanel}>
+        <View style={[styles.statDot, { backgroundColor: healthColor }]} />
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Active</Text>
+          <Text style={styles.statValue}>{activeItems.length}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text style={styles.statLabel}>Events/s</Text>
+          <Text style={styles.statValue}>{stats.eventsPerSec}</Text>
+        </View>
       </View>
 
       <FlatList

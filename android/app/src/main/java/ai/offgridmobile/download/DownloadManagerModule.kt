@@ -133,6 +133,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     }
                 }
                 WorkerDownload.cancel(reactApplicationContext, id)
+                DownloadForegroundService.remove(reactApplicationContext, id)
                 workManager.pruneWork()
                 removeWorkObserver(id)
                 DownloadEventBridge.log("I", "[Module] cancelDownload id=$id")
@@ -280,7 +281,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 if (targetPath.isEmpty()) {
                     // Cleanup-only — delete DB entry, no move needed
                     withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                    DownloadForegroundService.stop(reactApplicationContext, "cleanup")
+                    DownloadForegroundService.remove(reactApplicationContext, id)
                     SafePromise(promise, NAME).resolve(sourceFile.absolutePath)
                     return@launch
                 }
@@ -304,12 +305,36 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
 
                 withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                DownloadForegroundService.stop(reactApplicationContext, "moved")
+                DownloadForegroundService.remove(reactApplicationContext, id)
                 DownloadEventBridge.log("I", "[Module] moveCompleted id=$id -> $movedPath")
                 SafePromise(promise, NAME).resolve(movedPath)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
             }
+        }
+    }
+
+    @ReactMethod
+    fun getDebugLogPath(promise: Promise) {
+        SafePromise(promise, NAME).resolve(DownloadEventBridge.logFilePath(reactApplicationContext))
+    }
+
+    @ReactMethod
+    fun readDebugLog(promise: Promise) {
+        try {
+            SafePromise(promise, NAME).resolve(DownloadEventBridge.readLogFile(reactApplicationContext))
+        } catch (e: Exception) {
+            SafePromise(promise, NAME).reject("LOG_READ_ERROR", "Failed to read debug log: ${e.message}", e)
+        }
+    }
+
+    @ReactMethod
+    fun clearDebugLog(promise: Promise) {
+        try {
+            DownloadEventBridge.clearLogFile(reactApplicationContext)
+            SafePromise(promise, NAME).resolve(true)
+        } catch (e: Exception) {
+            SafePromise(promise, NAME).reject("LOG_CLEAR_ERROR", "Failed to clear debug log: ${e.message}", e)
         }
     }
 
@@ -363,21 +388,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         val combinedTotal = mainTotalL + mmprojTotalL
         val statusText = "Vision model"
 
-        try {
-            DownloadForegroundService.start(
-                reactApplicationContext,
-                fileName, // Use file name as title
-                0L,
-                combinedBytes,
-                combinedTotal,
-                statusText,
-                fileName,
-                mmprojBytesL,
-                mmprojTotalL,
-            )
-        } catch (e: Exception) {
-            DownloadEventBridge.log("W", "[Module] updateCombinedProgress failed: ${e.message}")
-        }
+        // The foreground service is now stateful: each WorkerDownload writes its own
+        // progress via DownloadForegroundService.update(), and the service aggregates
+        // GGUF + mmproj entries automatically using the shared model title.
+        // No manual combined-progress push is needed here.
+        DownloadEventBridge.log("I", "[Module] updateCombinedProgress called (no-op) main=${combinedBytes}/${combinedTotal} mmproj=${mmprojBytesL}/${mmprojTotalL}")
     }
 
     @ReactMethod
@@ -495,7 +510,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                                 d.downloadedBytes, d.totalBytes,
                             )
                         }
-                        DownloadForegroundService.stop(reactApplicationContext, "completed")
+                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }
@@ -514,14 +529,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                             uiState.reason ?: "Something went wrong while downloading.",
                             uiState.reasonCode,
                         )
-                        DownloadForegroundService.stop(reactApplicationContext, "failed")
+                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }
                 WorkInfo.State.CANCELLED -> {
                     scope.launch {
                         DownloadEventBridge.log("W", "[Observer] cancelled id=$downloadId")
-                        DownloadForegroundService.stop(reactApplicationContext, "cancelled")
+                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }
