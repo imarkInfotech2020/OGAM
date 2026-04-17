@@ -342,24 +342,31 @@ class BackgroundDownloadService {
     push(this.eventEmitter.addListener('DownloadError', (e: DownloadErrorEvent) => {
       this.dispatchToListeners(this.errorListeners, 'error', e);
     }));
-    // DownloadRetrying — worker hit a transient error and will retry automatically.
+    // DownloadRetrying — Android worker hit a transient error and will retry automatically.
     // Route it as a progress event with status='retrying' so the UI shows
     // "Retrying..." instead of surfacing a false error to the user.
-    push(this.eventEmitter.addListener('DownloadRetrying', (e: {
-      downloadId: number; fileName: string; modelId: string; reason: string; reasonCode?: string; attempt: number; status?: BackgroundDownloadStatus;
-    }) => {
-      const retryEvent: DownloadProgressEvent = {
-        downloadId: e.downloadId,
-        fileName: e.fileName,
-        modelId: e.modelId,
-        bytesDownloaded: 0,
-        totalBytes: 0,
-        status: e.status || 'retrying',
-        reason: e.reason,
-        reasonCode: e.reasonCode as any,
-      };
-      this.dispatchToListeners(this.progressListeners, 'progress', retryEvent);
-    }));
+    // Note: Only available on Android; iOS uses polling mechanism instead.
+    if (Platform.OS === 'android') {
+      try {
+        push(this.eventEmitter.addListener('DownloadRetrying', (e: {
+          downloadId: number; fileName: string; modelId: string; reason: string; reasonCode?: string; attempt: number; status?: BackgroundDownloadStatus;
+        }) => {
+          const retryEvent: DownloadProgressEvent = {
+            downloadId: e.downloadId,
+            fileName: e.fileName,
+            modelId: e.modelId,
+            bytesDownloaded: 0,
+            totalBytes: 0,
+            status: e.status || 'retrying',
+            reason: e.reason,
+            reasonCode: e.reasonCode as any,
+          };
+          this.dispatchToListeners(this.progressListeners, 'progress', retryEvent);
+        }));
+      } catch (err) {
+        logger.warn('[BackgroundDownload] DownloadRetrying event not supported:', err);
+      }
+    }
   }
 }
 export const backgroundDownloadService = new BackgroundDownloadService();

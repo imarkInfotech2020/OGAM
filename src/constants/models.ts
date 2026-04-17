@@ -65,15 +65,6 @@ export const RECOMMENDED_MODELS = [
   },
   // --- Others ---
   {
-    id: 'bartowski/microsoft_Phi-4-mini-instruct-GGUF',
-    name: 'Phi-4 Mini',
-    params: 3.8,
-    description: 'Microsoft\'s reasoning & math specialist',
-    minRam: 6,
-    type: 'text' as const,
-    org: 'microsoft',
-  },
-  {
     id: 'ggml-org/SmolLM3-3B-GGUF',
     name: 'SmolLM3 3B',
     params: 3,
