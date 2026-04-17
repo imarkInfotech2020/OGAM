@@ -7,8 +7,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
@@ -17,18 +15,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...shadows.small,
     zIndex: 1,
   },
-  backButton: {
-    padding: SPACING.sm,
-    marginRight: SPACING.sm,
-  },
   title: {
     ...TYPOGRAPHY.h2,
-    flex: 1,
     color: colors.text,
-  },
-  terminalButton: {
-    padding: SPACING.sm,
-    marginLeft: SPACING.sm,
   },
   content: {
     flex: 1,
@@ -227,33 +216,5 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: SPACING.xs,
-  },
-  statsPanel: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: SPACING.lg,
-  },
-  statItem: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.xs,
-  },
-  statLabel: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-  },
-  statValue: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textSecondary,
-  },
-  statDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
 });

@@ -1,19 +1,15 @@
 import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useNavigation } from '@react-navigation/native';
 import { createStyles } from './styles';
 import { ActiveDownloadCard, CompletedDownloadCard, formatBytes } from './items';
 import { useDownloadManager } from './useDownloadManager';
-import type { RootStackParamList } from '../../navigation/types';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export const DownloadManagerScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
@@ -28,39 +24,12 @@ export const DownloadManagerScreen: React.FC = () => {
     handleDeleteItem,
     handleRepairVision,
     totalStorageUsed,
-    stats,
   } = useDownloadManager();
-
-  const healthColor =
-    activeItems.length > 2
-      ? colors.error
-      : activeItems.length > 1
-        ? colors.warning
-        : colors.success;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color={colors.text} />
-        </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
-        <TouchableOpacity style={styles.terminalButton} onPress={() => navigation.navigate('DownloadLogs')}>
-          <Icon name="terminal" size={20} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Dev stats bar */}
-      <View style={styles.statsPanel}>
-        <View style={[styles.statDot, { backgroundColor: healthColor }]} />
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Active</Text>
-          <Text style={styles.statValue}>{activeItems.length}</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Events/s</Text>
-          <Text style={styles.statValue}>{stats.eventsPerSec}</Text>
-        </View>
       </View>
 
       <FlatList

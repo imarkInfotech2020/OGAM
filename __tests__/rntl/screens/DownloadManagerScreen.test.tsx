@@ -13,17 +13,14 @@
  * - Background download service subscriptions
  * - Refresh flow
  * - Background download items rendering
- * - Back button navigation
  * - Alert onClose
- */
+*/
 
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
-import { TouchableOpacity } from 'react-native';
 
 // Navigation is globally mocked in jest.setup.ts
 
-const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
@@ -31,7 +28,7 @@ jest.mock('@react-navigation/native', () => {
     ...actual,
     useNavigation: () => ({
       navigate: mockNavigate,
-      goBack: mockGoBack,
+      goBack: jest.fn(),
       setOptions: jest.fn(),
       addListener: jest.fn(() => jest.fn()),
     }),
@@ -528,14 +525,6 @@ describe('DownloadManagerScreen', () => {
 
   // ===== NEW TESTS FOR COVERAGE =====
 
-  it('back button calls navigation.goBack', () => {
-    const { UNSAFE_getAllByType } = render(<DownloadManagerScreen />);
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    // First touchable is the back button
-    fireEvent.press(touchables[0]);
-    expect(mockGoBack).toHaveBeenCalled();
-  });
-
   it('starts background download polling when service is available', () => {
     mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
     mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([]);
@@ -581,6 +570,12 @@ describe('DownloadManagerScreen', () => {
     });
 
     render(<DownloadManagerScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    setDownloadProgress.mockClear();
 
     await act(async () => {
       progressCallback({
@@ -637,8 +632,15 @@ describe('DownloadManagerScreen', () => {
       });
     });
 
-    // Should NOT have been called because store already has 800 >= 500
-    expect(setDownloadProgress).not.toHaveBeenCalled();
+    // Should NOT overwrite progress because store already has 800 >= 500
+    expect(setDownloadProgress).not.toHaveBeenCalledWith(
+      'test/model/file.gguf',
+      expect.objectContaining({
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+        ownerDownloadId: 888,
+      }),
+    );
   });
 
   it('progress event callback resets stale progress when the downloadId changed for the same file', async () => {

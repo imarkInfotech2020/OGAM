@@ -73,11 +73,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val title = params.getString("title") ?: fileName
                 val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
                 val expectedSha256 = params.getString("sha256")?.lowercase()?.takeIf { it.length == 64 }
-                DownloadEventBridge.log(
-                    "I",
-                    "[Module] startDownload params file=$fileName model=$modelId totalBytes=$totalBytes hasSha=${expectedSha256 != null} urlHost=${Uri.parse(url).host ?: "unknown"}",
-                )
-
                 val downloadId = System.currentTimeMillis()
                 val destination = File(
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
@@ -101,9 +96,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 withContext(Dispatchers.IO) {
                     downloadDao.insertDownload(entity)
                 }
-
-                DownloadEventBridge.log("I", "[Module] startDownload id=$downloadId file=$fileName model=$modelId")
-
                 registerObserver(downloadId)
                 WorkerDownload.enqueue(reactApplicationContext, downloadId)
 
@@ -129,14 +121,13 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     if (download != null) {
                         downloadDao.updateStatus(id, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
                         val file = File(download.destination)
-                        if (file.exists() && !file.delete()) DownloadEventBridge.log("W", "[Module] Could not delete partial file on cancel id=$id")
+                        if (file.exists()) file.delete()
                     }
                 }
                 WorkerDownload.cancel(reactApplicationContext, id)
                 DownloadForegroundService.remove(reactApplicationContext, id)
                 workManager.pruneWork()
                 removeWorkObserver(id)
-                DownloadEventBridge.log("I", "[Module] cancelDownload id=$id")
                 SafePromise(promise, NAME).resolve(true)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
@@ -152,7 +143,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 withContext(Dispatchers.IO) {
                     downloadDao.updateStatus(id, DownloadStatus.PAUSED)
                 }
-                DownloadEventBridge.log("I", "[Module] pauseDownload id=$id")
                 SafePromise(promise, NAME).resolve(true)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("PAUSE_ERROR", "Failed to pause download: ${e.message}", e)
@@ -172,7 +162,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     WorkerDownload.enqueueResume(reactApplicationContext, id)
                 }
                 registerObserver(id)
-                DownloadEventBridge.log("I", "[Module] resumeDownload id=$id")
                 SafePromise(promise, NAME).resolve(true)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("RESUME_ERROR", "Failed to resume download: ${e.message}", e)
@@ -190,14 +179,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         it.status != DownloadStatus.CANCELLED
                     }
                 }
-                DownloadEventBridge.log("I", "[Module] getActiveDownloads count=${downloads.size}")
                 val result = Arguments.createArray()
                 downloads.forEach { d ->
                     val uiState = DownloadReason.toUiState(d.status, d.error)
-                    DownloadEventBridge.log(
-                        "I",
-                        "[Module] active id=${d.id} status=${d.status}/${uiState.status} bytes=${d.downloadedBytes}/${d.totalBytes} file=${d.fileName} model=${d.modelId} code=${uiState.reasonCode ?: ""}",
-                    )
                     result.pushMap(Arguments.createMap().apply {
                         putDouble("downloadId", d.id.toDouble())
                         putString("fileName", d.fileName)
@@ -229,10 +213,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     SafePromise(promise, NAME).reject("QUERY_ERROR", "Download not found")
                     return@launch
                 }
-                DownloadEventBridge.log(
-                    "I",
-                    "[Module] getDownloadProgress id=$id status=${d.status} bytes=${d.downloadedBytes}/${d.totalBytes} error=${d.error ?: ""}",
-                )
                 val uiState = DownloadReason.toUiState(d.status, d.error)
                 val result = Arguments.createMap().apply {
                     putDouble("downloadId", d.id.toDouble())
@@ -306,35 +286,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
                 withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
                 DownloadForegroundService.remove(reactApplicationContext, id)
-                DownloadEventBridge.log("I", "[Module] moveCompleted id=$id -> $movedPath")
                 SafePromise(promise, NAME).resolve(movedPath)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
             }
-        }
-    }
-
-    @ReactMethod
-    fun getDebugLogPath(promise: Promise) {
-        SafePromise(promise, NAME).resolve(DownloadEventBridge.logFilePath(reactApplicationContext))
-    }
-
-    @ReactMethod
-    fun readDebugLog(promise: Promise) {
-        try {
-            SafePromise(promise, NAME).resolve(DownloadEventBridge.readLogFile(reactApplicationContext))
-        } catch (e: Exception) {
-            SafePromise(promise, NAME).reject("LOG_READ_ERROR", "Failed to read debug log: ${e.message}", e)
-        }
-    }
-
-    @ReactMethod
-    fun clearDebugLog(promise: Promise) {
-        try {
-            DownloadEventBridge.clearLogFile(reactApplicationContext)
-            SafePromise(promise, NAME).resolve(true)
-        } catch (e: Exception) {
-            SafePromise(promise, NAME).reject("LOG_CLEAR_ERROR", "Failed to clear debug log: ${e.message}", e)
         }
     }
 
@@ -354,7 +309,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
             }
             active.forEach { registerObserver(it.id) }
-            DownloadEventBridge.log("I", "[Module] startProgressPolling — re-attached ${active.size} observer(s)")
         }
     }
 
@@ -362,7 +316,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun stopProgressPolling() {
         workObservers.keys.toList().forEach { removeWorkObserver(it) }
         workObservers.clear()
-        DownloadEventBridge.log("I", "[Module] stopProgressPolling — all observers removed")
     }
 
     /**
@@ -392,7 +345,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         // progress via DownloadForegroundService.update(), and the service aggregates
         // GGUF + mmproj entries automatically using the shared model title.
         // No manual combined-progress push is needed here.
-        DownloadEventBridge.log("I", "[Module] updateCombinedProgress called (no-op) main=${combinedBytes}/${combinedTotal} mmproj=${mmprojBytesL}/${mmprojTotalL}")
     }
 
     @ReactMethod
@@ -432,8 +384,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             reactApplicationContext.startActivity(intent)
-        } catch (e: Exception) {
-            DownloadEventBridge.log("W", "[Module] Failed to open battery optimization settings: ${e.message}")
+        } catch (_: Exception) {
         }
     }
 
@@ -450,10 +401,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
         val observer = Observer<List<WorkInfo>> { workInfos ->
             val info = workInfos.firstOrNull() ?: return@Observer
-            DownloadEventBridge.log(
-                "D",
-                "[Observer] id=$downloadId WorkInfo.state=${info.state} attempts=${info.runAttemptCount} progress=${info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)}/${info.progress.getLong(WorkerDownload.KEY_TOTAL, 0L)}",
-            )
             when (info.state) {
                 WorkInfo.State.RUNNING -> {
                     val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)
@@ -461,10 +408,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                             ?: return@launch
-                        DownloadEventBridge.log(
-                            "I",
-                            "[Observer] running id=$downloadId dbStatus=${d.status} bytes=${bytes}/${total} file=${d.fileName}",
-                        )
                         DownloadEventBridge.progress(
                             downloadId, d.fileName, d.modelId, bytes, total,
                             DownloadStatus.RUNNING.name.lowercase(),
@@ -479,10 +422,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                             ?: return@launch
                         val uiState = DownloadReason.toUiState(d.status, d.error)
                         if (uiState.status == "pending" || uiState.status == "retrying" || uiState.status == "waiting_for_network" || uiState.status == "paused") {
-                            DownloadEventBridge.log(
-                                "I",
-                                "[Observer] queued-like id=$downloadId dbStatus=${d.status} uiStatus=${uiState.status} code=${uiState.reasonCode ?: ""}",
-                            )
                             DownloadEventBridge.progress(
                                 downloadId,
                                 d.fileName,
@@ -500,10 +439,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                         if (d != null) {
-                            DownloadEventBridge.log(
-                                "I",
-                                "[Observer] succeeded id=$downloadId finalBytes=${d.downloadedBytes}/${d.totalBytes} file=${d.fileName}",
-                            )
                             DownloadEventBridge.complete(
                                 downloadId, d.fileName, d.modelId,
                                 Uri.fromFile(File(d.destination)).toString(),
@@ -518,10 +453,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                         val uiState = DownloadReason.toUiState(d?.status ?: DownloadStatus.FAILED, d?.error)
-                        DownloadEventBridge.log(
-                            "E",
-                            "[Observer] failed id=$downloadId file=${d?.fileName ?: ""} reason=${uiState.reason ?: "Something went wrong while downloading."} code=${uiState.reasonCode ?: ""}",
-                        )
                         DownloadEventBridge.error(
                             downloadId,
                             d?.fileName ?: "",
@@ -535,7 +466,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
                 WorkInfo.State.CANCELLED -> {
                     scope.launch {
-                        DownloadEventBridge.log("W", "[Observer] cancelled id=$downloadId")
                         DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }

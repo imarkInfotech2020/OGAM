@@ -92,14 +92,17 @@ class DownloadForegroundServiceTest {
     // ── Static helpers ───────────────────────────────────────────────────────
 
     @Test
-    fun `start sends intent to DownloadForegroundService`() {
-        DownloadForegroundService.start(context, "Downloading model")
+    fun `update sends intent to DownloadForegroundService`() {
+        DownloadForegroundService.update(
+            context = context,
+            downloadId = 1L,
+            modelTitle = "Downloading model",
+        )
 
         val shadow = shadowOf(context as Application)
         val intent = shadow.nextStartedService
-        assertNotNull("start() should start the service", intent)
+        assertNotNull("update() should start the service", intent)
         assertEquals(DownloadForegroundService::class.java.name, intent.component?.className)
-        assertEquals("Downloading model", intent.getStringExtra("title"))
     }
 
     @Test

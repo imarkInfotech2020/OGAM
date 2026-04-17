@@ -8,16 +8,6 @@ import {
 } from './types';
 import logger from '../../utils/logger';
 
-function logDownloadDebug(entry: {
-  level: 'log' | 'warn' | 'error';
-  scope: string;
-  message: string;
-  meta?: Record<string, unknown>;
-}): void {
-  const payload = entry.meta ? ` ${JSON.stringify(entry.meta)}` : '';
-  logger[entry.level](`[${entry.scope}] ${entry.message}${payload}`);
-}
-
 export interface RestoreDownloadsOpts {
   persistedDownloads: Record<number, PersistedDownloadInfo>;
   modelsDir: string;
@@ -44,11 +34,6 @@ async function resolveMmProjState(
   activeDownloads: BackgroundDownloadInfo[],
 ): Promise<boolean> {
   const mmProjDownload = activeDownloads.find(d => d.downloadId === mmProjDownloadId);
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerRestore', message: 'resolveMmProjState', meta: {
-    mmProjDownloadId,
-    mmProjLocalPath: mmProjLocalPath ?? '',
-    status: mmProjDownload?.status ?? 'missing',
-  } });
 
   if (mmProjDownload?.status === 'failed') {
     logger.warn('[ModelManager] mmproj download failed while app was dead, vision will not be available');
@@ -116,13 +101,6 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
     : mainFileSize + mmProjFileSize;
   const mmProjDownloadId = metadata.mmProjDownloadId;
   const fileInfo = buildFileInfo(metadata);
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerRestore', message: 'restoreDownloadEntry', meta: {
-    downloadId: download.downloadId,
-    modelId: metadata.modelId,
-    fileName: metadata.fileName,
-    downloadStatus: download.status,
-    mmProjDownloadId: mmProjDownloadId ?? null,
-  } });
 
   let mmProjCompleted = !mmProjDownloadId;
   if (mmProjDownloadId) {
@@ -138,14 +116,6 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
     : (mmProjDownload?.bytesDownloaded || 0);
   const reportProgress = () => {
     const combinedDownloaded = mainBytesDownloaded + mmProjBytesDownloaded;
-    logDownloadDebug({ level: 'log', scope: 'ModelManagerRestore', message: 'restored combined progress', meta: {
-      downloadId: download.downloadId,
-      modelId: metadata.modelId,
-      mainBytesDownloaded,
-      mmProjBytesDownloaded,
-      combinedDownloaded,
-      combinedTotalBytes,
-    } });
     onProgress?.({
       modelId: metadata.modelId, fileName: metadata.fileName,
       bytesDownloaded: combinedDownloaded, totalBytes: combinedTotalBytes,
@@ -191,10 +161,6 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
   if (!backgroundDownloadService.isAvailable()) return [];
 
   const activeDownloads = await backgroundDownloadService.getActiveDownloads();
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerRestore', message: 'restoreInProgressDownloads start', meta: {
-    activeDownloadCount: activeDownloads.length,
-    persistedDownloadCount: Object.keys(persistedDownloads).length,
-  } });
   const restoredDownloadIds: number[] = [];
 
   for (const download of activeDownloads) {
@@ -214,11 +180,6 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
     });
     restoredDownloadIds.push(download.downloadId);
   }
-
-  logDownloadDebug({ level: 'log', scope: 'ModelManagerRestore', message: 'restoreInProgressDownloads done', meta: {
-    restoredDownloadCount: restoredDownloadIds.length,
-    restoredDownloadIds: restoredDownloadIds.join(','),
-  } });
 
   return restoredDownloadIds;
 }
