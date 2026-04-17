@@ -1,6 +1,7 @@
 package ai.offgridmobile.download
 
 import android.content.Context
+import android.util.Log
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Environment
@@ -78,7 +79,7 @@ class WorkerDownload(
     /** Returns non-null Result if should exit early, null to continue. */
     private suspend fun handleEarlyStopOrPause(downloadId: Long, download: DownloadEntity): Result? {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, 0L, "early-stop")
+            return handleStoppedState(downloadId, download, 0L)
         }
         if (download.status == DownloadStatus.PAUSED) {
             return Result.retry()
@@ -92,7 +93,7 @@ class WorkerDownload(
         val needed = download.totalBytes - existingBytes
         val available = StatFs(targetFile.parentFile?.absolutePath ?: download.destination).availableBytes
         if (available < needed) {
-            return failDownload(downloadId, download, DownloadReason.DISK_FULL, "worker disk space")
+            return failDownload(downloadId, download, DownloadReason.DISK_FULL)
         }
         return null
     }
@@ -100,10 +101,8 @@ class WorkerDownload(
     /** Handles exceptions during download. */
     private suspend fun handleDownloadException(e: Exception, downloadId: Long, download: DownloadEntity, requestStartMs: Long): Result {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, download.downloadedBytes, "exception-stop")
+            return handleStoppedState(downloadId, download, download.downloadedBytes)
         }
-        val elapsed = System.currentTimeMillis() - requestStartMs
-        val rawReason = e.message ?: e.javaClass.simpleName
         val reasonCode = DownloadReason.fromThrowable(e)
         val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
         val retryStatus = if (!isNetworkConnected() && reasonCode == DownloadReason.NETWORK_LOST) "waiting_for_network" else "retrying"
@@ -159,7 +158,7 @@ class WorkerDownload(
         val earlyResult = handleResponseCode(response, code, existingBytes, download, downloadId, targetFile)
         if (earlyResult != null) return earlyResult
 
-        val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE, "worker no body")
+        val body = response.body ?: return failDownload(downloadId, download, DownloadReason.EMPTY_RESPONSE)
 
         val currentFileBytes = if (targetFile.exists() && code == 206) targetFile.length() else 0L
         val contentLength = body.contentLength()
@@ -180,12 +179,12 @@ class WorkerDownload(
     ): Result? {
         return when {
             existingBytes > 0L && code == 200 -> {
-                targetFile.delete()
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete stale file for re-download: ${targetFile.path}")
                 null
             }
             code == 416 -> {
-                targetFile.delete()
-                failDownload(downloadId, download, DownloadReason.HTTP_416, "worker 416")
+                if (!targetFile.delete()) Log.w(TAG, "Failed to delete file on 416: ${targetFile.path}")
+                failDownload(downloadId, download, DownloadReason.HTTP_416)
             }
             !response.isSuccessful -> {
                 val reasonCode = DownloadReason.fromHttpCode(code)
@@ -245,7 +244,7 @@ class WorkerDownload(
 
                     val now = System.currentTimeMillis()
                     if (now - lastProgressAt >= progressInterval) {
-                        emitProgressUpdate(downloadId, bytesWritten, totalBytes, lastSpeedBytes, lastSpeedTs, now)
+                        emitProgressUpdate(downloadId, bytesWritten, totalBytes)
                         lastSpeedBytes = bytesWritten
                         lastSpeedTs = now
                         lastProgressAt = now
@@ -254,8 +253,6 @@ class WorkerDownload(
                 }
             }
         }
-
-        val totalElapsedMs = (System.currentTimeMillis() - transferStartMs).coerceAtLeast(1L)
 
         // SHA256 integrity check — only if file size doesn't match (avoid expensive hash computation on mobile)
         // Most downloads will match size exactly, so this rarely runs.
@@ -267,8 +264,8 @@ class WorkerDownload(
                 // File size mismatch > 0.1% — verify integrity with SHA256 before failing
                 val actual = computeFileSha256(targetFile)
                 if (actual.lowercase() != expectedSha256.lowercase()) {
-                    targetFile.delete()
-                    return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED, "worker sha256 mismatch")
+                    if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
+                    return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
                 }
             }
         }
@@ -281,7 +278,7 @@ class WorkerDownload(
     /** Returns a non-null Result if the loop should stop, null to continue. */
     private suspend fun checkCancellationOrPause(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result? {
         if (isStopped) {
-            return handleStoppedState(downloadId, download, bytesWritten, "mid-transfer-stop")
+            return handleStoppedState(downloadId, download, bytesWritten)
         }
         val current = downloadDao.getDownload(downloadId)
         if (current?.status == DownloadStatus.PAUSED) {
@@ -294,9 +291,6 @@ class WorkerDownload(
         downloadId: Long,
         bytesWritten: Long,
         totalBytes: Long,
-        lastSpeedBytes: Long,
-        lastSpeedTs: Long,
-        now: Long,
     ) {
         val progressDownload = downloadDao.getDownload(downloadId)
         val isSecondary = (progressDownload?.fileName ?: "").contains("mmproj", ignoreCase = true)
@@ -308,7 +302,7 @@ class WorkerDownload(
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
     }
 
-    private suspend fun failDownload(downloadId: Long, download: DownloadEntity, reasonCode: String, serviceReason: String): Result {
+    private suspend fun failDownload(downloadId: Long, download: DownloadEntity, reasonCode: String): Result {
         val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
         downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reasonCode)
         DownloadEventBridge.error(downloadId, download.fileName, download.modelId, uiReason, reasonCode)
@@ -316,7 +310,7 @@ class WorkerDownload(
         return Result.failure()
     }
 
-    private suspend fun handleStoppedState(downloadId: Long, download: DownloadEntity, bytesWritten: Long, stage: String): Result {
+    private suspend fun handleStoppedState(downloadId: Long, download: DownloadEntity, bytesWritten: Long): Result {
         val current = downloadDao.getDownload(downloadId) ?: download
         return if (current.status == DownloadStatus.CANCELLED) {
             // Worker owns the file write — delete partial file here once writing has stopped.
@@ -357,6 +351,7 @@ class WorkerDownload(
     // -------------------------------------------------------------------------
 
     companion object {
+        private const val TAG = "WorkerDownload"
         private const val DEFAULT_TITLE = "Downloading model…"
 
         // Shared across all WorkerDownload instances — reuses connection and thread pools.

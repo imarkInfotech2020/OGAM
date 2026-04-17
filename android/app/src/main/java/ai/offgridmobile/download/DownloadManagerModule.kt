@@ -337,10 +337,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         val mmprojBytesL = mmprojBytes.toLong()
         val mmprojTotalL = mmprojTotal.toLong()
 
-        val combinedBytes = mainBytesL + mmprojBytesL
-        val combinedTotal = mainTotalL + mmprojTotalL
-        val statusText = "Vision model"
-
         // The foreground service is now stateful: each WorkerDownload writes its own
         // progress via DownloadForegroundService.update(), and the service aggregates
         // GGUF + mmproj entries automatically using the shared model title.
@@ -385,6 +381,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             }
             reactApplicationContext.startActivity(intent)
         } catch (_: Exception) {
+            // no-op: device may not have a Settings app to handle this intent
         }
     }
 
