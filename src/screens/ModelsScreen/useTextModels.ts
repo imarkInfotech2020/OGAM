@@ -260,7 +260,15 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   const handleCancelDownload = async (downloadKey: string) => {
-    const downloadId = downloadIds[downloadKey];
+    let downloadId: number | undefined = downloadIds[downloadKey];
+    if (downloadId == null) {
+      // Fallback: look up downloadId from persisted store (e.g. after app restart)
+      const { activeBackgroundDownloads } = useAppStore.getState();
+      const entry = Object.entries(activeBackgroundDownloads).find(
+        ([, metadata]) => metadata != null && `${metadata.modelId}/${metadata.fileName}` === downloadKey,
+      );
+      if (entry) downloadId = Number(entry[0]);
+    }
     if (downloadId == null) return;
     try {
       await modelManager.cancelBackgroundDownload(downloadId);
