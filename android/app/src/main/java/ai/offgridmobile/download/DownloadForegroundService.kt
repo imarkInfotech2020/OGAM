@@ -95,10 +95,16 @@ class DownloadForegroundService : Service() {
 
         private fun startService(context: Context) {
             val intent = Intent(context, DownloadForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                // App is in the background on Android 12+ — notification skipped,
+                // but WorkManager continues the download unaffected.
+                android.util.Log.w("DownloadService", "Skipping foreground notification (background): ${e.message}")
             }
         }
     }
