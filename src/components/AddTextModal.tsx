@@ -9,12 +9,84 @@ import {
   ScrollView,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { useTheme } from '../theme';
-import { ragService, PASTE_MAX_CHARS } from '../services/rag';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { ragService } from '../services/rag';
 import { TYPOGRAPHY, SPACING } from '../constants';
 
 const MIN_CHARS = 100;
+const PASTE_MAX_CHARS = 50_000;
 const WARN_CHARS = 40_000;
+
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+  },
+  titleInput: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  contentInput: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+    minHeight: 220,
+    textAlignVertical: 'top' as const,
+  },
+  footer: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  hintText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+  },
+  errorText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.error,
+  },
+  counterDefault: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+  },
+  counterWarn: {
+    ...TYPOGRAPHY.meta,
+    color: colors.trending,
+  },
+  counterError: {
+    ...TYPOGRAPHY.meta,
+    color: colors.error,
+  },
+  saveButton: {
+    borderRadius: 6,
+    paddingVertical: SPACING.md,
+    alignItems: 'center' as const,
+  },
+  saveButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  saveButtonDisabled: {
+    backgroundColor: colors.surfaceHover,
+  },
+  saveButtonTextActive: {
+    ...TYPOGRAPHY.body,
+    color: colors.surface,
+  },
+  saveButtonTextDisabled: {
+    ...TYPOGRAPHY.body,
+    color: colors.textMuted,
+  },
+});
 
 function autoTitle(text: string): string {
   const words = text.trim().split(/\s+/).slice(0, 6).join(' ');
@@ -30,6 +102,7 @@ export interface AddTextModalProps {
 
 export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, onClose, onIndexed }) => {
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [indexing, setIndexing] = useState(false);
@@ -39,11 +112,11 @@ export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, 
   const tooLong = charCount > PASTE_MAX_CHARS;
   const canSave = charCount >= MIN_CHARS && !tooLong && !indexing;
 
-  const counterColor = tooLong
-    ? colors.error
+  const counterStyle = tooLong
+    ? styles.counterError
     : charCount >= WARN_CHARS
-    ? colors.trending
-    : colors.textMuted;
+    ? styles.counterWarn
+    : styles.counterDefault;
 
   const handleSave = useCallback(async () => {
     if (!canSave) return;
@@ -79,19 +152,12 @@ export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, 
       snapPoints={['90%']}
     >
       <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xxl }}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
-          style={{
-            ...TYPOGRAPHY.body,
-            color: colors.text,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-            paddingVertical: SPACING.sm,
-            marginBottom: SPACING.md,
-          }}
+          style={styles.titleInput}
           value={title}
           onChangeText={setTitle}
           placeholder="Title (optional — auto-fills from content)"
@@ -102,12 +168,7 @@ export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, 
         />
 
         <TextInput
-          style={{
-            ...TYPOGRAPHY.body,
-            color: colors.text,
-            minHeight: 220,
-            textAlignVertical: 'top',
-          }}
+          style={styles.contentInput}
           value={text}
           onChangeText={setText}
           placeholder="Paste or type text here..."
@@ -117,36 +178,21 @@ export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, 
           editable={!indexing}
         />
 
-        <View style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginTop: SPACING.sm,
-          marginBottom: SPACING.lg,
-        }}>
+        <View style={styles.footer}>
           {tooShort ? (
-            <Text style={{ ...TYPOGRAPHY.meta, color: colors.textMuted }}>
-              {`min ${MIN_CHARS} characters`}
-            </Text>
+            <Text style={styles.hintText}>{`min ${MIN_CHARS} characters`}</Text>
           ) : tooLong ? (
-            <Text style={{ ...TYPOGRAPHY.meta, color: colors.error }}>
-              {`max ${PASTE_MAX_CHARS.toLocaleString()} characters`}
-            </Text>
+            <Text style={styles.errorText}>{`max ${PASTE_MAX_CHARS.toLocaleString()} characters`}</Text>
           ) : (
             <View />
           )}
-          <Text style={{ ...TYPOGRAPHY.meta, color: counterColor }}>
+          <Text style={counterStyle}>
             {`${charCount.toLocaleString()} / ${PASTE_MAX_CHARS.toLocaleString()}`}
           </Text>
         </View>
 
         <TouchableOpacity
-          style={{
-            backgroundColor: canSave ? colors.primary : colors.surfaceHover,
-            borderRadius: 6,
-            paddingVertical: SPACING.md,
-            alignItems: 'center',
-          }}
+          style={[styles.saveButton, canSave ? styles.saveButtonActive : styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={!canSave}
           activeOpacity={0.8}
@@ -154,7 +200,7 @@ export const AddTextModal: React.FC<AddTextModalProps> = ({ visible, projectId, 
           {indexing ? (
             <ActivityIndicator size="small" color={colors.surface} />
           ) : (
-            <Text style={{ ...TYPOGRAPHY.body, color: canSave ? colors.surface : colors.textMuted }}>
+            <Text style={canSave ? styles.saveButtonTextActive : styles.saveButtonTextDisabled}>
               Save to knowledge base
             </Text>
           )}

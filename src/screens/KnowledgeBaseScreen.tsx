@@ -18,7 +18,6 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import logger from '../utils/logger';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
-import { SPACING } from '../constants';
 import { useProjectStore } from '../stores';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
@@ -214,7 +213,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
           <Icon name="file-text" size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>No documents yet</Text>
           <Text style={styles.emptySubtext}>Add files to build your knowledge base</Text>
-          <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+          <View style={styles.addFirstButtonRow}>
             <TouchableOpacity style={styles.addFirstButton} onPress={handleAddDocument} disabled={isPicking}>
               <Text style={styles.addFirstButtonText}>Add File</Text>
             </TouchableOpacity>

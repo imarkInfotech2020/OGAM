@@ -104,4 +104,8 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     padding: SPACING.sm,
     marginLeft: SPACING.sm,
   },
+  addFirstButtonRow: {
+    flexDirection: 'row' as const,
+    gap: SPACING.sm,
+  },
 });
