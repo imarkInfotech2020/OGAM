@@ -63,8 +63,8 @@ class WhisperService {
         : undefined,
       silent: true,
     });
-    downloadIdPromise.then(id => { this.activeDownloadId = id; }).catch(() => {});
     try {
+      this.activeDownloadId = await downloadIdPromise;
       await promise;
     } catch (error) {
       logger.error('[Whisper] Download failed:', error);
@@ -76,6 +76,7 @@ class WhisperService {
     try {
       await this.validateModelFile(destPath);
     } catch (validationError) {
+      await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
       throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
     }
     logger.log(`[Whisper] Downloaded to ${destPath}`);
