@@ -23,11 +23,7 @@
     <!-- For silent companion file downloads (e.g. mmproj for vision models) -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
-    <!-- Foreground service to prevent Android from throttling/pausing large downloads -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-
-    <!-- To check and request battery optimization exemption for uninterrupted downloads -->
+<!-- To check and request battery optimization exemption for uninterrupted downloads -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -62,13 +58,7 @@
         </intent-filter>
       </activity>
 
-      <!-- Foreground service to keep downloads running at high priority -->
-      <service
-          android:name=".download.DownloadForegroundService"
-          android:exported="false"
-          android:foregroundServiceType="dataSync" />
-
-      <!-- Receiver for background download completion events -->
+<!-- Receiver for background download completion events -->
       <receiver
           android:name=".download.DownloadCompleteBroadcastReceiver"
           android:exported="true">
