@@ -141,16 +141,6 @@ jest.mock('../../../../src/screens/ModelsScreen/useImageModels', () => ({
   })),
 }));
 
-// Mock useNotifRationale
-jest.mock('../../../../src/screens/ModelsScreen/useNotifRationale', () => ({
-  useNotifRationale: jest.fn(() => ({
-    showNotifRationale: false,
-    maybeShowNotifRationale: jest.fn((cb) => cb()),
-    handleNotifRationaleAllow: jest.fn(),
-    handleNotifRationaleDismiss: jest.fn(),
-  })),
-}));
-
 // Mock useAppStore
 jest.mock('../../../../src/stores', () => ({
   useAppStore: jest.fn(() => ({
@@ -563,19 +553,10 @@ describe('useModelsScreen', () => {
   });
 
   describe('handleDownload callback', () => {
-    it('calls maybeShowNotifRationale with download handler', () => {
-      const { useNotifRationale } = require('../../../../src/screens/ModelsScreen/useNotifRationale');
-      const mockMaybeShowNotifRationale = jest.fn();
+    it('calls text.handleDownload directly with correct args', () => {
+      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const mockHandleDownload = jest.fn();
 
-      useNotifRationale.mockReturnValue({
-        showNotifRationale: false,
-        maybeShowNotifRationale: mockMaybeShowNotifRationale,
-        handleNotifRationaleAllow: jest.fn(),
-        handleNotifRationaleDismiss: jest.fn(),
-      });
-
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
       useTextModels.mockReturnValue({
         downloadedModels: [],
         setIsRefreshing: jest.fn(),
@@ -590,7 +571,6 @@ describe('useModelsScreen', () => {
       });
 
       const { result } = renderHook(() => useModelsScreen());
-
       const mockModel: any = { id: 'model-id', name: 'Test', author: 'Test', files: [] };
       const mockFile: any = { name: 'url', size: 100, quantization: 'Q4', downloadUrl: 'http://test' };
 
@@ -598,28 +578,15 @@ describe('useModelsScreen', () => {
         result.current.handleDownload(mockModel, mockFile);
       });
 
-      expect(mockMaybeShowNotifRationale).toHaveBeenCalled();
-      // The callback passed to maybeShowNotifRationale should call handleDownload
-      const callback = mockMaybeShowNotifRationale.mock.calls[0][0];
-      callback();
       expect(mockHandleDownload).toHaveBeenCalledWith(mockModel, mockFile);
     });
   });
 
   describe('handleDownloadImageModel callback', () => {
-    it('calls maybeShowNotifRationale with image download handler', () => {
-      const { useNotifRationale } = require('../../../../src/screens/ModelsScreen/useNotifRationale');
-      const mockMaybeShowNotifRationale = jest.fn();
+    it('calls image.handleDownloadImageModel directly with correct args', () => {
+      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
       const mockHandleDownloadImageModel = jest.fn();
 
-      useNotifRationale.mockReturnValue({
-        showNotifRationale: false,
-        maybeShowNotifRationale: mockMaybeShowNotifRationale,
-        handleNotifRationaleAllow: jest.fn(),
-        handleNotifRationaleDismiss: jest.fn(),
-      });
-
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
       useImageModels.mockReturnValue({
         downloadedImageModels: [],
         loadDownloadedImageModels: jest.fn().mockResolvedValue(undefined),
@@ -631,24 +598,15 @@ describe('useModelsScreen', () => {
       });
 
       const { result } = renderHook(() => useModelsScreen());
-
       const mockImageModel: any = {
-        id: 'img-model',
-        name: 'Test Model',
-        description: 'Test',
-        downloadUrl: 'http://test',
-        size: 100,
-        style: 'default',
-        backend: 'mnn'
+        id: 'img-model', name: 'Test Model', description: 'Test',
+        downloadUrl: 'http://test', size: 100, style: 'default', backend: 'mnn',
       };
 
       act(() => {
         result.current.handleDownloadImageModel(mockImageModel);
       });
 
-      expect(mockMaybeShowNotifRationale).toHaveBeenCalled();
-      const callback = mockMaybeShowNotifRationale.mock.calls[0][0];
-      callback();
       expect(mockHandleDownloadImageModel).toHaveBeenCalledWith(mockImageModel);
     });
   });
