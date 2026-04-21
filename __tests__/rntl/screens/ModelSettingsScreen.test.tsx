@@ -837,7 +837,7 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('0.70')).toBeTruthy(); // temperature || 0.7
       expect(getByText('0.90')).toBeTruthy(); // topP || 0.9
       expect(getByText('1.10')).toBeTruthy(); // repeatPenalty || 1.1
-      expect(getByText('6')).toBeTruthy(); // undefined still falls back to 6
+      expect(getByText('1')).toBeTruthy(); // undefined falls back to cpuThreadsSliderValue (1)
       expect(getByText('8')).toBeTruthy(); // imageSteps || 8
       expect(getByText('7.5')).toBeTruthy(); // imageGuidanceScale || 7.5
     });
