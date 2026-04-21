@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid, Alert } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, Alert } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 import logger from '../utils/logger';
 import type {
@@ -173,17 +173,6 @@ class BackgroundDownloadService {
     }
     this.isPolling = false;
     DownloadManagerModule.stopProgressPolling();
-  }
-
-  async requestNotificationPermission(): Promise<void> {
-    if (Platform.OS !== 'android' || Platform.Version < 33) return;
-    try {
-      await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
-      );
-    } catch {
-      // Non-fatal — download still works, just no system notification
-    }
   }
 
   /** Returns true if battery optimization is ignored, or if unsupported (iOS, old Android). */

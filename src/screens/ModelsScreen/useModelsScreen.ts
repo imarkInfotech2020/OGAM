@@ -15,7 +15,6 @@ import { initialFilterState } from './constants';
 import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
-import { useNotifRationale } from './useNotifRationale';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
@@ -84,15 +83,6 @@ export function useModelsScreen() {
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);
-
-  const isFirstDownload =
-    text.downloadedModels.length === 0 && image.downloadedImageModels.length === 0;
-  const {
-    showNotifRationale,
-    maybeShowNotifRationale,
-    handleNotifRationaleAllow,
-    handleNotifRationaleDismiss,
-  } = useNotifRationale(isFirstDownload);
 
   useEffect(() => {
     if (activeTab === 'image' && image.availableHFModels.length === 0 && !image.hfModelsLoading) {
@@ -194,16 +184,16 @@ export function useModelsScreen() {
 
   const handleDownload = useCallback(
     (...args: Parameters<typeof text.handleDownload>) => {
-      maybeShowNotifRationale(() => text.handleDownload(...args));
+      text.handleDownload(...args);
     },
-    [maybeShowNotifRationale, text],
+    [text],
   );
 
   const handleDownloadImageModel = useCallback(
     (...args: Parameters<typeof image.handleDownloadImageModel>) => {
-      maybeShowNotifRationale(() => image.handleDownloadImageModel(...args));
+      image.handleDownloadImageModel(...args);
     },
-    [maybeShowNotifRationale, image],
+    [image],
   );
 
   return {
@@ -290,9 +280,6 @@ export function useModelsScreen() {
     isRecommendedModel: image.isRecommendedModel,
     handleDownloadImageModel,
     handleCancelImageDownload: image.handleCancelImageDownload,
-    showNotifRationale,
-    handleNotifRationaleAllow,
-    handleNotifRationaleDismiss,
     setUserChangedBackendFilter: image.setUserChangedBackendFilter,
   };
 }
