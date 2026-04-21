@@ -433,10 +433,10 @@ describe('ModelSettingsScreen', () => {
   // Performance Settings
   // ============================================================================
   describe('performance settings', () => {
-    it('shows CPU Threads slider label and auto value when nThreads uses the auto sentinel', () => {
-      const { getByText } = renderWithSections('text');
+    it('shows CPU Threads slider label and auto value when nThreads uses the auto sentinel', async () => {
+      const { getByText, findByText } = renderWithSections('text');
       expect(getByText('CPU Threads')).toBeTruthy();
-      expect(getByText('Auto')).toBeTruthy();
+      await findByText(/^Auto \(\d+\)$/);
     });
 
     it('shows Batch Size slider label and default value', () => {
@@ -832,12 +832,12 @@ describe('ModelSettingsScreen', () => {
         },
       });
 
-      const { getByText } = renderWithSections('image', 'text');
+      const { getByText, getAllByText } = renderWithSections('image', 'text');
       // Verify fallback values are used
       expect(getByText('0.70')).toBeTruthy(); // temperature || 0.7
       expect(getByText('0.90')).toBeTruthy(); // topP || 0.9
       expect(getByText('1.10')).toBeTruthy(); // repeatPenalty || 1.1
-      expect(getByText('6')).toBeTruthy(); // undefined still falls back to 6
+      expect(getAllByText('1').length).toBeGreaterThan(0); // undefined falls back to cpuThreadsSliderValue (1)
       expect(getByText('8')).toBeTruthy(); // imageSteps || 8
       expect(getByText('7.5')).toBeTruthy(); // imageGuidanceScale || 7.5
     });
