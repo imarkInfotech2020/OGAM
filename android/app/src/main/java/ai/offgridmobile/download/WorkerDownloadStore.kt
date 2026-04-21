@@ -111,10 +111,4 @@ object WorkerDownloadStore {
         return false
     }
 
-    fun stopForegroundServiceIfIdle(context: Context, reason: String) {
-        if (!hasActiveWorkerDownloads(context) && !hasActiveLegacyDownloads(context)) {
-            DownloadEventBridge.log("I", "[WorkerStore] Stopping foreground service: $reason")
-            DownloadForegroundService.stop(context, reason)
-        }
-    }
 }

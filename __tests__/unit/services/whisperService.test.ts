@@ -9,7 +9,17 @@ import { initWhisper, AudioSessionIos } from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import { whisperService, WHISPER_MODELS } from '../../../src/services/whisperService';
+import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
 
+jest.mock('../../../src/services/backgroundDownloadService', () => ({
+  backgroundDownloadService: {
+    isAvailable: jest.fn(() => true),
+    downloadFileTo: jest.fn(),
+    cancelDownload: jest.fn(() => Promise.resolve()),
+  },
+}));
+
+const mockedBDS = backgroundDownloadService as jest.Mocked<typeof backgroundDownloadService>;
 const mockedAudioSessionIos = AudioSessionIos as jest.Mocked<typeof AudioSessionIos>;
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
@@ -32,6 +42,15 @@ describe('WhisperService', () => {
     (whisperService as any).stopFn = null;
     (whisperService as any).isReleasingContext = false;
     (whisperService as any).transcriptionFullyStopped = Promise.resolve();
+    (whisperService as any).activeDownloadId = null;
+    // Default backgroundDownloadService mock
+    mockedBDS.isAvailable.mockReturnValue(true);
+    mockedBDS.downloadFileTo.mockReturnValue({
+      downloadId: 0,
+      downloadIdPromise: Promise.resolve(0),
+      promise: Promise.resolve(),
+    } as any);
+    mockedBDS.cancelDownload.mockResolvedValue(undefined as any);
     // Re-establish default AudioSessionIos mock implementations
     // (previous tests may have set mockRejectedValue which clearAllMocks doesn't reset)
     mockedAudioSessionIos.setCategory.mockResolvedValue(undefined as any);
@@ -85,71 +104,71 @@ describe('WhisperService', () => {
       const result = await whisperService.downloadModel('tiny.en');
 
       expect(result).toBe('/mock/documents/whisper-models/ggml-tiny.en.bin');
-      expect(RNFS.downloadFile).not.toHaveBeenCalled();
+      expect(mockedBDS.downloadFileTo).not.toHaveBeenCalled();
     });
 
-    it('downloads via RNFS when not present', async () => {
-      // First exists check (ensureModelsDirExists) = true, second (destPath) = false,
-      // third (validateModelFile) = true
+    it('downloads via backgroundDownloadService when not present', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true) // dir exists
+        .mockResolvedValueOnce(true)  // dir exists
         .mockResolvedValueOnce(false) // model not yet downloaded
-        .mockResolvedValueOnce(true); // validation: file exists after download
+        .mockResolvedValueOnce(true); // validateModelFile: file exists
       mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
 
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 75000000 }),
+      mockedBDS.downloadFileTo.mockReturnValue({
+        downloadId: 1,
+        downloadIdPromise: Promise.resolve(1),
+        promise: Promise.resolve(),
       } as any);
 
       const result = await whisperService.downloadModel('tiny.en');
 
-      expect(RNFS.downloadFile).toHaveBeenCalled();
-      const callArgs = (RNFS.downloadFile as jest.Mock).mock.calls[0][0];
-      expect(callArgs.fromUrl).toBe(WHISPER_MODELS[0].url);
+      expect(mockedBDS.downloadFileTo).toHaveBeenCalledWith(expect.objectContaining({
+        params: expect.objectContaining({ url: WHISPER_MODELS[0].url }),
+        destPath: '/mock/documents/whisper-models/ggml-tiny.en.bin',
+      }));
       expect(result).toBe('/mock/documents/whisper-models/ggml-tiny.en.bin');
     });
 
     it('calls progress callback', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true) // dir exists
+        .mockResolvedValueOnce(true)  // dir exists
         .mockResolvedValueOnce(false) // model doesn't exist
-        .mockResolvedValueOnce(true); // validation: file exists after download
+        .mockResolvedValueOnce(true); // validateModelFile: file exists
       mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
 
-      let capturedProgressFn: any;
-      mockedRNFS.downloadFile.mockImplementation((opts: any) => {
-        capturedProgressFn = opts.progress;
+      let capturedOnProgress: ((b: number, t: number) => void) | undefined;
+      mockedBDS.downloadFileTo.mockImplementation((opts: any) => {
+        capturedOnProgress = opts.onProgress;
         return {
-          jobId: 1,
-          promise: Promise.resolve({ statusCode: 200, bytesWritten: 75000000 }),
+          downloadId: 1,
+          downloadIdPromise: Promise.resolve(1),
+          promise: Promise.resolve(),
         } as any;
       });
 
       const progressCb = jest.fn();
       await whisperService.downloadModel('tiny.en', progressCb);
 
-      // Simulate progress
-      if (capturedProgressFn) {
-        capturedProgressFn({ bytesWritten: 37500000, contentLength: 75000000 });
+      if (capturedOnProgress) {
+        capturedOnProgress(37500000, 75000000);
         expect(progressCb).toHaveBeenCalledWith(0.5);
       }
     });
 
-    it('cleans up on non-200 status', async () => {
+    it('cleans up partial file and rethrows when download fails', async () => {
       mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
-
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 500, bytesWritten: 0 }),
-      } as any);
-
+        .mockResolvedValueOnce(true)  // dir exists
+        .mockResolvedValueOnce(false); // model not yet downloaded
       mockedRNFS.unlink.mockResolvedValue(undefined as any);
 
-      await expect(whisperService.downloadModel('tiny.en')).rejects.toThrow('Download failed');
-      expect(RNFS.unlink).toHaveBeenCalled();
+      mockedBDS.downloadFileTo.mockReturnValue({
+        downloadId: 1,
+        downloadIdPromise: Promise.resolve(1),
+        promise: Promise.reject(new Error('network_lost')),
+      } as any);
+
+      await expect(whisperService.downloadModel('tiny.en')).rejects.toThrow('network_lost');
+      expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/whisper-models/ggml-tiny.en.bin');
     });
   });
 

@@ -46,9 +46,6 @@ class WorkerDownload(
         val earlyCheckResult = handleEarlyStopOrPause(downloadId, download)
         if (earlyCheckResult != null) return earlyCheckResult
 
-        val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.update(applicationContext, downloadId, download.title, isSecondary = isSecondary)
-
         val targetFile = File(download.destination)
         targetFile.parentFile?.mkdirs()
 
@@ -108,11 +105,6 @@ class WorkerDownload(
         val retryStatus = if (!isNetworkConnected() && reasonCode == DownloadReason.NETWORK_LOST) "waiting_for_network" else "retrying"
         val statusText = if (retryStatus == "waiting_for_network") "Waiting for network..." else "Reconnecting..."
         downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
-        val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.update(
-            applicationContext, downloadId, download.title,
-            download.downloadedBytes, download.totalBytes, isSecondary, statusText,
-        )
         DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, uiReason, reasonCode, runAttemptCount, retryStatus)
         return Result.retry()
     }
@@ -195,18 +187,12 @@ class WorkerDownload(
                     // (wiping all listeners/metadata) while WorkManager silently retries — causing
                     // the Download Manager screen to stay stuck and the Models screen to desync.
                     downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
-                    val isSecondary = download.fileName.contains("mmproj", ignoreCase = true)
-                    DownloadForegroundService.update(
-                        applicationContext, downloadId, download.title,
-                        download.downloadedBytes, download.totalBytes, isSecondary, "Reconnecting…",
-                    )
                     DownloadEventBridge.retrying(downloadId, download.fileName, download.modelId, uiReason, reasonCode, runAttemptCount)
                     Result.retry()
                 } else {
                     // 4xx = client error — permanent failure, do not retry.
                     downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reasonCode)
                     DownloadEventBridge.error(downloadId, download.fileName, download.modelId, uiReason, reasonCode)
-                    DownloadForegroundService.remove(applicationContext, downloadId)
                     Result.failure()
                 }
             }
@@ -271,7 +257,6 @@ class WorkerDownload(
         }
 
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.COMPLETED)
-        DownloadForegroundService.remove(applicationContext, downloadId)
         return Result.success()
     }
 
@@ -292,12 +277,6 @@ class WorkerDownload(
         bytesWritten: Long,
         totalBytes: Long,
     ) {
-        val progressDownload = downloadDao.getDownload(downloadId)
-        val isSecondary = (progressDownload?.fileName ?: "").contains("mmproj", ignoreCase = true)
-        DownloadForegroundService.update(
-            applicationContext, downloadId, progressDownload?.title ?: DEFAULT_TITLE,
-            bytesWritten, totalBytes, isSecondary, "Downloading",
-        )
         setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
     }
@@ -306,7 +285,6 @@ class WorkerDownload(
         val uiReason = DownloadReason.messageFor(reasonCode) ?: DownloadReason.messageFor(DownloadReason.UNKNOWN_ERROR)!!
         downloadDao.updateStatus(downloadId, DownloadStatus.FAILED, reasonCode)
         DownloadEventBridge.error(downloadId, download.fileName, download.modelId, uiReason, reasonCode)
-        DownloadForegroundService.remove(applicationContext, downloadId)
         return Result.failure()
     }
 
@@ -318,7 +296,6 @@ class WorkerDownload(
             // authoritative cleanup.
             val partialFile = File(current.destination)
             if (partialFile.exists()) partialFile.delete()
-            DownloadForegroundService.remove(applicationContext, downloadId)
             Result.failure()
         } else {
             val networkConnected = isNetworkConnected()
@@ -328,11 +305,6 @@ class WorkerDownload(
             val eventStatus = if (networkConnected) "retrying" else "waiting_for_network"
             downloadDao.updateProgress(downloadId, bytesWritten, current.totalBytes, DownloadStatus.QUEUED)
             downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED, reasonCode)
-            val isSecondary = current.fileName.contains("mmproj", ignoreCase = true)
-            DownloadForegroundService.update(
-                applicationContext, downloadId, current.title,
-                bytesWritten, current.totalBytes, isSecondary, statusText,
-            )
             DownloadEventBridge.retrying(downloadId, current.fileName, current.modelId, uiReason, reasonCode, runAttemptCount, eventStatus)
             Result.retry()
         }

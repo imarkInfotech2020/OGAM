@@ -125,7 +125,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     }
                 }
                 WorkerDownload.cancel(reactApplicationContext, id)
-                DownloadForegroundService.remove(reactApplicationContext, id)
                 workManager.pruneWork()
                 removeWorkObserver(id)
                 SafePromise(promise, NAME).resolve(true)
@@ -261,7 +260,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 if (targetPath.isEmpty()) {
                     // Cleanup-only — delete DB entry, no move needed
                     withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                    DownloadForegroundService.remove(reactApplicationContext, id)
                     SafePromise(promise, NAME).resolve(sourceFile.absolutePath)
                     return@launch
                 }
@@ -285,7 +283,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 }
 
                 withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                DownloadForegroundService.remove(reactApplicationContext, id)
                 SafePromise(promise, NAME).resolve(movedPath)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
@@ -337,10 +334,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         val mmprojBytesL = mmprojBytes.toLong()
         val mmprojTotalL = mmprojTotal.toLong()
 
-        // The foreground service is now stateful: each WorkerDownload writes its own
-        // progress via DownloadForegroundService.update(), and the service aggregates
-        // GGUF + mmproj entries automatically using the shared model title.
-        // No manual combined-progress push is needed here.
+        // Combined progress tracking is handled in the JS layer.
     }
 
     @ReactMethod
@@ -442,7 +436,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                                 d.downloadedBytes, d.totalBytes,
                             )
                         }
-                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }
@@ -457,13 +450,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                             uiState.reason ?: "Something went wrong while downloading.",
                             uiState.reasonCode,
                         )
-                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }
                 WorkInfo.State.CANCELLED -> {
                     scope.launch {
-                        DownloadForegroundService.remove(reactApplicationContext, downloadId)
                         removeWorkObserver(downloadId)
                     }
                 }

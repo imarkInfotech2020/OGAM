@@ -2,6 +2,7 @@ import { initWhisper, WhisperContext, RealtimeTranscribeEvent, AudioSessionIos }
 import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
+import { backgroundDownloadService } from './backgroundDownloadService';
 
 export interface TranscriptionResult {
   text: string;
@@ -27,6 +28,7 @@ class WhisperService {
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
+  private activeDownloadId: number | null = null;
 
   getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
   async ensureModelsDirExists(): Promise<void> {
@@ -42,27 +44,49 @@ class WhisperService {
     await this.ensureModelsDirExists();
     const destPath = this.getModelPath(modelId);
     if (await RNFS.exists(destPath)) return destPath;
-    logger.log(`[Whisper] Downloading ${model.name}...`);
-    const download = RNFS.downloadFile({
-      fromUrl: model.url, toFile: destPath, progressDivider: 1,
-      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
+    logger.log(`[Whisper] Downloading ${model.name} via background download service...`);
+    const fileName = `ggml-${modelId}.bin`;
+    const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
+      params: {
+        url: model.url,
+        fileName,
+        modelId: `whisper-${modelId}`,
+        title: `Downloading ${model.name}`,
+        description: `Whisper speech-to-text model (${model.size} MB)`,
+        totalBytes: model.size * 1024 * 1024,
+      },
+      destPath,
+      onProgress: onProgress
+        ? (bytesDownloaded, totalBytes) => {
+            onProgress(totalBytes > 0 ? bytesDownloaded / totalBytes : 0);
+          }
+        : undefined,
+      silent: true,
     });
-    const result = await download.promise;
-    if (result.statusCode !== 200) {
+    try {
+      this.activeDownloadId = await downloadIdPromise;
+      await promise;
+    } catch (error) {
+      logger.error('[Whisper] Download failed:', error);
       await RNFS.unlink(destPath).catch(() => {});
-      throw new Error(`Download failed with status ${result.statusCode}`);
+      throw error;
+    } finally {
+      this.activeDownloadId = null;
     }
-    // Verify the downloaded file is not truncated/corrupted
     try {
       await this.validateModelFile(destPath);
     } catch (validationError) {
-      await RNFS.unlink(destPath).catch(() => {});
+      await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
       throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
     }
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
   async deleteModel(modelId: string): Promise<void> {
+    if (this.activeDownloadId !== null) {
+      await backgroundDownloadService.cancelDownload(this.activeDownloadId).catch(() => {});
+      this.activeDownloadId = null;
+    }
     const path = this.getModelPath(modelId);
     if (await RNFS.exists(path)) await RNFS.unlink(path);
   }
