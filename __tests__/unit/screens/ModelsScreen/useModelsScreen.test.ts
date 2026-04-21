@@ -552,6 +552,65 @@ describe('useModelsScreen', () => {
     });
   });
 
+  describe('handleDownload callback', () => {
+    it('calls text.handleDownload directly with correct args', () => {
+      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const mockHandleDownload = jest.fn();
+
+      useTextModels.mockReturnValue({
+        downloadedModels: [],
+        setIsRefreshing: jest.fn(),
+        loadDownloadedModels: jest.fn().mockResolvedValue(undefined),
+        hasSearched: false,
+        searchQuery: '',
+        handleSearch: jest.fn(),
+        handleDownload: mockHandleDownload,
+        downloadProgress: {},
+        setFilterState: jest.fn(),
+        setTextFiltersVisible: jest.fn(),
+      });
+
+      const { result } = renderHook(() => useModelsScreen());
+      const mockModel: any = { id: 'model-id', name: 'Test', author: 'Test', files: [] };
+      const mockFile: any = { name: 'url', size: 100, quantization: 'Q4', downloadUrl: 'http://test' };
+
+      act(() => {
+        result.current.handleDownload(mockModel, mockFile);
+      });
+
+      expect(mockHandleDownload).toHaveBeenCalledWith(mockModel, mockFile);
+    });
+  });
+
+  describe('handleDownloadImageModel callback', () => {
+    it('calls image.handleDownloadImageModel directly with correct args', () => {
+      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const mockHandleDownloadImageModel = jest.fn();
+
+      useImageModels.mockReturnValue({
+        downloadedImageModels: [],
+        loadDownloadedImageModels: jest.fn().mockResolvedValue(undefined),
+        loadHFModels: jest.fn().mockResolvedValue(undefined),
+        availableHFModels: [],
+        hfModelsLoading: false,
+        handleDownloadImageModel: mockHandleDownloadImageModel,
+        setImageFiltersVisible: jest.fn(),
+      });
+
+      const { result } = renderHook(() => useModelsScreen());
+      const mockImageModel: any = {
+        id: 'img-model', name: 'Test Model', description: 'Test',
+        downloadUrl: 'http://test', size: 100, style: 'default', backend: 'mnn',
+      };
+
+      act(() => {
+        result.current.handleDownloadImageModel(mockImageModel);
+      });
+
+      expect(mockHandleDownloadImageModel).toHaveBeenCalledWith(mockImageModel);
+    });
+  });
+
   describe('useEffect - load HF models on image tab', () => {
     it('loads HF models when switching to image tab with empty models', () => {
       const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
