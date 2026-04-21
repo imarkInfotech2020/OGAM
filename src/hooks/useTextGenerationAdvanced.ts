@@ -43,7 +43,7 @@ export function useTextGenerationAdvanced() {
   const cpuThreadsSliderValue = settings?.nThreads && settings.nThreads > 0 ? settings.nThreads : 1;
   const cpuThreadsDisplayValue = settings?.nThreads === 0
     ? (resolvedThreadCount != null ? `Auto (${resolvedThreadCount})` : 'Auto')
-    : String(settings?.nThreads ?? 6);
+    : String(cpuThreadsSliderValue);
 
   const handleFlashAttnToggle = (flashAttn: boolean) => {
     if (!flashAttn && isQuantizedCache) {
