@@ -172,10 +172,14 @@ export function useModelsScreen() {
     }
   };
 
-  const activeDownloadCount = Object.keys(text.downloadProgress).filter(key => {
-    if (!key.startsWith('image:')) return true;
-    const imageId = key.split('/').slice(0, -1).join('/').replace('image:', '');
-    return !image.downloadedImageModels.some(m => m.id === imageId);
+  const activeDownloadCount = Object.entries(text.downloadProgress).filter(([key, progress]) => {
+    const status = progress?.status;
+    if (status === 'failed' || status === 'completed') return false;
+    if (key.startsWith('image:')) {
+      const imageId = key.split('/').slice(0, -1).join('/').replace('image:', '');
+      return !image.downloadedImageModels.some(m => m.id === imageId);
+    }
+    return true;
   }).length;
   const totalModelCount =
     text.downloadedModels.length +
