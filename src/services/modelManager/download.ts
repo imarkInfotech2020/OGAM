@@ -281,9 +281,15 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       ctx.mmProjCompleteHandled = true;
       try {
         await backgroundDownloadService.moveCompletedDownload(event.downloadId, ctx.mmProjLocalPath!);
-        ctx.mmProjCompleted = true;
-        await tryFinalize();
-      } catch (error) { handleError(error as Error, downloadId); }
+      } catch (moveErr) {
+        const targetExists = ctx.mmProjLocalPath ? await RNFS.exists(ctx.mmProjLocalPath) : false;
+        if (!targetExists) {
+          logger.warn('[ModelManager] mmproj move failed and target not found, continuing without vision:', moveErr);
+          ctx.mmProjLocalPath = null;
+        }
+      }
+      ctx.mmProjCompleted = true;
+      await tryFinalize();
     });
     removeMmProjError = backgroundDownloadService.onError(ctx.mmProjDownloadId, (event) => {
       handleError(new Error(`Vision projection download failed: ${event.reason || 'Unknown error'}`), downloadId);

@@ -184,16 +184,38 @@ export function useModelsScreen() {
 
   const handleDownload = useCallback(
     (...args: Parameters<typeof text.handleDownload>) => {
+      if (activeDownloadCount >= 2) {
+        setAlertState(showAlert(
+          'Downloads Already Active',
+          '2 downloads are already running. Starting more can affect performance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Start Anyway', style: 'default', onPress: () => { text.handleDownload(...args); } },
+          ],
+        ));
+        return;
+      }
       text.handleDownload(...args);
     },
-    [text],
+    [text, activeDownloadCount, setAlertState],
   );
 
   const handleDownloadImageModel = useCallback(
     (...args: Parameters<typeof image.handleDownloadImageModel>) => {
+      if (activeDownloadCount >= 2) {
+        setAlertState(showAlert(
+          'Downloads Already Active',
+          '2 downloads are already running. Starting more can affect performance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Start Anyway', style: 'default', onPress: () => { image.handleDownloadImageModel(...args); } },
+          ],
+        ));
+        return;
+      }
       image.handleDownloadImageModel(...args);
     },
-    [image],
+    [image, activeDownloadCount, setAlertState],
   );
 
   return {

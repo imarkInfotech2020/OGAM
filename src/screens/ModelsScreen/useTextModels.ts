@@ -231,7 +231,14 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
     };
     const onError = (err: Error) => {
-      setDownloadProgress(downloadKey, null);
+      const existing = useAppStore.getState().downloadProgress[downloadKey];
+      setDownloadProgress(downloadKey, {
+        progress: existing?.progress ?? 0,
+        bytesDownloaded: existing?.bytesDownloaded ?? 0,
+        totalBytes: existing?.totalBytes ?? totalBytes,
+        status: 'failed',
+        reason: err.message,
+      });
       setDownloadIds(prev => {
         const { [downloadKey]: _r, ...rest } = prev;
         downloadIdsRef.current = rest;
