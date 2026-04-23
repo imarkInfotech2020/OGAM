@@ -166,6 +166,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     }
 
     onProgress?.({
+      downloadId: downloadInfo.downloadId,
       modelId, fileName: file.name, bytesDownloaded: combinedDownloaded,
       totalBytes: combinedTotalBytes,
       progress: combinedTotalBytes > 0 ? combinedDownloaded / combinedTotalBytes : 0,
