@@ -26,7 +26,7 @@ async function handleCompletedImageDownload(opts: {
   modelId: string;
   modelDir: string;
   imageModelsDir: string;
-  downloadId: number;
+  downloadId: string;
   deps: ImageDownloadDeps;
 }): Promise<void> {
   const { metadata, modelId, modelDir, imageModelsDir, downloadId, deps } = opts;
@@ -115,7 +115,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     modelId: string;
     progress: number;
     totalBytes: number;
-    downloadId?: number;
+    downloadId?: string;
     fileName?: string;
     status?: string;
     bytesDownloaded?: number;
@@ -139,7 +139,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     addDownloadedImageModel, activeImageModelId,
     setActiveImageModelId, setImageModelDownloadId,
     setBackgroundDownload, setAlertState,
-    getBackgroundDownload: (downloadId: number) => useAppStore.getState().activeBackgroundDownloads[downloadId] ?? null,
+    getBackgroundDownload: (downloadId: string) => useAppStore.getState().activeBackgroundDownloads[downloadId] ?? null,
     setDownloadProgress,
     triedImageGen: onboardingChecklist.triedImageGen,
   });
@@ -172,7 +172,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   }, []);
 
   const restoreDownloadWithoutMetadata = (
-    download: { downloadId: number; status: string; bytesDownloaded: number; totalBytes: number },
+    download: { downloadId: string; status: string; bytesDownloaded: number; totalBytes: number },
     modelId: string,
   ) => {
     if (!['running', 'pending', 'paused'].includes(download.status)) return;
@@ -182,7 +182,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   };
 
   const restoreCompletedDownload = async (
-    download: { downloadId: number; modelId: string },
+    download: { downloadId: string; modelId: string },
     info: { modelId: string; metadata: PersistedDownloadInfo; deps: ImageDownloadDeps },
   ) => {
     const { modelId, metadata, deps } = info;
@@ -209,7 +209,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   };
 
   const restoreInProgressDownload = (
-    download: { downloadId: number; modelId: string; bytesDownloaded: number; totalBytes: number; status: string },
+    download: { downloadId: string; modelId: string; bytesDownloaded: number; totalBytes: number; status: string },
     info: { modelId: string; metadata: PersistedDownloadInfo; deps: ImageDownloadDeps },
   ) => {
     const { modelId, metadata, deps } = info;
@@ -234,7 +234,6 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
         metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
       }),
     ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
       const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
       const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0;
       deps.updateModelProgress(modelId, progress);

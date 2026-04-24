@@ -6,11 +6,10 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "downloads")
 data class DownloadEntity(
     @PrimaryKey
-    val id: Long,
+    val id: String,
     val url: String,
     val fileName: String,
     val modelId: String,
-    val title: String,
     val destination: String,
     val totalBytes: Long,
     val downloadedBytes: Long,
@@ -18,8 +17,15 @@ data class DownloadEntity(
     val createdAt: Long,
     val error: String? = null,
     val expectedSha256: String? = null,
+    // v3 columns
+    val modelType: String = "text",
+    val modelKey: String? = null,
+    val quantization: String? = null,
+    val combinedTotalBytes: Long = 0L,
+    val mmProjDownloadId: String? = null,
+    val metadataJson: String? = null,
 )
 
 enum class DownloadStatus {
-    QUEUED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED
+    QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED
 }

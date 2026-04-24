@@ -74,8 +74,8 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
-  const downloadIdsRef = useRef<Record<string, number>>({});
+  const [downloadIds, setDownloadIds] = useState<Record<string, string>>({});
+  const downloadIdsRef = useRef<Record<string, string>>({});
 
   const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel, downloadedModels } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);

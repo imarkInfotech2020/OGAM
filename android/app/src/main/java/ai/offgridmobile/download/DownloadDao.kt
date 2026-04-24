@@ -13,7 +13,7 @@ interface DownloadDao {
     fun getAllDownloads(): Flow<List<DownloadEntity>>
 
     @Query("SELECT * FROM downloads WHERE id = :downloadId")
-    suspend fun getDownload(downloadId: Long): DownloadEntity?
+    suspend fun getDownload(downloadId: String): DownloadEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDownload(download: DownloadEntity)
@@ -22,8 +22,8 @@ interface DownloadDao {
     suspend fun deleteDownload(download: DownloadEntity)
 
     @Query("UPDATE downloads SET downloadedBytes = :bytes, totalBytes = :totalBytes, status = :status WHERE id = :downloadId")
-    suspend fun updateProgress(downloadId: Long, bytes: Long, totalBytes: Long, status: DownloadStatus)
+    suspend fun updateProgress(downloadId: String, bytes: Long, totalBytes: Long, status: DownloadStatus)
 
     @Query("UPDATE downloads SET status = :status, error = :error WHERE id = :downloadId")
-    suspend fun updateStatus(downloadId: Long, status: DownloadStatus, error: String? = null)
+    suspend fun updateStatus(downloadId: String, status: DownloadStatus, error: String? = null)
 }

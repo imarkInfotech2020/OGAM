@@ -14,7 +14,8 @@ import { createStyles } from './styles';
 export type DownloadItem = {
   type: 'active' | 'completed';
   modelType: 'text' | 'image';
-  downloadId?: number;
+  downloadId?: string;
+  modelKey?: string;
   modelId: string;
   fileName: string;
   author: string;
@@ -32,9 +33,9 @@ export type DownloadItem = {
 };
 
 export interface DownloadItemsData {
-  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; ownerDownloadId?: number; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
+  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; ownerDownloadId?: string; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
   activeDownloads: BackgroundDownloadInfo[];
-  activeBackgroundDownloads: Record<number, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
+  activeBackgroundDownloads: Record<string, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
   downloadedModels: DownloadedModel[];
   downloadedImageModels: ONNXImageModel[];
 }
@@ -103,7 +104,7 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       bytesDownloaded: progress.bytesDownloaded,
       progress: progress.progress,
       status: matchingActiveDownload?.status ?? progress.status ?? 'downloading',
-      reason: matchingActiveDownload?.reason || matchingActiveDownload?.failureReason || progress.reason,
+      reason: matchingActiveDownload?.reason || progress.reason,
       reasonCode: matchingActiveDownload?.reasonCode || progress.reasonCode,
     });
   });
@@ -124,14 +125,14 @@ export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
       modelType: metadata.modelId.startsWith('image:') ? 'image' : 'text',
       downloadId: download.downloadId,
       modelId: metadata.modelId,
-      fileName: download.title ?? metadata.fileName,
+      fileName: metadata.fileName,
       author: metadata.author,
       quantization: metadata.quantization,
       fileSize: metadata.totalBytes,
       bytesDownloaded: download.bytesDownloaded,
       progress: metadata.totalBytes > 0 ? download.bytesDownloaded / metadata.totalBytes : 0,
       status: download.status,
-      reason: download.reason || download.failureReason,
+      reason: download.reason,
       reasonCode: download.reasonCode,
     });
   });

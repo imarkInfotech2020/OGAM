@@ -7,6 +7,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
+import { useDownloadStore } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -172,15 +173,11 @@ export function useModelsScreen() {
     }
   };
 
-  const activeDownloadCount = Object.entries(text.downloadProgress).filter(([key, progress]) => {
-    const status = progress?.status;
-    if (status === 'failed' || status === 'completed') return false;
-    if (key.startsWith('image:')) {
-      const imageId = key.split('/').slice(0, -1).join('/').replace('image:', '');
-      return !image.downloadedImageModels.some(m => m.id === imageId);
-    }
-    return true;
-  }).length;
+  const activeDownloadCount = useDownloadStore(state =>
+    Object.values(state.downloads).filter(
+      d => d.status === 'pending' || d.status === 'running',
+    ).length,
+  );
   const totalModelCount =
     text.downloadedModels.length +
     image.downloadedImageModels.length +
@@ -250,7 +247,6 @@ export function useModelsScreen() {
     textFiltersVisible: text.textFiltersVisible,
     setTextFiltersVisible: text.setTextFiltersVisible,
     downloadedModels: text.downloadedModels,
-    downloadProgress: text.downloadProgress,
     hasActiveFilters: text.hasActiveFilters,
     ramGB: text.ramGB,
     deviceRecommendation: text.deviceRecommendation,
@@ -263,7 +259,6 @@ export function useModelsScreen() {
     handleRepairMmProj: text.handleRepairMmProj,
     handleCancelDownload: text.handleCancelDownload,
     handleDeleteModel: text.handleDeleteModel,
-    downloadIds: text.downloadIds,
     clearFilters: text.clearFilters,
     toggleFilterDimension: text.toggleFilterDimension,
     toggleOrg: text.toggleOrg,

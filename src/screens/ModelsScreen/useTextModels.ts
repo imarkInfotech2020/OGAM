@@ -1,9 +1,11 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { makeModelKey } from '../../utils/modelKey';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
@@ -105,10 +107,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
 
-  const { downloadedModels, setDownloadedModels, downloadProgress, setDownloadProgress, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
-  const [downloadIds, setDownloadIds] = useState<Record<string, number>>({});
-  const lastProgressUpdate = useRef<Record<string, number>>({});
-  const downloadIdsRef = useRef<Record<string, number>>({});
+  const { downloadedModels, setDownloadedModels, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
 
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
@@ -193,40 +192,20 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
-    const downloadKey = `${model.id}/${file.name}-mmproj`;
-    const clearRepairState = () => { setDownloadProgress(downloadKey, null); setDownloadIds(prev => { const { [downloadKey]: _r, ...rest } = prev; return rest; }); };
-    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile?.size || 0 });
     try {
-      await modelManager.repairMmProj(model.id, file, {
-        onProgress: (p) => setDownloadProgress(downloadKey, p),
-        onDownloadIdReady: (id) => setDownloadIds(prev => ({ ...prev, [downloadKey]: id })),
-      });
-      clearRepairState();
+      await modelManager.repairMmProj(model.id, file, {});
       await loadDownloadedModels();
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
-    } catch (e) { clearRepairState(); setAlertState(showAlert('Repair Failed', (e as Error).message)); }
+    } catch (e) { setAlertState(showAlert('Repair Failed', (e as Error).message)); }
   };
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
-    const downloadKey = `${model.id}/${file.name}`;
+    const modelKey = makeModelKey(model.id, file.name);
     const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
-    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes });
-    const onProgress = (p: { progress: number; bytesDownloaded: number; totalBytes: number }) => {
-      const now = Date.now();
-      if (now - (lastProgressUpdate.current[downloadKey] ?? 0) < 500) return;
-      lastProgressUpdate.current[downloadKey] = now;
-      const ownerDownloadId = downloadIdsRef.current[downloadKey];
-      setDownloadProgress(downloadKey, ownerDownloadId != null
-        ? { ...p, ownerDownloadId, status: 'running', reason: undefined, reasonCode: undefined }
-        : { ...p, status: 'running', reason: undefined, reasonCode: undefined });
-    };
+    let currentDownloadId: string | undefined;
+
     const onComplete = (dm: DownloadedModel) => {
-      setDownloadProgress(downloadKey, null);
-      setDownloadIds(prev => {
-        const { [downloadKey]: _r, ...rest } = prev;
-        downloadIdsRef.current = rest;
-        return rest;
-      });
+      if (currentDownloadId) useDownloadStore.getState().setCompleted(currentDownloadId);
       addDownloadedModel(dm);
       if (file.mmProjFile && !dm.isVisionModel) {
         setAlertState(showAlert(
@@ -238,62 +217,42 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       }
     };
     const onError = (err: Error) => {
-      const existing = useAppStore.getState().downloadProgress[downloadKey];
-      setDownloadProgress(downloadKey, {
-        progress: existing?.progress ?? 0,
-        bytesDownloaded: existing?.bytesDownloaded ?? 0,
-        totalBytes: existing?.totalBytes ?? totalBytes,
-        ownerDownloadId: existing?.ownerDownloadId,
-        status: 'failed',
-        reason: err.message,
-      });
-      setDownloadIds(prev => {
-        const { [downloadKey]: _r, ...rest } = prev;
-        downloadIdsRef.current = rest;
-        return rest;
-      });
+      if (currentDownloadId) {
+        useDownloadStore.getState().setStatus(currentDownloadId, 'failed', { message: err.message });
+      }
       setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message)));
     };
     try {
-      const info = await modelManager.downloadModelBackground(model.id, file, onProgress);
-      setDownloadIds(prev => {
-        const next = { ...prev, [downloadKey]: info.downloadId };
-        downloadIdsRef.current = next;
-        return next;
-      });
-      setDownloadProgress(downloadKey, {
-        progress: 0,
+      const info = await modelManager.downloadModelBackground(model.id, file);
+      currentDownloadId = info.downloadId;
+      useDownloadStore.getState().add({
+        modelKey,
+        downloadId: info.downloadId,
+        modelId: model.id,
+        fileName: file.name,
+        quantization: file.quantization,
+        modelType: 'text',
+        status: 'pending',
         bytesDownloaded: 0,
         totalBytes,
-        ownerDownloadId: info.downloadId,
-        status: 'pending',
-        reason: undefined,
-        reasonCode: undefined,
+        combinedTotalBytes: totalBytes,
+        progress: 0,
+        createdAt: Date.now(),
       });
       modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (e) { onError(e as Error); }
   };
 
-  const handleCancelDownload = async (downloadKey: string) => {
-    let downloadId: number | undefined = downloadIds[downloadKey];
-    if (downloadId == null) {
-      // Fallback: look up downloadId from persisted store (e.g. after app restart)
-      const { activeBackgroundDownloads } = useAppStore.getState();
-      const entry = Object.entries(activeBackgroundDownloads).find(
-        ([, metadata]) => metadata != null && `${metadata.modelId}/${metadata.fileName}` === downloadKey,
-      );
-      if (entry) downloadId = Number(entry[0]);
-    }
-    if (downloadId == null) return;
+  const handleCancelDownload = async (modelKey: string) => {
+    const entry = useDownloadStore.getState().downloads[modelKey];
+    if (!entry) return;
+    useDownloadStore.getState().remove(modelKey);
     try {
-      await modelManager.cancelBackgroundDownload(downloadId);
+      await modelManager.cancelBackgroundDownload(entry.downloadId);
+      if (entry.mmProjDownloadId) {
+        await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
+      }
     } catch { /* ignore cancel errors */ }
-    setDownloadProgress(downloadKey, null);
-    setDownloadIds(prev => {
-      const { [downloadKey]: _r, ...rest } = prev;
-      downloadIdsRef.current = rest;
-      return rest;
-    });
   };
 
   const handleDeleteModel = async (modelId: string) => {
@@ -380,13 +339,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     isLoadingFiles,
     filterState, setFilterState,
     textFiltersVisible, setTextFiltersVisible,
-    downloadedModels, downloadProgress,
+    downloadedModels,
     hasActiveFilters, ramGB, deviceRecommendation,
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo,
     handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel,
-    downloadIds,
   };
 }

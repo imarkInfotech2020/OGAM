@@ -51,7 +51,7 @@ export const StorageSettingsScreen: React.FC = () => {
   }, [loadStorageInfo]);
 
   const handleClearStaleDownload = useCallback(
-    (downloadId: number) => {
+    (downloadId: string) => {
       setBackgroundDownload(downloadId, null);
     },
     [setBackgroundDownload],
@@ -70,7 +70,7 @@ export const StorageSettingsScreen: React.FC = () => {
             onPress: () => {
               setAlertState(hideAlert());
               for (const [downloadId] of staleDownloads) {
-                setBackgroundDownload(Number(downloadId), null);
+                setBackgroundDownload(downloadId, null);
               }
             },
           },
@@ -211,7 +211,7 @@ export const StorageSettingsScreen: React.FC = () => {
                 </View>
                 <TouchableOpacity
                   style={styles.deleteButton}
-                  onPress={() => handleClearStaleDownload(Number(downloadId))}
+                  onPress={() => handleClearStaleDownload(downloadId)}
                 >
                   <Icon name="x" size={18} color={colors.error} />
                 </TouchableOpacity>

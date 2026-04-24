@@ -8,7 +8,7 @@ type DownloadProgressInfo = {
   progress: number;
   bytesDownloaded: number;
   totalBytes: number;
-  ownerDownloadId?: number;
+  ownerDownloadId?: string;
   status?: BackgroundDownloadStatus | string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
@@ -61,8 +61,8 @@ interface AppState {
   setModelMaxContext: (ctx: number | null) => void;
   downloadProgress: Record<string, DownloadProgressInfo>;
   setDownloadProgress: (modelId: string, progress: DownloadProgressInfo | null) => void;
-  activeBackgroundDownloads: Record<number, PersistedDownloadInfo>;
-  setBackgroundDownload: (downloadId: number, info: PersistedDownloadInfo | null) => void;
+  activeBackgroundDownloads: Record<string, PersistedDownloadInfo>;
+  setBackgroundDownload: (downloadId: string, info: PersistedDownloadInfo | null) => void;
   clearBackgroundDownloads: () => void;
   settings: AppSettings;
   updateSettings: (settings: Partial<AppSettings>) => void;
@@ -74,11 +74,11 @@ interface AppState {
   removeDownloadedImageModel: (modelId: string) => void;
   setActiveImageModelId: (modelId: string | null) => void;
   imageModelDownloading: string[];
-  imageModelDownloadIds: Record<string, number>;
+  imageModelDownloadIds: Record<string, string>;
   addImageModelDownloading: (modelId: string) => void;
   removeImageModelDownloading: (modelId: string) => void;
   clearImageModelDownloading: () => void;
-  setImageModelDownloadId: (modelId: string, downloadId: number | null) => void;
+  setImageModelDownloadId: (modelId: string, downloadId: string | null) => void;
   isGeneratingImage: boolean;
   imageGenerationProgress: { step: number; totalSteps: number } | null;
   imageGenerationStatus: string | null;

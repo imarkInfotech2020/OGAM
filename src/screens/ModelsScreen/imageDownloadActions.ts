@@ -13,7 +13,7 @@ import { ONNXImageModel } from '../../types';
 import { ImageModelDescriptor } from './types';
 
 /** Remove downloading indicator and clear progress for a model. */
-export function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, downloadId?: number) {
+export function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, downloadId?: string) {
   deps.removeImageModelDownloading(modelId);
   deps.clearModelProgress(modelId);
   const progressKeys = new Set<string>([
@@ -33,7 +33,7 @@ export function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, d
 /** Register a downloaded image model, activate if first, then cleanup + alert. */
 export async function registerAndNotify(
   deps: ImageDownloadDeps,
-  opts: { imageModel: ONNXImageModel; modelName: string; downloadId?: number },
+  opts: { imageModel: ONNXImageModel; modelName: string; downloadId?: string },
 ) {
   const { imageModel, modelName, downloadId } = opts;
   await modelManager.addDownloadedImageModel(imageModel);
@@ -48,7 +48,7 @@ export async function registerAndNotify(
 
 /** Wire error + complete listeners that unsub on completion and share cleanup logic. */
 export function wireDownloadListeners(
-  ctx: { downloadId: number; modelId: string; deps: ImageDownloadDeps },
+  ctx: { downloadId: string; modelId: string; deps: ImageDownloadDeps },
   onCompleteWork: () => Promise<void>,
 ) {
   const { downloadId, modelId, deps } = ctx;
@@ -78,7 +78,7 @@ export interface ImageDownloadDeps {
     modelId: string;
     progress: number;
     totalBytes: number;
-    downloadId?: number;
+    downloadId?: string;
     fileName?: string;
     status?: string;
     bytesDownloaded?: number;
@@ -87,9 +87,9 @@ export interface ImageDownloadDeps {
   addDownloadedImageModel: (m: ONNXImageModel) => void;
   activeImageModelId: string | null;
   setActiveImageModelId: (id: string) => void;
-  setImageModelDownloadId: (modelId: string, downloadId: number | null) => void;
-  setBackgroundDownload: (downloadId: number, data: any) => void;
-  getBackgroundDownload: (downloadId: number) => { modelId?: string; fileName?: string } | null;
+  setImageModelDownloadId: (modelId: string, downloadId: string | null) => void;
+  setBackgroundDownload: (downloadId: string, data: any) => void;
+  getBackgroundDownload: (downloadId: string) => { modelId?: string; fileName?: string } | null;
   setAlertState: (s: AlertState) => void;
   setDownloadProgress: (key: string, progress: { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string } | null) => void;
   /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
@@ -169,75 +169,53 @@ export async function downloadCoreMLMultiFile(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
 ): Promise<void> {
-  if (!backgroundDownloadService.isAvailable()) {
-    deps.setAlertState(showAlert('Not Available', 'Background downloads not available'));
-    return;
-  }
   if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
 
   deps.addImageModelDownloading(modelInfo.id);
   deps.updateModelProgress(modelInfo.id, 0);
-  deps.syncSharedProgress({
-    modelId: modelInfo.id,
-    progress: 0,
-    totalBytes: modelInfo.size,
-    fileName: modelInfo.id,
-    status: 'pending',
-  });
+  deps.syncSharedProgress({ modelId: modelInfo.id, progress: 0, totalBytes: modelInfo.size, status: 'pending' });
+
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    const downloadInfo = await backgroundDownloadService.startMultiFileDownload({
-      files: modelInfo.coremlFiles.map(f => ({ url: f.downloadUrl, relativePath: f.relativePath, size: f.size })),
-      fileName: modelInfo.id, modelId: `image:${modelInfo.id}`, destinationDir: modelDir, totalBytes: modelInfo.size,
-    });
-    deps.setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
-    deps.setBackgroundDownload(downloadInfo.downloadId, {
-      modelId: `image:${modelInfo.id}`, fileName: modelInfo.id, quantization: 'Core ML', author: 'Image Generation', totalBytes: modelInfo.size,
-      imageModelName: modelInfo.name, imageModelDescription: modelInfo.description,
-      imageModelSize: modelInfo.size, imageModelStyle: modelInfo.style,
-      imageModelBackend: modelInfo.backend, imageModelRepo: modelInfo.repo,
-      imageDownloadType: 'multifile',
-    });
-    deps.syncSharedProgress({
-      modelId: modelInfo.id,
-      progress: 0,
-      totalBytes: modelInfo.size,
-      downloadId: downloadInfo.downloadId,
-      fileName: modelInfo.id,
-      status: 'pending',
-    });
-    const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
-      // Remove the native download entry in background (no-op for multi-file — files already moved)
-      backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, modelDir).catch(() => {});
-      const imageModel: ONNXImageModel = {
-        id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
-        modelPath: modelDir, downloadedAt: new Date().toISOString(),
-        size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
-      };
-      // Register model first so UI unblocks, then fetch tokenizer files in background.
-      // Tokenizer files are only needed at generation time, not for model registration.
-      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
-      if (modelInfo.backend === 'coreml' && modelInfo.repo) {
-        downloadCoreMLTokenizerFiles(modelDir, modelInfo.repo).catch(() => {});
-      }
-    });
-    listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
-      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0;
-      deps.updateModelProgress(modelInfo.id, progress);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName: modelInfo.id,
-        status: ev.status,
+    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
+    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+
+    const files = modelInfo.coremlFiles;
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    let downloadedSize = 0;
+    for (const file of files) {
+      const filePath = `${modelDir}/${file.relativePath}`;
+      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
+      const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
+      const capturedDownloadedSize = downloadedSize;
+      const { promise } = backgroundDownloadService.downloadFileTo({
+        params: { url: file.downloadUrl, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
+        destPath: filePath,
+        onProgress: (bytesDownloaded) => {
+          deps.updateModelProgress(modelInfo.id, ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95);
+        },
       });
-    }));
-    backgroundDownloadService.startProgressPolling();
+      await promise;
+      downloadedSize += file.size;
+      deps.updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
+    }
+    const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+    const imageModel: ONNXImageModel = {
+      id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
+      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
+      size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
+      attentionVariant: modelInfo.attentionVariant,
+    };
+    await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+    if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
+    try {
+      const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
+      if (await RNFS.exists(dir)) await RNFS.unlink(dir);
+    } catch { /* ignore cleanup errors */ }
     cleanupDownloadState(deps, modelInfo.id);
   }
 }
@@ -268,7 +246,7 @@ export async function proceedWithDownload(
     const fileName = `${modelInfo.id}.zip`;
     const downloadInfo = await backgroundDownloadService.startDownload({
       url: modelInfo.downloadUrl, fileName, modelId: `image:${modelInfo.id}`,
-      title: `Downloading ${modelInfo.name}`, description: 'Image generation model', totalBytes: modelInfo.size,
+      totalBytes: modelInfo.size,
     });
     deps.setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
     deps.setBackgroundDownload(downloadInfo.downloadId, {
@@ -330,7 +308,6 @@ export async function proceedWithDownload(
       await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
     });
     listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
       const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0;
       deps.updateModelProgress(modelInfo.id, progress);
       deps.syncSharedProgress({

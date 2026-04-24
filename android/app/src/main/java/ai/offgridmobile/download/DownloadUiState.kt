@@ -87,7 +87,6 @@ object DownloadReason {
         val normalizedCode = code?.ifBlank { null }
         return when (status) {
             DownloadStatus.RUNNING -> DownloadUiState(status = "running")
-            DownloadStatus.PAUSED -> DownloadUiState(status = "paused")
             DownloadStatus.COMPLETED -> DownloadUiState(status = "completed")
             DownloadStatus.CANCELLED -> DownloadUiState(
                 status = "cancelled",
@@ -99,26 +98,11 @@ object DownloadReason {
                 reason = messageFor(normalizedCode ?: UNKNOWN_ERROR),
                 reasonCode = normalizedCode ?: UNKNOWN_ERROR,
             )
-            DownloadStatus.QUEUED -> when (normalizedCode) {
-                NETWORK_LOST -> DownloadUiState(
-                    status = "waiting_for_network",
-                    reason = messageFor(NETWORK_LOST),
-                    reasonCode = NETWORK_LOST,
-                )
-                NETWORK_TIMEOUT,
-                SERVER_UNAVAILABLE,
-                DOWNLOAD_INTERRUPTED,
-                -> DownloadUiState(
-                    status = "retrying",
-                    reason = messageFor(normalizedCode),
-                    reasonCode = normalizedCode,
-                )
-                else -> DownloadUiState(
-                    status = "pending",
-                    reason = messageFor(normalizedCode),
-                    reasonCode = normalizedCode,
-                )
-            }
+            DownloadStatus.QUEUED -> DownloadUiState(
+                status = "pending",
+                reason = messageFor(normalizedCode),
+                reasonCode = normalizedCode,
+            )
         }
     }
 }

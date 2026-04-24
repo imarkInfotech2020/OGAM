@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 import ai.offgridmobile.SafePromise
 
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
@@ -33,10 +34,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     private val downloadDao = DownloadDatabase.getInstance(reactContext).downloadDao()
     private val workManager = WorkManager.getInstance(reactContext)
 
-    // LiveData observers keyed by downloadId — enables real-time progress tracking
-    // Future: integrate with device connectivity service to enforce WiFi-only downloads
-    // when requested, allowing models to resume over cellular if necessary.
-    private val workObservers = mutableMapOf<Long, Observer<List<WorkInfo>>>()
+    private val workObservers = mutableMapOf<String, Observer<List<WorkInfo>>>()
 
     init {
         DownloadEventBridge.attach(reactContext)
@@ -64,16 +62,21 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val fileName = params.getString("fileName")?.let { File(it).name }
                     ?: return@launch SafePromise(promise, NAME).reject("DOWNLOAD_ERROR", "fileName is required")
 
-                // SSRF: validate host against allowlist
                 if (!WorkerDownload.isHostAllowed(url)) {
                     return@launch SafePromise(promise, NAME).reject("DOWNLOAD_ERROR", "Download URL host not allowed")
                 }
 
                 val modelId = params.getString("modelId") ?: ""
-                val title = params.getString("title") ?: fileName
+                val modelKey = params.getString("modelKey")
+                val modelType = params.getString("modelType") ?: "text"
+                val quantization = params.getString("quantization")
+                val combinedTotalBytes = if (params.hasKey("combinedTotalBytes")) params.getDouble("combinedTotalBytes").toLong() else 0L
+                val mmProjDownloadId = params.getString("mmProjDownloadId")
+                val metadataJson = params.getString("metadataJson")
                 val totalBytes = if (params.hasKey("totalBytes")) params.getDouble("totalBytes").toLong() else 0L
                 val expectedSha256 = params.getString("sha256")?.lowercase()?.takeIf { it.length == 64 }
-                val downloadId = System.currentTimeMillis()
+
+                val downloadId = UUID.randomUUID().toString()
                 val destination = File(
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                     "${downloadId}_${fileName}",
@@ -84,13 +87,18 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     url = url,
                     fileName = fileName,
                     modelId = modelId,
-                    title = title,
                     destination = destination,
                     totalBytes = totalBytes,
                     downloadedBytes = 0L,
                     status = DownloadStatus.QUEUED,
                     createdAt = System.currentTimeMillis(),
                     expectedSha256 = expectedSha256,
+                    modelType = modelType,
+                    modelKey = modelKey,
+                    quantization = quantization,
+                    combinedTotalBytes = combinedTotalBytes,
+                    mmProjDownloadId = mmProjDownloadId,
+                    metadataJson = metadataJson,
                 )
 
                 withContext(Dispatchers.IO) {
@@ -100,7 +108,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 WorkerDownload.enqueue(reactApplicationContext, downloadId)
 
                 val result = Arguments.createMap().apply {
-                    putDouble("downloadId", downloadId.toDouble())
+                    putString("downloadId", downloadId)
                     putString("fileName", fileName)
                     putString("modelId", modelId)
                 }
@@ -112,58 +120,23 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun cancelDownload(downloadId: Double, promise: Promise) {
+    fun cancelDownload(downloadId: String, promise: Promise) {
         scope.launch {
             try {
-                val id = downloadId.toLong()
                 withContext(Dispatchers.IO) {
-                    val download = downloadDao.getDownload(id)
+                    val download = downloadDao.getDownload(downloadId)
                     if (download != null) {
-                        downloadDao.updateStatus(id, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
+                        downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
                         val file = File(download.destination)
                         if (file.exists()) file.delete()
                     }
                 }
-                WorkerDownload.cancel(reactApplicationContext, id)
+                WorkerDownload.cancel(reactApplicationContext, downloadId)
                 workManager.pruneWork()
-                removeWorkObserver(id)
+                removeWorkObserver(downloadId)
                 SafePromise(promise, NAME).resolve(true)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
-            }
-        }
-    }
-
-    @ReactMethod
-    fun pauseDownload(downloadId: Double, promise: Promise) {
-        scope.launch {
-            try {
-                val id = downloadId.toLong()
-                withContext(Dispatchers.IO) {
-                    downloadDao.updateStatus(id, DownloadStatus.PAUSED)
-                }
-                SafePromise(promise, NAME).resolve(true)
-            } catch (e: Exception) {
-                SafePromise(promise, NAME).reject("PAUSE_ERROR", "Failed to pause download: ${e.message}", e)
-            }
-        }
-    }
-
-    @ReactMethod
-    fun resumeDownload(downloadId: Double, promise: Promise) {
-        scope.launch {
-            try {
-                val id = downloadId.toLong()
-                withContext(Dispatchers.IO) {
-                    downloadDao.getDownload(id) ?: return@withContext
-                    downloadDao.updateStatus(id, DownloadStatus.QUEUED)
-                    // KEEP policy: leave running work untouched, restart only if finished/missing
-                    WorkerDownload.enqueueResume(reactApplicationContext, id)
-                }
-                registerObserver(id)
-                SafePromise(promise, NAME).resolve(true)
-            } catch (e: Exception) {
-                SafePromise(promise, NAME).reject("RESUME_ERROR", "Failed to resume download: ${e.message}", e)
             }
         }
     }
@@ -174,7 +147,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             try {
                 val downloads = withContext(Dispatchers.IO) {
                     downloadDao.getAllDownloads().first().filter {
-                        it.status != DownloadStatus.COMPLETED &&
                         it.status != DownloadStatus.CANCELLED
                     }
                 }
@@ -182,17 +154,23 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 downloads.forEach { d ->
                     val uiState = DownloadReason.toUiState(d.status, d.error)
                     result.pushMap(Arguments.createMap().apply {
-                        putDouble("downloadId", d.id.toDouble())
+                        putString("id", d.id)
+                        putString("url", d.url)
                         putString("fileName", d.fileName)
                         putString("modelId", d.modelId)
-                        putString("title", d.title)
+                        putString("modelKey", d.modelKey)
+                        putString("modelType", d.modelType)
+                        putString("quantization", d.quantization)
                         putDouble("totalBytes", d.totalBytes.toDouble())
                         putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
+                        putDouble("combinedTotalBytes", d.combinedTotalBytes.toDouble())
+                        putString("mmProjDownloadId", d.mmProjDownloadId)
+                        putString("metadataJson", d.metadataJson)
                         putString("status", uiState.status)
                         putString("localUri", Uri.fromFile(File(d.destination)).toString())
                         putString("reason", uiState.reason ?: "")
                         putString("reasonCode", uiState.reasonCode ?: "")
-                        putDouble("startedAt", d.createdAt.toDouble())
+                        putDouble("createdAt", d.createdAt.toDouble())
                     })
                 }
                 SafePromise(promise, NAME).resolve(result)
@@ -203,18 +181,17 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun getDownloadProgress(downloadId: Double, promise: Promise) {
+    fun getDownloadProgress(downloadId: String, promise: Promise) {
         scope.launch {
             try {
-                val id = downloadId.toLong()
-                val d = withContext(Dispatchers.IO) { downloadDao.getDownload(id) }
+                val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                 if (d == null) {
                     SafePromise(promise, NAME).reject("QUERY_ERROR", "Download not found")
                     return@launch
                 }
                 val uiState = DownloadReason.toUiState(d.status, d.error)
                 val result = Arguments.createMap().apply {
-                    putDouble("downloadId", d.id.toDouble())
+                    putString("downloadId", d.id)
                     putDouble("bytesDownloaded", d.downloadedBytes.toDouble())
                     putDouble("totalBytes", d.totalBytes.toDouble())
                     putString("status", uiState.status)
@@ -230,12 +207,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
-    fun moveCompletedDownload(downloadId: Double, targetPath: String, promise: Promise) {
+    fun moveCompletedDownload(downloadId: String, targetPath: String, promise: Promise) {
         scope.launch {
             try {
-                val id = downloadId.toLong()
-
-                // Validate target path against app sandbox directories to prevent path traversal.
                 if (targetPath.isNotEmpty()) {
                     val targetFile = File(targetPath)
                     val allowedDirs = listOfNotNull(
@@ -249,7 +223,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     }
                 }
 
-                val d = withContext(Dispatchers.IO) { downloadDao.getDownload(id) }
+                val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                     ?: run {
                         SafePromise(promise, NAME).reject("MOVE_ERROR", "Download info not found")
                         return@launch
@@ -258,7 +232,6 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val sourceFile = File(d.destination)
 
                 if (targetPath.isEmpty()) {
-                    // Cleanup-only — delete DB entry, no move needed
                     withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
                     SafePromise(promise, NAME).resolve(sourceFile.absolutePath)
                     return@launch
@@ -296,19 +269,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Re-attaches WorkInfo LiveData observers for any downloads still active in the DB.
-     * Called by JS on app resume — covers the case where the app was killed while a
-     * download was running and WorkManager continued in the background.
-     */
     @ReactMethod
     fun startProgressPolling() {
         scope.launch {
             val active = withContext(Dispatchers.IO) {
                 downloadDao.getAllDownloads().first().filter {
-                    it.status == DownloadStatus.QUEUED ||
-                    it.status == DownloadStatus.RUNNING ||
-                    it.status == DownloadStatus.PAUSED
+                    it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.RUNNING
                 }
             }
             active.forEach { registerObserver(it.id) }
@@ -321,38 +287,12 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         workObservers.clear()
     }
 
-    /**
-     * Update foreground notification with combined progress for vision models.
-     * This shows combined GGUF + mmproj progress in a single notification.
-     */
-    @ReactMethod
-    fun updateCombinedProgress(
-        modelId: String,
-        fileName: String,
-        mmprojFileName: String,
-        mainBytes: Double,
-        mainTotal: Double,
-        mmprojBytes: Double,
-        mmprojTotal: Double,
-    ) {
-        val mainBytesL = mainBytes.toLong()
-        val mainTotalL = mainTotal.toLong()
-        val mmprojBytesL = mmprojBytes.toLong()
-        val mmprojTotalL = mmprojTotal.toLong()
-
-        // Combined progress tracking is handled in the JS layer.
-    }
-
     @ReactMethod
     fun addListener(eventName: String) { /* required for RN event emitter */ }
 
     @ReactMethod
     fun removeListeners(count: Int) { /* required for RN event emitter */ }
 
-    /**
-     * Returns true if the app is already excluded from battery optimisation.
-     * Always returns true on Android < M.
-     */
     @ReactMethod
     fun isBatteryOptimizationIgnored(promise: Promise) {
         try {
@@ -363,14 +303,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val pm = reactApplicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             promise.resolve(pm.isIgnoringBatteryOptimizations(reactApplicationContext.packageName))
         } catch (e: Exception) {
-            promise.resolve(true) // fail open — don't block downloads
+            promise.resolve(true)
         }
     }
 
-    /**
-     * Opens the system dialog asking the user to exempt this app from battery optimisation.
-     * No-op on Android < M.
-     */
     @ReactMethod
     fun requestBatteryOptimizationIgnore() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
@@ -380,17 +316,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             reactApplicationContext.startActivity(intent)
-        } catch (_: Exception) {
-            // no-op: device may not have a Settings app to handle this intent
-        }
+        } catch (_: Exception) { }
     }
 
     // -------------------------------------------------------------------------
     // WorkInfo observer management
     // -------------------------------------------------------------------------
 
-    private fun registerObserver(downloadId: Long) {
-        // Remove stale observer if present
+    private fun registerObserver(downloadId: String) {
         workObservers[downloadId]?.let { old ->
             workManager.getWorkInfosForUniqueWorkLiveData(WorkerDownload.workName(downloadId))
                 .removeObserver(old)
@@ -418,7 +351,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                             ?: return@launch
                         val uiState = DownloadReason.toUiState(d.status, d.error)
-                        if (uiState.status == "pending" || uiState.status == "retrying" || uiState.status == "waiting_for_network" || uiState.status == "paused") {
+                        if (uiState.status == "pending") {
                             DownloadEventBridge.progress(
                                 downloadId,
                                 d.fileName,
@@ -460,9 +393,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     }
                 }
                 WorkInfo.State.CANCELLED -> {
-                    scope.launch {
-                        removeWorkObserver(downloadId)
-                    }
+                    scope.launch { removeWorkObserver(downloadId) }
                 }
                 else -> Unit
             }
@@ -473,7 +404,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             .observeForever(observer)
     }
 
-    private fun removeWorkObserver(downloadId: Long) {
+    private fun removeWorkObserver(downloadId: String) {
         workObservers.remove(downloadId)?.let { observer ->
             workManager.getWorkInfosForUniqueWorkLiveData(WorkerDownload.workName(downloadId))
                 .removeObserver(observer)
@@ -484,16 +415,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     companion object {
         const val NAME = "DownloadManagerModule"
-
-        // Legacy SharedPreferences constants — retained so WorkerDownloadStore compiles
-        // during the transition period while both download paths coexist.
-        const val PREFS_NAME = "OffgridMobileDownloads"
-        const val DOWNLOADS_KEY = "active_downloads"
-        const val STATUS_PENDING = "pending"
-        const val STATUS_RUNNING = "running"
-        const val STATUS_PAUSED = "paused"
-        const val STATUS_COMPLETED = "completed"
-        const val STATUS_FAILED = "failed"
-        const val STATUS_UNKNOWN = "unknown"
+        const val PREFS_NAME = "OffgridWorkerDownloads"
+        const val DOWNLOADS_KEY = "downloads"
     }
 }

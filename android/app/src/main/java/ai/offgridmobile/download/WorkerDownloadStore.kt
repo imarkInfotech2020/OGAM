@@ -10,13 +10,12 @@ object WorkerDownloadStore {
 
     const val STATUS_PENDING = "pending"
     const val STATUS_RUNNING = "running"
-    const val STATUS_PAUSED = "paused"
     const val STATUS_COMPLETED = "completed"
     const val STATUS_FAILED = "failed"
     const val STATUS_CANCELLED = "cancelled"
     const val STATUS_UNKNOWN = "unknown"
 
-    private val ACTIVE_STATUSES = setOf(STATUS_PENDING, STATUS_RUNNING, STATUS_PAUSED)
+    private val ACTIVE_STATUSES = setOf(STATUS_PENDING, STATUS_RUNNING)
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -94,20 +93,6 @@ object WorkerDownloadStore {
 
     @Synchronized
     fun hasActiveLegacyDownloads(context: Context): Boolean {
-        val raw = context.getSharedPreferences(
-            DownloadManagerModule.PREFS_NAME,
-            Context.MODE_PRIVATE
-        ).getString(DownloadManagerModule.DOWNLOADS_KEY, "[]") ?: "[]"
-        val downloads = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
-        val activeLegacyStatuses = setOf(
-            DownloadManagerModule.STATUS_PENDING,
-            DownloadManagerModule.STATUS_RUNNING,
-            DownloadManagerModule.STATUS_PAUSED,
-        )
-        for (i in 0 until downloads.length()) {
-            val status = downloads.getJSONObject(i).optString("status", DownloadManagerModule.STATUS_PENDING)
-            if (status in activeLegacyStatuses) return true
-        }
         return false
     }
 

@@ -4,9 +4,8 @@ export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 export type DownloadCompleteCallback = (model: DownloadedModel) => void;
 export type DownloadErrorCallback = (error: Error) => void;
 
-// Callback for background download metadata persistence
 export type BackgroundDownloadMetadataCallback = (
-  downloadId: number,
+  downloadId: string,
   info: {
     modelId: string;
     fileName: string;
@@ -17,7 +16,7 @@ export type BackgroundDownloadMetadataCallback = (
     mmProjFileName?: string;
     mmProjFileSize?: number;
     mmProjLocalPath?: string | null;
-    mmProjDownloadId?: number;
+    mmProjDownloadId?: string;
   } | null
 ) => void;
 
@@ -28,8 +27,7 @@ export type BackgroundDownloadContext =
       localPath: string;
       mmProjLocalPath: string | null;
       removeProgressListener: () => void;
-      // Parallel mmproj download tracking
-      mmProjDownloadId?: number;
+      mmProjDownloadId?: string;
       mmProjCompleted: boolean;
       mainCompleted: boolean;
       mainCompleteHandled?: boolean;

@@ -14,6 +14,8 @@ import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
+import { hydrateDownloadStore } from './src/services/downloadHydration';
+import { useDownloads } from './src/hooks/useDownloads';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 
@@ -28,6 +30,7 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
+  useDownloads();
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
@@ -53,8 +56,7 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
-      // Lock is already set when going to background
-      // Nothing additional needed here
+      hydrateDownloadStore().catch(() => {});
     }, []),
   });
 
@@ -76,6 +78,9 @@ function App() {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
 
+      // Hydrate download store from SQLite before any screen mounts.
+      hydrateDownloadStore().catch(() => {});
+
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
       const deviceInfo = await hardwareService.getDeviceInfo();
@@ -95,7 +100,6 @@ function App() {
         setBackgroundDownload,
         activeBackgroundDownloads,
         addDownloadedModel,
-        setDownloadProgress,
       } = useAppStore.getState();
       modelManager.setBackgroundDownloadMetadataCallback((downloadId, info) => {
         setBackgroundDownload(downloadId, info);
@@ -126,41 +130,6 @@ function App() {
         }
       } catch (err) {
         logger.error('[App] Failed to sync completed image downloads:', err);
-      }
-
-      // Re-wire event listeners for downloads that were still running when the
-      // app was killed (running/pending status in Android DownloadManager).
-      try {
-        const restoredDownloadIds = await modelManager.restoreInProgressDownloads(
-          activeBackgroundDownloads,
-          (progress) => {
-            const key = `${progress.modelId}/${progress.fileName}`;
-            setDownloadProgress(key, {
-              progress: progress.progress,
-              bytesDownloaded: progress.bytesDownloaded,
-              totalBytes: progress.totalBytes,
-              ownerDownloadId: progress.downloadId,
-            });
-          },
-        );
-        for (const downloadId of restoredDownloadIds) {
-          const metadata = activeBackgroundDownloads[downloadId];
-          const progressKey = metadata ? `${metadata.modelId}/${metadata.fileName}` : null;
-          modelManager.watchDownload(
-            downloadId,
-            (model) => {
-              if (progressKey) setDownloadProgress(progressKey, null);
-              addDownloadedModel(model);
-              logger.log('[App] Restored in-progress download completed:', model.name);
-            },
-            (error) => {
-              if (progressKey) setDownloadProgress(progressKey, null);
-              logger.error('[App] Restored in-progress download failed:', error);
-            },
-          );
-        }
-      } catch (err) {
-        logger.error('[App] Failed to restore in-progress downloads:', err);
       }
 
       // Clear any stale imageModelDownloading entries — if the app was killed

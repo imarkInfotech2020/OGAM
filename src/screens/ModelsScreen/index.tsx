@@ -149,7 +149,6 @@ export const ModelsScreen: React.FC = () => {
           deviceRecommendation={vm.deviceRecommendation}
           hasActiveFilters={vm.hasActiveFilters}
           downloadedModels={vm.downloadedModels}
-          downloadProgress={vm.downloadProgress}
           alertState={vm.alertState}
           setAlertState={vm.setAlertState}
           focusTrigger={vm.focusTrigger}
@@ -160,7 +159,6 @@ export const ModelsScreen: React.FC = () => {
           handleRepairMmProj={vm.handleRepairMmProj}
           handleCancelDownload={vm.handleCancelDownload}
           handleDeleteModel={vm.handleDeleteModel}
-          downloadIds={vm.downloadIds}
           clearFilters={vm.clearFilters}
           toggleFilterDimension={vm.toggleFilterDimension}
           toggleOrg={vm.toggleOrg}

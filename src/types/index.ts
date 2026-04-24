@@ -68,7 +68,7 @@ export interface PersistedDownloadInfo {
   mmProjFileName?: string;
   mmProjFileSize?: number;
   mmProjLocalPath?: string | null;
-  mmProjDownloadId?: number;
+  mmProjDownloadId?: string;
   // Image model metadata (for restoring downloads after app kill)
   imageModelName?: string;
   imageModelDescription?: string;
@@ -80,7 +80,7 @@ export interface PersistedDownloadInfo {
 }
 
 export interface DownloadProgress {
-  downloadId?: number;
+  downloadId?: string;
   modelId: string;
   fileName: string;
   bytesDownloaded: number;
@@ -335,12 +335,8 @@ export interface Project {
 export type BackgroundDownloadStatus =
   | 'pending'
   | 'running'
-  | 'paused'
   | 'completed'
   | 'failed'
-  | 'unknown'
-  | 'retrying'
-  | 'waiting_for_network'
   | 'cancelled';
 export type BackgroundDownloadReasonCode =
   | 'none'
@@ -359,17 +355,14 @@ export type BackgroundDownloadReasonCode =
   | 'client_error'
   | 'unknown_error';
 export interface BackgroundDownloadInfo {
-  downloadId: number;
+  downloadId: string;
   fileName: string;
-  title?: string;
   modelId: string;
   status: BackgroundDownloadStatus;
   bytesDownloaded: number;
   totalBytes: number;
   localUri?: string;
   startedAt: number;
-  completedAt?: number;
-  failureReason?: string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
 }

@@ -84,23 +84,13 @@ class DownloadManagerModuleTest {
 
     @Test
     fun workNameReturnsDownloadUnderscoreId() {
-        assertEquals("download_42", WorkerDownload.workName(42L))
-    }
-
-    @Test
-    fun workNameHandlesZeroId() {
-        assertEquals("download_0", WorkerDownload.workName(0L))
-    }
-
-    @Test
-    fun workNameHandlesLargeTimestampId() {
-        assertEquals("download_1712345678901", WorkerDownload.workName(1712345678901L))
+        assertEquals("download_abc-123", WorkerDownload.workName("abc-123"))
     }
 
     @Test
     fun workNameIsUniquePerDownloadId() {
-        val name1 = WorkerDownload.workName(1L)
-        val name2 = WorkerDownload.workName(2L)
+        val name1 = WorkerDownload.workName("id-1")
+        val name2 = WorkerDownload.workName("id-2")
         assertTrue(name1 != name2)
     }
 
@@ -111,42 +101,25 @@ class DownloadManagerModuleTest {
         val values = DownloadStatus.entries.map { it.name }
         assertTrue(values.contains("QUEUED"))
         assertTrue(values.contains("RUNNING"))
-        assertTrue(values.contains("PAUSED"))
         assertTrue(values.contains("COMPLETED"))
         assertTrue(values.contains("FAILED"))
         assertTrue(values.contains("CANCELLED"))
+        assertFalse("PAUSED must not exist in V2", values.contains("PAUSED"))
     }
 
     @Test
-    fun downloadStatusRunningLowercasedMatchesLegacyConstant() {
-        assertEquals(DownloadManagerModule.STATUS_RUNNING, DownloadStatus.RUNNING.name.lowercase())
+    fun downloadStatusRunningLowercasedIsRunning() {
+        assertEquals("running", DownloadStatus.RUNNING.name.lowercase())
     }
 
     @Test
-    fun downloadStatusPausedLowercasedMatchesLegacyConstant() {
-        assertEquals(DownloadManagerModule.STATUS_PAUSED, DownloadStatus.PAUSED.name.lowercase())
+    fun downloadStatusCompletedLowercasedIsCompleted() {
+        assertEquals("completed", DownloadStatus.COMPLETED.name.lowercase())
     }
 
     @Test
-    fun downloadStatusCompletedLowercasedMatchesLegacyConstant() {
-        assertEquals(DownloadManagerModule.STATUS_COMPLETED, DownloadStatus.COMPLETED.name.lowercase())
-    }
-
-    @Test
-    fun downloadStatusFailedLowercasedMatchesLegacyConstant() {
-        assertEquals(DownloadManagerModule.STATUS_FAILED, DownloadStatus.FAILED.name.lowercase())
-    }
-
-    // ── DownloadManagerModule legacy constants ────────────────────────────────
-
-    @Test
-    fun legacyStatusConstantsHaveCorrectStringValues() {
-        assertEquals("pending", DownloadManagerModule.STATUS_PENDING)
-        assertEquals("running", DownloadManagerModule.STATUS_RUNNING)
-        assertEquals("paused", DownloadManagerModule.STATUS_PAUSED)
-        assertEquals("completed", DownloadManagerModule.STATUS_COMPLETED)
-        assertEquals("failed", DownloadManagerModule.STATUS_FAILED)
-        assertEquals("unknown", DownloadManagerModule.STATUS_UNKNOWN)
+    fun downloadStatusFailedLowercasedIsFailed() {
+        assertEquals("failed", DownloadStatus.FAILED.name.lowercase())
     }
 
     // ── WorkerDownload constants ──────────────────────────────────────────────

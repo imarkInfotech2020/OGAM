@@ -13,6 +13,8 @@ import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { makeModelKey } from '../../utils/modelKey';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
@@ -40,12 +42,11 @@ type Props = Pick<ModelsScreenViewModel,
   | 'filteredResults' | 'recommendedAsModelInfo' | 'trendingAsModelInfo'
   | 'ramGB' | 'deviceRecommendation'
   | 'hasActiveFilters'
-  | 'downloadedModels' | 'downloadProgress'
+  | 'downloadedModels'
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
   | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
-  | 'downloadIds'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
@@ -54,15 +55,15 @@ type Props = Pick<ModelsScreenViewModel,
 
 type DetailProps = Pick<Props,
   | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
-  | 'downloadProgress' | 'alertState' | 'setAlertState'
+  | 'alertState' | 'setAlertState'
   | 'getDownloadedModel' | 'isModelDownloaded'
-  | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel' | 'downloadIds'
+  | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
-  downloadProgress, alertState, setAlertState, onBack,
-  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, downloadIds,
+  alertState, setAlertState, onBack,
+  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -81,15 +82,19 @@ const ModelDetailView: React.FC<DetailProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const storeDownloads = useDownloadStore(state => state.downloads);
+
   const getFileCardState = (item: ModelFile) => {
-    const downloadKey = `${selectedModel.id}/${item.name}`;
-    const repairKey = `${selectedModel.id}/${item.name}-mmproj`;
-    const progress = downloadProgress[downloadKey] || downloadProgress[repairKey];
+    const modelKey = makeModelKey(selectedModel.id, item.name);
+    const entry = storeDownloads[modelKey];
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
-    const canCancel = !!progress && downloadIds[downloadKey] != null;
-    return { downloadKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
+    const progress = entry
+      ? { progress: entry.progress, bytesDownloaded: entry.bytesDownloaded, totalBytes: entry.combinedTotalBytes, status: entry.status }
+      : undefined;
+    const canCancel = !!entry && (entry.status === 'pending' || entry.status === 'running');
+    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
   };
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
@@ -219,10 +224,9 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     selectedModel, setSelectedModel, modelFiles, setModelFiles, isLoadingFiles,
     filterState, textFiltersVisible, setTextFiltersVisible,
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo, ramGB, deviceRecommendation,
-    hasActiveFilters, downloadedModels, downloadProgress,
+    hasActiveFilters, downloadedModels,
     alertState, setAlertState, focusTrigger,
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
-    downloadIds,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel,
@@ -252,7 +256,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         isLoadingFiles={isLoadingFiles}
         filterState={filterState}
         ramGB={ramGB}
-        downloadProgress={downloadProgress}
         alertState={alertState}
         setAlertState={setAlertState}
         onBack={onBack}
@@ -262,7 +265,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         handleRepairMmProj={handleRepairMmProj}
         handleCancelDownload={handleCancelDownload}
         handleDeleteModel={handleDeleteModel}
-        downloadIds={downloadIds}
       />
     );
   }
