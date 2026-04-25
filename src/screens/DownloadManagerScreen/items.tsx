@@ -77,12 +77,10 @@ function getStatusLabel(item: DownloadItem): string {
 interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
-  onRetry?: (item: DownloadItem) => void;
-  onRestart?: (item: DownloadItem) => void;
   isStalled?: boolean;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry, onRestart, isStalled }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, isStalled }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -140,7 +138,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
           )}
           <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }, isStalled && { color: colors.warning }]}>
-            {isStalled ? 'Looks stuck — try restart' : getStatusLabel(item)}
+            {isStalled ? 'Looks stuck' : getStatusLabel(item)}
           </Text>
         </View>
       </View>
@@ -153,28 +151,6 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           >
             <Icon name="trash-2" size={14} color={colors.error} />
             <Text style={styles.removeButtonText}>Remove</Text>
-          </TouchableOpacity>
-          {onRetry && item.modelType !== 'image' && (
-            <TouchableOpacity
-              style={styles.retryButton}
-              testID="retry-download-button"
-              onPress={() => onRetry(item)}
-            >
-              <Icon name="rotate-cw" size={14} color={colors.primary} />
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-      {item.status !== 'failed' && onRestart && item.modelType !== 'image' && (
-        <View style={styles.failedActionsRow}>
-          <TouchableOpacity
-            style={styles.retryButton}
-            testID="restart-download-button"
-            onPress={() => onRestart(item)}
-          >
-            <Icon name="rotate-cw" size={14} color={isStalled ? colors.warning : colors.primary} />
-            <Text style={[styles.retryButtonText, isStalled && { color: colors.warning }]}>Restart</Text>
           </TouchableOpacity>
         </View>
       )}

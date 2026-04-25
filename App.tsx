@@ -36,7 +36,6 @@ function App() {
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
-  const clearImageModelDownloading = useAppStore((s) => s.clearImageModelDownloading);
 
   const { colors, isDark } = useTheme();
 
@@ -95,49 +94,11 @@ function App() {
       // Clean up any mmproj files that were incorrectly added as standalone models
       await modelManager.cleanupMMProjEntries();
 
-      // Wire up background download metadata persistence
-      const {
-        setBackgroundDownload,
-        activeBackgroundDownloads,
-        addDownloadedModel,
-      } = useAppStore.getState();
-      modelManager.setBackgroundDownloadMetadataCallback((downloadId, info) => {
-        setBackgroundDownload(downloadId, info);
-      });
-
-      // Recover any background downloads that completed while app was dead
-      try {
-        const recoveredModels = await modelManager.syncBackgroundDownloads(
-          activeBackgroundDownloads,
-          (downloadId) => setBackgroundDownload(downloadId, null)
-        );
-        for (const model of recoveredModels) {
-          addDownloadedModel(model);
-          logger.log('[App] Recovered background download:', model.name);
-        }
-      } catch (err) {
-        logger.error('[App] Failed to sync background downloads:', err);
-      }
-
-      // Recover completed image downloads (zip unzip / multifile finalization)
-      try {
-        const recoveredImageModels = await modelManager.syncCompletedImageDownloads(
-          activeBackgroundDownloads,
-          (downloadId) => setBackgroundDownload(downloadId, null),
-        );
-        for (const model of recoveredImageModels) {
-          logger.log('[App] Recovered image download:', model.name);
-        }
-      } catch (err) {
-        logger.error('[App] Failed to sync completed image downloads:', err);
-      }
-
-      // Clear any stale imageModelDownloading entries — if the app was killed
-      // mid-download these would be persisted as "downloading" forever.
-      clearImageModelDownloading();
-
       // Scan for any models that may have been downloaded externally or
-      // when app was killed before JS callback fired
+      // while the app was killed. hydrateDownloadStore (called on cold start
+      // and foreground resume) repopulates in-flight downloads directly
+      // from the native Room DB, replacing the old metadata-callback +
+      // syncBackgroundDownloads recovery path.
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);

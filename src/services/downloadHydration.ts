@@ -3,6 +3,23 @@ import { useDownloadStore, DownloadEntry, DownloadStatus, ModelType } from '../s
 import { makeModelKey, ModelKey } from '../utils/modelKey';
 import { BackgroundDownloadStatus } from '../types';
 
+type NativeDownloadRow = {
+  downloadId: string;
+  modelId?: string;
+  modelKey?: string;
+  fileName: string;
+  quantization?: string;
+  modelType?: ModelType;
+  status: BackgroundDownloadStatus;
+  bytesDownloaded?: number;
+  totalBytes?: number;
+  combinedTotalBytes?: number;
+  mmProjDownloadId?: string;
+  reason?: string;
+  createdAt?: number;
+  metadataJson?: string;
+};
+
 export function isMmProjFileName(fileName: string): boolean {
   return /-mmproj\.gguf$/i.test(fileName);
 }
@@ -20,80 +37,89 @@ function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {
 }
 
 function computeProgress(
-  bytesDownloaded: number,
-  mmProjBytesDownloaded: number,
-  combinedTotalBytes: number,
+  downloadedBytes: number,
   totalBytes: number,
+  combinedTotalBytes: number,
 ): number {
   const denom = combinedTotalBytes || totalBytes;
   if (denom <= 0) return 0;
-  return (bytesDownloaded + mmProjBytesDownloaded) / denom;
+  return downloadedBytes / denom;
 }
 
-export async function hydrateDownloadStore(): Promise<void> {
-  if (!backgroundDownloadService.isAvailable()) return;
-
-  const rows = await backgroundDownloadService.getActiveDownloads() as any[];
-
-  // Build set of known mmproj sidecar IDs
-  const mmProjIds = new Set<string>(
+function getMmProjIds(rows: NativeDownloadRow[]): Set<string> {
+  return new Set<string>(
     rows
       .filter(r => r.mmProjDownloadId != null)
       .map(r => r.mmProjDownloadId as string),
   );
+}
 
-  // Parent rows only — sidecars never shown in UI.
-  // Drop cancelled (user explicitly removed) and completed (already lives in
-  // downloadedModels/downloadedImageModels). Failed, pending, running,
-  // retrying, waiting_for_network must survive restart so users can resume
-  // or remove them deliberately.
-  const parentRows = rows.filter(r =>
+function getParentRows(rows: NativeDownloadRow[], mmProjIds: Set<string>): NativeDownloadRow[] {
+  return rows.filter(r =>
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
     r.status !== 'cancelled' &&
     r.status !== 'completed',
   );
+}
 
-  // Hydration rule: if multiple rows share modelKey, latest createdAt wins
-  const latestByKey = new Map<ModelKey, typeof parentRows[0]>();
-  for (const row of parentRows) {
+function getLatestRowsByKey(rows: NativeDownloadRow[]): Map<ModelKey, NativeDownloadRow> {
+  const latestByKey = new Map<ModelKey, NativeDownloadRow>();
+  for (const row of rows) {
     const key: ModelKey = row.modelKey ?? makeModelKey(row.modelId ?? '', row.fileName);
     const existing = latestByKey.get(key);
     if (!existing || (row.createdAt ?? 0) > (existing.createdAt ?? 0)) {
       latestByKey.set(key, row);
     }
   }
+  return latestByKey;
+}
 
-  const entries: DownloadEntry[] = [];
-  for (const [modelKey, row] of latestByKey) {
-    const mmProjRow = row.mmProjDownloadId
-      ? rows.find(r => r.downloadId === row.mmProjDownloadId)
-      : undefined;
+function toDownloadEntry(
+  modelKey: ModelKey,
+  row: NativeDownloadRow,
+  rows: NativeDownloadRow[],
+): DownloadEntry {
+  const mmProjRow = row.mmProjDownloadId
+    ? rows.find(r => r.downloadId === row.mmProjDownloadId)
+    : undefined;
 
-    const mmProjBytes = mmProjRow?.bytesDownloaded ?? 0;
-    const combinedTotal = row.combinedTotalBytes || row.totalBytes;
+  const mmProjBytes = mmProjRow?.bytesDownloaded ?? 0;
+  const combinedTotal = row.combinedTotalBytes || row.totalBytes || 0;
+  const downloadedBytes = (row.bytesDownloaded ?? 0) + mmProjBytes;
 
-    entries.push({
-      modelKey,
-      downloadId: row.downloadId,
-      modelId: row.modelId ?? '',
-      fileName: row.fileName,
-      quantization: row.quantization ?? 'Unknown',
-      modelType: (row.modelType as ModelType) ?? 'text',
-      status: mapNativeStatus(row.status),
-      bytesDownloaded: row.bytesDownloaded ?? 0,
-      totalBytes: row.totalBytes ?? 0,
-      combinedTotalBytes: combinedTotal,
-      progress: computeProgress(row.bytesDownloaded ?? 0, mmProjBytes, combinedTotal, row.totalBytes ?? 0),
-      mmProjDownloadId: row.mmProjDownloadId ?? undefined,
-      mmProjBytesDownloaded: mmProjRow ? mmProjBytes : undefined,
-      mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
-      errorMessage: row.reason || undefined,
-      createdAt: row.createdAt ?? 0,
-      lastProgressAt: Date.now(),
-      metadataJson: row.metadataJson ?? undefined,
-    });
-  }
+  return {
+    modelKey,
+    downloadId: row.downloadId,
+    modelId: row.modelId ?? '',
+    fileName: row.fileName,
+    quantization: row.quantization ?? 'Unknown',
+    modelType: (row.modelType as ModelType) ?? 'text',
+    status: mapNativeStatus(row.status),
+    bytesDownloaded: row.bytesDownloaded ?? 0,
+    totalBytes: row.totalBytes ?? 0,
+    combinedTotalBytes: combinedTotal,
+    progress: computeProgress(downloadedBytes, row.totalBytes ?? 0, combinedTotal),
+    mmProjDownloadId: row.mmProjDownloadId ?? undefined,
+    mmProjBytesDownloaded: mmProjRow ? mmProjBytes : undefined,
+    mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
+    errorMessage: row.reason || undefined,
+    createdAt: row.createdAt ?? 0,
+    lastProgressAt: Date.now(),
+    metadataJson: row.metadataJson ?? undefined,
+  };
+}
+
+export async function hydrateDownloadStore(): Promise<void> {
+  if (!backgroundDownloadService.isAvailable()) return;
+
+  const rows = await backgroundDownloadService.getActiveDownloads() as NativeDownloadRow[];
+  const mmProjIds = getMmProjIds(rows);
+  const parentRows = getParentRows(rows, mmProjIds);
+  const latestByKey = getLatestRowsByKey(parentRows);
+  const entries = Array.from(latestByKey.entries(), ([modelKey, row]) =>
+    toDownloadEntry(modelKey, row, rows),
+  );
 
   useDownloadStore.getState().hydrate(entries);
 }

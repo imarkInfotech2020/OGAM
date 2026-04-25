@@ -2,17 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage, PersistedDownloadInfo, BackgroundDownloadReasonCode, BackgroundDownloadStatus } from '../types';
-
-type DownloadProgressInfo = {
-  progress: number;
-  bytesDownloaded: number;
-  totalBytes: number;
-  ownerDownloadId?: string;
-  status?: BackgroundDownloadStatus | string;
-  reason?: string;
-  reasonCode?: BackgroundDownloadReasonCode;
-};
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage } from '../types';
 
 type OnboardingChecklist = {
   downloadedModel: boolean; loadedModel: boolean; sentMessage: boolean;
@@ -59,11 +49,6 @@ interface AppState {
   setIsLoadingModel: (loading: boolean) => void;
   modelMaxContext: number | null;
   setModelMaxContext: (ctx: number | null) => void;
-  downloadProgress: Record<string, DownloadProgressInfo>;
-  setDownloadProgress: (modelId: string, progress: DownloadProgressInfo | null) => void;
-  activeBackgroundDownloads: Record<string, PersistedDownloadInfo>;
-  setBackgroundDownload: (downloadId: string, info: PersistedDownloadInfo | null) => void;
-  clearBackgroundDownloads: () => void;
   settings: AppSettings;
   updateSettings: (settings: Partial<AppSettings>) => void;
   resetSettings: () => void;
@@ -73,12 +58,6 @@ interface AppState {
   addDownloadedImageModel: (model: ONNXImageModel) => void;
   removeDownloadedImageModel: (modelId: string) => void;
   setActiveImageModelId: (modelId: string | null) => void;
-  imageModelDownloading: string[];
-  imageModelDownloadIds: Record<string, string>;
-  addImageModelDownloading: (modelId: string) => void;
-  removeImageModelDownloading: (modelId: string) => void;
-  clearImageModelDownloading: () => void;
-  setImageModelDownloadId: (modelId: string, downloadId: string | null) => void;
   isGeneratingImage: boolean;
   imageGenerationProgress: { step: number; totalSteps: number } | null;
   imageGenerationStatus: string | null;
@@ -147,11 +126,14 @@ function migrateEnabledTools(merged: any): void {
 }
 function migratePersistedState(persistedState: any, currentState: AppState): AppState {
   const merged = { ...currentState, ...persistedState };
-  if (typeof merged.imageModelDownloading === 'string') {
-    merged.imageModelDownloading = [merged.imageModelDownloading];
-  } else if (!Array.isArray(merged.imageModelDownloading)) {
-    merged.imageModelDownloading = [];
-  }
+  // Drop legacy download tracking fields. The unified downloadStore (backed
+  // by the native Room DB) is now the source of truth. Persisted entries
+  // from old versions are silently ignored on rehydrate.
+  delete merged.downloadProgress;
+  delete merged.activeBackgroundDownloads;
+  delete merged.imageModelDownloading;
+  delete merged.imageModelDownloadIds;
+  delete merged.imageModelDownloadId;
   if (persistedState?.settings?.modelLoadingStrategy === 'memory') {
     merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
   }
@@ -165,16 +147,6 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
     };
   }
 
-  if (typeof merged.imageModelDownloadId === 'number') {
-    const ids: Record<string, number> = {};
-    if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
-      ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
-    }
-    merged.imageModelDownloadIds = ids;
-    delete merged.imageModelDownloadId;
-  } else if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
-    merged.imageModelDownloadIds = {};
-  }
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
@@ -216,36 +188,6 @@ export const useAppStore = create<AppState>()(
       setIsLoadingModel: (loading) => set({ isLoadingModel: loading }),
       modelMaxContext: null,
       setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
-      downloadProgress: {},
-      setDownloadProgress: (modelId, progress) =>
-        set((state) => {
-          if (progress === null) {
-            const { [modelId]: _removed, ...rest } = state.downloadProgress;
-            return { downloadProgress: rest };
-          }
-          return {
-            downloadProgress: {
-              ...state.downloadProgress,
-              [modelId]: progress,
-            },
-          };
-        }),
-      activeBackgroundDownloads: {},
-      setBackgroundDownload: (downloadId, info) =>
-        set((state) => {
-          if (info === null) {
-            const { [downloadId]: _removed, ...rest } = state.activeBackgroundDownloads;
-            return { activeBackgroundDownloads: rest };
-          }
-          return {
-            activeBackgroundDownloads: {
-              ...state.activeBackgroundDownloads,
-              [downloadId]: info,
-            },
-          };
-        }),
-      clearBackgroundDownloads: () =>
-        set({ activeBackgroundDownloads: {} }),
       settings: { ...DEFAULT_SETTINGS },
       updateSettings: (newSettings) =>
         set((state) => ({
@@ -266,33 +208,6 @@ export const useAppStore = create<AppState>()(
           activeImageModelId: state.activeImageModelId === modelId ? null : state.activeImageModelId,
         })),
       setActiveImageModelId: (modelId) => set({ activeImageModelId: modelId }),
-      // Image model download tracking
-      imageModelDownloading: [],
-      imageModelDownloadIds: {},
-      addImageModelDownloading: (modelId) =>
-        set((state) => ({
-          imageModelDownloading: [...state.imageModelDownloading.filter(id => id !== modelId), modelId],
-        })),
-      removeImageModelDownloading: (modelId) =>
-        set((state) => {
-          const { [modelId]: _removed, ...restIds } = state.imageModelDownloadIds;
-          return {
-            imageModelDownloading: state.imageModelDownloading.filter(id => id !== modelId),
-            imageModelDownloadIds: restIds,
-          };
-        }),
-      clearImageModelDownloading: () =>
-        set({ imageModelDownloading: [], imageModelDownloadIds: {} }),
-      setImageModelDownloadId: (modelId, downloadId) =>
-        set((state) => {
-          if (downloadId === null) {
-            const { [modelId]: _removed, ...rest } = state.imageModelDownloadIds;
-            return { imageModelDownloadIds: rest };
-          }
-          return {
-            imageModelDownloadIds: { ...state.imageModelDownloadIds, [modelId]: downloadId },
-          };
-        }),
       // Image generation state
       isGeneratingImage: false,
       imageGenerationProgress: null,
@@ -352,10 +267,7 @@ export const useAppStore = create<AppState>()(
         checklistDismissed: state.checklistDismissed,
         activeModelId: state.activeModelId,
         settings: state.settings,
-        activeBackgroundDownloads: state.activeBackgroundDownloads,
         activeImageModelId: state.activeImageModelId,
-        imageModelDownloading: state.imageModelDownloading,
-        imageModelDownloadIds: state.imageModelDownloadIds,
         generatedImages: state.generatedImages,
         shownSpotlights: state.shownSpotlights,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,

@@ -4,20 +4,15 @@ export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 export type DownloadCompleteCallback = (model: DownloadedModel) => void;
 export type DownloadErrorCallback = (error: Error) => void;
 
+/**
+ * @deprecated Legacy metadata callback used by the old appStore-based
+ * download tracking. The unified downloadStore now persists everything via
+ * the native Room DB. Type retained only so existing callers compile;
+ * registering a callback is a no-op.
+ */
 export type BackgroundDownloadMetadataCallback = (
   downloadId: string,
-  info: {
-    modelId: string;
-    fileName: string;
-    quantization: string;
-    author: string;
-    totalBytes: number;
-    mainFileSize?: number;
-    mmProjFileName?: string;
-    mmProjFileSize?: number;
-    mmProjLocalPath?: string | null;
-    mmProjDownloadId?: string;
-  } | null
+  info: unknown,
 ) => void;
 
 export type BackgroundDownloadContext =

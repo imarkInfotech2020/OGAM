@@ -18,24 +18,54 @@ export interface UseDownloadManagerResult {
   alertState: AlertState;
   setAlertState: (state: AlertState) => void;
   handleRemoveDownload: (item: DownloadItem) => void;
-  handleRetryDownload: (item: DownloadItem) => void;
-  handleRestartDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   isStalled: (item: DownloadItem) => boolean;
   totalStorageUsed: number;
 }
 
+function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
+  if (!entry.metadataJson) return null;
+  try {
+    return JSON.parse(entry.metadataJson);
+  } catch {
+    return null;
+  }
+}
+
 function entryToActiveItem(entry: DownloadEntry): DownloadItem {
+  const metadata = parseEntryMetadata(entry);
+  const isImage = entry.modelType === 'image';
+  const displayModelId = isImage && entry.modelId.startsWith('image:')
+    ? entry.modelId.replace('image:', '')
+    : entry.modelId;
+  const displayFileName = isImage && metadata?.imageModelName
+    ? metadata.imageModelName
+    : entry.fileName;
+  const displayAuthor = isImage
+    ? (metadata?.imageModelBackend === 'coreml'
+      ? 'Core ML'
+      : metadata?.imageModelBackend === 'qnn'
+        ? 'NPU'
+        : metadata?.imageModelBackend === 'mnn'
+          ? 'GPU'
+          : 'Image Generation')
+    : entry.modelId.split('/')[0] ?? 'Unknown';
+  const displayQuantization = isImage
+    ? (metadata?.imageModelBackend === 'coreml'
+      ? 'Core ML'
+      : '')
+    : entry.quantization;
+
   return {
     type: 'active',
     modelType: entry.modelType,
     downloadId: entry.downloadId,
     modelKey: entry.modelKey,
-    modelId: entry.modelId,
-    fileName: entry.fileName,
-    author: entry.modelId.split('/')[0] ?? 'Unknown',
-    quantization: entry.quantization,
+    modelId: displayModelId,
+    fileName: displayFileName,
+    author: displayAuthor,
+    quantization: displayQuantization,
     fileSize: entry.combinedTotalBytes || entry.totalBytes,
     bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
     progress: entry.progress,
@@ -52,7 +82,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     removeDownloadedModel,
     downloadedImageModels,
     removeDownloadedImageModel,
-    removeImageModelDownloading,
   } = useAppStore();
 
   const downloads = useDownloadStore(state => state.downloads);
@@ -111,9 +140,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
           await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
         }
       }
-      if (item.modelId.startsWith('image:')) {
-        removeImageModelDownloading(item.modelId.replace('image:', ''));
-      }
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
@@ -127,53 +153,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       [
         { text: 'No', style: 'cancel' },
         { text: 'Yes', style: 'destructive', onPress: () => { executeRemoveDownload(item); } },
-      ],
-    ));
-  };
-
-  const executeRetryDownload = async (item: DownloadItem) => {
-    setAlertState(hideAlert());
-    const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
-    const entry = useDownloadStore.getState().downloads[modelKey];
-    if (!entry) {
-      setAlertState(showAlert('Error', 'Could not retry - download info not found'));
-      return;
-    }
-    try {
-      const downloadUrl = huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName);
-      const modelFile = {
-        name: entry.fileName,
-        size: entry.totalBytes,
-        quantization: entry.quantization,
-        downloadUrl,
-      };
-      const info = await modelManager.downloadModelBackground(entry.modelId, modelFile as any);
-      useDownloadStore.getState().retryEntry(modelKey, info.downloadId);
-      modelManager.watchDownload(
-        info.downloadId,
-        async (_dm) => {
-          useDownloadStore.getState().setCompleted(info.downloadId);
-          const models = await modelManager.getDownloadedModels();
-          setDownloadedModels(models);
-          setAlertState(showAlert('Download Complete', `${entry.fileName} downloaded successfully`));
-        },
-        (error) => {
-          useDownloadStore.getState().setStatus(info.downloadId, 'failed', { message: error.message });
-        },
-      );
-    } catch (error) {
-      logger.error('[DownloadManager] Failed to retry download:', error);
-      setAlertState(showAlert('Error', 'Failed to retry download'));
-    }
-  };
-
-  const handleRetryDownload = (item: DownloadItem) => {
-    setAlertState(showAlert(
-      'Retry Download',
-      'This will restart the download from the beginning. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Retry', style: 'default', onPress: () => { executeRetryDownload(item); } },
       ],
     ));
   };
@@ -251,10 +230,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     });
   };
 
-  // Restart = retry without confirming. For "looks stuck" / proactive restart on a
-  // running download. Reuses the failed-retry plumbing, just skips the dialog.
-  const handleRestartDownload = (item: DownloadItem) => { executeRetryDownload(item); };
-
   // Tick once a second so isStalled-based UI updates without depending on store events.
   const [stallTick, setStallTick] = useState(0);
   useEffect(() => {
@@ -277,8 +252,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     alertState,
     setAlertState,
     handleRemoveDownload,
-    handleRetryDownload,
-    handleRestartDownload,
     handleDeleteItem,
     handleRepairVision,
     isStalled,

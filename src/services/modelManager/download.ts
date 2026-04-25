@@ -15,7 +15,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 
 export function mmProjLocalName(ggufFileName: string): string {
-  return ggufFileName.replace(/\.gguf$/i, '') + '-mmproj.gguf';
+  return `${ggufFileName.replace(/\.gguf$/i, '')}-mmproj.gguf`;
 }
 
 export {
