@@ -48,9 +48,7 @@ function computeProgress(
 
 function getMmProjIds(rows: NativeDownloadRow[]): Set<string> {
   return new Set<string>(
-    rows
-      .filter(r => r.mmProjDownloadId != null)
-      .map(r => r.mmProjDownloadId!),
+    rows.flatMap(r => r.mmProjDownloadId != null ? [r.mmProjDownloadId] : []),
   );
 }
 

@@ -72,7 +72,7 @@ function assertNotCancelled(modelId: string, runtime: MultifileRuntime) {
 }
 
 function wireCurrentDownloadPromise(downloadIdPromise: Promise<string> | undefined, runtime: MultifileRuntime) {
-  if (!downloadIdPromise) return;
+  if (downloadIdPromise === undefined) return;
   downloadIdPromise.then((downloadId) => {
     runtime.currentDownloadId = downloadId;
     if (runtime.cancelled) {
