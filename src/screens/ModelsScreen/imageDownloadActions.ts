@@ -14,6 +14,7 @@ import { ONNXImageModel } from '../../types';
 import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { ImageModelDescriptor } from './types';
+import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 
 export interface ImageDownloadDeps {
   addDownloadedImageModel: (m: ONNXImageModel) => void;
@@ -458,46 +459,6 @@ export async function proceedWithDownload(
   }
 }
 
-function getQnnWarningMessage(
-  modelInfo: ImageModelDescriptor,
-  socInfo: { hasNPU: boolean; qnnVariant?: string },
-): string | null {
-  if (!socInfo.hasNPU) {
-    return 'NPU models require a Qualcomm Snapdragon processor. ' +
-      'Your device does not have a compatible NPU and this model will not work. ' +
-      'Consider downloading a CPU model instead.';
-  }
-  if (!modelInfo.variant || !socInfo.qnnVariant) return null;
-
-  const deviceVariant = socInfo.qnnVariant;
-  const modelVariant = modelInfo.variant;
-  const compatible =
-    modelVariant === deviceVariant || deviceVariant === '8gen2' ||
-    (deviceVariant === '8gen1' && modelVariant !== '8gen2');
-  if (compatible) return null;
-
-  return `This model is built for ${modelVariant === '8gen2' ? 'flagship' : modelVariant} Snapdragon chips. ` +
-    `Your device uses a ${deviceVariant === 'min' ? 'non-flagship' : deviceVariant} chip and this model will likely crash. ` +
-    `Download the non-flagship variant instead.`;
-}
-
-function showQnnWarningAlert(
-  opts: { warningMessage: string; hasNPU: boolean; modelInfo: ImageModelDescriptor },
-  deps: ImageDownloadDeps,
-): void {
-  const { warningMessage, hasNPU, modelInfo } = opts;
-  if (hasNPU) {
-    deps.setAlertState(showAlert('Incompatible Model', warningMessage, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Download Anyway', style: 'destructive', onPress: () => { deps.setAlertState(hideAlert()); proceedWithDownload(modelInfo, deps); } },
-    ]));
-  } else {
-    deps.setAlertState(showAlert('Incompatible Model', warningMessage, [
-      { text: 'OK', style: 'cancel' },
-    ]));
-  }
-}
-
 export async function handleDownloadImageModel(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
@@ -506,7 +467,12 @@ export async function handleDownloadImageModel(
     const socInfo = await hardwareService.getSoCInfo();
     const warningMessage = getQnnWarningMessage(modelInfo, socInfo);
     if (warningMessage) {
-      showQnnWarningAlert({ warningMessage, hasNPU: socInfo.hasNPU, modelInfo }, deps);
+      showQnnWarningAlert({
+        warningMessage,
+        hasNPU: socInfo.hasNPU,
+        modelInfo,
+        onDownloadAnyway: () => { void proceedWithDownload(modelInfo, deps); },
+      }, deps);
       return;
     }
   }
