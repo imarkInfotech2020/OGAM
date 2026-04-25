@@ -43,8 +43,6 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
     onProgress: jest.fn(() => jest.fn()),
     onComplete: jest.fn(() => jest.fn()),
     onError: jest.fn(() => jest.fn()),
-    markSilent: jest.fn(),
-    unmarkSilent: jest.fn(),
     excludeFromBackup: jest.fn(() => Promise.resolve(true)),
   },
 }));
@@ -66,7 +64,7 @@ function visionFile(mainSize = 4_000_000_000, mmProjSize = 500_000_000) {
 }
 
 // Helper: stub startDownload to return sequential download IDs
-function stubStartDownload(ids: number[]) {
+function stubStartDownload(ids: string[]) {
   let idx = 0;
   mockService.startDownload.mockImplementation(async (params: any) => ({
     downloadId: ids[idx++] ?? ids[ids.length - 1],
@@ -80,9 +78,9 @@ function stubStartDownload(ids: number[]) {
 }
 
 // Helper: capture onComplete callbacks keyed by downloadId
-function captureCompleteCallbacks(): Record<number, (event: any) => Promise<void>> {
-  const cbs: Record<number, any> = {};
-  mockService.onComplete.mockImplementation((id: number, cb: any) => {
+function captureCompleteCallbacks(): Record<string, (event: any) => Promise<void>> {
+  const cbs: Record<string, any> = {};
+  mockService.onComplete.mockImplementation((id: string, cb: any) => {
     cbs[id] = cb;
     return jest.fn();
   });
@@ -90,9 +88,9 @@ function captureCompleteCallbacks(): Record<number, (event: any) => Promise<void
 }
 
 // Helper: capture onError callbacks keyed by downloadId
-function captureErrorCallbacks(): Record<number, (event: any) => void> {
-  const cbs: Record<number, any> = {};
-  mockService.onError.mockImplementation((id: number, cb: any) => {
+function captureErrorCallbacks(): Record<string, (event: any) => void> {
+  const cbs: Record<string, any> = {};
+  mockService.onError.mockImplementation((id: string, cb: any) => {
     cbs[id] = cb;
     return jest.fn();
   });
@@ -100,9 +98,9 @@ function captureErrorCallbacks(): Record<number, (event: any) => void> {
 }
 
 // Helper: capture onProgress callbacks keyed by downloadId
-function captureProgressCallbacks(): Record<number, (event: any) => void> {
-  const cbs: Record<number, any> = {};
-  mockService.onProgress.mockImplementation((id: number, cb: any) => {
+function captureProgressCallbacks(): Record<string, (event: any) => void> {
+  const cbs: Record<string, any> = {};
+  mockService.onProgress.mockImplementation((id: string, cb: any) => {
     cbs[id] = cb;
     return jest.fn();
   });
@@ -110,7 +108,7 @@ function captureProgressCallbacks(): Record<number, (event: any) => void> {
 }
 
 describe('Parallel mmproj download', () => {
-  let bgContext: Map<number, BackgroundDownloadContext>;
+  let bgContext: Map<string, BackgroundDownloadContext>;
   let metadataCallback: jest.Mock;
 
   beforeEach(() => {
@@ -129,7 +127,7 @@ describe('Parallel mmproj download', () => {
 
   describe('performBackgroundDownload', () => {
     it('starts both main and mmproj downloads in parallel', async () => {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
 
       const info = await performBackgroundDownload({
         modelId: 'test/model',
@@ -139,7 +137,7 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      expect(info.downloadId).toBe(42);
+      expect(info.downloadId).toBe('42');
       expect(mockService.startDownload).toHaveBeenCalledTimes(2);
       expect(mockService.startDownload).toHaveBeenCalledWith(
         expect.objectContaining({ fileName: 'vision.gguf' }),
@@ -150,7 +148,7 @@ describe('Parallel mmproj download', () => {
     });
 
     it('persists mmProjDownloadId in metadata callback', async () => {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
 
       await performBackgroundDownload({
         modelId: 'test/model',
@@ -160,14 +158,14 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      expect(metadataCallback).toHaveBeenCalledWith(42, expect.objectContaining({
-        mmProjDownloadId: 43,
+      expect(metadataCallback).toHaveBeenCalledWith('42', expect.objectContaining({
+        mmProjDownloadId: '43',
         mmProjFileName: 'vision-mmproj.gguf',
       }));
     });
 
     it('sets mmProjCompleted=false and mainCompleted=false in context', async () => {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
 
       await performBackgroundDownload({
         modelId: 'test/model',
@@ -177,14 +175,14 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       expect(ctx.mmProjCompleted).toBe(false);
       expect(ctx.mainCompleted).toBe(false);
-      expect(ctx.mmProjDownloadId).toBe(43);
+      expect(ctx.mmProjDownloadId).toBe('43');
     });
 
     it('skips mmproj download when mmproj already exists', async () => {
-      stubStartDownload([42]);
+      stubStartDownload(['42']);
       mockedRNFS.exists
         .mockResolvedValueOnce(false) // main doesn't exist
         .mockResolvedValueOnce(true); // mmproj exists
@@ -200,14 +198,12 @@ describe('Parallel mmproj download', () => {
 
       // Only main download started
       expect(mockService.startDownload).toHaveBeenCalledTimes(1);
-      expect(mockService.markSilent).not.toHaveBeenCalled();
-
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       expect(ctx.mmProjCompleted).toBe(true);
     });
 
     it('only starts main download for non-vision models', async () => {
-      stubStartDownload([42]);
+      stubStartDownload(['42']);
       const file = createModelFile({ name: 'model.gguf', size: 4_000_000_000 });
 
       await performBackgroundDownload({
@@ -219,7 +215,7 @@ describe('Parallel mmproj download', () => {
       });
 
       expect(mockService.startDownload).toHaveBeenCalledTimes(1);
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       expect(ctx.mmProjCompleted).toBe(true);
       expect(ctx.mmProjDownloadId).toBeUndefined();
     });
@@ -250,7 +246,7 @@ describe('Parallel mmproj download', () => {
   describe('combined progress', () => {
     it('reports combined progress from both downloads', async () => {
       const progressCbs = captureProgressCallbacks();
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
       const onProgress = jest.fn();
 
       await performBackgroundDownload({
@@ -263,14 +259,14 @@ describe('Parallel mmproj download', () => {
       });
 
       // Simulate main progress: 2GB downloaded
-      progressCbs[42]?.({ downloadId: 42, bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, status: 'running', fileName: 'vision.gguf', modelId: 'test/model' });
+      progressCbs['42']?.({ downloadId: '42', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, status: 'running', fileName: 'vision.gguf', modelId: 'test/model' });
       expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
         bytesDownloaded: 2_000_000_000, // main only so far
         totalBytes: 5_000_000_000, // combined
       }));
 
       // Simulate mmproj progress: 500MB downloaded
-      progressCbs[43]?.({ downloadId: 43, bytesDownloaded: 500_000_000, totalBytes: 1_000_000_000, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model' });
+      progressCbs['43']?.({ downloadId: '43', bytesDownloaded: 500_000_000, totalBytes: 1_000_000_000, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model' });
       expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
         bytesDownloaded: 2_500_000_000, // 2GB main + 500MB mmproj
         totalBytes: 5_000_000_000,
@@ -280,7 +276,7 @@ describe('Parallel mmproj download', () => {
 
     it('includes pre-existing mmproj size in progress when mmproj already downloaded', async () => {
       const progressCbs = captureProgressCallbacks();
-      stubStartDownload([42]);
+      stubStartDownload(['42']);
       mockedRNFS.exists
         .mockResolvedValueOnce(false) // main
         .mockResolvedValueOnce(true); // mmproj exists
@@ -297,7 +293,7 @@ describe('Parallel mmproj download', () => {
       });
 
       // Main progress: 2GB
-      progressCbs[42]?.({ downloadId: 42, bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, status: 'running', fileName: 'vision.gguf', modelId: 'test/model' });
+      progressCbs['42']?.({ downloadId: '42', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, status: 'running', fileName: 'vision.gguf', modelId: 'test/model' });
       expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
         bytesDownloaded: 3_000_000_000, // 2GB main + 1GB existing mmproj
         totalBytes: 5_000_000_000,
@@ -311,7 +307,7 @@ describe('Parallel mmproj download', () => {
 
   describe('watchBackgroundDownload — completion gating', () => {
     async function setupVisionDownload() {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
       const completeCbs = captureCompleteCallbacks();
 
       await performBackgroundDownload({
@@ -333,7 +329,7 @@ describe('Parallel mmproj download', () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
@@ -341,11 +337,11 @@ describe('Parallel mmproj download', () => {
       });
 
       // mmproj completes first
-      await completeCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf' });
+      await completeCbs['43']?.({ downloadId: '43', fileName: 'mmproj.gguf' });
       expect(onComplete).not.toHaveBeenCalled();
 
       // main completes
-      await completeCbs[42]?.({ downloadId: 42, fileName: 'vision.gguf' });
+      await completeCbs['42']?.({ downloadId: '42', fileName: 'vision.gguf' });
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
 
@@ -357,7 +353,7 @@ describe('Parallel mmproj download', () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
@@ -365,16 +361,16 @@ describe('Parallel mmproj download', () => {
       });
 
       // main completes first
-      await completeCbs[42]?.({ downloadId: 42, fileName: 'vision.gguf' });
+      await completeCbs['42']?.({ downloadId: '42', fileName: 'vision.gguf' });
       expect(onComplete).not.toHaveBeenCalled();
 
       // mmproj completes
-      await completeCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf' });
+      await completeCbs['43']?.({ downloadId: '43', fileName: 'mmproj.gguf' });
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
 
     it('fires onComplete immediately for non-vision model (no mmproj)', async () => {
-      stubStartDownload([42]);
+      stubStartDownload(['42']);
       const completeCbs = captureCompleteCallbacks();
       const file = createModelFile({ name: 'model.gguf', size: 4_000_000_000 });
 
@@ -391,14 +387,14 @@ describe('Parallel mmproj download', () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
         onComplete,
       });
 
-      await completeCbs[42]?.({ downloadId: 42, fileName: 'model.gguf' });
+      await completeCbs['42']?.({ downloadId: '42', fileName: 'model.gguf' });
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
 
@@ -409,16 +405,16 @@ describe('Parallel mmproj download', () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      await completeCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf' });
+      await completeCbs['43']?.({ downloadId: '43', fileName: 'mmproj.gguf' });
 
       expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(
-        43, `${MODELS_DIR}/vision-mmproj.gguf`,
+        '43', `${MODELS_DIR}/vision-mmproj.gguf`,
       );
     });
 
@@ -428,17 +424,17 @@ describe('Parallel mmproj download', () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
       metadataCallback.mockClear();
-      await completeCbs[43]?.({ downloadId: 43 });
-      await completeCbs[42]?.({ downloadId: 42 });
+      await completeCbs['43']?.({ downloadId: '43' });
+      await completeCbs['42']?.({ downloadId: '42' });
 
-      expect(metadataCallback).toHaveBeenCalledWith(42, null);
+      expect(metadataCallback).toHaveBeenCalledWith('42', null);
     });
   });
 
@@ -448,7 +444,7 @@ describe('Parallel mmproj download', () => {
 
   describe('watchBackgroundDownload — error handling', () => {
     it('cancels mmproj when main download fails', async () => {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
       const errorCbs = captureErrorCallbacks();
       captureCompleteCallbacks();
 
@@ -462,21 +458,21 @@ describe('Parallel mmproj download', () => {
 
       const onError = jest.fn();
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
         onError,
       });
 
-      errorCbs[42]?.({ downloadId: 42, fileName: 'vision.gguf', modelId: 'test/model', status: 'failed', reason: 'Network error' });
+      errorCbs['42']?.({ downloadId: '42', fileName: 'vision.gguf', modelId: 'test/model', status: 'failed', reason: 'Network error' });
 
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'Network error' }));
-      expect(mockService.cancelDownload).toHaveBeenCalledWith(43);
+      expect(mockService.cancelDownload).toHaveBeenCalledWith('43');
     });
 
     it('continues as text-only when mmproj download fails', async () => {
-      stubStartDownload([42, 43]);
+      stubStartDownload(['42', '43']);
       const errorCbs = captureErrorCallbacks();
       captureCompleteCallbacks();
 
@@ -490,17 +486,17 @@ describe('Parallel mmproj download', () => {
 
       const onError = jest.fn();
       watchBackgroundDownload({
-        downloadId: 42,
+        downloadId: '42',
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
         onError,
       });
 
-      errorCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf', modelId: 'test/model', status: 'failed', reason: 'Storage full' });
+      errorCbs['43']?.({ downloadId: '43', fileName: 'mmproj.gguf', modelId: 'test/model', status: 'failed', reason: 'Storage full' });
 
       expect(onError).not.toHaveBeenCalled();
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       expect(ctx.mmProjCompleted).toBe(true);
       expect(ctx.mmProjLocalPath).toBeNull();
     });
@@ -513,8 +509,8 @@ describe('Parallel mmproj download', () => {
   describe('syncCompletedBackgroundDownloads', () => {
     it('syncs completed model with mmproj download', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'completed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 4_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'completed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 4_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
       mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/vision.gguf`);
       mockedRNFS.exists.mockResolvedValue(true);
@@ -522,7 +518,7 @@ describe('Parallel mmproj download', () => {
       const clearCb = jest.fn();
       const models = await syncCompletedBackgroundDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
@@ -530,7 +526,7 @@ describe('Parallel mmproj download', () => {
             totalBytes: 4_500_000_000,
             mmProjFileName: 'vision-mmproj.gguf',
             mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -539,27 +535,27 @@ describe('Parallel mmproj download', () => {
 
       expect(models.length).toBe(1);
       // Should move both files
-      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(42, `${MODELS_DIR}/vision.gguf`);
-      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/vision-mmproj.gguf`);
-      expect(clearCb).toHaveBeenCalledWith(42);
+      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith('42', `${MODELS_DIR}/vision.gguf`);
+      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith('43', `${MODELS_DIR}/vision-mmproj.gguf`);
+      expect(clearCb).toHaveBeenCalledWith('42');
     });
 
     it('skips sync when mmproj download is still running', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'completed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 4_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 200_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'completed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 4_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 200_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       const clearCb = jest.fn();
       const models = await syncCompletedBackgroundDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -573,28 +569,28 @@ describe('Parallel mmproj download', () => {
 
     it('cancels mmproj when main download failed', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'failed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 200_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'failed', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 200_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       const clearCb = jest.fn();
       await syncCompletedBackgroundDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
         clearDownloadCallback: clearCb,
       });
 
-      expect(mockService.cancelDownload).toHaveBeenCalledWith(43);
-      expect(clearCb).toHaveBeenCalledWith(42);
+      expect(mockService.cancelDownload).toHaveBeenCalledWith('43');
+      expect(clearCb).toHaveBeenCalledWith('42');
     });
   });
 
@@ -605,13 +601,13 @@ describe('Parallel mmproj download', () => {
   describe('restoreInProgressDownloads — mmproj recovery', () => {
     it('restores both main and mmproj progress listeners', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 1_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 100_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 1_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 100_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
@@ -619,7 +615,7 @@ describe('Parallel mmproj download', () => {
             totalBytes: 4_500_000_000,
             mmProjFileName: 'vision-mmproj.gguf',
             mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -628,26 +624,26 @@ describe('Parallel mmproj download', () => {
       });
 
       expect(bgContext.size).toBe(1);
-      const ctx = bgContext.get(42) as any;
-      expect(ctx.mmProjDownloadId).toBe(43);
+      const ctx = bgContext.get('42') as any;
+      expect(ctx.mmProjDownloadId).toBe('43');
       expect(ctx.mmProjCompleted).toBe(false);
       expect(ctx.mainCompleted).toBe(false);
       // Progress listeners for both
-      expect(mockService.onProgress).toHaveBeenCalledWith(42, expect.any(Function));
-      expect(mockService.onProgress).toHaveBeenCalledWith(43, expect.any(Function));
+      expect(mockService.onProgress).toHaveBeenCalledWith('42', expect.any(Function));
+      expect(mockService.onProgress).toHaveBeenCalledWith('43', expect.any(Function));
     });
 
     it('handles mmproj completed while app was dead', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
       mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/vision-mmproj.gguf`);
       mockedRNFS.exists.mockResolvedValue(true);
 
       await restoreInProgressDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
@@ -655,7 +651,7 @@ describe('Parallel mmproj download', () => {
             totalBytes: 4_500_000_000,
             mmProjFileName: 'vision-mmproj.gguf',
             mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -663,23 +659,23 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       expect(ctx.mmProjCompleted).toBe(true);
       // Should have tried to move the completed mmproj
-      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/vision-mmproj.gguf`);
+      expect(mockService.moveCompletedDownload).toHaveBeenCalledWith('43', `${MODELS_DIR}/vision-mmproj.gguf`);
       // Should NOT register mmproj progress listener (already done)
-      expect(mockService.onProgress).not.toHaveBeenCalledWith(43, expect.any(Function));
+      expect(mockService.onProgress).not.toHaveBeenCalledWith('43', expect.any(Function));
     });
 
     it('marks mmproj as completed when it failed while app was dead', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'failed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'failed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
@@ -687,7 +683,7 @@ describe('Parallel mmproj download', () => {
             totalBytes: 4_500_000_000,
             mmProjFileName: 'vision-mmproj.gguf',
             mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -695,26 +691,26 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      const ctx = bgContext.get(42) as any;
+      const ctx = bgContext.get('42') as any;
       // mmproj failed but treated as done (vision just won't work)
       expect(ctx.mmProjCompleted).toBe(true);
     });
 
     it('does not create duplicate context for mmproj download ID', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: 42, status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, startedAt: 0 } as any,
-        { downloadId: 43, status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
         persistedDownloads: {
-          42: {
+          '42': {
             modelId: 'test/model',
             fileName: 'vision.gguf',
             quantization: 'Q4_K_M',
             author: 'test',
             totalBytes: 4_500_000_000,
-            mmProjDownloadId: 43,
+            mmProjDownloadId: '43',
           },
         },
         modelsDir: MODELS_DIR,
@@ -724,8 +720,8 @@ describe('Parallel mmproj download', () => {
 
       // Only the main download ID should be in the context, not the mmproj
       expect(bgContext.size).toBe(1);
-      expect(bgContext.has(42)).toBe(true);
-      expect(bgContext.has(43)).toBe(false);
+      expect(bgContext.has('42')).toBe(true);
+      expect(bgContext.has('43')).toBe(false);
     });
   });
 });

@@ -1282,7 +1282,7 @@ describe('ModelManager', () => {
     it('throws when background service is unavailable', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      await expect(modelManager.cancelBackgroundDownload(42)).rejects.toThrow(
+      await expect(modelManager.cancelBackgroundDownload('42')).rejects.toThrow(
         'Background downloads not supported'
       );
 
@@ -1583,8 +1583,8 @@ describe('ModelManager', () => {
         } as any);
 
       // Capture completion callbacks for both main (42) and mmproj (43)
-      const completeCallbacks: Record<number, any> = {};
-      mockedBackgroundDownloadService.onComplete.mockImplementation((id: number, cb: any) => {
+      const completeCallbacks: Record<string, any> = {};
+      mockedBackgroundDownloadService.onComplete.mockImplementation((id: string, cb: any) => {
         completeCallbacks[id] = cb;
         return jest.fn();
       });
@@ -1599,15 +1599,15 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       // mmproj completes
-      if (completeCallbacks[43]) {
-        await completeCallbacks[43]({ downloadId: 43, fileName: 'bg-mmproj.gguf' });
+      if (completeCallbacks['43']) {
+        await completeCallbacks['43']({ downloadId: '43', fileName: 'bg-mmproj.gguf' });
       }
       // onComplete should NOT fire yet — main still running
       expect(onComplete).not.toHaveBeenCalled();
 
       // main completes
-      if (completeCallbacks[42]) {
-        await completeCallbacks[42]({ downloadId: 42, fileName: 'bg-vision.gguf' });
+      if (completeCallbacks['42']) {
+        await completeCallbacks['42']({ downloadId: '42', fileName: 'bg-vision.gguf' });
       }
       // Now both are done, onComplete should fire
       expect(onComplete).toHaveBeenCalled();
@@ -1631,7 +1631,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true);
 
       mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 99,
+        downloadId: '99',
         fileName: 'bg-fail.gguf',
         modelId: 'test/model',
         status: 'pending',
@@ -1641,7 +1641,7 @@ describe('ModelManager', () => {
       } as any);
 
       let errorCallback: any;
-      mockedBackgroundDownloadService.onError.mockImplementation((id: number, cb: any) => {
+      mockedBackgroundDownloadService.onError.mockImplementation((id: string, cb: any) => {
         errorCallback = cb;
         return jest.fn();
       });
@@ -1652,7 +1652,7 @@ describe('ModelManager', () => {
 
       // Simulate the error event
       if (errorCallback) {
-        await errorCallback({ downloadId: 99, reason: 'Network error' });
+        await errorCallback({ downloadId: '99', reason: 'Network error' });
         expect(onError).toHaveBeenCalledWith(expect.any(Error));
       }
     });
@@ -1663,10 +1663,10 @@ describe('ModelManager', () => {
       const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
       const initSpy = jest.spyOn(modelManager, 'initialize').mockResolvedValue(undefined);
       try {
-        mockedBackgroundDownloadService.startDownload.mockResolvedValue({ downloadId: 321 } as any);
+        mockedBackgroundDownloadService.startDownload.mockResolvedValue({ downloadId: '321' } as any);
 
         let completeCallback!: (event: any) => void;
-        mockedBackgroundDownloadService.onComplete.mockImplementation((_id: number, cb: any) => {
+        mockedBackgroundDownloadService.onComplete.mockImplementation((_id: string, cb: any) => {
           completeCallback = cb;
           return jest.fn();
         });
@@ -1679,7 +1679,7 @@ describe('ModelManager', () => {
         await new Promise(resolve => setImmediate(resolve));
 
         expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
-        expect(onDownloadIdReady).toHaveBeenCalledWith(321);
+        expect(onDownloadIdReady).toHaveBeenCalledWith('321');
 
         // Resolve the download
         completeCallback({ localUri: 'file:///models/vision-model-mmproj.gguf' });

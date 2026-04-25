@@ -367,7 +367,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       }
       removeMmProjComplete?.();
       removeMmProjError?.();
-      void tryFinalize();
+      tryFinalize().catch(() => {});
     });
   }
 }

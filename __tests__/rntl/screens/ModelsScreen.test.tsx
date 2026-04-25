@@ -566,42 +566,6 @@ describe('ModelsScreen', () => {
   });
 
   // ============================================================================
-  // Store interactions (download progress, model management)
-  // ============================================================================
-  describe('store interactions', () => {
-    it('tracks download progress via store', async () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-        },
-      });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-
-      // Verify store state was updated
-      const progress = useAppStore.getState().downloadProgress;
-      expect(progress['model-1'].progress).toBe(0.5);
-    });
-
-    it('tracks multiple concurrent downloads', () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-          'model-2': { progress: 0.25, bytesDownloaded: 1000, totalBytes: 4000 },
-        },
-      });
-
-      const progress = useAppStore.getState().downloadProgress;
-      expect(Object.keys(progress).length).toBe(2);
-    });
-
-  });
-
-  // ============================================================================
   // Search error handling
   // ============================================================================
   describe('search error handling', () => {

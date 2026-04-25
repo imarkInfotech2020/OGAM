@@ -641,7 +641,7 @@ describe('appStore', () => {
       const merged = {
         ...currentState,
         ...oldPersistedState,
-      };
+      } as any;
 
       // The merge function converts string to array
       if (typeof merged.imageModelDownloading === 'string') {
@@ -671,11 +671,11 @@ describe('appStore', () => {
         if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
           ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
         }
-        merged.imageModelDownloadIds = ids;
+        (merged as any).imageModelDownloadIds = ids;
         delete merged.imageModelDownloadId;
       }
 
-      expect(merged.imageModelDownloadIds).toEqual({ 'model-a': 42 });
+      expect((merged as any).imageModelDownloadIds).toEqual({ 'model-a': 42 });
       expect(merged.imageModelDownloadId).toBeUndefined();
     });
 

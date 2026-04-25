@@ -50,9 +50,9 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
 
 const mockGetImageModelsDirectory = jest.fn(() => '/mock/image-models');
 const mockAddDownloadedImageModel = jest.fn((_m?: any) => Promise.resolve());
-const mockMoveCompletedDownload = jest.fn(() => Promise.resolve('/moved.zip'));
-const mockStartDownload = jest.fn(() => Promise.resolve({ downloadId: 'zip-42' }));
-const mockDownloadFileTo = jest.fn(() => ({ promise: Promise.resolve() }));
+const mockMoveCompletedDownload = jest.fn((_id: string, _targetPath: string) => Promise.resolve('/moved.zip'));
+const mockStartDownload = jest.fn((_params: any) => Promise.resolve({ downloadId: 'zip-42' }));
+const mockDownloadFileTo = jest.fn((_opts: any) => ({ promise: Promise.resolve() }));
 const mockOnComplete = jest.fn((_id: string, cb: Function) => { completeCallbacks.push(cb); return jest.fn(); });
 const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push(cb); return jest.fn(); });
 const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
@@ -66,11 +66,11 @@ jest.mock('../../../../src/services', () => ({
     getSoCInfo: () => mockGetSoCInfo(),
   },
   backgroundDownloadService: {
-    startDownload: (...args: any[]) => mockStartDownload(...args),
-    downloadFileTo: (...args: any[]) => mockDownloadFileTo(...args),
-    onComplete: (...args: any[]) => mockOnComplete(...args),
-    onError: (...args: any[]) => mockOnError(...args),
-    moveCompletedDownload: (...args: any[]) => mockMoveCompletedDownload(...args),
+    startDownload: (params: any) => mockStartDownload(params),
+    downloadFileTo: (opts: any) => mockDownloadFileTo(opts),
+    onComplete: (id: string, cb: Function) => mockOnComplete(id, cb),
+    onError: (id: string, cb: Function) => mockOnError(id, cb),
+    moveCompletedDownload: (id: string, targetPath: string) => mockMoveCompletedDownload(id, targetPath),
     startProgressPolling: jest.fn(),
     cancelDownload: jest.fn(() => Promise.resolve()),
   },
@@ -246,7 +246,7 @@ describe('imageDownloadActions', () => {
   it('handleDownloadImageModel shows incompatibility alert for unsupported QNN device', async () => {
     const originalPlatform = Platform.OS;
     Object.defineProperty(Platform, 'OS', { value: 'android' });
-    mockGetSoCInfo.mockResolvedValueOnce({ hasNPU: false, qnnVariant: undefined });
+    mockGetSoCInfo.mockResolvedValueOnce({ hasNPU: false, qnnVariant: 'min' });
     const deps = makeDeps();
 
     await handleDownloadImageModel(makeZipModelInfo({ backend: 'qnn' }), deps);
