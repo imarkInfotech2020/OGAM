@@ -91,5 +91,5 @@ export async function hydrateDownloadStore(): Promise<void> {
     });
   }
 
-  useDownloadStore.getState().setAll(entries);
+  useDownloadStore.getState().hydrate(entries);
 }

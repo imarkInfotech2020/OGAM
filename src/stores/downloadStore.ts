@@ -39,6 +39,7 @@ interface DownloadStoreState {
   downloadIdIndex: Record<string, ModelKey>
 
   setAll: (entries: DownloadEntry[]) => void
+  hydrate: (entries: DownloadEntry[]) => void
   add: (entry: DownloadEntry) => void
   setMmProjDownloadId: (modelKey: ModelKey, mmProjDownloadId: string) => void
   updateProgress: (downloadId: string, bytes: number, total: number) => void
@@ -67,6 +68,36 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     }
     set({ downloads, downloadIdIndex });
   },
+
+  // Like setAll, but preserves any existing entry whose JS-tracked progress
+  // is ahead of the native row. Avoids foreground-resume hydration blowing
+  // away an in-flight entry's lastProgressAt or progress that listeners have
+  // already advanced past the native snapshot.
+  hydrate: (entries) => set(state => {
+    const downloads: Record<ModelKey, DownloadEntry> = {};
+    const downloadIdIndex: Record<string, ModelKey> = {};
+    for (const next of entries) {
+      const existing = state.downloads[next.modelKey];
+      let merged: DownloadEntry;
+      if (existing && existing.bytesDownloaded >= next.bytesDownloaded) {
+        // Local listeners are ahead — keep them, just refresh metadataJson + total
+        merged = {
+          ...existing,
+          totalBytes: next.totalBytes || existing.totalBytes,
+          combinedTotalBytes: next.combinedTotalBytes || existing.combinedTotalBytes,
+          metadataJson: next.metadataJson ?? existing.metadataJson,
+        };
+      } else {
+        merged = next;
+      }
+      downloads[merged.modelKey] = merged;
+      downloadIdIndex[merged.downloadId] = merged.modelKey;
+      if (merged.mmProjDownloadId) {
+        downloadIdIndex[merged.mmProjDownloadId] = merged.modelKey;
+      }
+    }
+    return { downloads, downloadIdIndex };
+  }),
 
   add: (entry) => set(state => ({
     downloads: { ...state.downloads, [entry.modelKey]: entry },
