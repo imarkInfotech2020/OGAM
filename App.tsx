@@ -83,20 +83,15 @@ function App() {
     }, [reattachTextDownloadRecovery]),
   });
 
-  useEffect(() => {
-    initializeApp();
-
-  }, []);
-
-  const ensureAppStoreHydrated = async () => {
+  const ensureAppStoreHydrated = useCallback(async () => {
     const persistApi = useAppStore.persist;
     if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
     if (!persistApi.hasHydrated()) {
       await persistApi.rehydrate();
     }
-  };
+  }, []);
 
-  const initializeApp = async () => {
+  const initializeApp = useCallback(async () => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
@@ -156,7 +151,20 @@ function App() {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
     }
-  };
+  }, [
+    authEnabled,
+    ensureAppStoreHydrated,
+    reattachTextDownloadRecovery,
+    setDeviceInfo,
+    setDownloadedImageModels,
+    setDownloadedModels,
+    setLocked,
+    setModelRecommendation,
+  ]);
+
+  useEffect(() => {
+    initializeApp();
+  }, [initializeApp]);
 
   const handleUnlock = useCallback(() => {
     setLocked(false);

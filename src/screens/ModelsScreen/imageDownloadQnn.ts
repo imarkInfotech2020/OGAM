@@ -34,7 +34,7 @@ export function showQnnWarningAlert(
   },
   deps: ImageDownloadDeps,
 ): void {
-  const { warningMessage, hasNPU, modelInfo, onDownloadAnyway } = opts;
+  const { warningMessage, hasNPU, onDownloadAnyway } = opts;
   if (hasNPU) {
     deps.setAlertState(showAlert('Incompatible Model', warningMessage, [
       { text: 'Cancel', style: 'cancel' },

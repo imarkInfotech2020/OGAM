@@ -371,7 +371,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
     });
   }
 
-  void tryFinalize();
+  tryFinalize().catch(() => {});
 }
 
 export { loadDownloadedModels, saveModelsList };
