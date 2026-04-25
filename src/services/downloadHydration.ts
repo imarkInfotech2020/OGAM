@@ -94,7 +94,7 @@ function toDownloadEntry(
     modelId: row.modelId ?? '',
     fileName: row.fileName,
     quantization: row.quantization ?? 'Unknown',
-    modelType: (row.modelType ?? 'text') as ModelType,
+    modelType: row.modelType ?? 'text',
     status: mapNativeStatus(row.status),
     bytesDownloaded: row.bytesDownloaded ?? 0,
     totalBytes: row.totalBytes ?? 0,

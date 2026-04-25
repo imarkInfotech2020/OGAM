@@ -270,7 +270,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             targetFile.absolutePath
         } else {
             sourceFile.copyTo(targetFile, overwrite = true)
-            sourceFile.delete()
+            if (!sourceFile.delete()) sourceFile.deleteOnExit()
             targetFile.absolutePath
         }
     }

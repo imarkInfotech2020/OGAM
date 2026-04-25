@@ -671,11 +671,11 @@ describe('appStore', () => {
         if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
           ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
         }
-        (merged as any).imageModelDownloadIds = ids;
+        (merged as any).imageModelDownloadIds = ids; // NOSONAR: property absent from spread type; as-any required by tsc
         delete merged.imageModelDownloadId;
       }
 
-      expect((merged as any).imageModelDownloadIds).toEqual({ 'model-a': 42 });
+      expect((merged as any).imageModelDownloadIds).toEqual({ 'model-a': 42 }); // NOSONAR
       expect(merged.imageModelDownloadId).toBeUndefined();
     });
 

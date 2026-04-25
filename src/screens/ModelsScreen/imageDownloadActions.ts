@@ -319,34 +319,11 @@ export async function downloadCoreMLMultiFile(
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+    await ensureDirectory(imageModelsDir);
+    await ensureDirectory(modelDir);
 
-    const files = modelInfo.coremlFiles;
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    let downloadedSize = 0;
-    for (const file of files) {
-      assertNotCancelled(modelInfo.id, runtime);
-      const filePath = `${modelDir}/${file.relativePath}`;
-      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-      if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
-      const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
-      const capturedDownloadedSize = downloadedSize;
-      const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
-        params: { url: file.downloadUrl, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
-        destPath: filePath,
-        onProgress: (bytesDownloaded) => {
-          if (runtime.cancelled) return;
-          const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
-          useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
-        },
-      });
-      wireCurrentDownloadPromise(downloadIdPromise, runtime);
-      await promise;
-      runtime.currentDownloadId = undefined;
-      downloadedSize += file.size;
-      useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
-    }
+    const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
+    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
@@ -360,21 +337,12 @@ export async function downloadCoreMLMultiFile(
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
     if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
-    if (isCancelledError(error)) {
-      try {
-        const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
-        if (await RNFS.exists(dir)) await RNFS.unlink(dir);
-      } catch { /* ignore cleanup errors */ }
-      return;
-    }
+    await cleanupImageModelDir(modelInfo.id);
+    if (isCancelledError(error)) return;
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     useDownloadStore.getState().setStatus(syntheticId, 'failed', {
       message: error?.message || 'CoreML download failed',
     });
-    try {
-      const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
-      if (await RNFS.exists(dir)) await RNFS.unlink(dir);
-    } catch { /* ignore cleanup errors */ }
   } finally {
     clearMultifileRuntime(modelInfo.id);
   }

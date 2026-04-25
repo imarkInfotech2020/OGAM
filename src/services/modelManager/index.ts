@@ -300,12 +300,13 @@ class ModelManager {
     opts?.onDownloadIdReady?.(info.downloadId);
 
     let resolvedPath = mmProjLocalPath;
+    const mmProjFile = file.mmProjFile;
     await new Promise<void>((resolve, reject) => {
       const removeProgress = backgroundDownloadService.onProgress(info.downloadId, (event) => {
         opts?.onProgress?.({
           downloadId: info.downloadId,
           modelId,
-          fileName: file.mmProjFile!.name,
+          fileName: mmProjFile.name,
           bytesDownloaded: event.bytesDownloaded,
           totalBytes,
           progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0,

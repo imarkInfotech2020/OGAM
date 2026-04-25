@@ -30,7 +30,7 @@ const mockStoreApi = {
   downloads: mockDownloads,
   add: jest.fn((entry: any) => { mockDownloads[entry.modelKey] = entry; }),
   retryEntry: jest.fn((modelKey: string, downloadId: string) => {
-    mockDownloads[modelKey] = { ...(mockDownloads[modelKey] || {}), modelKey, downloadId, status: 'pending' };
+    mockDownloads[modelKey] = { ...mockDownloads[modelKey], modelKey, downloadId, status: 'pending' };
   }),
   remove: jest.fn((modelKey: string) => { delete mockDownloads[modelKey]; }),
   updateProgress: jest.fn(),
