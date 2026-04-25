@@ -601,23 +601,11 @@ describe('Parallel mmproj download', () => {
   describe('restoreInProgressDownloads — mmproj recovery', () => {
     it('restores both main and mmproj progress listeners', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 1_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 1_000_000_000, totalBytes: 4_000_000_000, combinedTotalBytes: 4_500_000_000, quantization: 'Q4_K_M', mmProjDownloadId: '43', startedAt: 0 } as any,
         { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 100_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
-        persistedDownloads: {
-          '42': {
-            modelId: 'test/model',
-            fileName: 'vision.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4_500_000_000,
-            mmProjFileName: 'vision-mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: '43',
-          },
-        },
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
@@ -635,25 +623,13 @@ describe('Parallel mmproj download', () => {
 
     it('handles mmproj completed while app was dead', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, combinedTotalBytes: 4_500_000_000, quantization: 'Q4_K_M', mmProjDownloadId: '43', startedAt: 0 } as any,
         { downloadId: '43', status: 'completed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 500_000_000, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
       mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/vision-mmproj.gguf`);
       mockedRNFS.exists.mockResolvedValue(true);
 
       await restoreInProgressDownloads({
-        persistedDownloads: {
-          '42': {
-            modelId: 'test/model',
-            fileName: 'vision.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4_500_000_000,
-            mmProjFileName: 'vision-mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: '43',
-          },
-        },
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
@@ -669,23 +645,11 @@ describe('Parallel mmproj download', () => {
 
     it('marks mmproj as completed when it failed while app was dead', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 2_000_000_000, totalBytes: 4_000_000_000, combinedTotalBytes: 4_500_000_000, quantization: 'Q4_K_M', mmProjDownloadId: '43', startedAt: 0 } as any,
         { downloadId: '43', status: 'failed', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
-        persistedDownloads: {
-          '42': {
-            modelId: 'test/model',
-            fileName: 'vision.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4_500_000_000,
-            mmProjFileName: 'vision-mmproj.gguf',
-            mmProjLocalPath: `${MODELS_DIR}/vision-mmproj.gguf`,
-            mmProjDownloadId: '43',
-          },
-        },
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,
@@ -698,21 +662,11 @@ describe('Parallel mmproj download', () => {
 
     it('does not create duplicate context for mmproj download ID', async () => {
       mockService.getActiveDownloads.mockResolvedValue([
-        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, startedAt: 0 } as any,
+        { downloadId: '42', status: 'running', fileName: 'vision.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 4_000_000_000, combinedTotalBytes: 4_500_000_000, quantization: 'Q4_K_M', mmProjDownloadId: '43', startedAt: 0 } as any,
         { downloadId: '43', status: 'running', fileName: 'mmproj.gguf', modelId: 'test/model', bytesDownloaded: 0, totalBytes: 500_000_000, startedAt: 0 } as any,
       ]);
 
       await restoreInProgressDownloads({
-        persistedDownloads: {
-          '42': {
-            modelId: 'test/model',
-            fileName: 'vision.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4_500_000_000,
-            mmProjDownloadId: '43',
-          },
-        },
         modelsDir: MODELS_DIR,
         backgroundDownloadContext: bgContext,
         backgroundDownloadMetadataCallback: metadataCallback,

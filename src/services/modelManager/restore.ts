@@ -16,6 +16,12 @@ export interface RestoreDownloadsOpts {
   onProgress?: DownloadProgressCallback;
 }
 
+type RestorableDownloadInfo = BackgroundDownloadInfo & {
+  combinedTotalBytes?: number;
+  mmProjDownloadId?: string;
+  quantization?: string;
+};
+
 function isRestorable(download: BackgroundDownloadInfo): boolean {
   return download.status === 'running' || download.status === 'pending' || download.status === 'completed';
 }
@@ -61,16 +67,16 @@ function buildFileInfo(metadata: PersistedDownloadInfo): ModelFile {
 }
 
 interface RestoreEntryOpts {
-  download: BackgroundDownloadInfo;
+  download: RestorableDownloadInfo;
   metadata: PersistedDownloadInfo;
   modelsDir: string;
-  activeDownloads: BackgroundDownloadInfo[];
+  activeDownloads: RestorableDownloadInfo[];
   backgroundDownloadContext: Map<string, BackgroundDownloadContext>;
   backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
   onProgress?: DownloadProgressCallback;
 }
 
-function buildMetadataFromActiveDownload(download: BackgroundDownloadInfo, modelsDir: string): PersistedDownloadInfo | null {
+function buildMetadataFromActiveDownload(download: RestorableDownloadInfo, modelsDir: string): PersistedDownloadInfo | null {
   if (!download.modelId || download.modelId.startsWith('image:')) return null;
   const mainFileSize = download.totalBytes;
   const combinedTotal = download.combinedTotalBytes || download.totalBytes;
@@ -160,7 +166,7 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
 
   if (!backgroundDownloadService.isAvailable()) return [];
 
-  const activeDownloads = await backgroundDownloadService.getActiveDownloads();
+  const activeDownloads = await backgroundDownloadService.getActiveDownloads() as RestorableDownloadInfo[];
   const restoredDownloadIds: string[] = [];
 
   for (const download of activeDownloads) {
