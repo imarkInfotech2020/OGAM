@@ -206,7 +206,7 @@ describe('appStore', () => {
   describe('downloadProgress', () => {
     it('legacy appStore progress tracking has been removed', () => {
       const state = getAppState() as any;
-      expect(state.downloadProgress).toEqual({});
+      expect(state.downloadProgress).toBeUndefined();
       expect(state.setDownloadProgress).toBeUndefined();
     });
   });
@@ -219,7 +219,7 @@ describe('appStore', () => {
       const state = getAppState() as any;
       expect(state.setBackgroundDownload).toBeUndefined();
       expect(state.clearBackgroundDownloads).toBeUndefined();
-      expect(state.activeBackgroundDownloads).toEqual({});
+      expect(state.activeBackgroundDownloads).toBeUndefined();
     });
   });
 
@@ -438,8 +438,8 @@ describe('appStore', () => {
   describe('imageModelDownloadTracking', () => {
     it('legacy appStore image download tracking has been removed', () => {
       const state = getAppState() as any;
-      expect(state.imageModelDownloading).toEqual([]);
-      expect(state.imageModelDownloadIds).toEqual({});
+      expect(state.imageModelDownloading).toBeUndefined();
+      expect(state.imageModelDownloadIds).toBeUndefined();
       expect(state.addImageModelDownloading).toBeUndefined();
       expect(state.setImageModelDownloadId).toBeUndefined();
     });
@@ -1166,7 +1166,7 @@ describe('appStore', () => {
 
       expect(state.setBackgroundDownload).toBeUndefined();
       expect(state.clearBackgroundDownloads).toBeUndefined();
-      expect(state.activeBackgroundDownloads).toEqual({});
+      expect(state.activeBackgroundDownloads).toBeUndefined();
     });
   });
 
