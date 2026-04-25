@@ -210,62 +210,70 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun moveCompletedDownload(downloadId: String, targetPath: String, promise: Promise) {
         scope.launch {
             try {
-                if (targetPath.isNotEmpty()) {
-                    val targetFile = File(targetPath)
-                    val allowedDirs = listOfNotNull(
-                        reactApplicationContext.filesDir?.canonicalPath,
-                        reactApplicationContext.cacheDir?.canonicalPath,
-                        reactApplicationContext.getExternalFilesDir(null)?.canonicalPath,
-                    )
-                    if (allowedDirs.none { targetFile.canonicalPath.startsWith(it) }) {
-                        SafePromise(promise, NAME).reject("MOVE_ERROR", "Target path is outside the app sandbox.")
-                        return@launch
-                    }
-                }
+                validateTargetPath(targetPath)
+                    ?: return@launch SafePromise(promise, NAME)
+                        .reject("MOVE_ERROR", "Target path is outside the app sandbox.")
 
-                val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
-                    ?: run {
-                        SafePromise(promise, NAME).reject("MOVE_ERROR", "Download info not found")
-                        return@launch
-                    }
+                val download = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                    ?: return@launch SafePromise(promise, NAME).reject("MOVE_ERROR", "Download info not found")
 
-                val sourceFile = File(d.destination)
-
-                if (targetPath.isEmpty()) {
-                    withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                    SafePromise(promise, NAME).resolve(sourceFile.absolutePath)
-                    return@launch
-                }
-
-                if (!sourceFile.exists()) {
-                    val targetFile = File(targetPath)
-                    if (targetFile.exists()) {
-                        withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
-                        SafePromise(promise, NAME).resolve(targetPath)
-                        return@launch
-                    }
-                    SafePromise(promise, NAME).reject("MOVE_ERROR", "Downloaded file not found: ${sourceFile.absolutePath}")
-                    return@launch
-                }
-
-                val targetFile = File(targetPath)
-                targetFile.parentFile?.mkdirs()
-
-                val movedPath = withContext(Dispatchers.IO) {
-                    if (sourceFile.renameTo(targetFile)) {
-                        targetFile.absolutePath
-                    } else {
-                        sourceFile.copyTo(targetFile, overwrite = true)
-                        sourceFile.delete()
-                        targetFile.absolutePath
-                    }
-                }
-
-                withContext(Dispatchers.IO) { downloadDao.deleteDownload(d) }
+                val movedPath = moveCompletedDownloadInternal(download, targetPath)
                 SafePromise(promise, NAME).resolve(movedPath)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("MOVE_ERROR", "Failed to move completed download: ${e.message}", e)
             }
+        }
+    }
+
+    private fun validateTargetPath(targetPath: String): Boolean? {
+        if (targetPath.isEmpty()) return true
+        val targetFile = File(targetPath)
+        val allowedDirs = listOfNotNull(
+            reactApplicationContext.filesDir?.canonicalPath,
+            reactApplicationContext.cacheDir?.canonicalPath,
+            reactApplicationContext.getExternalFilesDir(null)?.canonicalPath,
+        )
+        return allowedDirs.any { targetFile.canonicalPath.startsWith(it) }
+    }
+
+    private suspend fun moveCompletedDownloadInternal(download: DownloadEntity, targetPath: String): String {
+        val sourceFile = File(download.destination)
+        if (targetPath.isEmpty()) {
+            withContext(Dispatchers.IO) { downloadDao.deleteDownload(download) }
+            return sourceFile.absolutePath
+        }
+
+        val existingTarget = resolveExistingTargetPath(sourceFile, targetPath, download)
+        if (existingTarget != null) return existingTarget
+
+        val targetFile = File(targetPath)
+        targetFile.parentFile?.mkdirs()
+        val movedPath = moveFile(sourceFile, targetFile)
+        withContext(Dispatchers.IO) { downloadDao.deleteDownload(download) }
+        return movedPath
+    }
+
+    private suspend fun resolveExistingTargetPath(
+        sourceFile: File,
+        targetPath: String,
+        download: DownloadEntity,
+    ): String? {
+        if (sourceFile.exists()) return null
+        val targetFile = File(targetPath)
+        if (!targetFile.exists()) {
+            throw IllegalStateException("Downloaded file not found: ${sourceFile.absolutePath}")
+        }
+        withContext(Dispatchers.IO) { downloadDao.deleteDownload(download) }
+        return targetPath
+    }
+
+    private suspend fun moveFile(sourceFile: File, targetFile: File): String = withContext(Dispatchers.IO) {
+        if (sourceFile.renameTo(targetFile)) {
+            targetFile.absolutePath
+        } else {
+            sourceFile.copyTo(targetFile, overwrite = true)
+            sourceFile.delete()
+            targetFile.absolutePath
         }
     }
 

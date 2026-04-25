@@ -255,13 +255,11 @@ class ModelManager {
   }
 
   async restoreInProgressDownloads(
-    persistedDownloads: Record<string, PersistedDownloadInfo>,
     onProgress?: DownloadProgressCallback,
   ): Promise<string[]> {
     if (!this.isBackgroundDownloadSupported()) return [];
     await this.initialize();
     return restoreInProgressDownloads({
-      persistedDownloads,
       modelsDir: this.modelsDir,
       backgroundDownloadContext: this.backgroundDownloadContext,
       backgroundDownloadMetadataCallback: this.backgroundDownloadMetadataCallback,

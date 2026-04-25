@@ -7,7 +7,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -175,7 +175,7 @@ export function useModelsScreen() {
 
   const activeDownloadCount = useDownloadStore(state =>
     Object.values(state.downloads).filter(
-      d => d.status === 'pending' || d.status === 'running',
+      d => isActiveStatus(d.status),
     ).length,
   );
   const totalModelCount =

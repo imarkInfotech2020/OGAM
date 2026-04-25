@@ -33,39 +33,61 @@ function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
   }
 }
 
+function getActiveItemModelId(entry: DownloadEntry, isImage: boolean): string {
+  if (isImage && entry.modelId.startsWith('image:')) {
+    return entry.modelId.replace('image:', '');
+  }
+  return entry.modelId;
+}
+
+function getActiveItemFileName(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  return isImage && metadata?.imageModelName
+    ? metadata.imageModelName
+    : entry.fileName;
+}
+
+function getImageAuthor(backend?: string): string {
+  if (backend === 'coreml') return 'Core ML';
+  if (backend === 'qnn') return 'NPU';
+  if (backend === 'mnn') return 'GPU';
+  return 'Image Generation';
+}
+
+function getActiveItemAuthor(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  if (isImage) return getImageAuthor(metadata?.imageModelBackend);
+  return entry.modelId.split('/')[0] ?? 'Unknown';
+}
+
+function getActiveItemQuantization(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  if (!isImage) return entry.quantization;
+  return metadata?.imageModelBackend === 'coreml' ? 'Core ML' : '';
+}
+
 function entryToActiveItem(entry: DownloadEntry): DownloadItem {
   const metadata = parseEntryMetadata(entry);
   const isImage = entry.modelType === 'image';
-  const displayModelId = isImage && entry.modelId.startsWith('image:')
-    ? entry.modelId.replace('image:', '')
-    : entry.modelId;
-  const displayFileName = isImage && metadata?.imageModelName
-    ? metadata.imageModelName
-    : entry.fileName;
-  const displayAuthor = isImage
-    ? (metadata?.imageModelBackend === 'coreml'
-      ? 'Core ML'
-      : metadata?.imageModelBackend === 'qnn'
-        ? 'NPU'
-        : metadata?.imageModelBackend === 'mnn'
-          ? 'GPU'
-          : 'Image Generation')
-    : entry.modelId.split('/')[0] ?? 'Unknown';
-  const displayQuantization = isImage
-    ? (metadata?.imageModelBackend === 'coreml'
-      ? 'Core ML'
-      : '')
-    : entry.quantization;
 
   return {
     type: 'active',
     modelType: entry.modelType,
     downloadId: entry.downloadId,
     modelKey: entry.modelKey,
-    modelId: displayModelId,
-    fileName: displayFileName,
-    author: displayAuthor,
-    quantization: displayQuantization,
+    modelId: getActiveItemModelId(entry, isImage),
+    fileName: getActiveItemFileName(entry, isImage, metadata),
+    author: getActiveItemAuthor(entry, isImage, metadata),
+    quantization: getActiveItemQuantization(entry, isImage, metadata),
     fileSize: entry.combinedTotalBytes || entry.totalBytes,
     bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
     progress: entry.progress,

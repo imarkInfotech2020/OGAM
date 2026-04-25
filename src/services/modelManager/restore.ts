@@ -7,9 +7,9 @@ import {
   DownloadProgressCallback,
 } from './types';
 import logger from '../../utils/logger';
+import { mmProjLocalName } from './download';
 
 export interface RestoreDownloadsOpts {
-  persistedDownloads: Record<string, PersistedDownloadInfo>;
   modelsDir: string;
   backgroundDownloadContext: Map<string, BackgroundDownloadContext>;
   backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
@@ -17,7 +17,7 @@ export interface RestoreDownloadsOpts {
 }
 
 function isRestorable(download: BackgroundDownloadInfo): boolean {
-  return download.status === 'running' || download.status === 'pending';
+  return download.status === 'running' || download.status === 'pending' || download.status === 'completed';
 }
 
 async function resolveMmProjState(
@@ -68,6 +68,28 @@ interface RestoreEntryOpts {
   backgroundDownloadContext: Map<string, BackgroundDownloadContext>;
   backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
   onProgress?: DownloadProgressCallback;
+}
+
+function buildMetadataFromActiveDownload(download: BackgroundDownloadInfo, modelsDir: string): PersistedDownloadInfo | null {
+  if (!download.modelId || download.modelId.startsWith('image:')) return null;
+  const mainFileSize = download.totalBytes;
+  const combinedTotal = download.combinedTotalBytes || download.totalBytes;
+  const mmProjFileSize = Math.max(combinedTotal - mainFileSize, 0);
+  const hasMmProj = !!download.mmProjDownloadId || mmProjFileSize > 0;
+  const derivedMmProjFileName = hasMmProj ? mmProjLocalName(download.fileName) : undefined;
+
+  return {
+    modelId: download.modelId,
+    fileName: download.fileName,
+    quantization: download.quantization || 'Unknown',
+    author: download.modelId.split('/')[0] || 'Unknown',
+    totalBytes: combinedTotal,
+    mainFileSize,
+    mmProjFileName: derivedMmProjFileName,
+    mmProjFileSize: hasMmProj ? mmProjFileSize : undefined,
+    mmProjLocalPath: derivedMmProjFileName ? `${modelsDir}/${derivedMmProjFileName}` : null,
+    mmProjDownloadId: download.mmProjDownloadId,
+  };
 }
 
 async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
@@ -126,7 +148,7 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
 
   backgroundDownloadContext.set(download.downloadId, {
     modelId: metadata.modelId, file: fileInfo, localPath, mmProjLocalPath,
-    removeProgressListener, mmProjDownloadId, mmProjCompleted, mainCompleted: false,
+    removeProgressListener, mmProjDownloadId, mmProjCompleted, mainCompleted: download.status === 'completed',
     removeMmProjProgressListener,
   });
   backgroundDownloadMetadataCallback?.(download.downloadId, { ...metadata, mmProjLocalPath });
@@ -134,7 +156,7 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
 }
 
 export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Promise<string[]> {
-  const { persistedDownloads, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
+  const { modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
 
   if (!backgroundDownloadService.isAvailable()) return [];
 
@@ -143,9 +165,8 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
 
   for (const download of activeDownloads) {
     if (!isRestorable(download)) continue;
-    const metadata = persistedDownloads[download.downloadId];
+    const metadata = buildMetadataFromActiveDownload(download, modelsDir);
     if (!metadata || backgroundDownloadContext.has(download.downloadId)) continue;
-    if (metadata.modelId.startsWith('image:')) continue;
     await restoreDownloadEntry({
       download, metadata, modelsDir, activeDownloads,
       backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress,

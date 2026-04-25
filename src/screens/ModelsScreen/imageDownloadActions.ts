@@ -89,6 +89,68 @@ export async function cancelSyntheticImageDownload(modelId: string): Promise<voi
   }
 }
 
+async function ensureDirectory(path: string): Promise<void> {
+  if (!(await RNFS.exists(path))) await RNFS.mkdir(path);
+}
+
+async function cleanupImageModelDir(modelId: string): Promise<void> {
+  try {
+    const dir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
+    if (await RNFS.exists(dir)) await RNFS.unlink(dir);
+  } catch {
+    /* ignore cleanup errors */
+  }
+}
+
+function setMultifileFailed(syntheticId: string, deps: ImageDownloadDeps, message?: string): void {
+  deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(message)));
+  useDownloadStore.getState().setStatus(syntheticId, 'failed', {
+    message: message || 'Multi-file download failed',
+  });
+}
+
+type MultifileDownloadSpec = {
+  relativePath: string;
+  size: number;
+  url: string;
+};
+
+async function downloadSequentialFiles(opts: {
+  modelInfo: ImageModelDescriptor;
+  runtime: MultifileRuntime;
+  syntheticId: string;
+  modelDir: string;
+  files: MultifileDownloadSpec[];
+}): Promise<void> {
+  const { modelInfo, runtime, syntheticId, modelDir, files } = opts;
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  let downloadedSize = 0;
+
+  for (const file of files) {
+    assertNotCancelled(modelInfo.id, runtime);
+    const filePath = `${modelDir}/${file.relativePath}`;
+    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    await ensureDirectory(fileDir);
+
+    const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
+    const capturedDownloadedSize = downloadedSize;
+    const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
+      params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
+      destPath: filePath,
+      onProgress: (bytesDownloaded) => {
+        if (runtime.cancelled) return;
+        const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
+        useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
+      },
+    });
+    wireCurrentDownloadPromise(downloadIdPromise, runtime);
+    await promise;
+    runtime.currentDownloadId = undefined;
+    downloadedSize += file.size;
+    useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
+  }
+}
+
 /** Remove the entry from the store. Use after register-and-notify or on error. */
 function removeStoreEntry(modelId: string) {
   useDownloadStore.getState().remove(makeImageModelKey(modelId));
@@ -196,36 +258,15 @@ export async function downloadHuggingFaceModel(
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+    await ensureDirectory(imageModelsDir);
+    await ensureDirectory(modelDir);
 
-    const files = modelInfo.huggingFaceFiles;
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    let downloadedSize = 0;
-    for (const file of files) {
-      assertNotCancelled(modelInfo.id, runtime);
-      const fileUrl = `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`;
-      const filePath = `${modelDir}/${file.path}`;
-      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-      if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
-
-      const tempFileName = `${modelInfo.id}_${file.path.replaceAll('/', '_')}`;
-      const capturedDownloadedSize = downloadedSize;
-      const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
-        params: { url: fileUrl, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
-        destPath: filePath,
-        onProgress: (bytesDownloaded) => {
-          if (runtime.cancelled) return;
-          const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
-          useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
-        },
-      });
-      wireCurrentDownloadPromise(downloadIdPromise, runtime);
-      await promise;
-      runtime.currentDownloadId = undefined;
-      downloadedSize += file.size;
-      useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
-    }
+    const files = modelInfo.huggingFaceFiles.map((file) => ({
+      relativePath: file.path,
+      size: file.size,
+      url: `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
+    }));
+    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
@@ -237,20 +278,11 @@ export async function downloadHuggingFaceModel(
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
   } catch (error: any) {
     if (isCancelledError(error)) {
-      try {
-        const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
-        if (await RNFS.exists(dir)) await RNFS.unlink(dir);
-      } catch { /* ignore cleanup errors */ }
+      await cleanupImageModelDir(modelInfo.id);
       return;
     }
-    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    useDownloadStore.getState().setStatus(syntheticId, 'failed', {
-      message: error?.message || 'Multi-file download failed',
-    });
-    try {
-      const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
-      if (await RNFS.exists(dir)) await RNFS.unlink(dir);
-    } catch { /* ignore cleanup errors */ }
+    setMultifileFailed(syntheticId, deps, error?.message);
+    await cleanupImageModelDir(modelInfo.id);
   } finally {
     clearMultifileRuntime(modelInfo.id);
   }

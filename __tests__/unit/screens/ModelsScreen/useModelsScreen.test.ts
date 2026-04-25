@@ -155,6 +155,7 @@ const mockDownloads: Record<string, any> = {};
 jest.mock('../../../../src/stores/downloadStore', () => ({
   useDownloadStore: jest.fn((selector?: any) =>
     selector ? selector({ downloads: mockDownloads }) : { downloads: mockDownloads }),
+  isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 
 // Mock modelManager

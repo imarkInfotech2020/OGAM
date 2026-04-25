@@ -18,6 +18,7 @@ import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloads } from './src/hooks/useDownloads';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
+import { useDownloadStore } from './src/stores/downloadStore';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -46,6 +47,26 @@ function App() {
     setLastBackgroundTime,
   } = useAuthStore();
 
+  const reattachTextDownloadRecovery = useCallback(async () => {
+    const restoredIds = await modelManager.restoreInProgressDownloads();
+    restoredIds.forEach((downloadId) => {
+      modelManager.watchDownload(
+        downloadId,
+        async () => {
+          const models = await modelManager.getDownloadedModels();
+          setDownloadedModels(models);
+          useDownloadStore.getState().remove(
+            useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
+          );
+        },
+        (error: Error) => {
+          logger.error('[App] Restored text download failed:', error);
+          useDownloadStore.getState().setStatus(downloadId, 'failed', { message: error.message });
+        },
+      );
+    });
+  }, [setDownloadedModels]);
+
   // Handle app state changes for auto-lock
   useAppState({
     onBackground: useCallback(() => {
@@ -56,7 +77,10 @@ function App() {
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
       hydrateDownloadStore().catch(() => {});
-    }, []),
+      reattachTextDownloadRecovery().catch((error) => {
+        logger.error('[App] Failed to restore text downloads on foreground:', error);
+      });
+    }, [reattachTextDownloadRecovery]),
   });
 
   useEffect(() => {
@@ -79,6 +103,7 @@ function App() {
 
       // Hydrate download store from SQLite before any screen mounts.
       hydrateDownloadStore().catch(() => {});
+      await reattachTextDownloadRecovery();
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection

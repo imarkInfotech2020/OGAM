@@ -8,7 +8,6 @@
 
 import { restoreInProgressDownloads } from '../../../src/services/modelManager/restore';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
-import { PersistedDownloadInfo } from '../../../src/types';
 import { BackgroundDownloadContext } from '../../../src/services/modelManager/types';
 
 jest.mock('../../../src/services/backgroundDownloadService', () => ({
@@ -24,17 +23,6 @@ const mockService = backgroundDownloadService as jest.Mocked<typeof backgroundDo
 
 const MODELS_DIR = '/mock/documents/models';
 
-function makePersistedInfo(overrides: Partial<PersistedDownloadInfo> = {}): PersistedDownloadInfo {
-  return {
-    modelId: 'test/model',
-    fileName: 'model.gguf',
-    quantization: 'Q4_K_M',
-    author: 'test',
-    totalBytes: 4_000_000_000,
-    ...overrides,
-  };
-}
-
 function makeActiveDownload(overrides: Partial<{
   downloadId: string;
   status: string;
@@ -42,6 +30,9 @@ function makeActiveDownload(overrides: Partial<{
   modelId: string;
   bytesDownloaded: number;
   totalBytes: number;
+  combinedTotalBytes: number;
+  quantization: string;
+  mmProjDownloadId: string;
 }> = {}) {
   return {
     downloadId: '42',
@@ -50,6 +41,8 @@ function makeActiveDownload(overrides: Partial<{
     modelId: 'test/model',
     bytesDownloaded: 0,
     totalBytes: 4_000_000_000,
+    combinedTotalBytes: 4_000_000_000,
+    quantization: 'Q4_K_M',
     startedAt: Date.now(),
     ...overrides,
   };
@@ -62,12 +55,10 @@ describe('restoreInProgressDownloads', () => {
 
   /** Helper to call restoreInProgressDownloads with common defaults. */
   function callRestore(overrides: {
-    persistedDownloads?: Record<string, PersistedDownloadInfo>;
     metadataCallback?: jest.Mock | null;
     onProgress?: jest.Mock;
   } = {}) {
     return restoreInProgressDownloads({
-      persistedDownloads: overrides.persistedDownloads ?? {},
       modelsDir: MODELS_DIR,
       backgroundDownloadContext: bgContext,
       backgroundDownloadMetadataCallback: overrides.metadataCallback === undefined
@@ -105,7 +96,7 @@ describe('restoreInProgressDownloads', () => {
   // ========================================================================
 
   it.each([
-    ['completed', 0],
+    ['completed', 1],
     ['failed', 0],
     ['unknown', 0],
     ['running', 1],
@@ -113,7 +104,7 @@ describe('restoreInProgressDownloads', () => {
     ['paused', 0],
   ])('handles %s downloads (expect size=%i)', async (status, expectedSize) => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status }) as any]);
-    await callRestore({ persistedDownloads: { '42': makePersistedInfo() } });
+    await callRestore();
     expect(bgContext.size).toBe(expectedSize);
   });
 
@@ -121,19 +112,11 @@ describe('restoreInProgressDownloads', () => {
   // Filtering: metadata matching
   // ========================================================================
 
-  it('skips download with no matching persisted metadata', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
-    // persistedDownloads has downloadId 99, not 42
-    await callRestore({ persistedDownloads: { '99': makePersistedInfo() } });
-    expect(bgContext.size).toBe(0);
-    expect(mockService.onProgress).not.toHaveBeenCalled();
-  });
-
   it('skips download already present in backgroundDownloadContext', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
     bgContext.set('42', { modelId: 'test/model', file: {} as any, localPath: '/x', mmProjLocalPath: null, removeProgressListener: jest.fn(), mmProjCompleted: true, mainCompleted: false });
 
-    await callRestore({ persistedDownloads: { '42': makePersistedInfo() } });
+    await callRestore();
 
     expect(bgContext.size).toBe(1);
     expect(mockService.onProgress).not.toHaveBeenCalled();
@@ -145,37 +128,42 @@ describe('restoreInProgressDownloads', () => {
 
   it('sets correct localPath in context', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '55', fileName: 'vision.gguf' }) as any]);
-    await callRestore({ persistedDownloads: { '55': makePersistedInfo({ fileName: 'vision.gguf' }) }, metadataCallback: null });
+    await callRestore({ metadataCallback: null });
 
     const ctx = bgContext.get('55') as any;
     expect(ctx.localPath).toBe(`${MODELS_DIR}/vision.gguf`);
   });
 
   it('sets mmProjLocalPath from persisted metadata', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '55' }) as any]);
-    await callRestore({
-      persistedDownloads: { '55': makePersistedInfo({ mmProjFileName: 'mmproj.gguf', mmProjLocalPath: `${MODELS_DIR}/mmproj.gguf` }) },
-      metadataCallback: null,
-    });
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({
+      downloadId: '55',
+      fileName: 'vision.gguf',
+      totalBytes: 4_000_000_000,
+      combinedTotalBytes: 4_500_000_000,
+      mmProjDownloadId: 'mm-55',
+    }) as any]);
+    await callRestore({ metadataCallback: null });
 
     const ctx = bgContext.get('55') as any;
-    expect(ctx.mmProjLocalPath).toBe(`${MODELS_DIR}/mmproj.gguf`);
+    expect(ctx.mmProjLocalPath).toBe(`${MODELS_DIR}/vision-mmproj.gguf`);
   });
 
   it('sets mmProjLocalPath to null when not in persisted metadata', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '77' }) as any]);
-    await callRestore({ persistedDownloads: { '77': makePersistedInfo() }, metadataCallback: null });
+    await callRestore({ metadataCallback: null });
 
     const ctx = bgContext.get('77') as any;
     expect(ctx.mmProjLocalPath).toBeNull();
   });
 
   it('stores modelId and file info in context', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
-    await callRestore({
-      persistedDownloads: { '42': makePersistedInfo({ modelId: 'org/specific-model', fileName: 'specific.gguf', quantization: 'Q5_K_M' }) },
-      metadataCallback: null,
-    });
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({
+      downloadId: '42',
+      modelId: 'org/specific-model',
+      fileName: 'specific.gguf',
+      quantization: 'Q5_K_M',
+    }) as any]);
+    await callRestore({ metadataCallback: null });
 
     const ctx = bgContext.get('42') as any;
     expect(ctx.modelId).toBe('org/specific-model');
@@ -188,7 +176,7 @@ describe('restoreInProgressDownloads', () => {
     mockService.onProgress.mockReturnValue(removeProgressFn);
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
 
-    await callRestore({ persistedDownloads: { '42': makePersistedInfo() }, metadataCallback: null });
+    await callRestore({ metadataCallback: null });
 
     expect(mockService.onProgress).toHaveBeenCalledWith('42', expect.any(Function));
     const ctx = bgContext.get('42') as any;
@@ -199,10 +187,13 @@ describe('restoreInProgressDownloads', () => {
   // Metadata callback
   // ========================================================================
 
-  it('calls metadata callback with persisted info', async () => {
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
-    const info = makePersistedInfo({ totalBytes: 5_000_000_000 });
-    await callRestore({ persistedDownloads: { '42': info } });
+  it('calls metadata callback with derived info', async () => {
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({
+      downloadId: '42',
+      totalBytes: 4_000_000_000,
+      combinedTotalBytes: 5_000_000_000,
+    }) as any]);
+    await callRestore();
 
     expect(metadataCallback).toHaveBeenCalledWith('42', expect.objectContaining({
       modelId: 'test/model',
@@ -213,7 +204,7 @@ describe('restoreInProgressDownloads', () => {
 
   it('does not throw when metadataCallback is null', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
-    await expect(callRestore({ persistedDownloads: { '42': makePersistedInfo() }, metadataCallback: null })).resolves.toEqual(['42']);
+    await expect(callRestore({ metadataCallback: null })).resolves.toEqual(['42']);
   });
 
   // ========================================================================
@@ -226,10 +217,13 @@ describe('restoreInProgressDownloads', () => {
       capturedHandler = handler;
       return jest.fn();
     });
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({
+      downloadId: '42',
+      totalBytes: 4_000_000_000,
+      combinedTotalBytes: 4_500_000_000,
+    }) as any]);
 
     await callRestore({
-      persistedDownloads: { '42': makePersistedInfo({ totalBytes: 4_500_000_000 }) },
       metadataCallback: null,
       onProgress,
     });
@@ -243,13 +237,13 @@ describe('restoreInProgressDownloads', () => {
       modelId: 'test/model',
     });
 
-    expect(onProgress).toHaveBeenCalledWith({
+    expect(onProgress).toHaveBeenLastCalledWith({
       downloadId: '42',
       modelId: 'test/model',
       fileName: 'model.gguf',
-      bytesDownloaded: 2_000_000_000,
+      bytesDownloaded: 2_500_000_000,
       totalBytes: 4_500_000_000, // uses combined stored totalBytes
-      progress: expect.closeTo(2_000_000_000 / 4_500_000_000, 5),
+      progress: expect.closeTo(2_500_000_000 / 4_500_000_000, 5),
     });
   });
 
@@ -259,10 +253,13 @@ describe('restoreInProgressDownloads', () => {
       capturedHandler = handler;
       return jest.fn();
     });
-    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42', totalBytes: 0 }) as any]);
+    mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({
+      downloadId: '42',
+      totalBytes: 0,
+      combinedTotalBytes: 0,
+    }) as any]);
 
     await callRestore({
-      persistedDownloads: { '42': makePersistedInfo({ totalBytes: 0 }) },
       metadataCallback: null,
       onProgress,
     });
@@ -272,12 +269,12 @@ describe('restoreInProgressDownloads', () => {
       status: 'running', fileName: 'model.gguf', modelId: 'test/model',
     });
 
-    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ progress: 0 }));
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ progress: 0 }));
   });
 
   it('does not throw when onProgress is undefined', async () => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ downloadId: '42' }) as any]);
-    await expect(callRestore({ persistedDownloads: { '42': makePersistedInfo() }, metadataCallback: null })).resolves.toEqual(['42']);
+    await expect(callRestore({ metadataCallback: null })).resolves.toEqual(['42']);
   });
 
   // ========================================================================
@@ -289,9 +286,7 @@ describe('restoreInProgressDownloads', () => {
       makeActiveDownload({ downloadId: '10', fileName: 'model-a.gguf' }) as any,
       makeActiveDownload({ downloadId: '20', fileName: 'model-b.gguf' }) as any,
     ]);
-    await callRestore({
-      persistedDownloads: { '10': makePersistedInfo({ fileName: 'model-a.gguf' }), '20': makePersistedInfo({ fileName: 'model-b.gguf' }) },
-    });
+    await callRestore();
 
     expect(bgContext.size).toBe(2);
     expect(bgContext.has('10')).toBe(true);
@@ -300,16 +295,15 @@ describe('restoreInProgressDownloads', () => {
     expect(metadataCallback).toHaveBeenCalledTimes(2);
   });
 
-  it('skips already-completed entry while restoring other running entries', async () => {
+  it('restores completed and running entries independently', async () => {
     mockService.getActiveDownloads.mockResolvedValue([
       makeActiveDownload({ downloadId: '10', status: 'completed' }) as any,
       makeActiveDownload({ downloadId: '20', status: 'running' }) as any,
     ]);
-    await callRestore({
-      persistedDownloads: { '10': makePersistedInfo({ fileName: 'a.gguf' }), '20': makePersistedInfo({ fileName: 'b.gguf' }) },
-    });
+    await callRestore();
 
-    expect(bgContext.size).toBe(1);
+    expect(bgContext.size).toBe(2);
+    expect(bgContext.has('10')).toBe(true);
     expect(bgContext.has('20')).toBe(true);
   });
 });
