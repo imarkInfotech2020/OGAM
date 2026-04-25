@@ -15,12 +15,14 @@ import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
+import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { hardwareService, modelManager, remoteServerManager } from '../services';
 import { discoverLANServers } from '../services/networkDiscovery';
 import { ModelFile, DownloadedModel, RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { fetchModelFiles, NetworkSection } from './ModelDownloadHelpers';
+import { makeModelKey } from '../utils/modelKey';
 import logger from '../utils/logger';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'> };
@@ -68,16 +70,12 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
   const [showServerModal, setShowServerModal] = useState(false);
   const healthCheckInFlight = useRef(false);
-  const cancelledKeys = useRef<Set<string>>(new Set());
-  const lastProgressUpdate = useRef<Record<string, number>>({});
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [downloadIds, setDownloadIds] = useState<Record<string, string>>({});
-  const downloadIdsRef = useRef<Record<string, string>>({});
-
-  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadProgress, setDownloadProgress, addDownloadedModel, downloadedModels } = useAppStore();
+  const { deviceInfo, setDeviceInfo, setModelRecommendation, addDownloadedModel, downloadedModels } = useAppStore();
+  const storeDownloads = useDownloadStore(s => s.downloads);
   const servers = useRemoteServerStore((s) => s.servers);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
 
@@ -155,65 +153,37 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [refreshServerHealth]);
 
-  const handleCancelDownload = async (key: string) => {
-    cancelledKeys.current.add(key);
-    const downloadId = downloadIds[key];
-    if (downloadId != null) {
-      try { await modelManager.cancelBackgroundDownload(downloadId); } catch { /* ignore */ }
+  // Cancel goes through the store: removing the entry by modelKey is the
+  // single source of truth, and the native cancel cleans up the worker.
+  const handleCancelDownload = async (modelId: string, fileName: string) => {
+    const modelKey = makeModelKey(modelId, fileName);
+    const entry = useDownloadStore.getState().downloads[modelKey];
+    if (!entry) return;
+    useDownloadStore.getState().remove(modelKey);
+    try { await modelManager.cancelBackgroundDownload(entry.downloadId); } catch { /* ignore */ }
+    if (entry.mmProjDownloadId) {
+      try { await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId); } catch { /* ignore */ }
     }
-    setDownloadProgress(key, null);
-    setDownloadIds(prev => {
-      const { [key]: _r, ...rest } = prev;
-      downloadIdsRef.current = rest;
-      return rest;
-    });
   };
 
   const handleDownload = async (modelId: string, file: ModelFile) => {
-    const key = `${modelId}/${file.name}`;
-    const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
-    cancelledKeys.current.delete(key);
-    setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes });
-    const onError = (error: Error) => { setDownloadProgress(key, null); setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message))); };
+    const modelKey = makeModelKey(modelId, file.name);
+    // Duplicate-start guard. The store's add() also enforces this, but
+    // checking up-front avoids the unnecessary native call.
+    const existing = useDownloadStore.getState().downloads[modelKey];
+    if (existing && isActiveStatus(existing.status)) return;
+    const onError = (error: Error) => {
+      // The store now holds the failed state — UI shows it, no need to
+      // clear progress here. Only surface the alert.
+      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message)));
+    };
     try {
-      const info = await modelManager.downloadModelBackground(modelId, file, (p) => {
-        if (cancelledKeys.current.has(key)) return;
-        const now = Date.now();
-        if (now - (lastProgressUpdate.current[key] ?? 0) < 500) return;
-        lastProgressUpdate.current[key] = now;
-        const ownerDownloadId = downloadIdsRef.current[key];
-        setDownloadProgress(key, ownerDownloadId != null
-          ? { ...p, ownerDownloadId, status: 'running', reason: undefined, reasonCode: undefined }
-          : { ...p, status: 'running', reason: undefined, reasonCode: undefined });
-      });
-      // If the user cancelled before downloadModelBackground resolved, kill it now
-      if (cancelledKeys.current.has(key)) {
-        try { await modelManager.cancelBackgroundDownload(info.downloadId); } catch { /* ignore */ }
-        return;
-      }
-      setDownloadIds(prev => {
-        const next = { ...prev, [key]: info.downloadId };
-        downloadIdsRef.current = next;
-        return next;
-      });
-      setDownloadProgress(key, {
-        progress: 0,
-        bytesDownloaded: 0,
-        totalBytes,
-        ownerDownloadId: info.downloadId,
-        status: 'pending',
-        reason: undefined,
-        reasonCode: undefined,
-      });
+      // modelManager.downloadModelBackground writes the row to SQLite and
+      // adds the entry to useDownloadStore synchronously after start.
+      const info = await modelManager.downloadModelBackground(modelId, file);
       modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
-        if (cancelledKeys.current.has(key)) return;
-        setDownloadProgress(key, null);
-        setDownloadIds(prev => {
-          const { [key]: _r, ...rest } = prev;
-          downloadIdsRef.current = rest;
-          return rest;
-        });
         addDownloadedModel(model);
+        useDownloadStore.getState().remove(modelKey);
       }, onError);
     } catch (error) { onError(error as Error); }
   };
@@ -314,19 +284,23 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
           {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
             const recFile = modelFiles[model.id][0];
-            const key = `${model.id}/${recFile.name}`;
+            const modelKey = makeModelKey(model.id, recFile.name);
+            const entry = storeDownloads[modelKey];
+            const progress = entry && isActiveStatus(entry.status)
+              ? { progress: entry.progress }
+              : null;
             return (
               <RecommendedModelCard
                 key={model.id}
                 model={model}
                 recFile={recFile}
                 index={index}
-                progress={downloadProgress[key]}
+                progress={progress}
                 downloaded={downloadedModels.find(d => d.id === `${model.id}/${recFile.name}`)}
                 totalRamGB={totalRamGB}
                 isTrending={trendingModelIds.has(model.id)}
                 onDownload={() => handleDownload(model.id, recFile)}
-                onCancel={() => handleCancelDownload(key)}
+                onCancel={() => handleCancelDownload(model.id, recFile.name)}
               />
             );
           })}

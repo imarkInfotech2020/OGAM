@@ -10,6 +10,8 @@ export function isMmProjFileName(fileName: string): boolean {
 function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {
   switch (status) {
     case 'running': return 'running';
+    case 'retrying': return 'retrying';
+    case 'waiting_for_network': return 'waiting_for_network';
     case 'completed': return 'completed';
     case 'failed': return 'failed';
     case 'cancelled': return 'cancelled';
@@ -41,13 +43,15 @@ export async function hydrateDownloadStore(): Promise<void> {
   );
 
   // Parent rows only — sidecars never shown in UI.
-  // Exclude terminal states; only active/in-flight entries belong in the store.
+  // Drop cancelled (user explicitly removed) and completed (already lives in
+  // downloadedModels/downloadedImageModels). Failed, pending, running,
+  // retrying, waiting_for_network must survive restart so users can resume
+  // or remove them deliberately.
   const parentRows = rows.filter(r =>
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
     r.status !== 'cancelled' &&
-    r.status !== 'completed' &&
-    r.status !== 'failed',
+    r.status !== 'completed',
   );
 
   // Hydration rule: if multiple rows share modelKey, latest createdAt wins

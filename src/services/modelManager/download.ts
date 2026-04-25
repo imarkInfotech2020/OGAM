@@ -127,22 +127,31 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   });
 
   // Populate new store immediately — no awaits between startDownload and add().
+  // If a non-active entry already exists for this modelKey (e.g. previous run
+  // ended in 'failed' and the user is starting again), reuse the same logical
+  // record via retryEntry instead of overwriting via add(). add() is strict
+  // and refuses to clobber any existing entry.
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
-  useDownloadStore.getState().add({
-    modelKey,
-    downloadId: downloadInfo.downloadId,
-    modelId,
-    fileName: file.name,
-    quantization: file.quantization,
-    modelType: 'text',
-    status: 'pending',
-    bytesDownloaded: 0,
-    totalBytes: file.size,
-    combinedTotalBytes,
-    progress: 0,
-    createdAt: Date.now(),
-    lastProgressAt: Date.now(),
-  });
+  const existing = useDownloadStore.getState().downloads[modelKey];
+  if (existing) {
+    useDownloadStore.getState().retryEntry(modelKey, downloadInfo.downloadId);
+  } else {
+    useDownloadStore.getState().add({
+      modelKey,
+      downloadId: downloadInfo.downloadId,
+      modelId,
+      fileName: file.name,
+      quantization: file.quantization,
+      modelType: 'text',
+      status: 'pending',
+      bytesDownloaded: 0,
+      totalBytes: file.size,
+      combinedTotalBytes,
+      progress: 0,
+      createdAt: Date.now(),
+      lastProgressAt: Date.now(),
+    });
+  }
 
   // Start mmproj download in parallel if needed
   let mmProjDownloadId: string | undefined;
@@ -323,7 +332,26 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       await tryFinalize();
     });
     removeMmProjError = backgroundDownloadService.onError(ctx.mmProjDownloadId, (event) => {
-      handleError(new Error(`Vision projection download failed: ${event.reason || 'Unknown error'}`), downloadId);
+      // mmproj failure must NOT fail the parent download. Treat as
+      // text-only-with-repair-needed: clear the mmproj path, mark sidecar
+      // complete (from the finalizer's perspective) so tryFinalize() can
+      // proceed when the main GGUF finishes. Surface the failure to the
+      // store so UI shows a "vision broken / repair needed" affordance.
+      logger.warn('[ModelManager] mmproj failed, continuing as text-only:', event.reason);
+      ctx.mmProjLocalPath = null;
+      ctx.mmProjCompleted = true;
+      // Update the sidecar status in the store before tryFinalize completes
+      // and removes the entry; setStatus on a sidecar id only marks
+      // mmProjStatus, not the main status (see downloadStore.setStatus).
+      if (ctx.mmProjDownloadId) {
+        useDownloadStore.getState().setStatus(ctx.mmProjDownloadId, 'failed', {
+          message: event.reason || 'Vision projection download failed',
+          code: event.reasonCode,
+        });
+      }
+      removeMmProjComplete?.();
+      removeMmProjError?.();
+      void tryFinalize();
     });
   }
 }

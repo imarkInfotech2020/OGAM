@@ -27,6 +27,7 @@ object DownloadReason {
     const val HTTP_403 = "http_403"
     const val HTTP_404 = "http_404"
     const val HTTP_416 = "http_416"
+    const val HTTP_429 = "http_429"
     const val CLIENT_ERROR = "client_error"
     const val UNKNOWN_ERROR = "unknown_error"
 
@@ -35,6 +36,7 @@ object DownloadReason {
         NETWORK_TIMEOUT,
         SERVER_UNAVAILABLE,
         DOWNLOAD_INTERRUPTED,
+        HTTP_429,
     )
 
     fun fromThrowable(error: Exception): String {
@@ -55,6 +57,7 @@ object DownloadReason {
             403 -> HTTP_403
             404 -> HTTP_404
             416 -> HTTP_416
+            429 -> HTTP_429
             in 500..599 -> SERVER_UNAVAILABLE
             in 400..499 -> CLIENT_ERROR
             else -> UNKNOWN_ERROR
@@ -77,6 +80,7 @@ object DownloadReason {
             HTTP_403 -> "The download server rejected access to this file."
             HTTP_404 -> "The file could not be found on the download server."
             HTTP_416 -> "The server could not resume this download. Please retry it."
+            HTTP_429 -> "Rate limited by the download server. Retrying with backoff."
             CLIENT_ERROR -> "The download request was rejected by the server."
             UNKNOWN_ERROR -> "Something went wrong while downloading."
             else -> null
@@ -97,6 +101,16 @@ object DownloadReason {
                 status = "failed",
                 reason = messageFor(normalizedCode ?: UNKNOWN_ERROR),
                 reasonCode = normalizedCode ?: UNKNOWN_ERROR,
+            )
+            DownloadStatus.RETRYING -> DownloadUiState(
+                status = "retrying",
+                reason = messageFor(normalizedCode ?: DOWNLOAD_INTERRUPTED),
+                reasonCode = normalizedCode ?: DOWNLOAD_INTERRUPTED,
+            )
+            DownloadStatus.WAITING_FOR_NETWORK -> DownloadUiState(
+                status = "waiting_for_network",
+                reason = messageFor(NETWORK_LOST),
+                reasonCode = NETWORK_LOST,
             )
             DownloadStatus.QUEUED -> DownloadUiState(
                 status = "pending",

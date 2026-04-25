@@ -15,6 +15,14 @@ export function useDownloads() {
       const entry = downloads[modelKey];
       if (!entry) return;
 
+      // Status transitions from native (retrying / waiting_for_network) come
+      // through Progress events. Don't treat them like normal byte updates —
+      // route them to setStatus so the UI reflects the actual state.
+      if (event.status === 'retrying' || event.status === 'waiting_for_network') {
+        useDownloadStore.getState().setStatus(event.downloadId, event.status);
+        return;
+      }
+
       if (entry.downloadId === event.downloadId) {
         useDownloadStore.getState().updateProgress(event.downloadId, event.bytesDownloaded, event.totalBytes);
       } else if (entry.mmProjDownloadId === event.downloadId) {

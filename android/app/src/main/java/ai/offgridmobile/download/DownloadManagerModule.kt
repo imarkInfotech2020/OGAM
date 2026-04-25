@@ -350,19 +350,37 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     scope.launch {
                         val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
                             ?: return@launch
-                        val uiState = DownloadReason.toUiState(d.status, d.error)
-                        if (uiState.status == "pending") {
+                        // BLOCKED with our only constraint (NetworkType.CONNECTED)
+                        // means we're waiting for the network to come back. Persist
+                        // that to the DB so a restart while still offline restores
+                        // the visible state. ENQUEUED with no prior network failure
+                        // is plain pending.
+                        if (info.state == WorkInfo.State.BLOCKED &&
+                            d.status != DownloadStatus.WAITING_FOR_NETWORK
+                        ) {
+                            withContext(Dispatchers.IO) {
+                                downloadDao.updateStatus(downloadId, DownloadStatus.WAITING_FOR_NETWORK)
+                            }
                             DownloadEventBridge.progress(
-                                downloadId,
-                                d.fileName,
-                                d.modelId,
-                                d.downloadedBytes,
-                                d.totalBytes,
-                                uiState.status,
-                                uiState.reason,
-                                uiState.reasonCode,
+                                downloadId, d.fileName, d.modelId,
+                                d.downloadedBytes, d.totalBytes,
+                                "waiting_for_network",
+                                "Waiting for network",
+                                "network_lost",
                             )
+                            return@launch
                         }
+                        val uiState = DownloadReason.toUiState(d.status, d.error)
+                        DownloadEventBridge.progress(
+                            downloadId,
+                            d.fileName,
+                            d.modelId,
+                            d.downloadedBytes,
+                            d.totalBytes,
+                            uiState.status,
+                            uiState.reason,
+                            uiState.reasonCode,
+                        )
                     }
                 }
                 WorkInfo.State.SUCCEEDED -> {

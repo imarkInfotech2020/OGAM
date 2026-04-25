@@ -4,7 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
@@ -201,7 +201,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     const modelKey = makeModelKey(model.id, file.name);
-    const totalBytes = (file.size || 0) + (file.mmProjFile?.size || 0);
+    // Duplicate-start guard. If a download is already active for this
+    // logical file (rapid double-tap, race after retry, etc.), do nothing.
+    const existing = useDownloadStore.getState().downloads[modelKey];
+    if (existing && isActiveStatus(existing.status)) return;
     let currentDownloadId: string | undefined;
 
     const onComplete = (dm: DownloadedModel) => {
@@ -225,23 +228,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message)));
     };
     try {
+      // modelManager.downloadModelBackground handles store population
+      // (add for new entries, retryEntry for existing failed ones).
       const info = await modelManager.downloadModelBackground(model.id, file);
       currentDownloadId = info.downloadId;
-      useDownloadStore.getState().add({
-        modelKey,
-        downloadId: info.downloadId,
-        modelId: model.id,
-        fileName: file.name,
-        quantization: file.quantization,
-        modelType: 'text',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes,
-        combinedTotalBytes: totalBytes,
-        progress: 0,
-        createdAt: Date.now(),
-        lastProgressAt: Date.now(),
-      });
       modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (e) { onError(e as Error); }
   };

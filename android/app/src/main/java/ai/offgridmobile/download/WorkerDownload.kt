@@ -75,10 +75,19 @@ class WorkerDownload(
         return null
     }
 
-    // Network exception during download — retry silently (maxAttempts=2), no JS state change.
+    // Network exception during download — retry with backoff, surface to JS so the
+    // UI can show "Retrying connection..." instead of a frozen progress bar.
+    // Persist the visible status to the DB so a restart during the retry window
+    // restores 'retrying' instead of collapsing to plain 'pending'.
     private suspend fun handleDownloadException(downloadId: String, download: DownloadEntity): Result {
         if (isStopped) return handleStoppedState(downloadId, download, download.downloadedBytes)
-        downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+        downloadDao.updateStatus(downloadId, DownloadStatus.RETRYING)
+        DownloadEventBridge.progress(
+            downloadId, download.fileName, download.modelId,
+            download.downloadedBytes, download.totalBytes,
+            status = "retrying",
+            reasonCode = "download_interrupted",
+        )
         return Result.retry()
     }
 
@@ -148,12 +157,21 @@ class WorkerDownload(
             }
             !response.isSuccessful -> {
                 val reasonCode = DownloadReason.fromHttpCode(code)
-                if (code in 500..599) {
-                    // Transient server error — retry silently, no JS state change.
-                    downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+                if (code in 500..599 || code == 429) {
+                    // Transient: 5xx server errors and 429 rate-limit. Both are
+                    // retry-with-backoff, not permanent failure. WorkManager's
+                    // exponential backoff policy supplies the delay. Persist
+                    // 'retrying' so restart restores the visible state.
+                    downloadDao.updateStatus(downloadId, DownloadStatus.RETRYING)
+                    DownloadEventBridge.progress(
+                        downloadId, download.fileName, download.modelId,
+                        download.downloadedBytes, download.totalBytes,
+                        status = "retrying",
+                        reasonCode = reasonCode,
+                    )
                     Result.retry()
                 } else {
-                    // 4xx client error — permanent failure.
+                    // 4xx client error (excluding 429) — permanent failure.
                     failDownload(downloadId, download, reasonCode)
                 }
             }

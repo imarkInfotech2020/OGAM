@@ -4,6 +4,8 @@ import { ModelKey } from '../utils/modelKey';
 export type DownloadStatus =
   | 'pending'
   | 'running'
+  | 'retrying'
+  | 'waiting_for_network'
   | 'processing'
   | 'completed'
   | 'failed'
@@ -33,6 +35,19 @@ export interface DownloadEntry {
 }
 
 export const STUCK_THRESHOLD_MS = 30_000;
+
+/**
+ * Statuses that count as "an active download is in flight for this modelKey".
+ * Use this to guard against duplicate starts (rapid double-tap) so we never
+ * have two parallel native downloads racing on the same logical file.
+ */
+const ACTIVE_STATUSES: ReadonlyArray<DownloadStatus> = [
+  'pending', 'running', 'retrying', 'waiting_for_network', 'processing',
+];
+
+export function isActiveStatus(status: DownloadStatus): boolean {
+  return ACTIVE_STATUSES.includes(status);
+}
 
 interface DownloadStoreState {
   downloads: Record<ModelKey, DownloadEntry>
@@ -99,14 +114,23 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     return { downloads, downloadIdIndex };
   }),
 
-  add: (entry) => set(state => ({
-    downloads: { ...state.downloads, [entry.modelKey]: entry },
-    downloadIdIndex: {
-      ...state.downloadIdIndex,
-      [entry.downloadId]: entry.modelKey,
-      ...(entry.mmProjDownloadId ? { [entry.mmProjDownloadId]: entry.modelKey } : {}),
-    },
-  })),
+  // Adds a new entry. Refuses if any entry already exists for this modelKey,
+  // active or otherwise. Failed/stuck/retrying entries must be restarted via
+  // retryEntry (which preserves the same logical record), or the user must
+  // remove() them first. This enforces "one logical entry per model/file"
+  // and prevents a fresh start path from silently replacing a visible failed
+  // entry that the product rules say must persist until explicit user action.
+  add: (entry) => set(state => {
+    if (state.downloads[entry.modelKey]) return state;
+    return {
+      downloads: { ...state.downloads, [entry.modelKey]: entry },
+      downloadIdIndex: {
+        ...state.downloadIdIndex,
+        [entry.downloadId]: entry.modelKey,
+        ...(entry.mmProjDownloadId ? { [entry.mmProjDownloadId]: entry.modelKey } : {}),
+      },
+    };
+  }),
 
   setMmProjDownloadId: (modelKey, mmProjDownloadId) => set(state => {
     const entry = state.downloads[modelKey];
@@ -165,17 +189,19 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     if (!modelKey) return state;
     const entry = state.downloads[modelKey];
     if (!entry) return state;
-    // If mmproj fails, fail the whole entry
     const isMmProj = entry.mmProjDownloadId === downloadId;
     if (isMmProj) {
+      // Sidecar status is independent of the parent. mmproj failure must not
+      // fail the whole download — the main GGUF can still complete and the
+      // model becomes usable text-only with a "repair vision" affordance.
       return {
         downloads: {
           ...state.downloads,
           [modelKey]: {
             ...entry,
-            status: 'failed',
             mmProjStatus: status as DownloadStatus,
-            errorMessage: error?.message,
+            // Surface the mmproj error message only if main hasn't itself failed.
+            errorMessage: entry.status === 'failed' ? entry.errorMessage : (status === 'failed' ? error?.message : entry.errorMessage),
           },
         },
       };

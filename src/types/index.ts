@@ -335,6 +335,8 @@ export interface Project {
 export type BackgroundDownloadStatus =
   | 'pending'
   | 'running'
+  | 'retrying'
+  | 'waiting_for_network'
   | 'completed'
   | 'failed'
   | 'cancelled';
@@ -352,6 +354,7 @@ export type BackgroundDownloadReasonCode =
   | 'http_403'
   | 'http_404'
   | 'http_416'
+  | 'http_429'
   | 'client_error'
   | 'unknown_error';
 export interface BackgroundDownloadInfo {

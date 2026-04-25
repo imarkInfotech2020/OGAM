@@ -11,6 +11,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   http_403:             'Access denied. You may not have permission to download this file.',
   http_404:             'File not found. It may have been moved or removed.',
   http_416:             'Download resume failed. Will restart from the beginning.',
+  http_429:             'Server is rate-limiting. Retrying with backoff.',
   client_error:         'A client error occurred. Please retry.',
   unknown_error:        'Download failed. Try again on a stable connection.',
 };
@@ -38,5 +39,6 @@ export function isRetryableError(code?: string): boolean {
   return code === 'network_lost' ||
     code === 'network_timeout' ||
     code === 'server_unavailable' ||
-    code === 'download_interrupted';
+    code === 'download_interrupted' ||
+    code === 'http_429';
 }
