@@ -96,7 +96,6 @@ interface DownloadEntry {
   mmProjStatus?: DownloadStatus
   errorMessage?: string
   createdAt: number
-  lastProgressAt: number       // used for stuck detection
   metadataJson?: string        // display metadata (image model name, backend, etc.)
 }
 ```
@@ -260,14 +259,3 @@ Vision models download two files: the main GGUF and an mmproj file.
 - If mmproj fails: model is registered as `isVisionModel: false`. A "Repair Vision" affordance is shown. State persists across restarts (stored in `downloadedModels`).
 - Progress bar combines both: `(bytesDownloaded + mmProjBytesDownloaded) / combinedTotalBytes`.
 
----
-
-## Stuck Detection
-
-`STUCK_THRESHOLD_MS = 30_000` (30 seconds).
-
-`isStalled(item)` in `useDownloadManager` returns `true` if:
-- status is `pending` or `running`, AND
-- `Date.now() - entry.lastProgressAt > 30_000`
-
-`lastProgressAt` is updated on every `updateProgress` call. The DownloadManagerScreen ticks a `stallTick` counter every second to force re-evaluation without depending on store events.
