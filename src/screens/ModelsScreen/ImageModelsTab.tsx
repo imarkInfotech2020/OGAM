@@ -78,7 +78,7 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
         }}
         isDownloading={isDownloading}
         downloadProgress={progressValue}
-        downloadBytes={!entry ? undefined : { downloaded: Math.round(progressValue * model.size), total: model.size }}
+        downloadBytes={entry ? { downloaded: Math.round(progressValue * model.size), total: model.size } : undefined}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}

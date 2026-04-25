@@ -453,9 +453,9 @@ describe('appStore', () => {
       const partialize = (useAppStore.persist as any).getOptions().partialize;
       const partialized = partialize(useAppStore.getState());
 
-      expect((partialized as any).imageModelDownloading).toBeUndefined();
-      expect((partialized as any).imageModelDownloadIds).toBeUndefined();
-      expect((partialized as any).activeBackgroundDownloads).toBeUndefined();
+      expect(partialized.imageModelDownloading).toBeUndefined();
+      expect(partialized.imageModelDownloadIds).toBeUndefined();
+      expect(partialized.activeBackgroundDownloads).toBeUndefined();
     });
   });
 
@@ -641,7 +641,7 @@ describe('appStore', () => {
       const merged = {
         ...currentState,
         ...oldPersistedState,
-      } as any;
+      };
 
       // The merge function converts string to array
       if (typeof merged.imageModelDownloading === 'string') {
@@ -853,7 +853,7 @@ describe('appStore', () => {
         currentState
       );
 
-      expect((result as any).imageModelDownloading).toBeUndefined();
+      expect(result.imageModelDownloading).toBeUndefined();
     });
 
     it('drops legacy imageModelDownloadIds and imageModelDownloadId fields', () => {
@@ -868,8 +868,8 @@ describe('appStore', () => {
         currentState
       );
 
-      expect((result as any).imageModelDownloadIds).toBeUndefined();
-      expect((result as any).imageModelDownloadId).toBeUndefined();
+      expect(result.imageModelDownloadIds).toBeUndefined();
+      expect(result.imageModelDownloadId).toBeUndefined();
     });
   });
 
@@ -1009,11 +1009,11 @@ describe('appStore', () => {
         },
       }, currentState);
 
-      expect((migrated as any).downloadProgress).toBeUndefined();
-      expect((migrated as any).activeBackgroundDownloads).toBeUndefined();
-      expect((migrated as any).imageModelDownloading).toBeUndefined();
-      expect((migrated as any).imageModelDownloadIds).toBeUndefined();
-      expect((migrated as any).imageModelDownloadId).toBeUndefined();
+      expect(migrated.downloadProgress).toBeUndefined();
+      expect(migrated.activeBackgroundDownloads).toBeUndefined();
+      expect(migrated.imageModelDownloading).toBeUndefined();
+      expect(migrated.imageModelDownloadIds).toBeUndefined();
+      expect(migrated.imageModelDownloadId).toBeUndefined();
     });
 
     it('handles model add and remove in sequence', () => {

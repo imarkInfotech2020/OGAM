@@ -38,12 +38,12 @@ export interface DownloadEntry {
  * Use this to guard against duplicate starts (rapid double-tap) so we never
  * have two parallel native downloads racing on the same logical file.
  */
-const ACTIVE_STATUSES: ReadonlyArray<DownloadStatus> = [
+const ACTIVE_STATUSES = new Set<DownloadStatus>([
   'pending', 'running', 'retrying', 'waiting_for_network', 'processing',
-];
+]);
 
 export function isActiveStatus(status: DownloadStatus): boolean {
-  return ACTIVE_STATUSES.includes(status);
+  return ACTIVE_STATUSES.has(status);
 }
 
 interface DownloadStoreState {
@@ -189,14 +189,17 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
       // Sidecar status is independent of the parent. mmproj failure must not
       // fail the whole download — the main GGUF can still complete and the
       // model becomes usable text-only with a "repair vision" affordance.
+      let mmProjErrorMessage = entry.errorMessage;
+      if (entry.status !== 'failed') {
+        mmProjErrorMessage = status === 'failed' ? error?.message : entry.errorMessage;
+      }
       return {
         downloads: {
           ...state.downloads,
           [modelKey]: {
             ...entry,
             mmProjStatus: status as DownloadStatus,
-            // Surface the mmproj error message only if main hasn't itself failed.
-            errorMessage: entry.status === 'failed' ? entry.errorMessage : (status === 'failed' ? error?.message : entry.errorMessage),
+            errorMessage: mmProjErrorMessage,
           },
         },
       };

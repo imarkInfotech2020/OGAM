@@ -50,7 +50,7 @@ function getMmProjIds(rows: NativeDownloadRow[]): Set<string> {
   return new Set<string>(
     rows
       .filter(r => r.mmProjDownloadId != null)
-      .map(r => r.mmProjDownloadId as string),
+      .map(r => r.mmProjDownloadId!),
   );
 }
 
@@ -94,7 +94,7 @@ function toDownloadEntry(
     modelId: row.modelId ?? '',
     fileName: row.fileName,
     quantization: row.quantization ?? 'Unknown',
-    modelType: (row.modelType as ModelType) ?? 'text',
+    modelType: (row.modelType ?? 'text') as ModelType,
     status: mapNativeStatus(row.status),
     bytesDownloaded: row.bytesDownloaded ?? 0,
     totalBytes: row.totalBytes ?? 0,

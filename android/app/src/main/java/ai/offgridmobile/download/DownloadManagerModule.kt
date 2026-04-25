@@ -260,9 +260,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ): String? {
         if (sourceFile.exists()) return null
         val targetFile = File(targetPath)
-        if (!targetFile.exists()) {
-            throw IllegalStateException("Downloaded file not found: ${sourceFile.absolutePath}")
-        }
+        check(targetFile.exists()) { "Downloaded file not found: ${sourceFile.absolutePath}" }
         withContext(Dispatchers.IO) { downloadDao.deleteDownload(download) }
         return targetPath
     }
@@ -324,7 +322,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             reactApplicationContext.startActivity(intent)
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            // startActivity is a best-effort call; ignore failures on restricted devices
+        }
     }
 
     // -------------------------------------------------------------------------

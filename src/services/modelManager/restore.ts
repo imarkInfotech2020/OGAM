@@ -14,6 +14,7 @@ export interface RestoreDownloadsOpts {
   backgroundDownloadContext: Map<string, BackgroundDownloadContext>;
   backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null;
   onProgress?: DownloadProgressCallback;
+  persistedDownloads?: Record<string, PersistedDownloadInfo>;
 }
 
 type RestorableDownloadInfo = BackgroundDownloadInfo & {
@@ -161,16 +162,32 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
   reportProgress();
 }
 
+function collectMmProjIds(
+  persistedDownloads: Record<string, PersistedDownloadInfo> | undefined,
+  activeDownloads: RestorableDownloadInfo[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const info of Object.values(persistedDownloads ?? {})) {
+    if (info.mmProjDownloadId) ids.add(info.mmProjDownloadId);
+  }
+  for (const d of activeDownloads) {
+    if (d.mmProjDownloadId) ids.add(d.mmProjDownloadId);
+  }
+  return ids;
+}
+
 export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Promise<string[]> {
-  const { modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
+  const { modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress, persistedDownloads } = opts;
 
   if (!backgroundDownloadService.isAvailable()) return [];
 
   const activeDownloads = await backgroundDownloadService.getActiveDownloads() as RestorableDownloadInfo[];
+  const mmProjIds = collectMmProjIds(persistedDownloads, activeDownloads);
   const restoredDownloadIds: string[] = [];
 
   for (const download of activeDownloads) {
     if (!isRestorable(download)) continue;
+    if (mmProjIds.has(download.downloadId)) continue;
     const metadata = buildMetadataFromActiveDownload(download, modelsDir);
     if (!metadata || backgroundDownloadContext.has(download.downloadId)) continue;
     await restoreDownloadEntry({
