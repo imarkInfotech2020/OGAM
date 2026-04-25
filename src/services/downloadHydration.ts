@@ -40,11 +40,14 @@ export async function hydrateDownloadStore(): Promise<void> {
       .map(r => r.mmProjDownloadId as string),
   );
 
-  // Parent rows only — sidecars never shown in UI
+  // Parent rows only — sidecars never shown in UI.
+  // Exclude terminal states; only active/in-flight entries belong in the store.
   const parentRows = rows.filter(r =>
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
-    r.status !== 'cancelled',
+    r.status !== 'cancelled' &&
+    r.status !== 'completed' &&
+    r.status !== 'failed',
   );
 
   // Hydration rule: if multiple rows share modelKey, latest createdAt wins

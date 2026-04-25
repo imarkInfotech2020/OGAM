@@ -205,8 +205,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     let currentDownloadId: string | undefined;
 
     const onComplete = (dm: DownloadedModel) => {
-      if (currentDownloadId) useDownloadStore.getState().setCompleted(currentDownloadId);
       addDownloadedModel(dm);
+      // Clear the entry once the model is registered — UI then reads "downloaded" state
+      // from downloadedModels rather than a lingering store entry stuck at 100%.
+      useDownloadStore.getState().remove(modelKey);
       if (file.mmProjFile && !dm.isVisionModel) {
         setAlertState(showAlert(
           'Model Downloaded',

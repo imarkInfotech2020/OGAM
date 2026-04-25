@@ -234,7 +234,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
       if (!file?.mmProjFile) {
-        setAlertState(showAlert('Error', 'Could not find vision projection file for this model'));
+        setAlertState(showAlert(
+          'No Vision File Available',
+          'This model does not publish a separate vision projection file. Re-download the original (non-i1) variant if vision support is required.',
+        ));
         return;
       }
       await modelManager.repairMmProj(repoId, file, {});

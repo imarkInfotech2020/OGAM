@@ -16,6 +16,8 @@ export function needsVisionRepair(
   catalogFile?: ModelFile,
 ): boolean {
   if (!model) return false;
+  // Only vision models can need repair. Non-vision models without mmProjPath are normal.
+  if (!model.isVisionModel) return false;
   // If a catalog file is provided, use it to confirm an mmproj is available to download
   if (catalogFile !== undefined && !catalogFile.mmProjFile) return false;
   return !model.mmProjPath;
