@@ -150,7 +150,7 @@ function wireZipListeners(
   ctx: { downloadId: string; modelId: string; deps: ImageDownloadDeps },
   onCompleteWork: () => Promise<void>,
 ) {
-  const { downloadId, modelId, deps } = ctx;
+  const { downloadId, deps } = ctx;
   const unsubComplete = backgroundDownloadService.onComplete(downloadId, async () => {
     unsubComplete(); unsubError();
     try { await onCompleteWork(); } catch (e: any) {
@@ -163,7 +163,6 @@ function wireZipListeners(
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(ev.reason)));
     // useDownloads at app root has already routed this to setStatus('failed').
     // Keep the entry visible so the user can retry/remove. No removeStoreEntry here.
-    void modelId;
   });
 }
 

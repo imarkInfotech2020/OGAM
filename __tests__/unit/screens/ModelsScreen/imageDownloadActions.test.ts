@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import RNFS from 'react-native-fs';
+import _RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import {
   downloadHuggingFaceModel,
@@ -10,7 +10,7 @@ import {
   ImageDownloadDeps,
 } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
-import { useDownloadStore } from '../../../../src/stores/downloadStore';
+import { useDownloadStore as _useDownloadStore } from '../../../../src/stores/downloadStore';
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(true)),
