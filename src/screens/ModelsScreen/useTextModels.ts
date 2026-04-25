@@ -240,6 +240,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         combinedTotalBytes: totalBytes,
         progress: 0,
         createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       });
       modelManager.watchDownload(info.downloadId, onComplete, onError);
     } catch (e) { onError(e as Error); }

@@ -86,6 +86,7 @@ export async function hydrateDownloadStore(): Promise<void> {
       mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
       errorMessage: row.reason || undefined,
       createdAt: row.createdAt ?? 0,
+      lastProgressAt: Date.now(),
       metadataJson: row.metadataJson ?? undefined,
     });
   }

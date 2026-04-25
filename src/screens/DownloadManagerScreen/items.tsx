@@ -192,9 +192,11 @@ interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
   onRetry?: (item: DownloadItem) => void;
+  onRestart?: (item: DownloadItem) => void;
+  isStalled?: boolean;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry, onRestart, isStalled }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -251,8 +253,8 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           {getStatusIcon() && (
             <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
           )}
-          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
-            {getStatusLabel(item)}
+          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }, isStalled && { color: colors.warning }]}>
+            {isStalled ? 'Looks stuck — try restart' : getStatusLabel(item)}
           </Text>
         </View>
       </View>
@@ -276,6 +278,18 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           )}
+        </View>
+      )}
+      {item.status !== 'failed' && onRestart && item.modelType !== 'image' && (
+        <View style={styles.failedActionsRow}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            testID="restart-download-button"
+            onPress={() => onRestart(item)}
+          >
+            <Icon name="rotate-cw" size={14} color={isStalled ? colors.warning : colors.primary} />
+            <Text style={[styles.retryButtonText, isStalled && { color: colors.warning }]}>Restart</Text>
+          </TouchableOpacity>
         </View>
       )}
     </Card>

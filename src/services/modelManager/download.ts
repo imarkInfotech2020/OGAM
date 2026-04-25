@@ -141,6 +141,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     combinedTotalBytes,
     progress: 0,
     createdAt: Date.now(),
+    lastProgressAt: Date.now(),
   });
 
   // Start mmproj download in parallel if needed

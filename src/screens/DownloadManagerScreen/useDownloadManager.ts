@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
+import { useDownloadStore, DownloadEntry, STUCK_THRESHOLD_MS } from '../../stores/downloadStore';
 import {
   modelManager,
   activeModelService,
@@ -19,8 +19,10 @@ export interface UseDownloadManagerResult {
   setAlertState: (state: AlertState) => void;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleRetryDownload: (item: DownloadItem) => void;
+  handleRestartDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
+  isStalled: (item: DownloadItem) => boolean;
   totalStorageUsed: number;
 }
 
@@ -249,6 +251,26 @@ export function useDownloadManager(): UseDownloadManagerResult {
     });
   };
 
+  // Restart = retry without confirming. For "looks stuck" / proactive restart on a
+  // running download. Reuses the failed-retry plumbing, just skips the dialog.
+  const handleRestartDownload = (item: DownloadItem) => { executeRetryDownload(item); };
+
+  // Tick once a second so isStalled-based UI updates without depending on store events.
+  const [stallTick, setStallTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setStallTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isStalled = (item: DownloadItem): boolean => {
+    void stallTick;
+    if (!item.modelKey) return false;
+    if (item.status !== 'pending' && item.status !== 'running') return false;
+    const entry = downloads[item.modelKey];
+    if (!entry) return false;
+    return Date.now() - entry.lastProgressAt > STUCK_THRESHOLD_MS;
+  };
+
   return {
     activeItems,
     completedItems,
@@ -256,8 +278,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setAlertState,
     handleRemoveDownload,
     handleRetryDownload,
+    handleRestartDownload,
     handleDeleteItem,
     handleRepairVision,
+    isStalled,
     totalStorageUsed,
   };
 }

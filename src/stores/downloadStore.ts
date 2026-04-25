@@ -28,8 +28,11 @@ export interface DownloadEntry {
   mmProjStatus?: DownloadStatus
   errorMessage?: string
   createdAt: number
+  lastProgressAt: number
   metadataJson?: string
 }
+
+export const STUCK_THRESHOLD_MS = 30_000;
 
 interface DownloadStoreState {
   downloads: Record<ModelKey, DownloadEntry>
@@ -48,7 +51,7 @@ interface DownloadStoreState {
   remove: (modelKey: ModelKey) => void
 }
 
-export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
+export const useDownloadStore = create<DownloadStoreState>((set) => ({
   downloads: {},
   downloadIdIndex: {},
 
@@ -94,7 +97,14 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
     return {
       downloads: {
         ...state.downloads,
-        [modelKey]: { ...entry, bytesDownloaded: bytes, totalBytes: total, progress, status: 'running' },
+        [modelKey]: {
+          ...entry,
+          bytesDownloaded: bytes,
+          totalBytes: total,
+          progress,
+          status: 'running',
+          lastProgressAt: Date.now(),
+        },
       },
     };
   }),
@@ -109,7 +119,12 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
     return {
       downloads: {
         ...state.downloads,
-        [modelKey]: { ...entry, mmProjBytesDownloaded: bytes, progress },
+        [modelKey]: {
+          ...entry,
+          mmProjBytesDownloaded: bytes,
+          progress,
+          lastProgressAt: Date.now(),
+        },
       },
     };
   }),
@@ -187,6 +202,7 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
     if (!entry) return state;
     const newIndex = { ...state.downloadIdIndex };
     delete newIndex[entry.downloadId];
+    if (entry.mmProjDownloadId) delete newIndex[entry.mmProjDownloadId];
     newIndex[newDownloadId] = modelKey;
     return {
       downloads: {
@@ -200,6 +216,8 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
           errorMessage: undefined,
           mmProjStatus: undefined,
           mmProjBytesDownloaded: undefined,
+          mmProjDownloadId: undefined,
+          lastProgressAt: Date.now(),
         },
       },
       downloadIdIndex: newIndex,
