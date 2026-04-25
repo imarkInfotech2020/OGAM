@@ -8,6 +8,8 @@ import { consumePendingSpotlight } from '../../components/onboarding/spotlightSt
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { makeImageModelKey } from '../../utils/modelKey';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { ImageFilterBar } from './ImageFilterBar';
@@ -27,7 +29,6 @@ type Props = Pick<ModelsScreenViewModel,
   | 'showRecommendedOnly' | 'setShowRecommendedOnly'
   | 'showRecHint' | 'setShowRecHint'
   | 'imageRec' | 'ramGB' | 'imageRecommendation'
-  | 'imageModelDownloading' | 'imageModelProgress'
   | 'handleDownloadImageModel' | 'handleCancelImageDownload' | 'loadHFModels'
   | 'clearImageFilters' | 'setUserChangedBackendFilter'
   | 'isRecommendedModel'
@@ -37,20 +38,24 @@ interface ImageModelCardProps {
   model: HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] };
   index: number;
   imageRec: ImageModelRecommendation | null;
-  imageModelDownloading: string[];
-  imageModelProgress: Record<string, number>;
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
   handleCancelImageDownload: Props['handleCancelImageDownload'];
 }
 
 const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
-  model, index, imageRec, imageModelDownloading, imageModelProgress,
+  model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
   const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
+  // Single source of truth: live download status read from useDownloadStore
+  // via the stable image:<id> modelKey. Replaces drilled imageModelDownloading
+  // and imageModelProgress props.
+  const entry = useDownloadStore(s => s.downloads[makeImageModelKey(model.id)]);
+  const isDownloading = !!entry && isActiveStatus(entry.status);
+  const progressValue = entry?.progress ?? 0;
   let authorLabel: string;
   if (model._coreml) authorLabel = 'Core ML';
   else if (model.backend === 'qnn') authorLabel = 'NPU';
@@ -71,22 +76,14 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
           author: authorLabel,
           description: `${formatBytes(model.size)}${variantSuffix}`,
         }}
-        isDownloading={imageModelDownloading.includes(model.id)}
-        downloadProgress={imageModelProgress[model.id] || 0}
-        downloadBytes={imageModelProgress[model.id] == null ? undefined : { downloaded: Math.round((imageModelProgress[model.id] || 0) * model.size), total: model.size }}
+        isDownloading={isDownloading}
+        downloadProgress={progressValue}
+        downloadBytes={!entry ? undefined : { downloaded: Math.round(progressValue * model.size), total: model.size }}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
-        onDownload={
-          imageModelDownloading.includes(model.id)
-            ? undefined
-            : () => handleDownloadImageModel(hfModelToDescriptor(model))
-        }
-        onCancel={
-          imageModelDownloading.includes(model.id)
-            ? () => handleCancelImageDownload(model.id)
-            : undefined
-        }
+        onDownload={isDownloading ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
+        onCancel={isDownloading ? () => handleCancelImageDownload(model.id) : undefined}
       />
     </View>
   );
@@ -120,8 +117,6 @@ interface ScrollContentProps {
   loadHFModels: (forceRefresh?: boolean) => void;
   filteredHFModels: (HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] })[];
   availableHFModels: HFImageModel[];
-  imageModelDownloading: string[];
-  imageModelProgress: Record<string, number>;
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
   handleCancelImageDownload: Props['handleCancelImageDownload'];
@@ -137,7 +132,6 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
   hasActiveImageFilters, clearImageFilters, setUserChangedBackendFilter,
   hfModelsLoading, hfModelsError, loadHFModels,
   filteredHFModels, availableHFModels,
-  imageModelDownloading, imageModelProgress,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
   imageSearchQuery,
 }) => {
@@ -223,8 +217,6 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
                 model={model}
                 index={index}
                 imageRec={imageRec}
-                imageModelDownloading={imageModelDownloading}
-                imageModelProgress={imageModelProgress}
                 isRecommendedModel={isRecommendedModel}
                 handleDownloadImageModel={handleDownloadImageModel}
                 handleCancelImageDownload={handleCancelImageDownload}
@@ -259,7 +251,6 @@ export const ImageModelsTab: React.FC<Props> = ({
   showRecommendedOnly, setShowRecommendedOnly,
   showRecHint, setShowRecHint,
   imageRec, ramGB, imageRecommendation,
-  imageModelDownloading, imageModelProgress,
   handleDownloadImageModel, handleCancelImageDownload, loadHFModels,
   clearImageFilters, setUserChangedBackendFilter,
   isRecommendedModel,
@@ -325,8 +316,6 @@ export const ImageModelsTab: React.FC<Props> = ({
         loadHFModels={loadHFModels}
         filteredHFModels={filteredHFModels as (HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] })[]}
         availableHFModels={availableHFModels}
-        imageModelDownloading={imageModelDownloading}
-        imageModelProgress={imageModelProgress}
         isRecommendedModel={isRecommendedModel}
         handleDownloadImageModel={handleDownloadImageModel}
         handleCancelImageDownload={handleCancelImageDownload}

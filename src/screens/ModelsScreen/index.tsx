@@ -199,8 +199,6 @@ export const ModelsScreen: React.FC = () => {
           imageRec={vm.imageRec}
           ramGB={vm.ramGB}
           imageRecommendation={vm.imageRecommendation}
-          imageModelDownloading={vm.imageModelDownloading}
-          imageModelProgress={vm.imageModelProgress}
           handleDownloadImageModel={vm.handleDownloadImageModel}
           handleCancelImageDownload={vm.handleCancelImageDownload}
           loadHFModels={vm.loadHFModels}
