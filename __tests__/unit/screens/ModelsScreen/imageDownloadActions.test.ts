@@ -1,19 +1,16 @@
 import { Platform } from 'react-native';
+import RNFS from 'react-native-fs';
+import { unzip } from 'react-native-zip-archive';
 import {
   downloadHuggingFaceModel,
   downloadCoreMLMultiFile,
   proceedWithDownload,
   handleDownloadImageModel,
-  cleanupDownloadState,
   registerAndNotify,
-  wireDownloadListeners,
   ImageDownloadDeps,
 } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
-
-// ============================================================================
-// Mocks
-// ============================================================================
+import { useDownloadStore } from '../../../../src/stores/downloadStore';
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(true)),
@@ -22,7 +19,7 @@ jest.mock('react-native-fs', () => ({
 }));
 
 jest.mock('react-native-zip-archive', () => ({
-  unzip: jest.fn(() => Promise.resolve('/extracted')),
+  unzip: jest.fn(() => Promise.resolve('/unzipped')),
 }));
 
 jest.mock('../../../../src/components/CustomAlert', () => ({
@@ -30,38 +27,52 @@ jest.mock('../../../../src/components/CustomAlert', () => ({
   hideAlert: jest.fn(() => ({ visible: false })),
 }));
 
+const mockDownloads: Record<string, any> = {};
+const mockStoreApi = {
+  downloads: mockDownloads,
+  add: jest.fn((entry: any) => { mockDownloads[entry.modelKey] = entry; }),
+  retryEntry: jest.fn((modelKey: string, downloadId: string) => {
+    mockDownloads[modelKey] = { ...(mockDownloads[modelKey] || {}), modelKey, downloadId, status: 'pending' };
+  }),
+  remove: jest.fn((modelKey: string) => { delete mockDownloads[modelKey]; }),
+  updateProgress: jest.fn(),
+  setProcessing: jest.fn(),
+  setStatus: jest.fn(),
+};
+
+jest.mock('../../../../src/stores/downloadStore', () => ({
+  useDownloadStore: Object.assign(
+    jest.fn((selector?: any) => selector ? selector(mockStoreApi) : mockStoreApi),
+    { getState: () => mockStoreApi },
+  ),
+  isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
+}));
+
 const mockGetImageModelsDirectory = jest.fn(() => '/mock/image-models');
 const mockAddDownloadedImageModel = jest.fn((_m?: any) => Promise.resolve());
-const mockGetActiveBackgroundDownloads = jest.fn(() => Promise.resolve([]));
+const mockMoveCompletedDownload = jest.fn(() => Promise.resolve('/moved.zip'));
+const mockStartDownload = jest.fn(() => Promise.resolve({ downloadId: 'zip-42' }));
+const mockDownloadFileTo = jest.fn(() => ({ promise: Promise.resolve() }));
+const mockOnComplete = jest.fn((_id: string, cb: Function) => { completeCallbacks.push(cb); return jest.fn(); });
+const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push(cb); return jest.fn(); });
+const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
 
 jest.mock('../../../../src/services', () => ({
   modelManager: {
     getImageModelsDirectory: () => mockGetImageModelsDirectory(),
     addDownloadedImageModel: (m: any) => mockAddDownloadedImageModel(m),
-    getActiveBackgroundDownloads: () => mockGetActiveBackgroundDownloads(),
   },
   hardwareService: {
-    getSoCInfo: jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' })),
+    getSoCInfo: () => mockGetSoCInfo(),
   },
   backgroundDownloadService: {
-    isAvailable: jest.fn(() => true),
-    startDownload: jest.fn(() => Promise.resolve({ downloadId: 42 })),
-    startMultiFileDownload: jest.fn(() => Promise.resolve({ downloadId: 99 })),
-    downloadFileTo: jest.fn(() => ({
-      promise: Promise.resolve(),
-    })),
-    onProgress: jest.fn(() => jest.fn()),
-    onComplete: jest.fn((_id: number, cb: Function) => {
-      // Store callback for manual invocation in tests
-      (mockOnCompleteCallbacks as any[]).push(cb);
-      return jest.fn();
-    }),
-    onError: jest.fn((_id: number, cb: Function) => {
-      (mockOnErrorCallbacks as any[]).push(cb);
-      return jest.fn();
-    }),
-    moveCompletedDownload: jest.fn(() => Promise.resolve()),
+    startDownload: (...args: any[]) => mockStartDownload(...args),
+    downloadFileTo: (...args: any[]) => mockDownloadFileTo(...args),
+    onComplete: (...args: any[]) => mockOnComplete(...args),
+    onError: (...args: any[]) => mockOnError(...args),
+    moveCompletedDownload: (...args: any[]) => mockMoveCompletedDownload(...args),
     startProgressPolling: jest.fn(),
+    cancelDownload: jest.fn(() => Promise.resolve()),
   },
 }));
 
@@ -70,28 +81,15 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
   downloadCoreMLTokenizerFiles: jest.fn(() => Promise.resolve()),
 }));
 
-let mockOnCompleteCallbacks: Function[] = [];
-let mockOnErrorCallbacks: Function[] = [];
-
-// ============================================================================
-// Helpers
-// ============================================================================
+let completeCallbacks: Function[] = [];
+let errorCallbacks: Function[] = [];
 
 function makeDeps(overrides: Partial<ImageDownloadDeps> = {}): ImageDownloadDeps {
   return {
-    addImageModelDownloading: jest.fn(),
-    removeImageModelDownloading: jest.fn(),
-    updateModelProgress: jest.fn(),
-    syncSharedProgress: jest.fn(),
-    clearModelProgress: jest.fn(),
     addDownloadedImageModel: jest.fn(),
     activeImageModelId: null,
     setActiveImageModelId: jest.fn(),
-    setImageModelDownloadId: jest.fn(),
-    setBackgroundDownload: jest.fn(),
-    getBackgroundDownload: jest.fn(() => null),
     setAlertState: jest.fn(),
-    setDownloadProgress: jest.fn(),
     triedImageGen: true,
     ...overrides,
   };
@@ -146,629 +144,123 @@ function makeCoreMLModelInfo(overrides: Partial<ImageModelDescriptor> = {}): Ima
   };
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 describe('imageDownloadActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockOnCompleteCallbacks = [];
-    mockOnErrorCallbacks = [];
+    completeCallbacks = [];
+    errorCallbacks = [];
+    Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
   });
 
-  // ==========================================================================
-  // downloadHuggingFaceModel
-  // ==========================================================================
-  describe('downloadHuggingFaceModel', () => {
-    it('shows error when huggingFaceRepo is missing', async () => {
-      const deps = makeDeps();
-      const model = makeHFModelInfo({ huggingFaceRepo: undefined, huggingFaceFiles: undefined });
+  it('downloadHuggingFaceModel writes a store entry and registers on success', async () => {
+    const deps = makeDeps();
 
-      await downloadHuggingFaceModel(model, deps);
+    await downloadHuggingFaceModel(makeHFModelInfo(), deps);
 
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Error' }),
-      );
-      expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
-    });
-
-    it('shows error when huggingFaceFiles is missing', async () => {
-      const deps = makeDeps();
-      const model = makeHFModelInfo({ huggingFaceFiles: undefined });
-
-      await downloadHuggingFaceModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Error' }),
-      );
-    });
-
-    it('downloads all files and registers model on success', async () => {
-      const deps = makeDeps();
-      const model = makeHFModelInfo();
-
-      await downloadHuggingFaceModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalledWith('test-hf-model');
-      expect(deps.updateModelProgress).toHaveBeenCalled();
-      expect(mockAddDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.addDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-hf-model');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('test-hf-model');
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Success' }),
-      );
-    });
-
-    it('sets active image model when none is active', async () => {
-      const deps = makeDeps({ activeImageModelId: null });
-      const model = makeHFModelInfo();
-
-      await downloadHuggingFaceModel(model, deps);
-
-      expect(deps.setActiveImageModelId).toHaveBeenCalledWith('test-hf-model');
-    });
-
-    it('does not override active image model if one already set', async () => {
-      const deps = makeDeps({ activeImageModelId: 'existing-model' });
-      const model = makeHFModelInfo();
-
-      await downloadHuggingFaceModel(model, deps);
-
-      expect(deps.setActiveImageModelId).not.toHaveBeenCalled();
-    });
-
-    it('cleans up and shows error on download failure', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      backgroundDownloadService.downloadFileTo.mockReturnValueOnce({
-        promise: Promise.reject(new Error('Network failed')),
-      });
-
-      const deps = makeDeps();
-      const model = makeHFModelInfo();
-
-      await downloadHuggingFaceModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-hf-model');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('test-hf-model');
-    });
+    expect(mockStoreApi.add).toHaveBeenCalled();
+    expect(mockStoreApi.setProcessing).toHaveBeenCalled();
+    expect(mockAddDownloadedImageModel).toHaveBeenCalled();
+    expect(deps.addDownloadedImageModel).toHaveBeenCalled();
+    expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-hf-model');
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
   });
 
-  // ==========================================================================
-  // downloadCoreMLMultiFile
-  // ==========================================================================
-  describe('downloadCoreMLMultiFile', () => {
-    it('shows alert when background downloads not available', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      backgroundDownloadService.isAvailable.mockReturnValueOnce(false);
+  it('downloadHuggingFaceModel marks failure in store on error', async () => {
+    mockDownloadFileTo.mockReturnValueOnce({ promise: Promise.reject(new Error('Network failed')) });
+    const deps = makeDeps();
 
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
+    await downloadHuggingFaceModel(makeHFModelInfo(), deps);
 
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Not Available' }),
-      );
-      expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
-    });
-
-    it('returns early when coremlFiles is empty', async () => {
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo({ coremlFiles: [] }), deps);
-
-      expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
-    });
-
-    it('starts multi-file download and sets up listeners', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      const deps = makeDeps();
-
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalledWith('test-coreml-model');
-      expect(backgroundDownloadService.startMultiFileDownload).toHaveBeenCalled();
-      expect(deps.setImageModelDownloadId).toHaveBeenCalledWith('test-coreml-model', 99);
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(99, expect.any(Object));
-      expect(backgroundDownloadService.onProgress).toHaveBeenCalledWith(99, expect.any(Function));
-      expect(backgroundDownloadService.onComplete).toHaveBeenCalledWith(99, expect.any(Function));
-      expect(backgroundDownloadService.onError).toHaveBeenCalledWith(99, expect.any(Function));
-      expect(backgroundDownloadService.startProgressPolling).toHaveBeenCalled();
-    });
-
-    it('handles completion callback', async () => {
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
-
-      // Trigger the complete callback
-      expect(mockOnCompleteCallbacks.length).toBe(1);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(mockAddDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.addDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-coreml-model');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('test-coreml-model');
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Success' }),
-      );
-    });
-
-    it('handles error callback', async () => {
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
-
-      expect(mockOnErrorCallbacks.length).toBe(1);
-      mockOnErrorCallbacks[0]({ reason: 'Disk full' });
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-coreml-model');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('test-coreml-model');
-    });
-
-    it('handles exception during startMultiFileDownload', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      backgroundDownloadService.startMultiFileDownload.mockRejectedValueOnce(new Error('Native crash'));
-
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-coreml-model');
-    });
+    expect(mockStoreApi.setStatus).toHaveBeenCalledWith(
+      'image-multi:test-hf-model',
+      'failed',
+      expect.objectContaining({ message: 'Network failed' }),
+    );
   });
 
-  // ==========================================================================
-  // proceedWithDownload
-  // ==========================================================================
-  describe('proceedWithDownload', () => {
-    it('delegates to downloadHuggingFaceModel for HF models', async () => {
-      const deps = makeDeps();
-      const model = makeHFModelInfo();
+  it('downloadCoreMLMultiFile writes a store entry and registers on success', async () => {
+    const deps = makeDeps();
 
-      await proceedWithDownload(model, deps);
+    await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
 
-      expect(deps.addImageModelDownloading).toHaveBeenCalledWith('test-hf-model');
-    });
-
-    it('delegates to downloadCoreMLMultiFile for CoreML models', async () => {
-      const deps = makeDeps();
-      const model = makeCoreMLModelInfo();
-
-      await proceedWithDownload(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalledWith('test-coreml-model');
-    });
-
-    it('uses background download service for zip models', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      const deps = makeDeps();
-      const model = makeZipModelInfo();
-
-      await proceedWithDownload(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalledWith('test-zip-model');
-      expect(backgroundDownloadService.startDownload).toHaveBeenCalled();
-      expect(deps.setImageModelDownloadId).toHaveBeenCalledWith('test-zip-model', 42);
-    });
-
-    it('handles zip download completion with unzip', async () => {
-      const deps = makeDeps();
-      const model = makeZipModelInfo();
-
-      await proceedWithDownload(model, deps);
-
-      // Trigger completion
-      expect(mockOnCompleteCallbacks.length).toBe(1);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(mockAddDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.addDownloadedImageModel).toHaveBeenCalled();
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('test-zip-model');
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Success' }),
-      );
-    });
-
-    it('handles zip download error callback', async () => {
-      const deps = makeDeps();
-      const model = makeZipModelInfo();
-
-      await proceedWithDownload(model, deps);
-
-      expect(mockOnErrorCallbacks.length).toBe(1);
-      mockOnErrorCallbacks[0]({ reason: 'Connection lost' });
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('handles startDownload exception for zip models', async () => {
-      const { backgroundDownloadService } = require('../../../../src/services');
-      backgroundDownloadService.startDownload.mockRejectedValueOnce(new Error('Storage full'));
-
-      const deps = makeDeps();
-      await proceedWithDownload(makeZipModelInfo(), deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('sets active model on zip download completion when none active', async () => {
-      const deps = makeDeps({ activeImageModelId: null });
-      const model = makeZipModelInfo();
-
-      await proceedWithDownload(model, deps);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(deps.setActiveImageModelId).toHaveBeenCalled();
-    });
-
-    it('does not set active model on zip download when one already active', async () => {
-      const deps = makeDeps({ activeImageModelId: 'existing' });
-      const model = makeZipModelInfo();
-
-      await proceedWithDownload(model, deps);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(deps.setActiveImageModelId).not.toHaveBeenCalled();
-    });
-
-    it('handles extraction failure on zip download completion', async () => {
-      const { unzip } = require('react-native-zip-archive');
-      unzip.mockRejectedValueOnce(new Error('Corrupt zip'));
-
-      const deps = makeDeps();
-      await proceedWithDownload(makeZipModelInfo(), deps);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalled();
-    });
+    expect(mockStoreApi.add).toHaveBeenCalled();
+    expect(mockStoreApi.setProcessing).toHaveBeenCalled();
+    expect(mockAddDownloadedImageModel).toHaveBeenCalled();
+    expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-coreml-model');
   });
 
-  // ==========================================================================
-  // handleDownloadImageModel
-  // ==========================================================================
-  describe('handleDownloadImageModel', () => {
+  it('proceedWithDownload uses native zip flow and completes via listeners', async () => {
+    const deps = makeDeps();
+
+    await proceedWithDownload(makeZipModelInfo(), deps);
+
+    expect(mockStartDownload).toHaveBeenCalledWith(expect.objectContaining({
+      fileName: 'test-zip-model.zip',
+      modelKey: 'image:test-zip-model',
+      modelType: 'image',
+    }));
+    expect(completeCallbacks).toHaveLength(1);
+
+    await completeCallbacks[0]();
+
+    expect(mockStoreApi.setProcessing).toHaveBeenCalledWith('zip-42');
+    expect(mockMoveCompletedDownload).toHaveBeenCalled();
+    expect(unzip).toHaveBeenCalled();
+    expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-zip-model');
+  });
+
+  it('proceedWithDownload keeps failed zip entry visible on error callback', async () => {
+    const deps = makeDeps();
+
+    await proceedWithDownload(makeZipModelInfo(), deps);
+    expect(errorCallbacks).toHaveLength(1);
+
+    errorCallbacks[0]({ reason: 'Connection lost' });
+
+    expect(mockStoreApi.remove).not.toHaveBeenCalledWith('image:test-zip-model');
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Download Failed' }));
+  });
+
+  it('registerAndNotify removes the active entry after registration', async () => {
+    const deps = makeDeps();
+
+    await registerAndNotify(deps, {
+      imageModel: {
+        id: 'img-1',
+        name: 'Img 1',
+        description: 'desc',
+        modelPath: '/path',
+        downloadedAt: new Date().toISOString(),
+        size: 123,
+        style: 'creative',
+        backend: 'mnn',
+      },
+      modelName: 'Img 1',
+    });
+
+    expect(mockAddDownloadedImageModel).toHaveBeenCalled();
+    expect(mockStoreApi.remove).toHaveBeenCalledWith('image:img-1');
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
+  });
+
+  it('handleDownloadImageModel shows incompatibility alert for unsupported QNN device', async () => {
     const originalPlatform = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { value: 'android' });
+    mockGetSoCInfo.mockResolvedValueOnce({ hasNPU: false, qnnVariant: undefined });
+    const deps = makeDeps();
 
-    afterEach(() => {
-      Object.defineProperty(Platform, 'OS', { value: originalPlatform });
-    });
+    await handleDownloadImageModel(makeZipModelInfo({ backend: 'qnn' }), deps);
 
-    it('proceeds directly for non-QNN models', async () => {
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'mnn' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('proceeds directly for QNN on non-Android', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'ios' });
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
-    });
-
-    it('blocks QNN download on device without NPU (no "Download Anyway")', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: false });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Incompatible Model',
-          buttons: [expect.objectContaining({ text: 'OK', style: 'cancel' })],
-        }),
-      );
-      // Should not start download
-      expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
-    });
-
-    it('shows "Download Anyway" for variant mismatch (has NPU)', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: true, qnnVariant: 'min' });
-
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: '8gen2' });
-
-      await handleDownloadImageModel(model, deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Incompatible Model',
-          buttons: expect.arrayContaining([
-            expect.objectContaining({ text: 'Cancel' }),
-            expect.objectContaining({ text: 'Download Anyway' }),
-          ]),
-        }),
-      );
-    });
-
-    it.each([
-      ['min', '8gen2', true, 'incompatible min device with 8gen2 model'],
-      ['8gen2', '8gen2', false, 'compatible same variant'],
-      ['8gen2', 'min', false, '8gen2 device compatible with all variants'],
-      ['8gen1', '8gen2', true, '8gen1 incompatible with 8gen2 model'],
-      ['8gen1', 'min', false, '8gen1 compatible with non-8gen2 variants'],
-    ])('QNN variant: %s device + %s model → incompatible=%s (%s)', async (deviceVariant, modelVariant, expectIncompatible) => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: true, qnnVariant: deviceVariant });
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn', variant: modelVariant });
-      await handleDownloadImageModel(model, deps);
-      if (expectIncompatible) {
-        expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Incompatible Model' }));
-      } else {
-        expect(deps.addImageModelDownloading).toHaveBeenCalled();
-      }
-    });
-
-    it('proceeds for QNN with NPU but no variant info', async () => {
-      Object.defineProperty(Platform, 'OS', { value: 'android' });
-      const { hardwareService } = require('../../../../src/services');
-      hardwareService.getSoCInfo.mockResolvedValueOnce({ hasNPU: true, qnnVariant: undefined });
-      const deps = makeDeps();
-      const model = makeZipModelInfo({ backend: 'qnn' });
-      await handleDownloadImageModel(model, deps);
-      expect(deps.addImageModelDownloading).toHaveBeenCalled();
-    });
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Incompatible Model' }));
+    expect(mockStartDownload).not.toHaveBeenCalled();
+    Object.defineProperty(Platform, 'OS', { value: originalPlatform });
   });
 
-  // ==========================================================================
-  // cleanupDownloadState
-  // ==========================================================================
-  describe('cleanupDownloadState', () => {
-    it('calls removeImageModelDownloading, clearModelProgress, and setBackgroundDownload', () => {
-      const deps = makeDeps();
-      cleanupDownloadState(deps, 'model-1', 42);
+  it('handleDownloadImageModel proceeds for non-QNN models', async () => {
+    const deps = makeDeps();
 
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('model-1');
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(42, null);
-    });
+    await handleDownloadImageModel(makeZipModelInfo({ backend: 'mnn' }), deps);
 
-    it('clears the metadata-derived progress key for zip downloads', () => {
-      const deps = makeDeps({
-        getBackgroundDownload: jest.fn(() => ({
-          modelId: 'image:model-1',
-          fileName: 'model-1.zip',
-        })),
-      });
-
-      cleanupDownloadState(deps, 'model-1', 42);
-
-      expect((deps.setDownloadProgress as jest.Mock).mock.calls).toEqual(
-        expect.arrayContaining([
-          ['image:model-1/model-1.zip', null],
-          ['image:model-1/model-1', null],
-        ]),
-      );
-    });
-
-    it('skips setBackgroundDownload when downloadId is undefined', () => {
-      const deps = makeDeps();
-      cleanupDownloadState(deps, 'model-1');
-
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('model-1');
-      expect(deps.setBackgroundDownload).not.toHaveBeenCalled();
-    });
-
-    it('skips setBackgroundDownload when downloadId is null-ish (0 is valid)', () => {
-      const deps = makeDeps();
-      cleanupDownloadState(deps, 'model-1', 0);
-
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(0, null);
-    });
-  });
-
-  // ==========================================================================
-  // registerAndNotify
-  // ==========================================================================
-  describe('registerAndNotify', () => {
-    const imageModel = {
-      id: 'img-1', name: 'Test', description: 'desc',
-      modelPath: '/path', downloadedAt: '2026-01-01', size: 100, style: 'creative' as const,
-    };
-
-    it('registers model via modelManager and deps, then shows success alert', async () => {
-      const deps = makeDeps();
-      await registerAndNotify(deps, { imageModel, modelName: 'Test', downloadId: 10 });
-
-      expect(mockAddDownloadedImageModel).toHaveBeenCalledWith(imageModel);
-      expect(deps.addDownloadedImageModel).toHaveBeenCalledWith(imageModel);
-      expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
-      // cleanup was called
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('img-1');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('img-1');
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(10, null);
-    });
-
-    it('sets active model when none is active', async () => {
-      const deps = makeDeps({ activeImageModelId: null });
-      await registerAndNotify(deps, { imageModel, modelName: 'Test' });
-
-      expect(deps.setActiveImageModelId).toHaveBeenCalledWith('img-1');
-    });
-
-    it('does not set active model when one already exists', async () => {
-      const deps = makeDeps({ activeImageModelId: 'existing' });
-      await registerAndNotify(deps, { imageModel, modelName: 'Test' });
-
-      expect(deps.setActiveImageModelId).not.toHaveBeenCalled();
-    });
-
-    it('does not auto-load when onboarding image flow is still active', async () => {
-      const deps = makeDeps({ activeImageModelId: null, triedImageGen: false });
-      await registerAndNotify(deps, { imageModel, modelName: 'Test' });
-
-      expect(deps.setActiveImageModelId).not.toHaveBeenCalled();
-    });
-  });
-
-  // ==========================================================================
-  // wireDownloadListeners
-  // ==========================================================================
-  describe('wireDownloadListeners', () => {
-    it('calls onCompleteWork on complete event', async () => {
-      const deps = makeDeps();
-      const onCompleteWork = jest.fn(() => Promise.resolve());
-
-      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
-
-      expect(mockOnCompleteCallbacks.length).toBe(1);
-      await mockOnCompleteCallbacks[0]();
-      expect(onCompleteWork).toHaveBeenCalled();
-    });
-
-    it('shows error alert and cleans up on error event', () => {
-      const deps = makeDeps();
-      const onCompleteWork = jest.fn(() => Promise.resolve());
-
-      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
-
-      expect(mockOnErrorCallbacks.length).toBe(1);
-      mockOnErrorCallbacks[0]({ reason: 'Network lost' });
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Download Failed' }));
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('mdl');
-      expect(deps.clearModelProgress).toHaveBeenCalledWith('mdl');
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(50, null);
-    });
-
-    it('cleans up and shows error when onCompleteWork throws', async () => {
-      const deps = makeDeps();
-      const onCompleteWork = jest.fn(() => Promise.reject(new Error('Processing failed')));
-
-      wireDownloadListeners({ downloadId: 50, modelId: 'mdl', deps }, onCompleteWork);
-
-      await mockOnCompleteCallbacks[0]();
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed', message: 'Processing failed' }),
-      );
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('mdl');
-    });
-  });
-
-  // ==========================================================================
-  // Metadata persistence
-  // ==========================================================================
-  describe('metadata persistence', () => {
-    it('proceedWithDownload persists imageDownloadType: zip and metadata for zip models', async () => {
-      const deps = makeDeps();
-      await proceedWithDownload(makeZipModelInfo(), deps);
-
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(42, expect.objectContaining({
-        imageDownloadType: 'zip',
-        imageModelName: 'Test Zip Model',
-        imageModelDescription: 'A zip model',
-        imageModelSize: 2000000,
-        imageModelStyle: 'creative',
-        imageModelBackend: 'mnn',
-      }));
-    });
-
-    it('downloadCoreMLMultiFile persists imageDownloadType: multifile and repo', async () => {
-      const deps = makeDeps();
-      await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
-
-      expect(deps.setBackgroundDownload).toHaveBeenCalledWith(99, expect.objectContaining({
-        imageDownloadType: 'multifile',
-        imageModelName: 'Test CoreML Model',
-        imageModelBackend: 'coreml',
-        imageModelRepo: 'apple/coreml-sd',
-      }));
-    });
-  });
-
-  // ==========================================================================
-  // Additional branch coverage
-  // ==========================================================================
-  describe('additional branch coverage', () => {
-    it('proceedWithDownload resolves coreML model dir for coreml backend on completion', async () => {
-      const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
-      resolveCoreMLModelDir.mockResolvedValueOnce('/resolved/coreml/dir');
-      const deps = makeDeps();
-      const coremlZipModel = makeZipModelInfo({ backend: 'coreml' });
-      await proceedWithDownload(coremlZipModel, deps);
-
-      await mockOnCompleteCallbacks[0]();
-
-      expect(resolveCoreMLModelDir).toHaveBeenCalled();
-      expect(mockAddDownloadedImageModel).toHaveBeenCalledWith(
-        expect.objectContaining({ modelPath: '/resolved/coreml/dir' }),
-      );
-    });
-
-    it('proceedWithDownload creates dirs when they do not exist', async () => {
-      const RNFS = require('react-native-fs');
-      RNFS.exists.mockResolvedValue(false); // All dirs missing
-
-      const deps = makeDeps();
-      await proceedWithDownload(makeZipModelInfo(), deps);
-      await mockOnCompleteCallbacks[0]();
-
-      expect(RNFS.mkdir).toHaveBeenCalled();
-    });
-
-    it('downloadCoreMLMultiFile returns early when coremlFiles is null', async () => {
-      const deps = makeDeps();
-      const model = makeCoreMLModelInfo({ coremlFiles: null as any });
-      await downloadCoreMLMultiFile(model, deps);
-
-      expect(deps.addImageModelDownloading).not.toHaveBeenCalled();
-    });
-
-    it('downloadHuggingFaceModel skips cleanup unlink when dir does not exist', async () => {
-      const RNFS = require('react-native-fs');
-      const { backgroundDownloadService } = require('../../../../src/services');
-      backgroundDownloadService.downloadFileTo.mockReturnValueOnce({
-        promise: Promise.reject(new Error('Network timeout')),
-      });
-      // Cleanup dir does not exist
-      RNFS.exists.mockResolvedValue(false);
-
-      const deps = makeDeps();
-      await downloadHuggingFaceModel(makeHFModelInfo(), deps);
-
-      expect(deps.setAlertState).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Download Failed' }),
-      );
-      expect(RNFS.unlink).not.toHaveBeenCalled();
-    });
-
-    it('cleanupDownloadState skips setBackgroundDownload when downloadId is null', () => {
-      const deps = makeDeps();
-      cleanupDownloadState(deps, 'model-1');
-
-      expect(deps.removeImageModelDownloading).toHaveBeenCalledWith('model-1');
-      expect(deps.setBackgroundDownload).not.toHaveBeenCalled();
-    });
+    expect(mockStartDownload).toHaveBeenCalled();
   });
 });

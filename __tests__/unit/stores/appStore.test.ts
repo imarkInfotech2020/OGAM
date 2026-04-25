@@ -204,52 +204,10 @@ describe('appStore', () => {
   // Download Progress
   // ============================================================================
   describe('downloadProgress', () => {
-    it('starts with empty downloadProgress', () => {
-      expect(getAppState().downloadProgress).toEqual({});
-    });
-
-    it('setDownloadProgress adds progress for model', () => {
-      const { setDownloadProgress } = useAppStore.getState();
-
-      setDownloadProgress('model-1', {
-        progress: 0.5,
-        bytesDownloaded: 1000,
-        totalBytes: 2000,
-      });
-
-      const progress = getAppState().downloadProgress['model-1'];
-      expect(progress.progress).toBe(0.5);
-      expect(progress.bytesDownloaded).toBe(1000);
-      expect(progress.totalBytes).toBe(2000);
-    });
-
-    it('setDownloadProgress updates existing progress', () => {
-      const { setDownloadProgress } = useAppStore.getState();
-
-      setDownloadProgress('model-1', { progress: 0.5, bytesDownloaded: 1000, totalBytes: 2000 });
-      setDownloadProgress('model-1', { progress: 0.75, bytesDownloaded: 1500, totalBytes: 2000 });
-
-      expect(getAppState().downloadProgress['model-1'].progress).toBe(0.75);
-    });
-
-    it('setDownloadProgress with null removes entry', () => {
-      const { setDownloadProgress } = useAppStore.getState();
-
-      setDownloadProgress('model-1', { progress: 0.5, bytesDownloaded: 1000, totalBytes: 2000 });
-      setDownloadProgress('model-1', null);
-
-      expect(getAppState().downloadProgress['model-1']).toBeUndefined();
-    });
-
-    it('tracks multiple downloads simultaneously', () => {
-      const { setDownloadProgress } = useAppStore.getState();
-
-      setDownloadProgress('model-1', { progress: 0.3, bytesDownloaded: 300, totalBytes: 1000 });
-      setDownloadProgress('model-2', { progress: 0.7, bytesDownloaded: 700, totalBytes: 1000 });
-
-      const progress = getAppState().downloadProgress;
-      expect(progress['model-1'].progress).toBe(0.3);
-      expect(progress['model-2'].progress).toBe(0.7);
+    it('legacy appStore progress tracking has been removed', () => {
+      const state = getAppState() as any;
+      expect(state.downloadProgress).toEqual({});
+      expect(state.setDownloadProgress).toBeUndefined();
     });
   });
 
@@ -257,50 +215,11 @@ describe('appStore', () => {
   // Background Downloads
   // ============================================================================
   describe('backgroundDownloads', () => {
-    it('starts with empty activeBackgroundDownloads', () => {
-      expect(getAppState().activeBackgroundDownloads).toEqual({});
-    });
-
-    it('setBackgroundDownload adds download info', () => {
-      const { setBackgroundDownload } = useAppStore.getState();
-
-      setBackgroundDownload(123, {
-        modelId: 'model-1',
-        fileName: 'model.gguf',
-        quantization: 'Q4_K_M',
-        author: 'test-author',
-        totalBytes: 4000000000,
-      });
-
-      const download = getAppState().activeBackgroundDownloads[123];
-      expect(download.modelId).toBe('model-1');
-      expect(download.fileName).toBe('model.gguf');
-    });
-
-    it('setBackgroundDownload with null removes entry', () => {
-      const { setBackgroundDownload } = useAppStore.getState();
-
-      setBackgroundDownload(123, {
-        modelId: 'model-1',
-        fileName: 'model.gguf',
-        quantization: 'Q4_K_M',
-        author: 'test-author',
-        totalBytes: 4000000000,
-      });
-      setBackgroundDownload(123, null);
-
-      expect(getAppState().activeBackgroundDownloads[123]).toBeUndefined();
-    });
-
-    it('clearBackgroundDownloads removes all', () => {
-      const { setBackgroundDownload, clearBackgroundDownloads } = useAppStore.getState();
-
-      setBackgroundDownload(1, { modelId: 'm1', fileName: 'f1', quantization: 'Q4', author: 'a', totalBytes: 100 });
-      setBackgroundDownload(2, { modelId: 'm2', fileName: 'f2', quantization: 'Q4', author: 'a', totalBytes: 100 });
-
-      clearBackgroundDownloads();
-
-      expect(getAppState().activeBackgroundDownloads).toEqual({});
+    it('legacy appStore background-download mutators have been removed', () => {
+      const state = getAppState() as any;
+      expect(state.setBackgroundDownload).toBeUndefined();
+      expect(state.clearBackgroundDownloads).toBeUndefined();
+      expect(state.activeBackgroundDownloads).toEqual({});
     });
   });
 
@@ -517,121 +436,12 @@ describe('appStore', () => {
   // Image Model Download Tracking (Multi-download)
   // ============================================================================
   describe('imageModelDownloadTracking', () => {
-    it('starts with empty imageModelDownloading array', () => {
-      expect(getAppState().imageModelDownloading).toEqual([]);
-    });
-
-    it('starts with empty imageModelDownloadIds', () => {
-      expect(getAppState().imageModelDownloadIds).toEqual({});
-    });
-
-    it('addImageModelDownloading adds model to array', () => {
-      const { addImageModelDownloading } = useAppStore.getState();
-
-      addImageModelDownloading('anythingv5_cpu');
-
-      expect(getAppState().imageModelDownloading).toEqual(['anythingv5_cpu']);
-    });
-
-    it('addImageModelDownloading does not duplicate', () => {
-      const { addImageModelDownloading } = useAppStore.getState();
-
-      addImageModelDownloading('anythingv5_cpu');
-      addImageModelDownloading('anythingv5_cpu');
-
-      expect(getAppState().imageModelDownloading).toEqual(['anythingv5_cpu']);
-    });
-
-    it('removeImageModelDownloading removes model from array', () => {
-      const { addImageModelDownloading, removeImageModelDownloading } = useAppStore.getState();
-
-      addImageModelDownloading('model-a');
-      addImageModelDownloading('model-b');
-      removeImageModelDownloading('model-a');
-
-      expect(getAppState().imageModelDownloading).toEqual(['model-b']);
-    });
-
-    it('setImageModelDownloadId maps model to download ID', () => {
-      const { setImageModelDownloadId } = useAppStore.getState();
-
-      setImageModelDownloadId('model-a', 42);
-
-      expect(getAppState().imageModelDownloadIds['model-a']).toBe(42);
-    });
-
-    it('setImageModelDownloadId with null removes mapping', () => {
-      const { setImageModelDownloadId } = useAppStore.getState();
-
-      setImageModelDownloadId('model-a', 42);
-      setImageModelDownloadId('model-a', null);
-
-      expect(getAppState().imageModelDownloadIds['model-a']).toBeUndefined();
-    });
-
-    it('multiple concurrent downloads tracked independently', () => {
-      const { addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
-
-      addImageModelDownloading('model-a');
-      setImageModelDownloadId('model-a', 1);
-      addImageModelDownloading('model-b');
-      setImageModelDownloadId('model-b', 2);
-
-      expect(getAppState().imageModelDownloading).toEqual(['model-a', 'model-b']);
-      expect(getAppState().imageModelDownloadIds).toEqual({ 'model-a': 1, 'model-b': 2 });
-    });
-
-    it('removeImageModelDownloading also clears download ID', () => {
-      const { addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
-
-      addImageModelDownloading('model-a');
-      setImageModelDownloadId('model-a', 1);
-      removeImageModelDownloading('model-a');
-
-      expect(getAppState().imageModelDownloading).toEqual([]);
-      expect(getAppState().imageModelDownloadIds['model-a']).toBeUndefined();
-    });
-
-    it('clearImageModelDownloading clears all', () => {
-      const { addImageModelDownloading, setImageModelDownloadId, clearImageModelDownloading } = useAppStore.getState();
-
-      addImageModelDownloading('model-a');
-      setImageModelDownloadId('model-a', 1);
-      addImageModelDownloading('model-b');
-      setImageModelDownloadId('model-b', 2);
-
-      clearImageModelDownloading();
-
-      expect(getAppState().imageModelDownloading).toEqual([]);
-      expect(getAppState().imageModelDownloadIds).toEqual({});
-    });
-
-    it('image download metadata stored in activeBackgroundDownloads enables cancel', () => {
-      const { setBackgroundDownload, addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
-
-      // Simulate starting an image model download with metadata
-      addImageModelDownloading('anythingv5_cpu');
-      setImageModelDownloadId('anythingv5_cpu', 99);
-      setBackgroundDownload(99, {
-        modelId: 'image:anythingv5_cpu',
-        fileName: 'anythingv5_cpu.zip',
-        quantization: '',
-        author: 'Image Generation',
-        totalBytes: 1_000_000_000,
-      });
-
-      // Metadata should be findable by downloadId
-      const meta = getAppState().activeBackgroundDownloads[99];
-      expect(meta).toBeDefined();
-      expect(meta.modelId).toBe('image:anythingv5_cpu');
-      expect(meta.fileName).toBe('anythingv5_cpu.zip');
-
-      // Simulate cancel: clear all state
-      setBackgroundDownload(99, null);
-      removeImageModelDownloading('anythingv5_cpu');
-
-      expect(getAppState().activeBackgroundDownloads[99]).toBeUndefined();
-      expect(getAppState().imageModelDownloading).toEqual([]);
+    it('legacy appStore image download tracking has been removed', () => {
+      const state = getAppState() as any;
+      expect(state.imageModelDownloading).toEqual([]);
+      expect(state.imageModelDownloadIds).toEqual({});
+      expect(state.addImageModelDownloading).toBeUndefined();
+      expect(state.setImageModelDownloadId).toBeUndefined();
     });
   });
 
@@ -639,66 +449,13 @@ describe('appStore', () => {
   // Image Model Download Persistence (survives app restart)
   // ============================================================================
   describe('imageModelDownloadPersistence', () => {
-    it('partialize includes imageModelDownloading array', () => {
-      const { addImageModelDownloading } = useAppStore.getState();
-      addImageModelDownloading('test-model');
+    it('persist partialize no longer includes legacy image download tracking', () => {
+      const partialize = (useAppStore.persist as any).getOptions().partialize;
+      const partialized = partialize(useAppStore.getState());
 
-      expect(getAppState().imageModelDownloading).toEqual(['test-model']);
-    });
-
-    it('partialize includes imageModelDownloadIds record', () => {
-      const { setImageModelDownloadId } = useAppStore.getState();
-      setImageModelDownloadId('test-model', 42);
-
-      expect(getAppState().imageModelDownloadIds).toEqual({ 'test-model': 42 });
-    });
-
-    it('imageModelDownloading array survives store rehydration', () => {
-      const { addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
-
-      // Simulate active downloads
-      addImageModelDownloading('sd-model-v2');
-      setImageModelDownloadId('sd-model-v2', 7);
-      addImageModelDownloading('sd-model-v3');
-      setImageModelDownloadId('sd-model-v3', 8);
-
-      const state = useAppStore.getState();
-      expect(state.imageModelDownloading).toEqual(['sd-model-v2', 'sd-model-v3']);
-      expect(state.imageModelDownloadIds).toEqual({ 'sd-model-v2': 7, 'sd-model-v3': 8 });
-    });
-
-    it('cleared download state persists empty values correctly', () => {
-      const { addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
-
-      // Start then cancel a download
-      addImageModelDownloading('model-x');
-      setImageModelDownloadId('model-x', 99);
-      removeImageModelDownloading('model-x');
-
-      const state = useAppStore.getState();
-      expect(state.imageModelDownloading).toEqual([]);
-      expect(state.imageModelDownloadIds).toEqual({});
-    });
-
-    it('activeBackgroundDownloads is also persisted alongside download tracking', () => {
-      const { setBackgroundDownload, addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
-
-      // Full download setup: both tracking state and metadata
-      addImageModelDownloading('coreml-sd21');
-      setImageModelDownloadId('coreml-sd21', 5);
-      setBackgroundDownload(5, {
-        modelId: 'image:coreml-sd21',
-        fileName: 'sd21-coreml.zip',
-        quantization: '',
-        author: 'Apple',
-        totalBytes: 2_500_000_000,
-      });
-
-      const state = useAppStore.getState();
-      expect(state.imageModelDownloading).toEqual(['coreml-sd21']);
-      expect(state.imageModelDownloadIds).toEqual({ 'coreml-sd21': 5 });
-      expect(state.activeBackgroundDownloads[5]).toBeDefined();
-      expect(state.activeBackgroundDownloads[5].modelId).toBe('image:coreml-sd21');
+      expect((partialized as any).imageModelDownloading).toBeUndefined();
+      expect((partialized as any).imageModelDownloadIds).toBeUndefined();
+      expect((partialized as any).activeBackgroundDownloads).toBeUndefined();
     });
   });
 
@@ -1087,7 +844,7 @@ describe('appStore', () => {
       return options?.merge as (persistedState: any, currentState: any) => any;
     };
 
-    it('migrates string imageModelDownloading to single-element array', () => {
+    it('drops legacy imageModelDownloading field', () => {
       const merge = getMergeFn();
       const currentState = useAppStore.getState();
 
@@ -1096,136 +853,23 @@ describe('appStore', () => {
         currentState
       );
 
-      expect(Array.isArray(result.imageModelDownloading)).toBe(true);
-      expect(result.imageModelDownloading).toEqual(['old-model-id']);
+      expect((result as any).imageModelDownloading).toBeUndefined();
     });
 
-    it('migrates non-array/non-string imageModelDownloading to empty array', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        { imageModelDownloading: null },
-        currentState
-      );
-
-      expect(result.imageModelDownloading).toEqual([]);
-    });
-
-    it('migrates undefined imageModelDownloading to empty array', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        { imageModelDownloading: undefined },
-        currentState
-      );
-
-      // undefined from persisted merges over currentState's [], but undefined is not array
-      // so the else-if branch fires
-      expect(result.imageModelDownloading).toEqual([]);
-    });
-
-    it('migrates number imageModelDownloadId to Record with downloading model', () => {
+    it('drops legacy imageModelDownloadIds and imageModelDownloadId fields', () => {
       const merge = getMergeFn();
       const currentState = useAppStore.getState();
 
       const result = merge(
         {
-          imageModelDownloading: ['model-a'],
+          imageModelDownloadIds: { a: 1 },
           imageModelDownloadId: 42,
         },
         currentState
       );
 
-      expect(result.imageModelDownloadIds).toEqual({ 'model-a': 42 });
-      expect(result.imageModelDownloadId).toBeUndefined();
-    });
-
-    it('migrates number imageModelDownloadId to empty Record when no downloading models', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        {
-          imageModelDownloading: [],
-          imageModelDownloadId: 50,
-        },
-        currentState
-      );
-
-      expect(result.imageModelDownloadIds).toEqual({});
-      expect(result.imageModelDownloadId).toBeUndefined();
-    });
-
-    it('sets imageModelDownloadIds to {} when missing and no old number format', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        {
-          imageModelDownloading: ['x'],
-          imageModelDownloadIds: null,
-        },
-        currentState
-      );
-
-      expect(result.imageModelDownloadIds).toEqual({});
-    });
-
-    it('sets imageModelDownloadIds to {} when it is a non-object type', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        {
-          imageModelDownloading: ['x'],
-          imageModelDownloadIds: 'invalid',
-        },
-        currentState
-      );
-
-      expect(result.imageModelDownloadIds).toEqual({});
-    });
-
-    it('preserves valid array imageModelDownloading and valid object imageModelDownloadIds', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        {
-          imageModelDownloading: ['a', 'b'],
-          imageModelDownloadIds: { a: 1, b: 2 },
-        },
-        currentState
-      );
-
-      expect(result.imageModelDownloading).toEqual(['a', 'b']);
-      expect(result.imageModelDownloadIds).toEqual({ a: 1, b: 2 });
-    });
-
-    it('handles persisted state with boolean imageModelDownloading', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        { imageModelDownloading: false },
-        currentState
-      );
-
-      expect(result.imageModelDownloading).toEqual([]);
-    });
-
-    it('handles persisted state with number imageModelDownloading', () => {
-      const merge = getMergeFn();
-      const currentState = useAppStore.getState();
-
-      const result = merge(
-        { imageModelDownloading: 123 },
-        currentState
-      );
-
-      expect(result.imageModelDownloading).toEqual([]);
+      expect((result as any).imageModelDownloadIds).toBeUndefined();
+      expect((result as any).imageModelDownloadId).toBeUndefined();
     });
   });
 
@@ -1353,21 +997,23 @@ describe('appStore', () => {
       expect(getAppState().downloadedImageModels).toHaveLength(5);
     });
 
-    it('handles interleaved download progress updates', () => {
-      const { setDownloadProgress } = useAppStore.getState();
+    it('drops legacy persisted download tracking fields during migration', () => {
+      const currentState = useAppStore.getState();
+      const migrated = (useAppStore.persist as any).getOptions().merge({
+        state: {
+          downloadProgress: { m1: { progress: 0.5 } },
+          activeBackgroundDownloads: { 1: { fileName: 'x.gguf' } },
+          imageModelDownloading: 'img-1',
+          imageModelDownloadIds: { 'img-1': 12 },
+          imageModelDownloadId: 12,
+        },
+      }, currentState);
 
-      // Simulate three concurrent downloads with interleaved updates
-      setDownloadProgress('m1', { progress: 0.1, bytesDownloaded: 100, totalBytes: 1000 });
-      setDownloadProgress('m2', { progress: 0.2, bytesDownloaded: 200, totalBytes: 1000 });
-      setDownloadProgress('m3', { progress: 0.3, bytesDownloaded: 300, totalBytes: 1000 });
-      setDownloadProgress('m1', { progress: 0.5, bytesDownloaded: 500, totalBytes: 1000 });
-      setDownloadProgress('m2', null); // m2 completes
-      setDownloadProgress('m1', { progress: 0.9, bytesDownloaded: 900, totalBytes: 1000 });
-
-      const progress = getAppState().downloadProgress;
-      expect(progress.m1.progress).toBe(0.9);
-      expect(progress.m2).toBeUndefined();
-      expect(progress.m3.progress).toBe(0.3);
+      expect((migrated as any).downloadProgress).toBeUndefined();
+      expect((migrated as any).activeBackgroundDownloads).toBeUndefined();
+      expect((migrated as any).imageModelDownloading).toBeUndefined();
+      expect((migrated as any).imageModelDownloadIds).toBeUndefined();
+      expect((migrated as any).imageModelDownloadId).toBeUndefined();
     });
 
     it('handles model add and remove in sequence', () => {
@@ -1515,37 +1161,12 @@ describe('appStore', () => {
   // Background download edge cases
   // ============================================================================
   describe('background download edge cases', () => {
-    it('handles multiple background downloads for same model ID', () => {
-      const { setBackgroundDownload } = useAppStore.getState();
+    it('no longer exposes legacy background-download appStore APIs', () => {
+      const state = useAppStore.getState() as any;
 
-      // Two different downloadIds for different files of same model
-      setBackgroundDownload(1, {
-        modelId: 'model-1',
-        fileName: 'model.gguf',
-        quantization: 'Q4_K_M',
-        author: 'author',
-        totalBytes: 4000000000,
-      });
-      setBackgroundDownload(2, {
-        modelId: 'model-1',
-        fileName: 'mmproj.gguf',
-        quantization: '',
-        author: 'author',
-        totalBytes: 500000000,
-      });
-
-      const downloads = getAppState().activeBackgroundDownloads;
-      expect(downloads[1].fileName).toBe('model.gguf');
-      expect(downloads[2].fileName).toBe('mmproj.gguf');
-    });
-
-    it('clearBackgroundDownloads is idempotent', () => {
-      const { clearBackgroundDownloads } = useAppStore.getState();
-
-      clearBackgroundDownloads();
-      clearBackgroundDownloads();
-
-      expect(getAppState().activeBackgroundDownloads).toEqual({});
+      expect(state.setBackgroundDownload).toBeUndefined();
+      expect(state.clearBackgroundDownloads).toBeUndefined();
+      expect(state.activeBackgroundDownloads).toEqual({});
     });
   });
 

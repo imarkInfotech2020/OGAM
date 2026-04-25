@@ -22,7 +22,6 @@ export const DownloadManagerScreen: React.FC = () => {
     handleRemoveDownload,
     handleDeleteItem,
     handleRepairVision,
-    isStalled,
     totalStorageUsed,
   } = useDownloadManager();
 
@@ -51,7 +50,7 @@ export const DownloadManagerScreen: React.FC = () => {
               {activeItems.length > 0 ? (
                 activeItems.map(item => (
                   <View key={`active-${item.modelId}-${item.fileName}`}>
-                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} isStalled={isStalled(item)} />
+                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} />
                   </View>
                 ))
               ) : (

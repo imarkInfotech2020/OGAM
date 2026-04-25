@@ -12,6 +12,7 @@ export interface DownloadParams {
   metadataJson?: string;
   totalBytes?: number;
   sha256?: string;
+  hideNotification?: boolean;
 }
 
 export interface DownloadProgressEvent {

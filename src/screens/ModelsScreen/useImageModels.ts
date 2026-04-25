@@ -13,6 +13,7 @@ import { matchesSdVersionFilter } from './utils';
 import {
   ImageDownloadDeps,
   handleDownloadImageModel as downloadImageModel,
+  cancelSyntheticImageDownload,
 } from './imageDownloadActions';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
@@ -140,9 +141,12 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     const entry = useDownloadStore.getState().downloads[modelKey];
     if (!entry) return;
     useDownloadStore.getState().remove(modelKey);
-    if (entry.downloadId && !entry.downloadId.startsWith('image-multi:')) {
-      await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+    if (!entry.downloadId) return;
+    if (entry.downloadId.startsWith('image-multi:')) {
+      await cancelSyntheticImageDownload(modelId).catch(() => {});
+      return;
     }
+    await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
   };
 
   return {

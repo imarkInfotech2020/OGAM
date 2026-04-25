@@ -30,11 +30,8 @@ export interface DownloadEntry {
   mmProjStatus?: DownloadStatus
   errorMessage?: string
   createdAt: number
-  lastProgressAt: number
   metadataJson?: string
 }
-
-export const STUCK_THRESHOLD_MS = 30_000;
 
 /**
  * Statuses that count as "an active download is in flight for this modelKey".
@@ -86,8 +83,8 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
 
   // Like setAll, but preserves any existing entry whose JS-tracked progress
   // is ahead of the native row. Avoids foreground-resume hydration blowing
-  // away an in-flight entry's lastProgressAt or progress that listeners have
-  // already advanced past the native snapshot.
+  // away in-flight progress that listeners have already advanced past the
+  // native snapshot.
   hydrate: (entries) => set(state => {
     const downloads: Record<ModelKey, DownloadEntry> = {};
     const downloadIdIndex: Record<string, ModelKey> = {};
@@ -158,7 +155,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           totalBytes: total,
           progress,
           status: 'running',
-          lastProgressAt: Date.now(),
         },
       },
     };
@@ -178,7 +174,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           ...entry,
           mmProjBytesDownloaded: bytes,
           progress,
-          lastProgressAt: Date.now(),
         },
       },
     };
@@ -274,7 +269,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           mmProjStatus: undefined,
           mmProjBytesDownloaded: undefined,
           mmProjDownloadId: undefined,
-          lastProgressAt: Date.now(),
         },
       },
       downloadIdIndex: newIndex,

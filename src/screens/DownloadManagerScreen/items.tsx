@@ -54,7 +54,7 @@ export function extractQuantization(fileName: string): string {
 }
 
 export function getStatusText(status: string): string {
-  if (status === 'running' || status === 'downloading') return 'Downloading...';
+  if (status === 'running') return 'Downloading...';
   if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
   if (status === 'retrying') return 'Retrying connection...';
@@ -77,10 +77,9 @@ function getStatusLabel(item: DownloadItem): string {
 interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
-  isStalled?: boolean;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, isStalled }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -137,8 +136,8 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           {getStatusIcon() && (
             <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
           )}
-          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }, isStalled && { color: colors.warning }]}>
-            {isStalled ? 'Looks stuck' : getStatusLabel(item)}
+          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
+            {getStatusLabel(item)}
           </Text>
         </View>
       </View>

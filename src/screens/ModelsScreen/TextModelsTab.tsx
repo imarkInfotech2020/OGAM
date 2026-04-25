@@ -91,7 +91,12 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const progress = entry
-      ? { progress: entry.progress, bytesDownloaded: entry.bytesDownloaded, totalBytes: entry.combinedTotalBytes, status: entry.status }
+      ? {
+        progress: entry.progress,
+        bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
+        totalBytes: entry.combinedTotalBytes,
+        status: entry.status,
+      }
       : undefined;
     const canCancel = !!entry && (entry.status === 'pending' || entry.status === 'running');
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };

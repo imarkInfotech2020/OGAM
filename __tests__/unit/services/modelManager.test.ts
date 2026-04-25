@@ -566,10 +566,8 @@ describe('ModelManager', () => {
         expect.objectContaining({ fileName: 'vision.gguf' }),
       );
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
-        expect.objectContaining({ fileName: 'mmproj.gguf' }),
+        expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
       );
-      // mmproj download should be marked silent
-      expect(mockedBackgroundDownloadService.markSilent).toHaveBeenCalledWith(43);
     });
   });
 

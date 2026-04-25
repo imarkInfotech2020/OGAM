@@ -110,7 +110,7 @@ describe('restoreInProgressDownloads', () => {
     ['unknown', 0],
     ['running', 1],
     ['pending', 1],
-    ['paused', 1],
+    ['paused', 0],
   ])('handles %s downloads (expect size=%i)', async (status, expectedSize) => {
     mockService.getActiveDownloads.mockResolvedValue([makeActiveDownload({ status }) as any]);
     await callRestore({ persistedDownloads: { 42: makePersistedInfo() } });

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore, DownloadEntry, STUCK_THRESHOLD_MS } from '../../stores/downloadStore';
+import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import {
   modelManager,
   activeModelService,
@@ -11,6 +11,7 @@ import {
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
+import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
 
 export interface UseDownloadManagerResult {
   activeItems: DownloadItem[];
@@ -20,7 +21,6 @@ export interface UseDownloadManagerResult {
   handleRemoveDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
-  isStalled: (item: DownloadItem) => boolean;
   totalStorageUsed: number;
 }
 
@@ -85,6 +85,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
   } = useAppStore();
 
   const downloads = useDownloadStore(state => state.downloads);
+  const removeDownloadEntry = useDownloadStore(state => state.remove);
 
   const activeItems: DownloadItem[] = Object.values(downloads)
     .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
@@ -130,11 +131,14 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
-      const store = useDownloadStore.getState();
       const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
-      const entry = store.downloads[modelKey];
-      store.remove(modelKey);
+      const entry = downloads[modelKey];
+      removeDownloadEntry(modelKey);
       if (entry) {
+        if (entry.downloadId.startsWith('image-multi:')) {
+          await cancelSyntheticImageDownload(item.modelId).catch(() => {});
+          return;
+        }
         await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
         if (entry.mmProjDownloadId) {
           await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
@@ -230,22 +234,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     });
   };
 
-  // Tick once a second so isStalled-based UI updates without depending on store events.
-  const [stallTick, setStallTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setStallTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const isStalled = (item: DownloadItem): boolean => {
-    void stallTick;
-    if (!item.modelKey) return false;
-    if (item.status !== 'pending' && item.status !== 'running') return false;
-    const entry = downloads[item.modelKey];
-    if (!entry) return false;
-    return Date.now() - entry.lastProgressAt > STUCK_THRESHOLD_MS;
-  };
-
   return {
     activeItems,
     completedItems,
@@ -254,7 +242,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleRemoveDownload,
     handleDeleteItem,
     handleRepairVision,
-    isStalled,
     totalStorageUsed,
   };
 }

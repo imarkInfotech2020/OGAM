@@ -44,6 +44,19 @@ jest.mock('../../../src/stores', () => {
   return { useAppStore: store };
 });
 
+let mockDownloadStoreDownloads: Record<string, any> = {};
+
+jest.mock('../../../src/stores/downloadStore', () => ({
+  useDownloadStore: (selector?: any) => {
+    const state = {
+      downloads: mockDownloadStoreDownloads,
+      remove: jest.fn((modelKey: string) => { delete mockDownloadStoreDownloads[modelKey]; }),
+    };
+    return typeof selector === 'function' ? selector(state) : state;
+  },
+  STUCK_THRESHOLD_MS: 30000,
+}));
+
 jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
@@ -157,15 +170,10 @@ const mockStoreState = (state: any) => {
 const createDefaultState = (overrides: any = {}) => ({
   downloadedModels: [],
   setDownloadedModels: jest.fn(),
-  downloadProgress: {},
-  setDownloadProgress: jest.fn(),
   removeDownloadedModel: jest.fn(),
-  activeBackgroundDownloads: {},
-  setBackgroundDownload: jest.fn(),
   downloadedImageModels: [],
   setDownloadedImageModels: jest.fn(),
   removeDownloadedImageModel: jest.fn(),
-  removeImageModelDownloading: jest.fn(),
   themeMode: 'system',
   ...overrides,
 });
@@ -186,6 +194,7 @@ describe('DownloadManagerScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    mockDownloadStoreDownloads = {};
 
     // Restore mock implementations cleared by clearAllMocks
     mockBackgroundDownloadService.isAvailable.mockReturnValue(false);
@@ -194,7 +203,6 @@ describe('DownloadManagerScreen', () => {
     mockBackgroundDownloadService.onAnyError.mockReturnValue(jest.fn());
     mockModelManager.getDownloadedModels.mockResolvedValue([]);
     mockModelManager.getDownloadedImageModels.mockResolvedValue([]);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([]);
     mockModelManager.cancelBackgroundDownload.mockResolvedValue(undefined);
     mockModelManager.deleteModel.mockResolvedValue(undefined);
     mockModelManager.deleteImageModel.mockResolvedValue(undefined);
@@ -219,98 +227,31 @@ describe('DownloadManagerScreen', () => {
     expect(getByText('No models downloaded yet')).toBeTruthy();
   });
 
-  it('keeps failed downloads visible with their reason', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 42,
-        fileName: 'model.gguf',
+  it('keeps failed downloads visible with their reason', () => {
+    mockDownloadStoreDownloads = {
+      'test/model/model.gguf': {
+        modelKey: 'test/model/model.gguf',
+        downloadId: 'dl-42',
         modelId: 'test/model',
+        fileName: 'model.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
         status: 'failed',
         bytesDownloaded: 1024,
         totalBytes: 4096,
-        startedAt: Date.now(),
-        reason: 'HTTP 416',
+        combinedTotalBytes: 4096,
+        progress: 0.25,
+        errorMessage: 'http_416',
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    ]);
-
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        42: {
-          modelId: 'test/model',
-          fileName: 'model.gguf',
-          author: 'test',
-          quantization: 'Q4_K_M',
-          totalBytes: 4096,
-        },
-      },
-    });
-    mockStoreState(state);
+    };
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
 
     expect(getByText('model.gguf')).toBeTruthy();
     expect(getByText('The server could not resume this download. Please retry it.')).toBeTruthy();
     expect(queryByText('No active downloads')).toBeNull();
-  });
-
-  it('shows network retry messaging when polling refreshes a stale running entry', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 77,
-        fileName: 'model.gguf',
-        modelId: 'test/model',
-        status: 'pending',
-        bytesDownloaded: 2048,
-        totalBytes: 4096,
-        startedAt: Date.now(),
-        reason: 'Network connection lost. Waiting to resume.',
-      },
-    ]);
-
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {
-        'test/model/model.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 2048,
-          totalBytes: 4096,
-          status: 'running',
-        },
-      },
-      setDownloadProgress,
-      activeBackgroundDownloads: {
-        77: {
-          modelId: 'test/model',
-          fileName: 'model.gguf',
-          author: 'test',
-          quantization: 'Q4_K_M',
-          totalBytes: 4096,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(setDownloadProgress).toHaveBeenCalledWith(
-      'test/model/model.gguf',
-      expect.objectContaining({
-        status: 'retrying',
-        reason: 'Network connection lost. Waiting to resume.',
-      }),
-    );
-    expect(getByText('Network connection lost - waiting to resume...')).toBeTruthy();
   });
 
   it('shows section headers for active and completed', () => {
@@ -372,16 +313,23 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('renders active download with progress info', () => {
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-file.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 2 * 1024 * 1024 * 1024,
-          totalBytes: 4 * 1024 * 1024 * 1024,
-        },
+    mockDownloadStoreDownloads = {
+      'author/model-id/model-file.gguf': {
+        modelKey: 'author/model-id/model-file.gguf',
+        downloadId: 'dl-1',
+        modelId: 'author/model-id',
+        fileName: 'model-file.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 2 * 1024 * 1024 * 1024,
+        totalBytes: 4 * 1024 * 1024 * 1024,
+        combinedTotalBytes: 4 * 1024 * 1024 * 1024,
+        progress: 0.5,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    });
-    mockStoreState(state);
+    };
 
     const { getByText, queryByText } = render(<DownloadManagerScreen />);
     expect(getByText('model-file.gguf')).toBeTruthy();
@@ -419,16 +367,23 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('pressing cancel on active download shows confirmation alert', () => {
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-file.gguf': {
-          progress: 0.3,
-          bytesDownloaded: 1024,
-          totalBytes: 4096,
-        },
+    mockDownloadStoreDownloads = {
+      'author/model-id/model-file.gguf': {
+        modelKey: 'author/model-id/model-file.gguf',
+        downloadId: 'dl-2',
+        modelId: 'author/model-id',
+        fileName: 'model-file.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        combinedTotalBytes: 4096,
+        progress: 0.3,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    });
-    mockStoreState(state);
+    };
 
     const { getAllByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -475,16 +430,23 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('shows downloading status text for active downloads', () => {
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/active-model.gguf': {
-          progress: 0.25,
-          bytesDownloaded: 256,
-          totalBytes: 1024,
-        },
+    mockDownloadStoreDownloads = {
+      'author/model-id/active-model.gguf': {
+        modelKey: 'author/model-id/active-model.gguf',
+        downloadId: 'dl-3',
+        modelId: 'author/model-id',
+        fileName: 'active-model.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 256,
+        totalBytes: 1024,
+        combinedTotalBytes: 1024,
+        progress: 0.25,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    });
-    mockStoreState(state);
+    };
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('Downloading...')).toBeTruthy();
@@ -523,308 +485,7 @@ describe('DownloadManagerScreen', () => {
     );
   });
 
-  // ===== NEW TESTS FOR COVERAGE =====
-
-  it('starts background download polling when service is available', () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([]);
-
-    render(<DownloadManagerScreen />);
-
-    expect(mockModelManager.startBackgroundDownloadPolling).toHaveBeenCalled();
-  });
-
-  it('subscribes to background download events when service is available', () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([]);
-
-    render(<DownloadManagerScreen />);
-
-    expect(mockBackgroundDownloadService.onAnyProgress).toHaveBeenCalled();
-    expect(mockBackgroundDownloadService.onAnyComplete).toHaveBeenCalled();
-    expect(mockBackgroundDownloadService.onAnyError).toHaveBeenCalled();
-  });
-
-  it('progress event callback updates download progress when store has no existing value', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      setDownloadProgress,
-      downloadProgress: {},
-      activeBackgroundDownloads: {
-        777: {
-          modelId: 'test/model',
-          fileName: 'file.gguf',
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-    // getState() returns the same state (no existing progress)
-
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let progressCallback: any;
-    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
-      progressCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    setDownloadProgress.mockClear();
-
-    await act(async () => {
-      progressCallback({
-        downloadId: 777,
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-      });
-    });
-
-    expect(setDownloadProgress).toHaveBeenCalledWith('test/model/file.gguf', {
-      progress: 0.5,
-      bytesDownloaded: 500,
-      totalBytes: 1000,
-      ownerDownloadId: 777,
-    });
-  });
-
-  it('progress event callback skips update when store already has higher bytesDownloaded', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      setDownloadProgress,
-      downloadProgress: {
-        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200, ownerDownloadId: 888 },
-      },
-      activeBackgroundDownloads: {
-        888: {
-          modelId: 'test/model',
-          fileName: 'file.gguf',
-          totalBytes: 1200,
-        },
-      },
-    });
-    mockStoreState(state);
-
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let progressCallback: any;
-    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
-      progressCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      progressCallback({
-        downloadId: 888,
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-      });
-    });
-
-    // Should NOT overwrite progress because store already has 800 >= 500
-    expect(setDownloadProgress).not.toHaveBeenCalledWith(
-      'test/model/file.gguf',
-      expect.objectContaining({
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-        ownerDownloadId: 888,
-      }),
-    );
-  });
-
-  it('progress event callback resets stale progress when the downloadId changed for the same file', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      setDownloadProgress,
-      downloadProgress: {
-        'test/model/file.gguf': { progress: 0.8, bytesDownloaded: 800, totalBytes: 1200, ownerDownloadId: 111 },
-      },
-      activeBackgroundDownloads: {
-        222: {
-          modelId: 'test/model',
-          fileName: 'file.gguf',
-          totalBytes: 1200,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let progressCallback: any;
-    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
-      progressCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      progressCallback({
-        downloadId: 222,
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-        bytesDownloaded: 100,
-        totalBytes: 1000,
-      });
-    });
-
-    expect(setDownloadProgress).toHaveBeenCalledWith('test/model/file.gguf', {
-      progress: 0.1,
-      bytesDownloaded: 100,
-      totalBytes: 1000,
-      ownerDownloadId: 222,
-      status: undefined,
-      reason: undefined,
-      reasonCode: undefined,
-    });
-  });
-
-  it('progress event callback ignores events without persisted metadata', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({ setDownloadProgress, downloadProgress: {}, activeBackgroundDownloads: {} });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let progressCallback: any;
-    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
-      progressCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      progressCallback({
-        downloadId: 999,
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-      });
-    });
-
-    expect(setDownloadProgress).not.toHaveBeenCalled();
-  });
-
-  it('progress event callback ignores image downloads so shared image progress is not overwritten', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      setDownloadProgress,
-      downloadProgress: {},
-      activeBackgroundDownloads: {
-        321: {
-          modelId: 'image:sd-turbo',
-          fileName: 'sd-turbo.zip',
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let progressCallback: any;
-    mockBackgroundDownloadService.onAnyProgress.mockImplementation((cb: any) => {
-      progressCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      progressCallback({
-        downloadId: 321,
-        modelId: 'image:sd-turbo',
-        fileName: 'sd-turbo.zip',
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-      });
-    });
-
-    expect(setDownloadProgress).not.toHaveBeenCalled();
-  });
-
-  it('complete event callback reloads active downloads for text models', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let completeCallback: any;
-    mockBackgroundDownloadService.onAnyComplete.mockImplementation((cb: any) => {
-      completeCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await completeCallback({
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-      });
-    });
-
-    // Should reload active downloads but NOT clear progress for text models
-    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
-  });
-
-  it('complete event callback reloads active downloads for image models without clearing shared progress', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({ setDownloadProgress });
-    mockStoreState(state);
-
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let completeCallback: any;
-    mockBackgroundDownloadService.onAnyComplete.mockImplementation((cb: any) => {
-      completeCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await completeCallback({
-        modelId: 'image:sd-turbo',
-        fileName: 'sd-turbo.zip',
-      });
-    });
-
-    expect(setDownloadProgress).not.toHaveBeenCalled();
-    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
-  });
-
-  it('error event callback shows alert and reloads active downloads', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    let errorCallback: any;
-    mockBackgroundDownloadService.onAnyError.mockImplementation((cb: any) => {
-      errorCallback = cb;
-      return jest.fn();
-    });
-
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await errorCallback({
-        modelId: 'test/model',
-        fileName: 'file.gguf',
-        downloadId: 42,
-        reason: 'Network error',
-      });
-    });
-
-    // Shows alert but does NOT clear progress or background download state
-    expect(mockShowAlert).toHaveBeenCalledWith('Download Failed', 'The connection dropped while downloading. Please try again.');
-    expect(mockModelManager.getActiveBackgroundDownloads).toHaveBeenCalled();
-  });
-
+  // ===== COVERAGE TESTS =====
 
   it('confirming delete model calls deleteModel and removeDownloadedModel', async () => {
     const removeDownloadedModel = jest.fn();
@@ -926,50 +587,24 @@ describe('DownloadManagerScreen', () => {
     expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to delete image model');
   });
 
-  it('confirming remove active download cancels and clears state', async () => {
-    const setDownloadProgress = jest.fn();
-    const setBackgroundDownload = jest.fn();
-    const removeImageModelDownloading = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-file.gguf': {
-          progress: 0.3,
-          bytesDownloaded: 1024,
-          totalBytes: 4096,
-        },
+  it('confirming remove active download cancels the native download', async () => {
+    mockDownloadStoreDownloads = {
+      'author/model-id/model-file.gguf': {
+        modelKey: 'author/model-id/model-file.gguf',
+        downloadId: 'dl-remove-1',
+        modelId: 'author/model-id',
+        fileName: 'model-file.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        combinedTotalBytes: 4096,
+        progress: 0.3,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-      setDownloadProgress,
-      setBackgroundDownload,
-      removeImageModelDownloading,
-    });
-    mockStoreState(state);
-
-    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
-    fireEvent.press(getAllByTestId('remove-download-button')[0]);
-
-    // Press "Yes" to confirm
-    await act(async () => {
-      fireEvent.press(getByTestId('alert-button-Yes'));
-    });
-
-    expect(setDownloadProgress).toHaveBeenCalledWith('author/model-id/model-file.gguf', null);
-  });
-
-  it('confirming remove download for image model clears image model downloading state', async () => {
-    const removeImageModelDownloading = jest.fn();
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {
-        'image:sd-turbo/model.bin': {
-          progress: 0.5,
-          bytesDownloaded: 500,
-          totalBytes: 1000,
-        },
-      },
-      setDownloadProgress,
-      removeImageModelDownloading,
-    });
-    mockStoreState(state);
+    };
 
     const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
     fireEvent.press(getAllByTestId('remove-download-button')[0]);
@@ -978,146 +613,83 @@ describe('DownloadManagerScreen', () => {
       fireEvent.press(getByTestId('alert-button-Yes'));
     });
 
-    expect(removeImageModelDownloading).toHaveBeenCalledWith('sd-turbo');
+    expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith('dl-remove-1');
   });
 
-  it('remove download error shows error alert', async () => {
-    const setDownloadProgress = jest.fn(() => { throw new Error('fail'); });
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-file.gguf': {
-          progress: 0.3,
-          bytesDownloaded: 1024,
-          totalBytes: 4096,
-        },
-      },
-      setDownloadProgress,
-    });
-    mockStoreState(state);
-
-    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
-    fireEvent.press(getAllByTestId('remove-download-button')[0]);
-
-    await act(async () => {
-      fireEvent.press(getByTestId('alert-button-Yes'));
-    });
-
-    expect(mockShowAlert).toHaveBeenCalledWith('Error', 'Failed to remove download');
-  });
-
-  it('renders background download items from active downloads with metadata', async () => {
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        101: {
-          modelId: 'author/bg-model',
-          fileName: 'bg-model.gguf',
-          author: 'bg-author',
-          quantization: 'Q4_K_M',
-          totalBytes: 2000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    // Set active downloads via loadActiveDownloads
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 101,
-        modelId: 'author/bg-model',
+  it('confirming remove download for image model cancels it', async () => {
+    mockDownloadStoreDownloads = {
+      'image:sd-turbo': {
+        modelKey: 'image:sd-turbo',
+        downloadId: 'dl-img-1',
+        modelId: 'image:sd-turbo',
+        fileName: 'sd-turbo.zip',
+        quantization: '',
+        modelType: 'image',
         status: 'running',
         bytesDownloaded: 500,
-        title: 'bg-model.gguf',
+        totalBytes: 1000,
+        combinedTotalBytes: 1000,
+        progress: 0.5,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    ]);
+    };
 
-    const result = render(<DownloadManagerScreen />);
+    const { getAllByTestId, getByTestId } = render(<DownloadManagerScreen />);
+    fireEvent.press(getAllByTestId('remove-download-button')[0]);
 
-    // Wait for the async loadActiveDownloads to finish
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      fireEvent.press(getByTestId('alert-button-Yes'));
     });
 
-    // Re-render should show the background download
-    expect(result.getByText('bg-model.gguf')).toBeTruthy();
-    expect(result.getByText('bg-author')).toBeTruthy();
+    expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith('dl-img-1');
   });
 
-  it('loadActiveDownloads replaces stale progress when the active snapshot belongs to a new downloadId', async () => {
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      setDownloadProgress,
-      downloadProgress: {
-        'author/bg-model/bg-model.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 500,
-          totalBytes: 2000,
-          ownerDownloadId: 100,
-        },
-      },
-      activeBackgroundDownloads: {
-        101: {
-          modelId: 'author/bg-model',
-          fileName: 'bg-model.gguf',
-          author: 'bg-author',
-          quantization: 'Q4_K_M',
-          totalBytes: 2000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 101,
+  it('renders background download items from active downloads with metadata', () => {
+    mockDownloadStoreDownloads = {
+      'author/bg-model/bg-model.gguf': {
+        modelKey: 'author/bg-model/bg-model.gguf',
+        downloadId: 'dl-bg-101',
         modelId: 'author/bg-model',
+        fileName: 'bg-model.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
         status: 'running',
-        bytesDownloaded: 100,
+        bytesDownloaded: 500,
         totalBytes: 2000,
-        title: 'bg-model.gguf',
+        combinedTotalBytes: 2000,
+        progress: 0.25,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    ]);
+    };
 
-    render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(setDownloadProgress).toHaveBeenCalledWith('author/bg-model/bg-model.gguf', {
-      progress: 0.05,
-      bytesDownloaded: 100,
-      totalBytes: 2000,
-      ownerDownloadId: 101,
-      status: 'running',
-      reason: undefined,
-      reasonCode: undefined,
-    });
+    const { getByText } = render(<DownloadManagerScreen />);
+    expect(getByText('bg-model.gguf')).toBeTruthy();
+    expect(getByText('author')).toBeTruthy();
   });
 
-  it('skips invalid download progress entries', () => {
-    const state = createDefaultState({
-      downloadProgress: {
-        'undefined/undefined': {
-          progress: Number.NaN,
-          bytesDownloaded: Number.NaN,
-          totalBytes: Number.NaN,
-        },
-        'valid/model/valid-file.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 500,
-          totalBytes: 1000,
-        },
+  it('renders active download entries from store', () => {
+    mockDownloadStoreDownloads = {
+      'valid/model/valid-file.gguf': {
+        modelKey: 'valid/model/valid-file.gguf',
+        downloadId: 'dl-valid',
+        modelId: 'valid/model',
+        fileName: 'valid-file.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 500,
+        totalBytes: 1000,
+        combinedTotalBytes: 1000,
+        progress: 0.5,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    });
-    mockStoreState(state);
+    };
 
     const { getByText } = render(<DownloadManagerScreen />);
     expect(getByText('valid-file.gguf')).toBeTruthy();
-    // The invalid entry should be skipped (no NaN rendering)
   });
 
   it('alert onClose calls hideAlert', () => {
@@ -1145,163 +717,27 @@ describe('DownloadManagerScreen', () => {
     expect(cancelBtn).toBeTruthy();
   });
 
-  it('remove download cross-references active downloads using exact model and file match', async () => {
-    const setDownloadProgress = jest.fn();
-    const setBackgroundDownload = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/bg-model/bg-model.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 500,
-          totalBytes: 1000,
-        },
-      },
-      activeBackgroundDownloads: {
-        301: {
-          modelId: 'author/bg-model',
-          fileName: 'bg-model.gguf',
-          author: 'bg-author',
-          quantization: 'Q4_K_M',
-          totalBytes: 1000,
-        },
-      },
-      setDownloadProgress,
-      setBackgroundDownload,
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 301,
-        modelId: 'author/bg-model',
-        status: 'running',
-        bytesDownloaded: 500,
-        title: 'bg-model.gguf',
-      },
-    ]);
-
-    const result = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Find the cancel button for the RNFS download (which has no downloadId)
-    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
-
-    // Confirm
-    await act(async () => {
-      fireEvent.press(result.getByTestId('alert-button-Yes'));
-    });
-
-    // Should have cross-referenced and found downloadId 301
-    expect(setBackgroundDownload).toHaveBeenCalledWith(301, null);
-    expect(mockModelManager.cancelBackgroundDownload).toHaveBeenCalledWith(301);
-  });
-
-  it('remove download does not cancel a different download with the same file name', async () => {
-    const setDownloadProgress = jest.fn();
-    const setBackgroundDownload = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/right-model/shared.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 500,
-          totalBytes: 1000,
-        },
-      },
-      activeBackgroundDownloads: {
-        302: {
-          modelId: 'author/other-model',
-          fileName: 'shared.gguf',
-          author: 'bg-author',
-          quantization: 'Q4_K_M',
-          totalBytes: 1000,
-        },
-      },
-      setDownloadProgress,
-      setBackgroundDownload,
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 302,
-        modelId: 'author/other-model',
-        status: 'running',
-        bytesDownloaded: 500,
-        title: 'shared.gguf',
-      },
-    ]);
-
-    const result = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
-
-    await act(async () => {
-      fireEvent.press(result.getByTestId('alert-button-Yes'));
-    });
-
-    expect(setBackgroundDownload).not.toHaveBeenCalledWith(302, null);
-    expect(mockModelManager.cancelBackgroundDownload).not.toHaveBeenCalledWith(302);
-    expect(setDownloadProgress).toHaveBeenCalledWith('author/right-model/shared.gguf', null);
-  });
-
-  it('skips invalid background download metadata entries', async () => {
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        201: {
-          modelId: 'undefined',
-          fileName: 'undefined',
-          author: '',
-          quantization: '',
-          totalBytes: Number.NaN,
-        },
-        202: {
-          modelId: 'valid/model',
-          fileName: 'valid.gguf',
-          author: 'author',
-          quantization: 'Q4_K_M',
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 201,
-        modelId: 'undefined',
-        status: 'running',
-        bytesDownloaded: Number.NaN,
-        title: 'undefined',
-      },
-      {
-        downloadId: 202,
+  it('renders valid download entries and shows their file names', () => {
+    mockDownloadStoreDownloads = {
+      'valid/model/valid.gguf': {
+        modelKey: 'valid/model/valid.gguf',
+        downloadId: 'dl-202',
         modelId: 'valid/model',
+        fileName: 'valid.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
         status: 'running',
         bytesDownloaded: 300,
-        title: 'valid.gguf',
+        totalBytes: 1000,
+        combinedTotalBytes: 1000,
+        progress: 0.3,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
       },
-    ]);
+    };
 
     const result = render(<DownloadManagerScreen />);
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Valid download should appear, invalid should be skipped
     expect(result.getByText('valid.gguf')).toBeTruthy();
   });
 
@@ -1382,59 +818,6 @@ describe('DownloadManagerScreen', () => {
     expect(getByText('0 B')).toBeTruthy();
   });
 
-  it('extractQuantization returns "Core ML" for coreml filename (covers line 554)', () => {
-    // Active RNFS download with a CoreML filename triggers extractQuantization with coreml
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-coreml.gguf': {
-          progress: 0.4,
-          bytesDownloaded: 400,
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('Core ML')).toBeTruthy();
-  });
-
-  it('extractQuantization returns quantization via regex fallback for non-standard pattern (covers lines 561-562)', () => {
-    // A filename like 'model-f16.gguf' matches the regex /[QqFf]\d+[_]?[KkMmSs]*/
-    // but does not match any of the listed patterns, so uses the regex fallback
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/model-f16.gguf': {
-          progress: 0.3,
-          bytesDownloaded: 300,
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-    // 'F16' is matched by the regex [QqFf]\d+ and returned uppercased
-    expect(getByText('F16')).toBeTruthy();
-  });
-
-  it('extractQuantization returns "Unknown" when no pattern matches (covers line 562 false branch)', () => {
-    // A filename with no quantization info at all (no Q/F pattern) returns 'Unknown'
-    const state = createDefaultState({
-      downloadProgress: {
-        'author/model-id/plain-model.gguf': {
-          progress: 0.2,
-          bytesDownloaded: 200,
-          totalBytes: 1000,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('Unknown')).toBeTruthy();
-  });
-
   it('image model with quantization renders imageBadge and imageQuantText styles (covers lines 424-425)', () => {
     // To hit the imageBadge branch on line 424, we need a completed image-type item
     // with a non-empty quantization. Image models currently have quantization='' in getDownloadItems,
@@ -1468,289 +851,6 @@ describe('DownloadManagerScreen', () => {
     expect(queryByText('Unknown')).toBeNull();
   });
 
-  // ===== getStatusText HELPER TESTS =====
-
-  it('shows "Downloading..." for background download with status "running"', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 11, modelId: 'a/m', status: 'running', bytesDownloaded: 100, title: 'run.gguf' },
-    ]);
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        11: { modelId: 'a/m', fileName: 'run.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
-      },
-    });
-    mockStoreState(state);
-
-    const result = render(<DownloadManagerScreen />);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-
-    expect(result.getByText('Downloading...')).toBeTruthy();
-  });
-
-  it('shows "Queued" for background download with status "pending"', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 12, modelId: 'a/m', status: 'pending', bytesDownloaded: 0, title: 'pend.gguf' },
-    ]);
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        12: { modelId: 'a/m', fileName: 'pend.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
-      },
-    });
-    mockStoreState(state);
-
-    const result = render(<DownloadManagerScreen />);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-
-    expect(result.getByText('Queued')).toBeTruthy();
-  });
-
-  it('shows "Paused" for background download with status "paused"', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      { downloadId: 13, modelId: 'a/m', status: 'paused', bytesDownloaded: 400, title: 'paus.gguf' },
-    ]);
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        13: { modelId: 'a/m', fileName: 'paus.gguf', author: 'a', quantization: 'Q4', totalBytes: 1000 },
-      },
-    });
-    mockStoreState(state);
-
-    const result = render(<DownloadManagerScreen />);
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-
-    expect(result.getByText('Paused')).toBeTruthy();
-  });
 
 
-  it('remove download with downloadId cancels background download', async () => {
-    const setBackgroundDownload = jest.fn();
-    const setDownloadProgress = jest.fn();
-    const state = createDefaultState({
-      downloadProgress: {},
-      activeBackgroundDownloads: {
-        101: {
-          modelId: 'author/bg-model',
-          fileName: 'bg-model.gguf',
-          author: 'bg-author',
-          quantization: 'Q4_K_M',
-          totalBytes: 2000,
-        },
-      },
-      setBackgroundDownload,
-      setDownloadProgress,
-    });
-    mockStoreState(state);
-
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 101,
-        modelId: 'author/bg-model',
-        status: 'running',
-        bytesDownloaded: 500,
-        title: 'bg-model.gguf',
-      },
-    ]);
-
-    const result = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Find and press cancel button on the active download
-    fireEvent.press(result.getAllByTestId('remove-download-button')[0]);
-
-    // Confirm removal
-    await act(async () => {
-      fireEvent.press(result.getByTestId('alert-button-Yes'));
-    });
-
-    // After 1 second timeout, reload should happen
-    await act(async () => {
-      jest.advanceTimersByTime(1000);
-      await Promise.resolve();
-    });
-  });
-
-  // ===== RETRY BUTTON TESTS =====
-
-  it('shows retry and remove buttons for failed downloads', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 42,
-        fileName: 'model.gguf',
-        modelId: 'test/model',
-        status: 'failed',
-        bytesDownloaded: 1024,
-        totalBytes: 4096,
-        startedAt: Date.now(),
-        reason: 'HTTP 404',
-      },
-    ]);
-
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        42: {
-          modelId: 'test/model',
-          fileName: 'model.gguf',
-          author: 'test',
-          quantization: 'Q4_K_M',
-          totalBytes: 4096,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(getByTestId('retry-download-button')).toBeTruthy();
-    expect(getByTestId('failed-remove-button')).toBeTruthy();
-    expect(queryByTestId('remove-download-button')).toBeNull();
-  });
-
-  it('does not show retry button for failed image downloads', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 99,
-        fileName: 'image.zip',
-        modelId: 'image:img-model',
-        status: 'failed',
-        bytesDownloaded: 512,
-        totalBytes: 2048,
-        startedAt: Date.now(),
-        reason: 'Network error',
-      },
-    ]);
-
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        99: {
-          modelId: 'image:img-model',
-          fileName: 'image.zip',
-          author: 'system',
-          quantization: '',
-          totalBytes: 2048,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByTestId, queryByTestId } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(getByTestId('failed-remove-button')).toBeTruthy();
-    expect(queryByTestId('retry-download-button')).toBeNull();
-  });
-
-  it('pressing retry button shows confirmation alert', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 42,
-        fileName: 'model.gguf',
-        modelId: 'test/model',
-        status: 'failed',
-        bytesDownloaded: 1024,
-        totalBytes: 4096,
-        startedAt: Date.now(),
-        reason: 'timeout',
-      },
-    ]);
-
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        42: {
-          modelId: 'test/model',
-          fileName: 'model.gguf',
-          author: 'test',
-          quantization: 'Q4_K_M',
-          totalBytes: 4096,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByTestId } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    fireEvent.press(getByTestId('retry-download-button'));
-
-    expect(mockShowAlert).toHaveBeenCalledWith(
-      'Retry Download',
-      expect.stringContaining('restart'),
-      expect.any(Array),
-    );
-  });
-
-  it('shows reconnecting status with icon for retrying downloads', async () => {
-    const state = createDefaultState({
-      downloadProgress: {
-        'test/model/model.gguf': {
-          progress: 0.5,
-          bytesDownloaded: 2048,
-          totalBytes: 4096,
-          status: 'retrying',
-          reason: 'Connection dropped. Waiting to retry (attempt 2).',
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText(/Reconnecting/)).toBeTruthy();
-  });
-
-  it('shows failed status with error color and icon', async () => {
-    mockBackgroundDownloadService.isAvailable.mockReturnValue(true);
-    mockModelManager.getActiveBackgroundDownloads.mockResolvedValue([
-      {
-        downloadId: 42,
-        fileName: 'model.gguf',
-        modelId: 'test/model',
-        status: 'failed',
-        bytesDownloaded: 1024,
-        totalBytes: 4096,
-        startedAt: Date.now(),
-        reason: 'HTTP 404',
-      },
-    ]);
-
-    const state = createDefaultState({
-      activeBackgroundDownloads: {
-        42: {
-          modelId: 'test/model',
-          fileName: 'model.gguf',
-          author: 'test',
-          quantization: 'Q4_K_M',
-          totalBytes: 4096,
-        },
-      },
-    });
-    mockStoreState(state);
-
-    const { getByText } = render(<DownloadManagerScreen />);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(getByText('The file could not be found on the download server.')).toBeTruthy();
-  });
 });

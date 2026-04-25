@@ -599,12 +599,6 @@ describe('ModelsScreen', () => {
       expect(Object.keys(progress).length).toBe(2);
     });
 
-    it('clears progress when download completes', () => {
-      useAppStore.getState().setDownloadProgress('model-1', { progress: 1, bytesDownloaded: 4000, totalBytes: 4000 });
-      useAppStore.getState().setDownloadProgress('model-1', null);
-
-      expect(useAppStore.getState().downloadProgress['model-1']).toBeUndefined();
-    });
   });
 
   // ============================================================================
@@ -1329,20 +1323,6 @@ describe('ModelsScreen', () => {
       });
     });
 
-    it('includes active downloads in badge count', async () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        downloadProgress: {
-          'downloading-1': { progress: 0.3, bytesDownloaded: 1000, totalBytes: 3000 },
-        },
-      });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('1')).toBeTruthy();
-      });
-    });
   });
 
   // ============================================================================

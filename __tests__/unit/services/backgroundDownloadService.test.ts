@@ -117,19 +117,17 @@ describe('BackgroundDownloadService', () => {
         url: 'https://example.com/model.gguf',
         fileName: 'model.gguf',
         modelId: 'test/model',
-        title: 'Downloading model',
-        description: 'In progress...',
         totalBytes: 4000000000,
       });
 
-      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledWith({
-        url: 'https://example.com/model.gguf',
-        fileName: 'model.gguf',
-        modelId: 'test/model',
-        title: 'Downloading model',
-        description: 'In progress...',
-        totalBytes: 4000000000,
-      });
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com/model.gguf',
+          fileName: 'model.gguf',
+          modelId: 'test/model',
+          totalBytes: 4000000000,
+        }),
+      );
       expect(result.downloadId).toBe(42);
       expect(result.status).toBe('pending');
     });
@@ -151,22 +149,23 @@ describe('BackgroundDownloadService', () => {
       expect(result.bytesDownloaded).toBe(0);
     });
 
-    it('uses default title and description when not provided', async () => {
+    it('defaults modelType to text and totalBytes to 0 when not provided', async () => {
       mockDownloadManagerModule.startDownload.mockResolvedValue({
         downloadId: 1,
         fileName: 'model.gguf',
         modelId: 'test/model',
       });
 
-      await service.startDownload({
+      const result = await service.startDownload({
         url: 'https://example.com/model.gguf',
         fileName: 'model.gguf',
         modelId: 'test/model',
       });
 
       const callArgs = mockDownloadManagerModule.startDownload.mock.calls[0][0];
-      expect(callArgs.title).toBe('Downloading model.gguf');
-      expect(callArgs.description).toBe('Model download in progress...');
+      expect(callArgs.modelType).toBe('text');
+      expect(callArgs.totalBytes).toBe(0);
+      expect(result.totalBytes).toBe(0);
     });
 
     it('throws when not available', async () => {
@@ -247,13 +246,13 @@ describe('BackgroundDownloadService', () => {
     it('maps native response to BackgroundDownloadInfo', async () => {
       mockDownloadManagerModule.getActiveDownloads.mockResolvedValue([
         {
-          downloadId: 1,
+          id: 'dl-1',
           fileName: 'model.gguf',
           modelId: 'test/model',
           status: 'running',
           bytesDownloaded: 1000,
           totalBytes: 5000,
-          startedAt: 12345,
+          createdAt: 12345,
           reason: 'still downloading',
         },
       ]);
@@ -261,7 +260,7 @@ describe('BackgroundDownloadService', () => {
       const result = await service.getActiveDownloads();
 
       expect(result).toHaveLength(1);
-      expect(result[0].downloadId).toBe(1);
+      expect(result[0].downloadId).toBe('dl-1');
       expect(result[0].status).toBe('running');
       expect(result[0].bytesDownloaded).toBe(1000);
       expect(result[0].reason).toBe('still downloading');
@@ -547,189 +546,6 @@ describe('BackgroundDownloadService', () => {
   });
 
   // ========================================================================
-  // startMultiFileDownload
-  // ========================================================================
-  describe('startMultiFileDownload', () => {
-    it('calls native module with correct params', async () => {
-      (mockDownloadManagerModule as any).startMultiFileDownload = jest
-        .fn()
-        .mockResolvedValue({
-          downloadId: 55,
-          fileName: 'sd-model.zip',
-          modelId: 'image:sd-model',
-        });
-
-      const result = await service.startMultiFileDownload({
-        files: [
-          {
-            url: 'https://example.com/unet.onnx',
-            relativePath: 'unet/model.onnx',
-            size: 1000,
-          },
-          {
-            url: 'https://example.com/vae.onnx',
-            relativePath: 'vae/model.onnx',
-            size: 500,
-          },
-        ],
-        fileName: 'sd-model.zip',
-        modelId: 'image:sd-model',
-        destinationDir: '/models/image/sd-model',
-        totalBytes: 1500,
-      });
-
-      expect(
-        (mockDownloadManagerModule as any).startMultiFileDownload,
-      ).toHaveBeenCalledWith({
-        files: [
-          {
-            url: 'https://example.com/unet.onnx',
-            relativePath: 'unet/model.onnx',
-            size: 1000,
-          },
-          {
-            url: 'https://example.com/vae.onnx',
-            relativePath: 'vae/model.onnx',
-            size: 500,
-          },
-        ],
-        fileName: 'sd-model.zip',
-        modelId: 'image:sd-model',
-        destinationDir: '/models/image/sd-model',
-        totalBytes: 1500,
-      });
-      expect(result.downloadId).toBe(55);
-      expect(result.status).toBe('pending');
-      expect(result.bytesDownloaded).toBe(0);
-      expect(result.totalBytes).toBe(1500);
-    });
-
-    it('uses 0 for totalBytes when not provided', async () => {
-      (mockDownloadManagerModule as any).startMultiFileDownload = jest
-        .fn()
-        .mockResolvedValue({
-          downloadId: 56,
-          fileName: 'sd-model.zip',
-          modelId: 'image:sd-model',
-        });
-
-      const result = await service.startMultiFileDownload({
-        files: [
-          {
-            url: 'https://example.com/model.onnx',
-            relativePath: 'model.onnx',
-            size: 100,
-          },
-        ],
-        fileName: 'sd-model.zip',
-        modelId: 'image:sd-model',
-        destinationDir: '/models/image/sd-model',
-      });
-
-      const callArgs = (mockDownloadManagerModule as any).startMultiFileDownload
-        .mock.calls[0][0];
-      expect(callArgs.totalBytes).toBe(0);
-      expect(result.totalBytes).toBe(0);
-    });
-
-    it('throws when not available', async () => {
-      const savedModule = NativeModules.DownloadManagerModule;
-      NativeModules.DownloadManagerModule = null;
-
-      let unavailableService: any;
-      jest.isolateModules(() => {
-        const mod = require('../../../src/services/backgroundDownloadService');
-        unavailableService = new (
-          mod.backgroundDownloadService as any
-        ).constructor();
-      });
-
-      await expect(
-        unavailableService.startMultiFileDownload({
-          files: [],
-          fileName: 'test.zip',
-          modelId: 'test',
-          destinationDir: '/test',
-        }),
-      ).rejects.toThrow('Background downloads not available');
-      NativeModules.DownloadManagerModule = savedModule;
-    });
-  });
-
-  // ========================================================================
-  // getDownloadProgress
-  // ========================================================================
-  describe('getDownloadProgress', () => {
-    it('returns progress from native module', async () => {
-      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
-        bytesDownloaded: 2500,
-        totalBytes: 5000,
-        status: 'running',
-        localUri: '',
-        reason: '',
-      });
-
-      const result = await service.getDownloadProgress(42);
-
-      expect(
-        mockDownloadManagerModule.getDownloadProgress,
-      ).toHaveBeenCalledWith(42);
-      expect(result.bytesDownloaded).toBe(2500);
-      expect(result.totalBytes).toBe(5000);
-      expect(result.status).toBe('running');
-      // Empty strings should be converted to undefined
-      expect(result.localUri).toBeUndefined();
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('returns localUri and reason when present', async () => {
-      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
-        bytesDownloaded: 5000,
-        totalBytes: 5000,
-        status: 'completed',
-        localUri: '/data/downloads/model.gguf',
-        reason: '',
-      });
-
-      const result = await service.getDownloadProgress(42);
-      expect(result.localUri).toBe('/data/downloads/model.gguf');
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('returns reason when download failed', async () => {
-      mockDownloadManagerModule.getDownloadProgress.mockResolvedValue({
-        bytesDownloaded: 0,
-        totalBytes: 5000,
-        status: 'failed',
-        localUri: '',
-        reason: 'Network error',
-      });
-
-      const result = await service.getDownloadProgress(42);
-      expect(result.localUri).toBeUndefined();
-      expect(result.reason).toBe('Network error');
-    });
-
-    it('throws when not available', async () => {
-      const savedModule = NativeModules.DownloadManagerModule;
-      NativeModules.DownloadManagerModule = null;
-
-      let unavailableService: any;
-      jest.isolateModules(() => {
-        const mod = require('../../../src/services/backgroundDownloadService');
-        unavailableService = new (
-          mod.backgroundDownloadService as any
-        ).constructor();
-      });
-
-      await expect(unavailableService.getDownloadProgress(42)).rejects.toThrow(
-        'not available',
-      );
-      NativeModules.DownloadManagerModule = savedModule;
-    });
-  });
-
-  // ========================================================================
   // Additional polling branches
   // ========================================================================
   describe('polling edge cases', () => {
@@ -999,6 +815,10 @@ describe('BackgroundDownloadService', () => {
   // downloadFileTo
   // ========================================================================
   describe('downloadFileTo', () => {
+    // startDownload is async (2+ microtask ticks deep); flush enough ticks so
+    // listeners are registered before we fire synthetic events.
+    const flushMicrotasks = () => new Promise<void>(resolve => setImmediate(resolve));
+
     const baseParams = {
       url: 'https://example.com/dep.gguf',
       fileName: 'dep.gguf',
@@ -1022,7 +842,7 @@ describe('BackgroundDownloadService', () => {
       });
 
       // Let startDownload mock resolve and listeners register
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadComplete) {
         eventHandlers.DownloadComplete({
@@ -1099,7 +919,7 @@ describe('BackgroundDownloadService', () => {
         destPath: '/dest/dep.gguf',
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadError) {
         eventHandlers.DownloadError({
@@ -1130,7 +950,7 @@ describe('BackgroundDownloadService', () => {
         silent: true,
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadComplete) {
         eventHandlers.DownloadComplete({
@@ -1165,7 +985,7 @@ describe('BackgroundDownloadService', () => {
         silent: false,
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadComplete) {
         eventHandlers.DownloadComplete({
@@ -1201,7 +1021,7 @@ describe('BackgroundDownloadService', () => {
         onProgress,
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadProgress) {
         eventHandlers.DownloadProgress({
@@ -1245,7 +1065,7 @@ describe('BackgroundDownloadService', () => {
         destPath: '/dest/dep.gguf',
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadComplete) {
         eventHandlers.DownloadComplete({
@@ -1297,7 +1117,7 @@ describe('BackgroundDownloadService', () => {
         destPath: '/dest/dep.gguf',
       });
 
-      await Promise.resolve();
+      await flushMicrotasks();
 
       if (eventHandlers.DownloadError) {
         eventHandlers.DownloadError({

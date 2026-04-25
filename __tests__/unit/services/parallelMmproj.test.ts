@@ -145,22 +145,8 @@ describe('Parallel mmproj download', () => {
         expect.objectContaining({ fileName: 'vision.gguf' }),
       );
       expect(mockService.startDownload).toHaveBeenCalledWith(
-        expect.objectContaining({ fileName: 'mmproj.gguf' }),
+        expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
       );
-    });
-
-    it('marks mmproj download as silent', async () => {
-      stubStartDownload([42, 43]);
-
-      await performBackgroundDownload({
-        modelId: 'test/model',
-        file: visionFile(),
-        modelsDir: MODELS_DIR,
-        backgroundDownloadContext: bgContext,
-        backgroundDownloadMetadataCallback: metadataCallback,
-      });
-
-      expect(mockService.markSilent).toHaveBeenCalledWith(43);
     });
 
     it('persists mmProjDownloadId in metadata callback', async () => {
@@ -251,7 +237,7 @@ describe('Parallel mmproj download', () => {
         backgroundDownloadMetadataCallback: metadataCallback,
       });
 
-      expect(info.downloadId).toBe(-1);
+      expect(info.downloadId).toBe('already-downloaded:test/model/vision.gguf');
       expect(info.status).toBe('completed');
       expect(mockService.startDownload).not.toHaveBeenCalled();
     });
@@ -489,7 +475,7 @@ describe('Parallel mmproj download', () => {
       expect(mockService.cancelDownload).toHaveBeenCalledWith(43);
     });
 
-    it('cancels main when mmproj download fails', async () => {
+    it('continues as text-only when mmproj download fails', async () => {
       stubStartDownload([42, 43]);
       const errorCbs = captureErrorCallbacks();
       captureCompleteCallbacks();
@@ -513,36 +499,10 @@ describe('Parallel mmproj download', () => {
 
       errorCbs[43]?.({ downloadId: 43, fileName: 'mmproj.gguf', modelId: 'test/model', status: 'failed', reason: 'Storage full' });
 
-      expect(onError).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('Storage full') }),
-      );
-      expect(mockService.cancelDownload).toHaveBeenCalledWith(42);
-    });
-
-    it('unmarks silent on error cleanup', async () => {
-      stubStartDownload([42, 43]);
-      const errorCbs = captureErrorCallbacks();
-      captureCompleteCallbacks();
-
-      await performBackgroundDownload({
-        modelId: 'test/model',
-        file: visionFile(),
-        modelsDir: MODELS_DIR,
-        backgroundDownloadContext: bgContext,
-        backgroundDownloadMetadataCallback: metadataCallback,
-      });
-
-      watchBackgroundDownload({
-        downloadId: 42,
-        modelsDir: MODELS_DIR,
-        backgroundDownloadContext: bgContext,
-        backgroundDownloadMetadataCallback: metadataCallback,
-        onError: jest.fn(),
-      });
-
-      errorCbs[42]?.({ downloadId: 42, fileName: 'vision.gguf', modelId: 'test/model', status: 'failed', reason: 'fail' });
-
-      expect(mockService.unmarkSilent).toHaveBeenCalledWith(43);
+      expect(onError).not.toHaveBeenCalled();
+      const ctx = bgContext.get(42) as any;
+      expect(ctx.mmProjCompleted).toBe(true);
+      expect(ctx.mmProjLocalPath).toBeNull();
     });
   });
 
@@ -675,8 +635,6 @@ describe('Parallel mmproj download', () => {
       // Progress listeners for both
       expect(mockService.onProgress).toHaveBeenCalledWith(42, expect.any(Function));
       expect(mockService.onProgress).toHaveBeenCalledWith(43, expect.any(Function));
-      // mmproj should be marked silent
-      expect(mockService.markSilent).toHaveBeenCalledWith(43);
     });
 
     it('handles mmproj completed while app was dead', async () => {
@@ -710,7 +668,7 @@ describe('Parallel mmproj download', () => {
       // Should have tried to move the completed mmproj
       expect(mockService.moveCompletedDownload).toHaveBeenCalledWith(43, `${MODELS_DIR}/vision-mmproj.gguf`);
       // Should NOT register mmproj progress listener (already done)
-      expect(mockService.markSilent).not.toHaveBeenCalled();
+      expect(mockService.onProgress).not.toHaveBeenCalledWith(43, expect.any(Function));
     });
 
     it('marks mmproj as completed when it failed while app was dead', async () => {

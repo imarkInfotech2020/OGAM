@@ -18,6 +18,10 @@ export function mmProjLocalName(ggufFileName: string): string {
   return `${ggufFileName.replace(/\.gguf$/i, '')}-mmproj.gguf`;
 }
 
+function makeAlreadyDownloadedId(modelId: string, fileName: string): string {
+  return `already-downloaded:${makeModelKey(modelId, fileName)}`;
+}
+
 export {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
@@ -85,11 +89,12 @@ async function handleAlreadyDownloaded(opts: AlreadyDownloadedOpts): Promise<Bac
   const { modelId, file, localPath, mmProjLocalPath, backgroundDownloadContext } = opts;
   const model = await buildDownloadedModel({ modelId, file, resolvedLocalPath: localPath, mmProjPath: mmProjLocalPath || undefined });
   const totalBytes = file.size + (file.mmProjFile?.size || 0);
+  const downloadId = makeAlreadyDownloadedId(modelId, file.name);
   const completedInfo: BackgroundDownloadInfo = {
-    downloadId: 'already-downloaded', fileName: file.name, modelId, status: 'completed',
+    downloadId, fileName: file.name, modelId, status: 'completed',
     bytesDownloaded: totalBytes, totalBytes, startedAt: Date.now(),
   };
-  backgroundDownloadContext.set('already-downloaded', { model, error: null });
+  backgroundDownloadContext.set(downloadId, { model, error: null });
   return completedInfo;
 }
 
@@ -149,7 +154,6 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
       combinedTotalBytes,
       progress: 0,
       createdAt: Date.now(),
-      lastProgressAt: Date.now(),
     });
   }
 
@@ -188,9 +192,20 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     // Update Android notification with combined progress for vision models
     if (needsMmProj && mmProjDownloadId) {
       try {
-        // @ts-ignore - native module method
-        const { DownloadManagerModule } = require('react-native').NativeModules;
-        if (DownloadManagerModule?.updateCombinedProgress) {
+        const { DownloadManagerModule } = require('react-native').NativeModules as {
+          DownloadManagerModule?: {
+            updateCombinedProgress?: (
+              modelId: string,
+              fileName: string,
+              mmProjFileName: string,
+              mainBytesDownloaded: number,
+              mainTotalBytes: number,
+              mmProjBytesDownloaded: number,
+              mmProjTotalBytes: number,
+            ) => void;
+          };
+        };
+        if (typeof DownloadManagerModule?.updateCombinedProgress === 'function') {
           DownloadManagerModule.updateCombinedProgress(
             modelId,
             file.name,
@@ -253,8 +268,9 @@ export interface WatchDownloadOpts {
 export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   const { downloadId, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onComplete, onError } = opts;
   const ctx = backgroundDownloadContext.get(downloadId);
+  const isAlreadyDownloaded = typeof downloadId === 'string' && downloadId.startsWith('already-downloaded:');
 
-  if (downloadId === 'already-downloaded' && ctx && 'model' in ctx) {
+  if (isAlreadyDownloaded && ctx && 'model' in ctx) {
     if (ctx.model) onComplete?.(ctx.model);
     else if (ctx.error) onError?.(ctx.error);
     backgroundDownloadContext.delete(downloadId);

@@ -35,9 +35,58 @@ interface ImageMetadata {
   imageModelAttentionVariant?: string;
 }
 
+type MultifileRuntime = {
+  cancelled: boolean;
+  currentDownloadId?: string;
+};
+
+const activeMultifileDownloads = new Map<string, MultifileRuntime>();
+const USER_CANCELLED_ERROR = 'user_cancelled';
+
 /** Build a synthetic downloadId for multi-file flows that don't go through WorkManager. */
 function makeMultifileId(modelId: string): string {
   return `image-multi:${modelId}`;
+}
+
+function startMultifileRuntime(modelId: string): MultifileRuntime {
+  const runtime: MultifileRuntime = { cancelled: false };
+  activeMultifileDownloads.set(modelId, runtime);
+  return runtime;
+}
+
+function clearMultifileRuntime(modelId: string) {
+  activeMultifileDownloads.delete(modelId);
+}
+
+function isCancelledError(error: unknown): boolean {
+  return error instanceof Error && error.message === USER_CANCELLED_ERROR;
+}
+
+function assertNotCancelled(modelId: string, runtime: MultifileRuntime) {
+  const stillVisible = !!useDownloadStore.getState().downloads[makeImageModelKey(modelId)];
+  if (runtime.cancelled || !stillVisible) {
+    runtime.cancelled = true;
+    throw new Error(USER_CANCELLED_ERROR);
+  }
+}
+
+function wireCurrentDownloadPromise(downloadIdPromise: Promise<string> | undefined, runtime: MultifileRuntime) {
+  if (!downloadIdPromise) return;
+  downloadIdPromise.then((downloadId) => {
+    runtime.currentDownloadId = downloadId;
+    if (runtime.cancelled) {
+      backgroundDownloadService.cancelDownload(downloadId).catch(() => {});
+    }
+  }).catch(() => {});
+}
+
+export async function cancelSyntheticImageDownload(modelId: string): Promise<void> {
+  const runtime = activeMultifileDownloads.get(modelId);
+  if (!runtime) return;
+  runtime.cancelled = true;
+  if (runtime.currentDownloadId) {
+    await backgroundDownloadService.cancelDownload(runtime.currentDownloadId).catch(() => {});
+  }
 }
 
 /** Remove the entry from the store. Use after register-and-notify or on error. */
@@ -91,7 +140,6 @@ function addImageEntry(opts: {
     combinedTotalBytes: totalBytes,
     progress: 0,
     createdAt: Date.now(),
-    lastProgressAt: Date.now(),
     metadataJson: JSON.stringify(metadata),
   });
   return true;
@@ -145,6 +193,7 @@ export async function downloadHuggingFaceModel(
     },
   });
   if (!created) return;
+  const runtime = startMultifileRuntime(modelInfo.id);
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
@@ -155,6 +204,7 @@ export async function downloadHuggingFaceModel(
     const totalSize = files.reduce((sum, f) => sum + f.size, 0);
     let downloadedSize = 0;
     for (const file of files) {
+      assertNotCancelled(modelInfo.id, runtime);
       const fileUrl = `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`;
       const filePath = `${modelDir}/${file.path}`;
       const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
@@ -162,19 +212,24 @@ export async function downloadHuggingFaceModel(
 
       const tempFileName = `${modelInfo.id}_${file.path.replaceAll('/', '_')}`;
       const capturedDownloadedSize = downloadedSize;
-      const { promise } = backgroundDownloadService.downloadFileTo({
+      const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
         params: { url: fileUrl, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
         destPath: filePath,
         onProgress: (bytesDownloaded) => {
+          if (runtime.cancelled) return;
           const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
           useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
         },
       });
+      wireCurrentDownloadPromise(downloadIdPromise, runtime);
       await promise;
+      runtime.currentDownloadId = undefined;
       downloadedSize += file.size;
       useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
     }
+    assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
+    assertNotCancelled(modelInfo.id, runtime);
     const imageModel: ONNXImageModel = {
       id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -182,6 +237,13 @@ export async function downloadHuggingFaceModel(
     };
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
   } catch (error: any) {
+    if (isCancelledError(error)) {
+      try {
+        const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
+        if (await RNFS.exists(dir)) await RNFS.unlink(dir);
+      } catch { /* ignore cleanup errors */ }
+      return;
+    }
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     useDownloadStore.getState().setStatus(syntheticId, 'failed', {
       message: error?.message || 'Multi-file download failed',
@@ -190,6 +252,8 @@ export async function downloadHuggingFaceModel(
       const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
       if (await RNFS.exists(dir)) await RNFS.unlink(dir);
     } catch { /* ignore cleanup errors */ }
+  } finally {
+    clearMultifileRuntime(modelInfo.id);
   }
 }
 
@@ -218,6 +282,7 @@ export async function downloadCoreMLMultiFile(
     },
   });
   if (!created) return;
+  const runtime = startMultifileRuntime(modelInfo.id);
 
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -229,24 +294,30 @@ export async function downloadCoreMLMultiFile(
     const totalSize = files.reduce((sum, f) => sum + f.size, 0);
     let downloadedSize = 0;
     for (const file of files) {
+      assertNotCancelled(modelInfo.id, runtime);
       const filePath = `${modelDir}/${file.relativePath}`;
       const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
       if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
       const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
       const capturedDownloadedSize = downloadedSize;
-      const { promise } = backgroundDownloadService.downloadFileTo({
+      const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
         params: { url: file.downloadUrl, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
         destPath: filePath,
         onProgress: (bytesDownloaded) => {
+          if (runtime.cancelled) return;
           const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
           useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
         },
       });
+      wireCurrentDownloadPromise(downloadIdPromise, runtime);
       await promise;
+      runtime.currentDownloadId = undefined;
       downloadedSize += file.size;
       useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
     }
+    assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
+    assertNotCancelled(modelInfo.id, runtime);
     const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
     const imageModel: ONNXImageModel = {
       id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
@@ -257,6 +328,13 @@ export async function downloadCoreMLMultiFile(
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
     if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
+    if (isCancelledError(error)) {
+      try {
+        const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
+        if (await RNFS.exists(dir)) await RNFS.unlink(dir);
+      } catch { /* ignore cleanup errors */ }
+      return;
+    }
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
     useDownloadStore.getState().setStatus(syntheticId, 'failed', {
       message: error?.message || 'CoreML download failed',
@@ -265,6 +343,8 @@ export async function downloadCoreMLMultiFile(
       const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
       if (await RNFS.exists(dir)) await RNFS.unlink(dir);
     } catch { /* ignore cleanup errors */ }
+  } finally {
+    clearMultifileRuntime(modelInfo.id);
   }
 }
 
@@ -294,6 +374,8 @@ export async function proceedWithDownload(
     imageModelBackend: modelInfo.backend,
     imageModelAttentionVariant: modelInfo.attentionVariant,
   };
+  const existing = useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)];
+  if (existing && isActiveStatus(existing.status)) return;
   try {
     const downloadInfo = await backgroundDownloadService.startDownload({
       url: modelInfo.downloadUrl, fileName, modelId: `image:${modelInfo.id}`,
@@ -319,19 +401,25 @@ export async function proceedWithDownload(
       const imageModelsDir = modelManager.getImageModelsDirectory();
       const zipPath = `${imageModelsDir}/${fileName}`;
       const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-      useDownloadStore.getState().setProcessing(downloadInfo.downloadId);
-      if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-      await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
-      if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-      await unzip(zipPath, modelDir);
-      const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
-      await RNFS.unlink(zipPath).catch(() => {});
-      const imageModel: ONNXImageModel = {
-        id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
-        modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: modelInfo.size, style: modelInfo.style,
-        backend: modelInfo.backend, attentionVariant: modelInfo.attentionVariant,
-      };
-      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+      try {
+        useDownloadStore.getState().setProcessing(downloadInfo.downloadId);
+        if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
+        await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
+        if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+        await unzip(zipPath, modelDir);
+        const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
+        await RNFS.unlink(zipPath).catch(() => {});
+        const imageModel: ONNXImageModel = {
+          id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
+          modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: modelInfo.size, style: modelInfo.style,
+          backend: modelInfo.backend, attentionVariant: modelInfo.attentionVariant,
+        };
+        await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+      } catch (e) {
+        await RNFS.unlink(zipPath).catch(() => {});
+        await RNFS.unlink(modelDir).catch(() => {});
+        throw e;
+      }
     });
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {

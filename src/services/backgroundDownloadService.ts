@@ -43,6 +43,7 @@ class BackgroundDownloadService {
       metadataJson: params.metadataJson,
       totalBytes: params.totalBytes ?? 0,
       sha256: params.sha256,
+      hideNotification: params.hideNotification ?? false,
     });
     return {
       downloadId: result.downloadId,
@@ -183,12 +184,16 @@ class BackgroundDownloadService {
     onProgress?: (bytesDownloaded: number, totalBytes: number) => void;
     silent?: boolean;
   }): { downloadIdPromise: Promise<string>; promise: Promise<void> } {
+    if (!this.isAvailable()) throw new Error('Background downloads not available on this platform');
     let resolveId!: (id: string) => void;
     let rejectId!: (err: unknown) => void;
     const downloadIdPromise = new Promise<string>((res, rej) => { resolveId = res; rejectId = rej; });
 
     const promise = (async () => {
-      const info = await this.startDownload(opts.params);
+      const info = await this.startDownload({
+        ...opts.params,
+        hideNotification: opts.silent,
+      });
       resolveId(info.downloadId);
       await new Promise<void>((resolve, reject) => {
         const removeProgress = this.onProgress(info.downloadId, (event) => {

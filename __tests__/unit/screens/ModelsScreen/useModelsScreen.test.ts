@@ -151,6 +151,12 @@ jest.mock('../../../../src/stores', () => ({
   })),
 }));
 
+const mockDownloads: Record<string, any> = {};
+jest.mock('../../../../src/stores/downloadStore', () => ({
+  useDownloadStore: jest.fn((selector?: any) =>
+    selector ? selector({ downloads: mockDownloads }) : { downloads: mockDownloads }),
+}));
+
 // Mock modelManager
 jest.mock('../../../../src/services', () => ({
   modelManager: {
@@ -173,6 +179,7 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
 describe('useModelsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
   });
 
   describe('initial state', () => {
@@ -301,12 +308,13 @@ describe('useModelsScreen', () => {
 
       useTextModels.mockReturnValue({
         downloadedModels: [{ id: '1' }, { id: '2' }],
-        downloadProgress: { '3': 50 }, // 1 in-progress download
       });
 
       useImageModels.mockReturnValue({
         downloadedImageModels: [{ id: '4' }],
       });
+
+      mockDownloads['org/repo/file.gguf'] = { status: 'running' };
 
       const { result } = renderHook(() => useModelsScreen());
 
