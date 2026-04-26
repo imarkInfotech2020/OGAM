@@ -125,8 +125,8 @@ class DownloadManagerModuleTest {
     // ── WorkerDownload constants ──────────────────────────────────────────────
 
     @Test
-    fun defaultProgressIntervalIsOneSecond() {
-        assertEquals(1_000L, WorkerDownload.DEFAULT_PROGRESS_INTERVAL)
+    fun defaultProgressIntervalIs1500ms() {
+        assertEquals(1_500L, WorkerDownload.DEFAULT_PROGRESS_INTERVAL)
     }
 
     @Test
