@@ -29,6 +29,7 @@ export interface DownloadEntry {
   mmProjBytesDownloaded?: number
   mmProjStatus?: DownloadStatus
   errorMessage?: string
+  errorCode?: string
   createdAt: number
   metadataJson?: string
 }
@@ -219,7 +220,7 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     return {
       downloads: {
         ...state.downloads,
-        [modelKey]: { ...entry, status, errorMessage: error?.message },
+        [modelKey]: { ...entry, status, errorMessage: error?.message, errorCode: error?.code },
       },
     };
   }),
@@ -281,6 +282,7 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           bytesDownloaded: 0,
           progress: 0,
           errorMessage: undefined,
+          errorCode: undefined,
           mmProjStatus: undefined,
           mmProjBytesDownloaded: undefined,
           mmProjDownloadId: undefined,

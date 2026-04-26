@@ -139,6 +139,13 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing) {
+    // Cancel any running/queued native worker before retryEntry swaps the
+    // downloadId. Without this, the old worker keeps running with no store
+    // listener after the index is updated to the new downloadId.
+    await backgroundDownloadService.cancelDownload(existing.downloadId).catch(() => {});
+    if (existing.mmProjDownloadId) {
+      await backgroundDownloadService.cancelDownload(existing.mmProjDownloadId).catch(() => {});
+    }
     useDownloadStore.getState().retryEntry(modelKey, downloadInfo.downloadId);
   } else {
     useDownloadStore.getState().add({

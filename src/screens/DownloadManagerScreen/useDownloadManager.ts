@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Platform } from 'react-native';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
@@ -7,6 +8,7 @@ import {
   activeModelService,
   hardwareService,
   huggingFaceService,
+  backgroundDownloadService,
 } from '../../services';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
@@ -19,6 +21,7 @@ export interface UseDownloadManagerResult {
   alertState: AlertState;
   setAlertState: (state: AlertState) => void;
   handleRemoveDownload: (item: DownloadItem) => void;
+  handleRetryDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   isRepairingVision: (modelId: string) => boolean;
@@ -94,6 +97,7 @@ function entryToActiveItem(entry: DownloadEntry): DownloadItem {
     progress: entry.progress,
     status: entry.status,
     reason: entry.errorMessage,
+    reasonCode: entry.errorCode as import('../../types').BackgroundDownloadReasonCode | undefined,
   };
 }
 
@@ -172,6 +176,22 @@ export function useDownloadManager(): UseDownloadManagerResult {
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
+    }
+  };
+
+  const handleRetryDownload = async (item: DownloadItem) => {
+    if (!item.downloadId) return;
+    try {
+      useDownloadStore.getState().setStatus(item.downloadId, 'pending');
+      if (Platform.OS === 'android') {
+        await backgroundDownloadService.retryDownload(item.downloadId);
+      }
+      backgroundDownloadService.startProgressPolling();
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to retry download:', error);
+      useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
+        message: 'Retry failed. Please remove and re-download.',
+      });
     }
   };
 
@@ -270,6 +290,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     alertState,
     setAlertState,
     handleRemoveDownload,
+    handleRetryDownload,
     handleDeleteItem,
     handleRepairVision,
     isRepairingVision,

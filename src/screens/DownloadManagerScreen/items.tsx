@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
-import { getDownloadStatusLabel } from '../../utils/downloadErrors';
+import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { createStyles } from './styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -77,9 +77,10 @@ function getStatusLabel(item: DownloadItem): string {
 interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
+  onRetry: (item: DownloadItem) => void;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -143,6 +144,16 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
       </View>
       {item.status === 'failed' && (
         <View style={styles.failedActionsRow}>
+          {Platform.OS === 'android' && isRetryable(item.reasonCode) && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              testID="failed-retry-button"
+              onPress={() => onRetry(item)}
+            >
+              <Icon name="refresh-cw" size={14} color={colors.primary} />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.removeButton}
             testID="failed-remove-button"

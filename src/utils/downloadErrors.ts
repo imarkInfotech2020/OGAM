@@ -15,7 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   http_403:             'Access denied. You may not have permission to download this file.',
   http_404:             'File not found. It may have been moved or removed.',
   http_416:             'The server could not resume this download. Please retry it.',
-  http_429:             'Server is rate-limiting. Retrying with backoff.',
+  http_429:             'Server is rate-limiting. Please try again later.',
   client_error:         'A client error occurred. Please retry.',
   unknown_error:        'Something went wrong while downloading.',
 };
@@ -99,6 +99,16 @@ export function toUserMessage(reason?: string, code?: string): string {
     return reason;
   }
   return ERROR_MESSAGES.unknown_error;
+}
+
+const RETRYABLE_CODES = new Set([
+  'network_lost', 'network_timeout', 'server_unavailable', 'download_interrupted',
+  'http_416', 'http_429', 'empty_response', 'unknown_error',
+]);
+
+export function isRetryable(reasonCode?: string): boolean {
+  if (!reasonCode) return true;
+  return RETRYABLE_CODES.has(reasonCode);
 }
 
 export function getUserFacingDownloadMessage(message?: string, code?: string): string {

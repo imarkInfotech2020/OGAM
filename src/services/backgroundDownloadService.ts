@@ -56,6 +56,13 @@ class BackgroundDownloadService {
     };
   }
 
+  async retryDownload(downloadId: string): Promise<void> {
+    if (!this.isAvailable() || Platform.OS !== 'android') {
+      throw new Error('retryDownload is only available on Android');
+    }
+    await DownloadManagerModule.retryDownload(downloadId);
+  }
+
   async cancelDownload(downloadId: string): Promise<void> {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');

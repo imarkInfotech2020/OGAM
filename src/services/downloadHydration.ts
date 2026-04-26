@@ -17,6 +17,7 @@ type NativeDownloadRow = {
   combinedTotalBytes?: number;
   mmProjDownloadId?: string;
   reason?: string;
+  reasonCode?: string;
   createdAt?: number;
   metadataJson?: string;
 };
@@ -29,7 +30,7 @@ export function isMmProjFileName(fileName: string): boolean {
 function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {
   switch (status) {
     case 'running': return 'running';
-    case 'retrying': return 'retrying';
+    case 'retrying': return 'failed';
     case 'waiting_for_network': return 'waiting_for_network';
     case 'completed': return 'completed';
     case 'failed': return 'failed';
@@ -106,6 +107,7 @@ function toDownloadEntry(
     mmProjBytesDownloaded: mmProjRow ? mmProjBytes : undefined,
     mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
     errorMessage: row.reason || undefined,
+    errorCode: row.reasonCode || undefined,
     createdAt: row.createdAt ?? 0,
     metadataJson: row.metadataJson ?? undefined,
   };

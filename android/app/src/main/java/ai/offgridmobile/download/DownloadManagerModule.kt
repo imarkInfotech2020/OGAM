@@ -120,6 +120,31 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun retryDownload(downloadId: String, promise: Promise) {
+        scope.launch {
+            try {
+                val download = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                    ?: return@launch SafePromise(promise, NAME).reject("RETRY_ERROR", "Download not found")
+                if (download.status != DownloadStatus.FAILED) {
+                    return@launch SafePromise(promise, NAME).reject("RETRY_ERROR", "Download is not in a failed state")
+                }
+                withContext(Dispatchers.IO) {
+                    downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+                }
+                // Enqueue before observeForever so the LiveData replay sees the new
+                // ENQUEUED WorkInfo, not the stale FAILED one from the previous run.
+                WorkerDownload.enqueue(reactApplicationContext, downloadId)
+                registerObserver(downloadId, download.fileName, download.modelId)
+                SafePromise(promise, NAME).resolve(true)
+            } catch (e: Exception) {
+                // Roll back DB so hydration after restart doesn't leave a zombie QUEUED row.
+                runCatching { withContext(Dispatchers.IO) { downloadDao.updateStatus(downloadId, DownloadStatus.FAILED) } }
+                SafePromise(promise, NAME).reject("RETRY_ERROR", "Failed to retry download: ${e.message}", e)
+            }
+        }
+    }
+
+    @ReactMethod
     fun cancelDownload(downloadId: String, promise: Promise) {
         scope.launch {
             try {
@@ -283,7 +308,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.RUNNING
                 }
             }
-            active.forEach { registerObserver(it.id, it.fileName, it.modelId) }
+            active.forEach { if (!workObservers.containsKey(it.id)) registerObserver(it.id, it.fileName, it.modelId) }
         }
     }
 
