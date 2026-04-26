@@ -50,20 +50,21 @@ type Props = Pick<ModelsScreenViewModel,
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
-  | 'isModelDownloaded' | 'getDownloadedModel'
+  | 'isModelDownloaded' | 'getDownloadedModel' | 'isRepairingVisionModel'
 >;
 
 type DetailProps = Pick<Props,
   | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
   | 'alertState' | 'setAlertState'
-  | 'getDownloadedModel' | 'isModelDownloaded'
+  | 'getDownloadedModel' | 'isModelDownloaded' | 'isRepairingVisionModel'
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   alertState, setAlertState, onBack,
-  getDownloadedModel, isModelDownloaded, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
+  getDownloadedModel, isModelDownloaded, isRepairingVisionModel,
+  handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -90,6 +91,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
+    const repairingVision = isRepairingVisionModel(`${selectedModel.id}/${item.name}`);
     const progress = entry
       ? {
         progress: entry.progress,
@@ -99,7 +101,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       }
       : undefined;
     const canCancel = !!entry && (entry.status === 'pending' || entry.status === 'running');
-    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, canCancel };
+    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel };
   };
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
@@ -114,10 +116,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
         isDownloading={!!s.progress} downloadProgress={s.progress?.progress}
         downloadBytes={s.progress ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
+        isRepairingVision={s.repairingVision}
         isCompatible={item.size / (1024 ** 3) < ramGB * 0.6} testID={`file-card-${index}`}
         onDownload={onDownload}
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
-        onRepairVision={s.needsVisionRepair && !s.progress ? () => handleRepairMmProj(selectedModel, item) : undefined}
+        onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
       />
     );
@@ -234,7 +237,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel,
+    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
   } = props;
 
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
@@ -266,6 +269,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         onBack={onBack}
         getDownloadedModel={getDownloadedModel}
         isModelDownloaded={isModelDownloaded}
+        isRepairingVisionModel={isRepairingVisionModel}
         handleDownload={handleDownload}
         handleRepairMmProj={handleRepairMmProj}
         handleCancelDownload={handleCancelDownload}

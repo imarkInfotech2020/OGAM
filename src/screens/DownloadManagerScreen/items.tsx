@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -161,9 +161,10 @@ interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
   onRepairVision?: (item: DownloadItem) => void;
+  isRepairingVision?: boolean;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const needsVisionRepair = checkNeedsVisionRepair(item);
@@ -182,14 +183,22 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        {needsVisionRepair && onRepairVision && (
-          <TouchableOpacity
-            style={styles.repairButton}
-            testID="repair-vision-button"
-            onPress={() => onRepairVision(item)}
-          >
-            <Icon name="eye" size={18} color={colors.warning} />
-          </TouchableOpacity>
+        {needsVisionRepair && (
+          isRepairingVision ? (
+            <View style={styles.repairButton} testID="repairing-vision-button">
+              <ActivityIndicator size="small" color={colors.warning} />
+            </View>
+          ) : (
+            onRepairVision && (
+              <TouchableOpacity
+                style={styles.repairButton}
+                testID="repair-vision-button"
+                onPress={() => onRepairVision(item)}
+              >
+                <Icon name="eye" size={18} color={colors.warning} />
+              </TouchableOpacity>
+            )
+          )
         )}
         <TouchableOpacity
           style={styles.deleteButton}

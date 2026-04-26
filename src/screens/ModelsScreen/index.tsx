@@ -169,6 +169,7 @@ export const ModelsScreen: React.FC = () => {
           setSortOption={vm.setSortOption}
           isModelDownloaded={vm.isModelDownloaded}
           getDownloadedModel={vm.getDownloadedModel}
+          isRepairingVisionModel={vm.isRepairingVisionModel}
         />
       )}
 

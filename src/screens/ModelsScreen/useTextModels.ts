@@ -106,6 +106,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
+  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, true>>({});
 
   const { downloadedModels, setDownloadedModels, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
 
@@ -192,12 +193,24 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
+    const modelDownloadId = `${model.id}/${file.name}`;
+    setRepairingVisionIds(prev => ({ ...prev, [modelDownloadId]: true }));
     try {
       await modelManager.repairMmProj(model.id, file, {});
       await loadDownloadedModels();
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
-    } catch (e) { setAlertState(showAlert('Repair Failed', (e as Error).message)); }
+    } catch (e) {
+      setAlertState(showAlert('Repair Failed', (e as Error).message));
+    } finally {
+      setRepairingVisionIds(prev => {
+        const next = { ...prev };
+        delete next[modelDownloadId];
+        return next;
+      });
+    }
   };
+
+  const isRepairingVisionModel = (modelDownloadId: string) => !!repairingVisionIds[modelDownloadId];
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     const modelKey = makeModelKey(model.id, file.name);
@@ -338,6 +351,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel,
+    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
   };
 }

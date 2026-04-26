@@ -213,10 +213,17 @@ class WorkerDownload(
             }
         }
 
-        val expectedSha256 = download.expectedSha256
-        if (!expectedSha256.isNullOrEmpty() && download.totalBytes > 0L) {
+        if (download.totalBytes > 0L) {
             val sizeDiffPercent = abs(bytesWritten - download.totalBytes).toDouble() / download.totalBytes
             if (sizeDiffPercent > 0.001) {
+                // A meaningful final size mismatch is corruption unless a known SHA can
+                // explicitly prove the downloaded file is still the expected artifact.
+                val expectedSha256 = download.expectedSha256
+                if (expectedSha256.isNullOrEmpty()) {
+                    if (!targetFile.delete()) Log.w(TAG, "Failed to delete size-mismatched file: ${targetFile.path}")
+                    return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
+                }
+
                 val actual = computeFileSha256(targetFile)
                 if (actual.lowercase() != expectedSha256.lowercase()) {
                     if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")

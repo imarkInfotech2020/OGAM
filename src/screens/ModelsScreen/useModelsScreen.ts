@@ -269,6 +269,7 @@ export function useModelsScreen() {
     setSortOption: text.setSortOption,
     isModelDownloaded: text.isModelDownloaded,
     getDownloadedModel: text.getDownloadedModel,
+    isRepairingVisionModel: text.isRepairingVisionModel,
     // image model state & handlers
     availableHFModels: image.availableHFModels,
     hfModelsLoading: image.hfModelsLoading,

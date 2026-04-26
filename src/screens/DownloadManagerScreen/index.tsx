@@ -22,6 +22,7 @@ export const DownloadManagerScreen: React.FC = () => {
     handleRemoveDownload,
     handleDeleteItem,
     handleRepairVision,
+    isRepairingVision,
     totalStorageUsed,
   } = useDownloadManager();
 
@@ -73,7 +74,7 @@ export const DownloadManagerScreen: React.FC = () => {
               {completedItems.length > 0 ? (
                 completedItems.map(item => (
                   <View key={`completed-${item.modelId}-${item.fileName}`}>
-                    <CompletedDownloadCard item={item} onDelete={handleDeleteItem} onRepairVision={handleRepairVision} />
+                    <CompletedDownloadCard item={item} onDelete={handleDeleteItem} onRepairVision={handleRepairVision} isRepairingVision={isRepairingVision(item.modelId)} />
                   </View>
                 ))
               ) : (

@@ -22,7 +22,10 @@ type NativeDownloadRow = {
 };
 
 export function isMmProjFileName(fileName: string): boolean {
-  return /-mmproj\.gguf$/i.test(fileName);
+  const lower = fileName.toLowerCase();
+  return lower.includes('mmproj') ||
+    lower.includes('projector') ||
+    (lower.includes('clip') && lower.endsWith('.gguf'));
 }
 
 function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {
@@ -55,6 +58,8 @@ function getMmProjIds(rows: NativeDownloadRow[]): Set<string> {
 
 function getParentRows(rows: NativeDownloadRow[], mmProjIds: Set<string>): NativeDownloadRow[] {
   return rows.filter(r =>
+    // Keep raw mmproj sidecars hidden across relaunch too. Repair downloads are
+    // intentionally not surfaced as standalone rows in Download Manager.
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
     r.status !== 'cancelled' &&

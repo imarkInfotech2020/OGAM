@@ -21,6 +21,7 @@ export interface UseDownloadManagerResult {
   handleRemoveDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
+  isRepairingVision: (modelId: string) => boolean;
   totalStorageUsed: number;
 }
 
@@ -98,6 +99,7 @@ function entryToActiveItem(entry: DownloadEntry): DownloadItem {
 
 export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, true>>({});
   const {
     downloadedModels,
     setDownloadedModels,
@@ -238,6 +240,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     if (lastSlash < 0) return;
     const repoId = item.modelId.substring(0, lastSlash);
     const fileName = item.modelId.substring(lastSlash + 1);
+    setRepairingVisionIds(prev => ({ ...prev, [item.modelId]: true }));
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
       if (!file?.mmProjFile) {
@@ -253,8 +256,16 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
     }).catch((e: Error) => {
       setAlertState(showAlert('Repair Failed', e.message));
+    }).finally(() => {
+      setRepairingVisionIds(prev => {
+        const next = { ...prev };
+        delete next[item.modelId];
+        return next;
+      });
     });
   };
+
+  const isRepairingVision = (modelId: string) => !!repairingVisionIds[modelId];
 
   return {
     activeItems,
@@ -264,6 +275,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleRemoveDownload,
     handleDeleteItem,
     handleRepairVision,
+    isRepairingVision,
     totalStorageUsed,
   };
 }
