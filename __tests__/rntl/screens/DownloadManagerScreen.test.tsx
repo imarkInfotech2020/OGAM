@@ -51,6 +51,8 @@ jest.mock('../../../src/stores/downloadStore', () => ({
     const state = {
       downloads: mockDownloadStoreDownloads,
       remove: jest.fn((modelKey: string) => { delete mockDownloadStoreDownloads[modelKey]; }),
+      repairingVisionIds: {} as Record<string, true>,
+      setRepairingVision: jest.fn(),
     };
     return typeof selector === 'function' ? selector(state) : state;
   },
