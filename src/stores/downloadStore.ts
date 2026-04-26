@@ -49,7 +49,9 @@ export function isActiveStatus(status: DownloadStatus): boolean {
 interface DownloadStoreState {
   downloads: Record<ModelKey, DownloadEntry>
   downloadIdIndex: Record<string, ModelKey>
+  repairingVisionIds: Record<string, true>
 
+  setRepairingVision: (modelId: string, repairing: boolean) => void
   setAll: (entries: DownloadEntry[]) => void
   hydrate: (entries: DownloadEntry[]) => void
   add: (entry: DownloadEntry) => void
@@ -67,6 +69,16 @@ interface DownloadStoreState {
 export const useDownloadStore = create<DownloadStoreState>((set) => ({
   downloads: {},
   downloadIdIndex: {},
+  repairingVisionIds: {},
+
+  setRepairingVision: (modelId, repairing) => set(state => {
+    if (repairing) {
+      return { repairingVisionIds: { ...state.repairingVisionIds, [modelId]: true } };
+    }
+    const next = { ...state.repairingVisionIds };
+    delete next[modelId];
+    return { repairingVisionIds: next };
+  }),
 
   setAll: (entries) => {
     const downloads: Record<ModelKey, DownloadEntry> = {};

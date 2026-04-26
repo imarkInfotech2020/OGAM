@@ -170,6 +170,19 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
     textAlign: 'center' as const,
   },
+  repairingBadge: {
+    backgroundColor: `${colors.warning}20`,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 6,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.xs,
+  },
+  repairingBadgeText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.warning,
+  },
   storageSection: {
     paddingHorizontal: SPACING.lg,
   },

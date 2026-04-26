@@ -106,7 +106,8 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
-  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, true>>({});
+  const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
+  const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
 
   const { downloadedModels, setDownloadedModels, addDownloadedModel, removeDownloadedModel, activeModelId } = useAppStore();
 
@@ -194,7 +195,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
     const modelDownloadId = `${model.id}/${file.name}`;
-    setRepairingVisionIds(prev => ({ ...prev, [modelDownloadId]: true }));
+    setRepairingVision(modelDownloadId, true);
     try {
       await modelManager.repairMmProj(model.id, file, {});
       await loadDownloadedModels();
@@ -202,11 +203,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     } catch (e) {
       setAlertState(showAlert('Repair Failed', (e as Error).message));
     } finally {
-      setRepairingVisionIds(prev => {
-        const next = { ...prev };
-        delete next[modelDownloadId];
-        return next;
-      });
+      setRepairingVision(modelDownloadId, false);
     }
   };
 

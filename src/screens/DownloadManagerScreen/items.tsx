@@ -183,22 +183,14 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        {needsVisionRepair && (
-          isRepairingVision ? (
-            <View style={styles.repairButton} testID="repairing-vision-button">
-              <ActivityIndicator size="small" color={colors.warning} />
-            </View>
-          ) : (
-            onRepairVision && (
-              <TouchableOpacity
-                style={styles.repairButton}
-                testID="repair-vision-button"
-                onPress={() => onRepairVision(item)}
-              >
-                <Icon name="eye" size={18} color={colors.warning} />
-              </TouchableOpacity>
-            )
-          )
+        {needsVisionRepair && !isRepairingVision && onRepairVision && (
+          <TouchableOpacity
+            style={styles.repairButton}
+            testID="repair-vision-button"
+            onPress={() => onRepairVision(item)}
+          >
+            <Icon name="eye" size={18} color={colors.warning} />
+          </TouchableOpacity>
         )}
         <TouchableOpacity
           style={styles.deleteButton}
@@ -219,6 +211,12 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         <Text style={styles.sizeText}>{formatBytes(item.fileSize)}</Text>
         {item.downloadedAt && (
           <Text style={styles.dateText}>{new Date(item.downloadedAt).toLocaleDateString()}</Text>
+        )}
+        {isRepairingVision && (
+          <View style={styles.repairingBadge} testID="repairing-vision-badge">
+            <ActivityIndicator size="small" color={colors.warning} />
+            <Text style={styles.repairingBadgeText}>Repairing</Text>
+          </View>
         )}
       </View>
     </Card>

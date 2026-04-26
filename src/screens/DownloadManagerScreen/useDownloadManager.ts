@@ -99,7 +99,8 @@ function entryToActiveItem(entry: DownloadEntry): DownloadItem {
 
 export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, true>>({});
+  const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
+  const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
   const {
     downloadedModels,
     setDownloadedModels,
@@ -240,7 +241,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     if (lastSlash < 0) return;
     const repoId = item.modelId.substring(0, lastSlash);
     const fileName = item.modelId.substring(lastSlash + 1);
-    setRepairingVisionIds(prev => ({ ...prev, [item.modelId]: true }));
+    setRepairingVision(item.modelId, true);
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
       if (!file?.mmProjFile) {
@@ -257,11 +258,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     }).catch((e: Error) => {
       setAlertState(showAlert('Repair Failed', e.message));
     }).finally(() => {
-      setRepairingVisionIds(prev => {
-        const next = { ...prev };
-        delete next[item.modelId];
-        return next;
-      });
+      setRepairingVision(item.modelId, false);
     });
   };
 
