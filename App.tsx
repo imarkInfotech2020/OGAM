@@ -49,6 +49,7 @@ function App() {
 
   const reattachTextDownloadRecovery = useCallback(async () => {
     const restoredIds = await modelManager.restoreInProgressDownloads();
+    modelManager.startBackgroundDownloadPolling();
     restoredIds.forEach((downloadId) => {
       modelManager.watchDownload(
         downloadId,
