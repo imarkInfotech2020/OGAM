@@ -104,7 +104,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 withContext(Dispatchers.IO) {
                     downloadDao.insertDownload(entity)
                 }
-                registerObserver(downloadId)
+                registerObserver(downloadId, fileName, modelId)
                 WorkerDownload.enqueue(reactApplicationContext, downloadId)
 
                 val result = Arguments.createMap().apply {
@@ -283,7 +283,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     it.status == DownloadStatus.QUEUED || it.status == DownloadStatus.RUNNING
                 }
             }
-            active.forEach { registerObserver(it.id) }
+            active.forEach { registerObserver(it.id, it.fileName, it.modelId) }
         }
     }
 
@@ -331,7 +331,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     // WorkInfo observer management
     // -------------------------------------------------------------------------
 
-    private fun registerObserver(downloadId: String) {
+    private fun registerObserver(downloadId: String, fileName: String, modelId: String) {
         workObservers[downloadId]?.let { old ->
             workManager.getWorkInfosForUniqueWorkLiveData(WorkerDownload.workName(downloadId))
                 .removeObserver(old)
@@ -343,14 +343,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 WorkInfo.State.RUNNING -> {
                     val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)
                     val total = info.progress.getLong(WorkerDownload.KEY_TOTAL, 0L)
-                    scope.launch {
-                        val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
-                            ?: return@launch
-                        DownloadEventBridge.progress(
-                            downloadId, d.fileName, d.modelId, bytes, total,
-                            DownloadStatus.RUNNING.name.lowercase(),
-                        )
-                    }
+                    DownloadEventBridge.progress(
+                        downloadId, fileName, modelId, bytes, total,
+                        DownloadStatus.RUNNING.name.lowercase(),
+                    )
                 }
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED,

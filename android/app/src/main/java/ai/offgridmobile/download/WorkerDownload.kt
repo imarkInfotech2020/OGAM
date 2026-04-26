@@ -270,7 +270,7 @@ class WorkerDownload(
             .followSslRedirects(true)
             .build()
 
-        const val DEFAULT_PROGRESS_INTERVAL = 1000L
+        const val DEFAULT_PROGRESS_INTERVAL = 1500L
         const val KEY_DOWNLOAD_ID = "download_id"
         const val KEY_PROGRESS = "progress"
         const val KEY_TOTAL = "total"
