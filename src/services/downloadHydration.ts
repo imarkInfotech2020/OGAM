@@ -2,6 +2,7 @@ import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore, DownloadEntry, DownloadStatus, ModelType } from '../stores/downloadStore';
 import { makeModelKey, ModelKey } from '../utils/modelKey';
 import { BackgroundDownloadStatus } from '../types';
+import logger from '../utils/logger';
 
 type NativeDownloadRow = {
   downloadId: string;
@@ -114,9 +115,21 @@ export async function hydrateDownloadStore(): Promise<void> {
   const mmProjIds = getMmProjIds(rows);
   const parentRows = getParentRows(rows, mmProjIds);
   const latestByKey = getLatestRowsByKey(parentRows);
-  const entries = Array.from(latestByKey.entries(), ([modelKey, row]) =>
-    toDownloadEntry(modelKey, row, rows),
-  );
+  const entries: DownloadEntry[] = [];
+
+  for (const [modelKey, row] of latestByKey.entries()) {
+    try {
+      entries.push(toDownloadEntry(modelKey, row, rows));
+    } catch (error) {
+      // One malformed native row should not make the whole Download Manager disappear.
+      logger.error('[DownloadHydration] Failed to hydrate download row', {
+        downloadId: row.downloadId,
+        modelId: row.modelId,
+        fileName: row.fileName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   useDownloadStore.getState().hydrate(entries);
 }

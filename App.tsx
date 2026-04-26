@@ -77,10 +77,17 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
-      hydrateDownloadStore().catch(() => {});
-      reattachTextDownloadRecovery().catch((error) => {
-        logger.error('[App] Failed to restore text downloads on foreground:', error);
-      });
+      // Rebuild the unified store before reattaching JS listeners so restored
+      // progress events map onto current download entries instead of racing hydration.
+      hydrateDownloadStore()
+        .catch((error) => {
+          logger.error('[App] Failed to hydrate download store on foreground:', error);
+        })
+        .finally(() => {
+          reattachTextDownloadRecovery().catch((error) => {
+            logger.error('[App] Failed to restore text downloads on foreground:', error);
+          });
+        });
     }, [reattachTextDownloadRecovery]),
   });
 
@@ -98,7 +105,9 @@ function App() {
       await ensureAppStoreHydrated();
 
       // Hydrate download store from SQLite before any screen mounts.
-      hydrateDownloadStore().catch(() => {});
+      await hydrateDownloadStore().catch((error) => {
+        logger.error('[App] Failed to hydrate download store during startup:', error);
+      });
       await reattachTextDownloadRecovery();
 
       // Phase 1: Quick initialization - get app ready to show UI

@@ -190,11 +190,21 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
     if (mmProjIds.has(download.downloadId)) continue;
     const metadata = buildMetadataFromActiveDownload(download, modelsDir);
     if (!metadata || backgroundDownloadContext.has(download.downloadId)) continue;
-    await restoreDownloadEntry({
-      download, metadata, modelsDir, activeDownloads,
-      backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress,
-    });
-    restoredDownloadIds.push(download.downloadId);
+    try {
+      await restoreDownloadEntry({
+        download, metadata, modelsDir, activeDownloads,
+        backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress,
+      });
+      restoredDownloadIds.push(download.downloadId);
+    } catch (error) {
+      // Keep restoring other downloads even if one stale native row is malformed.
+      logger.error('[ModelManager] Failed to restore in-progress download', {
+        downloadId: download.downloadId,
+        modelId: download.modelId,
+        fileName: download.fileName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return restoredDownloadIds;
