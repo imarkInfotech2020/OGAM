@@ -23,9 +23,7 @@ type NativeDownloadRow = {
 
 export function isMmProjFileName(fileName: string): boolean {
   const lower = fileName.toLowerCase();
-  return lower.includes('mmproj') ||
-    lower.includes('projector') ||
-    (lower.includes('clip') && lower.endsWith('.gguf'));
+  return lower.includes('mmproj');
 }
 
 function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {

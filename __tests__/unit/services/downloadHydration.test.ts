@@ -23,7 +23,7 @@ describe('isMmProjFileName', () => {
 
   it('returns false for regular filenames', () => {
     expect(isMmProjFileName('model-Q4_K_M.gguf')).toBe(false);
-    expect(isMmProjFileName('mmproj-something-else.gguf')).toBe(false);
+    expect(isMmProjFileName('plain-model.gguf')).toBe(false);
   });
 });
 
