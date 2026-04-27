@@ -145,6 +145,7 @@ function makeCoreMLModelInfo(overrides: Partial<ImageModelDescriptor> = {}): Ima
 describe('imageDownloadActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.requireMock('react-native-fs').exists.mockResolvedValue(false);
     completeCallbacks = [];
     errorCallbacks = [];
     Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
