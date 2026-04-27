@@ -7,8 +7,6 @@ import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { createStyles } from './styles';
-import { useDownloadStore } from '../../stores/downloadStore';
-import { backgroundDownloadService } from '../../services';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

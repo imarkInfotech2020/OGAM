@@ -14,8 +14,8 @@ import {
   ImageDownloadDeps,
   handleDownloadImageModel as downloadImageModel,
   cancelSyntheticImageDownload,
-  resumeImageDownload,
 } from './imageDownloadActions';
+import { resumeImageDownload } from './imageDownloadResume';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);

@@ -11,7 +11,7 @@ import { modelManager, hardwareService, backgroundDownloadService } from '../../
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import { ONNXImageModel } from '../../types';
-import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { ImageModelDescriptor } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
@@ -420,9 +420,13 @@ export async function proceedWithDownload(
       try {
         useDownloadStore.getState().setProcessing(downloadInfo.downloadId);
         if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
+        const t0 = Date.now();
         await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
+        logger.log(`[ImageDownload] moveCompletedDownload took ${Date.now() - t0}ms modelId=${modelInfo.id}`);
         if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+        const t1 = Date.now();
         await unzip(zipPath, modelDir);
+        logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
         await RNFS.unlink(zipPath).catch(() => {});
         const imageModel: ONNXImageModel = {
@@ -465,96 +469,3 @@ export async function handleDownloadImageModel(
   await proceedWithDownload(modelInfo, deps);
 }
 
-/**
- * Re-finalize a download entry that is in `processing` state after app restart.
- * Called by useImageModels after hydrateDownloadStore to recover interrupted finalizations.
- */
-export async function resumeImageDownload(entry: DownloadEntry, deps: ImageDownloadDeps): Promise<void> {
-  const modelId = entry.modelId.replace('image:', '');
-  logger.log(`[ImageDownload] resumeImageDownload modelId=${modelId} downloadId=${entry.downloadId}`);
-
-  let metadata: Record<string, any> | null = null;
-  try { metadata = entry.metadataJson ? JSON.parse(entry.metadataJson) : null; } catch { /* ignore */ }
-
-  if (!metadata?.imageDownloadType) {
-    logger.warn(`[ImageDownload] resumeImageDownload no metadata for ${modelId} - marking failed`);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Could not resume: missing download metadata' });
-    return;
-  }
-
-  const imageModelsDir = modelManager.getImageModelsDirectory();
-  const modelDir = `${imageModelsDir}/${modelId}`;
-
-  try {
-    if (metadata.imageDownloadType === 'zip') {
-      const zipPath = `${imageModelsDir}/${entry.fileName}`;
-      const isCoreml = metadata.imageModelBackend === 'coreml';
-
-      // Case 1: already unzipped - just register
-      if (await RNFS.exists(modelDir)) {
-        const resolvedDir = isCoreml ? await resolveCoreMLModelDir(modelDir) : modelDir;
-        const imageModel: ONNXImageModel = {
-          id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,
-          modelPath: resolvedDir, downloadedAt: new Date().toISOString(),
-          size: metadata.imageModelSize, style: metadata.imageModelStyle,
-          backend: metadata.imageModelBackend, attentionVariant: metadata.imageModelAttentionVariant,
-        };
-        logger.log(`[ImageDownload] resumeImageDownload zip - model dir exists, registering ${modelId}`);
-        await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName });
-        return;
-      }
-
-      // Case 2: zip already moved to our location
-      if (await RNFS.exists(zipPath)) {
-        if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-        await unzip(zipPath, modelDir);
-        await RNFS.unlink(zipPath).catch(() => {});
-        const resolvedDir = isCoreml ? await resolveCoreMLModelDir(modelDir) : modelDir;
-        const imageModel: ONNXImageModel = {
-          id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,
-          modelPath: resolvedDir, downloadedAt: new Date().toISOString(),
-          size: metadata.imageModelSize, style: metadata.imageModelStyle,
-          backend: metadata.imageModelBackend, attentionVariant: metadata.imageModelAttentionVariant,
-        };
-        logger.log(`[ImageDownload] resumeImageDownload zip - zip found, unzipping ${modelId}`);
-        await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName });
-        return;
-      }
-
-      // Case 3: zip still in WorkManager temp location
-      if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-      await backgroundDownloadService.moveCompletedDownload(entry.downloadId, zipPath);
-      if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-      await unzip(zipPath, modelDir);
-      await RNFS.unlink(zipPath).catch(() => {});
-      const resolvedDir = isCoreml ? await resolveCoreMLModelDir(modelDir) : modelDir;
-      const imageModel: ONNXImageModel = {
-        id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,
-        modelPath: resolvedDir, downloadedAt: new Date().toISOString(),
-        size: metadata.imageModelSize, style: metadata.imageModelStyle,
-        backend: metadata.imageModelBackend, attentionVariant: metadata.imageModelAttentionVariant,
-      };
-      logger.log(`[ImageDownload] resumeImageDownload zip - moved from WorkManager, unzipping ${modelId}`);
-      await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName });
-
-    } else if (metadata.imageDownloadType === 'multifile') {
-      // Files should already be at final location - just register
-      if (!(await RNFS.exists(modelDir))) {
-        logger.warn(`[ImageDownload] resumeImageDownload multifile - model dir missing, marking failed ${modelId}`);
-        useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
-        return;
-      }
-      const imageModel: ONNXImageModel = {
-        id: modelId, name: metadata.imageModelName, description: metadata.imageModelDescription,
-        modelPath: modelDir, downloadedAt: new Date().toISOString(),
-        size: metadata.imageModelSize, style: metadata.imageModelStyle,
-        backend: metadata.imageModelBackend,
-      };
-      logger.log(`[ImageDownload] resumeImageDownload multifile - registering ${modelId}`);
-      await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName });
-    }
-  } catch (error: any) {
-    logger.error(`[ImageDownload] resumeImageDownload failed for ${modelId}`, error?.message);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: error?.message || 'Could not resume download after restart' });
-  }
-}

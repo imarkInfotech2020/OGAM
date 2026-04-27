@@ -82,16 +82,25 @@ function getLatestRowsByKey(rows: NativeDownloadRow[]): Map<ModelKey, NativeDown
   return latestByKey;
 }
 
+function resolveMmProj(row: NativeDownloadRow, rows: NativeDownloadRow[]) {
+  const mmProjRow = row.mmProjDownloadId
+    ? rows.find(r => r.downloadId === row.mmProjDownloadId)
+    : undefined;
+  return {
+    mmProjRow,
+    mmProjBytes: mmProjRow?.bytesDownloaded ?? 0,
+    mmProjDownloadId: row.mmProjDownloadId ?? undefined,
+    mmProjBytesDownloaded: mmProjRow ? (mmProjRow.bytesDownloaded ?? 0) : undefined,
+    mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
+  };
+}
+
 function toDownloadEntry(
   modelKey: ModelKey,
   row: NativeDownloadRow,
   rows: NativeDownloadRow[],
 ): DownloadEntry {
-  const mmProjRow = row.mmProjDownloadId
-    ? rows.find(r => r.downloadId === row.mmProjDownloadId)
-    : undefined;
-
-  const mmProjBytes = mmProjRow?.bytesDownloaded ?? 0;
+  const { mmProjBytes, mmProjDownloadId, mmProjBytesDownloaded, mmProjStatus } = resolveMmProj(row, rows);
   const combinedTotal = row.combinedTotalBytes || row.totalBytes || 0;
   const downloadedBytes = (row.bytesDownloaded ?? 0) + mmProjBytes;
 
@@ -112,9 +121,9 @@ function toDownloadEntry(
     totalBytes: row.totalBytes ?? 0,
     combinedTotalBytes: combinedTotal,
     progress: computeProgress(downloadedBytes, row.totalBytes ?? 0, combinedTotal),
-    mmProjDownloadId: row.mmProjDownloadId ?? undefined,
-    mmProjBytesDownloaded: mmProjRow ? mmProjBytes : undefined,
-    mmProjStatus: mmProjRow ? mapNativeStatus(mmProjRow.status) : undefined,
+    mmProjDownloadId,
+    mmProjBytesDownloaded,
+    mmProjStatus,
     errorMessage: row.reason || undefined,
     errorCode: row.reasonCode || undefined,
     createdAt: row.createdAt ?? 0,
