@@ -1,0 +1,699 @@
+diff --git a/ios/DownloadManagerModule.m b/ios/DownloadManagerModule.m
+index a1945f1..734bd6f 100644
+--- a/ios/DownloadManagerModule.m
++++ b/ios/DownloadManagerModule.m
+@@ -11,18 +11,18 @@ @interface RCT_EXTERN_MODULE(DownloadManagerModule, RCTEventEmitter)
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(cancelDownload:(double)downloadId
++RCT_EXTERN_METHOD(cancelDownload:(NSString *)downloadId
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+ RCT_EXTERN_METHOD(getActiveDownloads:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(getDownloadProgress:(double)downloadId
++RCT_EXTERN_METHOD(getDownloadProgress:(NSString *)downloadId
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(moveCompletedDownload:(double)downloadId
++RCT_EXTERN_METHOD(moveCompletedDownload:(NSString *)downloadId
+                   targetPath:(NSString *)targetPath
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+diff --git a/ios/DownloadManagerModule.swift b/ios/DownloadManagerModule.swift
+index 73d9ba1..9f0c2fb 100644
+--- a/ios/DownloadManagerModule.swift
++++ b/ios/DownloadManagerModule.swift
+@@ -5,6 +5,39 @@ import React
+ @objc(DownloadManagerModule)
+ class DownloadManagerModule: RCTEventEmitter {
+ 
++  private struct LosslessStringId: Codable {
++    let value: String
++
++    init(_ value: String) {
++      self.value = value
++    }
++
++    init(from decoder: Decoder) throws {
++      let container = try decoder.singleValueContainer()
++      if let stringValue = try? container.decode(String.self) {
++        value = stringValue
++        return
++      }
++      if let intValue = try? container.decode(Int64.self) {
++        value = String(intValue)
++        return
++      }
++      if let doubleValue = try? container.decode(Double.self) {
++        value = String(Int64(doubleValue))
++        return
++      }
++      throw DecodingError.typeMismatch(
++        String.self,
++        DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "downloadId must be string-like")
++      )
++    }
++
++    func encode(to encoder: Encoder) throws {
++      var container = encoder.singleValueContainer()
++      try container.encode(value)
++    }
++  }
++
+   // MARK: - Types
+ 
+   struct FileTask {
+@@ -19,7 +52,7 @@ class DownloadManagerModule: RCTEventEmitter {
+   }
+ 
+   struct DownloadInfo {
+-    let downloadId: Int64
++    let downloadId: String
+     let fileName: String
+     let modelId: String
+     var totalBytes: Int64
+@@ -47,7 +80,7 @@ class DownloadManagerModule: RCTEventEmitter {
+   }
+ 
+   struct PersistedDownloadInfo: Codable {
+-    let downloadId: Int64
++    let downloadId: String
+     let fileName: String
+     let modelId: String
+     let totalBytes: Int64
+@@ -59,10 +92,59 @@ class DownloadManagerModule: RCTEventEmitter {
+     let multiFileDestDir: String?
+     let isMultiFile: Bool
+     let fileTasks: [PersistedFileTask]
++
++    enum CodingKeys: String, CodingKey {
++      case downloadId, fileName, modelId, totalBytes, bytesDownloaded, status,
++           startedAt, taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks
++    }
++
++    init(
++      downloadId: String,
++      fileName: String,
++      modelId: String,
++      totalBytes: Int64,
++      bytesDownloaded: Int64,
++      status: String,
++      startedAt: Double,
++      taskIdentifier: Int?,
++      localUri: String?,
++      multiFileDestDir: String?,
++      isMultiFile: Bool,
++      fileTasks: [PersistedFileTask]
++    ) {
++      self.downloadId = downloadId
++      self.fileName = fileName
++      self.modelId = modelId
++      self.totalBytes = totalBytes
++      self.bytesDownloaded = bytesDownloaded
++      self.status = status
++      self.startedAt = startedAt
++      self.taskIdentifier = taskIdentifier
++      self.localUri = localUri
++      self.multiFileDestDir = multiFileDestDir
++      self.isMultiFile = isMultiFile
++      self.fileTasks = fileTasks
++    }
++
++    init(from decoder: Decoder) throws {
++      let container = try decoder.container(keyedBy: CodingKeys.self)
++      downloadId = try container.decode(LosslessStringId.self, forKey: .downloadId).value
++      fileName = try container.decode(String.self, forKey: .fileName)
++      modelId = try container.decode(String.self, forKey: .modelId)
++      totalBytes = try container.decode(Int64.self, forKey: .totalBytes)
++      bytesDownloaded = try container.decode(Int64.self, forKey: .bytesDownloaded)
++      status = try container.decode(String.self, forKey: .status)
++      startedAt = try container.decode(Double.self, forKey: .startedAt)
++      taskIdentifier = try container.decodeIfPresent(Int.self, forKey: .taskIdentifier)
++      localUri = try container.decodeIfPresent(String.self, forKey: .localUri)
++      multiFileDestDir = try container.decodeIfPresent(String.self, forKey: .multiFileDestDir)
++      isMultiFile = try container.decode(Bool.self, forKey: .isMultiFile)
++      fileTasks = try container.decode([PersistedFileTask].self, forKey: .fileTasks)
++    }
+   }
+ 
+   struct TaskDescription: Codable {
+-    let downloadId: Int64
++    let downloadId: String
+     let fileName: String
+     let modelId: String
+     let isMultiFile: Bool
+@@ -70,6 +152,42 @@ class DownloadManagerModule: RCTEventEmitter {
+     let destinationDir: String?
+     let fileSize: Int64?
+     let totalBytes: Int64?
++
++    enum CodingKeys: String, CodingKey {
++      case downloadId, fileName, modelId, isMultiFile, relativePath, destinationDir, fileSize, totalBytes
++    }
++
++    init(
++      downloadId: String,
++      fileName: String,
++      modelId: String,
++      isMultiFile: Bool,
++      relativePath: String?,
++      destinationDir: String?,
++      fileSize: Int64?,
++      totalBytes: Int64?
++    ) {
++      self.downloadId = downloadId
++      self.fileName = fileName
++      self.modelId = modelId
++      self.isMultiFile = isMultiFile
++      self.relativePath = relativePath
++      self.destinationDir = destinationDir
++      self.fileSize = fileSize
++      self.totalBytes = totalBytes
++    }
++
++    init(from decoder: Decoder) throws {
++      let container = try decoder.container(keyedBy: CodingKeys.self)
++      downloadId = try container.decode(LosslessStringId.self, forKey: .downloadId).value
++      fileName = try container.decode(String.self, forKey: .fileName)
++      modelId = try container.decode(String.self, forKey: .modelId)
++      isMultiFile = try container.decode(Bool.self, forKey: .isMultiFile)
++      relativePath = try container.decodeIfPresent(String.self, forKey: .relativePath)
++      destinationDir = try container.decodeIfPresent(String.self, forKey: .destinationDir)
++      fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize)
++      totalBytes = try container.decodeIfPresent(Int64.self, forKey: .totalBytes)
++    }
+   }
+ 
+   // MARK: - State
+@@ -77,8 +195,8 @@ class DownloadManagerModule: RCTEventEmitter {
+   static var sharedSession: URLSession?
+   static var sessionDelegate: DownloadSessionDelegate?
+ 
+-  var downloads: [Int64: DownloadInfo] = [:]
+-  var taskToDownloadId: [Int: Int64] = [:] // URLSessionTask.taskIdentifier -> downloadId
++  var downloads: [String: DownloadInfo] = [:]
++  var taskToDownloadId: [Int: String] = [:] // URLSessionTask.taskIdentifier -> downloadId
+   var nextDownloadId: Int64 = 1
+   var pollingTimer: Timer?
+   let queue = DispatchQueue(label: "ai.offgridmobile.downloadmanager", attributes: .concurrent)
+@@ -274,11 +392,11 @@ class DownloadManagerModule: RCTEventEmitter {
+       guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
+       do {
+         let payload = try JSONDecoder().decode([PersistedDownloadInfo].self, from: data)
+-        var restored: [Int64: DownloadInfo] = [:]
++        var restored: [String: DownloadInfo] = [:]
+         var maxId: Int64 = 0
+         for item in payload {
+           restored[item.downloadId] = fromPersisted(item)
+-          if item.downloadId > maxId { maxId = item.downloadId }
++          if let numericId = Int64(item.downloadId), numericId > maxId { maxId = numericId }
+         }
+         downloads = restored
+         nextDownloadId = max(maxId + 1, nextDownloadId)
+@@ -371,7 +489,7 @@ class DownloadManagerModule: RCTEventEmitter {
+           info.status = self.statusString(from: downloadTask.state)
+           self.downloads[desc.downloadId] = info
+           self.taskToDownloadId[downloadTask.taskIdentifier] = desc.downloadId
+-          if desc.downloadId > maxId { maxId = desc.downloadId }
++          if let numericId = Int64(desc.downloadId), numericId > maxId { maxId = numericId }
+         }
+ 
+         self.nextDownloadId = max(self.nextDownloadId, maxId + 1)
+@@ -401,10 +519,10 @@ extension DownloadManagerModule {
+     }
+ 
+     let totalBytes = (params["totalBytes"] as? NSNumber)?.int64Value ?? 0
+-    let downloadId = nextDownloadId
++    let downloadId = String(nextDownloadId)
+     nextDownloadId += 1
+ 
+-    NSLog("[DownloadManager] Starting download #%lld: url=%@, fileName=%@, modelId=%@, totalBytes=%lld",
++    NSLog("[DownloadManager] Starting download #%@: url=%@, fileName=%@, modelId=%@, totalBytes=%lld",
+           downloadId, urlString, fileName, modelId, totalBytes)
+ 
+     let task = session.downloadTask(with: url)
+@@ -418,7 +536,7 @@ extension DownloadManagerModule {
+       fileSize: nil,
+       totalBytes: totalBytes
+     ))
+-    NSLog("[DownloadManager] Created URLSessionDownloadTask #%d for download #%lld", task.taskIdentifier, downloadId)
++    NSLog("[DownloadManager] Created URLSessionDownloadTask #%d for download #%@", task.taskIdentifier, downloadId)
+ 
+     let info = DownloadInfo(
+       downloadId: downloadId,
+@@ -440,15 +558,15 @@ extension DownloadManagerModule {
+       self.downloads[downloadId] = info
+       self.taskToDownloadId[task.taskIdentifier] = downloadId
+       self.persistStateLocked()
+-      NSLog("[DownloadManager] Stored download #%lld in state (total: %d, taskMap: %d)",
++      NSLog("[DownloadManager] Stored download #%@ in state (total: %d, taskMap: %d)",
+             downloadId, self.downloads.count, self.taskToDownloadId.count)
+     }
+ 
+     task.resume()
+-    NSLog("[DownloadManager] task.resume() called for download #%lld", downloadId)
++    NSLog("[DownloadManager] task.resume() called for download #%@", downloadId)
+ 
+     resolve([
+-      "downloadId": NSNumber(value: downloadId),
++      "downloadId": downloadId,
+       "fileName": fileName,
+       "modelId": modelId
+     ] as [String: Any])
+@@ -470,10 +588,10 @@ extension DownloadManagerModule {
+     }
+ 
+     let totalBytes = (params["totalBytes"] as? NSNumber)?.int64Value ?? 0
+-    let downloadId = nextDownloadId
++    let downloadId = String(nextDownloadId)
+     nextDownloadId += 1
+ 
+-    NSLog("[DownloadManager] Starting multi-file download #%lld: %d files, totalBytes=%lld, dest=%@",
++    NSLog("[DownloadManager] Starting multi-file download #%@: %d files, totalBytes=%lld, dest=%@",
+           downloadId, filesArray.count, totalBytes, destinationDir)
+ 
+     let fileManager = FileManager.default
+@@ -543,30 +661,30 @@ extension DownloadManagerModule {
+         self.taskToDownloadId[task.taskIdentifier] = downloadId
+       }
+       self.persistStateLocked()
+-      NSLog("[DownloadManager] Stored multi-file download #%lld in state (taskMap entries: %d)",
++      NSLog("[DownloadManager] Stored multi-file download #%@ in state (taskMap entries: %d)",
+             downloadId, self.taskToDownloadId.count)
+     }
+ 
+     for task in tasks {
+       task.resume()
+     }
+-    NSLog("[DownloadManager] Resumed all %d tasks for multi-file download #%lld", tasks.count, downloadId)
++    NSLog("[DownloadManager] Resumed all %d tasks for multi-file download #%@", tasks.count, downloadId)
+ 
+     resolve([
+-      "downloadId": NSNumber(value: downloadId),
++      "downloadId": downloadId,
+       "fileName": fileName,
+       "modelId": modelId
+     ] as [String: Any])
+   }
+ 
+-  @objc func cancelDownload(_ downloadId: Double,
++  @objc func cancelDownload(_ downloadId: String,
+                             resolver resolve: @escaping RCTPromiseResolveBlock,
+                             rejecter reject: @escaping RCTPromiseRejectBlock) {
+-    let id = Int64(downloadId)
+-    NSLog("[DownloadManager] cancelDownload called for #%lld", id)
++    let id = downloadId
++    NSLog("[DownloadManager] cancelDownload called for #%@", id)
+     queue.async(flags: .barrier) {
+       guard let info = self.downloads[id] else {
+-        NSLog("[DownloadManager] cancelDownload: download #%lld NOT FOUND", id)
++        NSLog("[DownloadManager] cancelDownload: download #%@ NOT FOUND", id)
+         reject("NOT_FOUND", "Download \(id) not found", nil)
+         return
+       }
+@@ -584,7 +702,7 @@ extension DownloadManagerModule {
+       self.downloads[id]?.status = "failed"
+       self.downloads.removeValue(forKey: id)
+       self.persistStateLocked()
+-      NSLog("[DownloadManager] Download #%lld cancelled and removed", id)
++      NSLog("[DownloadManager] Download #%@ cancelled and removed", id)
+       resolve(nil)
+     }
+   }
+@@ -594,10 +712,10 @@ extension DownloadManagerModule {
+     queue.sync {
+       NSLog("[DownloadManager] getActiveDownloads: %d downloads in state", downloads.count)
+       let result = downloads.values.map { info -> [String: Any] in
+-        NSLog("[DownloadManager]   -> #%lld: %@ status=%@ bytes=%lld/%lld",
++        NSLog("[DownloadManager]   -> #%@: %@ status=%@ bytes=%lld/%lld",
+               info.downloadId, info.fileName, info.status, info.bytesDownloaded, info.totalBytes)
+         return [
+-          "downloadId": NSNumber(value: info.downloadId),
++          "downloadId": info.downloadId,
+           "fileName": info.fileName,
+           "modelId": info.modelId,
+           "status": info.status,
+@@ -610,20 +728,20 @@ extension DownloadManagerModule {
+     }
+   }
+ 
+-  @objc func getDownloadProgress(_ downloadId: Double,
++  @objc func getDownloadProgress(_ downloadId: String,
+                                  resolver resolve: @escaping RCTPromiseResolveBlock,
+                                  rejecter reject: @escaping RCTPromiseRejectBlock) {
+-    let id = Int64(downloadId)
++    let id = downloadId
+     queue.sync {
+       guard let info = downloads[id] else {
+-        NSLog("[DownloadManager] getDownloadProgress: #%lld NOT FOUND", id)
++        NSLog("[DownloadManager] getDownloadProgress: #%@ NOT FOUND", id)
+         reject("NOT_FOUND", "Download \(id) not found", nil)
+         return
+       }
+-      NSLog("[DownloadManager] getDownloadProgress #%lld: %@ %lld/%lld",
++      NSLog("[DownloadManager] getDownloadProgress #%@: %@ %lld/%lld",
+             id, info.status, info.bytesDownloaded, info.totalBytes)
+       resolve([
+-        "downloadId": NSNumber(value: info.downloadId),
++        "downloadId": info.downloadId,
+         "fileName": info.fileName,
+         "modelId": info.modelId,
+         "status": info.status,
+@@ -633,12 +751,12 @@ extension DownloadManagerModule {
+     }
+   }
+ 
+-  @objc func moveCompletedDownload(_ downloadId: Double,
++  @objc func moveCompletedDownload(_ downloadId: String,
+                                    targetPath: String,
+                                    resolver resolve: @escaping RCTPromiseResolveBlock,
+                                    rejecter reject: @escaping RCTPromiseRejectBlock) {
+-    let id = Int64(downloadId)
+-    NSLog("[DownloadManager] moveCompletedDownload #%lld -> %@", id, targetPath)
++    let id = downloadId
++    NSLog("[DownloadManager] moveCompletedDownload #%@ -> %@", id, targetPath)
+ 
+     // Read download info with a short sync read, then do heavy I/O async
+     // so the RN bridge thread is not blocked during large file moves.
+@@ -646,7 +764,7 @@ extension DownloadManagerModule {
+     queue.sync { snapshotInfo = downloads[id] }
+ 
+     guard let info = snapshotInfo else {
+-      NSLog("[DownloadManager] moveCompletedDownload: #%lld NOT FOUND", id)
++      NSLog("[DownloadManager] moveCompletedDownload: #%@ NOT FOUND", id)
+       reject("NOT_FOUND", "Download \(id) not found or not completed", nil)
+       return
+     }
+@@ -665,7 +783,7 @@ extension DownloadManagerModule {
+     }
+ 
+     guard let localUri = info.localUri else {
+-      NSLog("[DownloadManager] moveCompletedDownload: #%lld localUri is nil (not completed yet)", id)
++      NSLog("[DownloadManager] moveCompletedDownload: #%@ localUri is nil (not completed yet)", id)
+       reject("NOT_COMPLETED", "Download \(id) not completed yet", nil)
+       return
+     }
+@@ -788,7 +906,7 @@ extension DownloadManagerModule {
+         }
+         downloads[downloadId] = info
+         sendEvent(withName: "DownloadProgress", body: [
+-            "downloadId": NSNumber(value: info.downloadId),
++            "downloadId": info.downloadId,
+             "fileName": info.fileName,
+             "modelId": info.modelId,
+             "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+@@ -827,7 +945,7 @@ extension DownloadManagerModule {
+         info.bytesDownloaded = totalDown
+         info.status = "running"
+         if totalBytesWritten % (5 * 1024 * 1024) < bytesWritten || totalBytesWritten == bytesWritten {
+-          NSLog("[DownloadManager] Multi-file progress: download#%lld task#%d: %lld/%lld (aggregate: %lld/%lld)",
++          NSLog("[DownloadManager] Multi-file progress: download#%@ task#%d: %lld/%lld (aggregate: %lld/%lld)",
+                 downloadId, taskId, totalBytesWritten, totalBytesExpected, info.bytesDownloaded, info.totalBytes)
+         }
+       } else {
+@@ -836,7 +954,7 @@ extension DownloadManagerModule {
+         info.status = "running"
+         info.taskIdentifier = taskId
+         if totalBytesWritten % (5 * 1024 * 1024) < bytesWritten || totalBytesWritten == bytesWritten {
+-          NSLog("[DownloadManager] Progress: download#%lld task#%d: %lld/%lld",
++          NSLog("[DownloadManager] Progress: download#%@ task#%d: %lld/%lld",
+                 downloadId, taskId, totalBytesWritten, totalBytesExpected)
+         }
+       }
+@@ -855,7 +973,7 @@ extension DownloadManagerModule {
+       }
+ 
+       let fileManager = FileManager.default
+-      NSLog("[DownloadManager] handleCompletion for download#%lld (%@), isMultiFile=%d, hasListeners=%d",
++      NSLog("[DownloadManager] handleCompletion for download#%@ (%@), isMultiFile=%d, hasListeners=%d",
+             downloadId, info.fileName, info.isMultiFile ? 1 : 0, self.hasListeners ? 1 : 0)
+ 
+       if info.isMultiFile {
+@@ -874,7 +992,7 @@ extension DownloadManagerModule {
+ 
+   private func handleMultiFileTaskCompletion(taskId: Int,
+                                              location: URL,
+-                                             downloadId: Int64,
++                                             downloadId: String,
+                                              info: inout DownloadInfo,
+                                              fileManager: FileManager) {
+     guard var fileTask = info.fileTasks[taskId] else {
+@@ -910,12 +1028,12 @@ extension DownloadManagerModule {
+     taskToDownloadId.removeValue(forKey: taskId)
+ 
+     let completedCount = info.fileTasks.values.filter { $0.completed }.count
+-    NSLog("[DownloadManager] Multi-file progress: %d/%d files completed for download#%lld",
++    NSLog("[DownloadManager] Multi-file progress: %d/%d files completed for download#%@",
+           completedCount, info.fileTasks.count, downloadId)
+ 
+     let allDone = info.fileTasks.values.allSatisfy { $0.completed }
+     if allDone {
+-      NSLog("[DownloadManager] ALL files complete for download#%lld!", downloadId)
++      NSLog("[DownloadManager] ALL files complete for download#%@!", downloadId)
+       if let destDir = info.multiFileDestDir {
+         DownloadManagerModule.excludeFromBackup(at: URL(fileURLWithPath: destDir))
+       }
+@@ -926,9 +1044,9 @@ extension DownloadManagerModule {
+       persistStateLocked()
+ 
+       if hasListeners {
+-        NSLog("[DownloadManager] SENDING DownloadComplete event for #%lld", downloadId)
++        NSLog("[DownloadManager] SENDING DownloadComplete event for #%@", downloadId)
+         sendEvent(withName: "DownloadComplete", body: [
+-          "downloadId": NSNumber(value: info.downloadId),
++          "downloadId": info.downloadId,
+           "fileName": info.fileName,
+           "modelId": info.modelId,
+           "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+@@ -937,7 +1055,7 @@ extension DownloadManagerModule {
+           "localUri": info.multiFileDestDir ?? ""
+         ] as [String: Any])
+       } else {
+-        NSLog("[DownloadManager] Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
++        NSLog("[DownloadManager] Download#%@ completed but hasListeners=false, NOT sending event!", downloadId)
+       }
+     } else {
+       downloads[downloadId] = info
+@@ -947,7 +1065,7 @@ extension DownloadManagerModule {
+ 
+   private func handleSingleFileCompletion(taskId: Int,
+                                           location: URL,
+-                                          downloadId: Int64,
++                                          downloadId: String,
+                                           info: inout DownloadInfo,
+                                           fileManager: FileManager) {
+     let tmpDir = NSTemporaryDirectory()
+@@ -969,9 +1087,9 @@ extension DownloadManagerModule {
+       persistStateLocked()
+ 
+       if hasListeners {
+-        NSLog("[DownloadManager] SENDING DownloadComplete event for #%lld (single file)", downloadId)
++      NSLog("[DownloadManager] SENDING DownloadComplete event for #%@ (single file)", downloadId)
+         sendEvent(withName: "DownloadComplete", body: [
+-          "downloadId": NSNumber(value: info.downloadId),
++          "downloadId": info.downloadId,
+           "fileName": info.fileName,
+           "modelId": info.modelId,
+           "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+@@ -980,7 +1098,7 @@ extension DownloadManagerModule {
+           "localUri": destPath
+         ] as [String: Any])
+       } else {
+-        NSLog("[DownloadManager] Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
++        NSLog("[DownloadManager] Download#%@ completed but hasListeners=false, NOT sending event!", downloadId)
+       }
+     } catch {
+       NSLog("[DownloadManager] Failed to move single file: %@", error.localizedDescription)
+@@ -990,7 +1108,7 @@ extension DownloadManagerModule {
+       persistStateLocked()
+       if hasListeners {
+         sendEvent(withName: "DownloadError", body: [
+-          "downloadId": NSNumber(value: info.downloadId),
++          "downloadId": info.downloadId,
+           "fileName": info.fileName,
+           "modelId": info.modelId,
+           "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+@@ -1011,11 +1129,11 @@ extension DownloadManagerModule {
+         return
+       }
+ 
+-      NSLog("[DownloadManager] Download#%lld (%@) FAILED: %@",
++      NSLog("[DownloadManager] Download#%@ (%@) FAILED: %@",
+             downloadId, info.fileName, error?.localizedDescription ?? "Unknown")
+ 
+       if info.isMultiFile {
+-        NSLog("[DownloadManager] Cancelling all remaining tasks for multi-file download#%lld", downloadId)
++        NSLog("[DownloadManager] Cancelling all remaining tasks for multi-file download#%@", downloadId)
+         for (_, fileTask) in info.fileTasks where !fileTask.completed {
+           fileTask.task?.cancel()
+           self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
+@@ -1029,9 +1147,9 @@ extension DownloadManagerModule {
+       self.persistStateLocked()
+ 
+       if self.hasListeners {
+-        NSLog("[DownloadManager] SENDING DownloadError event for #%lld", downloadId)
++        NSLog("[DownloadManager] SENDING DownloadError event for #%@", downloadId)
+         self.sendEvent(withName: "DownloadError", body: [
+-          "downloadId": NSNumber(value: info.downloadId),
++          "downloadId": info.downloadId,
+           "fileName": info.fileName,
+           "modelId": info.modelId,
+           "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
+@@ -1040,7 +1158,7 @@ extension DownloadManagerModule {
+           "reason": error?.localizedDescription ?? "Unknown error"
+         ] as [String: Any])
+       } else {
+-        NSLog("[DownloadManager] Download#%lld errored but hasListeners=false, NOT sending event!", downloadId)
++        NSLog("[DownloadManager] Download#%@ errored but hasListeners=false, NOT sending event!", downloadId)
+       }
+     }
+   }
+diff --git a/ios/OffgridMobile/Download/DownloadManagerModule.m b/ios/OffgridMobile/Download/DownloadManagerModule.m
+index 00f2b37..c17e0d3 100644
+--- a/ios/OffgridMobile/Download/DownloadManagerModule.m
++++ b/ios/OffgridMobile/Download/DownloadManagerModule.m
+@@ -11,18 +11,18 @@ @interface RCT_EXTERN_MODULE(DownloadManagerModule, RCTEventEmitter)
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(cancelDownload:(double)downloadId
++RCT_EXTERN_METHOD(cancelDownload:(NSString *)downloadId
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+ RCT_EXTERN_METHOD(getActiveDownloads:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(getDownloadProgress:(double)downloadId
++RCT_EXTERN_METHOD(getDownloadProgress:(NSString *)downloadId
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ 
+-RCT_EXTERN_METHOD(moveCompletedDownload:(double)downloadId
++RCT_EXTERN_METHOD(moveCompletedDownload:(NSString *)downloadId
+                   targetPath:(NSString *)targetPath
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+diff --git a/ios/OffgridMobileTests/OffgridMobileTests.swift b/ios/OffgridMobileTests/OffgridMobileTests.swift
+index 84c9942..6667f4a 100644
+--- a/ios/OffgridMobileTests/OffgridMobileTests.swift
++++ b/ios/OffgridMobileTests/OffgridMobileTests.swift
+@@ -510,7 +510,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+   func testGetDownloadProgressRejectsUnknownId() {
+     let exp = expectation(description: "getDownloadProgress rejects unknown id")
+     module.getDownloadProgress(
+-      99_999,
++      "99_999",
+       resolver: { _ in
+         XCTFail("should reject for unknown download id")
+         exp.fulfill()
+@@ -528,7 +528,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+   func testCancelDownloadRejectsUnknownId() {
+     let exp = expectation(description: "cancelDownload rejects unknown id")
+     module.cancelDownload(
+-      99_999,
++      "99_999",
+       resolver: { _ in
+         XCTFail("should reject for unknown download id")
+         exp.fulfill()
+@@ -546,7 +546,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+   func testMoveCompletedDownloadRejectsUnknownId() {
+     let exp = expectation(description: "moveCompletedDownload rejects unknown id")
+     module.moveCompletedDownload(
+-      99_999,
++      "99_999",
+       targetPath: TestPaths.tmpModelBin,
+       resolver: { _ in
+         XCTFail("should reject for unknown download id")
+@@ -673,7 +673,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+   func testCompletedDownloadEntryPersistsUntilMoved() {
+     // Inject a completed download entry directly
+     let info = DownloadManagerModule.DownloadInfo(
+-      downloadId: 100,
++      downloadId: "100",
+       fileName: "test-model.gguf",
+       modelId: "test/model",
+       totalBytes: 1_000_000,
+@@ -681,13 +681,14 @@ final class DownloadManagerModuleTests: XCTestCase {
+       status: "completed",
+       startedAt: Date().timeIntervalSince1970 * 1000,
+       task: nil,
++      taskIdentifier: nil,
+       localUri: TestPaths.tmpTestModelGGUF,
+       fileTasks: [:],
+       multiFileDestDir: nil,
+       isMultiFile: false
+     )
+     module.queue.sync(flags: .barrier) {
+-      self.module.downloads[100] = info
++      self.module.downloads["100"] = info
+     }
+ 
+     let exp = expectation(description: "getActiveDownloads returns completed entry")
+@@ -720,7 +721,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+ 
+     // Inject download entry pointing to the source file
+     let info = DownloadManagerModule.DownloadInfo(
+-      downloadId: 200,
++      downloadId: "200",
+       fileName: "model.gguf",
+       modelId: "test/model",
+       totalBytes: 256,
+@@ -728,18 +729,19 @@ final class DownloadManagerModuleTests: XCTestCase {
+       status: "completed",
+       startedAt: Date().timeIntervalSince1970 * 1000,
+       task: nil,
++      taskIdentifier: nil,
+       localUri: sourceFile,
+       fileTasks: [:],
+       multiFileDestDir: nil,
+       isMultiFile: false
+     )
+     module.queue.sync(flags: .barrier) {
+-      self.module.downloads[200] = info
++      self.module.downloads["200"] = info
+     }
+ 
+     let exp = expectation(description: "moveCompletedDownload moves file")
+     module.moveCompletedDownload(
+-      200,
++      "200",
+       targetPath: targetFile,
+       resolver: { result in
+         XCTAssertEqual(result as? String, targetFile)
+@@ -772,7 +774,7 @@ final class DownloadManagerModuleTests: XCTestCase {
+   func testMoveCompletedDownloadRejectsNotCompletedDownload() {
+     // Inject a running (not completed) download entry — no localUri
+     let info = DownloadManagerModule.DownloadInfo(
+-      downloadId: 300,
++      downloadId: "300",
+       fileName: "running-model.gguf",
+       modelId: "test/model",
+       totalBytes: 1_000_000,
+@@ -780,18 +782,19 @@ final class DownloadManagerModuleTests: XCTestCase {
+       status: "running",
+       startedAt: Date().timeIntervalSince1970 * 1000,
+       task: nil,
++      taskIdentifier: nil,
+       localUri: nil,
+       fileTasks: [:],
+       multiFileDestDir: nil,
+       isMultiFile: false
+     )
+     module.queue.sync(flags: .barrier) {
+-      self.module.downloads[300] = info
++      self.module.downloads["300"] = info
+     }
+ 
+     let exp = expectation(description: "moveCompletedDownload rejects not-completed download")
+     module.moveCompletedDownload(
+-      300,
++      "300",
+       targetPath: TestPaths.tmpShouldNotExist,
+       resolver: { _ in
+         XCTFail("should reject for download that hasn't completed")
