@@ -91,6 +91,20 @@ function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
   return 'mnn';
 }
 
+const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
+
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function shouldSkipSuspiciousRecoveredTextModel(author: string, quantization: string): boolean {
+  if (isUnknownLike(author) || isUnknownLike(quantization)) {
+    return true;
+  }
+  return false;
+}
+
 export interface ScanImageModelsOpts {
   imageModelsDir: string;
   getImageModels: () => Promise<ONNXImageModel[]>;
@@ -169,11 +183,16 @@ async function doScanForUntrackedTextModels(
 
     const quantMatch = item.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
     const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+    const author = 'Unknown';
+
+    if (shouldSkipSuspiciousRecoveredTextModel(author, quantization) && fileSize < MIN_RECOVERED_TEXT_MODEL_BYTES) {
+      continue;
+    }
 
     const newModel: DownloadedModel = {
       id: `recovered_${item.name}_${Date.now()}`,
       name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
-      author: 'Unknown',
+      author,
       filePath: item.path,
       fileName: item.name,
       fileSize,
