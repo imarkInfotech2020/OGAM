@@ -15,6 +15,9 @@ import { createStyles } from './styles';
 
 const isAndroid = Platform.OS === 'android';
 
+/** Feature flag: Set to true to enable HTP/Hexagon NPU in UI. Currently disabled. */
+const HTP_UI_ENABLED = false;
+
 // ─── Inference Backend ────────────────────────────────────────────────────────
 
 type BackendOption = { id: InferenceBackend; label: string; desc: string };
@@ -48,7 +51,7 @@ export const BackendSelector: React.FC = () => {
 
   const backends: BackendOption[] = Platform.OS === 'ios'
     ? IOS_BACKENDS
-    : hasNPU ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
+    : hasNPU && HTP_UI_ENABLED ? [...ANDROID_BASE_BACKENDS, HTP_BACKEND] : ANDROID_BASE_BACKENDS;
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
   const current = settings.inferenceBackend ?? defaultBackend;
