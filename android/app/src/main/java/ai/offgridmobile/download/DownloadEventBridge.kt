@@ -31,7 +31,7 @@ object DownloadEventBridge {
     }
 
     fun progress(
-        downloadId: Long,
+        downloadId: String,
         fileName: String,
         modelId: String,
         bytesDownloaded: Long,
@@ -41,7 +41,7 @@ object DownloadEventBridge {
         reasonCode: String? = null,
     ) {
         emit("DownloadProgress") {
-            putDouble("downloadId", downloadId.toDouble())
+            putString("downloadId", downloadId)
             putString("fileName", fileName)
             putString("modelId", modelId)
             putDouble("bytesDownloaded", bytesDownloaded.toDouble())
@@ -53,9 +53,9 @@ object DownloadEventBridge {
         }
     }
 
-    fun complete(downloadId: Long, fileName: String, modelId: String, localUri: String, bytesDownloaded: Long, totalBytes: Long) {
+    fun complete(downloadId: String, fileName: String, modelId: String, localUri: String, bytesDownloaded: Long, totalBytes: Long) {
         emit("DownloadComplete") {
-            putDouble("downloadId", downloadId.toDouble())
+            putString("downloadId", downloadId)
             putString("fileName", fileName)
             putString("modelId", modelId)
             putDouble("bytesDownloaded", bytesDownloaded.toDouble())
@@ -66,7 +66,7 @@ object DownloadEventBridge {
     }
 
     fun error(
-        downloadId: Long,
+        downloadId: String,
         fileName: String,
         modelId: String,
         reason: String,
@@ -74,31 +74,11 @@ object DownloadEventBridge {
         status: String = "failed",
     ) {
         emit("DownloadError") {
-            putDouble("downloadId", downloadId.toDouble())
+            putString("downloadId", downloadId)
             putString("fileName", fileName)
             putString("modelId", modelId)
             putString("reason", reason)
             putString("reasonCode", reasonCode ?: "")
-            putString("status", status)
-        }
-    }
-
-    fun retrying(
-        downloadId: Long,
-        fileName: String,
-        modelId: String,
-        reason: String,
-        reasonCode: String? = null,
-        attempt: Int,
-        status: String = "retrying",
-    ) {
-        emit("DownloadRetrying") {
-            putDouble("downloadId", downloadId.toDouble())
-            putString("fileName", fileName)
-            putString("modelId", modelId)
-            putString("reason", reason)
-            putString("reasonCode", reasonCode ?: "")
-            putInt("attempt", attempt)
             putString("status", status)
         }
     }

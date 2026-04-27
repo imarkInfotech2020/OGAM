@@ -41,6 +41,7 @@ interface ModelCardProps {
   onDelete?: () => void;
   onSelect?: () => void;
   onRepairVision?: () => void;
+  isRepairingVision?: boolean;
   onCancel?: () => void;
   compact?: boolean;
   isTrending?: boolean;
@@ -103,6 +104,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onDelete,
   onSelect,
   onRepairVision,
+  isRepairingVision,
   onCancel,
   compact,
   isTrending,
@@ -167,6 +169,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             quantization={quantization}
             isVisionModel={isVisionModel}
             needsRepair={needsRepair}
+            isRepairingVision={isRepairingVision}
             isCompatible={isCompatible}
             incompatibleReason={incompatibleReason}
           />
@@ -198,6 +201,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           onSelect={onSelect}
           onDelete={onDelete}
           onRepairVision={onRepairVision}
+          isRepairingVision={isRepairingVision}
           onCancel={onCancel}
         />
       </View>

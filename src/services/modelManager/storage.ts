@@ -2,6 +2,7 @@ import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
+import logger from '../../utils/logger';
 
 export const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 export const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
@@ -97,7 +98,19 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   const stored = await AsyncStorage.getItem(MODELS_STORAGE_KEY);
   if (!stored) return [];
 
-  const models: DownloadedModel[] = JSON.parse(stored);
+  let models: DownloadedModel[];
+  try {
+    models = JSON.parse(stored) as DownloadedModel[];
+  } catch (error) {
+    // Corrupt AsyncStorage should not prevent the app from loading other state.
+    logger.error('[ModelManagerStorage] Failed to parse downloaded models JSON', {
+      storageKey: MODELS_STORAGE_KEY,
+      length: stored.length,
+      preview: stored.slice(0, 100),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
   const validModels: DownloadedModel[] = [];
   let pathsUpdated = false;
 
@@ -140,7 +153,19 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
   const stored = await AsyncStorage.getItem(IMAGE_MODELS_STORAGE_KEY);
   if (!stored) return [];
 
-  const models: ONNXImageModel[] = JSON.parse(stored);
+  let models: ONNXImageModel[];
+  try {
+    models = JSON.parse(stored) as ONNXImageModel[];
+  } catch (error) {
+    // Corrupt AsyncStorage should not prevent the app from loading other state.
+    logger.error('[ModelManagerStorage] Failed to parse downloaded image models JSON', {
+      storageKey: IMAGE_MODELS_STORAGE_KEY,
+      length: stored.length,
+      preview: stored.slice(0, 100),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
   const validModels: ONNXImageModel[] = [];
   let pathsUpdated = false;
 

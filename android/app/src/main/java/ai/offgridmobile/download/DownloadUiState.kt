@@ -27,6 +27,7 @@ object DownloadReason {
     const val HTTP_403 = "http_403"
     const val HTTP_404 = "http_404"
     const val HTTP_416 = "http_416"
+    const val HTTP_429 = "http_429"
     const val CLIENT_ERROR = "client_error"
     const val UNKNOWN_ERROR = "unknown_error"
 
@@ -35,6 +36,7 @@ object DownloadReason {
         NETWORK_TIMEOUT,
         SERVER_UNAVAILABLE,
         DOWNLOAD_INTERRUPTED,
+        HTTP_429,
     )
 
     fun fromThrowable(error: Exception): String {
@@ -55,6 +57,7 @@ object DownloadReason {
             403 -> HTTP_403
             404 -> HTTP_404
             416 -> HTTP_416
+            429 -> HTTP_429
             in 500..599 -> SERVER_UNAVAILABLE
             in 400..499 -> CLIENT_ERROR
             else -> UNKNOWN_ERROR
@@ -65,10 +68,10 @@ object DownloadReason {
 
     fun messageFor(code: String?): String? {
         return when (code) {
-            NETWORK_LOST -> "Network connection lost. Waiting to resume."
-            NETWORK_TIMEOUT -> "The download timed out. Retrying automatically."
-            SERVER_UNAVAILABLE -> "The download server is temporarily unavailable. Retrying automatically."
-            DOWNLOAD_INTERRUPTED -> "The download was interrupted. Retrying automatically."
+            NETWORK_LOST -> "Network connection lost."
+            NETWORK_TIMEOUT -> "The download timed out."
+            SERVER_UNAVAILABLE -> "The download server is temporarily unavailable."
+            DOWNLOAD_INTERRUPTED -> "The download was interrupted."
             DISK_FULL -> "Not enough storage space for this download."
             FILE_CORRUPTED -> "The downloaded file failed verification."
             EMPTY_RESPONSE -> "The download server returned an empty response."
@@ -77,6 +80,7 @@ object DownloadReason {
             HTTP_403 -> "The download server rejected access to this file."
             HTTP_404 -> "The file could not be found on the download server."
             HTTP_416 -> "The server could not resume this download. Please retry it."
+            HTTP_429 -> "Rate limited by the download server."
             CLIENT_ERROR -> "The download request was rejected by the server."
             UNKNOWN_ERROR -> "Something went wrong while downloading."
             else -> null
@@ -87,7 +91,6 @@ object DownloadReason {
         val normalizedCode = code?.ifBlank { null }
         return when (status) {
             DownloadStatus.RUNNING -> DownloadUiState(status = "running")
-            DownloadStatus.PAUSED -> DownloadUiState(status = "paused")
             DownloadStatus.COMPLETED -> DownloadUiState(status = "completed")
             DownloadStatus.CANCELLED -> DownloadUiState(
                 status = "cancelled",
@@ -99,26 +102,21 @@ object DownloadReason {
                 reason = messageFor(normalizedCode ?: UNKNOWN_ERROR),
                 reasonCode = normalizedCode ?: UNKNOWN_ERROR,
             )
-            DownloadStatus.QUEUED -> when (normalizedCode) {
-                NETWORK_LOST -> DownloadUiState(
-                    status = "waiting_for_network",
-                    reason = messageFor(NETWORK_LOST),
-                    reasonCode = NETWORK_LOST,
-                )
-                NETWORK_TIMEOUT,
-                SERVER_UNAVAILABLE,
-                DOWNLOAD_INTERRUPTED,
-                -> DownloadUiState(
-                    status = "retrying",
-                    reason = messageFor(normalizedCode),
-                    reasonCode = normalizedCode,
-                )
-                else -> DownloadUiState(
-                    status = "pending",
-                    reason = messageFor(normalizedCode),
-                    reasonCode = normalizedCode,
-                )
-            }
+            DownloadStatus.RETRYING -> DownloadUiState(
+                status = "failed",
+                reason = messageFor(normalizedCode ?: DOWNLOAD_INTERRUPTED),
+                reasonCode = normalizedCode ?: DOWNLOAD_INTERRUPTED,
+            )
+            DownloadStatus.WAITING_FOR_NETWORK -> DownloadUiState(
+                status = "waiting_for_network",
+                reason = messageFor(NETWORK_LOST),
+                reasonCode = NETWORK_LOST,
+            )
+            DownloadStatus.QUEUED -> DownloadUiState(
+                status = "pending",
+                reason = messageFor(normalizedCode),
+                reasonCode = normalizedCode,
+            )
         }
     }
 }

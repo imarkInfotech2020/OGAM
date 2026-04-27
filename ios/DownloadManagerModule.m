@@ -11,18 +11,18 @@ RCT_EXTERN_METHOD(startMultiFileDownload:(NSDictionary *)params
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(cancelDownload:(double)downloadId
+RCT_EXTERN_METHOD(cancelDownload:(NSString *)downloadId
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
 RCT_EXTERN_METHOD(getActiveDownloads:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(getDownloadProgress:(double)downloadId
+RCT_EXTERN_METHOD(getDownloadProgress:(NSString *)downloadId
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
-RCT_EXTERN_METHOD(moveCompletedDownload:(double)downloadId
+RCT_EXTERN_METHOD(moveCompletedDownload:(NSString *)downloadId
                   targetPath:(NSString *)targetPath
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)

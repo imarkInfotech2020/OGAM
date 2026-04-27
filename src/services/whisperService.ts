@@ -28,7 +28,7 @@ class WhisperService {
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
-  private activeDownloadId: number | null = null;
+  private activeDownloadId: string | null = null;
 
   getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
   async ensureModelsDirExists(): Promise<void> {
@@ -51,8 +51,6 @@ class WhisperService {
         url: model.url,
         fileName,
         modelId: `whisper-${modelId}`,
-        title: `Downloading ${model.name}`,
-        description: `Whisper speech-to-text model (${model.size} MB)`,
         totalBytes: model.size * 1024 * 1024,
       },
       destPath,

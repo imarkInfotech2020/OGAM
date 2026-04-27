@@ -1,101 +1,236 @@
 /**
- * Standalone async image download handlers — no hooks.
- * Each function accepts an explicit `deps` object instead of closing over hook state.
+ * Standalone async image download handlers - no hooks.
+ * All download state flows through useDownloadStore via the stable
+ * image:<id> modelKey. The store is the single source of truth.
  */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { showAlert, hideAlert, AlertState } from '../../components/CustomAlert';
+import { showAlert, AlertState } from '../../components/CustomAlert';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import { ONNXImageModel } from '../../types';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { makeImageModelKey } from '../../utils/modelKey';
 import { ImageModelDescriptor } from './types';
+import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
+import logger from '../../utils/logger';
 
-/** Remove downloading indicator and clear progress for a model. */
-export function cleanupDownloadState(deps: ImageDownloadDeps, modelId: string, downloadId?: number) {
-  deps.removeImageModelDownloading(modelId);
-  deps.clearModelProgress(modelId);
-  const progressKeys = new Set<string>([
-    `image:${modelId}/${modelId}`,
-    `image:${modelId}/${modelId}.zip`,
-  ]);
-  if (downloadId != null) {
-    const metadata = deps.getBackgroundDownload(downloadId);
-    if (metadata?.modelId && metadata?.fileName) {
-      progressKeys.add(`${metadata.modelId}/${metadata.fileName}`);
-    }
+export interface ImageDownloadDeps {
+  addDownloadedImageModel: (m: ONNXImageModel) => void;
+  activeImageModelId: string | null;
+  setActiveImageModelId: (id: string) => void;
+  setAlertState: (s: AlertState) => void;
+  /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
+  triedImageGen: boolean;
+}
+
+interface ImageMetadata {
+  imageDownloadType: 'zip' | 'multifile';
+  imageModelName: string;
+  imageModelDescription: string;
+  imageModelSize: number;
+  imageModelStyle?: string;
+  imageModelBackend?: 'mnn' | 'qnn' | 'coreml';
+  imageModelRepo?: string;
+  imageModelAttentionVariant?: string;
+}
+
+type MultifileRuntime = {
+  cancelled: boolean;
+  currentDownloadId?: string;
+};
+
+const activeMultifileDownloads = new Map<string, MultifileRuntime>();
+const USER_CANCELLED_ERROR = 'user_cancelled';
+
+/** Build a synthetic downloadId for multi-file flows that don't go through WorkManager. */
+function makeMultifileId(modelId: string): string {
+  return `image-multi:${modelId}`;
+}
+
+function startMultifileRuntime(modelId: string): MultifileRuntime {
+  const runtime: MultifileRuntime = { cancelled: false };
+  activeMultifileDownloads.set(modelId, runtime);
+  return runtime;
+}
+
+function clearMultifileRuntime(modelId: string) {
+  activeMultifileDownloads.delete(modelId);
+}
+
+function isCancelledError(error: unknown): boolean {
+  return error instanceof Error && error.message === USER_CANCELLED_ERROR;
+}
+
+function assertNotCancelled(modelId: string, runtime: MultifileRuntime) {
+  const stillVisible = !!useDownloadStore.getState().downloads[makeImageModelKey(modelId)];
+  if (runtime.cancelled || !stillVisible) {
+    runtime.cancelled = true;
+    throw new Error(USER_CANCELLED_ERROR);
   }
-  progressKeys.forEach((key) => deps.setDownloadProgress(key, null));
-  if (downloadId != null) deps.setBackgroundDownload(downloadId, null);
+}
+
+function wireCurrentDownloadPromise(downloadIdPromise: Promise<string> | undefined, runtime: MultifileRuntime) {
+  if (downloadIdPromise === undefined) return;
+  downloadIdPromise.then((downloadId) => {
+    runtime.currentDownloadId = downloadId;
+    if (runtime.cancelled) {
+      backgroundDownloadService.cancelDownload(downloadId).catch(() => {});
+    }
+  }).catch(() => {});
+}
+
+export async function cancelSyntheticImageDownload(modelId: string): Promise<void> {
+  const runtime = activeMultifileDownloads.get(modelId);
+  if (!runtime) return;
+  runtime.cancelled = true;
+  if (runtime.currentDownloadId) {
+    await backgroundDownloadService.cancelDownload(runtime.currentDownloadId).catch(() => {});
+  }
+}
+
+async function ensureDirectory(path: string): Promise<void> {
+  if (!(await RNFS.exists(path))) await RNFS.mkdir(path);
+}
+
+async function cleanupImageModelDir(modelId: string): Promise<void> {
+  try {
+    const dir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
+    if (await RNFS.exists(dir)) await RNFS.unlink(dir);
+  } catch {
+    /* ignore cleanup errors */
+  }
+}
+
+function setMultifileFailed(syntheticId: string, deps: ImageDownloadDeps, message?: string): void {
+  deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(message)));
+  useDownloadStore.getState().setStatus(syntheticId, 'failed', {
+    message: message || 'Multi-file download failed',
+  });
+}
+
+type MultifileDownloadSpec = {
+  relativePath: string;
+  size: number;
+  url: string;
+};
+
+async function downloadSequentialFiles(opts: {
+  modelInfo: ImageModelDescriptor;
+  runtime: MultifileRuntime;
+  syntheticId: string;
+  modelDir: string;
+  files: MultifileDownloadSpec[];
+}): Promise<void> {
+  const { modelInfo, runtime, syntheticId, modelDir, files } = opts;
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  let downloadedSize = 0;
+
+  for (const file of files) {
+    assertNotCancelled(modelInfo.id, runtime);
+    const filePath = `${modelDir}/${file.relativePath}`;
+    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
+    await ensureDirectory(fileDir);
+
+    const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
+    const capturedDownloadedSize = downloadedSize;
+    const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
+      params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
+      destPath: filePath,
+      onProgress: (bytesDownloaded) => {
+        if (runtime.cancelled) return;
+        const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
+        useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
+      },
+    });
+    wireCurrentDownloadPromise(downloadIdPromise, runtime);
+    await promise;
+    runtime.currentDownloadId = undefined;
+    downloadedSize += file.size;
+    useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
+  }
+}
+
+/** Remove the entry from the store. Use after register-and-notify or on error. */
+function removeStoreEntry(modelId: string) {
+  useDownloadStore.getState().remove(makeImageModelKey(modelId));
 }
 
 /** Register a downloaded image model, activate if first, then cleanup + alert. */
 export async function registerAndNotify(
   deps: ImageDownloadDeps,
-  opts: { imageModel: ONNXImageModel; modelName: string; downloadId?: number },
+  opts: { imageModel: ONNXImageModel; modelName: string },
 ) {
-  const { imageModel, modelName, downloadId } = opts;
+  const { imageModel, modelName } = opts;
   await modelManager.addDownloadedImageModel(imageModel);
   deps.addDownloadedImageModel(imageModel);
   // Auto-load the first image model unless the onboarding spotlight flow is
-  // still active — Step 13 needs activeImageModelId to be null so the
+  // still active - Step 13 needs activeImageModelId to be null so the
   // "Load your image model" spotlight can fire on HomeScreen.
   if (!deps.activeImageModelId && deps.triedImageGen) deps.setActiveImageModelId(imageModel.id);
-  cleanupDownloadState(deps, imageModel.id, downloadId);
+  removeStoreEntry(imageModel.id);
   deps.setAlertState(showAlert('Success', `${modelName} downloaded successfully!`));
 }
 
-/** Wire error + complete listeners that unsub on completion and share cleanup logic. */
-export function wireDownloadListeners(
-  ctx: { downloadId: number; modelId: string; deps: ImageDownloadDeps },
+/** Add (or refuse-add) an image entry to the store. Returns true if a new entry was created. */
+function addImageEntry(opts: {
+  modelId: string;
+  downloadId: string;
+  fileName: string;
+  totalBytes: number;
+  metadata: ImageMetadata;
+}): boolean {
+  const { modelId, downloadId, fileName, totalBytes, metadata } = opts;
+  const modelKey = makeImageModelKey(modelId);
+  const existing = useDownloadStore.getState().downloads[modelKey];
+  if (existing && isActiveStatus(existing.status)) return false;
+  if (existing) {
+    // Failed/etc. entry from a prior attempt - reuse logical record.
+    useDownloadStore.getState().retryEntry(modelKey, downloadId);
+    return true;
+  }
+  useDownloadStore.getState().add({
+    modelKey,
+    downloadId,
+    modelId: `image:${modelId}`,
+    fileName,
+    quantization: '',
+    modelType: 'image',
+    status: 'pending',
+    bytesDownloaded: 0,
+    totalBytes,
+    combinedTotalBytes: totalBytes,
+    progress: 0,
+    createdAt: Date.now(),
+    metadataJson: JSON.stringify(metadata),
+  });
+  return true;
+}
+
+/** Wire complete + error listeners for a zip-style download. */
+function wireZipListeners(
+  ctx: { downloadId: string; modelId: string; deps: ImageDownloadDeps },
   onCompleteWork: () => Promise<void>,
 ) {
-  const { downloadId, modelId, deps } = ctx;
-  let unsubProgress: (() => void) | null = null;
+  const { downloadId, deps } = ctx;
   const unsubComplete = backgroundDownloadService.onComplete(downloadId, async () => {
-    unsubProgress?.(); unsubComplete(); unsubError();
+    unsubComplete(); unsubError();
     try { await onCompleteWork(); } catch (e: any) {
       deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(e?.message || 'Failed to process model')));
-      cleanupDownloadState(deps, modelId, downloadId);
+      useDownloadStore.getState().setStatus(downloadId, 'failed', { message: e?.message || 'Failed to process model' });
     }
   });
   const unsubError = backgroundDownloadService.onError(downloadId, (ev) => {
-    unsubProgress?.(); unsubComplete(); unsubError();
+    unsubComplete(); unsubError();
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(ev.reason)));
-    cleanupDownloadState(deps, modelId, downloadId);
+    // useDownloads at app root has already routed this to setStatus('failed').
+    // Keep the entry visible so the user can retry/remove. No removeStoreEntry here.
   });
-  return {
-    setProgressUnsub: (fn: () => void) => { unsubProgress = fn; },
-  };
 }
 
-export interface ImageDownloadDeps {
-  addImageModelDownloading: (id: string) => void;
-  removeImageModelDownloading: (id: string) => void;
-  updateModelProgress: (id: string, n: number) => void;
-  syncSharedProgress: (opts: {
-    modelId: string;
-    progress: number;
-    totalBytes: number;
-    downloadId?: number;
-    fileName?: string;
-    status?: string;
-    bytesDownloaded?: number;
-  }) => void;
-  clearModelProgress: (id: string) => void;
-  addDownloadedImageModel: (m: ONNXImageModel) => void;
-  activeImageModelId: string | null;
-  setActiveImageModelId: (id: string) => void;
-  setImageModelDownloadId: (modelId: string, downloadId: number | null) => void;
-  setBackgroundDownload: (downloadId: number, data: any) => void;
-  getBackgroundDownload: (downloadId: number) => { modelId?: string; fileName?: string } | null;
-  setAlertState: (s: AlertState) => void;
-  setDownloadProgress: (key: string, progress: { progress: number; bytesDownloaded: number; totalBytes: number; status?: string; reason?: string } | null) => void;
-  /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
-  triedImageGen: boolean;
-}
-
+/** HuggingFace multi-file download. Each file goes through downloadFileTo sequentially. */
 export async function downloadHuggingFaceModel(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
@@ -104,51 +239,39 @@ export async function downloadHuggingFaceModel(
     deps.setAlertState(showAlert('Error', 'Invalid HuggingFace model configuration'));
     return;
   }
-  deps.addImageModelDownloading(modelInfo.id);
-  deps.updateModelProgress(modelInfo.id, 0);
-  deps.syncSharedProgress({
+  const syntheticId = makeMultifileId(modelInfo.id);
+  const created = addImageEntry({
     modelId: modelInfo.id,
-    progress: 0,
+    downloadId: syntheticId,
+    fileName: modelInfo.id,
     totalBytes: modelInfo.size,
-    status: 'downloading',
+    metadata: {
+      imageDownloadType: 'multifile',
+      imageModelName: modelInfo.name,
+      imageModelDescription: modelInfo.description,
+      imageModelSize: modelInfo.size,
+      imageModelStyle: modelInfo.style,
+      imageModelBackend: modelInfo.backend,
+      imageModelRepo: modelInfo.huggingFaceRepo,
+    },
   });
+  if (!created) return;
+  const runtime = startMultifileRuntime(modelInfo.id);
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+    await ensureDirectory(imageModelsDir);
+    await ensureDirectory(modelDir);
 
-    const files = modelInfo.huggingFaceFiles;
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    let downloadedSize = 0;
-    for (const file of files) {
-      const fileUrl = `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`;
-      const filePath = `${modelDir}/${file.path}`;
-      const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-      if (!(await RNFS.exists(fileDir))) await RNFS.mkdir(fileDir);
-
-      // Use a flattened temp filename to avoid path issues in the Downloads dir.
-      const tempFileName = `${modelInfo.id}_${file.path.replaceAll('/', '_')}`;
-      const capturedDownloadedSize = downloadedSize;
-      const { promise } = backgroundDownloadService.downloadFileTo({
-        params: {
-          url: fileUrl,
-          fileName: tempFileName,
-          modelId: `image:${modelInfo.id}`,
-          totalBytes: file.size,
-        },
-        destPath: filePath,
-        onProgress: (bytesDownloaded) => {
-          deps.updateModelProgress(
-            modelInfo.id,
-            ((capturedDownloadedSize + bytesDownloaded) / totalSize) * 0.95,
-          );
-        },
-      });
-      await promise;
-      downloadedSize += file.size;
-      deps.updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
-    }
+    const files = modelInfo.huggingFaceFiles.map((file) => ({
+      relativePath: file.path,
+      size: file.size,
+      url: `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
+    }));
+    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
+    assertNotCancelled(modelInfo.id, runtime);
+    useDownloadStore.getState().setProcessing(syntheticId);
+    assertNotCancelled(modelInfo.id, runtime);
     const imageModel: ONNXImageModel = {
       id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -156,89 +279,73 @@ export async function downloadHuggingFaceModel(
     };
     await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
   } catch (error: any) {
-    deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    try {
-      const dir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
-      if (await RNFS.exists(dir)) await RNFS.unlink(dir);
-    } catch { /* ignore cleanup errors */ }
-    cleanupDownloadState(deps, modelInfo.id);
+    if (isCancelledError(error)) {
+      await cleanupImageModelDir(modelInfo.id);
+      return;
+    }
+    setMultifileFailed(syntheticId, deps, error?.message);
+    await cleanupImageModelDir(modelInfo.id);
+  } finally {
+    clearMultifileRuntime(modelInfo.id);
   }
 }
 
+/** CoreML multi-file download (one file per blob in coremlFiles). */
 export async function downloadCoreMLMultiFile(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
 ): Promise<void> {
-  if (!backgroundDownloadService.isAvailable()) {
-    deps.setAlertState(showAlert('Not Available', 'Background downloads not available'));
-    return;
-  }
   if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
 
-  deps.addImageModelDownloading(modelInfo.id);
-  deps.updateModelProgress(modelInfo.id, 0);
-  deps.syncSharedProgress({
+  const syntheticId = makeMultifileId(modelInfo.id);
+  const created = addImageEntry({
     modelId: modelInfo.id,
-    progress: 0,
-    totalBytes: modelInfo.size,
+    downloadId: syntheticId,
     fileName: modelInfo.id,
-    status: 'pending',
+    totalBytes: modelInfo.size,
+    metadata: {
+      imageDownloadType: 'multifile',
+      imageModelName: modelInfo.name,
+      imageModelDescription: modelInfo.description,
+      imageModelSize: modelInfo.size,
+      imageModelStyle: modelInfo.style,
+      imageModelBackend: modelInfo.backend,
+      imageModelRepo: modelInfo.repo,
+      imageModelAttentionVariant: modelInfo.attentionVariant,
+    },
   });
+  if (!created) return;
+  const runtime = startMultifileRuntime(modelInfo.id);
+
   try {
     const imageModelsDir = modelManager.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-    const downloadInfo = await backgroundDownloadService.startMultiFileDownload({
-      files: modelInfo.coremlFiles.map(f => ({ url: f.downloadUrl, relativePath: f.relativePath, size: f.size })),
-      fileName: modelInfo.id, modelId: `image:${modelInfo.id}`, destinationDir: modelDir, totalBytes: modelInfo.size,
-    });
-    deps.setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
-    deps.setBackgroundDownload(downloadInfo.downloadId, {
-      modelId: `image:${modelInfo.id}`, fileName: modelInfo.id, quantization: 'Core ML', author: 'Image Generation', totalBytes: modelInfo.size,
-      imageModelName: modelInfo.name, imageModelDescription: modelInfo.description,
-      imageModelSize: modelInfo.size, imageModelStyle: modelInfo.style,
-      imageModelBackend: modelInfo.backend, imageModelRepo: modelInfo.repo,
-      imageDownloadType: 'multifile',
-    });
-    deps.syncSharedProgress({
-      modelId: modelInfo.id,
-      progress: 0,
-      totalBytes: modelInfo.size,
-      downloadId: downloadInfo.downloadId,
-      fileName: modelInfo.id,
-      status: 'pending',
-    });
-    const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
-      // Remove the native download entry in background (no-op for multi-file — files already moved)
-      backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, modelDir).catch(() => {});
-      const imageModel: ONNXImageModel = {
-        id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
-        modelPath: modelDir, downloadedAt: new Date().toISOString(),
-        size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
-      };
-      // Register model first so UI unblocks, then fetch tokenizer files in background.
-      // Tokenizer files are only needed at generation time, not for model registration.
-      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
-      if (modelInfo.backend === 'coreml' && modelInfo.repo) {
-        downloadCoreMLTokenizerFiles(modelDir, modelInfo.repo).catch(() => {});
-      }
-    });
-    listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
-      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.95 : 0;
-      deps.updateModelProgress(modelInfo.id, progress);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName: modelInfo.id,
-        status: ev.status,
-      });
-    }));
-    backgroundDownloadService.startProgressPolling();
+    await ensureDirectory(imageModelsDir);
+    await ensureDirectory(modelDir);
+
+    const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
+    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
+    assertNotCancelled(modelInfo.id, runtime);
+    useDownloadStore.getState().setProcessing(syntheticId);
+    assertNotCancelled(modelInfo.id, runtime);
+    const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
+    const imageModel: ONNXImageModel = {
+      id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
+      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
+      size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
+      attentionVariant: modelInfo.attentionVariant,
+    };
+    await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+    if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
+    await cleanupImageModelDir(modelInfo.id);
+    if (isCancelledError(error)) return;
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    cleanupDownloadState(deps, modelInfo.id);
+    useDownloadStore.getState().setStatus(syntheticId, 'failed', {
+      message: error?.message || 'CoreML download failed',
+    });
+  } finally {
+    clearMultifileRuntime(modelInfo.id);
   }
 }
 
@@ -255,137 +362,88 @@ export async function proceedWithDownload(
     return;
   }
 
-  deps.addImageModelDownloading(modelInfo.id);
-  deps.updateModelProgress(modelInfo.id, 0);
-  deps.syncSharedProgress({
-    modelId: modelInfo.id,
-    progress: 0,
-    totalBytes: modelInfo.size,
-    fileName: `${modelInfo.id}.zip`,
-    status: 'downloading',
-  });
+  // Zip flow: native WorkManager handles the download. useDownloads at app
+  // root routes progress/error events to the store automatically. We only
+  // wire the completion to run the zip-extract finalization.
+  const fileName = `${modelInfo.id}.zip`;
+  const metadata: ImageMetadata = {
+    imageDownloadType: 'zip',
+    imageModelName: modelInfo.name,
+    imageModelDescription: modelInfo.description,
+    imageModelSize: modelInfo.size,
+    imageModelStyle: modelInfo.style,
+    imageModelBackend: modelInfo.backend,
+    imageModelAttentionVariant: modelInfo.attentionVariant,
+  };
+  const existing = useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)];
+  if (existing && isActiveStatus(existing.status)) return;
+
+  // Guard: if files already exist on disk, register without re-downloading.
+  const imageModelsDir = modelManager.getImageModelsDirectory();
+  const modelDir = `${imageModelsDir}/${modelInfo.id}`;
+  if (await RNFS.exists(modelDir)) {
+    const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
+    const imageModel: ONNXImageModel = {
+      id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
+      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
+      size: modelInfo.size, style: modelInfo.style, backend: modelInfo.backend,
+      attentionVariant: modelInfo.attentionVariant,
+    };
+    logger.log(`[ImageDownload] proceedWithDownload zip - files exist on disk, registering directly modelId=${modelInfo.id}`);
+    await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+    return;
+  }
+
   try {
-    const fileName = `${modelInfo.id}.zip`;
     const downloadInfo = await backgroundDownloadService.startDownload({
       url: modelInfo.downloadUrl, fileName, modelId: `image:${modelInfo.id}`,
-      title: `Downloading ${modelInfo.name}`, description: 'Image generation model', totalBytes: modelInfo.size,
-    });
-    deps.setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
-    deps.setBackgroundDownload(downloadInfo.downloadId, {
-      modelId: `image:${modelInfo.id}`, fileName, quantization: '', author: 'Image Generation', totalBytes: modelInfo.size,
-      imageModelName: modelInfo.name, imageModelDescription: modelInfo.description,
-      imageModelSize: modelInfo.size, imageModelStyle: modelInfo.style,
-      imageModelBackend: modelInfo.backend, imageDownloadType: 'zip',
-    });
-    deps.syncSharedProgress({
-      modelId: modelInfo.id,
-      progress: 0,
+      modelKey: makeImageModelKey(modelInfo.id),
+      modelType: 'image',
       totalBytes: modelInfo.size,
+      metadataJson: JSON.stringify(metadata),
+    });
+    const created = addImageEntry({
+      modelId: modelInfo.id,
       downloadId: downloadInfo.downloadId,
       fileName,
-      status: 'pending',
+      totalBytes: modelInfo.size,
+      metadata,
     });
-    const listeners = wireDownloadListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
-      deps.updateModelProgress(modelInfo.id, 0.9);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress: 0.9,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName,
-        status: 'processing',
-      });
-      const imageModelsDir = modelManager.getImageModelsDirectory();
+    if (!created) {
+      // Existing active entry blocked the start. Cancel the just-started
+      // native download to avoid orphan rows.
+      backgroundDownloadService.cancelDownload(downloadInfo.downloadId).catch(() => {});
+      return;
+    }
+    wireZipListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       const zipPath = `${imageModelsDir}/${fileName}`;
-      const modelDir = `${imageModelsDir}/${modelInfo.id}`;
-      if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-      await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
-      deps.updateModelProgress(modelInfo.id, 0.92);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress: 0.92,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName,
-        status: 'processing',
-      });
-      if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-      await unzip(zipPath, modelDir);
-      const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
-      deps.updateModelProgress(modelInfo.id, 0.95);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress: 0.95,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName,
-        status: 'processing',
-      });
-      await RNFS.unlink(zipPath).catch(() => {});
-      const imageModel: ONNXImageModel = {
-        id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
-        modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: modelInfo.size, style: modelInfo.style,
-        backend: modelInfo.backend, attentionVariant: modelInfo.attentionVariant,
-      };
-      await registerAndNotify(deps, { imageModel, modelName: modelInfo.name, downloadId: downloadInfo.downloadId });
+      try {
+        useDownloadStore.getState().setProcessing(downloadInfo.downloadId);
+        if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
+        const t0 = Date.now();
+        await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
+        logger.log(`[ImageDownload] moveCompletedDownload took ${Date.now() - t0}ms modelId=${modelInfo.id}`);
+        if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+        const t1 = Date.now();
+        await unzip(zipPath, modelDir);
+        logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
+        const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
+        await RNFS.unlink(zipPath).catch(() => {});
+        const imageModel: ONNXImageModel = {
+          id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
+          modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: modelInfo.size, style: modelInfo.style,
+          backend: modelInfo.backend, attentionVariant: modelInfo.attentionVariant,
+        };
+        await registerAndNotify(deps, { imageModel, modelName: modelInfo.name });
+      } catch (e) {
+        await RNFS.unlink(zipPath).catch(() => {});
+        await RNFS.unlink(modelDir).catch(() => {});
+        throw e;
+      }
     });
-    listeners.setProgressUnsub(backgroundDownloadService.onProgress(downloadInfo.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
-      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * 0.9 : 0;
-      deps.updateModelProgress(modelInfo.id, progress);
-      deps.syncSharedProgress({
-        modelId: modelInfo.id,
-        progress,
-        totalBytes: modelInfo.size,
-        downloadId: downloadInfo.downloadId,
-        fileName,
-        status: ev.status,
-      });
-    }));
     backgroundDownloadService.startProgressPolling();
   } catch (error: any) {
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    cleanupDownloadState(deps, modelInfo.id);
-  }
-}
-
-function getQnnWarningMessage(
-  modelInfo: ImageModelDescriptor,
-  socInfo: { hasNPU: boolean; qnnVariant?: string },
-): string | null {
-  if (!socInfo.hasNPU) {
-    return 'NPU models require a Qualcomm Snapdragon processor. ' +
-      'Your device does not have a compatible NPU and this model will not work. ' +
-      'Consider downloading a CPU model instead.';
-  }
-  if (!modelInfo.variant || !socInfo.qnnVariant) return null;
-
-  const deviceVariant = socInfo.qnnVariant;
-  const modelVariant = modelInfo.variant;
-  const compatible =
-    modelVariant === deviceVariant || deviceVariant === '8gen2' ||
-    (deviceVariant === '8gen1' && modelVariant !== '8gen2');
-  if (compatible) return null;
-
-  return `This model is built for ${modelVariant === '8gen2' ? 'flagship' : modelVariant} Snapdragon chips. ` +
-    `Your device uses a ${deviceVariant === 'min' ? 'non-flagship' : deviceVariant} chip and this model will likely crash. ` +
-    `Download the non-flagship variant instead.`;
-}
-
-function showQnnWarningAlert(
-  opts: { warningMessage: string; hasNPU: boolean; modelInfo: ImageModelDescriptor },
-  deps: ImageDownloadDeps,
-): void {
-  const { warningMessage, hasNPU, modelInfo } = opts;
-  if (hasNPU) {
-    deps.setAlertState(showAlert('Incompatible Model', warningMessage, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Download Anyway', style: 'destructive', onPress: () => { deps.setAlertState(hideAlert()); proceedWithDownload(modelInfo, deps); } },
-    ]));
-  } else {
-    deps.setAlertState(showAlert('Incompatible Model', warningMessage, [
-      { text: 'OK', style: 'cancel' },
-    ]));
   }
 }
 
@@ -397,9 +455,17 @@ export async function handleDownloadImageModel(
     const socInfo = await hardwareService.getSoCInfo();
     const warningMessage = getQnnWarningMessage(modelInfo, socInfo);
     if (warningMessage) {
-      showQnnWarningAlert({ warningMessage, hasNPU: socInfo.hasNPU, modelInfo }, deps);
+      showQnnWarningAlert({
+        warningMessage,
+        hasNPU: socInfo.hasNPU,
+        modelInfo,
+        onDownloadAnyway: () => {
+          proceedWithDownload(modelInfo, deps).catch(() => {});
+        },
+      }, deps);
       return;
     }
   }
   await proceedWithDownload(modelInfo, deps);
 }
+

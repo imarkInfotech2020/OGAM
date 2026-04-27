@@ -1,457 +1,209 @@
-/* eslint-disable max-lines, max-lines-per-function */
-import { useState, useRef, useEffect, useCallback } from 'react';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { useState } from 'react';
+import { Platform } from 'react-native';
 import { AlertState, showAlert, hideAlert, initialAlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
+import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import {
   modelManager,
-  backgroundDownloadService,
   activeModelService,
   hardwareService,
   huggingFaceService,
+  backgroundDownloadService,
 } from '../../services';
-import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../../types';
-import type { BackgroundDownloadStatus } from '../../types';
-import { DownloadItem, DownloadItemsData, buildDownloadItems, formatBytes } from './items';
+import { DownloadedModel, ONNXImageModel } from '../../types';
+import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
-import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
+import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
 
 export interface UseDownloadManagerResult {
-  isRefreshing: boolean;
   activeItems: DownloadItem[];
   completedItems: DownloadItem[];
   alertState: AlertState;
   setAlertState: (state: AlertState) => void;
-  handleRefresh: () => Promise<void>;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleRetryDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
+  isRepairingVision: (modelId: string) => boolean;
   totalStorageUsed: number;
 }
 
-function isNetworkRetryReason(reason?: string, reasonCode?: string): boolean {
-  const normalized = (reason || '').toLowerCase();
-  return (
-    reasonCode === 'network_lost' ||
-    normalized.includes('network connection lost') ||
-    normalized.includes('waiting to resume') ||
-    normalized.includes('network error')
-  );
-}
-
-function isMmProjSidecar(metadata: { fileName: string; mmProjFileName?: string } | null | undefined): boolean {
-  if (!metadata) return false;
-  if (metadata.mmProjFileName && metadata.fileName === metadata.mmProjFileName) return true;
-  return metadata.fileName.startsWith('mmproj-');
-}
-
-async function purgeStaleImageDownloads(downloads: BackgroundDownloadInfo[]): Promise<BackgroundDownloadInfo[]> {
-  const { downloadedImageModels } = useAppStore.getState();
-  const downloadedIds = new Set(downloadedImageModels.map(m => m.id));
-  for (const d of downloads) {
-    if (!d.modelId.startsWith('image:')) continue;
-    if (downloadedIds.has(d.modelId.replace('image:', ''))) {
-      backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => {});
-      backgroundDownloadService.cancelDownload(d.downloadId).catch(() => {});
-    }
+function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
+  if (!entry.metadataJson) return null;
+  try {
+    return JSON.parse(entry.metadataJson);
+  } catch {
+    return null;
   }
-  return downloads.filter(d =>
-    (
-      d.status === 'running' ||
-      d.status === 'pending' ||
-      d.status === 'paused' ||
-      d.status === 'failed' ||
-      d.status === 'retrying' ||
-      d.status === 'waiting_for_network'
-    ) &&
-    !(d.modelId.startsWith('image:') && downloadedIds.has(d.modelId.replace('image:', ''))),
-  );
 }
 
-function clearStaleTextProgressEntries(
-  downloads: BackgroundDownloadInfo[],
-  setDownloadProgress: (key: string, value: any) => void,
-): void {
-  const state = useAppStore.getState();
-  const activeDownloadIds = new Set(downloads.map(download => download.downloadId));
-  const activeKeys = new Set<string>();
-
-  downloads.forEach(download => {
-    const metadata = state.activeBackgroundDownloads[download.downloadId];
-    if (!metadata || isMmProjSidecar(metadata) || metadata.modelId.startsWith('image:')) return;
-    activeKeys.add(`${metadata.modelId}/${metadata.fileName}`);
-  });
-
-  Object.entries(state.downloadProgress).forEach(([key, progress]) => {
-    const modelId = key.slice(0, key.lastIndexOf('/'));
-    if (modelId.startsWith('image:')) return;
-    if (activeKeys.has(key)) return;
-    if (progress.ownerDownloadId != null && activeDownloadIds.has(progress.ownerDownloadId)) return;
-    setDownloadProgress(key, null);
-  });
-}
-
-function shouldSyncSnapshot(
-  download: BackgroundDownloadInfo,
-  existing: any,
-  totalBytes: number,
-): boolean {
-  return (
-    !existing ||
-    download.status !== (existing.status ?? 'downloading') ||
-    download.reason !== existing.reason ||
-    download.reasonCode !== existing.reasonCode ||
-    download.bytesDownloaded !== existing.bytesDownloaded ||
-    totalBytes !== existing.totalBytes
-  );
-}
-
-function updateActiveDownloadStatus(
-  setActiveDownloads: Dispatch<SetStateAction<BackgroundDownloadInfo[]>>,
-  event: {
-    downloadId: number;
-    status: BackgroundDownloadStatus;
-    reason?: string;
-    reasonCode?: string;
-  },
-): void {
-  setActiveDownloads(prev => prev.map(d =>
-    d.downloadId === event.downloadId
-      ? { ...d, status: event.status, reason: event.reason, reasonCode: event.reasonCode as any }
-      : d,
-  ));
-}
-
-type RetryProgressContext = {
-  retryLoggedRef: MutableRefObject<Record<string, string>>;
-  setDownloadProgress: (key: string, value: any) => void;
-  setActiveDownloads: Dispatch<SetStateAction<BackgroundDownloadInfo[]>>;
-};
-
-function handleRetryingProgressEvent(
-  event: {
-    downloadId: number;
-    status: BackgroundDownloadStatus;
-    reason?: string;
-    reasonCode?: string;
-  },
-  key: string,
-  ctx: RetryProgressContext,
-): void {
-  const { retryLoggedRef, setDownloadProgress, setActiveDownloads } = ctx;
-  const retryReason = event.reason || 'network issue';
-  if (retryLoggedRef.current[event.downloadId] !== retryReason) {
-    retryLoggedRef.current[event.downloadId] = retryReason;
+function getActiveItemModelId(entry: DownloadEntry, isImage: boolean): string {
+  if (isImage && entry.modelId.startsWith('image:')) {
+    return entry.modelId.replace('image:', '');
   }
-
-  const existing = useAppStore.getState().downloadProgress[key];
-  setDownloadProgress(key, {
-    progress: existing?.progress ?? 0,
-    bytesDownloaded: existing?.bytesDownloaded ?? 0,
-    totalBytes: existing?.totalBytes ?? 0,
-    ownerDownloadId: event.downloadId,
-    status: event.status,
-    reason: event.reason,
-    reasonCode: event.reasonCode,
-  });
-
-  updateActiveDownloadStatus(setActiveDownloads, event);
+  return entry.modelId;
 }
 
-function syncDownloadSnapshot(
-  download: BackgroundDownloadInfo,
-  setDownloadProgress: (key: string, value: any) => void,
-): { modelId: string } | null {
-  const metadata = useAppStore.getState().activeBackgroundDownloads[download.downloadId];
-  if (!metadata) return null;
-  if (isMmProjSidecar(metadata)) return null;
+function getActiveItemFileName(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  return isImage && metadata?.imageModelName
+    ? metadata.imageModelName
+    : entry.fileName;
+}
 
-  const key = `${metadata.modelId}/${metadata.fileName}`;
-  const existing = useAppStore.getState().downloadProgress[key];
-  const totalBytes = metadata.totalBytes || download.totalBytes || existing?.totalBytes || 0;
-  const sameDownloadInstance = existing?.ownerDownloadId === download.downloadId;
-  const bytesDownloaded = sameDownloadInstance
-    ? Math.max(existing?.bytesDownloaded ?? 0, download.bytesDownloaded)
-    : download.bytesDownloaded;
-  const shouldSyncProgress = shouldSyncSnapshot(download, existing, totalBytes);
+function getImageAuthor(backend?: string): string {
+  if (backend === 'coreml') return 'Core ML';
+  if (backend === 'qnn') return 'NPU';
+  if (backend === 'mnn') return 'GPU';
+  return 'Image Generation';
+}
 
-  if (!shouldSyncProgress) {
-    return { modelId: metadata.modelId };
-  }
+function getActiveItemAuthor(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  if (isImage) return getImageAuthor(metadata?.imageModelBackend);
+  return entry.modelId.split('/')[0] ?? 'Unknown';
+}
 
-  const resolvedStatus = download.status === 'pending' && isNetworkRetryReason(download.reason, download.reasonCode)
-    ? 'retrying'
-    : download.status;
-  setDownloadProgress(key, {
-    progress: totalBytes > 0 ? bytesDownloaded / totalBytes : existing?.progress ?? 0,
-    bytesDownloaded,
-    totalBytes,
-    ownerDownloadId: download.downloadId,
-    status: resolvedStatus,
-    reason: download.reason || existing?.reason,
-    reasonCode: download.reasonCode || existing?.reasonCode,
-  });
-  return { modelId: metadata.modelId };
+function getActiveItemQuantization(
+  entry: DownloadEntry,
+  isImage: boolean,
+  metadata: Record<string, any> | null,
+): string {
+  if (!isImage) return entry.quantization;
+  return metadata?.imageModelBackend === 'coreml' ? 'Core ML' : '';
+}
+
+function entryToActiveItem(entry: DownloadEntry): DownloadItem {
+  const metadata = parseEntryMetadata(entry);
+  const isImage = entry.modelType === 'image';
+
+  return {
+    type: 'active',
+    modelType: entry.modelType,
+    downloadId: entry.downloadId,
+    modelKey: entry.modelKey,
+    modelId: getActiveItemModelId(entry, isImage),
+    fileName: getActiveItemFileName(entry, isImage, metadata),
+    author: getActiveItemAuthor(entry, isImage, metadata),
+    quantization: getActiveItemQuantization(entry, isImage, metadata),
+    fileSize: entry.combinedTotalBytes || entry.totalBytes,
+    bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
+    progress: entry.progress,
+    status: entry.status,
+    reason: entry.errorMessage,
+    reasonCode: entry.errorCode as import('../../types').BackgroundDownloadReasonCode | undefined,
+  };
 }
 
 export function useDownloadManager(): UseDownloadManagerResult {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const cancelledKeysRef = useRef<Set<string>>(new Set());
+  const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
+  const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
   const {
     downloadedModels,
     setDownloadedModels,
-    downloadProgress,
-    setDownloadProgress,
     removeDownloadedModel,
-    activeBackgroundDownloads,
-    setBackgroundDownload,
     downloadedImageModels,
-    setDownloadedImageModels,
     removeDownloadedImageModel,
-    removeImageModelDownloading,
   } = useAppStore();
-  const retryLoggedRef = useRef<Record<string, string>>({});
 
-  const loadActiveDownloads = useCallback(async () => {
-    if (backgroundDownloadService.isAvailable()) {
-      const downloads = await modelManager.getActiveBackgroundDownloads();
-      const filteredDownloads = await purgeStaleImageDownloads(downloads);
-      clearStaleTextProgressEntries(filteredDownloads, setDownloadProgress);
-      setActiveDownloads(filteredDownloads);
-      filteredDownloads.forEach(download => {
-        syncDownloadSnapshot(download, setDownloadProgress);
-      });
-    }
-  }, [setDownloadProgress]);
+  const downloads = useDownloadStore(state => state.downloads);
+  const removeDownloadEntry = useDownloadStore(state => state.remove);
 
-  // Load active background downloads on mount + start/stop polling
-  useEffect(() => {
-    loadActiveDownloads();
+  const activeItems: DownloadItem[] = Object.values(downloads)
+    .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
+    .map(entryToActiveItem);
 
-    if (backgroundDownloadService.isAvailable()) {
-      modelManager.startBackgroundDownloadPolling();
-    }
-    // Do NOT stop polling on unmount — other screens (Models tab) rely on
-    // the same native polling timer for progress events. Polling is cheap
-    // (no-op when no active downloads) and stops automatically when all
-    // downloads complete.
-  }, [loadActiveDownloads]);
+  const completedItems: DownloadItem[] = [
+    ...downloadedModels.map((model): DownloadItem => {
+      const totalSize = hardwareService.getModelTotalSize(model);
+      return {
+        type: 'completed',
+        modelType: 'text',
+        modelId: model.id,
+        fileName: model.fileName,
+        author: model.author,
+        quantization: model.quantization,
+        fileSize: totalSize,
+        bytesDownloaded: totalSize,
+        progress: 1,
+        status: 'completed',
+        downloadedAt: model.downloadedAt,
+        filePath: model.filePath,
+        isVisionModel: model.isVisionModel,
+        mmProjPath: model.mmProjPath,
+      };
+    }),
+    ...downloadedImageModels.map((model): DownloadItem => ({
+      type: 'completed',
+      modelType: 'image',
+      modelId: model.id,
+      fileName: model.name,
+      author: 'Image Generation',
+      quantization: '',
+      fileSize: model.size,
+      bytesDownloaded: model.size,
+      progress: 1,
+      status: 'completed',
+      filePath: model.modelPath,
+    })),
+  ];
 
-  // Subscribe to background download service events
-  useEffect(() => {
-    if (!backgroundDownloadService.isAvailable()) return;
-
-    // Broadcast progress for all downloads. Per-download listeners (useTextModels)
-    // compute combined GGUF+mmproj progress and fire first. We skip the update here
-    // if the store already has a higher bytesDownloaded (i.e. combined progress).
-    const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
-      const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
-      if (!metadata) return;
-      if (isMmProjSidecar(metadata)) return;
-      if (metadata.modelId.startsWith('image:')) return;
-      const key = `${metadata.modelId}/${metadata.fileName}`;
-      if (cancelledKeysRef.current.has(key)) return;
-      if (event.status === 'retrying' || event.status === 'waiting_for_network') {
-        handleRetryingProgressEvent(event, key, {
-          retryLoggedRef,
-          setDownloadProgress,
-          setActiveDownloads,
-        });
-        return;
-      }
-      const existing = useAppStore.getState().downloadProgress[key];
-      if ((existing?.ownerDownloadId === event.downloadId) && (existing.bytesDownloaded >= event.bytesDownloaded)) return;
-      setDownloadProgress(key, {
-        progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
-        bytesDownloaded: event.bytesDownloaded,
-        totalBytes: event.totalBytes,
-        ownerDownloadId: event.downloadId,
-        status: event.status,
-        reason: event.reason || undefined,
-        reasonCode: event.reasonCode,
-      });
-    });
-
-    const unsubComplete = backgroundDownloadService.onAnyComplete(async (_event) => {
-      delete retryLoggedRef.current[_event.downloadId];
-      await loadActiveDownloads();
-    });
-
-    const unsubError = backgroundDownloadService.onAnyError(async (event) => {
-      delete retryLoggedRef.current[event.downloadId];
-      const metadata = useAppStore.getState().activeBackgroundDownloads[event.downloadId];
-      if (metadata) {
-        if (isMmProjSidecar(metadata)) return;
-        const key = `${metadata.modelId}/${metadata.fileName}`;
-        const existing = useAppStore.getState().downloadProgress[key];
-        setDownloadProgress(key, {
-          progress: existing?.progress ?? 0,
-          bytesDownloaded: existing?.bytesDownloaded ?? 0,
-          totalBytes: existing?.totalBytes ?? metadata.totalBytes ?? 0,
-          ownerDownloadId: event.downloadId,
-          status: 'failed',
-          reason: event.reason || 'Something went wrong while downloading.',
-          reasonCode: event.reasonCode,
-        });
-      }
-      setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(event.reason, event.reasonCode)));
-      await loadActiveDownloads();
-    });
-
-    return () => {
-      unsubProgress();
-      unsubComplete();
-      unsubError();
-    };
-
-  }, [loadActiveDownloads, setDownloadProgress]);
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadActiveDownloads();
-    const models = await modelManager.getDownloadedModels();
-    setDownloadedModels(models);
-    const imageModels = await modelManager.getDownloadedImageModels();
-    setDownloadedImageModels(imageModels);
-    setIsRefreshing(false);
-
-  }, [loadActiveDownloads, setDownloadedModels, setDownloadedImageModels]);
+  const totalStorageUsed = completedItems.reduce((sum, item) => sum + item.fileSize, 0);
 
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
-      const key = `${item.modelId}/${item.fileName}`;
-      cancelledKeysRef.current.add(key);
-      setDownloadProgress(key, null);
-      let downloadId = item.downloadId;
-      if (!downloadId) {
-        const match = activeDownloads.find(d => {
-          const metadata = activeBackgroundDownloads[d.downloadId];
-          return metadata?.modelId === item.modelId && metadata?.fileName === item.fileName;
-        });
-        if (match) downloadId = match.downloadId;
+      const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
+      const entry = downloads[modelKey];
+      removeDownloadEntry(modelKey);
+      if (entry) {
+        if (entry.downloadId.startsWith('image-multi:')) {
+          await cancelSyntheticImageDownload(item.modelId).catch(() => {});
+          return;
+        }
+        await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
+        if (entry.mmProjDownloadId) {
+          await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
+        }
       }
-      if (downloadId) {
-        setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
-        setBackgroundDownload(downloadId, null);
-        await modelManager.cancelBackgroundDownload(downloadId);
-      }
-      if (item.modelId.startsWith('image:')) removeImageModelDownloading(item.modelId.replace('image:', ''));
-      const capturedKey = key;
-      // Reload after a delay to let the native cancel write reach the DB.
-      // Keep the key blocked in cancelledKeysRef until AFTER reload so that
-      // any in-flight progress events from the dying worker don't resurrect the item.
-      setTimeout(() => {
-        loadActiveDownloads()
-          .catch(err => logger.error('[DownloadManager] Failed to reload active downloads:', err))
-          .finally(() => {
-            cancelledKeysRef.current.delete(capturedKey);
-          });
-      }, 2500);
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
     }
   };
 
-  const handleRemoveDownload = (item: DownloadItem) => {
-    setAlertState(
-      showAlert(
-        'Remove Download',
-        'Are you sure you want to remove this download?',
-        [
-          { text: 'No', style: 'cancel' },
-          {
-            text: 'Yes',
-            style: 'destructive',
-            onPress: () => { executeRemoveDownload(item); },
-          },
-        ],
-      ),
-    );
-  };
-
-  const executeRetryDownload = async (item: DownloadItem) => {
-    setAlertState(hideAlert());
+  const handleRetryDownload = async (item: DownloadItem) => {
+    if (!item.downloadId) return;
     try {
-      const key = `${item.modelId}/${item.fileName}`;
-
-      // Look up metadata
-      const metadata = item.downloadId ? activeBackgroundDownloads[item.downloadId] : undefined;
-
-      if (!metadata) {
-        setAlertState(showAlert('Error', 'Could not retry download - metadata not found'));
-        return;
+      useDownloadStore.getState().setStatus(item.downloadId, 'pending');
+      if (Platform.OS === 'android') {
+        await backgroundDownloadService.retryDownload(item.downloadId);
       }
-
-      // Clean up old state
-      const oldDownloadId = item.downloadId;
-      if (oldDownloadId) {
-        setBackgroundDownload(oldDownloadId, null);
-        cancelledKeysRef.current.add(key);
-      }
-      setDownloadProgress(key, null);
-
-      // Set fresh progress
-      setDownloadProgress(key, { progress: 0, bytesDownloaded: 0, totalBytes: metadata.totalBytes });
-
-      // Build ModelFile from metadata
-      const downloadUrl = huggingFaceService.getDownloadUrl(metadata.modelId, metadata.fileName);
-      const modelFile = {
-        name: metadata.fileName,
-        size: metadata.mainFileSize ?? metadata.totalBytes,
-        quantization: metadata.quantization,
-        downloadUrl,
-      };
-
-      // Start retry download
-      const info = await modelManager.downloadModelBackground(metadata.modelId, modelFile as any);
-
-      modelManager.watchDownload(
-        info.downloadId,
-        async () => {
-          setDownloadProgress(key, null);
-          if (oldDownloadId) {
-            cancelledKeysRef.current.delete(key);
-          }
-          const models = await modelManager.getDownloadedModels();
-          setDownloadedModels(models);
-          setAlertState(showAlert('Download Complete', `${item.fileName} downloaded successfully`));
-        },
-        (error) => {
-          setDownloadProgress(key, {
-            progress: (downloadProgress[key]?.progress ?? 0),
-            bytesDownloaded: (downloadProgress[key]?.bytesDownloaded ?? 0),
-            totalBytes: metadata.totalBytes,
-            status: 'failed',
-            reason: error.message,
-          });
-        },
-      );
+      backgroundDownloadService.startProgressPolling();
     } catch (error) {
       logger.error('[DownloadManager] Failed to retry download:', error);
-      setAlertState(showAlert('Error', 'Failed to retry download'));
+      useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
+        message: 'Retry failed. Please remove and re-download.',
+      });
     }
   };
 
-  const handleRetryDownload = (item: DownloadItem) => {
-    setAlertState(
-      showAlert(
-        'Retry Download',
-        'This will restart the download from the beginning. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Retry',
-            style: 'default',
-            onPress: () => { executeRetryDownload(item); },
-          },
-        ],
-      ),
-    );
+  const handleRemoveDownload = (item: DownloadItem) => {
+    setAlertState(showAlert(
+      'Remove Download',
+      'Are you sure you want to remove this download?',
+      [
+        { text: 'No', style: 'cancel' },
+        { text: 'Yes', style: 'destructive', onPress: () => { executeRemoveDownload(item); } },
+      ],
+    ));
   };
 
   const executeDeleteModel = async (model: DownloadedModel) => {
@@ -463,23 +215,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
       logger.error('[DownloadManager] Failed to delete model:', error);
       setAlertState(showAlert('Error', 'Failed to delete model'));
     }
-  };
-  const handleDeleteModel = (model: DownloadedModel) => {
-    const totalSize = hardwareService.getModelTotalSize(model);
-    setAlertState(
-      showAlert(
-        'Delete Model',
-        `Are you sure you want to delete "${model.fileName}"? This will free up ${formatBytes(totalSize)}.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => { executeDeleteModel(model); },
-          },
-        ],
-      ),
-    );
   };
 
   const executeDeleteImageModel = async (model: ONNXImageModel) => {
@@ -493,77 +228,72 @@ export function useDownloadManager(): UseDownloadManagerResult {
       setAlertState(showAlert('Error', 'Failed to delete image model'));
     }
   };
-  const handleDeleteImageModel = (model: ONNXImageModel) => {
-    setAlertState(
-      showAlert(
+
+  const handleDeleteItem = (item: DownloadItem) => {
+    if (item.modelType === 'image') {
+      const model = downloadedImageModels.find(m => m.id === item.modelId);
+      if (!model) return;
+      setAlertState(showAlert(
         'Delete Image Model',
         `Are you sure you want to delete "${model.name}"? This will free up ${formatBytes(model.size)}.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => { executeDeleteImageModel(model); },
-          },
+          { text: 'Delete', style: 'destructive', onPress: () => { executeDeleteImageModel(model); } },
         ],
-      ),
-    );
-  };
-  const handleDeleteItem = (item: DownloadItem) => {
-    if (item.modelType === 'image') {
-      const model = downloadedImageModels.find(m => m.id === item.modelId);
-      if (model) handleDeleteImageModel(model);
+      ));
     } else {
       const model = downloadedModels.find(m => m.id === item.modelId);
-      if (model) handleDeleteModel(model);
+      if (!model) return;
+      const totalSize = hardwareService.getModelTotalSize(model);
+      setAlertState(showAlert(
+        'Delete Model',
+        `Are you sure you want to delete "${model.fileName}"? This will free up ${formatBytes(totalSize)}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => { executeDeleteModel(model); } },
+        ],
+      ));
     }
   };
+
   const handleRepairVision = (item: DownloadItem): void => {
     const lastSlash = item.modelId.lastIndexOf('/');
     if (lastSlash < 0) return;
     const repoId = item.modelId.substring(0, lastSlash);
     const fileName = item.modelId.substring(lastSlash + 1);
-    const downloadKey = `${repoId}/${fileName}-mmproj`;
-    setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: 0 });
+    setRepairingVision(item.modelId, true);
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
-      if (!file?.mmProjFile) { setDownloadProgress(downloadKey, null); setAlertState(showAlert('Error', 'Could not find vision projection file for this model')); return; }
-      setDownloadProgress(downloadKey, { progress: 0, bytesDownloaded: 0, totalBytes: file.mmProjFile.size });
-      await modelManager.repairMmProj(repoId, file, { onProgress: (p) => setDownloadProgress(downloadKey, p) });
-      setDownloadProgress(downloadKey, null);
+      if (!file?.mmProjFile) {
+        setAlertState(showAlert(
+          'No Vision File Available',
+          'This model does not publish a separate vision projection file. Re-download the original (non-i1) variant if vision support is required.',
+        ));
+        return;
+      }
+      await modelManager.repairMmProj(repoId, file, {});
       const models = await modelManager.getDownloadedModels();
       setDownloadedModels(models);
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
     }).catch((e: Error) => {
-      setDownloadProgress(downloadKey, null);
       setAlertState(showAlert('Repair Failed', e.message));
+    }).finally(() => {
+      setRepairingVision(item.modelId, false);
     });
   };
 
-  // Build items from store state
-  const data: DownloadItemsData = {
-    downloadProgress,
-    activeDownloads,
-    activeBackgroundDownloads,
-    downloadedModels,
-    downloadedImageModels,
-  };
-  const items = buildDownloadItems(data);
-  const activeItems = items.filter(i => i.type === 'active');
-  const completedItems = items.filter(i => i.type === 'completed');
-  const totalStorageUsed = completedItems.reduce((sum, item) => sum + item.fileSize, 0);
+  const isRepairingVision = (modelId: string) => !!repairingVisionIds[modelId];
 
   return {
-    isRefreshing,
     activeItems,
     completedItems,
     alertState,
     setAlertState,
-    handleRefresh,
     handleRemoveDownload,
     handleRetryDownload,
     handleDeleteItem,
     handleRepairVision,
+    isRepairingVision,
     totalStorageUsed,
   };
 }

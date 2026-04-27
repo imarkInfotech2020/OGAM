@@ -14,8 +14,11 @@ import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
+import { hydrateDownloadStore } from './src/services/downloadHydration';
+import { useDownloads } from './src/hooks/useDownloads';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
+import { useDownloadStore } from './src/stores/downloadStore';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -28,12 +31,12 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
+  useDownloads();
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
-  const clearImageModelDownloading = useAppStore((s) => s.clearImageModelDownloading);
 
   const { colors, isDark } = useTheme();
 
@@ -44,6 +47,27 @@ function App() {
     setLastBackgroundTime,
   } = useAuthStore();
 
+  const reattachTextDownloadRecovery = useCallback(async () => {
+    const restoredIds = await modelManager.restoreInProgressDownloads();
+    modelManager.startBackgroundDownloadPolling();
+    restoredIds.forEach((downloadId) => {
+      modelManager.watchDownload(
+        downloadId,
+        async () => {
+          const models = await modelManager.getDownloadedModels();
+          setDownloadedModels(models);
+          useDownloadStore.getState().remove(
+            useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
+          );
+        },
+        (error: Error) => {
+          logger.error('[App] Restored text download failed:', error);
+          useDownloadStore.getState().setStatus(downloadId, 'failed', { message: error.message });
+        },
+      );
+    });
+  }, [setDownloadedModels]);
+
   // Handle app state changes for auto-lock
   useAppState({
     onBackground: useCallback(() => {
@@ -53,28 +77,38 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
-      // Lock is already set when going to background
-      // Nothing additional needed here
-    }, []),
+      // Rebuild the unified store before reattaching JS listeners so restored
+      // progress events map onto current download entries instead of racing hydration.
+      hydrateDownloadStore()
+        .catch((error) => {
+          logger.error('[App] Failed to hydrate download store on foreground:', error);
+        })
+        .finally(() => {
+          reattachTextDownloadRecovery().catch((error) => {
+            logger.error('[App] Failed to restore text downloads on foreground:', error);
+          });
+        });
+    }, [reattachTextDownloadRecovery]),
   });
 
-  useEffect(() => {
-    initializeApp();
-
-  }, []);
-
-  const ensureAppStoreHydrated = async () => {
+  const ensureAppStoreHydrated = useCallback(async () => {
     const persistApi = useAppStore.persist;
     if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
     if (!persistApi.hasHydrated()) {
       await persistApi.rehydrate();
     }
-  };
+  }, []);
 
-  const initializeApp = async () => {
+  const initializeApp = useCallback(async () => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
+
+      // Hydrate download store from SQLite before any screen mounts.
+      await hydrateDownloadStore().catch((error) => {
+        logger.error('[App] Failed to hydrate download store during startup:', error);
+      });
+      await reattachTextDownloadRecovery();
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
@@ -90,84 +124,11 @@ function App() {
       // Clean up any mmproj files that were incorrectly added as standalone models
       await modelManager.cleanupMMProjEntries();
 
-      // Wire up background download metadata persistence
-      const {
-        setBackgroundDownload,
-        activeBackgroundDownloads,
-        addDownloadedModel,
-        setDownloadProgress,
-      } = useAppStore.getState();
-      modelManager.setBackgroundDownloadMetadataCallback((downloadId, info) => {
-        setBackgroundDownload(downloadId, info);
-      });
-
-      // Recover any background downloads that completed while app was dead
-      try {
-        const recoveredModels = await modelManager.syncBackgroundDownloads(
-          activeBackgroundDownloads,
-          (downloadId) => setBackgroundDownload(downloadId, null)
-        );
-        for (const model of recoveredModels) {
-          addDownloadedModel(model);
-          logger.log('[App] Recovered background download:', model.name);
-        }
-      } catch (err) {
-        logger.error('[App] Failed to sync background downloads:', err);
-      }
-
-      // Recover completed image downloads (zip unzip / multifile finalization)
-      try {
-        const recoveredImageModels = await modelManager.syncCompletedImageDownloads(
-          activeBackgroundDownloads,
-          (downloadId) => setBackgroundDownload(downloadId, null),
-        );
-        for (const model of recoveredImageModels) {
-          logger.log('[App] Recovered image download:', model.name);
-        }
-      } catch (err) {
-        logger.error('[App] Failed to sync completed image downloads:', err);
-      }
-
-      // Re-wire event listeners for downloads that were still running when the
-      // app was killed (running/pending status in Android DownloadManager).
-      try {
-        const restoredDownloadIds = await modelManager.restoreInProgressDownloads(
-          activeBackgroundDownloads,
-          (progress) => {
-            const key = `${progress.modelId}/${progress.fileName}`;
-            setDownloadProgress(key, {
-              progress: progress.progress,
-              bytesDownloaded: progress.bytesDownloaded,
-              totalBytes: progress.totalBytes,
-            });
-          },
-        );
-        for (const downloadId of restoredDownloadIds) {
-          const metadata = activeBackgroundDownloads[downloadId];
-          const progressKey = metadata ? `${metadata.modelId}/${metadata.fileName}` : null;
-          modelManager.watchDownload(
-            downloadId,
-            (model) => {
-              if (progressKey) setDownloadProgress(progressKey, null);
-              addDownloadedModel(model);
-              logger.log('[App] Restored in-progress download completed:', model.name);
-            },
-            (error) => {
-              if (progressKey) setDownloadProgress(progressKey, null);
-              logger.error('[App] Restored in-progress download failed:', error);
-            },
-          );
-        }
-      } catch (err) {
-        logger.error('[App] Failed to restore in-progress downloads:', err);
-      }
-
-      // Clear any stale imageModelDownloading entries — if the app was killed
-      // mid-download these would be persisted as "downloading" forever.
-      clearImageModelDownloading();
-
       // Scan for any models that may have been downloaded externally or
-      // when app was killed before JS callback fired
+      // while the app was killed. hydrateDownloadStore (called on cold start
+      // and foreground resume) repopulates in-flight downloads directly
+      // from the native Room DB, replacing the old metadata-callback +
+      // syncBackgroundDownloads recovery path.
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
@@ -200,7 +161,20 @@ function App() {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
     }
-  };
+  }, [
+    authEnabled,
+    ensureAppStoreHydrated,
+    reattachTextDownloadRecovery,
+    setDeviceInfo,
+    setDownloadedImageModels,
+    setDownloadedModels,
+    setLocked,
+    setModelRecommendation,
+  ]);
+
+  useEffect(() => {
+    initializeApp();
+  }, [initializeApp]);
 
   const handleUnlock = useCallback(() => {
     setLocked(false);

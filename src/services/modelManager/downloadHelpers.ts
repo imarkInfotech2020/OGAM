@@ -84,9 +84,9 @@ export async function getOrphanedImageDirs(
 }
 
 export interface SyncDownloadsOpts {
-  persistedDownloads: Record<number, PersistedDownloadInfo>;
+  persistedDownloads: Record<string, PersistedDownloadInfo>;
   modelsDir: string;
-  clearDownloadCallback: (downloadId: number) => void;
+  clearDownloadCallback: (downloadId: string) => void;
 }
 
 /** Resolve the final mmproj path for a completed sync download. */
@@ -107,7 +107,7 @@ async function resolveMmProjPath(metadata: PersistedDownloadInfo): Promise<strin
 /** Check whether a parallel mmproj download is still in progress. */
 function isMmProjStillRunning(
   metadata: PersistedDownloadInfo,
-  activeDownloads: Array<{ downloadId: number; status: string }>,
+  activeDownloads: Array<{ downloadId: string; status: string }>,
 ): boolean {
   if (!metadata.mmProjDownloadId) return false;
   const mmProjDl = activeDownloads.find(d => d.downloadId === metadata.mmProjDownloadId);
@@ -115,7 +115,7 @@ function isMmProjStillRunning(
 }
 
 async function processCompletedDownload(
-  downloadId: number, metadata: PersistedDownloadInfo, modelsDir: string,
+  downloadId: string, metadata: PersistedDownloadInfo, modelsDir: string,
 ): Promise<DownloadedModel> {
   const localPath = `${modelsDir}/${metadata.fileName}`;
   await backgroundDownloadService.moveCompletedDownload(downloadId, localPath);
@@ -137,7 +137,7 @@ async function processCompletedDownload(
 }
 
 function handleFailedDownload(
-  metadata: PersistedDownloadInfo, clearDownloadCallback: (downloadId: number) => void, downloadId: number,
+  metadata: PersistedDownloadInfo, clearDownloadCallback: (downloadId: string) => void, downloadId: string,
 ): void {
   if (metadata.mmProjDownloadId) {
     backgroundDownloadService.cancelDownload(metadata.mmProjDownloadId).catch(() => {});

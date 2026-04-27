@@ -566,48 +566,6 @@ describe('ModelsScreen', () => {
   });
 
   // ============================================================================
-  // Store interactions (download progress, model management)
-  // ============================================================================
-  describe('store interactions', () => {
-    it('tracks download progress via store', async () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-        },
-      });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-
-      // Verify store state was updated
-      const progress = useAppStore.getState().downloadProgress;
-      expect(progress['model-1'].progress).toBe(0.5);
-    });
-
-    it('tracks multiple concurrent downloads', () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-          'model-2': { progress: 0.25, bytesDownloaded: 1000, totalBytes: 4000 },
-        },
-      });
-
-      const progress = useAppStore.getState().downloadProgress;
-      expect(Object.keys(progress).length).toBe(2);
-    });
-
-    it('clears progress when download completes', () => {
-      useAppStore.getState().setDownloadProgress('model-1', { progress: 1, bytesDownloaded: 4000, totalBytes: 4000 });
-      useAppStore.getState().setDownloadProgress('model-1', null);
-
-      expect(useAppStore.getState().downloadProgress['model-1']).toBeUndefined();
-    });
-  });
-
-  // ============================================================================
   // Search error handling
   // ============================================================================
   describe('search error handling', () => {
@@ -1329,20 +1287,6 @@ describe('ModelsScreen', () => {
       });
     });
 
-    it('includes active downloads in badge count', async () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        downloadProgress: {
-          'downloading-1': { progress: 0.3, bytesDownloaded: 1000, totalBytes: 3000 },
-        },
-      });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('1')).toBeTruthy();
-      });
-    });
   });
 
   // ============================================================================
@@ -1664,12 +1608,12 @@ describe('ModelsScreen', () => {
     it('filters search results by size', async () => {
       mockSearchModels.mockResolvedValue([
         createModelInfo({
-          id: 'test/small-1B',
+          id: 'test/model-1B',
           name: 'Small 1B',
           files: [createModelFile({ size: 1000000000 })],
         }),
         createModelInfo({
-          id: 'test/large-70B',
+          id: 'test/model-70B',
           name: 'Large 70B',
           files: [createModelFile({ size: 4000000000 })],
         }),
@@ -1691,14 +1635,11 @@ describe('ModelsScreen', () => {
         fireEvent.press(getByText('1-3B'));
       });
 
-      // Search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
+      // Size filters auto-trigger search even with an empty query.
       await waitFor(() => {
         expect(getByText('Small 1B')).toBeTruthy();
       });
+      expect(mockSearchModels).toHaveBeenCalled();
       // Large 70B doesn't match 1-3B size filter
       expect(queryByText('Large 70B')).toBeNull();
     });
