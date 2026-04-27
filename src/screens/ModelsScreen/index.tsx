@@ -61,9 +61,9 @@ export const ModelsScreen: React.FC = () => {
               testID="downloads-icon"
             >
               <Icon name="download" size={20} color={colors.text} />
-              {vm.totalModelCount > 0 && (
+              {vm.activeDownloadCount > 0 && (
                 <View style={styles.downloadBadge}>
-                  <Text style={styles.downloadBadgeText}>{vm.totalModelCount}</Text>
+                  <Text style={styles.downloadBadgeText}>{vm.activeDownloadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>

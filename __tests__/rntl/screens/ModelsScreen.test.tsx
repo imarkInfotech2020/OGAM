@@ -435,16 +435,34 @@ describe('ModelsScreen', () => {
   // Download badge
   // ============================================================================
   describe('download badge', () => {
-    it('shows badge count when models are downloaded', async () => {
+    it('does not show badge when no active downloads', async () => {
       const model = createDownloadedModel({ id: 'dl-model' });
       mockGetDownloadedModels.mockResolvedValue([model]);
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText } = renderModelsScreen();
+      const { queryByText } = renderModelsScreen();
 
       await waitFor(() => {
-        // Badge shows total model count
-        expect(getByText('1')).toBeTruthy();
+        // Badge should not show because there are no active downloads
+        expect(queryByText('1')).toBeFalsy();
+      });
+    });
+
+    it('does not show badge for downloaded image models with no active downloads', async () => {
+      const textModel = createDownloadedModel({ id: 'text-1' });
+      const imageModel = createONNXImageModel({ id: 'image-1' });
+      mockGetDownloadedModels.mockResolvedValue([textModel]);
+      mockGetDownloadedImageModels.mockResolvedValue([imageModel]);
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+      });
+
+      const { queryByText } = renderModelsScreen();
+
+      await waitFor(() => {
+        // Badge should not show because there are no active downloads
+        expect(queryByText('2')).toBeFalsy();
       });
     });
   });
@@ -1250,44 +1268,6 @@ describe('ModelsScreen', () => {
     });
   });
 
-  // ============================================================================
-  // Multiple download badge
-  // ============================================================================
-  describe('download badge for multiple models', () => {
-    it('shows badge with count for multiple models', async () => {
-      const models = [
-        createDownloadedModel({ id: 'model-1' }),
-        createDownloadedModel({ id: 'model-2' }),
-        createDownloadedModel({ id: 'model-3' }),
-      ];
-      mockGetDownloadedModels.mockResolvedValue(models);
-      useAppStore.setState({ downloadedModels: models });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('3')).toBeTruthy();
-      });
-    });
-
-    it('includes image models in badge count', async () => {
-      const textModel = createDownloadedModel({ id: 'text-1' });
-      const imageModel = createONNXImageModel({ id: 'image-1' });
-      mockGetDownloadedModels.mockResolvedValue([textModel]);
-      mockGetDownloadedImageModels.mockResolvedValue([imageModel]);
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        downloadedImageModels: [imageModel],
-      });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('2')).toBeTruthy();
-      });
-    });
-
-  });
 
   // ============================================================================
   // Downloaded model indicators

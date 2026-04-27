@@ -65,6 +65,7 @@ export function getStatusText(status: string): string {
 }
 
 function getStatusLabel(item: DownloadItem): string {
+  if (item.status === 'running') return '';
   if (item.status === 'failed' || item.status === 'retrying' || item.status === 'pending' || item.status === 'waiting_for_network') {
     return getDownloadStatusLabel(item.status, item.reasonCode, item.reason);
   }
@@ -135,14 +136,16 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             <Text style={styles.quantText}>{item.quantization}</Text>
           </View>
         )}
-        <View style={styles.statusIconRow}>
-          {getStatusIcon() && (
-            <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
-          )}
-          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
-            {getStatusLabel(item)}
-          </Text>
-        </View>
+        {getStatusLabel(item) && (
+          <View style={styles.statusIconRow}>
+            {getStatusIcon() && (
+              <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
+            )}
+            <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
+              {getStatusLabel(item)}
+            </Text>
+          </View>
+        )}
       </View>
       {item.status === 'failed' && (
         <View style={styles.failedActionsRow}>

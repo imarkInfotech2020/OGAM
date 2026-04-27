@@ -229,6 +229,7 @@ export function useModelsScreen() {
     isImporting,
     importProgress,
     totalModelCount,
+    activeDownloadCount,
     handleImportLocalModel,
     handleRefresh,
     // text model state & handlers

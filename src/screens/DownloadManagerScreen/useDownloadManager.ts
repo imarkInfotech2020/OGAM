@@ -79,6 +79,22 @@ function getActiveItemQuantization(
   return metadata?.imageModelBackend === 'coreml' ? 'Core ML' : '';
 }
 
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function isSuspiciousRecoveredModel(model: DownloadedModel): boolean {
+  const isRecovered = model.id.startsWith('recovered_');
+  if (!isRecovered) return false;
+
+  const hasUnknownAuthor = isUnknownLike(model.author);
+  const hasUnknownQuantization = isUnknownLike(model.quantization);
+
+  return hasUnknownAuthor || hasUnknownQuantization;
+}
+
+
 function entryToActiveItem(entry: DownloadEntry): DownloadItem {
   const metadata = parseEntryMetadata(entry);
   const isImage = entry.modelType === 'image';
@@ -121,25 +137,27 @@ export function useDownloadManager(): UseDownloadManagerResult {
     .map(entryToActiveItem);
 
   const completedItems: DownloadItem[] = [
-    ...downloadedModels.map((model): DownloadItem => {
-      const totalSize = hardwareService.getModelTotalSize(model);
-      return {
-        type: 'completed',
-        modelType: 'text',
-        modelId: model.id,
-        fileName: model.fileName,
-        author: model.author,
-        quantization: model.quantization,
-        fileSize: totalSize,
-        bytesDownloaded: totalSize,
-        progress: 1,
-        status: 'completed',
-        downloadedAt: model.downloadedAt,
-        filePath: model.filePath,
-        isVisionModel: model.isVisionModel,
-        mmProjPath: model.mmProjPath,
-      };
-    }),
+    ...downloadedModels
+      .filter(model => !isSuspiciousRecoveredModel(model))
+      .map((model): DownloadItem => {
+        const totalSize = hardwareService.getModelTotalSize(model);
+        return {
+          type: 'completed', 
+          modelType: 'text',
+          modelId: model.id,
+          fileName: model.fileName,
+          author: model.author,
+          quantization: model.quantization,
+          fileSize: totalSize,
+          bytesDownloaded: totalSize,
+          progress: 1,
+          status: 'completed',
+          downloadedAt: model.downloadedAt,
+          filePath: model.filePath,
+          isVisionModel: model.isVisionModel,
+          mmProjPath: model.mmProjPath,
+        };
+      }),
     ...downloadedImageModels.map((model): DownloadItem => ({
       type: 'completed',
       modelType: 'image',

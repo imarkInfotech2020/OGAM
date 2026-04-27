@@ -451,7 +451,8 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('Downloading...')).toBeTruthy();
+    // Progress bar is shown but no status text for running downloads
+    expect(getByText('256 B / 1 KB')).toBeTruthy();
   });
 
   it('does not show storage section when no completed models', () => {
