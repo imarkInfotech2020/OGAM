@@ -4,6 +4,25 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage } from '../types';
 
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function isSuspiciousRecoveredTextModel(model: DownloadedModel): boolean {
+  const isRecovered = model.id.startsWith('recovered_');
+  if (!isRecovered) return false;
+
+  const hasUnknownAuthor = isUnknownLike(model.author);
+  const hasUnknownQuantization = isUnknownLike(model.quantization);
+
+  return hasUnknownAuthor || hasUnknownQuantization;
+}
+
+function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean {
+  return model.id.startsWith('recovered_');
+}
+
 type OnboardingChecklist = {
   downloadedModel: boolean; loadedModel: boolean; sentMessage: boolean;
   triedImageGen: boolean; exploredSettings: boolean; createdProject: boolean;
@@ -172,11 +191,14 @@ export const useAppStore = create<AppState>()(
       setDeviceInfo: (info) => set({ deviceInfo: info }),
       setModelRecommendation: (rec) => set({ modelRecommendation: rec }),
       downloadedModels: [],
-      setDownloadedModels: (models) => set({ downloadedModels: models }),
+      setDownloadedModels: (models) => set({ downloadedModels: models.filter(m => !isSuspiciousRecoveredTextModel(m)) }),
       addDownloadedModel: (model) =>
-        set((state) => ({
-          downloadedModels: [...state.downloadedModels.filter(m => m.id !== model.id), model],
-        })),
+        set((state) => {
+          if (isSuspiciousRecoveredTextModel(model)) return state;
+          return {
+            downloadedModels: [...state.downloadedModels.filter(m => m.id !== model.id), model],
+          };
+        }),
       removeDownloadedModel: (modelId) =>
         set((state) => ({
           downloadedModels: state.downloadedModels.filter((m) => m.id !== modelId),
@@ -197,11 +219,14 @@ export const useAppStore = create<AppState>()(
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,
-      setDownloadedImageModels: (models) => set({ downloadedImageModels: models }),
+      setDownloadedImageModels: (models) => set({ downloadedImageModels: models.filter(m => !isSuspiciousRecoveredImageModel(m)) }),
       addDownloadedImageModel: (model) =>
-        set((state) => ({
-          downloadedImageModels: [...state.downloadedImageModels.filter(m => m.id !== model.id), model],
-        })),
+        set((state) => {
+          if (isSuspiciousRecoveredImageModel(model)) return state;
+          return {
+            downloadedImageModels: [...state.downloadedImageModels.filter(m => m.id !== model.id), model],
+          };
+        }),
       removeDownloadedImageModel: (modelId) =>
         set((state) => ({
           downloadedImageModels: state.downloadedImageModels.filter((m) => m.id !== modelId),

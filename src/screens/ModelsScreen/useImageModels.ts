@@ -7,7 +7,7 @@ import { makeImageModelKey } from '../../utils/modelKey';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
-import { ImageModelRecommendation, ONNXImageModel } from '../../types';
+import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
 import { matchesSdVersionFilter } from './utils';
 import {
@@ -16,10 +16,6 @@ import {
   cancelSyntheticImageDownload,
 } from './imageDownloadActions';
 import { resumeImageDownload } from './imageDownloadResume';
-
-function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean {
-  return model.id.startsWith('recovered_');
-}
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
@@ -176,11 +172,6 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
   };
 
-  const filteredDownloadedImageModels = useMemo(
-    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
-    [downloadedImageModels],
-  );
-
   return {
     availableHFModels, hfModelsLoading, hfModelsError,
     backendFilter, setBackendFilter,
@@ -191,7 +182,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     imageFiltersVisible, setImageFiltersVisible,
     imageRec, showRecommendedOnly, setShowRecommendedOnly,
     showRecHint, setShowRecHint,
-    downloadedImageModels: filteredDownloadedImageModels,
+    downloadedImageModels,
     hasActiveImageFilters, filteredHFModels, imageRecommendation,
     loadHFModels, loadDownloadedImageModels,
     clearImageFilters, isRecommendedModel, handleDownloadImageModel,

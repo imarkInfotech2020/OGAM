@@ -29,6 +29,7 @@ export type DownloadItem = {
   mmProjPath?: string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
+  name?: string;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

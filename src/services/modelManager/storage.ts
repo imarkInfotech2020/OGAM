@@ -101,17 +101,58 @@ async function validateAndResolveModels(
   const validModels: DownloadedModel[] = [];
   let pathsUpdated = false;
 
-  for (const model of models) {
-    let exists = await RNFS.exists(model.filePath);
-    if (!exists) {
-      const result = await tryResolveTextModelPath(model, modelsDir);
-      exists = result.exists;
-      if (result.updated) pathsUpdated = true;
+  const existenceChecks = await Promise.all(
+    models.map(m => RNFS.exists(m.filePath))
+  );
+
+  const modelsToResolve: Array<{ model: DownloadedModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    if (!existenceChecks[i]) {
+      modelsToResolve.push({ model: models[i], idx: i });
+    }
+  }
+
+  const resolutionResults = await Promise.all(
+    modelsToResolve.map(({ model }) => tryResolveTextModelPath(model, modelsDir))
+  );
+
+  for (let i = 0; i < modelsToResolve.length; i++) {
+    const result = resolutionResults[i];
+    if (result.updated) pathsUpdated = true;
+  }
+
+  const modelsToCheckMmProj: Array<{ model: DownloadedModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0 && resolutionResults[idx].exists) {
+        modelsToCheckMmProj.push({ model: models[i], idx: i });
+      }
+    } else {
+      modelsToCheckMmProj.push({ model: models[i], idx: i });
+    }
+  }
+
+  const mmProjResults = await Promise.all(
+    modelsToCheckMmProj.map(({ model }) => tryResolveMmProjPath(model, modelsDir))
+  );
+
+  for (const result of mmProjResults) {
+    if (result) pathsUpdated = true;
+  }
+
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    let exists = mainExists;
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0) {
+        exists = resolutionResults[idx].exists;
+      }
     }
     if (exists) {
-      const mmUpdated = await tryResolveMmProjPath(model, modelsDir);
-      if (mmUpdated) pathsUpdated = true;
-      validModels.push(model);
+      validModels.push(models[i]);
     }
   }
 
@@ -176,18 +217,39 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
     });
     return [];
   }
-  const validModels: ONNXImageModel[] = [];
-  let pathsUpdated = false;
 
-  for (const model of models) {
-    let exists = await RNFS.exists(model.modelPath);
-    if (!exists) {
-      const result = await tryResolveImageModelPath(model, imageModelsDir);
-      exists = result.exists;
-      if (result.updated) pathsUpdated = true;
+  const existenceChecks = await Promise.all(
+    models.map(m => RNFS.exists(m.modelPath))
+  );
+
+  const modelsToResolve: Array<{ model: ONNXImageModel; idx: number }> = [];
+  for (let i = 0; i < models.length; i++) {
+    if (!existenceChecks[i]) {
+      modelsToResolve.push({ model: models[i], idx: i });
+    }
+  }
+
+  const resolutionResults = await Promise.all(
+    modelsToResolve.map(({ model }) => tryResolveImageModelPath(model, imageModelsDir))
+  );
+
+  let pathsUpdated = false;
+  for (const result of resolutionResults) {
+    if (result.updated) pathsUpdated = true;
+  }
+
+  const validModels: ONNXImageModel[] = [];
+  for (let i = 0; i < models.length; i++) {
+    const mainExists = existenceChecks[i];
+    let exists = mainExists;
+    if (!mainExists) {
+      const idx = modelsToResolve.findIndex(m => m.idx === i);
+      if (idx >= 0) {
+        exists = resolutionResults[idx].exists;
+      }
     }
     if (exists) {
-      validModels.push(model);
+      validModels.push(models[i]);
     }
   }
 

@@ -28,6 +28,8 @@ export interface DownloadEntry {
   mmProjDownloadId?: string
   mmProjBytesDownloaded?: number
   mmProjStatus?: DownloadStatus
+  mmProjFileName?: string
+  mmProjFileSize?: number
   errorMessage?: string
   errorCode?: string
   createdAt: number

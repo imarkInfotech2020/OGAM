@@ -161,6 +161,10 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
       combinedTotalBytes,
       progress: 0,
       createdAt: Date.now(),
+      ...(needsMmProj && {
+        mmProjFileName: mmProjLocalName(file.name),
+        mmProjFileSize: file.mmProjFile?.size,
+      }),
     });
   }
 

@@ -124,7 +124,17 @@ class ModelManager {
       throw new Error('Invalid mmproj path: outside app directory');
     }
     await RNFS.unlink(model.filePath);
-    if (model.mmProjPath) await RNFS.unlink(model.mmProjPath).catch(() => {});
+
+    // Only delete mmproj if no other models reference it
+    if (model.mmProjPath) {
+      const otherModelsUsingMmproj = models.some(
+        m => m.id !== modelId && m.mmProjPath === model.mmProjPath,
+      );
+      if (!otherModelsUsingMmproj) {
+        await RNFS.unlink(model.mmProjPath).catch(() => {});
+      }
+    }
+
     await saveModelsList(models.filter(m => m.id !== modelId));
   }
 

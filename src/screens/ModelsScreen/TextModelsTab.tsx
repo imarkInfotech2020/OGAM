@@ -92,7 +92,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const repairingVision = isRepairingVisionModel(`${selectedModel.id}/${item.name}`);
-    const progress = entry
+    let progress = entry
       ? {
         progress: entry.progress,
         bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
@@ -100,6 +100,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
         status: entry.status,
       }
       : undefined;
+
+    // For completed downloads, discard if size doesn't match expected
+    if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
+      progress = undefined;
+    }
     const canCancel = !!entry && isActiveStatus(entry.status);
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel };
   };
