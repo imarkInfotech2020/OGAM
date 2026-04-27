@@ -8,11 +8,6 @@ type DownloadEntry = {
   mmProjBytesDownloaded?: number;
 };
 
-type ModelFile = {
-  name: string;
-  size: number;
-};
-
 /**
  * Helper to replicate the size-mismatch logic from getFileCardState in TextModelsTab.tsx
  */
