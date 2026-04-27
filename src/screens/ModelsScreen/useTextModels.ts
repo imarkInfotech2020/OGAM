@@ -21,6 +21,21 @@ function parseParamCount(model: ModelInfo): number | null {
   return match ? Number.parseFloat(match[1]) : null;
 }
 
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function isSuspiciousRecoveredModel(model: DownloadedModel): boolean {
+  const isRecovered = model.id.startsWith('recovered_');
+  if (!isRecovered) return false;
+
+  const hasUnknownAuthor = isUnknownLike(model.author);
+  const hasUnknownQuantization = isUnknownLike(model.quantization);
+
+  return hasUnknownAuthor || hasUnknownQuantization;
+}
+
 // Score how well a model fits a device: ideal is ~40% of RAM, penalty above 75% (too slow)
 function bestFitScore(model: ModelInfo, ramGB: number): number {
   const minRam = model.minRamGB ?? (model.paramCount ?? 0) * 0.75;
@@ -333,6 +348,11 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       .filter((m): m is ModelInfo => Boolean(m));
   }, [deviceRecommendation.maxParameters, recommendedModelDetails, ramGB]);
 
+  const filteredDownloadedModels = useMemo(
+    () => downloadedModels.filter(model => !isSuspiciousRecoveredModel(model)),
+    [downloadedModels],
+  );
+
   return {
     searchQuery, setSearchQuery,
     isLoading, isRefreshing, setIsRefreshing,
@@ -342,7 +362,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     isLoadingFiles,
     filterState, setFilterState,
     textFiltersVisible, setTextFiltersVisible,
-    downloadedModels,
+    downloadedModels: filteredDownloadedModels,
     hasActiveFilters, ramGB, deviceRecommendation,
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo,
     handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
