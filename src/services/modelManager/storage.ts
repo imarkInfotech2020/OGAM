@@ -94,6 +94,30 @@ async function tryResolveMmProjPath(
   return false;
 }
 
+async function validateAndResolveModels(
+  models: DownloadedModel[],
+  modelsDir: string,
+): Promise<{ validModels: DownloadedModel[]; pathsUpdated: boolean }> {
+  const validModels: DownloadedModel[] = [];
+  let pathsUpdated = false;
+
+  for (const model of models) {
+    let exists = await RNFS.exists(model.filePath);
+    if (!exists) {
+      const result = await tryResolveTextModelPath(model, modelsDir);
+      exists = result.exists;
+      if (result.updated) pathsUpdated = true;
+    }
+    if (exists) {
+      const mmUpdated = await tryResolveMmProjPath(model, modelsDir);
+      if (mmUpdated) pathsUpdated = true;
+      validModels.push(model);
+    }
+  }
+
+  return { validModels, pathsUpdated };
+}
+
 export async function loadDownloadedModels(modelsDir: string): Promise<DownloadedModel[]> {
   const stored = await AsyncStorage.getItem(MODELS_STORAGE_KEY);
   if (!stored) return [];
@@ -111,22 +135,8 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
     });
     return [];
   }
-  const validModels: DownloadedModel[] = [];
-  let pathsUpdated = false;
 
-  for (const model of models) {
-    let exists = await RNFS.exists(model.filePath);
-    if (!exists) {
-      const result = await tryResolveTextModelPath(model, modelsDir);
-      exists = result.exists;
-      if (result.updated) pathsUpdated = true;
-    }
-    if (exists) {
-      const mmUpdated = await tryResolveMmProjPath(model, modelsDir);
-      if (mmUpdated) pathsUpdated = true;
-      validModels.push(model);
-    }
-  }
+  const { validModels, pathsUpdated } = await validateAndResolveModels(models, modelsDir);
 
   if (validModels.length !== models.length || pathsUpdated) {
     await saveModelsList(validModels);

@@ -85,7 +85,7 @@ export function buildModelParams(
       model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
       use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn_type,
       kv_unified: true, no_extra_bufts: false,
-      ...(backend !== INFERENCE_BACKENDS.OPENCL ? { cache_type_k: cacheType, cache_type_v: cacheType } : {}),
+      ...(backend === INFERENCE_BACKENDS.OPENCL ? {} : { cache_type_k: cacheType, cache_type_v: cacheType }),
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
   };

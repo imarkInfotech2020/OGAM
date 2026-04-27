@@ -4,8 +4,7 @@ import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
-import { ImageDownloadDeps } from './imageDownloadActions';
-import { registerAndNotify } from './imageDownloadActions';
+import { ImageDownloadDeps, registerAndNotify } from './imageDownloadActions';
 import logger from '../../utils/logger';
 
 type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: Record<string, any>; deps: ImageDownloadDeps };

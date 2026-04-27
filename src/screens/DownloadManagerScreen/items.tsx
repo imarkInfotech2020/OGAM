@@ -136,7 +136,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             <Text style={styles.quantText}>{item.quantization}</Text>
           </View>
         )}
-        {getStatusLabel(item) && (
+        {!!getStatusLabel(item) && (
           <View style={styles.statusIconRow}>
             {getStatusIcon() && (
               <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
