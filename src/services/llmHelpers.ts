@@ -74,8 +74,8 @@ export function buildModelParams(
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
   const isFlashAttnEffective = flash_attn_type !== 'off';
   const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
-  // OpenCL requires f16 KV cache — quantized cache causes native crashes on Adreno.
-  // HTP also needs f16 here; quantized KV cache regressed into native loadModel crashes.
+  // OpenCL init on affected Adreno devices can fail when cache_type_k/v are passed.
+  // Keep f16 coercion for the non-OpenCL paths that still use explicit cache params.
   const needsF16 =
     backend === INFERENCE_BACKENDS.OPENCL ||
     (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
@@ -85,7 +85,7 @@ export function buildModelParams(
       model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
       use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn_type,
       kv_unified: true, no_extra_bufts: false,
-      cache_type_k: cacheType, cache_type_v: cacheType,
+      ...(backend !== INFERENCE_BACKENDS.OPENCL ? { cache_type_k: cacheType, cache_type_v: cacheType } : {}),
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
   };
