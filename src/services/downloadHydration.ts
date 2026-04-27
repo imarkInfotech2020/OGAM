@@ -55,14 +55,18 @@ function getMmProjIds(rows: NativeDownloadRow[]): Set<string> {
   );
 }
 
+function isImageRow(r: NativeDownloadRow): boolean {
+  return r.modelType === 'image' || (r.modelId?.startsWith('image:') ?? false);
+}
+
 function getParentRows(rows: NativeDownloadRow[], mmProjIds: Set<string>): NativeDownloadRow[] {
   return rows.filter(r =>
-    // Keep raw mmproj sidecars hidden across relaunch too. Repair downloads are
-    // intentionally not surfaced as standalone rows in Download Manager.
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
     r.status !== 'cancelled' &&
-    r.status !== 'completed',
+    // Keep COMPLETED image rows — native finished but JS finalization (unzip+register)
+    // may not have run. Text COMPLETED rows are safe to drop (already in AsyncStorage).
+    !(r.status === 'completed' && !isImageRow(r)),
   );
 }
 
@@ -91,6 +95,11 @@ function toDownloadEntry(
   const combinedTotal = row.combinedTotalBytes || row.totalBytes || 0;
   const downloadedBytes = (row.bytesDownloaded ?? 0) + mmProjBytes;
 
+  // COMPLETED image rows need JS-side finalization — surface as 'processing'
+  // so the UI shows them and restoreProcessingImageDownloads can re-finalize.
+  const imageCompleted = isImageRow(row) && row.status === 'completed';
+  const status = imageCompleted ? 'processing' : mapNativeStatus(row.status);
+
   return {
     modelKey,
     downloadId: row.downloadId,
@@ -98,7 +107,7 @@ function toDownloadEntry(
     fileName: row.fileName,
     quantization: row.quantization ?? 'Unknown',
     modelType: row.modelType ?? 'text',
-    status: mapNativeStatus(row.status),
+    status,
     bytesDownloaded: row.bytesDownloaded ?? 0,
     totalBytes: row.totalBytes ?? 0,
     combinedTotalBytes: combinedTotal,

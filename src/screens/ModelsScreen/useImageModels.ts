@@ -14,6 +14,7 @@ import {
   ImageDownloadDeps,
   handleDownloadImageModel as downloadImageModel,
   cancelSyntheticImageDownload,
+  resumeImageDownload,
 } from './imageDownloadActions';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
@@ -73,8 +74,30 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   }, []);
 
   useEffect(() => {
-    loadDownloadedImageModels();
-  }, [loadDownloadedImageModels]);
+    const init = async () => {
+      const downloaded = await modelManager.getDownloadedImageModels();
+      setDownloadedImageModels(downloaded);
+      const downloadedIds = new Set(downloaded.map(m => m.id));
+
+      // Re-finalize any image downloads that native-completed but JS finalization
+      // was interrupted (app kill during unzip/register). These are hydrated as
+      // 'processing' by hydrateDownloadStore (called in AppNavigator on mount).
+      const { downloads } = useDownloadStore.getState();
+      const deps = makeDeps();
+      for (const entry of Object.values(downloads)) {
+        if (entry.modelType !== 'image' || entry.status !== 'processing') continue;
+        const modelId = entry.modelId.replace('image:', '');
+        if (downloadedIds.has(modelId)) {
+          // Already registered - stale store entry, clean it up.
+          useDownloadStore.getState().remove(entry.modelKey);
+          continue;
+        }
+        resumeImageDownload(entry, deps).catch(() => {});
+      }
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

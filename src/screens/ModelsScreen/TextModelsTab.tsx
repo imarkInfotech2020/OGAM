@@ -13,7 +13,7 @@ import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
@@ -100,7 +100,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         status: entry.status,
       }
       : undefined;
-    const canCancel = !!entry && (entry.status === 'pending' || entry.status === 'running');
+    const canCancel = !!entry && isActiveStatus(entry.status);
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel };
   };
 

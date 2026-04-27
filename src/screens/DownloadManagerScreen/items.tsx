@@ -7,6 +7,8 @@ import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { createStyles } from './styles';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { backgroundDownloadService } from '../../services';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,9 +132,11 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
         </Text>
       </View>
       <View style={styles.downloadMeta}>
-        <View style={styles.quantBadge}>
-          <Text style={styles.quantText}>{item.quantization}</Text>
-        </View>
+        {!!item.quantization && (
+          <View style={styles.quantBadge}>
+            <Text style={styles.quantText}>{item.quantization}</Text>
+          </View>
+        )}
         <View style={styles.statusIconRow}>
           {getStatusIcon() && (
             <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
