@@ -8,7 +8,7 @@ import { consumePendingSpotlight } from '../../components/onboarding/spotlightSt
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { useDownloadStore } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
@@ -54,7 +54,8 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   // via the stable image:<id> modelKey. Replaces drilled imageModelDownloading
   // and imageModelProgress props.
   const entry = useDownloadStore(s => s.downloads[makeImageModelKey(model.id)]);
-  const isDownloading = !!entry && isActiveStatus(entry.status);
+  const isEntryOccupied = !!entry && entry.status !== 'completed' && entry.status !== 'cancelled';
+  const isDownloading = isEntryOccupied;
   const progressValue = entry?.progress ?? 0;
   let authorLabel: string;
   if (model._coreml) authorLabel = 'Core ML';
@@ -82,8 +83,8 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
-        onDownload={isDownloading ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
-        onCancel={isDownloading ? () => handleCancelImageDownload(model.id) : undefined}
+        onDownload={isEntryOccupied ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
+        onCancel={isEntryOccupied ? () => handleCancelImageDownload(model.id) : undefined}
       />
     </View>
   );
