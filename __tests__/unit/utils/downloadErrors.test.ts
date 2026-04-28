@@ -1,4 +1,4 @@
-import { getDownloadStatusLabel, getUserFacingDownloadMessage } from '../../../src/utils/downloadErrors';
+import { getDownloadStatusLabel, getUserFacingDownloadMessage, isRetryable } from '../../../src/utils/downloadErrors';
 
 describe('downloadErrors', () => {
   it('maps network failures to friendlier copy', () => {
@@ -25,6 +25,15 @@ describe('downloadErrors', () => {
     );
   });
 
+  it('maps pending without reason to Queued', () => {
+    expect(getDownloadStatusLabel('pending')).toBe('Queued');
+  });
+
+  it('maps running and downloading statuses', () => {
+    expect(getDownloadStatusLabel('running')).toBe('Downloading...');
+    expect(getDownloadStatusLabel('downloading')).toBe('Downloading...');
+  });
+
   describe('getUserFacingDownloadMessage', () => {
     it('maps 5xx server errors', () => {
       expect(getUserFacingDownloadMessage('HTTP 500')).toBe(
@@ -45,6 +54,29 @@ describe('downloadErrors', () => {
     it('preserves legitimate disk space errors', () => {
       const diskError = 'Not enough disk space (need 2GB, have 1GB)';
       expect(getUserFacingDownloadMessage(diskError)).toBe(diskError);
+    });
+
+    it('returns unknown error when reason and code are empty', () => {
+      expect(getUserFacingDownloadMessage(undefined, undefined)).toBe(
+        'Something went wrong while downloading.',
+      );
+    });
+  });
+
+  describe('isRetryable', () => {
+    it('returns true when reasonCode is empty', () => {
+      expect(isRetryable()).toBe(true);
+      expect(isRetryable(undefined)).toBe(true);
+    });
+
+    it('returns true for retryable codes', () => {
+      expect(isRetryable('network_lost')).toBe(true);
+      expect(isRetryable('server_unavailable')).toBe(true);
+    });
+
+    it('returns false for non-retryable codes', () => {
+      expect(isRetryable('http_404')).toBe(false);
+      expect(isRetryable('user_cancelled')).toBe(false);
     });
   });
 });
