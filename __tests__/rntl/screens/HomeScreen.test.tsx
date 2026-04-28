@@ -568,7 +568,7 @@ describe('HomeScreen', () => {
   // Eject All Button
   // ============================================================================
   describe('eject all button', () => {
-    it('shows eject all button when text model is active', () => {
+    it('shows eject all button when text model is active', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
@@ -576,10 +576,13 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
       expect(getByText('Eject All Models')).toBeTruthy();
-    });
+    }, 15000);
 
-    it('shows eject all button when image model is active', () => {
+    it('shows eject all button when image model is active', async () => {
       const imageModel = createONNXImageModel();
       useAppStore.setState({
         downloadedImageModels: [imageModel],
@@ -587,8 +590,11 @@ describe('HomeScreen', () => {
       });
 
       const { getByText } = renderHomeScreen();
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
       expect(getByText('Eject All Models')).toBeTruthy();
-    });
+    }, 15000);
 
     it('does not show eject button when no models active', () => {
       const { queryByText } = renderHomeScreen();

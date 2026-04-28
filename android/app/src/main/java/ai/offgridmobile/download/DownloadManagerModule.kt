@@ -121,6 +121,11 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun retryDownload(downloadId: String, promise: Promise) {
+        if (!isNetworkAvailable(reactApplicationContext)) {
+            SafePromise(promise, NAME).reject("RETRY_ERROR", "No network. Please check and retry.")
+            return
+        }
+
         scope.launch {
             try {
                 val download = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
@@ -366,12 +371,24 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             val info = workInfos.firstOrNull() ?: return@Observer
             when (info.state) {
                 WorkInfo.State.RUNNING -> {
-                    val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, 0L)
-                    val total = info.progress.getLong(WorkerDownload.KEY_TOTAL, 0L)
-                    DownloadEventBridge.progress(
-                        downloadId, fileName, modelId, bytes, total,
-                        DownloadStatus.RUNNING.name.lowercase(),
-                    )
+                    val bytes = info.progress.getLong(WorkerDownload.KEY_PROGRESS, -1L)
+                    val total = info.progress.getLong(WorkerDownload.KEY_TOTAL, -1L)
+                    if (bytes == -1L || total == -1L) {
+                        scope.launch {
+                            val d = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                            if (d != null) {
+                                DownloadEventBridge.progress(
+                                    downloadId, fileName, modelId, d.downloadedBytes, d.totalBytes,
+                                    DownloadStatus.RUNNING.name.lowercase(),
+                                )
+                            }
+                        }
+                    } else {
+                        DownloadEventBridge.progress(
+                            downloadId, fileName, modelId, bytes, total,
+                            DownloadStatus.RUNNING.name.lowercase(),
+                        )
+                    }
                 }
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED,
@@ -459,6 +476,17 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     // -------------------------------------------------------------------------
+
+    private fun isNetworkAvailable(context: Context): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        if (connectivityManager != null) {
+            val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)
+            if (capabilities != null) {
+                return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
+        }
+        return false
+    }
 
     companion object {
         const val NAME = "DownloadManagerModule"

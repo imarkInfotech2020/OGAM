@@ -265,10 +265,12 @@ export interface BuildModelOpts {
   file: ModelFile;
   resolvedLocalPath: string;
   mmProjPath?: string;
+  /** Kept even when mmProjPath is absent (download failed) so needsVisionRepair can detect the gap */
+  expectedMmProjFileName?: string;
 }
 
 export async function buildDownloadedModel(opts: BuildModelOpts): Promise<DownloadedModel> {
-  const { modelId, file, resolvedLocalPath, mmProjPath } = opts;
+  const { modelId, file, resolvedLocalPath, mmProjPath, expectedMmProjFileName } = opts;
   const stat = await RNFS.stat(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
   const mmProjFile = file.mmProjFile;
@@ -282,6 +284,14 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     }
   }
 
+  // mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
+  // This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
+  //   model.mmProjFileName is set  →  model was supposed to have vision
+  //   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
+  const mmProjFileName = mmProjPath
+    ? (mmProjFile?.name ?? mmProjPath.split('/').pop())
+    : (expectedMmProjFileName ?? mmProjFile?.name);
+
   return {
     id: `${modelId}/${file.name}`,
     name: modelId.split('/').pop() || modelId,
@@ -294,7 +304,7 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     credibility: determineCredibility(author),
     isVisionModel: !!mmProjPath,
     mmProjPath,
-    mmProjFileName: mmProjPath ? mmProjFile?.name : undefined,
+    mmProjFileName,
     mmProjFileSize,
   };
 }

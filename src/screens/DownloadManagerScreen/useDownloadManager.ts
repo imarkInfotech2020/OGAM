@@ -188,10 +188,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
         await backgroundDownloadService.retryDownload(item.downloadId);
       }
       backgroundDownloadService.startProgressPolling();
-    } catch (error) {
+    } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
+      const errorMessage = error?.message || 'Retry failed. Please remove and re-download.';
       useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
-        message: 'Retry failed. Please remove and re-download.',
+        message: errorMessage,
       });
     }
   };

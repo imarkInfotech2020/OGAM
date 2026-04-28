@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { modelManager } from '../../../src/services/modelManager';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
 import { huggingFaceService } from '../../../src/services/huggingface';
+import { buildDownloadedModel } from '../../../src/services/modelManager/storage';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
@@ -2401,6 +2402,61 @@ describe('ModelManager', () => {
 
       // progress callback should have been called
       expect(onProgress).toHaveBeenCalled();
+    });
+  });
+
+  // ========================================================================
+  // buildDownloadedModel
+  // ========================================================================
+  describe('buildDownloadedModel', () => {
+    beforeEach(() => {
+      mockedRNFS.stat.mockResolvedValue({ size: 4000000000, isFile: () => true } as any);
+    });
+
+    it('sets mmProjFileName when mmproj file exists', async () => {
+      const file = createModelFileWithMmProj();
+      const mmProjLocalPath = '/models/model-mmproj.gguf';
+
+      const model = await buildDownloadedModel({
+        modelId: 'meta/llama-3.2-11b',
+        file,
+        resolvedLocalPath: '/models/llama-3.2-11b.gguf',
+        mmProjPath: mmProjLocalPath,
+      });
+
+      expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
+      expect(model.mmProjPath).toBe(mmProjLocalPath);
+      expect(model.isVisionModel).toBe(true);
+    });
+
+    it('sets mmProjFileName from expectedMmProjFileName when mmproj download failed', async () => {
+      const file = createModelFileWithMmProj();
+
+      const model = await buildDownloadedModel({
+        modelId: 'meta/llama-3.2-11b',
+        file,
+        resolvedLocalPath: '/models/llama-3.2-11b.gguf',
+        mmProjPath: undefined,
+        expectedMmProjFileName: file.mmProjFile?.name,
+      });
+
+      expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
+      expect(model.mmProjPath).toBeUndefined();
+      expect(model.isVisionModel).toBe(false);
+    });
+
+    it('omits mmProjFileName when model has no vision support', async () => {
+      const file = createModelFile();
+
+      const model = await buildDownloadedModel({
+        modelId: 'meta/llama-3.2-1b',
+        file,
+        resolvedLocalPath: '/models/llama-3.2-1b.gguf',
+      });
+
+      expect(model.mmProjFileName).toBeUndefined();
+      expect(model.mmProjPath).toBeUndefined();
+      expect(model.isVisionModel).toBe(false);
     });
   });
 });

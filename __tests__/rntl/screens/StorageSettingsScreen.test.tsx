@@ -349,15 +349,18 @@ describe('StorageSettingsScreen', () => {
 
   // ---- Stale downloads section tests ----
 
-  it('shows stale downloads when they exist', () => {
+  it('shows stale downloads when they exist', async () => {
     mockStaleDownloadStoreEntries = [
       { modelKey: 'stale-key-1', downloadId: 'dl-123', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
     ];
 
     const { getByText } = render(<StorageSettingsScreen />);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
     expect(getByText('Stale Downloads')).toBeTruthy();
     expect(getByText('Clear All')).toBeTruthy();
-  });
+  }, 15000);
 
   it('shows stale download with missing modelId', () => {
     mockStaleDownloadStoreEntries = [

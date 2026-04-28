@@ -322,6 +322,10 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
 
       const model = await buildDownloadedModel({
         modelId: ctx.modelId, file: ctx.file, resolvedLocalPath: finalPath, mmProjPath: finalMmProjPath,
+        // If the sidecar download failed, mmProjPath is undefined but we still know
+        // the intended filename from the catalog. This sentinel triggers needsVisionRepair
+        // without any name-based heuristic so the "Repair Vision" button always appears.
+        expectedMmProjFileName: !finalMmProjPath ? ctx.file.mmProjFile?.name : undefined,
       });
       await persistDownloadedModel(model, modelsDir);
       backgroundDownloadMetadataCallback?.(downloadId, null);
