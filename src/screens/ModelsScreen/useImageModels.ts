@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
@@ -37,6 +37,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     activeImageModelId, setActiveImageModelId,
     onboardingChecklist,
   } = useAppStore();
+  const downloads = useDownloadStore((s) => s.downloads);
+  const resumingDownloadKeysRef = useRef<Set<string>>(new Set());
 
   const makeDeps = (): ImageDownloadDeps => ({
     addDownloadedImageModel,
@@ -77,27 +79,51 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     const init = async () => {
       const downloaded = await modelManager.getDownloadedImageModels();
       setDownloadedImageModels(downloaded);
-      const downloadedIds = new Set(downloaded.map(m => m.id));
+    };
+    init();
+  }, [setDownloadedImageModels]);
 
-      // Re-finalize any image downloads that native-completed but JS finalization
-      // was interrupted (app kill during unzip/register). These are hydrated as
-      // 'processing' by hydrateDownloadStore (called in AppNavigator on mount).
-      const { downloads } = useDownloadStore.getState();
+  useEffect(() => {
+    const processingEntries = Object.values(downloads).filter(
+      entry => entry.modelType === 'image' && entry.status === 'processing',
+    );
+    if (processingEntries.length === 0) return;
+
+    let cancelled = false;
+    const resumeProcessingDownloads = async () => {
+      const latestDownloaded = await modelManager.getDownloadedImageModels();
+      if (cancelled) return;
+      const downloadedIds = new Set(latestDownloaded.map(m => m.id));
       const deps = makeDeps();
-      for (const entry of Object.values(downloads)) {
-        if (entry.modelType !== 'image' || entry.status !== 'processing') continue;
+
+      for (const entry of processingEntries) {
+        if (cancelled) return;
+        if (resumingDownloadKeysRef.current.has(entry.modelKey)) continue;
+
         const modelId = entry.modelId.replace('image:', '');
         if (downloadedIds.has(modelId)) {
-          // Already registered - stale store entry, clean it up.
           useDownloadStore.getState().remove(entry.modelKey);
           continue;
         }
-        resumeImageDownload(entry, deps).catch(() => {});
+
+        // Restored image downloads can finish after mount and transition
+        // running -> processing via the global download hook. Re-run the same
+        // finalize path here so unzip/register isn't missed after relaunch.
+        resumingDownloadKeysRef.current.add(entry.modelKey);
+        resumeImageDownload(entry, deps)
+          .catch(() => {})
+          .finally(() => {
+            resumingDownloadKeysRef.current.delete(entry.modelKey);
+          });
       }
     };
-    init();
+
+    resumeProcessingDownloads();
+    return () => { cancelled = true; };
+    // makeDeps intentionally omitted: it is recreated each render and current store
+    // values are read when resumeProcessingDownloads runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [downloads]);
 
   useEffect(() => {
     let cancelled = false;
