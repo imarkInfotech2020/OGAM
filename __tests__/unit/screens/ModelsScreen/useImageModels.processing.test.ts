@@ -1,4 +1,3 @@
-import React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { useImageModels } from '../../../../src/screens/ModelsScreen/useImageModels';
 
@@ -82,7 +81,9 @@ describe('useImageModels processing resume', () => {
   });
 
   it('resumes image downloads that enter processing after mount', async () => {
-    const { rerender } = renderHook(() => useImageModels(setAlertState));
+    const { rerender } = renderHook(({ _tick }: { _tick: number }) => useImageModels(setAlertState), {
+      initialProps: { _tick: 0 },
+    });
 
     await waitFor(() => {
       expect(mockSetDownloadedImageModels).toHaveBeenCalled();
@@ -112,7 +113,7 @@ describe('useImageModels processing resume', () => {
     mockUseDownloadStore.mockImplementation((selector?: any) =>
       selector ? selector(storeState) : storeState,
     );
-    rerender();
+    rerender({ _tick: 1 });
 
     await waitFor(() => {
       expect(mockResumeImageDownload).toHaveBeenCalledWith(
@@ -157,13 +158,15 @@ describe('useImageModels processing resume', () => {
     mockUseDownloadStore.mockImplementation((selector?: any) =>
       selector ? selector(storeState) : storeState,
     );
-    const { rerender } = renderHook(() => useImageModels(setAlertState));
+    const { rerender } = renderHook(({ _tick }: { _tick: number }) => useImageModels(setAlertState), {
+      initialProps: { _tick: 0 },
+    });
 
     await waitFor(() => {
       expect(mockResumeImageDownload).toHaveBeenCalledTimes(1);
     });
 
-    rerender();
+    rerender({ _tick: 1 });
     expect(mockResumeImageDownload).toHaveBeenCalledTimes(1);
 
     await act(async () => {
