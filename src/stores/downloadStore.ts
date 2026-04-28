@@ -147,8 +147,9 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
   setMmProjDownloadId: (modelKey, mmProjDownloadId) => set(state => {
     const entry = state.downloads[modelKey];
     if (!entry) return state;
+    console.log('[DownloadStore] Registering mmproj download', { modelKey, mmProjDownloadId, mainDownloadId: entry.downloadId });
     return {
-      downloads: { ...state.downloads, [modelKey]: { ...entry, mmProjDownloadId } },
+      downloads: { ...state.downloads, [modelKey]: { ...entry, mmProjDownloadId, mmProjStatus: 'pending' } },
       downloadIdIndex: { ...state.downloadIdIndex, [mmProjDownloadId]: modelKey },
     };
   }),
@@ -177,17 +178,25 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
 
   updateMmProjProgress: (mmProjDownloadId, bytes) => set(state => {
     const modelKey = state.downloadIdIndex[mmProjDownloadId];
-    if (!modelKey) return state;
+    if (!modelKey) {
+      console.warn('[DownloadStore] mmproj progress: modelKey not found in index', { mmProjDownloadId });
+      return state;
+    }
     const entry = state.downloads[modelKey];
-    if (!entry || entry.mmProjDownloadId !== mmProjDownloadId) return state;
+    if (!entry || entry.mmProjDownloadId !== mmProjDownloadId) {
+      console.warn('[DownloadStore] mmproj progress: entry mismatch', { modelKey, mmProjDownloadId, entryMmProjId: entry?.mmProjDownloadId });
+      return state;
+    }
     const combinedTotal = entry.combinedTotalBytes || entry.totalBytes;
     const progress = combinedTotal > 0 ? (entry.bytesDownloaded + bytes) / combinedTotal : 0;
+    console.log('[DownloadStore] mmproj progress update', { modelKey, mmProjBytes: bytes, mainBytes: entry.bytesDownloaded, combinedTotal, progress });
     return {
       downloads: {
         ...state.downloads,
         [modelKey]: {
           ...entry,
           mmProjBytesDownloaded: bytes,
+          mmProjStatus: 'running',
           progress,
         },
       },

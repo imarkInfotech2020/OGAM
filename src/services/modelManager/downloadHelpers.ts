@@ -131,7 +131,16 @@ async function processCompletedDownload(
       : undefined,
   };
 
-  const model = await buildDownloadedModel({ modelId: metadata.modelId, file: fileInfo, resolvedLocalPath: localPath, mmProjPath: finalMmProjPath });
+  const model = await buildDownloadedModel({
+    modelId: metadata.modelId,
+    file: fileInfo,
+    resolvedLocalPath: localPath,
+    mmProjPath: finalMmProjPath,
+    // Persist the sentinel even when the sidecar file is absent (failed/not-yet-moved).
+    // This ensures needsVisionRepair() can show "Repair Vision" from the Download Manager
+    // without relying on catalog data that the DM screen doesn't have.
+    expectedMmProjFileName: !finalMmProjPath ? metadata.mmProjFileName : undefined,
+  });
   await persistDownloadedModel(model, modelsDir);
   return model;
 }

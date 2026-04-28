@@ -101,6 +101,43 @@ function entryToActiveItem(entry: DownloadEntry): DownloadItem {
   };
 }
 
+async function reattachRetriedTextDownload(
+  item: DownloadItem,
+  setDownloadedModels: (models: DownloadedModel[]) => void,
+): Promise<void> {
+  await modelManager.restoreInProgressDownloads();
+  modelManager.watchDownload(
+    item.downloadId!,
+    async () => {
+      const models = await modelManager.getDownloadedModels();
+      setDownloadedModels(models);
+      const modelKey = useDownloadStore.getState().downloadIdIndex[item.downloadId!] ?? '';
+      if (modelKey) {
+        useDownloadStore.getState().remove(modelKey);
+      }
+    },
+    (error: Error) => {
+      logger.error('[DownloadManager] Retried text download failed:', error);
+      useDownloadStore.getState().setStatus(item.downloadId!, 'failed', {
+        message: error.message,
+      });
+    },
+  );
+}
+
+async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<void> {
+  if (!entry?.mmProjDownloadId || entry.mmProjStatus !== 'failed') return;
+  useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
+  try {
+    await backgroundDownloadService.retryDownload(entry.mmProjDownloadId);
+  } catch (error) {
+    logger.warn('[DownloadManager] Failed to retry mmproj sidecar:', error);
+    useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
@@ -138,6 +175,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
           filePath: model.filePath,
           isVisionModel: model.isVisionModel,
           mmProjPath: model.mmProjPath,
+          mmProjFileName: model.mmProjFileName,
           name: model.name,
         };
       }),
@@ -182,10 +220,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
 
   const handleRetryDownload = async (item: DownloadItem) => {
     if (!item.downloadId) return;
+    const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
+    const entry = downloads[modelKey];
     try {
       useDownloadStore.getState().setStatus(item.downloadId, 'pending');
       if (Platform.OS === 'android') {
         await backgroundDownloadService.retryDownload(item.downloadId);
+        if (item.modelType === 'text') {
+          await retryFailedMmProj(entry);
+        }
+        if (item.modelType === 'text') {
+          await reattachRetriedTextDownload(item, setDownloadedModels);
+        }
       }
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {

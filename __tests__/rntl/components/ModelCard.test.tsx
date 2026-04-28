@@ -576,6 +576,22 @@ describe('ModelCard', () => {
       expect(downloadBtn.props.accessibilityState?.disabled).toBe(true);
     });
 
+    it('disables download when not compatible even if a reason is shown', () => {
+      const onDownload = jest.fn();
+      const { getByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={false}
+          isCompatible={false}
+          incompatibleReason="Not supported yet"
+          onDownload={onDownload}
+          testID="card"
+        />
+      );
+      const downloadBtn = getByTestId('card-download');
+      expect(downloadBtn.props.accessibilityState?.disabled).toBe(true);
+    });
+
     it('shows "Too large" warning when not compatible', () => {
       const { getByText } = render(
         <ModelCard

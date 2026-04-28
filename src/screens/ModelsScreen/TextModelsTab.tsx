@@ -201,7 +201,7 @@ interface ModelListItemProps {
 }
 const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={onPress} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

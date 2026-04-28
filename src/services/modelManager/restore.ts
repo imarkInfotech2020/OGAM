@@ -83,7 +83,23 @@ function buildMetadataFromActiveDownload(download: RestorableDownloadInfo, model
   const combinedTotal = download.combinedTotalBytes || download.totalBytes;
   const mmProjFileSize = Math.max(combinedTotal - mainFileSize, 0);
   const hasMmProj = !!download.mmProjDownloadId || mmProjFileSize > 0;
-  const derivedMmProjFileName = hasMmProj ? mmProjLocalName(download.fileName) : undefined;
+
+  // Prefer the mmProjFileName stored in the native DB row's metadataJson (written at
+  // download-start and survived app kills) over the size-delta heuristic below.
+  // This is the most reliable source — the heuristic misses cases where combinedTotal
+  // equals mainFileSize (already-complete sidecar counted into the delta calculation).
+  let derivedMmProjFileName: string | undefined;
+  if (download.metadataJson) {
+    try {
+      const parsed = JSON.parse(download.metadataJson) as Record<string, unknown>;
+      if (typeof parsed.mmProjFileName === 'string' && parsed.mmProjFileName) {
+        derivedMmProjFileName = parsed.mmProjFileName;
+      }
+    } catch { /* non-fatal: fall through to heuristic */ }
+  }
+  if (!derivedMmProjFileName && hasMmProj) {
+    derivedMmProjFileName = mmProjLocalName(download.fileName);
+  }
 
   return {
     modelId: download.modelId,
@@ -93,7 +109,7 @@ function buildMetadataFromActiveDownload(download: RestorableDownloadInfo, model
     totalBytes: combinedTotal,
     mainFileSize,
     mmProjFileName: derivedMmProjFileName,
-    mmProjFileSize: hasMmProj ? mmProjFileSize : undefined,
+    mmProjFileSize: derivedMmProjFileName ? mmProjFileSize : undefined,
     mmProjLocalPath: derivedMmProjFileName ? `${modelsDir}/${derivedMmProjFileName}` : null,
     mmProjDownloadId: download.mmProjDownloadId,
   };

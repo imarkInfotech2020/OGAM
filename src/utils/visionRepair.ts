@@ -33,9 +33,19 @@ export function needsVisionRepair(
   const hasVisionMetadata = !!model.mmProjFileName;
   if (hasVisionMetadata && !model.mmProjPath) return true;
 
-  // Fallback: check if model name looks like vision model
-  const isVision = !!model.isVisionModel || looksLikeVisionByName(model);
-  if (!isVision) return false;
-  if (catalogFile !== undefined && !catalogFile.mmProjFile) return false;
-  return true;
+  // Catalog metadata is authoritative for recommended models that haven't
+  // successfully persisted sidecar metadata yet.
+  if (catalogFile?.mmProjFile) return true;
+
+  // Persisted vision flag from imported/discovered models is the next-best
+  // signal once mmproj metadata is absent.
+  if (model.isVisionModel) return true;
+
+  // Last-resort fallback for older/incomplete records.
+  if (looksLikeVisionByName(model)) {
+    if (catalogFile !== undefined && !catalogFile.mmProjFile) return false;
+    return true;
+  }
+
+  return false;
 }

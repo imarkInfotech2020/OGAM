@@ -368,6 +368,8 @@ export interface BackgroundDownloadInfo {
   startedAt: number;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
+  /** Raw JSON persisted with the download row by the JS layer at start time. */
+  metadataJson?: string;
 }
 export interface DebugInfo {
   systemPrompt: string;

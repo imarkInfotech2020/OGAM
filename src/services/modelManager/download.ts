@@ -119,6 +119,15 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   const author = modelId.split('/')[0] || 'Unknown';
   const modelKey = makeModelKey(modelId, file.name);
 
+  // Determine whether a parallel mmproj download is needed.
+  // Also embed this in metadataJson so the native DB row carries the sentinel
+  // even after an app kill — restore.ts reads it to recover mmProjFileName
+  // reliably without falling back to the size-delta heuristic.
+  const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
+  const metadataJson = needsMmProj
+    ? JSON.stringify({ mmProjFileName: mmProjLocalName(file.name) })
+    : undefined;
+
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl,
     fileName: file.name,
@@ -129,6 +138,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     combinedTotalBytes,
     totalBytes: file.size,
     sha256: file.sha256,
+    metadataJson,
   });
 
   // Populate new store immediately — no awaits between startDownload and add().
@@ -136,7 +146,6 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   // ended in 'failed' and the user is starting again), reuse the same logical
   // record via retryEntry instead of overwriting via add(). add() is strict
   // and refuses to clobber any existing entry.
-  const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing) {
     // Cancel any running/queued native worker before retryEntry swaps the
@@ -171,6 +180,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   // Start mmproj download in parallel if needed
   let mmProjDownloadId: string | undefined;
   if (needsMmProj) {
+    console.log('[Download] Starting mmproj download', { modelId, mainDownloadId: downloadInfo.downloadId });
     const mmProjFile = file.mmProjFile!;
     const mmProjInfo = await backgroundDownloadService.startDownload({
       url: mmProjFile.downloadUrl,
@@ -182,6 +192,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     });
     mmProjDownloadId = mmProjInfo.downloadId;
     // Register mmproj in store immediately after startDownload resolves.
+    console.log('[Download] Registering mmproj in store', { modelKey, mmProjDownloadId, mainDownloadId: downloadInfo.downloadId });
     useDownloadStore.getState().setMmProjDownloadId(modelKey, mmProjDownloadId);
   }
 

@@ -14,17 +14,25 @@ describe('visionRepair', () => {
       expect(needsVisionRepair({ mmProjFileName: 'proj.gguf' })).toBe(true);
     });
 
-    it('returns true when model name or file looks like vision', () => {
-      expect(needsVisionRepair({ name: 'Llama-Vision-Model' })).toBe(true);
-      expect(needsVisionRepair({ fileName: 'smolvlm-q4.gguf' })).toBe(true);
+    it('returns true when catalog file advertises an mmproj', () => {
+      expect(needsVisionRepair(
+        { name: 'Anything' },
+        {
+          name: 'file.gguf',
+          size: 100,
+          quantization: 'Q4',
+          downloadUrl: '',
+          mmProjFile: { name: 'proj.gguf', size: 50, downloadUrl: '' },
+        },
+      )).toBe(true);
     });
 
-    it('returns false when model name looks like vision but catalog file has no mmProjFile', () => {
-      expect(needsVisionRepair({ name: 'Llama-Vision-Model' }, { name: 'file.gguf', size: 100, quantization: 'Q4', downloadUrl: '' })).toBe(false);
+    it('returns true when persisted vision flag exists without path', () => {
+      expect(needsVisionRepair({ isVisionModel: true })).toBe(true);
     });
 
-    it('returns false when not a vision model', () => {
-      expect(needsVisionRepair({ name: 'Normal-LLM', fileName: 'llm.gguf' })).toBe(false);
+    it('falls back to name-based vision detection when metadata is missing', () => {
+      expect(needsVisionRepair({ name: 'Llama-Vision-Model', fileName: 'llm.gguf' })).toBe(true);
     });
   });
 });

@@ -153,7 +153,7 @@ jest.mock('../../../src/components', () => {
   return {
     Card: ({ children, style, ...props }: any) => <View style={style} {...props}>{children}</View>,
     ModelCard: ({ model, testID, onPress, onDownload, onDelete, isDownloaded, isDownloading, downloadProgress }: any) => (
-      <TouchableOpacity testID={testID} onPress={onPress}>
+      <TouchableOpacity testID={testID} onPress={onPress} disabled={!onPress}>
         <Text testID={`${testID}-name`}>{model.name}</Text>
         <Text testID={`${testID}-author`}>{model.author}</Text>
         {isDownloaded && <Text testID={`${testID}-downloaded`}>Downloaded</Text>}
@@ -864,6 +864,34 @@ describe('ModelsScreen', () => {
       await waitFor(() => {
         expect(getByTestId('model-detail-screen')).toBeTruthy();
       });
+    });
+
+    it('does not navigate to detail for unsupported phi models', async () => {
+      const searchResults = [
+        createModelInfo({
+          id: 'microsoft/phi-3-mini',
+          name: 'Phi-3 Mini',
+          author: 'microsoft',
+        }),
+      ];
+      mockSearchModels.mockResolvedValue(searchResults);
+
+      const { getByTestId, getByText, queryByTestId } = renderModelsScreen();
+
+      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
+
+      await act(async () => {
+        fireEvent.changeText(getByTestId('search-input'), 'phi');
+      });
+
+      await waitFor(() => {
+        expect(getByText('Phi-3 Mini')).toBeTruthy();
+      });
+
+      fireEvent.press(getByTestId('model-card-0'));
+
+      expect(queryByTestId('model-detail-screen')).toBeNull();
+      expect(mockGetModelFiles).not.toHaveBeenCalled();
     });
 
     it('shows back button on model detail view', async () => {

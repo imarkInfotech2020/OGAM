@@ -27,6 +27,7 @@ export type DownloadItem = {
   filePath?: string;
   isVisionModel?: boolean;
   mmProjPath?: string;
+  mmProjFileName?: string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
   name?: string;

@@ -328,7 +328,7 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isActive, isCompatible, incompatibleReason,
+  isDownloaded, isDownloading, isActive, isCompatible,
   testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
 }) => {
   const { colors } = useTheme();
@@ -339,7 +339,7 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
     return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
   }
   if (!isDownloaded && onDownload) {
-    return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible && !incompatibleReason} testID={tid('download')} styles={styles} />;
+    return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible} testID={tid('download')} styles={styles} />;
   }
   if (isDownloaded) {
     return <DownloadedActions isActive={isActive} testID={testID} colors={colors} styles={styles} onSelect={onSelect} onDelete={onDelete} onRepairVision={onRepairVision} isRepairingVision={isRepairingVision} />;
