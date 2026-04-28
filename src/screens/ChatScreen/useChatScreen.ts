@@ -15,6 +15,10 @@ import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn } 
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
 import { saveImageToGallery } from './useSaveImage';
+import {
+  isSuspiciousRecoveredImageModel,
+  isSuspiciousRecoveredTextModel,
+} from '../../utils/modelSelectorFilters';
 
 export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
@@ -118,6 +122,19 @@ export const useChatScreen = () => {
   const hasTextModel = activeModelInfo.modelId !== null;
   const hasActiveModel = hasTextModel || !!activeImageModelId;
   const activeModelName = activeModelInfo.modelName;
+  const availableDownloadedTextModels = useMemo(
+    () => downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
+    [downloadedModels],
+  );
+  const availableDownloadedImageModels = useMemo(
+    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
+    [downloadedImageModels],
+  );
+  const hasAvailableModels =
+    availableDownloadedTextModels.length > 0 ||
+    availableDownloadedImageModels.length > 0 ||
+    discoveredModels[activeServerId || '']?.length > 0 ||
+    Object.values(discoveredModels).some(models => models.length > 0);
 
   const effectiveProjectId = activeConversation ? activeConversation.projectId : pendingProjectId;
   const activeProject = effectiveProjectId ? getProject(effectiveProjectId) : null;
@@ -258,7 +275,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, projects, settings,
+    isStreaming, isThinking, isCompacting, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
     navigation, hardwareService,
     handleSend: (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
       handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo }),

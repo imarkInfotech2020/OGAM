@@ -23,13 +23,13 @@ export const NoModelScreen: React.FC<{
   styles: StylesType;
   colors: ColorsType;
   navigation: any;
-  downloadedModelsCount: number;
+  hasAvailableModels: boolean;
   showModelSelector: boolean;
   setShowModelSelector: (v: boolean) => void;
   onSelectModel: (model: any) => void;
   onUnloadModel: () => void;
   isModelLoading: boolean;
-}> = ({ styles, colors, navigation, downloadedModelsCount, showModelSelector, setShowModelSelector, onSelectModel, onUnloadModel, isModelLoading }) => (
+}> = ({ styles, colors, navigation, hasAvailableModels, showModelSelector, setShowModelSelector, onSelectModel, onUnloadModel, isModelLoading }) => (
   <SafeAreaView style={styles.container} edges={['top']}>
     <View style={styles.header}>
       <View style={styles.headerRow}>
@@ -48,11 +48,11 @@ export const NoModelScreen: React.FC<{
       </View>
       <Text style={styles.noModelTitle}>No Model Selected</Text>
       <Text style={styles.noModelText}>
-        {downloadedModelsCount > 0
+        {hasAvailableModels
           ? 'Select a text or image model to get started.'
           : 'Download a text or image model from the Models tab to get started.'}
       </Text>
-      {downloadedModelsCount > 0 && (
+      {hasAvailableModels && (
         <TouchableOpacity style={styles.selectModelButton} onPress={() => setShowModelSelector(true)}>
           <Text style={styles.selectModelButtonText}>Select Model</Text>
         </TouchableOpacity>

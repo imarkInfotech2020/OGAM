@@ -116,7 +116,7 @@ export const ChatScreen: React.FC = () => {
         <NoModelScreen
           styles={styles} colors={colors}
           navigation={chat.navigation}
-          downloadedModelsCount={chat.downloadedModels.length}
+          hasAvailableModels={chat.hasAvailableModels}
           showModelSelector={chat.showModelSelector}
           setShowModelSelector={chat.setShowModelSelector}
           onSelectModel={chat.handleModelSelect}

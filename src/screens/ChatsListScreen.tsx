@@ -10,6 +10,7 @@ import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/onboarding/spotlightConfig';
 import { setPendingSpotlight } from '../components/onboarding/spotlightState';
 import { Button } from '../components/Button';
+import { ModelSelectorModal } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
@@ -18,8 +19,9 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import { onnxImageGeneratorService } from '../services';
+import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 type NavigationProp = CompositeNavigationProp<
@@ -34,9 +36,20 @@ export const ChatsListScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { conversations, deleteConversation, setActiveConversation } = useChatStore();
   const { getProject } = useProjectStore();
-  const { removeImagesByConversationId, activeImageModelId, onboardingChecklist, shownSpotlights, markSpotlightShown } = useAppStore();
+  const {
+    removeImagesByConversationId,
+    activeImageModelId,
+    onboardingChecklist,
+    shownSpotlights,
+    markSpotlightShown,
+    downloadedModels,
+    downloadedImageModels,
+  } = useAppStore();
   const { modelId: activeTextModelId } = useActiveTextModel();
+  const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const [isModelLoading, setIsModelLoading] = useState(false);
   const { goTo } = useSpotlightTour();
 
   // Reactive: image model loaded → spotlight "New Chat" button (step 14)
@@ -54,6 +67,10 @@ export const ChatsListScreen: React.FC = () => {
   }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   const hasModels = !!activeTextModelId || !!activeImageModelId;
+  const hasAvailableModels =
+    downloadedModels.length > 0 ||
+    downloadedImageModels.length > 0 ||
+    Object.values(discoveredModels).some(models => models.length > 0);
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -61,11 +78,64 @@ export const ChatsListScreen: React.FC = () => {
   };
 
   const handleNewChat = () => {
-    if (!hasModels) {
-      setAlertState(showAlert('No Model', 'Please download a text or image model first.'));
+    if (hasModels) {
+      navigation.navigate('Chat', {});
       return;
     }
-    navigation.navigate('Chat', {});
+    if (hasAvailableModels) {
+      setShowModelSelector(true);
+      return;
+    }
+    if (!hasModels) {
+      setAlertState(showAlert('No Model', 'Please download a text or image model first.'));
+    }
+  };
+
+  const handleSelectTextModel = async (model: any) => {
+    setIsModelLoading(true);
+    try {
+      await activeModelService.loadTextModel(model.id);
+      setShowModelSelector(false);
+      navigation.navigate('Chat', {});
+    } catch (error) {
+      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
+    } finally {
+      setIsModelLoading(false);
+    }
+  };
+
+  const handleSelectImageModel = async (model: any) => {
+    setIsModelLoading(true);
+    try {
+      await activeModelService.loadImageModel(model.id);
+      setShowModelSelector(false);
+      navigation.navigate('Chat', {});
+    } catch (error) {
+      setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
+    } finally {
+      setIsModelLoading(false);
+    }
+  };
+
+  const handleUnloadTextModel = async () => {
+    setIsModelLoading(true);
+    try {
+      remoteServerManager.clearActiveRemoteModel();
+      if (llmService.isModelLoaded()) {
+        await activeModelService.unloadTextModel();
+      }
+    } finally {
+      setIsModelLoading(false);
+    }
+  };
+
+  const handleUnloadImageModel = async () => {
+    setIsModelLoading(true);
+    try {
+      await activeModelService.unloadImageModel();
+    } finally {
+      setIsModelLoading(false);
+    }
   };
 
   const handleDeleteChat = (conversation: Conversation) => {
@@ -171,8 +241,8 @@ export const ChatsListScreen: React.FC = () => {
             variant="primary"
             size="small"
             onPress={handleNewChat}
-            disabled={!hasModels}
-            icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+            disabled={!hasAvailableModels}
+            icon={<Icon name="plus" size={16} color={hasAvailableModels ? colors.primary : colors.textDisabled} />}
           />
         </AttachStep>
       </View>
@@ -218,6 +288,20 @@ export const ChatsListScreen: React.FC = () => {
         message={alertState.message}
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
+      />
+      <ModelSelectorModal
+        visible={showModelSelector}
+        onClose={() => setShowModelSelector(false)}
+        onSelectModel={handleSelectTextModel}
+        onSelectImageModel={handleSelectImageModel}
+        onUnloadModel={handleUnloadTextModel}
+        onUnloadImageModel={handleUnloadImageModel}
+        isLoading={isModelLoading}
+        currentModelPath={llmService.getLoadedModelPath()}
+        onSelectionComplete={() => {
+          setShowModelSelector(false);
+          navigation.navigate('Chat', {});
+        }}
       />
     </SafeAreaView>
   );

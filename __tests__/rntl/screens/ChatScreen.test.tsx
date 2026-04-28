@@ -568,6 +568,26 @@ describe('ChatScreen', () => {
       expect(getByText('Select Model')).toBeTruthy();
     });
 
+    it('shows "Select Model" button when only image models exist', () => {
+      useAppStore.setState({
+        downloadedModels: [],
+        downloadedImageModels: [
+          {
+            id: 'image-model-1',
+            name: 'Stable Diffusion',
+            description: 'Image model',
+            modelPath: '/models/sd',
+            size: 1024,
+            downloadedAt: new Date().toISOString(),
+            backend: 'mnn',
+          },
+        ],
+      });
+
+      const { getByText } = renderChatScreen();
+      expect(getByText('Select Model')).toBeTruthy();
+    });
+
     it('does not show "Select Model" button when no models downloaded', () => {
       const { queryByText } = renderChatScreen();
       expect(queryByText('Select Model')).toBeNull();

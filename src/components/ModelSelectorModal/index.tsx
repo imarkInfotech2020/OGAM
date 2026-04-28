@@ -16,6 +16,10 @@ import { CustomAlert, AlertState, initialAlertState, showAlert } from '../Custom
 import { createAllStyles } from './styles';
 import { TextTab } from './TextTab';
 import { ImageTab } from './ImageTab';
+import {
+  isSuspiciousRecoveredImageModel,
+  isSuspiciousRecoveredTextModel,
+} from '../../utils/modelSelectorFilters';
 import logger from '../../utils/logger';
 
 type TabType = 'text' | 'image';
@@ -31,6 +35,7 @@ interface ModelSelectorModalProps {
   currentModelPath: string | null;
   initialTab?: TabType;
   onAddServer?: () => void;
+  onSelectionComplete?: () => void;
 }
 
 export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
@@ -44,6 +49,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   currentModelPath,
   initialTab = 'text',
   onAddServer,
+  onSelectionComplete,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -60,6 +66,15 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+
+  const filteredDownloadedModels = useMemo(
+    () => downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
+    [downloadedModels],
+  );
+  const filteredDownloadedImageModels = useMemo(
+    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
+    [downloadedImageModels],
+  );
 
   useEffect(() => {
     if (visible) setActiveTab(initialTab);
@@ -88,6 +103,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       // Clear remote selection when selecting local
       setActiveRemoteImageModelId(null);
       onSelectImageModel?.(model);
+      onSelectionComplete?.();
     } catch (error) {
       logger.error('Failed to load image model:', error);
       setAlertState(showAlert('Failed to Load', (error as Error).message));
@@ -117,6 +133,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
         await activeModelService.unloadTextModel();
       }
       await remoteServerManager.setActiveRemoteTextModel(serverId, model.id);
+      onSelectionComplete?.();
     } catch (error) {
       logger.error('[ModelSelectorModal] Failed to set remote text model:', error);
       setAlertState(showAlert('Failed to Select Model', (error as Error).message));
@@ -127,6 +144,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const handleSelectRemoteVisionModel = async (model: RemoteModel, serverId: string) => {
     try {
       await remoteServerManager.setActiveRemoteImageModel(serverId, model.id);
+      onSelectionComplete?.();
     } catch (error) {
       logger.error('[ModelSelectorModal] Failed to set remote vision model:', error);
       setAlertState(showAlert('Failed to Select Model', (error as Error).message));
@@ -193,7 +211,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {activeTab === 'text' ? (
             <TextTab
-              downloadedModels={downloadedModels}
+              downloadedModels={filteredDownloadedModels}
               remoteModels={remoteTextModels}
               currentModelPath={currentModelPath}
               currentRemoteModelId={activeRemoteTextModelId}
@@ -205,7 +223,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             />
           ) : (
             <ImageTab
-              downloadedImageModels={downloadedImageModels}
+              downloadedImageModels={filteredDownloadedImageModels}
               remoteVisionModels={remoteVisionModels}
               activeImageModelId={activeImageModelId}
               activeRemoteImageModelId={activeRemoteImageModelId}
