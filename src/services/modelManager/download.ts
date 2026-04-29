@@ -562,6 +562,41 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
     });
   }
 
+  // Catch-up guard: the mmproj sidecar is small and may complete in native
+  // before the onComplete listener above was registered. The native service
+  // fires the event exactly once — if there is no subscriber at that moment
+  // the event is permanently lost, ctx.mmProjCompleted stays false, and
+  // tryFinalize waits forever (progress bar stuck at 100%).
+  // Fix: query native downloads immediately after registering the listener.
+  // If the mmproj row is already 'completed', simulate the onComplete ourselves.
+  // mmProjCompleteHandled guards against a double-execution if the listener
+  // also fires concurrently.
+  if (ctx.mmProjDownloadId && !ctx.mmProjCompleted) {
+    backgroundDownloadService.getActiveDownloads().then(async (downloads) => {
+      const mmProjRow = (downloads as Array<{ downloadId: string; status: string }>)
+        .find(d => d.downloadId === ctx.mmProjDownloadId);
+      if (mmProjRow?.status === 'completed' && !ctx.mmProjCompleteHandled) {
+        ctx.mmProjCompleteHandled = true;
+        logger.log('[DownloadDebug] mmproj catch-up: completed before onComplete listener registered', {
+          downloadId,
+          mmProjDownloadId: ctx.mmProjDownloadId,
+          mmProjLocalPath: ctx.mmProjLocalPath,
+        });
+        try {
+          await backgroundDownloadService.moveCompletedDownload(ctx.mmProjDownloadId!, ctx.mmProjLocalPath!);
+        } catch (moveErr) {
+          const targetExists = ctx.mmProjLocalPath ? await RNFS.exists(ctx.mmProjLocalPath) : false;
+          if (!targetExists) {
+            logger.warn('[ModelManager] mmproj catch-up move failed, continuing without vision:', moveErr);
+            ctx.mmProjLocalPath = null;
+          }
+        }
+        ctx.mmProjCompleted = true;
+        await tryFinalize();
+      }
+    }).catch(() => {});
+  }
+
   tryFinalize().catch(() => {});
 }
 
