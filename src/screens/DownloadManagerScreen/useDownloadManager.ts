@@ -144,8 +144,8 @@ async function reattachRetriedTextDownload(
   );
 }
 
-async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<void> {
-  if (!entry?.mmProjDownloadId || entry.mmProjStatus !== 'failed') return;
+async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<boolean> {
+  if (!entry?.mmProjDownloadId || entry.mmProjStatus !== 'failed') return false;
   useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
   try {
     logger.log('[DownloadDebug] Retrying failed mmproj sidecar', {
@@ -155,11 +155,13 @@ async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<void
       mmProjDownloadId: entry.mmProjDownloadId,
     });
     await backgroundDownloadService.retryDownload(entry.mmProjDownloadId);
+    return true;
   } catch (error) {
     logger.warn('[DownloadManager] Failed to retry mmproj sidecar:', error);
     useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'failed', {
       message: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
 
@@ -269,7 +271,13 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (Platform.OS === 'android') {
         await backgroundDownloadService.retryDownload(item.downloadId);
         if (item.modelType === 'text') {
-          await retryFailedMmProj(entry);
+          const mmProjRetried = await retryFailedMmProj(entry);
+          if (mmProjRetried) {
+            // Reset ctx.mmProjCompleted + restore mmProjLocalPath that the error
+            // handler nulled, so watchBackgroundDownload registers a fresh listener
+            // and tryFinalize waits for the sidecar instead of skipping it.
+            modelManager.resetMmProjForRetry(item.downloadId);
+          }
         }
         if (item.modelType === 'text') {
           await reattachRetriedTextDownload(item, setDownloadedModels);

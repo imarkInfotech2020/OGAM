@@ -348,9 +348,17 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   const isAlreadyDownloaded = typeof downloadId === 'string' && downloadId.startsWith('already-downloaded:');
 
   if (isAlreadyDownloaded && ctx && 'model' in ctx) {
-    if (ctx.model) onComplete?.(ctx.model);
-    else if (ctx.error) onError?.(ctx.error);
     backgroundDownloadContext.delete(downloadId);
+    if (ctx.model) {
+      // File is on disk but persistDownloadedModel may not have run (e.g. app
+      // killed mid-finalization). Always persist before calling onComplete so the
+      // model survives restart and delete works correctly.
+      persistDownloadedModel(ctx.model, modelsDir)
+        .then(() => onComplete?.(ctx.model!))
+        .catch(() => onComplete?.(ctx.model!));
+    } else if (ctx.error) {
+      onError?.(ctx.error);
+    }
     return;
   }
 
@@ -401,7 +409,14 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       error: error.message,
     });
     cleanupListeners();
-    backgroundDownloadContext.delete(downloadId);
+    // Preserve the context so reattachRetriedTextDownload can reuse it on manual
+    // retry — deleting it here caused watchBackgroundDownload to return early
+    // (ctx === null) and finalization to never run after retry.
+    // Reset only the main-download flags; mmproj state is left as-is and
+    // restored separately via resetMmProjForRetry when the sidecar is retried.
+    ctx.mainCompleted = false;
+    ctx.mainCompleteHandled = false;
+    ctx.isFinalizing = false;
     onError?.(error);
   };
 

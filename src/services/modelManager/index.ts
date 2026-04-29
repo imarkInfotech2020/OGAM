@@ -23,6 +23,7 @@ import {
   syncCompletedBackgroundDownloads,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
+  mmProjLocalName,
 } from './download';
 import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
 import { restoreInProgressDownloads } from './restore';
@@ -208,6 +209,21 @@ class ModelManager {
       onComplete,
       onError,
     });
+  }
+
+  // Called after retrying a failed mmproj sidecar. The mmproj error handler
+  // sets ctx.mmProjCompleted=true and nulls ctx.mmProjLocalPath so finalization
+  // can proceed as text-only. If the user then retries and the native mmproj
+  // download restarts, these flags must be reset so watchBackgroundDownload
+  // registers a fresh onComplete listener and tryFinalize waits for the sidecar.
+  resetMmProjForRetry(downloadId: string): void {
+    const ctx = this.backgroundDownloadContext.get(downloadId);
+    if (!ctx || !('file' in ctx) || !ctx.mmProjDownloadId) return;
+    ctx.mmProjCompleted = false;
+    ctx.mmProjCompleteHandled = false;
+    if (!ctx.mmProjLocalPath && ctx.file.mmProjFile) {
+      ctx.mmProjLocalPath = `${this.modelsDir}/${mmProjLocalName(ctx.file.name)}`;
+    }
   }
 
   private async cleanupCancelledTextArtifacts(ctx: Extract<BackgroundDownloadContext, { file: ModelFile }>): Promise<void> {
