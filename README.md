@@ -20,6 +20,19 @@
 
 ---
 
+
+> ## 🟢 Founding Supporter pre-orders are open
+>
+> The first **100 supporters** lock in lifetime Off Grid Pro for **$10**. After that, $50.
+> 12-week ship guarantee — full refund if Pro doesn't ship within 12 weeks of your purchase.
+>
+> **[Join the founders Slack →](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA)**
+> Drop into **#pro-first-100** to claim your spot.
+>
+> *The free OSS app stays free, MIT-licensed, forever. Pro adds extended features — see below.*
+
+---
+
 ## Not just another chat app
 
 Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a **complete offline AI suite** — text generation, image generation, vision AI, voice transcription, tool calling, and document analysis, all running natively on your phone's or Mac's hardware.
@@ -62,6 +75,21 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 **AI Prompt Enhancement** — Simple prompt in, detailed Stable Diffusion prompt out. Your text model automatically enhances image generation prompts.
 
 ---
+
+---
+
+## Coming in Pro
+
+The 9 features above ship in the free OSS and stay free. Pro extends:
+
+- **Unlimited knowledge bases** — current cap removed
+- **Custom personas** — system prompts, voice, persistent memory per assistant
+- **End-to-end voice mode** — Whisper STT (already shipping) + Kokoro TTS, all on-device
+- **Calendar + email + MCP servers** — Linear, Notion, GitHub, your own MCP. Drafts only; you approve every send.
+- **Larger models** — full size range, including 7B on flagship phones, 13B on iPads / M-series Macs
+- **Future Pro features** — included for the supported lifetime of the app
+
+Founding Supporters: $10 lifetime, first 100 only. Then $50. Full refund if Pro doesn't ship in 12 weeks. **[Drop into #pro-first-100 in our Slack →](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA)**
 
 ## Performance
 
