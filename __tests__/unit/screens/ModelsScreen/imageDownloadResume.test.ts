@@ -45,9 +45,22 @@ const mockMoveCompletedDownload = backgroundDownloadService.moveCompletedDownloa
 const mockRegisterAndNotify = registerAndNotify as jest.MockedFunction<typeof registerAndNotify>;
 const mockGetImageModelsDirectory = modelManager.getImageModelsDirectory as jest.MockedFunction<typeof modelManager.getImageModelsDirectory>;
 
-type DirItem = { name: string; path: string };
+type DirItem = RNFS.ReadDirItem;
 
 const imageModelsDir = '/mock/image_models';
+
+function makeFileItem(path: string): DirItem {
+  const name = path.split('/').pop() || path;
+  return {
+    ctime: new Date(0),
+    mtime: new Date(0),
+    name,
+    path,
+    size: 1,
+    isFile: () => true,
+    isDirectory: () => false,
+  };
+}
 
 function makeEntry(overrides: Record<string, unknown> = {}) {
   return {
@@ -120,7 +133,7 @@ describe('resumeImageDownload', () => {
 
   it('registers immediately when modelDir already contains files', async () => {
     existingPaths.add(modelDir);
-    dirEntries[modelDir] = [{ name: 'weights.bin', path: `${modelDir}/weights.bin` }];
+    dirEntries[modelDir] = [makeFileItem(`${modelDir}/weights.bin`)];
 
     await resumeImageDownload(makeEntry(), makeDeps() as any);
 

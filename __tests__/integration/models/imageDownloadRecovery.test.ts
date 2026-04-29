@@ -36,9 +36,24 @@ const { useDownloadStore } = require('../../../src/stores/downloadStore');
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockUnzip = unzip as jest.MockedFunction<typeof unzip>;
 
+type DirItem = RNFS.ReadDirItem;
+
+function makeFileItem(path: string): DirItem {
+  const name = path.split('/').pop() || path;
+  return {
+    ctime: new Date(0),
+    mtime: new Date(0),
+    name,
+    path,
+    size: '1',
+    isFile: () => true,
+    isDirectory: () => false,
+  };
+}
+
 describe('image download recovery integration', () => {
   let existingPaths: Set<string>;
-  let dirEntries: Record<string, Array<{ name: string; path: string }>>;
+  let dirEntries: Record<string, DirItem[]>;
   let statSizes: Record<string, number>;
   let headers: Record<string, string>;
 
@@ -84,7 +99,7 @@ describe('image download recovery integration', () => {
     });
     mockUnzip.mockImplementation(async () => {
       existingPaths.add(modelDir);
-      dirEntries[modelDir] = [{ name: 'weights.bin', path: `${modelDir}/weights.bin` }];
+      dirEntries[modelDir] = [makeFileItem(`${modelDir}/weights.bin`)];
       return '/unzipped';
     });
   });
