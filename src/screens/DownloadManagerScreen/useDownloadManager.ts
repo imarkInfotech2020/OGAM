@@ -14,6 +14,7 @@ import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
 import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
+import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
 
 export interface UseDownloadManagerResult {
   activeItems: DownloadItem[];
@@ -26,6 +27,20 @@ export interface UseDownloadManagerResult {
   handleRepairVision: (item: DownloadItem) => void;
   isRepairingVision: (modelId: string) => boolean;
   totalStorageUsed: number;
+}
+
+async function resumeImageFinalization(
+  entry: DownloadEntry,
+  setAlertState: (state: AlertState) => void,
+): Promise<void> {
+  const appState = useAppStore.getState();
+  await resumeImageDownload(entry, {
+    addDownloadedImageModel: appState.addDownloadedImageModel,
+    activeImageModelId: appState.activeImageModelId,
+    setActiveImageModelId: appState.setActiveImageModelId,
+    setAlertState,
+    triedImageGen: appState.onboardingChecklist.triedImageGen,
+  });
 }
 
 function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
@@ -267,6 +282,22 @@ export function useDownloadManager(): UseDownloadManagerResult {
         status: item.status,
         mmProjStatus: entry?.mmProjStatus,
       });
+
+      const hasAllBytes = item.fileSize > 0 && item.bytesDownloaded >= item.fileSize;
+      if (item.modelType === 'image' && entry) {
+        let nativeMainStatus: string | undefined;
+        try {
+          const activeRows = await backgroundDownloadService.getActiveDownloads();
+          nativeMainStatus = activeRows.find(row => row.downloadId === item.downloadId)?.status;
+        } catch {
+          // Best-effort native state check only.
+        }
+        if (item.status === 'processing' || hasAllBytes || nativeMainStatus === 'completed') {
+          await resumeImageFinalization(entry, setAlertState);
+          return;
+        }
+      }
+
       useDownloadStore.getState().setStatus(item.downloadId, 'pending');
       if (Platform.OS === 'android') {
         await backgroundDownloadService.retryDownload(item.downloadId);
