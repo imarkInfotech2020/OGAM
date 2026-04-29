@@ -45,7 +45,7 @@ function makeFileItem(path: string): DirItem {
     mtime: new Date(0),
     name,
     path,
-    size: '1',
+    size: 1,
     isFile: () => true,
     isDirectory: () => false,
   };
