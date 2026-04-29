@@ -105,10 +105,29 @@ async function reattachRetriedTextDownload(
   item: DownloadItem,
   setDownloadedModels: (models: DownloadedModel[]) => void,
 ): Promise<void> {
-  await modelManager.restoreInProgressDownloads();
+  logger.log('[DownloadDebug] Reattaching text download finalizer after retry', {
+    modelId: item.modelId,
+    fileName: item.fileName,
+    downloadId: item.downloadId,
+  });
+  // Do NOT call restoreInProgressDownloads() here. The backgroundDownloadContext
+  // was already populated by the original startBgDownload call and remains valid
+  // for the lifetime of the download. Calling restore would overwrite the context
+  // with a fresh object, severing the mmProjCompleteHandled guard that is shared
+  // between the original onComplete listener (registered in startBgDownload) and
+  // the one registered below by watchDownload. With two independent context objects
+  // both starting with mmProjCompleteHandled=false, both onComplete listeners
+  // attempt the file move — the second one loses, sees the source gone, and
+  // nulls out ctx.mmProjLocalPath, resulting in mmProjFileExists:false at
+  // finalization (i.e. vision is silently dropped from the saved model).
   modelManager.watchDownload(
     item.downloadId!,
     async () => {
+      logger.log('[DownloadDebug] Retried text download finalized', {
+        modelId: item.modelId,
+        fileName: item.fileName,
+        downloadId: item.downloadId,
+      });
       const models = await modelManager.getDownloadedModels();
       setDownloadedModels(models);
       const modelKey = useDownloadStore.getState().downloadIdIndex[item.downloadId!] ?? '';
@@ -129,6 +148,12 @@ async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<void
   if (!entry?.mmProjDownloadId || entry.mmProjStatus !== 'failed') return;
   useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
   try {
+    logger.log('[DownloadDebug] Retrying failed mmproj sidecar', {
+      modelKey: entry.modelKey,
+      modelId: entry.modelId,
+      mainDownloadId: entry.downloadId,
+      mmProjDownloadId: entry.mmProjDownloadId,
+    });
     await backgroundDownloadService.retryDownload(entry.mmProjDownloadId);
   } catch (error) {
     logger.warn('[DownloadManager] Failed to retry mmproj sidecar:', error);
@@ -201,6 +226,13 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
       const entry = downloads[modelKey];
+      logger.log('[DownloadDebug] Removing download entry', {
+        modelKey,
+        modelId: item.modelId,
+        fileName: item.fileName,
+        mainDownloadId: entry?.downloadId,
+        mmProjDownloadId: entry?.mmProjDownloadId,
+      });
       removeDownloadEntry(modelKey);
       if (entry) {
         if (entry.downloadId.startsWith('image-multi:')) {
@@ -223,6 +255,16 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
     const entry = downloads[modelKey];
     try {
+      logger.log('[DownloadDebug] Manual retry requested', {
+        modelKey,
+        modelId: item.modelId,
+        fileName: item.fileName,
+        modelType: item.modelType,
+        mainDownloadId: item.downloadId,
+        mmProjDownloadId: entry?.mmProjDownloadId,
+        status: item.status,
+        mmProjStatus: entry?.mmProjStatus,
+      });
       useDownloadStore.getState().setStatus(item.downloadId, 'pending');
       if (Platform.OS === 'android') {
         await backgroundDownloadService.retryDownload(item.downloadId);
@@ -310,6 +352,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const repoId = item.modelId.substring(0, lastSlash);
     const fileName = item.modelId.substring(lastSlash + 1);
     setRepairingVision(item.modelId, true);
+    logger.log('[DownloadDebug] Repair vision requested', {
+      modelId: item.modelId,
+      fileName,
+      currentMmProjPath: item.mmProjPath,
+      currentMmProjFileName: item.mmProjFileName,
+    });
     huggingFaceService.getModelFiles(repoId).then(async (files) => {
       const file = files.find(f => f.name === fileName);
       if (!file?.mmProjFile) {
@@ -322,8 +370,17 @@ export function useDownloadManager(): UseDownloadManagerResult {
       await modelManager.repairMmProj(repoId, file, {});
       const models = await modelManager.getDownloadedModels();
       setDownloadedModels(models);
+      logger.log('[DownloadDebug] Repair vision completed', {
+        modelId: item.modelId,
+        fileName,
+      });
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${item.fileName}. Reload the model to enable vision.`));
     }).catch((e: Error) => {
+      logger.error('[DownloadDebug] Repair vision failed', {
+        modelId: item.modelId,
+        fileName,
+        error: e.message,
+      });
       setAlertState(showAlert('Repair Failed', e.message));
     }).finally(() => {
       setRepairingVision(item.modelId, false);

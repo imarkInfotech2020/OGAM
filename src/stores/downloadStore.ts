@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ModelKey } from '../utils/modelKey';
+import logger from '../utils/logger';
 
 export type DownloadStatus =
   | 'pending'
@@ -147,7 +148,11 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
   setMmProjDownloadId: (modelKey, mmProjDownloadId) => set(state => {
     const entry = state.downloads[modelKey];
     if (!entry) return state;
-    console.log('[DownloadStore] Registering mmproj download', { modelKey, mmProjDownloadId, mainDownloadId: entry.downloadId });
+    logger.log('[DownloadDebug] Register mmproj download', {
+      modelKey,
+      mmProjDownloadId,
+      mainDownloadId: entry.downloadId,
+    });
     return {
       downloads: { ...state.downloads, [modelKey]: { ...entry, mmProjDownloadId, mmProjStatus: 'pending' } },
       downloadIdIndex: { ...state.downloadIdIndex, [mmProjDownloadId]: modelKey },
@@ -179,17 +184,20 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
   updateMmProjProgress: (mmProjDownloadId, bytes) => set(state => {
     const modelKey = state.downloadIdIndex[mmProjDownloadId];
     if (!modelKey) {
-      console.warn('[DownloadStore] mmproj progress: modelKey not found in index', { mmProjDownloadId });
+      logger.warn('[DownloadDebug] mmproj progress dropped: missing modelKey', { mmProjDownloadId });
       return state;
     }
     const entry = state.downloads[modelKey];
     if (!entry || entry.mmProjDownloadId !== mmProjDownloadId) {
-      console.warn('[DownloadStore] mmproj progress: entry mismatch', { modelKey, mmProjDownloadId, entryMmProjId: entry?.mmProjDownloadId });
+      logger.warn('[DownloadDebug] mmproj progress dropped: entry mismatch', {
+        modelKey,
+        mmProjDownloadId,
+        entryMmProjId: entry?.mmProjDownloadId,
+      });
       return state;
     }
     const combinedTotal = entry.combinedTotalBytes || entry.totalBytes;
     const progress = combinedTotal > 0 ? (entry.bytesDownloaded + bytes) / combinedTotal : 0;
-    console.log('[DownloadStore] mmproj progress update', { modelKey, mmProjBytes: bytes, mainBytes: entry.bytesDownloaded, combinedTotal, progress });
     return {
       downloads: {
         ...state.downloads,
@@ -281,7 +289,11 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
     if (!entry) return state;
     const newIndex = { ...state.downloadIdIndex };
     delete newIndex[entry.downloadId];
-    if (entry.mmProjDownloadId) delete newIndex[entry.mmProjDownloadId];
+    // Keep mmProjDownloadId in the index — it is still valid until
+    // setMmProjDownloadId swaps it for the new sidecar ID after the retry
+    // starts. Removing it here creates a window where mmproj progress events
+    // arrive with no index match (updateMmProjProgress would log a mismatch
+    // warning and drop the update).
     newIndex[newDownloadId] = modelKey;
     return {
       downloads: {
@@ -294,9 +306,12 @@ export const useDownloadStore = create<DownloadStoreState>((set) => ({
           progress: 0,
           errorMessage: undefined,
           errorCode: undefined,
-          mmProjStatus: undefined,
-          mmProjBytesDownloaded: undefined,
-          mmProjDownloadId: undefined,
+          // Preserve mmproj identity fields so the UI still knows this is a
+          // vision model and so updateMmProjProgress can still route events.
+          // Only reset the mutable progress/status to give a clean slate.
+          mmProjStatus: entry.mmProjDownloadId ? 'pending' : undefined,
+          mmProjBytesDownloaded: 0,
+          // mmProjDownloadId, mmProjFileName, mmProjFileSize — preserved via ...entry
         },
       },
       downloadIdIndex: newIndex,

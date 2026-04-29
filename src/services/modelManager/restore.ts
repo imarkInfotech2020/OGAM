@@ -8,6 +8,7 @@ import {
 } from './types';
 import logger from '../../utils/logger';
 import { mmProjLocalName } from './download';
+import { isMmProjFileName } from '../downloadHydration';
 
 export interface RestoreDownloadsOpts {
   modelsDir: string;
@@ -33,21 +34,47 @@ async function resolveMmProjState(
   activeDownloads: BackgroundDownloadInfo[],
 ): Promise<boolean> {
   const mmProjDownload = activeDownloads.find(d => d.downloadId === mmProjDownloadId);
+  logger.log('[DownloadDebug] Restoring mmproj state', {
+    mmProjDownloadId,
+    mmProjLocalPath,
+    nativeStatus: mmProjDownload?.status ?? 'missing',
+    bytesDownloaded: mmProjDownload?.bytesDownloaded,
+    totalBytes: mmProjDownload?.totalBytes,
+  });
 
   if (mmProjDownload?.status === 'failed') {
     logger.warn('[ModelManager] mmproj download failed while app was dead, vision will not be available');
     return true;
   }
 
-  if (!mmProjDownload || mmProjDownload.status === 'completed') {
-    if (mmProjDownload && mmProjLocalPath) {
-      try { await backgroundDownloadService.moveCompletedDownload(mmProjDownloadId, mmProjLocalPath); }
-      catch { /* May already be moved */ }
+  if (mmProjDownload?.status === 'completed') {
+    // Native worker finished but file may not be moved yet. Do NOT call
+    // moveCompletedDownload here — that move belongs exclusively to the
+    // watchBackgroundDownload onComplete listener. If we move it here AND
+    // the listener fires later (duplicate events or replayed events), the
+    // second move attempt consumes the stale source and the target exists
+    // check may still return false due to timing, leaving mmProjFileExists:false
+    // in finalization. Instead, only check whether the file already landed
+    // on disk (i.e. a previous onComplete listener already moved it).
+    const fileOnDisk = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : false;
+    if (fileOnDisk) {
+      logger.log('[DownloadDebug] mmproj already on disk, marking complete', { mmProjDownloadId, mmProjLocalPath });
+      return true;
     }
-    if (!mmProjLocalPath || !(await RNFS.exists(mmProjLocalPath))) {
-      logger.warn('[ModelManager] mmproj download completed but file not found, vision will not be available');
+    // File not on disk yet — native row says completed but the JS onComplete
+    // listener hasn't moved it yet. Return false so watchBackgroundDownload
+    // registers its onComplete listener and does the move.
+    logger.log('[DownloadDebug] mmproj native completed but not on disk yet, deferring to onComplete', { mmProjDownloadId });
+    return false;
+  }
+
+  if (!mmProjDownload) {
+    // No active native row at all. Check disk as the final authority.
+    const fileOnDisk = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : false;
+    if (!fileOnDisk) {
+      logger.warn('[ModelManager] mmproj native row missing and file not found, vision will not be available');
     }
-    return true;
+    return true; // Either file is there or it is permanently missing — either way, nothing left to wait for.
   }
 
   return false;
@@ -135,6 +162,17 @@ async function restoreDownloadEntry(opts: RestoreEntryOpts): Promise<void> {
   if (mmProjDownloadId) {
     mmProjCompleted = await resolveMmProjState(mmProjDownloadId, mmProjLocalPath, activeDownloads);
   }
+  logger.log('[DownloadDebug] Restoring in-progress download entry', {
+    downloadId: download.downloadId,
+    modelId: metadata.modelId,
+    fileName: metadata.fileName,
+    status: download.status,
+    bytesDownloaded: download.bytesDownloaded,
+    totalBytes: download.totalBytes,
+    mmProjDownloadId,
+    mmProjCompleted,
+    mmProjLocalPath,
+  });
 
   const mmProjDownload = mmProjDownloadId
     ? activeDownloads.find(d => d.downloadId === mmProjDownloadId)
@@ -198,12 +236,22 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
   if (!backgroundDownloadService.isAvailable()) return [];
 
   const activeDownloads = await backgroundDownloadService.getActiveDownloads() as RestorableDownloadInfo[];
+  logger.log('[DownloadDebug] restoreInProgressDownloads scan', {
+    activeDownloads: activeDownloads.length,
+  });
   const mmProjIds = collectMmProjIds(persistedDownloads, activeDownloads);
   const restoredDownloadIds: string[] = [];
 
   for (const download of activeDownloads) {
     if (!isRestorable(download)) continue;
     if (mmProjIds.has(download.downloadId)) continue;
+    // Belt-and-suspenders: also skip by filename. collectMmProjIds relies on
+    // the mmProjDownloadId link field being populated on the parent row, but
+    // after a retry the parent row in the native DB may carry a fresh ID while
+    // the retried sidecar row has no back-link. The filename check catches those
+    // orphaned sidecar rows and prevents them appearing as standalone entries
+    // in the Download Manager screen.
+    if (isMmProjFileName(download.fileName)) continue;
     const metadata = buildMetadataFromActiveDownload(download, modelsDir);
     if (!metadata || backgroundDownloadContext.has(download.downloadId)) continue;
     try {
