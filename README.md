@@ -21,18 +21,6 @@
 ---
 
 
-> ## 🟢 Founding Supporter pre-orders are open
->
-> The first **100 supporters** lock in lifetime Off Grid Pro for **$10**. After that, $50.
-> 12-week ship guarantee — full refund if Pro doesn't ship within 12 weeks of your purchase.
->
-> **[Join the founders Slack →](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA)**
-> Drop into **#pro-first-100** to claim your spot.
->
-> *The free OSS app stays free, MIT-licensed, forever. Pro adds extended features — see below.*
-
----
-
 ## Not just another chat app
 
 Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a **complete offline AI suite** — text generation, image generation, vision AI, voice transcription, tool calling, and document analysis, all running natively on your phone's or Mac's hardware.
@@ -76,20 +64,43 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 
 ---
 
----
+<br />
 
-## Coming in Pro
+<div align="center">
 
-The 9 features above ship in the free OSS and stay free. Pro extends:
+<sub>**FOUNDING SUPPORTER PRE-ORDERS · NOW OPEN**</sub>
 
-- **Unlimited knowledge bases** — current cap removed
+# Off Grid Pro
+
+**First 100 supporters lock in lifetime access for $10.**
+
+</div>
+
+<br />
+
+The free OSS keeps shipping, MIT, forever — that's not changing. Pro is an optional, additive tier we're opening pre-orders for.
+
+This is our little hope of keeping ambient AI on-device alive — and sustaining the open-source release that this project has been built on for the last two years. Not a subscription. Not VC. A small, finite group of people willing to fund the next 12 weeks of full-time work.
+
+**$10 × 100 = $1,000. After that, lifetime Pro moves to $50.**
+
+### What Pro adds
+
 - **Custom personas** — system prompts, voice, persistent memory per assistant
 - **End-to-end voice mode** — Whisper STT (already shipping) + Kokoro TTS, all on-device
 - **Calendar + email + MCP servers** — Linear, Notion, GitHub, your own MCP. Drafts only; you approve every send.
 - **Larger models** — full size range, including 7B on flagship phones, 13B on iPads / M-series Macs
 - **Future Pro features** — included for the supported lifetime of the app
 
-Founding Supporters: $10 lifetime, first 100 only. Then $50. Full refund if Pro doesn't ship in 12 weeks. **[Drop into #pro-first-100 in our Slack →](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA)**
+### The promise
+
+Pro ships in **12 weeks** from your purchase, or full refund. No forms, no questions.
+
+### Claim a Founding Supporter spot
+
+Join the founders Slack and drop into **#pro-first-100**. We'll say hi and get you set up.
+
+**[→ Join the Slack](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3q7kj5gr6-rVzx5gl5LKPQh4mUE2CCvA)**
 
 ## Performance
 
@@ -157,6 +168,8 @@ Tests run across three platforms on every PR:
 npm test              # Run all tests (Jest + Android + iOS)
 npm run test:e2e      # Run Maestro E2E flows (requires running app)
 ```
+
+This project is tested with BrowserStack.
 
 ---
 
