@@ -433,10 +433,14 @@ describe('ModelManager', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
       mockedRNFS.exists.mockResolvedValue(true);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
+      mockedAsyncStorage.setItem.mockResolvedValue(undefined as any);
 
       const onComplete = jest.fn();
       const result = await modelManager.downloadModelBackground('test/model', file);
       modelManager.watchDownload(result.downloadId, onComplete);
+
+      // onComplete is now called after persistDownloadedModel resolves — flush microtasks
+      await new Promise(resolve => setImmediate(resolve));
 
       expect(result.status).toBe('completed');
       expect(onComplete).toHaveBeenCalled();
@@ -569,6 +573,57 @@ describe('ModelManager', () => {
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
         expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
       );
+    });
+  });
+
+  describe('resetMmProjForRetry', () => {
+    it('restores mmproj completion flags and local path for retried sidecars', () => {
+      const file = createModelFileWithMmProj({
+        name: 'vision.gguf',
+        size: 4_000_000_000,
+        quantization: 'Q4_K_M',
+        mmProjName: 'mmproj.gguf',
+        mmProjSize: 500_000_000,
+        mmProjDownloadUrl: 'https://huggingface.co/test/model/resolve/main/mmproj.gguf',
+      });
+      const ctx = {
+        modelId: 'test/model',
+        file,
+        localPath: '/mock/documents/models/vision.gguf',
+        mmProjLocalPath: null,
+        mmProjDownloadId: '43',
+        mmProjCompleted: true,
+        mmProjCompleteHandled: true,
+        mainCompleted: false,
+        mainCompleteHandled: false,
+        isFinalizing: false,
+      };
+      (modelManager as any).backgroundDownloadContext.set('42', ctx);
+
+      modelManager.resetMmProjForRetry('42');
+
+      expect(ctx.mmProjCompleted).toBe(false);
+      expect(ctx.mmProjCompleteHandled).toBe(false);
+      expect(ctx.mmProjLocalPath).toBe('/mock/documents/models/vision-mmproj.gguf');
+    });
+
+    it('leaves entries without mmproj download untouched', () => {
+      const file = createModelFile({ name: 'model.gguf', size: 4_000_000_000 });
+      const ctx = {
+        modelId: 'test/model',
+        file,
+        localPath: '/mock/documents/models/model.gguf',
+        mmProjLocalPath: null,
+        mmProjCompleted: true,
+        mmProjCompleteHandled: true,
+      };
+      (modelManager as any).backgroundDownloadContext.set('99', ctx);
+
+      modelManager.resetMmProjForRetry('99');
+
+      expect(ctx.mmProjCompleted).toBe(true);
+      expect(ctx.mmProjCompleteHandled).toBe(true);
+      expect(ctx.mmProjLocalPath).toBeNull();
     });
   });
 

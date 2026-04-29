@@ -17,6 +17,7 @@
 */
 
 import React from 'react';
+import { Platform } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 
 // Navigation is globally mocked in jest.setup.ts
@@ -45,24 +46,43 @@ jest.mock('../../../src/stores', () => {
 });
 
 let mockDownloadStoreDownloads: Record<string, any> = {};
+const mockSetStatus = jest.fn();
+const mockSetRepairingVision = jest.fn();
+const mockRetryDownload = jest.fn(() => Promise.resolve());
+const mockStartProgressPolling = jest.fn();
+const mockResetMmProjForRetry = jest.fn();
+const mockWatchDownload = jest.fn();
+const mockRemoveDownloadEntry = jest.fn((modelKey: string) => { delete mockDownloadStoreDownloads[modelKey]; });
 
-jest.mock('../../../src/stores/downloadStore', () => ({
-  useDownloadStore: (selector?: any) => {
+jest.mock('../../../src/stores/downloadStore', () => {
+  const store = (selector?: any) => {
     const state = {
       downloads: mockDownloadStoreDownloads,
-      remove: jest.fn((modelKey: string) => { delete mockDownloadStoreDownloads[modelKey]; }),
+      remove: mockRemoveDownloadEntry,
       repairingVisionIds: {} as Record<string, true>,
-      setRepairingVision: jest.fn(),
+      setRepairingVision: mockSetRepairingVision,
     };
     return typeof selector === 'function' ? selector(state) : state;
-  },
-  STUCK_THRESHOLD_MS: 30000,
-}));
+  };
+  store.getState = () => ({
+    downloads: mockDownloadStoreDownloads,
+    downloadIdIndex: Object.values(mockDownloadStoreDownloads).reduce((acc: Record<string, string>, entry: any) => {
+      if (entry?.downloadId && entry?.modelKey) acc[entry.downloadId] = entry.modelKey;
+      return acc;
+    }, {}),
+    remove: mockRemoveDownloadEntry,
+    setStatus: mockSetStatus,
+  });
+  return {
+    useDownloadStore: store,
+    STUCK_THRESHOLD_MS: 30000,
+  };
+});
 
 jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
-      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
+    linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
     getActiveBackgroundDownloads: jest.fn(() => Promise.resolve([])),
     startBackgroundDownloadPolling: jest.fn(),
@@ -70,6 +90,8 @@ jest.mock('../../../src/services', () => ({
     cancelBackgroundDownload: jest.fn(() => Promise.resolve()),
     deleteModel: jest.fn(() => Promise.resolve()),
     deleteImageModel: jest.fn(() => Promise.resolve()),
+    resetMmProjForRetry: jest.fn(),
+    watchDownload: jest.fn(),
   },
   backgroundDownloadService: {
     isAvailable: jest.fn(() => false),
@@ -78,6 +100,8 @@ jest.mock('../../../src/services', () => ({
     onAnyError: jest.fn(() => jest.fn()),
     moveCompletedDownload: jest.fn(() => Promise.resolve()),
     cancelDownload: jest.fn(() => Promise.resolve()),
+    retryDownload: jest.fn(() => Promise.resolve()),
+    startProgressPolling: jest.fn(),
   },
   activeModelService: {
     unloadTextModel: jest.fn(),
@@ -197,17 +221,29 @@ describe('DownloadManagerScreen', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     mockDownloadStoreDownloads = {};
+    mockSetStatus.mockReset();
+    mockSetRepairingVision.mockReset();
+    mockRetryDownload.mockReset();
+    mockRetryDownload.mockResolvedValue(undefined);
+    mockStartProgressPolling.mockReset();
+    mockResetMmProjForRetry.mockReset();
+    mockWatchDownload.mockReset();
+    mockRemoveDownloadEntry.mockClear();
 
     // Restore mock implementations cleared by clearAllMocks
     mockBackgroundDownloadService.isAvailable.mockReturnValue(false);
     mockBackgroundDownloadService.onAnyProgress.mockReturnValue(jest.fn());
     mockBackgroundDownloadService.onAnyComplete.mockReturnValue(jest.fn());
     mockBackgroundDownloadService.onAnyError.mockReturnValue(jest.fn());
+    mockBackgroundDownloadService.retryDownload.mockImplementation(mockRetryDownload);
+    mockBackgroundDownloadService.startProgressPolling.mockImplementation(mockStartProgressPolling);
     mockModelManager.getDownloadedModels.mockResolvedValue([]);
     mockModelManager.getDownloadedImageModels.mockResolvedValue([]);
     mockModelManager.cancelBackgroundDownload.mockResolvedValue(undefined);
     mockModelManager.deleteModel.mockResolvedValue(undefined);
     mockModelManager.deleteImageModel.mockResolvedValue(undefined);
+    mockModelManager.resetMmProjForRetry.mockImplementation(mockResetMmProjForRetry);
+    mockModelManager.watchDownload.mockImplementation(mockWatchDownload);
     mockHardwareService.getModelTotalSize.mockImplementation((model: any) => model.fileSize || 0);
 
     const defaultState = createDefaultState();
@@ -742,6 +778,58 @@ describe('DownloadManagerScreen', () => {
     const result = render(<DownloadManagerScreen />);
 
     expect(result.getByText('valid.gguf')).toBeTruthy();
+  });
+
+  it('retries failed text downloads on Android, including mmproj reset and reattach', async () => {
+    const originalOs = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    const setDownloadedModels = jest.fn();
+    mockStoreState(createDefaultState({ setDownloadedModels }));
+    mockModelManager.getDownloadedModels.mockResolvedValueOnce([standardModel]);
+
+    mockDownloadStoreDownloads = {
+      'author/vision/vision.gguf': {
+        modelKey: 'author/vision/vision.gguf',
+        downloadId: 'dl-main',
+        modelId: 'author/vision',
+        fileName: 'vision.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'failed',
+        errorCode: 'http_416',
+        errorMessage: 'retry me',
+        bytesDownloaded: 1024,
+        totalBytes: 4096,
+        combinedTotalBytes: 4608,
+        progress: 0.25,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
+        mmProjDownloadId: 'dl-mmproj',
+        mmProjStatus: 'failed',
+      },
+    };
+
+    try {
+      const { getByTestId } = render(<DownloadManagerScreen />);
+
+      await act(async () => {
+        fireEvent.press(getByTestId('failed-retry-button'));
+      });
+
+      expect(mockSetStatus).toHaveBeenCalledWith('dl-main', 'pending');
+      expect(mockBackgroundDownloadService.retryDownload).toHaveBeenNthCalledWith(1, 'dl-main');
+      expect(mockSetStatus).toHaveBeenCalledWith('dl-mmproj', 'pending');
+      expect(mockBackgroundDownloadService.retryDownload).toHaveBeenNthCalledWith(2, 'dl-mmproj');
+      expect(mockModelManager.resetMmProjForRetry).toHaveBeenCalledWith('dl-main');
+      expect(mockModelManager.watchDownload).toHaveBeenCalledWith(
+        'dl-main',
+        expect.any(Function),
+        expect.any(Function),
+      );
+      expect(mockBackgroundDownloadService.startProgressPolling).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
+    }
   });
 
   // ===== BRANCH COVERAGE TESTS =====
