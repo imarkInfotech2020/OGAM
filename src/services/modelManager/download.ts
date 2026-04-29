@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 import RNFS from 'react-native-fs';
 import { ModelFile, BackgroundDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
@@ -239,6 +240,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     downloadedBytes: number,
     totalBytes: number,
     lastMilestone: number,
+    // eslint-disable-next-line max-params
   ): number => {
     if (totalBytes <= 0) return lastMilestone;
     const pct = Math.floor((downloadedBytes / totalBytes) * 100);
