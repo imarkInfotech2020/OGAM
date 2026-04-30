@@ -3,7 +3,7 @@ import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-
+ 
 export function isMMProjFile(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return lower.includes('mmproj') ||
@@ -18,7 +18,15 @@ function parseSizeInt(size: string | number): number {
 async function getDirSize(dirPath: string): Promise<number> {
   try {
     const dirFiles = await RNFS.readDir(dirPath);
-    return dirFiles.reduce((total, f) => total + (f.isFile() ? parseSizeInt(f.size) : 0), 0);
+    let total = 0;
+    for (const f of dirFiles) {
+      if (f.isFile()) {
+        total += parseSizeInt(f.size);
+      } else if (f.isDirectory()) {
+        total += await getDirSize(f.path);
+      }
+    }
+    return total;
   } catch {
     return 0;
   }
@@ -88,7 +96,7 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
 }
 
 function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
-  if (dirName.includes('qnn') || dirName.includes('8gen')) return 'qnn';
+  if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
   if (dirName.includes('coreml')) return 'coreml';
   return 'mnn';
 }
@@ -156,7 +164,8 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
     for (const item of items) {
       if (!item.isDirectory()) continue;
-      if (registeredIds.has(item.name) || activeModelIds.has(item.name)) continue;
+      if (registeredIds.has(item.name)) continue;
+      if (activeModelIds.has(item.name)) continue;
 
       // Legacy recovered_ entry: path matches but ID has recovered_<name>_<ts> prefix.
       // Migrate to a real ID so the model shows in the UI after the appStore filter lands.
