@@ -256,9 +256,9 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
 const localStyles = {
   browseMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     padding: 16,
     borderTopWidth: 1,
     gap: 8,
