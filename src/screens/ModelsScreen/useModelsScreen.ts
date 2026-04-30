@@ -7,6 +7,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -172,11 +173,11 @@ export function useModelsScreen() {
     }
   };
 
-  const activeDownloadCount = Object.keys(text.downloadProgress).filter(key => {
-    if (!key.startsWith('image:')) return true;
-    const imageId = key.split('/').slice(0, -1).join('/').replace('image:', '');
-    return !image.downloadedImageModels.some(m => m.id === imageId);
-  }).length;
+  const activeDownloadCount = useDownloadStore(state =>
+    Object.values(state.downloads).filter(
+      d => isActiveStatus(d.status),
+    ).length,
+  );
   const totalModelCount =
     text.downloadedModels.length +
     image.downloadedImageModels.length +
@@ -184,16 +185,38 @@ export function useModelsScreen() {
 
   const handleDownload = useCallback(
     (...args: Parameters<typeof text.handleDownload>) => {
+      if (activeDownloadCount >= 2) {
+        setAlertState(showAlert(
+          'Downloads Already Active',
+          '2 downloads are already running. Starting more can affect performance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Start Anyway', style: 'default', onPress: () => { text.handleDownload(...args); } },
+          ],
+        ));
+        return;
+      }
       text.handleDownload(...args);
     },
-    [text],
+    [text, activeDownloadCount, setAlertState],
   );
 
   const handleDownloadImageModel = useCallback(
     (...args: Parameters<typeof image.handleDownloadImageModel>) => {
+      if (activeDownloadCount >= 2) {
+        setAlertState(showAlert(
+          'Downloads Already Active',
+          '2 downloads are already running. Starting more can affect performance.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Start Anyway', style: 'default', onPress: () => { image.handleDownloadImageModel(...args); } },
+          ],
+        ));
+        return;
+      }
       image.handleDownloadImageModel(...args);
     },
-    [image],
+    [image, activeDownloadCount, setAlertState],
   );
 
   return {
@@ -206,6 +229,7 @@ export function useModelsScreen() {
     isImporting,
     importProgress,
     totalModelCount,
+    activeDownloadCount,
     handleImportLocalModel,
     handleRefresh,
     // text model state & handlers
@@ -224,7 +248,6 @@ export function useModelsScreen() {
     textFiltersVisible: text.textFiltersVisible,
     setTextFiltersVisible: text.setTextFiltersVisible,
     downloadedModels: text.downloadedModels,
-    downloadProgress: text.downloadProgress,
     hasActiveFilters: text.hasActiveFilters,
     ramGB: text.ramGB,
     deviceRecommendation: text.deviceRecommendation,
@@ -237,7 +260,6 @@ export function useModelsScreen() {
     handleRepairMmProj: text.handleRepairMmProj,
     handleCancelDownload: text.handleCancelDownload,
     handleDeleteModel: text.handleDeleteModel,
-    downloadIds: text.downloadIds,
     clearFilters: text.clearFilters,
     toggleFilterDimension: text.toggleFilterDimension,
     toggleOrg: text.toggleOrg,
@@ -248,6 +270,7 @@ export function useModelsScreen() {
     setSortOption: text.setSortOption,
     isModelDownloaded: text.isModelDownloaded,
     getDownloadedModel: text.getDownloadedModel,
+    isRepairingVisionModel: text.isRepairingVisionModel,
     // image model state & handlers
     availableHFModels: image.availableHFModels,
     hfModelsLoading: image.hfModelsLoading,
@@ -269,9 +292,7 @@ export function useModelsScreen() {
     setShowRecommendedOnly: image.setShowRecommendedOnly,
     showRecHint: image.showRecHint,
     setShowRecHint: image.setShowRecHint,
-    imageModelProgress: image.imageModelProgress,
     downloadedImageModels: image.downloadedImageModels,
-    imageModelDownloading: image.imageModelDownloading,
     hasActiveImageFilters: image.hasActiveImageFilters,
     filteredHFModels: image.filteredHFModels,
     imageRecommendation: image.imageRecommendation,

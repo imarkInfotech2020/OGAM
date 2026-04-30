@@ -219,7 +219,7 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
           ctx.model.modelPath,
           ctx.imageThreads,
           {
-            backend: ctx.model.backend === 'coreml' ? 'auto' : (ctx.model.backend ?? 'auto'),
+            backend: 'auto',
             cpuOnly: ctx.cpuOnly,
             attentionVariant: ctx.model.attentionVariant,
           },

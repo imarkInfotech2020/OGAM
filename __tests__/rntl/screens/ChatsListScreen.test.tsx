@@ -20,6 +20,7 @@ import {
   createConversation,
   createMessage,
   createDownloadedModel,
+  createONNXImageModel,
   createProject,
 } from '../../utils/factories';
 
@@ -102,6 +103,31 @@ jest.mock('../../../src/services', () => ({
   onnxImageGeneratorService: {
     deleteGeneratedImage: jest.fn(() => Promise.resolve()),
   },
+  activeModelService: {
+    loadTextModel: jest.fn(() => Promise.resolve()),
+    loadImageModel: jest.fn(() => Promise.resolve()),
+    unloadTextModel: jest.fn(() => Promise.resolve()),
+    unloadImageModel: jest.fn(() => Promise.resolve()),
+  },
+  llmService: {
+    getLoadedModelPath: jest.fn(() => null),
+    isModelLoaded: jest.fn(() => false),
+  },
+  remoteServerManager: {
+    clearActiveRemoteModel: jest.fn(),
+  },
+}));
+
+jest.mock('../../../src/components', () => ({
+  ModelSelectorModal: ({ visible }: any) => {
+    if (!visible) return null;
+    const { View, Text } = require('react-native');
+    return (
+      <View testID="model-selector-modal">
+        <Text>Select Model</Text>
+      </View>
+    );
+  },
 }));
 
 // Override global Swipeable mock to render rightActions for testing
@@ -138,6 +164,19 @@ describe('ChatsListScreen', () => {
       const { getByText } = render(<ChatsListScreen />);
       expect(getByText('New')).toBeTruthy();
     });
+
+    it('enables New when downloadable models exist but none are loaded', () => {
+      useAppStore.setState({
+        downloadedModels: [createDownloadedModel()],
+        activeModelId: null,
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+
+      const { getByText } = render(<ChatsListScreen />);
+      fireEvent.press(getByText('New'));
+      expect(getByText('Select Model')).toBeTruthy();
+    });
   });
 
   // ==========================================================================
@@ -168,6 +207,19 @@ describe('ChatsListScreen', () => {
           'Start a new conversation to begin chatting with your local AI.',
         ),
       ).toBeTruthy();
+    });
+
+    it('shows New button flow when only image models are available', () => {
+      useAppStore.setState({
+        downloadedModels: [],
+        activeModelId: null,
+        downloadedImageModels: [createONNXImageModel()],
+        activeImageModelId: null,
+      });
+
+      const { getByText } = render(<ChatsListScreen />);
+      fireEvent.press(getByText('New'));
+      expect(getByText('Select Model')).toBeTruthy();
     });
 
     it('shows "New Chat" button in empty state when models are downloaded', () => {

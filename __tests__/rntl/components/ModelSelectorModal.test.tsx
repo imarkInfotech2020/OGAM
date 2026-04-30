@@ -157,6 +157,42 @@ describe('ModelSelectorModal', () => {
       expect(getByText('Test Model')).toBeTruthy();
     });
 
+    it('filters suspicious recovered text models from the selector', () => {
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [
+          {
+            id: 'recovered_bad_1',
+            name: 'Recovered Bad Model',
+            author: 'Unknown',
+            filePath: '/path/bad.gguf',
+            fileName: 'bad.gguf',
+            fileSize: 400000000,
+            quantization: 'Unknown',
+            downloadedAt: new Date().toISOString(),
+          },
+          {
+            id: 'model1',
+            name: 'Good Model',
+            author: 'test',
+            filePath: '/path/good.gguf',
+            fileName: 'good.gguf',
+            fileSize: 4000000000,
+            quantization: 'Q4_K_M',
+            downloadedAt: new Date().toISOString(),
+          },
+        ],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+
+      const { getByText, queryByText } = render(
+        <ModelSelectorModal {...defaultProps} />
+      );
+
+      expect(getByText('Good Model')).toBeTruthy();
+      expect(queryByText('Recovered Bad Model')).toBeNull();
+    });
+
     it('shows multiple downloaded text models', () => {
       mockUseAppStore.mockReturnValue({
         downloadedModels: [
@@ -517,6 +553,40 @@ describe('ModelSelectorModal', () => {
       expect(getByText('Stable Diffusion')).toBeTruthy();
     });
 
+    it('filters suspicious recovered image models from the selector', () => {
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [
+          {
+            id: 'recovered_image_1',
+            name: 'Recovered Image',
+            description: 'Recovered',
+            modelPath: '/path/recovered',
+            size: 100000000,
+            downloadedAt: new Date().toISOString(),
+            backend: 'mnn',
+          },
+          {
+            id: 'img-model1',
+            name: 'Stable Diffusion',
+            description: 'Image model',
+            modelPath: '/path/sd',
+            size: 2000000000,
+            downloadedAt: new Date().toISOString(),
+            backend: 'mnn',
+          },
+        ],
+        activeImageModelId: null,
+      });
+
+      const { getByText, queryByText } = render(
+        <ModelSelectorModal {...defaultProps} initialTab="image" />
+      );
+
+      expect(getByText('Stable Diffusion')).toBeTruthy();
+      expect(queryByText('Recovered Image')).toBeNull();
+    });
+
     it('shows tab badges when models are loaded', () => {
       mockUseAppStore.mockReturnValue({
         downloadedModels: [
@@ -781,15 +851,23 @@ describe('ModelSelectorModal', () => {
   // Add Server button
   // ============================================================================
   describe('Add Server button', () => {
-    it('renders Add Server link in text tab', () => {
+    beforeEach(() => {
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+    });
+
+    it('renders Add Remote Server button in empty state', () => {
       const { getByText } = render(
         <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
       );
 
-      expect(getByText('Add Server')).toBeTruthy();
+      expect(getByText('Add Remote Server')).toBeTruthy();
     });
 
-    it('Add Server link calls onClose and onAddServer when pressed', () => {
+    it('Add Remote Server calls onClose and onAddServer when pressed', () => {
       const onClose = jest.fn();
       const onAddServer = jest.fn();
 
@@ -801,13 +879,13 @@ describe('ModelSelectorModal', () => {
         />
       );
 
-      fireEvent.press(getByText('Add Server'));
+      fireEvent.press(getByText('Add Remote Server'));
 
       expect(onClose).toHaveBeenCalled();
       expect(onAddServer).toHaveBeenCalled();
     });
 
-    it('Add Server link is disabled when isLoading is true', () => {
+    it('Add Remote Server is disabled when isLoading is true', () => {
       const onClose = jest.fn();
       const onAddServer = jest.fn();
 
@@ -820,24 +898,18 @@ describe('ModelSelectorModal', () => {
         />
       );
 
-      fireEvent.press(getByText('Add Server'));
+      fireEvent.press(getByText('Add Remote Server'));
 
       expect(onClose).not.toHaveBeenCalled();
       expect(onAddServer).not.toHaveBeenCalled();
     });
 
-    it('Add Server link visible even when no models are downloaded', () => {
-      mockUseAppStore.mockReturnValue({
-        downloadedModels: [],
-        downloadedImageModels: [],
-        activeImageModelId: null,
-      });
-
+    it('Add Remote Server visible when no models are downloaded', () => {
       const { getByText } = render(
         <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
       );
 
-      expect(getByText('Add Server')).toBeTruthy();
+      expect(getByText('Add Remote Server')).toBeTruthy();
     });
   });
 

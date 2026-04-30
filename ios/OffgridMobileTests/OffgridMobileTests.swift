@@ -510,7 +510,7 @@ final class DownloadManagerModuleTests: XCTestCase {
   func testGetDownloadProgressRejectsUnknownId() {
     let exp = expectation(description: "getDownloadProgress rejects unknown id")
     module.getDownloadProgress(
-      99_999,
+      "99_999",
       resolver: { _ in
         XCTFail("should reject for unknown download id")
         exp.fulfill()
@@ -528,7 +528,7 @@ final class DownloadManagerModuleTests: XCTestCase {
   func testCancelDownloadRejectsUnknownId() {
     let exp = expectation(description: "cancelDownload rejects unknown id")
     module.cancelDownload(
-      99_999,
+      "99_999",
       resolver: { _ in
         XCTFail("should reject for unknown download id")
         exp.fulfill()
@@ -546,7 +546,7 @@ final class DownloadManagerModuleTests: XCTestCase {
   func testMoveCompletedDownloadRejectsUnknownId() {
     let exp = expectation(description: "moveCompletedDownload rejects unknown id")
     module.moveCompletedDownload(
-      99_999,
+      "99_999",
       targetPath: TestPaths.tmpModelBin,
       resolver: { _ in
         XCTFail("should reject for unknown download id")
@@ -673,7 +673,7 @@ final class DownloadManagerModuleTests: XCTestCase {
   func testCompletedDownloadEntryPersistsUntilMoved() {
     // Inject a completed download entry directly
     let info = DownloadManagerModule.DownloadInfo(
-      downloadId: 100,
+      downloadId: "100",
       fileName: "test-model.gguf",
       modelId: "test/model",
       totalBytes: 1_000_000,
@@ -681,13 +681,14 @@ final class DownloadManagerModuleTests: XCTestCase {
       status: "completed",
       startedAt: Date().timeIntervalSince1970 * 1000,
       task: nil,
+      taskIdentifier: nil,
       localUri: TestPaths.tmpTestModelGGUF,
       fileTasks: [:],
       multiFileDestDir: nil,
       isMultiFile: false
     )
     module.queue.sync(flags: .barrier) {
-      self.module.downloads[100] = info
+      self.module.downloads["100"] = info
     }
 
     let exp = expectation(description: "getActiveDownloads returns completed entry")
@@ -720,7 +721,7 @@ final class DownloadManagerModuleTests: XCTestCase {
 
     // Inject download entry pointing to the source file
     let info = DownloadManagerModule.DownloadInfo(
-      downloadId: 200,
+      downloadId: "200",
       fileName: "model.gguf",
       modelId: "test/model",
       totalBytes: 256,
@@ -728,18 +729,19 @@ final class DownloadManagerModuleTests: XCTestCase {
       status: "completed",
       startedAt: Date().timeIntervalSince1970 * 1000,
       task: nil,
+      taskIdentifier: nil,
       localUri: sourceFile,
       fileTasks: [:],
       multiFileDestDir: nil,
       isMultiFile: false
     )
     module.queue.sync(flags: .barrier) {
-      self.module.downloads[200] = info
+      self.module.downloads["200"] = info
     }
 
     let exp = expectation(description: "moveCompletedDownload moves file")
     module.moveCompletedDownload(
-      200,
+      "200",
       targetPath: targetFile,
       resolver: { result in
         XCTAssertEqual(result as? String, targetFile)
@@ -772,7 +774,7 @@ final class DownloadManagerModuleTests: XCTestCase {
   func testMoveCompletedDownloadRejectsNotCompletedDownload() {
     // Inject a running (not completed) download entry — no localUri
     let info = DownloadManagerModule.DownloadInfo(
-      downloadId: 300,
+      downloadId: "300",
       fileName: "running-model.gguf",
       modelId: "test/model",
       totalBytes: 1_000_000,
@@ -780,18 +782,19 @@ final class DownloadManagerModuleTests: XCTestCase {
       status: "running",
       startedAt: Date().timeIntervalSince1970 * 1000,
       task: nil,
+      taskIdentifier: nil,
       localUri: nil,
       fileTasks: [:],
       multiFileDestDir: nil,
       isMultiFile: false
     )
     module.queue.sync(flags: .barrier) {
-      self.module.downloads[300] = info
+      self.module.downloads["300"] = info
     }
 
     let exp = expectation(description: "moveCompletedDownload rejects not-completed download")
     module.moveCompletedDownload(
-      300,
+      "300",
       targetPath: TestPaths.tmpShouldNotExist,
       resolver: { _ in
         XCTFail("should reject for download that hasn't completed")

@@ -1,0 +1,216 @@
+in download screen  
+
+or or other person
+
+
+• Working (30s • esc to interru
+
+• Yes. The problem is clearer
+  now, and the screenshots add
+  an important clue: this is
+  probably not “a real
+  completed download became
+  corrupted on update.” It
+  looks more like old native
+  download rows are being
+  reinterpreted differently
+  after the update.
+
+  What the screenshots suggest:
+
+  - The date is 27/4/2026, so
+    these rows were created or
+    surfaced during the current
+    app version’s first run
+    after update, not just some
+    ancient leftover UI cache.
+  - gemma-4-E2B-it-Q4_K_M.gguf
+    showing 17.47 MB as
+    “completed” is structurally
+    wrong for that model. That
+    is not a normal partial
+    file accidentally marked
+    complete.
+  - The Unknown author and
+    Unknown quantization chip
+    on some rows suggests
+    missing or legacy metadata,
+    not just a truncated file.
+  - You also have duplicate-
+    looking entries where one
+    row has sane metadata
+    (unsloth, GB-sized) and
+    another has broken metadata
+    (Unknown, MB-sized). That
+    strongly points to stale
+    native DB rows from an
+    older format/flow being
+    rehydrated alongside valid
+    app-state model records.
+
+  So the likely root issue is:
+
+  - On update, the app changed
+    download persistence/
+    hydration behavior.
+  - Old Room rows that
+    previously did not matter,
+    or were filtered out, are
+    now being included by
+    getActiveDownloads() /
+    hydrateDownloadStore().
+  - Those rows contain
+    incomplete legacy metadata:
+    wrong totalBytes, missing
+    modelKey/quantization,
+    maybe old “completed”
+    semantics.
+  - Hydration now trusts them
+    enough to show them as
+    completed-ish UI entries.
+
+  Why this can suddenly appear
+  after an update:
+
+  - A migration changed which
+    rows survive.
+  - getActiveDownloads() now
+    returns more rows than
+    before, including completed
+    or legacy rows.
+  - JS hydration/filtering
+    rules changed, so
+    previously ignored rows are
+    now surfaced.
+  - Metadata fields added in
+    newer versions are absent
+    in old rows, causing
+    fallback values like
+    Unknown.
+
+  Your key question about “file
+  size check on every
+  hydration”:
+
+  - For 10 completed rows, a
+    file stat check is usually
+    not huge, probably tens to
+    a few hundreds of
+    milliseconds total
+    depending on storage/
+    device.
+  - But doing it every launch/
+    foreground is still the
+    wrong shape of fix.
+  - More importantly, it treats
+    the symptom at the UI
+    boundary instead of fixing
+    the bad persisted rows.
+
+  Simple solution that prevents
+  this for users on update:
+
+  1. Do a one-time cleanup on
+     app update, not every
+     hydration.
+  2. Run it against the native
+     Android download DB,
+     because that is where the
+     bad rows live.
+  3. Delete rows that are
+     clearly legacy-invalid,
+     for example:
+      - status = completed but
+        totalBytes is
+        implausibly small for
+        known large models
+      - missing critical
+        metadata for completed
+        rows
+      - duplicate logical model
+        where one row is
+        obviously invalid and
+        another valid
+        downloaded model
+        already exists
+  4. After cleanup, hydration
+     just reads clean data.
+
+  How I’d frame the problem for
+  a senior review:
+
+  “After app update, stale/
+  legacy Android download rows
+  from the native Room DB are
+  being rehydrated into the
+  Download Manager as if they
+  were valid completed entries.
+  These rows have inconsistent
+  metadata: implausibly small
+  file sizes for large models,
+  missing author/quantization
+  metadata, and duplicate
+  logical models alongside
+  valid downloaded entries.
+  This suggests the update
+  changed download persistence/
+  hydration behavior so old
+  native rows that were
+  previously ignored are now
+  surfaced. The current idea is
+  to add file-size validation
+  in hydrateDownloadStore(),
+  but that would add repeated
+  I/O on every launch/
+  foreground. The cleaner fix
+  seems to be a one-time native
+  DB cleanup/migration on app
+  update that removes invalid
+  legacy rows before
+  hydration.”
+
+  The concrete hypotheses to
+  ask someone:
+
+  1. Did getActiveDownloads()
+     start returning completed
+     rows or legacy rows after
+     the update?
+  2. Did the Room migration
+     preserve rows whose
+     metadata is no longer
+     valid under the new
+     schema?
+  3. Did hydration/filtering
+     logic change so old
+     completed rows now appear
+     in UI?
+  4. Should cleanup live as a
+     one-time native DB
+     migration/repair rather
+     than in JS hydration?
+
+  My recommendation:
+
+  - Do not rely on per-launch
+    hydration validation.
+  - Add a one-time Android
+    native repair/migration for
+    legacy invalid download
+    rows.
+  - Keep a small defensive
+    check in hydration if you
+    want, but only as a safety
+    net, not the primary fix.
+
+  If you want, I can next turn
+  this into a very tight review
+  note or engineer-to-engineer
+  message you can paste
+  directly.
+
+
+ 
+› Implement {feature}
+ 
+  gpt-5.4 low · ~/Desktop/off-grid-mobile-ai

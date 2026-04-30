@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { useThemedStyles, useTheme } from '../theme';
@@ -198,6 +198,7 @@ interface ModelInfoBadgesProps {
   quantization: string | undefined;
   isVisionModel: boolean;
   needsRepair: boolean;
+  isRepairingVision?: boolean;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
 }
@@ -209,6 +210,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
   quantization,
   isVisionModel,
   needsRepair,
+  isRepairingVision = false,
   isCompatible,
   incompatibleReason,
 }) => {
@@ -256,7 +258,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
       )}
       {isVisionModel && needsRepair && (
         <View style={styles.warningBadge}>
-          <Text style={styles.warningText}>Needs repair</Text>
+          <Text style={styles.warningText}>{isRepairingVision ? 'Repairing...' : 'Needs repair'}</Text>
         </View>
       )}
       {!isCompatible && (
@@ -281,6 +283,7 @@ interface ModelCardActionsProps {
   onSelect: (() => void) | undefined;
   onDelete: (() => void) | undefined;
   onRepairVision: (() => void) | undefined;
+  isRepairingVision?: boolean;
   onCancel: (() => void) | undefined;
 }
 
@@ -303,15 +306,21 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
   );
 }
 
-function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelete, onRepairVision }: Readonly<{
+function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelete, onRepairVision, isRepairingVision }: Readonly<{
   isActive?: boolean; testID?: string; colors: ThemeColors; styles: any;
-  onSelect?: () => void; onDelete?: () => void; onRepairVision?: () => void;
+  onSelect?: () => void; onDelete?: () => void; onRepairVision?: () => void; isRepairingVision?: boolean;
 }>) {
   const tid = (s: string) => testID ? `${testID}-${s}` : undefined;
   if (!onSelect && !onDelete && !onRepairVision) return <Icon name="check-circle" size={16} color={colors.primary} />;
   return (
     <>
-      {onRepairVision && <ActionButton icon="eye" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />}
+      {isRepairingVision ? (
+        <View style={styles.iconButton} testID={tid('repairing-vision')}>
+          <ActivityIndicator size="small" color={colors.warning} />
+        </View>
+      ) : (
+        onRepairVision && <ActionButton icon="eye" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
+      )}
       {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
       {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
     </>
@@ -319,8 +328,8 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isActive, isCompatible, incompatibleReason,
-  testID, onDownload, onSelect, onDelete, onRepairVision, onCancel,
+  isDownloaded, isDownloading, isActive, isCompatible,
+  testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -330,10 +339,10 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
     return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
   }
   if (!isDownloaded && onDownload) {
-    return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible && !incompatibleReason} testID={tid('download')} styles={styles} />;
+    return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible} testID={tid('download')} styles={styles} />;
   }
   if (isDownloaded) {
-    return <DownloadedActions isActive={isActive} testID={testID} colors={colors} styles={styles} onSelect={onSelect} onDelete={onDelete} onRepairVision={onRepairVision} />;
+    return <DownloadedActions isActive={isActive} testID={testID} colors={colors} styles={styles} onSelect={onSelect} onDelete={onDelete} onRepairVision={onRepairVision} isRepairingVision={isRepairingVision} />;
   }
   return null;
 };

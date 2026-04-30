@@ -61,9 +61,9 @@ export const ModelsScreen: React.FC = () => {
               testID="downloads-icon"
             >
               <Icon name="download" size={20} color={colors.text} />
-              {vm.totalModelCount > 0 && (
+              {vm.activeDownloadCount > 0 && (
                 <View style={styles.downloadBadge}>
-                  <Text style={styles.downloadBadgeText}>{vm.totalModelCount}</Text>
+                  <Text style={styles.downloadBadgeText}>{vm.activeDownloadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -149,7 +149,6 @@ export const ModelsScreen: React.FC = () => {
           deviceRecommendation={vm.deviceRecommendation}
           hasActiveFilters={vm.hasActiveFilters}
           downloadedModels={vm.downloadedModels}
-          downloadProgress={vm.downloadProgress}
           alertState={vm.alertState}
           setAlertState={vm.setAlertState}
           focusTrigger={vm.focusTrigger}
@@ -160,7 +159,6 @@ export const ModelsScreen: React.FC = () => {
           handleRepairMmProj={vm.handleRepairMmProj}
           handleCancelDownload={vm.handleCancelDownload}
           handleDeleteModel={vm.handleDeleteModel}
-          downloadIds={vm.downloadIds}
           clearFilters={vm.clearFilters}
           toggleFilterDimension={vm.toggleFilterDimension}
           toggleOrg={vm.toggleOrg}
@@ -171,6 +169,7 @@ export const ModelsScreen: React.FC = () => {
           setSortOption={vm.setSortOption}
           isModelDownloaded={vm.isModelDownloaded}
           getDownloadedModel={vm.getDownloadedModel}
+          isRepairingVisionModel={vm.isRepairingVisionModel}
         />
       )}
 
@@ -201,8 +200,6 @@ export const ModelsScreen: React.FC = () => {
           imageRec={vm.imageRec}
           ramGB={vm.ramGB}
           imageRecommendation={vm.imageRecommendation}
-          imageModelDownloading={vm.imageModelDownloading}
-          imageModelProgress={vm.imageModelProgress}
           handleDownloadImageModel={vm.handleDownloadImageModel}
           handleCancelImageDownload={vm.handleCancelImageDownload}
           loadHFModels={vm.loadHFModels}

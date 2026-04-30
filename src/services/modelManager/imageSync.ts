@@ -6,8 +6,8 @@ import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../utils
 
 interface SyncCompletedImageDownloadsOpts {
   imageModelsDir: string;
-  persistedDownloads: Record<number, PersistedDownloadInfo>;
-  clearDownloadCallback: (downloadId: number) => void;
+  persistedDownloads: Record<string, PersistedDownloadInfo>;
+  clearDownloadCallback: (downloadId: string) => void;
   getDownloadedImageModels: () => Promise<ONNXImageModel[]>;
   addDownloadedImageModel: (model: ONNXImageModel) => Promise<void>;
 }
@@ -35,7 +35,7 @@ function buildRecoveredImageModel(
 
 async function recoverZipDownload(opts: {
   metadata: PersistedDownloadInfo;
-  downloadId: number;
+  downloadId: string;
   imageModelsDir: string;
   modelDir: string;
 }): Promise<string> {

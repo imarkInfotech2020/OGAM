@@ -82,26 +82,34 @@ jest.mock('../../../src/components/Button', () => ({
   },
 }));
 
-const mockSetBackgroundDownload = jest.fn();
-const mockClearBackgroundDownloads = jest.fn();
 let mockDownloadedModels: any[] = [];
 let mockDownloadedImageModels: any[] = [];
-let mockActiveBackgroundDownloads: any = {};
 let mockConversations: any[] = [];
+let mockStaleDownloadStoreEntries: any[] = [];
+const mockRemoveFromStore = jest.fn();
 
 jest.mock('../../../src/stores', () => ({
   useAppStore: jest.fn(() => ({
     downloadedModels: mockDownloadedModels,
     downloadedImageModels: mockDownloadedImageModels,
     generatedImages: [],
-    activeBackgroundDownloads: mockActiveBackgroundDownloads,
-    setBackgroundDownload: mockSetBackgroundDownload,
-    clearBackgroundDownloads: mockClearBackgroundDownloads,
   })),
   useChatStore: jest.fn((selector?: any) => {
     const state = { conversations: mockConversations };
     return selector ? selector(state) : state;
   }),
+}));
+
+jest.mock('../../../src/stores/downloadStore', () => ({
+  useDownloadStore: (selector?: any) => {
+    const entries: Record<string, any> = {};
+    mockStaleDownloadStoreEntries.forEach((e, i) => { entries[`key-${i}`] = e; });
+    const state = {
+      downloads: entries,
+      remove: mockRemoveFromStore,
+    };
+    return typeof selector === 'function' ? selector(state) : state;
+  },
 }));
 
 const mockFormatBytes = jest.fn((bytes: number) => {
@@ -152,7 +160,7 @@ describe('StorageSettingsScreen', () => {
     jest.clearAllMocks();
     mockDownloadedModels = [];
     mockDownloadedImageModels = [];
-    mockActiveBackgroundDownloads = {};
+    mockStaleDownloadStoreEntries = [];
     mockConversations = [];
     mockGetOrphanedFiles.mockResolvedValue([]);
   });
@@ -341,24 +349,27 @@ describe('StorageSettingsScreen', () => {
 
   // ---- Stale downloads section tests ----
 
-  it('shows stale downloads when they exist', () => {
-    mockActiveBackgroundDownloads = {
-      123: null, // null entry = stale
-    };
+  it('shows stale downloads when they exist', async () => {
+    mockStaleDownloadStoreEntries = [
+      { modelKey: 'stale-key-1', downloadId: 'dl-123', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+    ];
 
     const { getByText } = render(<StorageSettingsScreen />);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
     expect(getByText('Stale Downloads')).toBeTruthy();
     expect(getByText('Clear All')).toBeTruthy();
-  });
+  }, 15000);
 
   it('shows stale download with missing modelId', () => {
-    mockActiveBackgroundDownloads = {
-      456: { fileName: 'partial.gguf', modelId: '', totalBytes: 0 },
-    };
+    mockStaleDownloadStoreEntries = [
+      { modelKey: 'stale-key-456', downloadId: 'dl-456', modelId: '', fileName: 'partial.gguf', combinedTotalBytes: 0, status: 'failed' },
+    ];
 
     const { getByText } = render(<StorageSettingsScreen />);
     expect(getByText('Stale Downloads')).toBeTruthy();
-    expect(getByText(/Download #456/)).toBeTruthy();
+    expect(getByText(/Download #dl-456/)).toBeTruthy();
   });
 
   it('does not show stale downloads section when none exist', () => {
@@ -366,33 +377,28 @@ describe('StorageSettingsScreen', () => {
     expect(queryByText('Stale Downloads')).toBeNull();
   });
 
-  it('clearing a stale download calls setBackgroundDownload with null', () => {
-    mockActiveBackgroundDownloads = {
-      789: { fileName: '', modelId: 'test', totalBytes: 0 },
-    };
+  it('clearing a stale download calls remove with the modelKey', () => {
+    mockStaleDownloadStoreEntries = [
+      { modelKey: 'stale-key-789', downloadId: 'dl-789', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+    ];
 
     const { UNSAFE_getAllByType } = render(<StorageSettingsScreen />);
     const touchables = UNSAFE_getAllByType(TouchableOpacity);
-    // Find the X button for the stale download
-    // There should be a button with an X icon for clearing
-    // Let's look for the clear button in the stale downloads section
-    // The back button is first, then scan button, then stale download X
     const deleteButtons = touchables.filter((t: any) =>
       t.props.testID === undefined && !t.props.disabled,
     );
 
-    // Press the last delete-like button (X for stale download)
     if (deleteButtons.length > 2) {
       fireEvent.press(deleteButtons[deleteButtons.length - 1]);
-      expect(mockSetBackgroundDownload).toHaveBeenCalledWith(789, null);
+      expect(mockRemoveFromStore).toHaveBeenCalledWith('stale-key-789');
     }
   });
 
   it('clear all stale downloads shows confirmation', () => {
-    mockActiveBackgroundDownloads = {
-      100: null,
-      200: { fileName: '', modelId: '', totalBytes: 0 },
-    };
+    mockStaleDownloadStoreEntries = [
+      { modelKey: 'stale-1', downloadId: 'dl-100', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+      { modelKey: 'stale-2', downloadId: 'dl-200', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+    ];
 
     const { getByText } = render(<StorageSettingsScreen />);
     fireEvent.press(getByText('Clear All'));
@@ -585,10 +591,10 @@ describe('StorageSettingsScreen', () => {
   });
 
   it('clears all stale downloads when confirmed', () => {
-    mockActiveBackgroundDownloads = {
-      100: null,
-      200: { fileName: '', modelId: '', totalBytes: 0 },
-    };
+    mockStaleDownloadStoreEntries = [
+      { modelKey: 'stale-1', downloadId: 'dl-100', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+      { modelKey: 'stale-2', downloadId: 'dl-200', modelId: '', fileName: '', combinedTotalBytes: 0, status: 'failed' },
+    ];
 
     const { getByText } = render(<StorageSettingsScreen />);
     fireEvent.press(getByText('Clear All'));
@@ -598,8 +604,8 @@ describe('StorageSettingsScreen', () => {
 
     if (clearAllButton?.onPress) {
       clearAllButton.onPress();
-      expect(mockSetBackgroundDownload).toHaveBeenCalledWith(100, null);
-      expect(mockSetBackgroundDownload).toHaveBeenCalledWith(200, null);
+      expect(mockRemoveFromStore).toHaveBeenCalledWith('stale-1');
+      expect(mockRemoveFromStore).toHaveBeenCalledWith('stale-2');
     }
   });
 

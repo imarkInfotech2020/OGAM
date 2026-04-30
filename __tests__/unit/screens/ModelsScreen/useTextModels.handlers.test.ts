@@ -19,24 +19,35 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 // ── App store ─────────────────────────────────────────────────────────
-const mockSetDownloadProgress = jest.fn();
 const mockAddDownloadedModel = jest.fn();
 const mockRemoveDownloadedModel = jest.fn();
 const mockSetDownloadedModels = jest.fn();
+const mockDownloads: Record<string, any> = {};
 
 const mockStoreState: any = {
   downloadedModels: [],
   setDownloadedModels: mockSetDownloadedModels,
-  downloadProgress: {},
-  setDownloadProgress: mockSetDownloadProgress,
   addDownloadedModel: mockAddDownloadedModel,
   removeDownloadedModel: mockRemoveDownloadedModel,
   activeModelId: null,
-  activeBackgroundDownloads: {},
 };
 
 jest.mock('../../../../src/stores', () => ({
   useAppStore: jest.fn(() => mockStoreState),
+}));
+
+jest.mock('../../../../src/stores/downloadStore', () => ({
+  useDownloadStore: Object.assign(
+    jest.fn((selector?: any) => selector ? selector({ downloads: mockDownloads }) : { downloads: mockDownloads }),
+    {
+      getState: () => ({
+        downloads: mockDownloads,
+        remove: (modelKey: string) => { delete mockDownloads[modelKey]; },
+        setStatus: jest.fn(),
+      }),
+    },
+  ),
+  isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 
 // ── Services ──────────────────────────────────────────────────────────
@@ -84,7 +95,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStoreState.downloadedModels = [];
   mockStoreState.activeModelId = null;
-  mockStoreState.activeBackgroundDownloads = {};
+  Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
   const { useAppStore } = jest.requireMock('../../../../src/stores') as any;
   useAppStore.getState = () => mockStoreState;
 });
@@ -106,13 +117,17 @@ describe('handleCancelDownload', () => {
       await result.current.handleDownload(mockModel as any, mockFile as any);
     });
 
-    // downloadIds should now have the key
+    mockDownloads['org/repo/model.gguf'] = {
+      downloadId: 99,
+      modelKey: 'org/repo/model.gguf',
+      status: 'running',
+    };
+
     await act(async () => {
       await result.current.handleCancelDownload('org/repo/model.gguf');
     });
 
     expect(mockCancelBackgroundDownload).toHaveBeenCalledWith(99);
-    expect(mockSetDownloadProgress).toHaveBeenCalledWith('org/repo/model.gguf', null);
   });
 
   it('clears downloadProgress without calling cancelBackgroundDownload when no downloadId', async () => {

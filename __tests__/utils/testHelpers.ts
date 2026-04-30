@@ -43,8 +43,6 @@ export const resetStores = (): void => {
     downloadedModels: [],
     activeModelId: null,
     isLoadingModel: false,
-    downloadProgress: {},
-    activeBackgroundDownloads: {},
     settings: {
       systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
       temperature: 0.7,
@@ -76,8 +74,6 @@ export const resetStores = (): void => {
     },
     downloadedImageModels: [],
     activeImageModelId: null,
-    imageModelDownloading: [],
-    imageModelDownloadIds: {},
     isGeneratingImage: false,
     imageGenerationProgress: null,
     imageGenerationStatus: null,

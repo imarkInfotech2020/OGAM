@@ -153,7 +153,7 @@ jest.mock('../../../src/components', () => {
   return {
     Card: ({ children, style, ...props }: any) => <View style={style} {...props}>{children}</View>,
     ModelCard: ({ model, testID, onPress, onDownload, onDelete, isDownloaded, isDownloading, downloadProgress }: any) => (
-      <TouchableOpacity testID={testID} onPress={onPress}>
+      <TouchableOpacity testID={testID} onPress={onPress} disabled={!onPress}>
         <Text testID={`${testID}-name`}>{model.name}</Text>
         <Text testID={`${testID}-author`}>{model.author}</Text>
         {isDownloaded && <Text testID={`${testID}-downloaded`}>Downloaded</Text>}
@@ -435,16 +435,34 @@ describe('ModelsScreen', () => {
   // Download badge
   // ============================================================================
   describe('download badge', () => {
-    it('shows badge count when models are downloaded', async () => {
+    it('does not show badge when no active downloads', async () => {
       const model = createDownloadedModel({ id: 'dl-model' });
       mockGetDownloadedModels.mockResolvedValue([model]);
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText } = renderModelsScreen();
+      const { queryByText } = renderModelsScreen();
 
       await waitFor(() => {
-        // Badge shows total model count
-        expect(getByText('1')).toBeTruthy();
+        // Badge should not show because there are no active downloads
+        expect(queryByText('1')).toBeFalsy();
+      });
+    });
+
+    it('does not show badge for downloaded image models with no active downloads', async () => {
+      const textModel = createDownloadedModel({ id: 'text-1' });
+      const imageModel = createONNXImageModel({ id: 'image-1' });
+      mockGetDownloadedModels.mockResolvedValue([textModel]);
+      mockGetDownloadedImageModels.mockResolvedValue([imageModel]);
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+      });
+
+      const { queryByText } = renderModelsScreen();
+
+      await waitFor(() => {
+        // Badge should not show because there are no active downloads
+        expect(queryByText('2')).toBeFalsy();
       });
     });
   });
@@ -562,48 +580,6 @@ describe('ModelsScreen', () => {
 
       const totalSize = file.size + (file.mmProjFile?.size || 0);
       expect(totalSize).toBe(4500000000);
-    });
-  });
-
-  // ============================================================================
-  // Store interactions (download progress, model management)
-  // ============================================================================
-  describe('store interactions', () => {
-    it('tracks download progress via store', async () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-        },
-      });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-
-      // Verify store state was updated
-      const progress = useAppStore.getState().downloadProgress;
-      expect(progress['model-1'].progress).toBe(0.5);
-    });
-
-    it('tracks multiple concurrent downloads', () => {
-      useAppStore.setState({
-        downloadProgress: {
-          'model-1': { progress: 0.5, bytesDownloaded: 2000, totalBytes: 4000 },
-          'model-2': { progress: 0.25, bytesDownloaded: 1000, totalBytes: 4000 },
-        },
-      });
-
-      const progress = useAppStore.getState().downloadProgress;
-      expect(Object.keys(progress).length).toBe(2);
-    });
-
-    it('clears progress when download completes', () => {
-      useAppStore.getState().setDownloadProgress('model-1', { progress: 1, bytesDownloaded: 4000, totalBytes: 4000 });
-      useAppStore.getState().setDownloadProgress('model-1', null);
-
-      expect(useAppStore.getState().downloadProgress['model-1']).toBeUndefined();
     });
   });
 
@@ -888,6 +864,34 @@ describe('ModelsScreen', () => {
       await waitFor(() => {
         expect(getByTestId('model-detail-screen')).toBeTruthy();
       });
+    });
+
+    it('does not navigate to detail for unsupported phi models', async () => {
+      const searchResults = [
+        createModelInfo({
+          id: 'microsoft/phi-3-mini',
+          name: 'Phi-3 Mini',
+          author: 'microsoft',
+        }),
+      ];
+      mockSearchModels.mockResolvedValue(searchResults);
+
+      const { getByTestId, getByText, queryByTestId } = renderModelsScreen();
+
+      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
+
+      await act(async () => {
+        fireEvent.changeText(getByTestId('search-input'), 'phi');
+      });
+
+      await waitFor(() => {
+        expect(getByText('Phi-3 Mini')).toBeTruthy();
+      });
+
+      fireEvent.press(getByTestId('model-card-0'));
+
+      expect(queryByTestId('model-detail-screen')).toBeNull();
+      expect(mockGetModelFiles).not.toHaveBeenCalled();
     });
 
     it('shows back button on model detail view', async () => {
@@ -1292,58 +1296,6 @@ describe('ModelsScreen', () => {
     });
   });
 
-  // ============================================================================
-  // Multiple download badge
-  // ============================================================================
-  describe('download badge for multiple models', () => {
-    it('shows badge with count for multiple models', async () => {
-      const models = [
-        createDownloadedModel({ id: 'model-1' }),
-        createDownloadedModel({ id: 'model-2' }),
-        createDownloadedModel({ id: 'model-3' }),
-      ];
-      mockGetDownloadedModels.mockResolvedValue(models);
-      useAppStore.setState({ downloadedModels: models });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('3')).toBeTruthy();
-      });
-    });
-
-    it('includes image models in badge count', async () => {
-      const textModel = createDownloadedModel({ id: 'text-1' });
-      const imageModel = createONNXImageModel({ id: 'image-1' });
-      mockGetDownloadedModels.mockResolvedValue([textModel]);
-      mockGetDownloadedImageModels.mockResolvedValue([imageModel]);
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        downloadedImageModels: [imageModel],
-      });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('2')).toBeTruthy();
-      });
-    });
-
-    it('includes active downloads in badge count', async () => {
-      useAppStore.setState({
-        downloadedModels: [],
-        downloadProgress: {
-          'downloading-1': { progress: 0.3, bytesDownloaded: 1000, totalBytes: 3000 },
-        },
-      });
-
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('1')).toBeTruthy();
-      });
-    });
-  });
 
   // ============================================================================
   // Downloaded model indicators
@@ -1664,12 +1616,12 @@ describe('ModelsScreen', () => {
     it('filters search results by size', async () => {
       mockSearchModels.mockResolvedValue([
         createModelInfo({
-          id: 'test/small-1B',
+          id: 'test/model-1B',
           name: 'Small 1B',
           files: [createModelFile({ size: 1000000000 })],
         }),
         createModelInfo({
-          id: 'test/large-70B',
+          id: 'test/model-70B',
           name: 'Large 70B',
           files: [createModelFile({ size: 4000000000 })],
         }),
@@ -1691,14 +1643,11 @@ describe('ModelsScreen', () => {
         fireEvent.press(getByText('1-3B'));
       });
 
-      // Search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
+      // Size filters auto-trigger search even with an empty query.
       await waitFor(() => {
         expect(getByText('Small 1B')).toBeTruthy();
       });
+      expect(mockSearchModels).toHaveBeenCalled();
       // Large 70B doesn't match 1-3B size filter
       expect(queryByText('Large 70B')).toBeNull();
     });

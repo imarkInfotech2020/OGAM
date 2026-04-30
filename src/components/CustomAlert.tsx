@@ -23,6 +23,7 @@ export interface CustomAlertProps {
   buttons?: AlertButton[];
   onClose?: () => void;
   loading?: boolean;
+  closeLabel?: string;
 }
 
 export const CustomAlert: React.FC<CustomAlertProps> = ({
@@ -32,6 +33,7 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
   buttons = [{ text: 'OK', style: 'default' }],
   onClose,
   loading = false,
+  closeLabel = 'Done',
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -47,7 +49,7 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
       onClose={() => onClose?.()}
       enableDynamicSizing
       title={title}
-      closeLabel="Done"
+      closeLabel={closeLabel}
     >
       <View style={styles.content}>
         {loading ? (
@@ -88,6 +90,7 @@ export interface AlertState {
   message?: string;
   buttons?: AlertButton[];
   loading?: boolean;
+  closeLabel?: string;
 }
 
 export const initialAlertState: AlertState = {

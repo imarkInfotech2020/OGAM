@@ -1,4 +1,4 @@
-import { getDownloadStatusLabel, getUserFacingDownloadMessage, isRetryableError } from '../../../src/utils/downloadErrors';
+import { getDownloadStatusLabel, getUserFacingDownloadMessage, isRetryable } from '../../../src/utils/downloadErrors';
 
 describe('downloadErrors', () => {
   it('maps network failures to friendlier copy', () => {
@@ -25,54 +25,13 @@ describe('downloadErrors', () => {
     );
   });
 
-  describe('isRetryableError', () => {
-    it('returns true for network errors', () => {
-      expect(isRetryableError('Software caused connection abort')).toBe(true);
-      expect(isRetryableError('connection reset')).toBe(true);
-      expect(isRetryableError('failed to connect')).toBe(true);
-    });
+  it('maps pending without reason to Queued', () => {
+    expect(getDownloadStatusLabel('pending')).toBe('Queued');
+  });
 
-    it('returns true for timeouts', () => {
-      expect(isRetryableError('timeout')).toBe(true);
-      expect(isRetryableError('timed out')).toBe(true);
-    });
-
-    it('returns true for 5xx errors', () => {
-      expect(isRetryableError('HTTP 500')).toBe(true);
-      expect(isRetryableError('HTTP 502')).toBe(true);
-      expect(isRetryableError('HTTP 503')).toBe(true);
-    });
-
-    it('returns true for interrupted/unknown errors', () => {
-      expect(isRetryableError('Download interrupted')).toBe(true);
-      expect(isRetryableError('Unknown error')).toBe(true);
-    });
-
-    it('returns false for HTTP client errors (401, 403, 404)', () => {
-      expect(isRetryableError('HTTP 401')).toBe(false);
-      expect(isRetryableError('HTTP 403')).toBe(false);
-      expect(isRetryableError('HTTP 404')).toBe(false);
-    });
-
-    it('returns false for disk space errors', () => {
-      expect(isRetryableError('not enough disk space')).toBe(false);
-      expect(isRetryableError('insufficient space')).toBe(false);
-    });
-
-    it('returns false for file corruption', () => {
-      expect(isRetryableError('file corrupted')).toBe(false);
-      expect(isRetryableError('sha256 mismatch')).toBe(false);
-    });
-
-    it('returns false for cancelled downloads', () => {
-      expect(isRetryableError('download cancelled')).toBe(false);
-    });
-
-    it('returns true for empty/null reasons', () => {
-      expect(isRetryableError(null)).toBe(true);
-      expect(isRetryableError('')).toBe(true);
-      expect(isRetryableError(undefined)).toBe(true);
-    });
+  it('maps running and downloading statuses', () => {
+    expect(getDownloadStatusLabel('running')).toBe('Downloading...');
+    expect(getDownloadStatusLabel('downloading')).toBe('Downloading...');
   });
 
   describe('getUserFacingDownloadMessage', () => {
@@ -95,6 +54,29 @@ describe('downloadErrors', () => {
     it('preserves legitimate disk space errors', () => {
       const diskError = 'Not enough disk space (need 2GB, have 1GB)';
       expect(getUserFacingDownloadMessage(diskError)).toBe(diskError);
+    });
+
+    it('returns unknown error when reason and code are empty', () => {
+      expect(getUserFacingDownloadMessage(undefined, undefined)).toBe(
+        'Something went wrong while downloading.',
+      );
+    });
+  });
+
+  describe('isRetryable', () => {
+    it('returns true when reasonCode is empty', () => {
+      expect(isRetryable()).toBe(true);
+      expect(isRetryable(undefined)).toBe(true);
+    });
+
+    it('returns true for retryable codes', () => {
+      expect(isRetryable('network_lost')).toBe(true);
+      expect(isRetryable('server_unavailable')).toBe(true);
+    });
+
+    it('returns false for non-retryable codes', () => {
+      expect(isRetryable('http_404')).toBe(false);
+      expect(isRetryable('user_cancelled')).toBe(false);
     });
   });
 });

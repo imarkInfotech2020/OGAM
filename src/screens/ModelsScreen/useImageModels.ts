@@ -1,86 +1,21 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { makeImageModelKey } from '../../utils/modelKey';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
-import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
-import { ImageModelRecommendation, ONNXImageModel, PersistedDownloadInfo } from '../../types';
+import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
 import { matchesSdVersionFilter } from './utils';
 import {
   ImageDownloadDeps,
   handleDownloadImageModel as downloadImageModel,
-  wireDownloadListeners,
-  registerAndNotify,
-  cleanupDownloadState,
+  cancelSyntheticImageDownload,
 } from './imageDownloadActions';
-import logger from '../../utils/logger';
-
-/** Process a completed image download (zip or multifile) using persisted metadata. */
-async function handleCompletedImageDownload(opts: {
-  metadata: PersistedDownloadInfo;
-  modelId: string;
-  modelDir: string;
-  imageModelsDir: string;
-  downloadId: number;
-  deps: ImageDownloadDeps;
-}): Promise<void> {
-  const { metadata, modelId, modelDir, imageModelsDir, downloadId, deps } = opts;
-
-  if (metadata.imageDownloadType === 'zip') {
-    const zipPath = `${imageModelsDir}/${metadata.fileName}`;
-    if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-    await backgroundDownloadService.moveCompletedDownload(downloadId, zipPath);
-    deps.updateModelProgress(modelId, 0.92);
-    deps.syncSharedProgress({
-      modelId,
-      progress: 0.92,
-      totalBytes: metadata.imageModelSize ?? 0,
-      downloadId,
-      fileName: metadata.fileName,
-      status: 'processing',
-    });
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-    await unzip(zipPath, modelDir);
-    const resolvedModelDir = metadata.imageModelBackend === 'coreml'
-      ? await resolveCoreMLModelDir(modelDir) : modelDir;
-    deps.updateModelProgress(modelId, 0.95);
-    deps.syncSharedProgress({
-      modelId,
-      progress: 0.95,
-      totalBytes: metadata.imageModelSize ?? 0,
-      downloadId,
-      fileName: metadata.fileName,
-      status: 'processing',
-    });
-    await RNFS.unlink(zipPath).catch(() => { });
-    const imageModel: ONNXImageModel = {
-      id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
-      modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(),
-      size: metadata.imageModelSize!, style: metadata.imageModelStyle,
-      backend: metadata.imageModelBackend as ONNXImageModel['backend'],
-    };
-    await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
-  } else if (metadata.imageDownloadType === 'multifile') {
-    // Clean up native download entry in background (files already at final location)
-    backgroundDownloadService.moveCompletedDownload(downloadId, modelDir).catch(() => { });
-    const imageModel: ONNXImageModel = {
-      id: modelId, name: metadata.imageModelName!, description: metadata.imageModelDescription!,
-      modelPath: modelDir, downloadedAt: new Date().toISOString(),
-      size: metadata.imageModelSize!, style: metadata.imageModelStyle,
-      backend: metadata.imageModelBackend as ONNXImageModel['backend'],
-    };
-    await registerAndNotify(deps, { imageModel, modelName: metadata.imageModelName!, downloadId });
-    // Fetch tokenizer files in background after model is registered
-    if (metadata.imageModelBackend === 'coreml' && metadata.imageModelRepo) {
-      downloadCoreMLTokenizerFiles(modelDir, metadata.imageModelRepo).catch(() => { });
-    }
-  }
-}
+import { resumeImageDownload } from './imageDownloadResume';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
@@ -96,51 +31,20 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [userChangedBackendFilter, setUserChangedBackendFilter] = useState(false);
   const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
   const [showRecHint, setShowRecHint] = useState(true);
-  const [imageModelProgress, setImageModelProgress] = useState<Record<string, number>>({});
 
   const {
     downloadedImageModels, setDownloadedImageModels, addDownloadedImageModel,
     activeImageModelId, setActiveImageModelId,
-    imageModelDownloading, addImageModelDownloading, removeImageModelDownloading,
-    imageModelDownloadIds, setImageModelDownloadId, setBackgroundDownload,
-    setDownloadProgress,
     onboardingChecklist,
   } = useAppStore();
-
-  const updateModelProgress = (modelId: string, n: number) =>
-    setImageModelProgress(prev => ({ ...prev, [modelId]: n }));
-  const clearModelProgress = (modelId: string) =>
-    setImageModelProgress(prev => { const next = { ...prev }; delete next[modelId]; return next; });
-  const syncSharedProgress = (opts: {
-    modelId: string;
-    progress: number;
-    totalBytes: number;
-    downloadId?: number;
-    fileName?: string;
-    status?: string;
-    bytesDownloaded?: number;
-  }) => {
-    const { modelId, progress, totalBytes, downloadId, fileName, status, bytesDownloaded } = opts;
-    const metadata = downloadId != null ? useAppStore.getState().activeBackgroundDownloads[downloadId] : null;
-    const keyModelId = metadata?.modelId ?? `image:${modelId}`;
-    const keyFileName = metadata?.fileName ?? fileName ?? modelId;
-    const key = `${keyModelId}/${keyFileName}`;
-    setDownloadProgress(key, {
-      progress,
-      bytesDownloaded: bytesDownloaded ?? Math.round(progress * totalBytes),
-      totalBytes,
-      status,
-    });
-  };
+  const downloads = useDownloadStore((s) => s.downloads);
+  const resumingDownloadKeysRef = useRef<Set<string>>(new Set());
 
   const makeDeps = (): ImageDownloadDeps => ({
-    addImageModelDownloading, removeImageModelDownloading,
-    updateModelProgress, syncSharedProgress, clearModelProgress,
-    addDownloadedImageModel, activeImageModelId,
-    setActiveImageModelId, setImageModelDownloadId,
-    setBackgroundDownload, setAlertState,
-    getBackgroundDownload: (downloadId: number) => useAppStore.getState().activeBackgroundDownloads[downloadId] ?? null,
-    setDownloadProgress,
+    addDownloadedImageModel,
+    activeImageModelId,
+    setActiveImageModelId,
+    setAlertState,
     triedImageGen: onboardingChecklist.triedImageGen,
   });
 
@@ -171,139 +75,55 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     }
   }, []);
 
-  const restoreDownloadWithoutMetadata = (
-    download: { downloadId: number; status: string; bytesDownloaded: number; totalBytes: number },
-    modelId: string,
-  ) => {
-    if (!['running', 'pending', 'paused'].includes(download.status)) return;
-    addImageModelDownloading(modelId);
-    setImageModelDownloadId(modelId, download.downloadId);
-    updateModelProgress(modelId, download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0);
-  };
+  useEffect(() => {
+    const init = async () => {
+      const downloaded = await modelManager.getDownloadedImageModels();
+      setDownloadedImageModels(downloaded);
+    };
+    init();
+  }, [setDownloadedImageModels]);
 
-  const restoreCompletedDownload = async (
-    download: { downloadId: number; modelId: string },
-    info: { modelId: string; metadata: PersistedDownloadInfo; deps: ImageDownloadDeps },
-  ) => {
-    const { modelId, metadata, deps } = info;
-    const imageModelsDir = modelManager.getImageModelsDirectory();
-    const modelDir = `${imageModelsDir}/${modelId}`;
-    addImageModelDownloading(modelId);
-    updateModelProgress(modelId, 0.9);
-    syncSharedProgress({
-      modelId,
-      progress: 0.9,
-      totalBytes: metadata.imageModelSize ?? 0,
-      downloadId: download.downloadId,
-      fileName: metadata.fileName,
-      status: 'processing',
-    });
-    try {
-      await handleCompletedImageDownload({
-        metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
-      });
-    } catch (e: any) {
-      logger.warn('[ModelsScreen] Failed to process completed image download:', e);
-      cleanupDownloadState(deps, modelId, download.downloadId);
-    }
-  };
+  useEffect(() => {
+    const processingEntries = Object.values(downloads).filter(
+      entry => entry.modelType === 'image' && entry.status === 'processing',
+    );
+    if (processingEntries.length === 0) return;
 
-  const restoreInProgressDownload = (
-    download: { downloadId: number; modelId: string; bytesDownloaded: number; totalBytes: number; status: string },
-    info: { modelId: string; metadata: PersistedDownloadInfo; deps: ImageDownloadDeps },
-  ) => {
-    const { modelId, metadata, deps } = info;
-    const imageModelsDir = modelManager.getImageModelsDirectory();
-    const modelDir = `${imageModelsDir}/${modelId}`;
-    addImageModelDownloading(modelId);
-    setImageModelDownloadId(modelId, download.downloadId);
-    const initialProgress = download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0;
-    updateModelProgress(modelId, initialProgress);
-    syncSharedProgress({
-      modelId,
-      progress: initialProgress,
-      totalBytes: metadata.imageModelSize ?? download.totalBytes,
-      downloadId: download.downloadId,
-      fileName: metadata.fileName,
-      status: download.status,
-    });
-
-    wireDownloadListeners(
-      { downloadId: download.downloadId, modelId, deps },
-      () => handleCompletedImageDownload({
-        metadata, modelId, modelDir, imageModelsDir, downloadId: download.downloadId, deps,
-      }),
-    ).setProgressUnsub(backgroundDownloadService.onProgress(download.downloadId, (ev) => {
-      if (ev.status === 'retrying' || ev.status === 'waiting_for_network') return;
-      const scale = metadata.imageDownloadType === 'zip' ? 0.9 : 0.95;
-      const progress = ev.totalBytes > 0 ? (ev.bytesDownloaded / ev.totalBytes) * scale : 0;
-      deps.updateModelProgress(modelId, progress);
-      deps.syncSharedProgress({
-        modelId,
-        progress,
-        totalBytes: metadata.imageModelSize ?? ev.totalBytes,
-        downloadId: download.downloadId,
-        fileName: metadata.fileName,
-        status: ev.status,
-      });
-    }));
-  };
-
-  const restoreActiveImageDownloads = async () => {
-    if (!backgroundDownloadService.isAvailable()) return;
-    try {
-      const activeDownloads = await modelManager.getActiveBackgroundDownloads();
-      const currentImageModels = useAppStore.getState().downloadedImageModels;
-      const downloadedImageIds = new Set(currentImageModels.map(m => m.id));
-
-      // Clean up stale native entries for already-downloaded image models
-      const imageDownloads = activeDownloads.filter(d => {
-        if (!d.modelId.startsWith('image:')) return false;
-        const imageId = d.modelId.replace('image:', '');
-        if (downloadedImageIds.has(imageId)) {
-          backgroundDownloadService.moveCompletedDownload(d.downloadId, '').catch(() => { });
-          backgroundDownloadService.cancelDownload(d.downloadId).catch(() => { });
-          return false;
-        }
-        return true;
-      });
-      const activeNativeIds = new Set(imageDownloads.map(d => d.modelId.replace('image:', '')));
-      for (const modelId of imageModelDownloading) {
-        if (!activeNativeIds.has(modelId)) removeImageModelDownloading(modelId);
-      }
-
-      const persistedDownloads = useAppStore.getState().activeBackgroundDownloads;
+    let cancelled = false;
+    const resumeProcessingDownloads = async () => {
+      const latestDownloaded = await modelManager.getDownloadedImageModels();
+      if (cancelled) return;
+      const downloadedIds = new Set(latestDownloaded.map(m => m.id));
       const deps = makeDeps();
-      let hasActiveDownloads = false;
 
-      for (const download of imageDownloads) {
-        const modelId = download.modelId.replace('image:', '');
-        const metadata = persistedDownloads[download.downloadId];
+      for (const entry of processingEntries) {
+        if (cancelled) return;
+        if (resumingDownloadKeysRef.current.has(entry.modelKey)) continue;
 
-        if (!metadata?.imageDownloadType) {
-          restoreDownloadWithoutMetadata(download, modelId);
+        const modelId = entry.modelId.replace('image:', '');
+        if (downloadedIds.has(modelId)) {
+          useDownloadStore.getState().remove(entry.modelKey);
           continue;
         }
 
-        if (download.status === 'completed') {
-          await restoreCompletedDownload(download, { modelId, metadata, deps });
-        } else if (['running', 'pending', 'paused'].includes(download.status)) {
-          restoreInProgressDownload(download, { modelId, metadata, deps });
-          hasActiveDownloads = true;
-        }
+        // Restored image downloads can finish after mount and transition
+        // running -> processing via the global download hook. Re-run the same
+        // finalize path here so unzip/register isn't missed after relaunch.
+        resumingDownloadKeysRef.current.add(entry.modelKey);
+        resumeImageDownload(entry, deps)
+          .catch(() => {})
+          .finally(() => {
+            resumingDownloadKeysRef.current.delete(entry.modelKey);
+          });
       }
+    };
 
-      if (hasActiveDownloads) backgroundDownloadService.startProgressPolling();
-    } catch (e) { logger.warn('[ModelsScreen] Failed to restore image downloads:', e); }
-  };
-
-  useEffect(() => {
-    loadDownloadedImageModels();
-    restoreActiveImageDownloads();
-    // restoreActiveImageDownloads is intentionally mount-only — it reads
-    // current store state via useAppStore.getState() to avoid stale closures.
+    resumeProcessingDownloads();
+    return () => { cancelled = true; };
+    // makeDeps intentionally omitted: it is recreated each render and current store
+    // values are read when resumeProcessingDownloads runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadDownloadedImageModels]);
+  }, [downloads]);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,12 +182,20 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleDownloadImageModel = (modelInfo: ImageModelDescriptor) =>
     downloadImageModel(modelInfo, makeDeps());
 
+  // Cancel by reading the store entry's downloadId; for synthetic multifile
+  // ids the native cancel is a no-op (downloadFileTo is in-process), but
+  // the store remove is what matters for UI.
   const handleCancelImageDownload = async (modelId: string) => {
-    const downloadId = imageModelDownloadIds[modelId];
-    cleanupDownloadState(makeDeps(), modelId, downloadId);
-    if (downloadId != null) {
-      await backgroundDownloadService.cancelDownload(downloadId).catch(() => { });
+    const modelKey = makeImageModelKey(modelId);
+    const entry = useDownloadStore.getState().downloads[modelKey];
+    if (!entry) return;
+    useDownloadStore.getState().remove(modelKey);
+    if (!entry.downloadId) return;
+    if (entry.downloadId.startsWith('image-multi:')) {
+      await cancelSyntheticImageDownload(modelId).catch(() => {});
+      return;
     }
+    await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
   };
 
   return {
@@ -380,9 +208,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     imageFiltersVisible, setImageFiltersVisible,
     imageRec, showRecommendedOnly, setShowRecommendedOnly,
     showRecHint, setShowRecHint,
-    imageModelProgress, downloadedImageModels, imageModelDownloading,
+    downloadedImageModels,
     hasActiveImageFilters, filteredHFModels, imageRecommendation,
-    loadHFModels, loadDownloadedImageModels, restoreActiveImageDownloads,
+    loadHFModels, loadDownloadedImageModels,
     clearImageFilters, isRecommendedModel, handleDownloadImageModel,
     handleCancelImageDownload,
     setUserChangedBackendFilter,

@@ -1,7 +1,9 @@
 import RNFS from 'react-native-fs';
+import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
-
+import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
+ 
 export function isMMProjFile(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return lower.includes('mmproj') ||
@@ -16,7 +18,15 @@ function parseSizeInt(size: string | number): number {
 async function getDirSize(dirPath: string): Promise<number> {
   try {
     const dirFiles = await RNFS.readDir(dirPath);
-    return dirFiles.reduce((total, f) => total + (f.isFile() ? parseSizeInt(f.size) : 0), 0);
+    let total = 0;
+    for (const f of dirFiles) {
+      if (f.isFile()) {
+        total += parseSizeInt(f.size);
+      } else if (f.isDirectory()) {
+        total += await getDirSize(f.path);
+      }
+    }
+    return total;
   } catch {
     return 0;
   }
@@ -86,15 +96,180 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
 }
 
 function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
-  if (dirName.includes('qnn') || dirName.includes('8gen')) return 'qnn';
+  if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
   if (dirName.includes('coreml')) return 'coreml';
   return 'mnn';
+}
+
+const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
+
+function isUnknownLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'unknown';
+}
+
+function shouldSkipSuspiciousRecoveredTextModel(author: string, quantization: string): boolean {
+  if (isUnknownLike(author) || isUnknownLike(quantization)) {
+    return true;
+  }
+  return false;
 }
 
 export interface ScanImageModelsOpts {
   imageModelsDir: string;
   getImageModels: () => Promise<ONNXImageModel[]>;
   addImageModel: (model: ONNXImageModel) => Promise<void>;
+}
+
+export interface ReconcileImageModelsOpts {
+  imageModelsDir: string;
+  getImageModels: () => Promise<ONNXImageModel[]>;
+  addImageModel: (model: ONNXImageModel) => Promise<void>;
+  activeModelIds: Set<string>;
+}
+
+async function isValidZip(zipPath: string): Promise<boolean> {
+  if (!(await RNFS.exists(zipPath))) return false;
+  try {
+    const stat = await RNFS.stat(zipPath);
+    const size = parseSizeInt(stat.size);
+    if (!Number.isFinite(size) || size <= 0) return false;
+  } catch {
+    return false;
+  }
+  try {
+    const header = await RNFS.read(zipPath, 4, 0, 'ascii');
+    if (!header.startsWith('PK')) return false;
+  } catch {
+    // header check is best-effort
+  }
+  return true;
+}
+
+export async function reconcileFinishedImageDownloads(opts: ReconcileImageModelsOpts): Promise<ONNXImageModel[]> {
+  const { imageModelsDir, getImageModels, addImageModel, activeModelIds } = opts;
+  const recovered: ONNXImageModel[] = [];
+
+  try {
+    const dirExists = await RNFS.exists(imageModelsDir);
+    if (!dirExists) return recovered;
+
+    const registeredModels = await getImageModels();
+    const registeredIds = new Set(registeredModels.map(m => m.id));
+    // Index by path so we can detect legacy recovered_<name>_<ts> entries whose
+    // ID doesn't match the directory name but whose modelPath still points here.
+    const registeredPaths = new Set(registeredModels.map(m => m.modelPath));
+
+    const items = await RNFS.readDir(imageModelsDir);
+
+    for (const item of items) {
+      if (!item.isDirectory()) continue;
+      if (registeredIds.has(item.name)) continue;
+      if (activeModelIds.has(item.name)) continue;
+
+      // Legacy recovered_ entry: path matches but ID has recovered_<name>_<ts> prefix.
+      // Migrate to a real ID so the model shows in the UI after the appStore filter lands.
+      const legacyEntry = registeredModels.find(
+        m => m.modelPath === item.path && m.id.startsWith('recovered_'),
+      );
+      if (legacyEntry) {
+        try {
+          await RNFS.writeFile(`${item.path}/_ready`, '', 'utf8').catch(() => {});
+          const backend = detectBackend(item.name);
+          let modelPath = item.path;
+          if (backend === 'coreml') modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
+          const totalSize = await getDirSize(item.path);
+          const migrated: ONNXImageModel = {
+            id: item.name, name: legacyEntry.name || item.name.replaceAll('_', ' '),
+            description: legacyEntry.description || '', modelPath,
+            size: totalSize, downloadedAt: legacyEntry.downloadedAt || new Date().toISOString(),
+            backend, style: legacyEntry.style, attentionVariant: legacyEntry.attentionVariant,
+          };
+          await addImageModel(migrated);
+          recovered.push(migrated);
+        } catch {
+          // Non-fatal — leave the old entry in place; at least files are safe.
+        }
+        continue;
+      }
+
+      // Directory is referenced by a properly-registered model — nothing to do.
+      if (registeredPaths.has(item.path)) continue;
+
+      const readyPath = `${item.path}/_ready`;
+      const hasReady = await RNFS.exists(readyPath);
+
+      if (hasReady) {
+        // Unzip completed but registerAndNotify was killed — register now.
+        const backend = detectBackend(item.name);
+        let modelPath = item.path;
+        if (backend === 'coreml') {
+          modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
+        }
+        const totalSize = await getDirSize(item.path);
+        const newModel: ONNXImageModel = {
+          id: item.name,
+          name: item.name.replaceAll('_', ' '),
+          description: '',
+          modelPath,
+          size: totalSize,
+          downloadedAt: new Date().toISOString(),
+          backend,
+        };
+        await addImageModel(newModel);
+        recovered.push(newModel);
+        continue;
+      }
+
+      // No _ready — check if a zip exists to re-unzip (mid-unzip kill).
+      const zipNamePath = `${item.path}/_zip_name`;
+      const hasZipName = await RNFS.exists(zipNamePath);
+
+      if (hasZipName) {
+        try {
+          const zipFileName = (await RNFS.readFile(zipNamePath, 'utf8')).trim();
+          const zipPath = `${imageModelsDir}/${zipFileName}`;
+          const zipOk = await isValidZip(zipPath);
+
+          if (zipOk) {
+            await unzip(zipPath, item.path);
+            await RNFS.unlink(zipPath).catch(() => {});
+            await RNFS.writeFile(readyPath, '', 'utf8').catch(() => {});
+            const backend = detectBackend(item.name);
+            let modelPath = item.path;
+            if (backend === 'coreml') {
+              modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
+            }
+            const totalSize = await getDirSize(item.path);
+            const newModel: ONNXImageModel = {
+              id: item.name,
+              name: item.name.replaceAll('_', ' '),
+              description: '',
+              modelPath,
+              size: totalSize,
+              downloadedAt: new Date().toISOString(),
+              backend,
+            };
+            await addImageModel(newModel);
+            recovered.push(newModel);
+          } else {
+            // Zip is gone or corrupt — partial dir is unrecoverable, clean up.
+            await RNFS.unlink(item.path).catch(() => {});
+          }
+        } catch {
+          // Non-fatal: leave for the next startup attempt.
+        }
+      } else {
+        // No _ready and no _zip_name — stale artifact from a cancelled or
+        // pre-sentinel download. Delete to free space.
+        await RNFS.unlink(item.path).catch(() => {});
+      }
+    }
+  } catch {
+    // Reconciliation errors must not crash startup.
+  }
+
+  return recovered;
 }
 
 export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Promise<ONNXImageModel[]> {
@@ -169,11 +344,16 @@ async function doScanForUntrackedTextModels(
 
     const quantMatch = item.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
     const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+    const author = 'Unknown';
+
+    if (shouldSkipSuspiciousRecoveredTextModel(author, quantization) && fileSize < MIN_RECOVERED_TEXT_MODEL_BYTES) {
+      continue;
+    }
 
     const newModel: DownloadedModel = {
       id: `recovered_${item.name}_${Date.now()}`,
       name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
-      author: 'Unknown',
+      author,
       filePath: item.path,
       fileName: item.name,
       fileSize,

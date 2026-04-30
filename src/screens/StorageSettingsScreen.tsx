@@ -13,6 +13,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
+import { useDownloadStore } from '../stores/downloadStore';
 import { hardwareService, modelManager } from '../services';
 import { OrphanedFilesSection } from './OrphanedFilesSection';
 import { createStyles } from './StorageSettingsScreen.styles';
@@ -28,15 +29,17 @@ export const StorageSettingsScreen: React.FC = () => {
   const {
     downloadedModels,
     downloadedImageModels,
-    activeBackgroundDownloads,
-    setBackgroundDownload,
   } = useAppStore();
   const { conversations } = useChatStore();
+  const downloads = useDownloadStore(s => s.downloads);
+  const removeFromStore = useDownloadStore(s => s.remove);
 
   const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
 
-  const staleDownloads = Object.entries(activeBackgroundDownloads).filter(([_, info]) => {
-    return !info?.modelId || !info?.fileName || !info?.totalBytes;
+  // A "stale" entry is a store entry missing the basic fields needed to
+  // display or finalize it. Now sourced from the unified download store.
+  const staleDownloads = Object.values(downloads).filter(entry => {
+    return !entry.modelId || !entry.fileName || !entry.combinedTotalBytes;
   });
 
   const loadStorageInfo = useCallback(async () => {
@@ -51,10 +54,10 @@ export const StorageSettingsScreen: React.FC = () => {
   }, [loadStorageInfo]);
 
   const handleClearStaleDownload = useCallback(
-    (downloadId: number) => {
-      setBackgroundDownload(downloadId, null);
+    (modelKey: string) => {
+      removeFromStore(modelKey);
     },
-    [setBackgroundDownload],
+    [removeFromStore],
   );
 
   const handleClearAllStaleDownloads = useCallback(() => {
@@ -69,15 +72,15 @@ export const StorageSettingsScreen: React.FC = () => {
             style: 'destructive',
             onPress: () => {
               setAlertState(hideAlert());
-              for (const [downloadId] of staleDownloads) {
-                setBackgroundDownload(Number(downloadId), null);
+              for (const entry of staleDownloads) {
+                removeFromStore(entry.modelKey);
               }
             },
           },
         ],
       ),
     );
-  }, [staleDownloads, setBackgroundDownload]);
+  }, [staleDownloads, removeFromStore]);
 
   const totalStorage = storageUsed + availableStorage;
   const usedPercentage = totalStorage > 0 ? (storageUsed / totalStorage) * 100 : 0;
@@ -201,17 +204,17 @@ export const StorageSettingsScreen: React.FC = () => {
             <Text style={[styles.hint, { textAlign: 'left' as const, marginBottom: SPACING.md }]}>
               These download entries have invalid or missing data and can be safely cleared.
             </Text>
-            {staleDownloads.map(([downloadId, info]) => (
-              <View key={downloadId} style={styles.orphanedRow}>
+            {staleDownloads.map(entry => (
+              <View key={entry.modelKey} style={styles.orphanedRow}>
                 <View style={styles.orphanedInfo}>
-                  <Text style={styles.orphanedName}>Download #{downloadId}</Text>
+                  <Text style={styles.orphanedName}>Download #{entry.downloadId}</Text>
                   <Text style={styles.orphanedMeta}>
-                    {info?.fileName ?? 'Unknown file'} • {info?.modelId ?? 'Unknown model'}
+                    {entry.fileName || 'Unknown file'} • {entry.modelId || 'Unknown model'}
                   </Text>
                 </View>
                 <TouchableOpacity
                   style={styles.deleteButton}
-                  onPress={() => handleClearStaleDownload(Number(downloadId))}
+                  onPress={() => handleClearStaleDownload(entry.modelKey)}
                 >
                   <Icon name="x" size={18} color={colors.error} />
                 </TouchableOpacity>

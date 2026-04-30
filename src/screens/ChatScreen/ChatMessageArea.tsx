@@ -32,7 +32,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const [inputHeight, setInputHeight] = useState(84);
   const activeModelRepoId = chat.activeModelId?.split('/').slice(0, 2).join('/');
   const handleRepairVision = activeModelRepoId
-    ? () => tabNav.navigate('Main', { screen: 'ModelsTab', params: { repairModelId: activeModelRepoId } })
+    ? () => tabNav.navigate('DownloadManager')
     : undefined;
   const scrollToBottomStyle = useMemo(
     () => [styles.scrollToBottomContainer, { bottom: inputHeight + 8 }],

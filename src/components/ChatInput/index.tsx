@@ -119,10 +119,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (!supportsVision) {
       setAlertState(showAlert(
         'Vision Not Supported',
-        'The loaded model does not have vision support.\n\nIf this model supports vision, use the repair option in the Models screen.',
+        'The loaded model does not have vision support.\n\nIf this model supports vision, open Download Manager and tap the eye icon next to the model to repair it.',
         [
           { text: 'Cancel', onPress: () => setAlertState(hideAlert()) },
-          ...(onRepairVision ? [{ text: 'Go to Models', onPress: () => { setAlertState(hideAlert()); onRepairVision(); } }] : [{ text: 'OK' }]),
+          ...(onRepairVision ? [{ text: 'Go to Download Manager', onPress: () => { setAlertState(hideAlert()); onRepairVision(); } }] : [{ text: 'OK' }]),
         ],
       ));
       return;

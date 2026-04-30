@@ -4,22 +4,19 @@ export interface DownloadParams {
   url: string;
   fileName: string;
   modelId: string;
-  title?: string;
-  description?: string;
+  modelKey?: string;
+  modelType?: 'text' | 'image';
+  quantization?: string;
+  combinedTotalBytes?: number;
+  mmProjDownloadId?: string;
+  metadataJson?: string;
   totalBytes?: number;
   sha256?: string;
-}
-
-export interface MultiFileDownloadParams {
-  files: { url: string; relativePath: string; size: number }[];
-  fileName: string;
-  modelId: string;
-  destinationDir: string;
-  totalBytes?: number;
+  hideNotification?: boolean;
 }
 
 export interface DownloadProgressEvent {
-  downloadId: number;
+  downloadId: string;
   fileName: string;
   modelId: string;
   bytesDownloaded: number;
@@ -30,7 +27,7 @@ export interface DownloadProgressEvent {
 }
 
 export interface DownloadCompleteEvent {
-  downloadId: number;
+  downloadId: string;
   fileName: string;
   modelId: string;
   bytesDownloaded: number;
@@ -40,7 +37,7 @@ export interface DownloadCompleteEvent {
 }
 
 export interface DownloadErrorEvent {
-  downloadId: number;
+  downloadId: string;
   fileName: string;
   modelId: string;
   status: 'failed';

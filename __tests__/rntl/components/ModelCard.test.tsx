@@ -273,6 +273,13 @@ describe('ModelCard', () => {
       expect(getByText('LM Studio')).toBeTruthy();
       expect(getByText('★')).toBeTruthy();
     });
+
+    it('shows trending icon in compact mode', () => {
+      const { getByText } = render(
+        <ModelCard model={baseModel} compact={true} isTrending={true} />
+      );
+      expect(getByText('')).toBeTruthy();
+    });
   });
 
   // ============================================================================
@@ -404,6 +411,21 @@ describe('ModelCard', () => {
       );
       expect(getByText('Needs repair')).toBeTruthy();
       expect(queryByText('Vision')).toBeNull();
+    });
+
+    it('shows Repairing badge while vision repair is in progress', () => {
+      const visionFile = createModelFileWithMmProj();
+      const brokenModel = createDownloadedModel({ isVisionModel: true });
+      const { getByText, queryByText } = render(
+        <ModelCard
+          model={baseModel}
+          file={visionFile}
+          downloadedModel={brokenModel}
+          isRepairingVision={true}
+        />
+      );
+      expect(getByText('Repairing...')).toBeTruthy();
+      expect(queryByText('Needs repair')).toBeNull();
     });
   });
 
@@ -576,6 +598,22 @@ describe('ModelCard', () => {
       expect(downloadBtn.props.accessibilityState?.disabled).toBe(true);
     });
 
+    it('disables download when not compatible even if a reason is shown', () => {
+      const onDownload = jest.fn();
+      const { getByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={false}
+          isCompatible={false}
+          incompatibleReason="Not supported yet"
+          onDownload={onDownload}
+          testID="card"
+        />
+      );
+      const downloadBtn = getByTestId('card-download');
+      expect(downloadBtn.props.accessibilityState?.disabled).toBe(true);
+    });
+
     it('shows "Too large" warning when not compatible', () => {
       const { getByText } = render(
         <ModelCard
@@ -618,6 +656,44 @@ describe('ModelCard', () => {
       // Active models should not show the select button
       const treeStr = JSON.stringify(toJSON());
       expect(treeStr).toContain('Active'); // Active badge is shown instead
+    });
+
+    it('shows downloaded check icon when no action handlers are provided', () => {
+      const { toJSON } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={true}
+        />
+      );
+      expect(JSON.stringify(toJSON())).toContain('check-circle');
+    });
+
+    it('shows repair spinner instead of repair button while repairing downloaded vision model', () => {
+      const { getByTestId, queryByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={true}
+          onRepairVision={jest.fn()}
+          isRepairingVision={true}
+          testID="card"
+        />
+      );
+      expect(getByTestId('card-repairing-vision')).toBeTruthy();
+      expect(queryByTestId('card-repair-vision')).toBeNull();
+    });
+
+    it('shows repair action for downloaded vision model when repair is available and idle', () => {
+      const onRepairVision = jest.fn();
+      const { getByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={true}
+          onRepairVision={onRepairVision}
+          testID="card"
+        />
+      );
+      fireEvent.press(getByTestId('card-repair-vision'));
+      expect(onRepairVision).toHaveBeenCalled();
     });
   });
 

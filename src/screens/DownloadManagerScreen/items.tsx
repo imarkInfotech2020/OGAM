@@ -1,12 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
-import { hardwareService } from '../../services';
-import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel, BackgroundDownloadReasonCode } from '../../types';
+import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
-import { getDownloadStatusLabel } from '../../utils/downloadErrors';
+import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { createStyles } from './styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -14,7 +13,8 @@ import { createStyles } from './styles';
 export type DownloadItem = {
   type: 'active' | 'completed';
   modelType: 'text' | 'image';
-  downloadId?: number;
+  downloadId?: string;
+  modelKey?: string;
   modelId: string;
   fileName: string;
   author: string;
@@ -27,17 +27,11 @@ export type DownloadItem = {
   filePath?: string;
   isVisionModel?: boolean;
   mmProjPath?: string;
+  mmProjFileName?: string;
   reason?: string;
   reasonCode?: BackgroundDownloadReasonCode;
+  name?: string;
 };
-
-export interface DownloadItemsData {
-  downloadProgress: Record<string, { progress: number; bytesDownloaded: number; totalBytes: number; ownerDownloadId?: number; status?: string; reason?: string; reasonCode?: BackgroundDownloadReasonCode }>;
-  activeDownloads: BackgroundDownloadInfo[];
-  activeBackgroundDownloads: Record<number, { modelId: string; fileName: string; author: string; quantization: string; totalBytes: number } | null>;
-  downloadedModels: DownloadedModel[];
-  downloadedImageModels: ONNXImageModel[];
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -62,7 +56,7 @@ export function extractQuantization(fileName: string): string {
 }
 
 export function getStatusText(status: string): string {
-  if (status === 'running' || status === 'downloading') return 'Downloading...';
+  if (status === 'running') return 'Downloading...';
   if (status === 'pending') return 'Queued';
   if (status === 'paused') return 'Paused';
   if (status === 'retrying') return 'Retrying connection...';
@@ -72,112 +66,8 @@ export function getStatusText(status: string): string {
   return status;
 }
 
-export function buildDownloadItems(data: DownloadItemsData): DownloadItem[] {
-  const items: DownloadItem[] = [];
-
-  Object.entries(data.downloadProgress).forEach(([key, progress]) => {
-    const [_modelId, fileName] = key.split('/').slice(-2);
-    const fullModelId = key.substring(0, key.lastIndexOf('/'));
-    const matchingActiveDownload = data.activeDownloads.find(download => {
-      const metadata = data.activeBackgroundDownloads[download.downloadId];
-      return metadata?.modelId === fullModelId && metadata?.fileName === fileName;
-    });
-    if (!fileName || !fullModelId || fileName === 'undefined' || fullModelId === 'undefined' ||
-        Number.isNaN(progress.totalBytes) || Number.isNaN(progress.bytesDownloaded)) {
-      return;
-    }
-    // Skip image download entries whose model is already in Downloaded Models
-    if (fullModelId.startsWith('image:')) {
-      const imageId = fullModelId.replace('image:', '');
-      if (data.downloadedImageModels.some(m => m.id === imageId)) return;
-    }
-    items.push({
-      type: 'active',
-      modelType: fullModelId.startsWith('image:') ? 'image' : 'text',
-      downloadId: matchingActiveDownload?.downloadId,
-      modelId: fullModelId,
-      fileName,
-      author: fullModelId.split('/')[0] ?? 'Unknown',
-      quantization: extractQuantization(fileName),
-      fileSize: progress.totalBytes,
-      bytesDownloaded: progress.bytesDownloaded,
-      progress: progress.progress,
-      status: matchingActiveDownload?.status ?? progress.status ?? 'downloading',
-      reason: matchingActiveDownload?.reason || matchingActiveDownload?.failureReason || progress.reason,
-      reasonCode: matchingActiveDownload?.reasonCode || progress.reasonCode,
-    });
-  });
-
-  // Background downloads not already covered by downloadProgress
-  data.activeDownloads.forEach(download => {
-    const metadata = data.activeBackgroundDownloads[download.downloadId];
-    if (!metadata) return;
-    const key = `${metadata.modelId}/${metadata.fileName}`;
-    if (data.downloadProgress[key]) return;
-    if (!metadata.fileName || !metadata.modelId ||
-        metadata.fileName === 'undefined' || metadata.modelId === 'undefined' ||
-        Number.isNaN(metadata.totalBytes) || Number.isNaN(download.bytesDownloaded)) {
-      return;
-    }
-    items.push({
-      type: 'active',
-      modelType: metadata.modelId.startsWith('image:') ? 'image' : 'text',
-      downloadId: download.downloadId,
-      modelId: metadata.modelId,
-      fileName: download.title ?? metadata.fileName,
-      author: metadata.author,
-      quantization: metadata.quantization,
-      fileSize: metadata.totalBytes,
-      bytesDownloaded: download.bytesDownloaded,
-      progress: metadata.totalBytes > 0 ? download.bytesDownloaded / metadata.totalBytes : 0,
-      status: download.status,
-      reason: download.reason || download.failureReason,
-      reasonCode: download.reasonCode,
-    });
-  });
-
-  // Completed text models
-  data.downloadedModels.forEach(model => {
-    const totalSize = hardwareService.getModelTotalSize(model);
-    items.push({
-      type: 'completed',
-      modelType: 'text',
-      modelId: model.id,
-      fileName: model.fileName,
-      author: model.author,
-      quantization: model.quantization,
-      fileSize: totalSize,
-      bytesDownloaded: totalSize,
-      progress: 1,
-      status: 'completed',
-      downloadedAt: model.downloadedAt,
-      filePath: model.filePath,
-      isVisionModel: model.isVisionModel,
-      mmProjPath: model.mmProjPath,
-    });
-  });
-
-  // Completed image models
-  data.downloadedImageModels.forEach(model => {
-    items.push({
-      type: 'completed',
-      modelType: 'image',
-      modelId: model.id,
-      fileName: model.name,
-      author: 'Image Generation',
-      quantization: '',
-      fileSize: model.size,
-      bytesDownloaded: model.size,
-      progress: 1,
-      status: 'completed',
-      filePath: model.modelPath,
-    });
-  });
-
-  return items;
-}
-
 function getStatusLabel(item: DownloadItem): string {
+  if (item.status === 'running') return '';
   if (item.status === 'failed' || item.status === 'retrying' || item.status === 'pending' || item.status === 'waiting_for_network') {
     return getDownloadStatusLabel(item.status, item.reasonCode, item.reason);
   }
@@ -190,7 +80,7 @@ function getStatusLabel(item: DownloadItem): string {
 interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
-  onRetry?: (item: DownloadItem) => void;
+  onRetry: (item: DownloadItem) => void;
 }
 
 export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
@@ -243,20 +133,34 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
         </Text>
       </View>
       <View style={styles.downloadMeta}>
-        <View style={styles.quantBadge}>
-          <Text style={styles.quantText}>{item.quantization}</Text>
-        </View>
-        <View style={styles.statusIconRow}>
-          {getStatusIcon() && (
-            <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
-          )}
-          <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
-            {getStatusLabel(item)}
-          </Text>
-        </View>
+        {!!item.quantization && (
+          <View style={styles.quantBadge}>
+            <Text style={styles.quantText}>{item.quantization}</Text>
+          </View>
+        )}
+        {!!getStatusLabel(item) && (
+          <View style={styles.statusIconRow}>
+            {getStatusIcon() && (
+              <Icon name={getStatusIcon()!} size={14} color={getStatusIconColor()} />
+            )}
+            <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
+              {getStatusLabel(item)}
+            </Text>
+          </View>
+        )}
       </View>
       {item.status === 'failed' && (
         <View style={styles.failedActionsRow}>
+          {Platform.OS === 'android' && isRetryable(item.reasonCode) && (
+            <TouchableOpacity
+              style={styles.retryButton}
+              testID="failed-retry-button"
+              onPress={() => onRetry(item)}
+            >
+              <Icon name="refresh-cw" size={14} color={colors.primary} />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.removeButton}
             testID="failed-remove-button"
@@ -265,16 +169,6 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             <Icon name="trash-2" size={14} color={colors.error} />
             <Text style={styles.removeButtonText}>Remove</Text>
           </TouchableOpacity>
-          {onRetry && item.modelType !== 'image' && (
-            <TouchableOpacity
-              style={styles.retryButton}
-              testID="retry-download-button"
-              onPress={() => onRetry(item)}
-            >
-              <Icon name="rotate-cw" size={14} color={colors.primary} />
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          )}
         </View>
       )}
     </Card>
@@ -285,9 +179,10 @@ interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
   onRepairVision?: (item: DownloadItem) => void;
+  isRepairingVision?: boolean;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const needsVisionRepair = checkNeedsVisionRepair(item);
@@ -306,7 +201,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        {needsVisionRepair && onRepairVision && (
+        {needsVisionRepair && !isRepairingVision && onRepairVision && (
           <TouchableOpacity
             style={styles.repairButton}
             testID="repair-vision-button"
@@ -334,6 +229,12 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         <Text style={styles.sizeText}>{formatBytes(item.fileSize)}</Text>
         {item.downloadedAt && (
           <Text style={styles.dateText}>{new Date(item.downloadedAt).toLocaleDateString()}</Text>
+        )}
+        {isRepairingVision && (
+          <View style={styles.repairingBadge} testID="repairing-vision-badge">
+            <ActivityIndicator size="small" color={colors.warning} />
+            <Text style={styles.repairingBadgeText}>Repairing</Text>
+          </View>
         )}
       </View>
     </Card>

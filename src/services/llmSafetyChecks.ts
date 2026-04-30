@@ -11,6 +11,12 @@ const GGUF_MAGIC = 'GGUF';
 /** Minimum plausible GGUF file size (header + at least some tensors) */
 const MIN_GGUF_FILE_SIZE = 1024; // 1 KB
 
+function decodeLittleEndianUint32(bytes: string): number | null {
+  if (bytes.length < 4) return null;
+  const byteValues = Array.from(bytes).slice(0, 4).map(char => char.charCodeAt(0));
+  return byteValues.reduce((sum, value, index) => sum + (value * (256 ** index)), 0);
+}
+
 /**
  * Validate that a model file is a plausible GGUF file.
  * Checks magic bytes and minimum file size to catch corrupted/truncated downloads.
@@ -45,9 +51,8 @@ export async function validateModelFile(modelPath: string): Promise<{ valid: boo
     try {
       const versionBytes = await RNFS.read(modelPath, 4, 4, 'ascii');
       if (versionBytes) {
-        const version = versionBytes.charCodeAt(0) | (versionBytes.charCodeAt(1) << 8) |
-          (versionBytes.charCodeAt(2) << 16) | (versionBytes.charCodeAt(3) << 24);
-        logger.log(`[LLM] GGUF version: ${version}`);
+        const version = decodeLittleEndianUint32(versionBytes);
+        if (version !== null) logger.log(`[LLM] GGUF version: ${version}`);
       }
     } catch (_e) {
       // Non-critical, just skip

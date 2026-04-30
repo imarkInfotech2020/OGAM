@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -15,16 +15,15 @@ export const DownloadManagerScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const {
-    isRefreshing,
     activeItems,
     completedItems,
     alertState,
     setAlertState,
-    handleRefresh,
     handleRemoveDownload,
     handleRetryDownload,
     handleDeleteItem,
     handleRepairVision,
+    isRepairingVision,
     totalStorageUsed,
   } = useDownloadManager();
 
@@ -76,7 +75,7 @@ export const DownloadManagerScreen: React.FC = () => {
               {completedItems.length > 0 ? (
                 completedItems.map(item => (
                   <View key={`completed-${item.modelId}-${item.fileName}`}>
-                    <CompletedDownloadCard item={item} onDelete={handleDeleteItem} onRepairVision={handleRepairVision} />
+                    <CompletedDownloadCard item={item} onDelete={handleDeleteItem} onRepairVision={handleRepairVision} isRepairingVision={isRepairingVision(item.modelId)} />
                   </View>
                 ))
               ) : (
@@ -104,13 +103,6 @@ export const DownloadManagerScreen: React.FC = () => {
           </View>
         )}
         keyExtractor={item => item.key}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
         contentContainerStyle={styles.listContent}
       />
 

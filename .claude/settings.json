@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(adb -s 192.168.43.7:46187 shell \"run-as ai.offgridmobile.dev cat databases/RKStorage\")",
+      "Bash(adb -s 192.168.43.7:46187 shell \"run-as ai.offgridmobile.dev ls -la files/image_models/\")",
+      "Bash(node -e \"const RNFS = { DocumentDirectoryPath: '[RNFS.DocumentDirectoryPath]' }; console.log\\('Android DocumentDirectoryPath maps to?'\\)\")"
+    ]
+  }
+}

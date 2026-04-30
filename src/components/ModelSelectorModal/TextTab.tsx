@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { DownloadedModel, RemoteModel } from '../../types';
@@ -16,10 +16,11 @@ export interface TextTabProps {
   onSelectRemoteModel: (model: RemoteModel, serverId: string) => void;
   onUnloadModel: () => void;
   onAddServer: () => void;
+  onBrowseModels?: () => void;
 }
 
 export const TextTab: React.FC<TextTabProps> = ({
-  downloadedModels, remoteModels, currentModelPath, currentRemoteModelId, isAnyLoading, onSelectModel, onUnloadModel, onSelectRemoteModel, onAddServer,
+  downloadedModels, remoteModels, currentModelPath, currentRemoteModelId, isAnyLoading, onSelectModel, onUnloadModel, onSelectRemoteModel, onAddServer, onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -63,13 +64,7 @@ export const TextTab: React.FC<TextTabProps> = ({
         </View>
       )}
 
-      <View style={styles.switchModelRow}>
-        <Text style={styles.sectionTitle}>{hasLoaded ? 'Switch Model' : 'Available Models'}</Text>
-        <TouchableOpacity style={styles.addServerInline} onPress={onAddServer} disabled={isAnyLoading}>
-          <Icon name="plus" size={14} color={colors.primary} />
-          <Text style={styles.addServerInlineText}>Add Server</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.sectionTitle}>{hasLoaded ? 'Switch Model' : 'Available Models'}</Text>
 
       {/* Empty state when no models at all */}
       {downloadedModels.length === 0 && remoteModels.length === 0 && (
@@ -77,6 +72,18 @@ export const TextTab: React.FC<TextTabProps> = ({
           <Icon name="package" size={40} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>No Text Models</Text>
           <Text style={styles.emptyText}>Download models from the Models tab</Text>
+          <View style={localStyles.emptyActions}>
+            <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.border }]} onPress={onAddServer} disabled={isAnyLoading}>
+              <Icon name="wifi" size={14} color={colors.textSecondary} />
+              <Text style={[localStyles.actionButtonText, { color: colors.textSecondary }]}>Add Remote Server</Text>
+            </TouchableOpacity>
+            {onBrowseModels && (
+              <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.primary }]} onPress={onBrowseModels}>
+                <Icon name="download" size={14} color={colors.primary} />
+                <Text style={[localStyles.actionButtonText, { color: colors.primary }]}>Browse Models</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
 
@@ -193,3 +200,26 @@ export const TextTab: React.FC<TextTabProps> = ({
     </>
   );
 };
+
+const localStyles = StyleSheet.create({
+  emptyActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    flexWrap: 'wrap' as const,
+    justifyContent: 'center' as const,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+});

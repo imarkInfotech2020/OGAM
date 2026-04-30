@@ -461,6 +461,7 @@ const renderChatScreen = () => {
 describe('ChatScreen', () => {
   afterEach(() => {
     cleanup();
+    jest.useRealTimers();
   });
 
   beforeEach(() => {
@@ -562,6 +563,26 @@ describe('ChatScreen', () => {
     it('shows "Select Model" button when models exist but none active', () => {
       const model = createDownloadedModel();
       useAppStore.setState({ downloadedModels: [model] });
+
+      const { getByText } = renderChatScreen();
+      expect(getByText('Select Model')).toBeTruthy();
+    });
+
+    it('shows "Select Model" button when only image models exist', () => {
+      useAppStore.setState({
+        downloadedModels: [],
+        downloadedImageModels: [
+          {
+            id: 'image-model-1',
+            name: 'Stable Diffusion',
+            description: 'Image model',
+            modelPath: '/models/sd',
+            size: 1024,
+            downloadedAt: new Date().toISOString(),
+            backend: 'mnn',
+          },
+        ],
+      });
 
       const { getByText } = renderChatScreen();
       expect(getByText('Select Model')).toBeTruthy();
@@ -3687,10 +3708,9 @@ describe('ChatScreen', () => {
       await act(async () => { fireEvent.press(getByTestId('chat-settings-icon')); });
       await act(async () => { fireEvent.press(getByTestId('delete-conversation-btn')); });
       await act(async () => { fireEvent.press(getByTestId('alert-button-Delete')); });
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 200)); });
-
-      // llmService.stopGeneration should have been called (was streaming)
-      expect(llmService.stopGeneration).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(llmService.stopGeneration).toHaveBeenCalled();
+      });
     });
   });
 
@@ -3733,10 +3753,9 @@ describe('ChatScreen', () => {
       await act(async () => {
         fireEvent.press(getByTestId('send-with-image'));
       });
-      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 300)); });
-
-      // The test exercises handleImageGeneration failure path - no crash
-      expect(getByTestId('chat-screen')).toBeTruthy();
+      await waitFor(() => {
+        expect(getByTestId('chat-screen')).toBeTruthy();
+      });
     });
   });
 
@@ -3785,6 +3804,7 @@ describe('ChatScreen', () => {
       });
 
       // Queue count should appear and clear queue button
+      await waitFor(() => expect(getByTestId('clear-queue-button')).toBeTruthy());
       const clearQueueBtn = getByTestId('clear-queue-button');
       await act(async () => {
         fireEvent.press(clearQueueBtn);
