@@ -36,6 +36,7 @@ interface ModelSelectorModalProps {
   initialTab?: TabType;
   onAddServer?: () => void;
   onSelectionComplete?: () => void;
+  onBrowseModels?: (tab: 'text' | 'image') => void;
 }
 
 export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
@@ -50,6 +51,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   initialTab = 'text',
   onAddServer,
   onSelectionComplete,
+  onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -220,6 +222,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               onSelectRemoteModel={handleSelectRemoteTextModel}
               onUnloadModel={handleUnloadModel}
               onAddServer={() => { onClose(); onAddServer?.(); }}
+              onBrowseModels={onBrowseModels ? () => onBrowseModels('text') : undefined}
             />
           ) : (
             <ImageTab
@@ -232,11 +235,36 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               onSelectImageModel={handleSelectImageModel}
               onSelectRemoteVisionModel={handleSelectRemoteVisionModel}
               onUnloadImageModel={handleUnloadImageModel}
+              onBrowseModels={onBrowseModels ? () => onBrowseModels('image') : undefined}
             />
           )}
         </ScrollView>
 
+      {onBrowseModels && (
+        <TouchableOpacity
+          style={[localStyles.browseMoreButton, { borderTopColor: colors.border }]}
+          onPress={() => onBrowseModels(activeTab)}
+        >
+          <Text style={[localStyles.browseMoreText, { color: colors.textMuted }]}>Browse more models</Text>
+          <Icon name="arrow-right" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      )}
       <CustomAlert {...alertState} onClose={() => setAlertState(initialAlertState)} />
     </AppSheet>
   );
+};
+
+const localStyles = {
+  browseMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+    gap: 8,
+  },
+  browseMoreText: {
+    fontSize: 14,
+    fontWeight: '400' as const,
+  },
 };

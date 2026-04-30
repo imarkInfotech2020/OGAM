@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ONNXImageModel, RemoteModel } from '../../types';
@@ -16,11 +16,12 @@ export interface ImageTabProps {
   onSelectImageModel: (model: ONNXImageModel) => void;
   onSelectRemoteVisionModel: (model: RemoteModel, serverId: string) => void;
   onUnloadImageModel: () => void;
+  onBrowseModels?: () => void;
 }
 
 export const ImageTab: React.FC<ImageTabProps> = ({
   downloadedImageModels, remoteVisionModels, activeImageModelId, activeRemoteImageModelId, isAnyLoading, isLoadingImage,
-  onSelectImageModel, onUnloadImageModel, onSelectRemoteVisionModel,
+  onSelectImageModel, onUnloadImageModel, onSelectRemoteVisionModel, onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -78,6 +79,12 @@ export const ImageTab: React.FC<ImageTabProps> = ({
           <Icon name="image" size={40} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>No Image Models</Text>
           <Text style={styles.emptyText}>Download image models from the Models tab</Text>
+          {onBrowseModels && (
+            <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.primary }]} onPress={onBrowseModels}>
+              <Icon name="download" size={14} color={colors.primary} />
+              <Text style={[localStyles.actionButtonText, { color: colors.primary }]}>Browse Models</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -157,3 +164,19 @@ export const ImageTab: React.FC<ImageTabProps> = ({
     </>
   );
 };
+
+const localStyles = StyleSheet.create({
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '400',
+  },
+});

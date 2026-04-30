@@ -19,7 +19,6 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
 import { Conversation } from '../types';
@@ -42,11 +41,8 @@ export const ChatsListScreen: React.FC = () => {
     onboardingChecklist,
     shownSpotlights,
     markSpotlightShown,
-    downloadedModels,
-    downloadedImageModels,
   } = useAppStore();
   const { modelId: activeTextModelId } = useActiveTextModel();
-  const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
@@ -67,10 +63,6 @@ export const ChatsListScreen: React.FC = () => {
   }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   const hasModels = !!activeTextModelId || !!activeImageModelId;
-  const hasAvailableModels =
-    downloadedModels.length > 0 ||
-    downloadedImageModels.length > 0 ||
-    Object.values(discoveredModels).some(models => models.length > 0);
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -82,13 +74,7 @@ export const ChatsListScreen: React.FC = () => {
       navigation.navigate('Chat', {});
       return;
     }
-    if (hasAvailableModels) {
-      setShowModelSelector(true);
-      return;
-    }
-    if (!hasModels) {
-      setAlertState(showAlert('No Model', 'Please download a text or image model first.'));
-    }
+    setShowModelSelector(true);
   };
 
   const handleSelectTextModel = async (model: any) => {
@@ -241,8 +227,7 @@ export const ChatsListScreen: React.FC = () => {
             variant="primary"
             size="small"
             onPress={handleNewChat}
-            disabled={!hasAvailableModels}
-            icon={<Icon name="plus" size={16} color={hasAvailableModels ? colors.primary : colors.textDisabled} />}
+            icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
         </AttachStep>
       </View>
@@ -298,6 +283,14 @@ export const ChatsListScreen: React.FC = () => {
         onUnloadImageModel={handleUnloadImageModel}
         isLoading={isModelLoading}
         currentModelPath={llmService.getLoadedModelPath()}
+        onAddServer={() => {
+          setShowModelSelector(false);
+          navigation.navigate('RemoteServers');
+        }}
+        onBrowseModels={(tab) => {
+          setShowModelSelector(false);
+          navigation.navigate('ModelsTab', { initialTab: tab });
+        }}
         onSelectionComplete={() => {
           setShowModelSelector(false);
           navigation.navigate('Chat', {});

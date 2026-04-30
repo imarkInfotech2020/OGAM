@@ -272,6 +272,7 @@ export async function downloadHuggingFaceModel(
     assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     const imageModel: ONNXImageModel = {
       id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
       modelPath: modelDir, downloadedAt: new Date().toISOString(),
@@ -328,6 +329,7 @@ export async function downloadCoreMLMultiFile(
     assertNotCancelled(modelInfo.id, runtime);
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
     const imageModel: ONNXImageModel = {
       id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
@@ -353,6 +355,7 @@ export async function proceedWithDownload(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
 ): Promise<void> {
+  deps.setAlertState({ ...showAlert('Download Started', 'Keep app open while image model processes'), closeLabel: '' });
   if (modelInfo.huggingFaceRepo && modelInfo.huggingFaceFiles) {
     await downloadHuggingFaceModel(modelInfo, deps);
     return;
@@ -424,10 +427,12 @@ export async function proceedWithDownload(
         await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
         logger.log(`[ImageDownload] moveCompletedDownload took ${Date.now() - t0}ms modelId=${modelInfo.id}`);
         if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+        await RNFS.writeFile(`${modelDir}/_zip_name`, fileName, 'utf8').catch(() => {});
         const t1 = Date.now();
         await unzip(zipPath, modelDir);
         logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
+        await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
         await RNFS.unlink(zipPath).catch(() => {});
         const imageModel: ONNXImageModel = {
           id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,

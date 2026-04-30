@@ -124,6 +124,20 @@ function App() {
       // Clean up any mmproj files that were incorrectly added as standalone models
       await modelManager.cleanupMMProjEntries();
 
+      // Reconcile image model directories that finished extracting on disk but
+      // whose AsyncStorage registration was lost to an app kill. Runs before
+      // refreshModelLists so the recovered models are included in the initial
+      // setDownloadedImageModels call. activeModelIds guards against touching
+      // directories that are currently being downloaded/extracted.
+      const activeImageModelIds = new Set(
+        Object.values(useDownloadStore.getState().downloads)
+          .filter(e => e.modelType === 'image')
+          .map(e => e.modelId.replace('image:', '')),
+      );
+      await modelManager.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
+        logger.error('[App] Image model reconciliation failed:', error);
+      });
+
       // Scan for any models that may have been downloaded externally or
       // while the app was killed. hydrateDownloadStore (called on cold start
       // and foreground resume) repopulates in-flight downloads directly

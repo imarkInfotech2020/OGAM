@@ -851,15 +851,23 @@ describe('ModelSelectorModal', () => {
   // Add Server button
   // ============================================================================
   describe('Add Server button', () => {
-    it('renders Add Server link in text tab', () => {
+    beforeEach(() => {
+      mockUseAppStore.mockReturnValue({
+        downloadedModels: [],
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+    });
+
+    it('renders Add Remote Server button in empty state', () => {
       const { getByText } = render(
         <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
       );
 
-      expect(getByText('Add Server')).toBeTruthy();
+      expect(getByText('Add Remote Server')).toBeTruthy();
     });
 
-    it('Add Server link calls onClose and onAddServer when pressed', () => {
+    it('Add Remote Server calls onClose and onAddServer when pressed', () => {
       const onClose = jest.fn();
       const onAddServer = jest.fn();
 
@@ -871,13 +879,13 @@ describe('ModelSelectorModal', () => {
         />
       );
 
-      fireEvent.press(getByText('Add Server'));
+      fireEvent.press(getByText('Add Remote Server'));
 
       expect(onClose).toHaveBeenCalled();
       expect(onAddServer).toHaveBeenCalled();
     });
 
-    it('Add Server link is disabled when isLoading is true', () => {
+    it('Add Remote Server is disabled when isLoading is true', () => {
       const onClose = jest.fn();
       const onAddServer = jest.fn();
 
@@ -890,24 +898,18 @@ describe('ModelSelectorModal', () => {
         />
       );
 
-      fireEvent.press(getByText('Add Server'));
+      fireEvent.press(getByText('Add Remote Server'));
 
       expect(onClose).not.toHaveBeenCalled();
       expect(onAddServer).not.toHaveBeenCalled();
     });
 
-    it('Add Server link visible even when no models are downloaded', () => {
-      mockUseAppStore.mockReturnValue({
-        downloadedModels: [],
-        downloadedImageModels: [],
-        activeImageModelId: null,
-      });
-
+    it('Add Remote Server visible when no models are downloaded', () => {
       const { getByText } = render(
         <ModelSelectorModal {...defaultProps} onAddServer={jest.fn()} />
       );
 
-      expect(getByText('Add Server')).toBeTruthy();
+      expect(getByText('Add Remote Server')).toBeTruthy();
     });
   });
 

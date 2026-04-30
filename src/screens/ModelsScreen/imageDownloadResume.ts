@@ -5,6 +5,7 @@ import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import { ImageDownloadDeps, registerAndNotify } from './imageDownloadActions';
+import { makeImageModelKey } from '../../utils/modelKey';
 import logger from '../../utils/logger';
 
 type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: Record<string, any>; deps: ImageDownloadDeps };
@@ -100,6 +101,14 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   }
 
   if (modelDirValid) {
+    const existingModels = await modelManager.getDownloadedImageModels();
+    if (existingModels.some(m => m.id === modelId)) {
+      // Already registered — stale native row caused a spurious processing entry.
+      // Remove the download entry silently without re-alerting the user.
+      logger.log(`[ImageDownload] resumeImageDownload zip - already registered, removing stale entry ${modelId}`);
+      useDownloadStore.getState().remove(makeImageModelKey(modelId));
+      return;
+    }
     logger.log(`[ImageDownload] resumeImageDownload zip - model dir exists, registering ${modelId}`);
     await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
     return;
@@ -107,7 +116,9 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
 
   if (zipValid) {
     if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+    await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
     await unzip(zipPath, modelDir);
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     await RNFS.unlink(zipPath).catch(() => {});
     logger.log(`[ImageDownload] resumeImageDownload zip - zip found, unzipping ${modelId}`);
     await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
@@ -127,12 +138,14 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     if (!recoveredZipValid) throw error;
   }
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+  await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
   try {
     await unzip(zipPath, modelDir);
   } catch (error) {
     await RNFS.unlink(modelDir).catch(() => {});
     throw error;
   }
+  await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
   await RNFS.unlink(zipPath).catch(() => {});
   logger.log(`[ImageDownload] resumeImageDownload zip - moved from WorkManager, unzipping ${modelId}`);
   await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });

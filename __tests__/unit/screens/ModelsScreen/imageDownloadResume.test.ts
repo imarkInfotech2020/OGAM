@@ -11,6 +11,7 @@ jest.mock('react-native-fs', () => ({
   read: jest.fn(),
   mkdir: jest.fn(),
   unlink: jest.fn(),
+  writeFile: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('react-native-zip-archive', () => ({
@@ -20,6 +21,7 @@ jest.mock('react-native-zip-archive', () => ({
 jest.mock('../../../../src/services', () => ({
   modelManager: {
     getImageModelsDirectory: jest.fn(),
+    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
   backgroundDownloadService: {
     moveCompletedDownload: jest.fn(),
@@ -199,5 +201,35 @@ describe('resumeImageDownload', () => {
     expect(mockedRNFS.unlink).toHaveBeenCalledWith(modelDir);
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'failed', { message: 'corrupt zip' });
     expect(mockRegisterAndNotify).not.toHaveBeenCalled();
+  });
+
+  it('unzips valid zip directly without calling moveCompletedDownload', async () => {
+    existingPaths.add(zipPath);
+    statSizes[zipPath] = 1000;
+    headers[zipPath] = 'PK34';
+
+    await resumeImageDownload(makeEntry(), makeDeps() as any);
+
+    expect(mockMoveCompletedDownload).not.toHaveBeenCalled();
+    expect(mockUnzip).toHaveBeenCalledWith(zipPath, modelDir);
+    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers multifile model when modelDir exists', async () => {
+    const entry = makeEntry({
+      metadataJson: JSON.stringify({
+        imageDownloadType: 'multifile',
+        imageModelName: 'Test Model',
+        imageModelDescription: 'desc',
+        imageModelSize: 1000,
+        imageModelBackend: 'mnn',
+      }),
+    });
+    existingPaths.add(modelDir);
+
+    await resumeImageDownload(entry, makeDeps() as any);
+
+    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockMoveCompletedDownload).not.toHaveBeenCalled();
   });
 });

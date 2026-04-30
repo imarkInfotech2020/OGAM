@@ -47,6 +47,14 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
 
 const mockedBackgroundDownloadService = backgroundDownloadService as jest.Mocked<typeof backgroundDownloadService>;
 
+jest.mock('react-native-zip-archive', () => ({ unzip: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../../src/utils/coreMLModelUtils', () => ({
+  resolveCoreMLModelDir: jest.fn((dir: string) => Promise.resolve(`${dir}/model.mlpackage`)),
+}));
+
+import { unzip as mockedUnzip } from 'react-native-zip-archive';
+import { resolveCoreMLModelDir as mockedResolveCoreML } from '../../../src/utils/coreMLModelUtils';
+
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 
 describe('ModelManager', () => {
@@ -2512,6 +2520,189 @@ describe('ModelManager', () => {
       expect(model.mmProjFileName).toBeUndefined();
       expect(model.mmProjPath).toBeUndefined();
       expect(model.isVisionModel).toBe(false);
+    });
+  });
+
+  describe('reconcileFinishedImageDownloads', () => {
+    const IMAGE_MODELS_DIR = '/mock/documents/image_models';
+
+    function setupInitialized() {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir init
+        .mockResolvedValueOnce(true);  // imageModelsDir init
+    }
+
+    it('returns empty when imageModelsDir does not exist', async () => {
+      setupInitialized();
+      mockedRNFS.exists.mockResolvedValueOnce(false); // imageModelsDir scan
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      expect(result).toEqual([]);
+    });
+
+    it('registers a dir that has _ready but is not in AsyncStorage', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem
+        .mockResolvedValueOnce('[]')   // getDownloadedImageModels (reconciler)
+        .mockResolvedValueOnce('[]')   // getDownloadedImageModels (addDownloadedImageModel)
+        .mockResolvedValueOnce(null);  // getDownloadedImageModels (addDownloadedImageModel save)
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // imageModelsDir scan
+        .mockResolvedValueOnce(true);  // _ready exists
+
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'unet.mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn/unet.mnn`, size: 1000000000, isFile: () => true, isDirectory: () => false },
+        ] as any);
+
+      mockedAsyncStorage.setItem.mockResolvedValue(undefined);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('sd_v15_mnn');
+      expect(result[0].backend).toBe('mnn');
+    });
+
+    it('skips dirs already in AsyncStorage', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem.mockResolvedValueOnce(
+        JSON.stringify([{ id: 'sd_v15_mnn', modelPath: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 1000 }]),
+      );
+
+      mockedRNFS.exists.mockResolvedValueOnce(true); // imageModelsDir scan
+
+      mockedRNFS.readDir.mockResolvedValueOnce([
+        { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+      ] as any);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      expect(result).toHaveLength(0);
+    });
+
+    it('skips dirs whose model ID is in activeModelIds', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem.mockResolvedValueOnce('[]');
+
+      mockedRNFS.exists.mockResolvedValueOnce(true); // imageModelsDir scan
+
+      mockedRNFS.readDir.mockResolvedValueOnce([
+        { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+      ] as any);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set(['sd_v15_mnn']));
+      expect(result).toHaveLength(0);
+    });
+
+    it('re-unzips from valid zip when _zip_name present and zip valid', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem
+        .mockResolvedValueOnce('[]')
+        .mockResolvedValueOnce('[]');
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)    // imageModelsDir scan
+        .mockResolvedValueOnce(false)   // _ready missing
+        .mockResolvedValueOnce(true)    // _zip_name exists
+        .mockResolvedValueOnce(true);   // zip file exists (isValidZip)
+
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'unet.mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn/unet.mnn`, size: 500000000, isFile: () => true, isDirectory: () => false },
+        ] as any);
+
+      mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_mnn.zip');
+      mockedRNFS.stat = jest.fn().mockResolvedValue({ size: 400000000, isFile: () => true } as any);
+      mockedRNFS.read = jest.fn().mockResolvedValue('PK\x03\x04');
+      mockedRNFS.writeFile = jest.fn().mockResolvedValue(undefined as any);
+      (mockedUnzip as jest.Mock).mockResolvedValueOnce(undefined);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+
+      expect(mockedUnzip).toHaveBeenCalledWith(
+        `${IMAGE_MODELS_DIR}/sd_v15_mnn.zip`,
+        `${IMAGE_MODELS_DIR}/sd_v15_mnn`,
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('sd_v15_mnn');
+    });
+
+    it('deletes partial dir when _zip_name present but zip is missing', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem.mockResolvedValueOnce('[]');
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)    // imageModelsDir scan
+        .mockResolvedValueOnce(false)   // _ready missing
+        .mockResolvedValueOnce(true)    // _zip_name exists
+        .mockResolvedValueOnce(false);  // zip file missing (isValidZip)
+
+      mockedRNFS.readDir.mockResolvedValueOnce([
+        { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+      ] as any);
+
+      mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_mnn.zip');
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+
+      expect(RNFS.unlink).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_v15_mnn`);
+      expect(result).toHaveLength(0);
+    });
+
+    it('deletes stale dir when neither _ready nor _zip_name exist', async () => {
+      setupInitialized();
+      mockedAsyncStorage.getItem.mockResolvedValueOnce('[]');
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)    // imageModelsDir scan
+        .mockResolvedValueOnce(false)   // _ready missing
+        .mockResolvedValueOnce(false);  // _zip_name missing
+
+      mockedRNFS.readDir.mockResolvedValueOnce([
+        { name: 'old_partial_dir', path: `${IMAGE_MODELS_DIR}/old_partial_dir`, size: 0, isFile: () => false, isDirectory: () => true },
+      ] as any);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+
+      expect(RNFS.unlink).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/old_partial_dir`);
+      expect(result).toHaveLength(0);
+    });
+
+    it('resolves CoreML model path via resolveCoreMLModelDir', async () => {
+      setupInitialized();
+      (mockedResolveCoreML as jest.Mock).mockImplementation((dir: string) =>
+        Promise.resolve(`${dir}/model.mlpackage`),
+      );
+      mockedAsyncStorage.getItem
+        .mockResolvedValueOnce('[]')   // getDownloadedImageModels (reconciler)
+        .mockResolvedValueOnce('[]')   // getDownloadedImageModels (addDownloadedImageModel)
+        .mockResolvedValueOnce(null);  // getDownloadedImageModels (addDownloadedImageModel save)
+
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // imageModelsDir scan
+        .mockResolvedValueOnce(true);  // _ready exists
+
+      mockedRNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'sd_coreml_v1', path: `${IMAGE_MODELS_DIR}/sd_coreml_v1`, size: 0, isFile: () => false, isDirectory: () => true },
+        ] as any)
+        .mockResolvedValueOnce([
+          { name: 'model.mlpackage', path: `${IMAGE_MODELS_DIR}/sd_coreml_v1/model.mlpackage`, size: 800000000, isFile: () => true, isDirectory: () => false },
+        ] as any);
+
+      mockedAsyncStorage.setItem.mockResolvedValue(undefined);
+
+      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+
+      expect(mockedResolveCoreML).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_coreml_v1`);
+      expect(result[0].modelPath).toBe(`${IMAGE_MODELS_DIR}/sd_coreml_v1/model.mlpackage`);
+      expect(result[0].backend).toBe('coreml');
     });
   });
 });

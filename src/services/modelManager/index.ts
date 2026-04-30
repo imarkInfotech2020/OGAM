@@ -33,6 +33,7 @@ import {
   scanForUntrackedImageModels as scanUntrackedImage,
   scanForUntrackedTextModels as scanUntrackedText,
   importLocalModel as scanImportLocalModel,
+  reconcileFinishedImageDownloads as reconcileImageDownloads,
   isMMProjFile,
   extractBaseName,
   findMatchingMmProj,
@@ -434,6 +435,16 @@ class ModelManager {
       imageModelsDir: this.imageModelsDir,
       getImageModels: () => this.getDownloadedImageModels(),
       addImageModel: (model) => this.addDownloadedImageModel(model),
+    });
+  }
+
+  async reconcileFinishedImageDownloads(activeModelIds: Set<string>): Promise<ONNXImageModel[]> {
+    await this.initialize();
+    return reconcileImageDownloads({
+      imageModelsDir: this.imageModelsDir,
+      getImageModels: () => this.getDownloadedImageModels(),
+      addImageModel: (model) => this.addDownloadedImageModel(model),
+      activeModelIds,
     });
   }
 

@@ -14,6 +14,7 @@ jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(true)),
   mkdir: jest.fn(() => Promise.resolve()),
   unlink: jest.fn(() => Promise.resolve()),
+  writeFile: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('react-native-zip-archive', () => ({
