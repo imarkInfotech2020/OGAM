@@ -1,8 +1,49 @@
 diff --git a/node_modules/react-native-zip-archive/android/src/main/java/com/rnziparchive/RNZipArchiveModule.java b/node_modules/react-native-zip-archive/android/src/main/java/com/rnziparchive/RNZipArchiveModule.java
-index 14bd68f..cccbd99 100644
+index 14bd68f..e381579 100644
 --- a/node_modules/react-native-zip-archive/android/src/main/java/com/rnziparchive/RNZipArchiveModule.java
 +++ b/node_modules/react-native-zip-archive/android/src/main/java/com/rnziparchive/RNZipArchiveModule.java
-@@ -470,7 +470,7 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+@@ -174,7 +174,12 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+           }
+         } catch (Exception ex) {
+           updateProgress(0, 1, zipFilePath); // force 0%
+-          promise.reject("RNZipArchiveError", "Failed to extract file " + ex.getLocalizedMessage());
++          safeReject(
++            promise,
++            "RNZipArchiveError",
++            "Failed to extract file " + (ex.getLocalizedMessage() != null ? ex.getLocalizedMessage() : "unknown error"),
++            ex
++          );
+         }
+       }
+     }).start();
+@@ -342,7 +347,7 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+       processZip(filesOrDirectory, destFile, parameters, promise, password.toCharArray());
+ 
+     } catch (Exception ex) {
+-      promise.reject("RNZipArchiveError", ex.getMessage());
++      promise.reject("RNZipArchiveError", ex.getMessage() != null ? ex.getMessage() : "unknown error");
+       return;
+     }
+   }
+@@ -356,7 +361,7 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+       processZip(filesOrDirectory, destFile, parameters, promise, null);
+ 
+     } catch (Exception ex) {
+-      promise.reject("RNZipArchiveError", ex.getMessage());
++      promise.reject("RNZipArchiveError", ex.getMessage() != null ? ex.getMessage() : "unknown error");
+       return;
+     }
+   }
+@@ -413,7 +418,7 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+           }
+           promise.resolve(destFile);
+         } catch (Exception ex) {
+-          promise.reject("RNZipArchiveError", ex.getMessage());
++          promise.reject("RNZipArchiveError", ex.getMessage() != null ? ex.getMessage() : "unknown error");
+           return;
+         }
+       }
+@@ -470,7 +475,7 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
    }
  
    private static CompressionLevel getCompressionLevel(double compressionLevel) {
@@ -11,3 +52,20 @@ index 14bd68f..cccbd99 100644
        case -1:
          return CompressionLevel.NORMAL;
        case 0:
+@@ -499,6 +504,16 @@ public class RNZipArchiveModule extends ReactContextBaseJavaModule {
+     }
+   }
+ 
++  private void safeReject(Promise promise, String code, String message, Throwable throwable) {
++    String safeCode = code != null ? code : "RNZipArchiveError";
++    String safeMessage = message != null ? message : "Zip operation failed";
++    try {
++      promise.reject(safeCode, safeMessage, throwable);
++    } catch (NullPointerException npe) {
++      Log.w(TAG, "Failed to reject promise", npe);
++    }
++  }
++
+   /**
+    * Returns the exception stack trace as a string
+    */
