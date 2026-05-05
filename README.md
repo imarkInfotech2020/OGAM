@@ -20,6 +20,48 @@
 
 ---
 
+<div align="center">
+
+<sub><b>BUILT BY</b></sub>
+
+<a href="https://mobile.wednesday.is/"><img src="src/assets/wednesday-logo.svg" alt="Wednesday Solutions" height="104" /></a>
+<br/>
+<a href="https://mobile.wednesday.is/"><sub><b>30+ ENTERPRISE CLIENTS &nbsp;·&nbsp; 4.8 / 5 ON CLUTCH</b></sub></a>
+
+</div>
+
+Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/) - the mobile engineering team behind apps for **American Express, Visa, Discover, EY**, and 30+ other enterprises.
+
+We run **AI-Native Mobile Squads**: pre-vetted iOS and Android engineers paired with AI tooling for code review, testing, screenshot regression, and release notes. Squads plug into your org in a week and ship to production from day one.
+
+<table align="center">
+  <tr>
+    <td><img src="src/assets/stat-4x.svg" alt="4x faster to ship" width="200" /></td>
+    <td><img src="src/assets/stat-2x.svg" alt="2x fewer crashes" width="200" /></td>
+    <td><img src="src/assets/stat-10x.svg" alt="10x more work, same cost" width="200" /></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center">
+      <br/>
+      <a href="https://cal.com/mohammed-ali-chherawalla-jlvdhw/work-with-wednesday"><img src="https://img.shields.io/badge/100%25%20MONEY%20BACK-7C3AED?style=for-the-badge" alt="100% money back" /></a>
+      <br/>
+      <br/>
+      <sub><b>FROM $8,000 / MONTH</b> &nbsp;·&nbsp; NO MINIMUM CONTRACT</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center"><b>Want the same team that shipped offline AI to a phone working on your product?</b></p>
+
+<p align="center">
+<a href="https://cal.com/mohammed-ali-chherawalla-jlvdhw/work-with-wednesday"><img src="https://img.shields.io/badge/%E2%86%92%20Book%20a%2030--min%20call-181717?style=for-the-badge&labelColor=000000" alt="Book a 30-min call" /></a>
+<br/>
+<sub>A free diagnostic with an engineer, not a salesperson.<br/>You walk away with squad scope, monthly cost, and a start date.</sub>
+</p>
+
+<p align="center"><sub>or <a href="https://mobile.wednesday.is/"><b>see how we work →</b></a></sub></p>
+
+---
 
 ## Not just another chat app
 
