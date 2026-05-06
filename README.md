@@ -24,11 +24,11 @@
 
 <sub><b>BUILT BY</b></sub>
 
-<a href="https://mobile.wednesday.is/"><img src="src/assets/wednesday-logo.svg" alt="Wednesday Solutions" height="104" /></a>
+<a href="https://mobile.wednesday.is/"><img src="https://mobile.wednesday.is/logos/wednesday-logo.svg" alt="Wednesday Solutions" height="104" /></a>
 
 </div>
 
-Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/). We run **AI-Native Mobile Squads**: pre-vetted iOS and Android engineers paired with AI tooling for code review, testing, screenshot regression, and release notes. Squads plug into your org in a week and ship to production from day one.
+Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/hire-ai-native-mobile-squad). We run **AI-Native Mobile Squads**: pre-vetted iOS and Android engineers paired with AI tooling for code review, testing, screenshot regression, and release notes. Squads plug into your org in a week and ship to production from day one.
 
 <table align="center">
   <tr>
