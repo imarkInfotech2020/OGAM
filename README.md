@@ -24,11 +24,11 @@
 
 <sub><b>BUILT BY</b></sub>
 
-<a href="https://mobile.wednesday.is/hire-ai-native-mobile-squad"><picture><source media="(prefers-color-scheme: dark)" srcset="https://mobile.wednesday.is/logos/wednesday-logo.svg" /><img src="src/assets/wednesday-logo.svg" alt="Wednesday Solutions" height="104" /></picture></a>
+<a href="https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=github&utm_medium=offgrid-readme&utm_campaign=ai-native-mobile-squad&utm_content=logo"><picture><source media="(prefers-color-scheme: dark)" srcset="https://mobile.wednesday.is/logos/wednesday-logo.svg" /><img src="src/assets/wednesday-logo.svg" alt="Wednesday Solutions" height="104" /></picture></a>
 
 </div>
 
-Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/hire-ai-native-mobile-squad). We run **AI-Native Mobile Squads**: pre-vetted iOS and Android engineers paired with AI tooling for code review, testing, screenshot regression, and release notes. Squads plug into your org in a week and ship to production from day one.
+Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=github&utm_medium=offgrid-readme&utm_campaign=ai-native-mobile-squad&utm_content=body-link). We run **AI-Native Mobile Squads**: pre-vetted iOS and Android engineers paired with AI tooling for code review, testing, screenshot regression, and release notes. Squads plug into your org in a week and ship to production from day one.
 
 <table align="center">
   <tr>
@@ -42,7 +42,7 @@ Off Grid is built by [**Wednesday Solutions**](https://mobile.wednesday.is/hire-
 <p align="center"><b>Want the same team that shipped offline AI to a phone working on your product?</b></p>
 
 <p align="center">
-<a href="https://mobile.wednesday.is/hire-ai-native-mobile-squad"><img src="https://img.shields.io/badge/Hire%20an%20AI--Native%20Squad%20%E2%86%92-181717?style=for-the-badge&labelColor=000000" alt="Hire an AI-Native Squad" /></a>
+<a href="https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=github&utm_medium=offgrid-readme&utm_campaign=ai-native-mobile-squad&utm_content=hire-cta"><img src="https://img.shields.io/badge/Hire%20an%20AI--Native%20Squad%20%E2%86%92-181717?style=for-the-badge&labelColor=000000" alt="Hire an AI-Native Squad" /></a>
 </p>
 
 ---
