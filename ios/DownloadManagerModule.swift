@@ -59,6 +59,11 @@ class DownloadManagerModule: RCTEventEmitter {
     var bytesDownloaded: Int64
     var status: String // pending, running, paused, completed, failed
     var startedAt: Double
+    // v3 fields — mirrors Android WorkManager columns so JS hydration works on both platforms
+    var modelKey: String?
+    var modelType: String
+    var combinedTotalBytes: Int64
+    var metadataJson: String?
     // Single-file download
     var task: URLSessionDownloadTask?
     var taskIdentifier: Int?
@@ -87,6 +92,10 @@ class DownloadManagerModule: RCTEventEmitter {
     let bytesDownloaded: Int64
     let status: String
     let startedAt: Double
+    let modelKey: String?
+    let modelType: String
+    let combinedTotalBytes: Int64
+    let metadataJson: String?
     let taskIdentifier: Int?
     let localUri: String?
     let multiFileDestDir: String?
@@ -95,7 +104,8 @@ class DownloadManagerModule: RCTEventEmitter {
 
     enum CodingKeys: String, CodingKey {
       case downloadId, fileName, modelId, totalBytes, bytesDownloaded, status,
-           startedAt, taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks
+           startedAt, modelKey, modelType, combinedTotalBytes, metadataJson,
+           taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks
     }
 
     init(
@@ -106,6 +116,10 @@ class DownloadManagerModule: RCTEventEmitter {
       bytesDownloaded: Int64,
       status: String,
       startedAt: Double,
+      modelKey: String?,
+      modelType: String,
+      combinedTotalBytes: Int64,
+      metadataJson: String?,
       taskIdentifier: Int?,
       localUri: String?,
       multiFileDestDir: String?,
@@ -119,6 +133,10 @@ class DownloadManagerModule: RCTEventEmitter {
       self.bytesDownloaded = bytesDownloaded
       self.status = status
       self.startedAt = startedAt
+      self.modelKey = modelKey
+      self.modelType = modelType
+      self.combinedTotalBytes = combinedTotalBytes
+      self.metadataJson = metadataJson
       self.taskIdentifier = taskIdentifier
       self.localUri = localUri
       self.multiFileDestDir = multiFileDestDir
@@ -135,6 +153,11 @@ class DownloadManagerModule: RCTEventEmitter {
       bytesDownloaded = try container.decode(Int64.self, forKey: .bytesDownloaded)
       status = try container.decode(String.self, forKey: .status)
       startedAt = try container.decode(Double.self, forKey: .startedAt)
+      // Decode with defaults so old persisted state (pre-v3) deserialises without crashing
+      modelKey = try container.decodeIfPresent(String.self, forKey: .modelKey)
+      modelType = (try container.decodeIfPresent(String.self, forKey: .modelType)) ?? "text"
+      combinedTotalBytes = (try container.decodeIfPresent(Int64.self, forKey: .combinedTotalBytes)) ?? 0
+      metadataJson = try container.decodeIfPresent(String.self, forKey: .metadataJson)
       taskIdentifier = try container.decodeIfPresent(Int.self, forKey: .taskIdentifier)
       localUri = try container.decodeIfPresent(String.self, forKey: .localUri)
       multiFileDestDir = try container.decodeIfPresent(String.self, forKey: .multiFileDestDir)
@@ -337,6 +360,10 @@ class DownloadManagerModule: RCTEventEmitter {
       bytesDownloaded: info.bytesDownloaded,
       status: info.status,
       startedAt: info.startedAt,
+      modelKey: info.modelKey,
+      modelType: info.modelType,
+      combinedTotalBytes: info.combinedTotalBytes,
+      metadataJson: info.metadataJson,
       taskIdentifier: info.taskIdentifier ?? info.task?.taskIdentifier,
       localUri: info.localUri,
       multiFileDestDir: info.multiFileDestDir,
@@ -368,6 +395,10 @@ class DownloadManagerModule: RCTEventEmitter {
       bytesDownloaded: persisted.bytesDownloaded,
       status: persisted.status,
       startedAt: persisted.startedAt,
+      modelKey: persisted.modelKey,
+      modelType: persisted.modelType,
+      combinedTotalBytes: persisted.combinedTotalBytes,
+      metadataJson: persisted.metadataJson,
       task: nil,
       taskIdentifier: persisted.taskIdentifier,
       localUri: persisted.localUri,
@@ -464,6 +495,10 @@ class DownloadManagerModule: RCTEventEmitter {
             bytesDownloaded: 0,
             status: self.statusString(from: downloadTask.state),
             startedAt: Date().timeIntervalSince1970 * 1000,
+            modelKey: nil,
+            modelType: "text",
+            combinedTotalBytes: 0,
+            metadataJson: nil,
             task: nil,
             taskIdentifier: nil,
             localUri: nil,
@@ -519,11 +554,18 @@ extension DownloadManagerModule {
     }
 
     let totalBytes = (params["totalBytes"] as? NSNumber)?.int64Value ?? 0
-    let downloadId = String(nextDownloadId)
-    nextDownloadId += 1
+    let modelKey = params["modelKey"] as? String
+    let modelType = (params["modelType"] as? String) ?? "text"
+    let combinedTotalBytes = (params["combinedTotalBytes"] as? NSNumber)?.int64Value ?? 0
+    let metadataJson = params["metadataJson"] as? String
+    let downloadId = queue.sync(flags: .barrier) { () -> String in
+      let id = String(nextDownloadId)
+      nextDownloadId += 1
+      return id
+    }
 
-    NSLog("[DownloadManager] Starting download #%@: url=%@, fileName=%@, modelId=%@, totalBytes=%lld",
-          downloadId, urlString, fileName, modelId, totalBytes)
+    NSLog("[DownloadManager] Starting download #%@: url=%@, fileName=%@, modelId=%@, totalBytes=%lld, modelType=%@",
+          downloadId, urlString, fileName, modelId, totalBytes, modelType)
 
     let task = session.downloadTask(with: url)
     task.taskDescription = encodeTaskDescription(TaskDescription(
@@ -546,6 +588,10 @@ extension DownloadManagerModule {
       bytesDownloaded: 0,
       status: "running",
       startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: modelKey,
+      modelType: modelType,
+      combinedTotalBytes: combinedTotalBytes,
+      metadataJson: metadataJson,
       task: task,
       taskIdentifier: task.taskIdentifier,
       localUri: nil,
@@ -588,8 +634,11 @@ extension DownloadManagerModule {
     }
 
     let totalBytes = (params["totalBytes"] as? NSNumber)?.int64Value ?? 0
-    let downloadId = String(nextDownloadId)
-    nextDownloadId += 1
+    let downloadId = queue.sync(flags: .barrier) { () -> String in
+      let id = String(nextDownloadId)
+      nextDownloadId += 1
+      return id
+    }
 
     NSLog("[DownloadManager] Starting multi-file download #%@: %d files, totalBytes=%lld, dest=%@",
           downloadId, filesArray.count, totalBytes, destinationDir)
@@ -647,6 +696,10 @@ extension DownloadManagerModule {
       bytesDownloaded: 0,
       status: "running",
       startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: params["modelKey"] as? String,
+      modelType: (params["modelType"] as? String) ?? "text",
+      combinedTotalBytes: (params["combinedTotalBytes"] as? NSNumber)?.int64Value ?? 0,
+      metadataJson: params["metadataJson"] as? String,
       task: nil,
       taskIdentifier: nil,
       localUri: nil,
@@ -714,15 +767,21 @@ extension DownloadManagerModule {
       let result = downloads.values.map { info -> [String: Any] in
         NSLog("[DownloadManager]   -> #%@: %@ status=%@ bytes=%lld/%lld",
               info.downloadId, info.fileName, info.status, info.bytesDownloaded, info.totalBytes)
-        return [
+        var entry: [String: Any] = [
           "downloadId": info.downloadId,
           "fileName": info.fileName,
           "modelId": info.modelId,
           "status": info.status,
           "bytesDownloaded": NSNumber(value: info.bytesDownloaded),
           "totalBytes": NSNumber(value: info.totalBytes),
-          "startedAt": NSNumber(value: info.startedAt)
+          "startedAt": NSNumber(value: info.startedAt),
+          "modelType": info.modelType,
+          "combinedTotalBytes": NSNumber(value: info.combinedTotalBytes),
+          "createdAt": NSNumber(value: info.startedAt)
         ]
+        if let modelKey = info.modelKey { entry["modelKey"] = modelKey }
+        if let metadataJson = info.metadataJson { entry["metadataJson"] = metadataJson }
+        return entry
       }
       resolve(result)
     }
