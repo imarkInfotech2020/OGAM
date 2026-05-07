@@ -80,7 +80,7 @@ class BackgroundDownloadService {
     }
     const downloads = await DownloadManagerModule.getActiveDownloads();
     return downloads.map((d: any) => ({
-      downloadId: d.id,
+      downloadId: d.downloadId ?? d.id,
       fileName: d.fileName,
       modelId: d.modelId,
       status: d.status as BackgroundDownloadStatus,
