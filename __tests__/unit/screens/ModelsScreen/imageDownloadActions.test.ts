@@ -7,9 +7,9 @@ import {
   handleDownloadImageModel,
   registerAndNotify,
   cancelSyntheticImageDownload,
-  ImageDownloadDeps,
 } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
+import { makeImageDownloadDeps } from '../../../utils/factories';
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(true)),
@@ -84,16 +84,7 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
 let completeCallbacks: Function[] = [];
 let errorCallbacks: Function[] = [];
 
-function makeDeps(overrides: Partial<ImageDownloadDeps> = {}): ImageDownloadDeps {
-  return {
-    addDownloadedImageModel: jest.fn(),
-    activeImageModelId: null,
-    setActiveImageModelId: jest.fn(),
-    setAlertState: jest.fn(),
-    triedImageGen: true,
-    ...overrides,
-  };
-}
+const makeDeps = (overrides = {}) => makeImageDownloadDeps({ triedImageGen: true, ...overrides });
 
 function makeHFModelInfo(overrides: Partial<ImageModelDescriptor> = {}): ImageModelDescriptor {
   return {

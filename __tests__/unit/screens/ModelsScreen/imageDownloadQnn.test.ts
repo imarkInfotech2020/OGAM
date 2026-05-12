@@ -1,6 +1,6 @@
 import { getQnnWarningMessage, showQnnWarningAlert } from '../../../../src/screens/ModelsScreen/imageDownloadQnn';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
-import { ImageDownloadDeps } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
+import { makeImageDownloadDeps } from '../../../utils/factories';
 
 jest.mock('../../../../src/components/CustomAlert', () => ({
   showAlert: jest.fn((_title: string, _msg: string, buttons: any[]) => ({ visible: true, title: _title, buttons })),
@@ -17,16 +17,6 @@ function makeModel(overrides: Partial<ImageModelDescriptor> = {}): ImageModelDes
     style: 'creative',
     backend: 'qnn',
     ...overrides,
-  };
-}
-
-function makeDeps(): ImageDownloadDeps {
-  return {
-    addDownloadedImageModel: jest.fn(),
-    activeImageModelId: null,
-    setActiveImageModelId: jest.fn(),
-    setAlertState: jest.fn(),
-    triedImageGen: false,
   };
 }
 
@@ -79,7 +69,7 @@ describe('getQnnWarningMessage', () => {
 
 describe('showQnnWarningAlert', () => {
   it('shows two-button alert with Download Anyway when device has NPU', () => {
-    const deps = makeDeps();
+    const deps = makeImageDownloadDeps();
     const onDownloadAnyway = jest.fn();
     showQnnWarningAlert(
       { warningMessage: 'some warning', hasNPU: true, modelInfo: makeModel(), onDownloadAnyway },
@@ -92,7 +82,7 @@ describe('showQnnWarningAlert', () => {
   });
 
   it('calls onDownloadAnyway and hides alert when Download Anyway is pressed', () => {
-    const deps = makeDeps();
+    const deps = makeImageDownloadDeps();
     const onDownloadAnyway = jest.fn();
     showQnnWarningAlert(
       { warningMessage: 'some warning', hasNPU: true, modelInfo: makeModel(), onDownloadAnyway },
@@ -105,7 +95,7 @@ describe('showQnnWarningAlert', () => {
   });
 
   it('shows single OK button when device has no NPU', () => {
-    const deps = makeDeps();
+    const deps = makeImageDownloadDeps();
     showQnnWarningAlert(
       { warningMessage: 'no npu', hasNPU: false, modelInfo: makeModel(), onDownloadAnyway: jest.fn() },
       deps,
