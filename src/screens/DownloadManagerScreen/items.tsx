@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -151,7 +151,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
       </View>
       {item.status === 'failed' && (
         <View style={styles.failedActionsRow}>
-          {Platform.OS === 'android' && isRetryable(item.reasonCode) && (
+          {isRetryable(item.reasonCode) && (
             <TouchableOpacity
               style={styles.retryButton}
               testID="failed-retry-button"

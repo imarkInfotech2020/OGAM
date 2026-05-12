@@ -126,7 +126,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   // reliably without falling back to the size-delta heuristic.
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
   const metadataJson = needsMmProj
-    ? JSON.stringify({ mmProjFileName: mmProjLocalName(file.name) })
+    ? JSON.stringify({ mmProjFileName: mmProjLocalName(file.name), mmProjDownloadUrl: file.mmProjFile?.downloadUrl })
     : undefined;
 
   const downloadInfo = await backgroundDownloadService.startDownload({

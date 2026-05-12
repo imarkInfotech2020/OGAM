@@ -35,6 +35,9 @@ interface ImageMetadata {
   imageModelBackend?: 'mnn' | 'qnn' | 'coreml';
   imageModelRepo?: string;
   imageModelAttentionVariant?: string;
+  imageModelDownloadUrl?: string;
+  imageModelHuggingFaceFiles?: { path: string; size: number }[];
+  imageModelCoremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
 }
 
 type MultifileRuntime = {
@@ -253,6 +256,7 @@ export async function downloadHuggingFaceModel(
       imageModelStyle: modelInfo.style,
       imageModelBackend: modelInfo.backend,
       imageModelRepo: modelInfo.huggingFaceRepo,
+      imageModelHuggingFaceFiles: modelInfo.huggingFaceFiles,
     },
   });
   if (!created) return;
@@ -313,6 +317,7 @@ export async function downloadCoreMLMultiFile(
       imageModelBackend: modelInfo.backend,
       imageModelRepo: modelInfo.repo,
       imageModelAttentionVariant: modelInfo.attentionVariant,
+      imageModelCoremlFiles: modelInfo.coremlFiles,
     },
   });
   if (!created) return;
@@ -377,6 +382,7 @@ export async function proceedWithDownload(
     imageModelStyle: modelInfo.style,
     imageModelBackend: modelInfo.backend,
     imageModelAttentionVariant: modelInfo.attentionVariant,
+    imageModelDownloadUrl: modelInfo.downloadUrl,
   };
   const existing = useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)];
   if (existing && isActiveStatus(existing.status)) return;

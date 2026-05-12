@@ -13,7 +13,7 @@ import {
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
-import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
+import { cancelSyntheticImageDownload, proceedWithDownload } from '../ModelsScreen/imageDownloadActions';
 import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
 
 export interface UseDownloadManagerResult {
@@ -125,16 +125,6 @@ async function reattachRetriedTextDownload(
     fileName: item.fileName,
     downloadId: item.downloadId,
   });
-  // Do NOT call restoreInProgressDownloads() here. The backgroundDownloadContext
-  // was already populated by the original startBgDownload call and remains valid
-  // for the lifetime of the download. Calling restore would overwrite the context
-  // with a fresh object, severing the mmProjCompleteHandled guard that is shared
-  // between the original onComplete listener (registered in startBgDownload) and
-  // the one registered below by watchDownload. With two independent context objects
-  // both starting with mmProjCompleteHandled=false, both onComplete listeners
-  // attempt the file move — the second one loses, sees the source gone, and
-  // nulls out ctx.mmProjLocalPath, resulting in mmProjFileExists:false at
-  // finalization (i.e. vision is silently dropped from the saved model).
   modelManager.watchDownload(
     item.downloadId!,
     async () => {
@@ -178,6 +168,72 @@ async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<bool
     });
     return false;
   }
+}
+
+async function retryAndroidDownload(item: DownloadItem, entry: DownloadEntry | undefined, setDownloadedModels: (models: DownloadedModel[]) => void): Promise<void> {
+  const downloadId = item.downloadId as string;
+  useDownloadStore.getState().setStatus(downloadId, 'pending');
+  await backgroundDownloadService.retryDownload(downloadId);
+  if (item.modelType === 'text') {
+    const mmProjRetried = await retryFailedMmProj(entry);
+    if (mmProjRetried) {
+      modelManager.resetMmProjForRetry(downloadId);
+    }
+    await reattachRetriedTextDownload(item, setDownloadedModels);
+  }
+}
+
+async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: AlertState) => void): Promise<void> {
+  const meta = parseEntryMetadata(entry);
+  if (!meta) return;
+  const isZip = meta.imageDownloadType === 'zip';
+  if (isZip && !meta.imageModelDownloadUrl) {
+    logger.error('[DownloadManager] retryIosImageDownload: missing imageModelDownloadUrl for zip download', { modelId: entry.modelId });
+    return;
+  }
+  const modelId = entry.modelId.replace('image:', '');
+  const appState = useAppStore.getState();
+  const deps = {
+    addDownloadedImageModel: appState.addDownloadedImageModel,
+    activeImageModelId: appState.activeImageModelId,
+    setActiveImageModelId: appState.setActiveImageModelId,
+    setAlertState,
+    triedImageGen: appState.onboardingChecklist.triedImageGen,
+  };
+  await proceedWithDownload({
+    id: modelId,
+    name: meta.imageModelName,
+    description: meta.imageModelDescription,
+    downloadUrl: meta.imageModelDownloadUrl ?? '',
+    size: meta.imageModelSize,
+    style: meta.imageModelStyle,
+    backend: meta.imageModelBackend,
+    attentionVariant: meta.imageModelAttentionVariant,
+    huggingFaceRepo: meta.imageModelRepo,
+    huggingFaceFiles: meta.imageModelHuggingFaceFiles,
+    coremlFiles: meta.imageModelCoremlFiles,
+    repo: meta.imageModelRepo,
+  }, deps);
+}
+
+async function retryIosTextDownload(
+  item: DownloadItem,
+  entry: DownloadEntry,
+  setDownloadedModels: (models: DownloadedModel[]) => void,
+): Promise<void> {
+  const meta = parseEntryMetadata(entry);
+  const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
+    ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
+    : undefined;
+  const file = {
+    name: entry.fileName,
+    size: entry.totalBytes,
+    quantization: entry.quantization,
+    downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
+    ...(mmProjFile ? { mmProjFile } : {}),
+  };
+  const info = await modelManager.downloadModelBackground(entry.modelId, file);
+  await reattachRetriedTextDownload({ ...item, downloadId: info.downloadId }, setDownloadedModels);
 }
 
 export function useDownloadManager(): UseDownloadManagerResult {
@@ -254,6 +310,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (entry) {
         if (entry.downloadId.startsWith('image-multi:')) {
           await cancelSyntheticImageDownload(item.modelId).catch(() => {});
+          // After app kill the runtime is gone — cancel native rows so they aren't re-hydrated.
+          try {
+            const activeRows = await backgroundDownloadService.getActiveDownloads();
+            const imageModelId = `image:${item.modelId}`;
+            await Promise.all(
+              activeRows
+                .filter(r => r.modelId === imageModelId)
+                .map(r => backgroundDownloadService.cancelDownload(r.downloadId).catch(() => {})),
+            );
+          } catch {
+            // Best-effort — store entry already removed above.
+          }
           return;
         }
         await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
@@ -272,16 +340,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
     const entry = downloads[modelKey];
     try {
-      logger.log('[DownloadDebug] Manual retry requested', {
-        modelKey,
-        modelId: item.modelId,
-        fileName: item.fileName,
-        modelType: item.modelType,
-        mainDownloadId: item.downloadId,
-        mmProjDownloadId: entry?.mmProjDownloadId,
-        status: item.status,
-        mmProjStatus: entry?.mmProjStatus,
-      });
+      logger.log('[DownloadDebug] Manual retry requested', { modelKey, modelId: item.modelId, fileName: item.fileName, modelType: item.modelType, mainDownloadId: item.downloadId, mmProjDownloadId: entry?.mmProjDownloadId, status: item.status, mmProjStatus: entry?.mmProjStatus });
 
       const hasAllBytes = item.fileSize > 0 && item.bytesDownloaded >= item.fileSize;
       if (item.modelType === 'image' && entry) {
@@ -298,21 +357,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
         }
       }
 
-      useDownloadStore.getState().setStatus(item.downloadId, 'pending');
       if (Platform.OS === 'android') {
-        await backgroundDownloadService.retryDownload(item.downloadId);
-        if (item.modelType === 'text') {
-          const mmProjRetried = await retryFailedMmProj(entry);
-          if (mmProjRetried) {
-            // Reset ctx.mmProjCompleted + restore mmProjLocalPath that the error
-            // handler nulled, so watchBackgroundDownload registers a fresh listener
-            // and tryFinalize waits for the sidecar instead of skipping it.
-            modelManager.resetMmProjForRetry(item.downloadId);
-          }
-        }
-        if (item.modelType === 'text') {
-          await reattachRetriedTextDownload(item, setDownloadedModels);
-        }
+        await retryAndroidDownload(item, entry, setDownloadedModels);
+      } else if (Platform.OS === 'ios' && item.modelType === 'image' && entry) {
+        await retryIosImageDownload(entry, setAlertState);
+      } else if (Platform.OS === 'ios' && item.modelType === 'text' && entry) {
+        await retryIosTextDownload(item, entry, setDownloadedModels);
       }
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {

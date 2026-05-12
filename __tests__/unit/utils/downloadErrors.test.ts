@@ -34,6 +34,11 @@ describe('downloadErrors', () => {
     expect(getDownloadStatusLabel('downloading')).toBe('Downloading...');
   });
 
+  it('falls through to toUserMessage for unhandled statuses like processing', () => {
+    expect(getDownloadStatusLabel('processing')).toBe('Something went wrong while downloading.');
+    expect(getDownloadStatusLabel('completed')).toBe('Something went wrong while downloading.');
+  });
+
   describe('getUserFacingDownloadMessage', () => {
     it('maps 5xx server errors', () => {
       expect(getUserFacingDownloadMessage('HTTP 500')).toBe(

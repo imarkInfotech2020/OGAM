@@ -5,6 +5,7 @@
  * Use these factories to create consistent test data across all test files.
  */
 
+import type { ImageDownloadDeps } from '../../src/screens/ModelsScreen/imageDownloadActions';
 import {
   Message,
   Conversation,
@@ -445,4 +446,17 @@ export const createProject = (options: ProjectFactoryOptions = {}): Project => (
   icon: options.icon ?? '📁',
   createdAt: options.createdAt ?? new Date().toISOString(),
   updatedAt: options.updatedAt ?? new Date().toISOString(),
+});
+
+// ============================================================================
+// Image Download Factories
+// ============================================================================
+
+export const makeImageDownloadDeps = (overrides: Partial<ImageDownloadDeps> = {}): ImageDownloadDeps => ({
+  addDownloadedImageModel: jest.fn(),
+  activeImageModelId: null,
+  setActiveImageModelId: jest.fn(),
+  setAlertState: jest.fn(),
+  triedImageGen: false,
+  ...overrides,
 });
