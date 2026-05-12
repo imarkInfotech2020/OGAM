@@ -52,7 +52,7 @@ const mockGetImageModelsDirectory = jest.fn(() => '/mock/image-models');
 const mockAddDownloadedImageModel = jest.fn((_m?: any) => Promise.resolve());
 const mockMoveCompletedDownload = jest.fn((_id: string, _targetPath: string) => Promise.resolve('/moved.zip'));
 const mockStartDownload = jest.fn((_params: any) => Promise.resolve({ downloadId: 'zip-42' }));
-const mockDownloadFileTo = jest.fn((_opts: any) => ({ promise: Promise.resolve() }));
+const mockDownloadFileTo = jest.fn((_opts: any): { downloadIdPromise?: Promise<string>; promise: Promise<void> } => ({ promise: Promise.resolve() }));
 const mockOnComplete = jest.fn((_id: string, cb: Function) => { completeCallbacks.push(cb); return jest.fn(); });
 const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push(cb); return jest.fn(); });
 const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
@@ -310,8 +310,8 @@ describe('imageDownloadActions', () => {
   it('downloadHuggingFaceModel cancels cleanly when store entry removed mid-download', async () => {
     const deps = makeDeps();
     const modelInfo = makeHFModelInfo();
-    let resolvFirst: () => void;
-    const firstFilePromise = new Promise<void>(res => { resolvFirst = res; });
+    let resolveFirst!: () => void;
+    const firstFilePromise = new Promise<void>(res => { resolveFirst = res; });
     let callCount = 0;
     mockDownloadFileTo.mockImplementation(() => {
       callCount++;
@@ -322,9 +322,8 @@ describe('imageDownloadActions', () => {
     });
 
     const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
-    // Remove the store entry to simulate user cancellation mid-download
     mockStoreApi.remove('image:test-hf-model');
-    resolvFirst!();
+    resolveFirst();
     await downloadPromise;
 
     expect(mockStoreApi.setStatus).not.toHaveBeenCalledWith('image-multi:test-hf-model', 'failed', expect.anything());
@@ -333,17 +332,17 @@ describe('imageDownloadActions', () => {
   it('cancelSyntheticImageDownload cancels native download when currentDownloadId is set', async () => {
     const deps = makeDeps();
     const modelInfo = makeHFModelInfo();
-    let resolveFile: () => void;
+    let resolveFile!: () => void;
     const filePromise = new Promise<void>(res => { resolveFile = res; });
     const idPromise = Promise.resolve('native-42');
-    mockDownloadFileTo.mockReturnValueOnce({ downloadIdPromise: idPromise, promise: filePromise } as any);
+    mockDownloadFileTo.mockReturnValueOnce({ downloadIdPromise: idPromise, promise: filePromise });
     mockDownloadFileTo.mockReturnValue({ promise: Promise.resolve() });
 
     const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
     await idPromise;
     await new Promise(r => setTimeout(r, 0));
     await cancelSyntheticImageDownload(modelInfo.id);
-    resolveFile!();
+    resolveFile();
     await downloadPromise;
 
     const { backgroundDownloadService: svc } = jest.requireMock('../../../../src/services');
@@ -358,5 +357,26 @@ describe('imageDownloadActions', () => {
     await downloadHuggingFaceModel(modelInfo, deps);
 
     expect(mockDownloadFileTo).not.toHaveBeenCalled();
+  });
+
+  it('proceedWithDownload reuses failed store entry via retryEntry', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeZipModelInfo();
+    mockStoreApi.downloads['image:test-zip-model'] = { status: 'failed' };
+
+    await proceedWithDownload(modelInfo, deps);
+
+    expect(mockStoreApi.retryEntry).toHaveBeenCalledWith('image:test-zip-model', expect.any(String));
+    expect(mockStoreApi.add).not.toHaveBeenCalled();
+  });
+
+  it('downloadHuggingFaceModel reuses failed store entry via retryEntry', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeHFModelInfo();
+    mockStoreApi.downloads['image:test-hf-model'] = { status: 'failed' };
+
+    await downloadHuggingFaceModel(modelInfo, deps);
+
+    expect(mockStoreApi.retryEntry).toHaveBeenCalledWith('image:test-hf-model', expect.any(String));
   });
 });
