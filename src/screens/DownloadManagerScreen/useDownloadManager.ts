@@ -180,6 +180,61 @@ async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<bool
   }
 }
 
+async function retryAndroidDownload(item: DownloadItem, entry: DownloadEntry | undefined, setDownloadedModels: (models: DownloadedModel[]) => void): Promise<void> {
+  useDownloadStore.getState().setStatus(item.downloadId!, 'pending');
+  await backgroundDownloadService.retryDownload(item.downloadId!);
+  if (item.modelType === 'text') {
+    const mmProjRetried = await retryFailedMmProj(entry);
+    if (mmProjRetried) {
+      modelManager.resetMmProjForRetry(item.downloadId!);
+    }
+    await reattachRetriedTextDownload(item, setDownloadedModels);
+  }
+}
+
+async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: AlertState) => void): Promise<void> {
+  const meta = parseEntryMetadata(entry);
+  if (!meta) return;
+  const modelId = entry.modelId.replace('image:', '');
+  const appState = useAppStore.getState();
+  const deps = {
+    addDownloadedImageModel: appState.addDownloadedImageModel,
+    activeImageModelId: appState.activeImageModelId,
+    setActiveImageModelId: appState.setActiveImageModelId,
+    setAlertState,
+    triedImageGen: appState.onboardingChecklist.triedImageGen,
+  };
+  await proceedWithDownload({
+    id: modelId,
+    name: meta.imageModelName,
+    description: meta.imageModelDescription,
+    downloadUrl: meta.imageModelDownloadUrl ?? '',
+    size: meta.imageModelSize,
+    style: meta.imageModelStyle,
+    backend: meta.imageModelBackend,
+    attentionVariant: meta.imageModelAttentionVariant,
+    huggingFaceRepo: meta.imageModelRepo,
+    huggingFaceFiles: meta.imageModelHuggingFaceFiles,
+    coremlFiles: meta.imageModelCoremlFiles,
+    repo: meta.imageModelRepo,
+  }, deps);
+}
+
+async function retryIosTextDownload(entry: DownloadEntry): Promise<void> {
+  const meta = parseEntryMetadata(entry);
+  const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
+    ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
+    : undefined;
+  const file = {
+    name: entry.fileName,
+    size: entry.totalBytes,
+    quantization: entry.quantization,
+    downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
+    ...(mmProjFile ? { mmProjFile } : {}),
+  };
+  await modelManager.downloadModelBackground(entry.modelId, file);
+}
+
 export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
@@ -299,58 +354,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
       }
 
       if (Platform.OS === 'android') {
-        useDownloadStore.getState().setStatus(item.downloadId, 'pending');
-        await backgroundDownloadService.retryDownload(item.downloadId);
-        if (item.modelType === 'text') {
-          const mmProjRetried = await retryFailedMmProj(entry);
-          if (mmProjRetried) {
-            // Reset ctx.mmProjCompleted + restore mmProjLocalPath that the error
-            // handler nulled, so watchBackgroundDownload registers a fresh listener
-            // and tryFinalize waits for the sidecar instead of skipping it.
-            modelManager.resetMmProjForRetry(item.downloadId);
-          }
-          await reattachRetriedTextDownload(item, setDownloadedModels);
-        }
+        await retryAndroidDownload(item, entry, setDownloadedModels);
       } else if (Platform.OS === 'ios' && item.modelType === 'image' && entry) {
-        const meta = parseEntryMetadata(entry);
-        if (meta) {
-          const modelId = entry.modelId.replace('image:', '');
-          const appState = useAppStore.getState();
-          const deps = {
-            addDownloadedImageModel: appState.addDownloadedImageModel,
-            activeImageModelId: appState.activeImageModelId,
-            setActiveImageModelId: appState.setActiveImageModelId,
-            setAlertState,
-            triedImageGen: appState.onboardingChecklist.triedImageGen,
-          };
-          await proceedWithDownload({
-            id: modelId,
-            name: meta.imageModelName,
-            description: meta.imageModelDescription,
-            downloadUrl: meta.imageModelDownloadUrl ?? '',
-            size: meta.imageModelSize,
-            style: meta.imageModelStyle,
-            backend: meta.imageModelBackend,
-            attentionVariant: meta.imageModelAttentionVariant,
-            huggingFaceRepo: meta.imageModelRepo,
-            huggingFaceFiles: meta.imageModelHuggingFaceFiles,
-            coremlFiles: meta.imageModelCoremlFiles,
-            repo: meta.imageModelRepo,
-          }, deps);
-        }
+        await retryIosImageDownload(entry, setAlertState);
       } else if (Platform.OS === 'ios' && item.modelType === 'text' && entry) {
-        const meta = parseEntryMetadata(entry);
-        const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
-          ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
-          : undefined;
-        const file = {
-          name: entry.fileName,
-          size: entry.totalBytes,
-          quantization: entry.quantization,
-          downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
-          ...(mmProjFile ? { mmProjFile } : {}),
-        };
-        await modelManager.downloadModelBackground(entry.modelId, file);
+        await retryIosTextDownload(entry);
       }
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {
