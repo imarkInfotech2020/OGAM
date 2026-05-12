@@ -51,6 +51,19 @@ jest.mock('../../../src/utils/downloadErrors', () => ({
 
 import { useDownloads } from '../../../src/hooks/useDownloads';
 
+function fireProgress(event: Parameters<ProgressCb>[0]) {
+  if (!onAnyProgressCb) throw new Error('onAnyProgressCb not set');
+  onAnyProgressCb(event);
+}
+function fireComplete(event: Parameters<CompleteCb>[0]) {
+  if (!onAnyCompleteCb) throw new Error('onAnyCompleteCb not set');
+  onAnyCompleteCb(event);
+}
+function fireError(event: Parameters<ErrorCb>[0]) {
+  if (!onAnyErrorCb) throw new Error('onAnyErrorCb not set');
+  onAnyErrorCb(event);
+}
+
 function makeStoreState(overrides: Partial<any> = {}) {
   return {
     downloadIdIndex: {},
@@ -65,6 +78,13 @@ function makeStoreState(overrides: Partial<any> = {}) {
     retryEntry: mockRetryEntry,
     ...overrides,
   };
+}
+
+function withSingleTextEntry(downloadId = 'dl-1', extra: Record<string, any> = {}) {
+  mockGetState.mockReturnValue(makeStoreState({
+    downloadIdIndex: { [downloadId]: 'llm:model' },
+    downloads: { 'llm:model': { downloadId, modelType: 'text', ...extra } },
+  }));
 }
 
 describe('useDownloads', () => {
@@ -109,38 +129,29 @@ describe('useDownloads', () => {
 
   it('ignores progress event when downloadId not in index', () => {
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 1000 }); });
+    act(() => { fireProgress({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 1000 }); });
     expect(mockUpdateProgress).not.toHaveBeenCalled();
   });
 
   it('routes retrying status through setStatus instead of updateProgress', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', modelType: 'text' } },
-    }));
+    withSingleTextEntry();
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'retrying' }); });
+    act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'retrying' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'retrying');
     expect(mockUpdateProgress).not.toHaveBeenCalled();
   });
 
   it('routes waiting_for_network status through setStatus', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', modelType: 'text' } },
-    }));
+    withSingleTextEntry();
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'waiting_for_network' }); });
+    act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'waiting_for_network' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'waiting_for_network');
   });
 
   it('calls updateProgress for main download progress event', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', modelType: 'text' } },
-    }));
+    withSingleTextEntry();
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 1000 }); });
+    act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalledWith('dl-1', 500, 1000);
   });
 
@@ -150,7 +161,7 @@ describe('useDownloads', () => {
       downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', modelType: 'text' } },
     }));
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'mmproj-1', bytesDownloaded: 200, totalBytes: 400 }); });
+    act(() => { fireProgress({ downloadId: 'mmproj-1', bytesDownloaded: 200, totalBytes: 400 }); });
     expect(mockUpdateMmProjProgress).toHaveBeenCalledWith('mmproj-1', 200);
   });
 
@@ -161,7 +172,7 @@ describe('useDownloads', () => {
       downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', modelType: 'text' } },
     }));
     renderHook(() => useDownloads());
-    act(() => { onAnyProgressCb!({ downloadId: 'other', bytesDownloaded: 100, totalBytes: 200 }); });
+    act(() => { fireProgress({ downloadId: 'other', bytesDownloaded: 100, totalBytes: 200 }); });
     expect(mockUpdateProgress).not.toHaveBeenCalled();
     expect(mockUpdateMmProjProgress).not.toHaveBeenCalled();
     warnSpy.mockRestore();
@@ -169,7 +180,7 @@ describe('useDownloads', () => {
 
   it('ignores complete event when downloadId not in index', () => {
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 100 }); });
+    act(() => { fireComplete({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 100 }); });
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
 
@@ -184,7 +195,7 @@ describe('useDownloads', () => {
     });
     mockGetState.mockReturnValue(storeState);
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
+    act(() => { fireComplete({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
     expect(storeState.setMmProjCompleted).toHaveBeenCalledWith('mmproj-1', 400);
     expect(mockSetCompleted).toHaveBeenCalledWith('dl-1');
   });
@@ -196,18 +207,15 @@ describe('useDownloads', () => {
     });
     mockGetState.mockReturnValue(storeState);
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
+    act(() => { fireComplete({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
     expect(mockSetMmProjCompleted).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
 
   it('calls updateProgress when main gguf finishes but mmproj not yet done', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', mmProjStatus: 'running', modelType: 'text' } },
-    }));
+    withSingleTextEntry('dl-1', { mmProjDownloadId: 'mmproj-1', mmProjStatus: 'running' });
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
+    act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
@@ -218,18 +226,15 @@ describe('useDownloads', () => {
       downloads: { 'image:model': { downloadId: 'dl-1', modelType: 'image' } },
     }));
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
+    act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
     expect(mockSetProcessing).toHaveBeenCalledWith('dl-1');
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
 
   it('calls updateProgress for text model on complete (finalization handled elsewhere)', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', modelType: 'text' } },
-    }));
+    withSingleTextEntry();
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
+    act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
@@ -240,23 +245,20 @@ describe('useDownloads', () => {
       downloads: { 'other:model': { downloadId: 'dl-1', modelType: 'other' } },
     }));
     renderHook(() => useDownloads());
-    act(() => { onAnyCompleteCb!({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
+    act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
     expect(mockSetCompleted).toHaveBeenCalledWith('dl-1');
   });
 
   it('ignores error event when downloadId not in index', () => {
     renderHook(() => useDownloads());
-    act(() => { onAnyErrorCb!({ downloadId: 'unknown', reason: 'oops' }); });
+    act(() => { fireError({ downloadId: 'unknown', reason: 'oops' }); });
     expect(mockSetStatus).not.toHaveBeenCalled();
   });
 
   it('calls setStatus with failed on error event', () => {
-    mockGetState.mockReturnValue(makeStoreState({
-      downloadIdIndex: { 'dl-1': 'llm:model' },
-      downloads: { 'llm:model': { downloadId: 'dl-1', modelType: 'text' } },
-    }));
+    withSingleTextEntry();
     renderHook(() => useDownloads());
-    act(() => { onAnyErrorCb!({ downloadId: 'dl-1', reason: 'timeout', reasonCode: 'E_TIMEOUT' }); });
+    act(() => { fireError({ downloadId: 'dl-1', reason: 'timeout', reasonCode: 'E_TIMEOUT' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'failed', expect.objectContaining({ message: 'timeout' }));
   });
 
