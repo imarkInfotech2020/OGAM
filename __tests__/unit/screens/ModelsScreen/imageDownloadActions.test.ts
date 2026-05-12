@@ -263,4 +263,89 @@ describe('imageDownloadActions', () => {
 
     expect(mockStartDownload).toHaveBeenCalled();
   });
+
+  it('proceedWithDownload zip flow stores imageModelDownloadUrl in metadataJson', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeZipModelInfo({ downloadUrl: 'https://example.com/model.zip' });
+
+    await proceedWithDownload(modelInfo, deps);
+
+    expect(mockStartDownload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadataJson: expect.stringContaining('"imageModelDownloadUrl":"https://example.com/model.zip"'),
+      }),
+    );
+  });
+
+  it('downloadHuggingFaceModel stores imageModelHuggingFaceFiles in metadataJson', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeHFModelInfo();
+
+    await downloadHuggingFaceModel(modelInfo, deps);
+
+    const addCall = mockStoreApi.add.mock.calls[0][0];
+    const meta = JSON.parse(addCall.metadataJson);
+    expect(meta.imageModelHuggingFaceFiles).toEqual(modelInfo.huggingFaceFiles);
+  });
+
+  it('downloadCoreMLMultiFile stores imageModelCoremlFiles in metadataJson', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeCoreMLModelInfo();
+
+    await downloadCoreMLMultiFile(modelInfo, deps);
+
+    const addCall = mockStoreApi.add.mock.calls[0][0];
+    const meta = JSON.parse(addCall.metadataJson);
+    expect(meta.imageModelCoremlFiles).toEqual(modelInfo.coremlFiles);
+  });
+
+  it('cancelSyntheticImageDownload does nothing when no runtime exists', async () => {
+    const { cancelSyntheticImageDownload: cancel } = jest.requireActual(
+      '../../../../src/screens/ModelsScreen/imageDownloadActions',
+    ) as typeof import('../../../../src/screens/ModelsScreen/imageDownloadActions');
+    await expect(cancel('non-existent-model')).resolves.toBeUndefined();
+  });
+
+  it('proceedWithDownload routes to downloadHuggingFaceModel when huggingFaceRepo and huggingFaceFiles present', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeHFModelInfo();
+
+    await proceedWithDownload(modelInfo, deps);
+
+    expect(mockDownloadFileTo).toHaveBeenCalled();
+    expect(mockStartDownload).not.toHaveBeenCalled();
+  });
+
+  it('proceedWithDownload routes to downloadCoreMLMultiFile when coremlFiles present', async () => {
+    const deps = makeDeps();
+    const modelInfo = makeCoreMLModelInfo();
+
+    await proceedWithDownload(modelInfo, deps);
+
+    expect(mockDownloadFileTo).toHaveBeenCalled();
+    expect(mockStartDownload).not.toHaveBeenCalled();
+  });
+
+  it('downloadCoreMLMultiFile marks failure on file download error', async () => {
+    mockDownloadFileTo.mockReturnValueOnce({ promise: Promise.reject(new Error('CoreML fetch failed')) });
+    const deps = makeDeps();
+
+    await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
+
+    expect(mockStoreApi.setStatus).toHaveBeenCalledWith(
+      'image-multi:test-coreml-model',
+      'failed',
+      expect.objectContaining({ message: 'CoreML fetch failed' }),
+    );
+  });
+
+  it('proceedWithDownload skips download when model dir already exists on disk', async () => {
+    jest.requireMock('react-native-fs').exists.mockResolvedValue(true);
+    const deps = makeDeps();
+
+    await proceedWithDownload(makeZipModelInfo(), deps);
+
+    expect(mockStartDownload).not.toHaveBeenCalled();
+    expect(mockAddDownloadedImageModel).toHaveBeenCalled();
+  });
 });

@@ -195,6 +195,11 @@ async function retryAndroidDownload(item: DownloadItem, entry: DownloadEntry | u
 async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: AlertState) => void): Promise<void> {
   const meta = parseEntryMetadata(entry);
   if (!meta) return;
+  const isZip = meta.imageDownloadType === 'zip';
+  if (isZip && !meta.imageModelDownloadUrl) {
+    logger.error('[DownloadManager] retryIosImageDownload: missing imageModelDownloadUrl for zip download', { modelId: entry.modelId });
+    return;
+  }
   const modelId = entry.modelId.replace('image:', '');
   const appState = useAppStore.getState();
   const deps = {
@@ -220,7 +225,11 @@ async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: Al
   }, deps);
 }
 
-async function retryIosTextDownload(entry: DownloadEntry): Promise<void> {
+async function retryIosTextDownload(
+  item: DownloadItem,
+  entry: DownloadEntry,
+  setDownloadedModels: (models: DownloadedModel[]) => void,
+): Promise<void> {
   const meta = parseEntryMetadata(entry);
   const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
     ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
@@ -232,7 +241,8 @@ async function retryIosTextDownload(entry: DownloadEntry): Promise<void> {
     downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
     ...(mmProjFile ? { mmProjFile } : {}),
   };
-  await modelManager.downloadModelBackground(entry.modelId, file);
+  const info = await modelManager.downloadModelBackground(entry.modelId, file);
+  await reattachRetriedTextDownload({ ...item, downloadId: info.downloadId }, setDownloadedModels);
 }
 
 export function useDownloadManager(): UseDownloadManagerResult {
@@ -309,6 +319,20 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (entry) {
         if (entry.downloadId.startsWith('image-multi:')) {
           await cancelSyntheticImageDownload(item.modelId).catch(() => {});
+          // After an app kill the in-memory runtime is gone, so cancelSyntheticImageDownload
+          // is a no-op. Explicitly cancel any native rows still in the DB for this model
+          // so they are not re-hydrated into the store on the next app start.
+          try {
+            const activeRows = await backgroundDownloadService.getActiveDownloads();
+            const imageModelId = `image:${item.modelId}`;
+            await Promise.all(
+              activeRows
+                .filter(r => r.modelId === imageModelId)
+                .map(r => backgroundDownloadService.cancelDownload(r.downloadId).catch(() => {})),
+            );
+          } catch {
+            // Best-effort — store entry already removed above.
+          }
           return;
         }
         await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
@@ -358,7 +382,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       } else if (Platform.OS === 'ios' && item.modelType === 'image' && entry) {
         await retryIosImageDownload(entry, setAlertState);
       } else if (Platform.OS === 'ios' && item.modelType === 'text' && entry) {
-        await retryIosTextDownload(entry);
+        await retryIosTextDownload(item, entry, setDownloadedModels);
       }
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {

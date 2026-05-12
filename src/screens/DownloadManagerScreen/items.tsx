@@ -114,13 +114,15 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.cancelButton}
-          testID="remove-download-button"
-          onPress={() => onRemove(item)}
-        >
-          <Icon name="x" size={20} color={colors.error} />
-        </TouchableOpacity>
+        {item.status !== 'failed' && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            testID="remove-download-button"
+            onPress={() => onRemove(item)}
+          >
+            <Icon name="x" size={20} color={colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.progressContainer}>
         <View style={styles.progressBarBackground}>
