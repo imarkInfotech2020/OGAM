@@ -16,8 +16,8 @@ describe('DownloadManagerScreen/items helpers', () => {
 });
 
 describe('isRetryable branches', () => {
-  it('returns true when no reasonCode is provided (undefined)', () => {
-    expect(isRetryable(undefined)).toBe(true);
+  it('returns true when no reasonCode is provided', () => {
+    expect(isRetryable()).toBe(true);
   });
 
   it('returns true for retryable error codes', () => {

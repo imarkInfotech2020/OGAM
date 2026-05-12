@@ -171,12 +171,13 @@ async function retryFailedMmProj(entry: DownloadEntry | undefined): Promise<bool
 }
 
 async function retryAndroidDownload(item: DownloadItem, entry: DownloadEntry | undefined, setDownloadedModels: (models: DownloadedModel[]) => void): Promise<void> {
-  useDownloadStore.getState().setStatus(item.downloadId!, 'pending');
-  await backgroundDownloadService.retryDownload(item.downloadId!);
+  const downloadId = item.downloadId as string;
+  useDownloadStore.getState().setStatus(downloadId, 'pending');
+  await backgroundDownloadService.retryDownload(downloadId);
   if (item.modelType === 'text') {
     const mmProjRetried = await retryFailedMmProj(entry);
     if (mmProjRetried) {
-      modelManager.resetMmProjForRetry(item.downloadId!);
+      modelManager.resetMmProjForRetry(downloadId);
     }
     await reattachRetriedTextDownload(item, setDownloadedModels);
   }
