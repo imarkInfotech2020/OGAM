@@ -13,7 +13,7 @@ import {
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
-import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
+import { cancelSyntheticImageDownload, proceedWithDownload } from '../ModelsScreen/imageDownloadActions';
 import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
 
 export interface UseDownloadManagerResult {
@@ -298,8 +298,8 @@ export function useDownloadManager(): UseDownloadManagerResult {
         }
       }
 
-      useDownloadStore.getState().setStatus(item.downloadId, 'pending');
       if (Platform.OS === 'android') {
+        useDownloadStore.getState().setStatus(item.downloadId, 'pending');
         await backgroundDownloadService.retryDownload(item.downloadId);
         if (item.modelType === 'text') {
           const mmProjRetried = await retryFailedMmProj(entry);
@@ -309,10 +309,48 @@ export function useDownloadManager(): UseDownloadManagerResult {
             // and tryFinalize waits for the sidecar instead of skipping it.
             modelManager.resetMmProjForRetry(item.downloadId);
           }
-        }
-        if (item.modelType === 'text') {
           await reattachRetriedTextDownload(item, setDownloadedModels);
         }
+      } else if (Platform.OS === 'ios' && item.modelType === 'image' && entry) {
+        const meta = parseEntryMetadata(entry);
+        if (meta) {
+          const modelId = entry.modelId.replace('image:', '');
+          const appState = useAppStore.getState();
+          const deps = {
+            addDownloadedImageModel: appState.addDownloadedImageModel,
+            activeImageModelId: appState.activeImageModelId,
+            setActiveImageModelId: appState.setActiveImageModelId,
+            setAlertState,
+            triedImageGen: appState.onboardingChecklist.triedImageGen,
+          };
+          await proceedWithDownload({
+            id: modelId,
+            name: meta.imageModelName,
+            description: meta.imageModelDescription,
+            downloadUrl: meta.imageModelDownloadUrl ?? '',
+            size: meta.imageModelSize,
+            style: meta.imageModelStyle,
+            backend: meta.imageModelBackend,
+            attentionVariant: meta.imageModelAttentionVariant,
+            huggingFaceRepo: meta.imageModelRepo,
+            huggingFaceFiles: meta.imageModelHuggingFaceFiles,
+            coremlFiles: meta.imageModelCoremlFiles,
+            repo: meta.imageModelRepo,
+          }, deps);
+        }
+      } else if (Platform.OS === 'ios' && item.modelType === 'text' && entry) {
+        const meta = parseEntryMetadata(entry);
+        const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
+          ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
+          : undefined;
+        const file = {
+          name: entry.fileName,
+          size: entry.totalBytes,
+          quantization: entry.quantization,
+          downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
+          ...(mmProjFile ? { mmProjFile } : {}),
+        };
+        await modelManager.downloadModelBackground(entry.modelId, file);
       }
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {
