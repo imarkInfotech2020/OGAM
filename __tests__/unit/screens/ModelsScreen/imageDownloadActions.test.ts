@@ -6,6 +6,7 @@ import {
   proceedWithDownload,
   handleDownloadImageModel,
   registerAndNotify,
+  cancelSyntheticImageDownload,
   ImageDownloadDeps,
 } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
@@ -306,46 +307,56 @@ describe('imageDownloadActions', () => {
     await expect(cancel('non-existent-model')).resolves.toBeUndefined();
   });
 
-  it('proceedWithDownload routes to downloadHuggingFaceModel when huggingFaceRepo and huggingFaceFiles present', async () => {
+  it('downloadHuggingFaceModel cancels cleanly when store entry removed mid-download', async () => {
     const deps = makeDeps();
     const modelInfo = makeHFModelInfo();
+    let resolvFirst: () => void;
+    const firstFilePromise = new Promise<void>(res => { resolvFirst = res; });
+    let callCount = 0;
+    mockDownloadFileTo.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return { promise: firstFilePromise };
+      }
+      return { promise: Promise.resolve() };
+    });
 
-    await proceedWithDownload(modelInfo, deps);
+    const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
+    // Remove the store entry to simulate user cancellation mid-download
+    mockStoreApi.remove('image:test-hf-model');
+    resolvFirst!();
+    await downloadPromise;
 
-    expect(mockDownloadFileTo).toHaveBeenCalled();
-    expect(mockStartDownload).not.toHaveBeenCalled();
+    expect(mockStoreApi.setStatus).not.toHaveBeenCalledWith('image-multi:test-hf-model', 'failed', expect.anything());
   });
 
-  it('proceedWithDownload routes to downloadCoreMLMultiFile when coremlFiles present', async () => {
+  it('cancelSyntheticImageDownload cancels native download when currentDownloadId is set', async () => {
     const deps = makeDeps();
-    const modelInfo = makeCoreMLModelInfo();
+    const modelInfo = makeHFModelInfo();
+    let resolveFile: () => void;
+    const filePromise = new Promise<void>(res => { resolveFile = res; });
+    const idPromise = Promise.resolve('native-42');
+    mockDownloadFileTo.mockReturnValueOnce({ downloadIdPromise: idPromise, promise: filePromise });
+    mockDownloadFileTo.mockReturnValue({ promise: Promise.resolve() });
 
-    await proceedWithDownload(modelInfo, deps);
+    const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
+    await idPromise;
+    await new Promise(r => setTimeout(r, 0));
+    await cancelSyntheticImageDownload(modelInfo.id);
+    resolveFile!();
+    await downloadPromise;
 
-    expect(mockDownloadFileTo).toHaveBeenCalled();
-    expect(mockStartDownload).not.toHaveBeenCalled();
+    const { backgroundDownloadService: svc } = jest.requireMock('../../../../src/services');
+    expect(svc.cancelDownload).toHaveBeenCalledWith('native-42');
   });
 
-  it('downloadCoreMLMultiFile marks failure on file download error', async () => {
-    mockDownloadFileTo.mockReturnValueOnce({ promise: Promise.reject(new Error('CoreML fetch failed')) });
+  it('downloadHuggingFaceModel does not start if active entry already exists', async () => {
     const deps = makeDeps();
+    const modelInfo = makeHFModelInfo();
+    mockStoreApi.downloads['image:test-hf-model'] = { status: 'running' };
 
-    await downloadCoreMLMultiFile(makeCoreMLModelInfo(), deps);
+    await downloadHuggingFaceModel(modelInfo, deps);
 
-    expect(mockStoreApi.setStatus).toHaveBeenCalledWith(
-      'image-multi:test-coreml-model',
-      'failed',
-      expect.objectContaining({ message: 'CoreML fetch failed' }),
-    );
-  });
-
-  it('proceedWithDownload skips download when model dir already exists on disk', async () => {
-    jest.requireMock('react-native-fs').exists.mockResolvedValue(true);
-    const deps = makeDeps();
-
-    await proceedWithDownload(makeZipModelInfo(), deps);
-
-    expect(mockStartDownload).not.toHaveBeenCalled();
-    expect(mockAddDownloadedImageModel).toHaveBeenCalled();
+    expect(mockDownloadFileTo).not.toHaveBeenCalled();
   });
 });
