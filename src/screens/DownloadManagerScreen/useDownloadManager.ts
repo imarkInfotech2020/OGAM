@@ -125,16 +125,6 @@ async function reattachRetriedTextDownload(
     fileName: item.fileName,
     downloadId: item.downloadId,
   });
-  // Do NOT call restoreInProgressDownloads() here. The backgroundDownloadContext
-  // was already populated by the original startBgDownload call and remains valid
-  // for the lifetime of the download. Calling restore would overwrite the context
-  // with a fresh object, severing the mmProjCompleteHandled guard that is shared
-  // between the original onComplete listener (registered in startBgDownload) and
-  // the one registered below by watchDownload. With two independent context objects
-  // both starting with mmProjCompleteHandled=false, both onComplete listeners
-  // attempt the file move — the second one loses, sees the source gone, and
-  // nulls out ctx.mmProjLocalPath, resulting in mmProjFileExists:false at
-  // finalization (i.e. vision is silently dropped from the saved model).
   modelManager.watchDownload(
     item.downloadId!,
     async () => {
@@ -319,9 +309,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
       if (entry) {
         if (entry.downloadId.startsWith('image-multi:')) {
           await cancelSyntheticImageDownload(item.modelId).catch(() => {});
-          // After an app kill the in-memory runtime is gone, so cancelSyntheticImageDownload
-          // is a no-op. Explicitly cancel any native rows still in the DB for this model
-          // so they are not re-hydrated into the store on the next app start.
+          // After app kill the runtime is gone — cancel native rows so they aren't re-hydrated.
           try {
             const activeRows = await backgroundDownloadService.getActiveDownloads();
             const imageModelId = `image:${item.modelId}`;
@@ -351,16 +339,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
     const entry = downloads[modelKey];
     try {
-      logger.log('[DownloadDebug] Manual retry requested', {
-        modelKey,
-        modelId: item.modelId,
-        fileName: item.fileName,
-        modelType: item.modelType,
-        mainDownloadId: item.downloadId,
-        mmProjDownloadId: entry?.mmProjDownloadId,
-        status: item.status,
-        mmProjStatus: entry?.mmProjStatus,
-      });
+      logger.log('[DownloadDebug] Manual retry requested', { modelKey, modelId: item.modelId, fileName: item.fileName, modelType: item.modelType, mainDownloadId: item.downloadId, mmProjDownloadId: entry?.mmProjDownloadId, status: item.status, mmProjStatus: entry?.mmProjStatus });
 
       const hasAllBytes = item.fileSize > 0 && item.bytesDownloaded >= item.fileSize;
       if (item.modelType === 'image' && entry) {
