@@ -336,7 +336,7 @@ describe('imageDownloadActions', () => {
     let resolveFile: () => void;
     const filePromise = new Promise<void>(res => { resolveFile = res; });
     const idPromise = Promise.resolve('native-42');
-    mockDownloadFileTo.mockReturnValueOnce({ downloadIdPromise: idPromise, promise: filePromise });
+    mockDownloadFileTo.mockReturnValueOnce({ downloadIdPromise: idPromise, promise: filePromise } as any);
     mockDownloadFileTo.mockReturnValue({ promise: Promise.resolve() });
 
     const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
