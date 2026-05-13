@@ -7,6 +7,7 @@ import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+import { checkProPromptForText } from '../utils/proPrompt';
 import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,
@@ -128,6 +129,7 @@ class GenerationService {
     const s = useAppStore.getState();
     if (s.hasEngagedSharePrompt) return;
     if (shouldShowSharePrompt(s.incrementTextGenerationCount())) setTimeout(() => emitSharePrompt('text'), delayMs);
+    checkProPromptForText(delayMs);
   }
 
   private buildToolLoopHandlers() { return buildToolLoopHandlersImpl(this); }

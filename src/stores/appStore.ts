@@ -99,6 +99,15 @@ interface AppState {
   incrementImageGenerationCount: () => number;
   hasEngagedSharePrompt: boolean;
   setHasEngagedSharePrompt: (v: boolean) => void;
+  // PRO pre-order state
+  hasRegisteredPro: boolean;
+  setHasRegisteredPro: (v: boolean) => void;
+  proAhaTriggeredBy: 'image' | 'text' | null;
+  setProAhaTriggeredBy: (by: 'image' | 'text') => void;
+  proAhaShowCount: number;
+  incrementProAhaShowCount: () => number;
+  lastProAhaShownAt: number | null;
+  setLastProAhaShownAt: (ts: number) => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
@@ -125,7 +134,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageThreads: 4,
   imageWidth: 512,
   imageHeight: 512,
-  imageUseOpenCL: true,
+  imageUseOpenCL: false,
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
@@ -278,6 +287,14 @@ export const useAppStore = create<AppState>()(
       incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
       hasEngagedSharePrompt: false,
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
+      hasRegisteredPro: false,
+      setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
+      proAhaTriggeredBy: null,
+      setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
+      proAhaShowCount: 0,
+      incrementProAhaShowCount: () => { const c = get().proAhaShowCount + 1; set({ proAhaShowCount: c }); return c; },
+      lastProAhaShownAt: null,
+      setLastProAhaShownAt: (ts) => set({ lastProAhaShownAt: ts }),
       loadedSettings: null,
       setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),
@@ -297,6 +314,10 @@ export const useAppStore = create<AppState>()(
         shownSpotlights: state.shownSpotlights,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
+        hasRegisteredPro: state.hasRegisteredPro,
+        proAhaTriggeredBy: state.proAhaTriggeredBy,
+        proAhaShowCount: state.proAhaShowCount,
+        lastProAhaShownAt: state.lastProAhaShownAt,
         loadedSettings: state.loadedSettings,
       }),
     }

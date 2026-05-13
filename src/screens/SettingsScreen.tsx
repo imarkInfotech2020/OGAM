@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { AttachStep } from 'react-native-spotlight-tour';
 import { useNavigation, CommonActions, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Card } from '../components';
+import { Card, ProAhaSheet } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { MadeWithLove } from '../components/MadeWithLove';
@@ -29,7 +29,7 @@ import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
 
-const FEEDBACK_EMAIL = 'work@wednesday.is';
+const FEEDBACK_EMAIL = 'support@offgridmobile.co';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -42,6 +42,8 @@ export const SettingsScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+  const hasRegisteredPro = useAppStore((s) => s.hasRegisteredPro);
+  const [proAhaVisible, setProAhaVisible] = useState(false);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
@@ -176,8 +178,40 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AttachStep>
 
-        {/* Community */}
+        {/* PRO */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
+          <TouchableOpacity
+            style={styles.proCard}
+            onPress={() => !hasRegisteredPro && navigation.navigate('ProDetail')}
+            activeOpacity={hasRegisteredPro ? 1 : 0.75}
+          >
+            <View style={styles.proCardContent}>
+              <View style={styles.proIconContainer}>
+                <Icon name="award" size={16} color={styles.proIcon.color} />
+              </View>
+              <View style={styles.proCardText}>
+                {hasRegisteredPro ? (
+                  <>
+                    <Text style={styles.proTitle}>You're in. Welcome.</Text>
+                    <Text style={styles.proDesc}>Off Grid PRO supporter</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.proTitle}>Off Grid PRO</Text>
+                    <Text style={styles.proDesc}>Voice. MCPs. Calendar. WhatsApp.</Text>
+                    <Text style={styles.proCtaLink}>I am in 🔥</Text>
+                  </>
+                )}
+              </View>
+              {!hasRegisteredPro && (
+                <Icon name="chevron-right" size={16} color={styles.proChevron.color} />
+              )}
+            </View>
+          </TouchableOpacity>
+        </AnimatedEntry>
+
+        {/* Community */}
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
               <View style={styles.navItemIcon}>
@@ -250,10 +284,19 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.devButton} onPress={() => setProAhaVisible(true)}>
+              <Icon name="zap" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>Preview PRO Sheet</Text>
+            </TouchableOpacity>
           </View>
         </AnimatedEntry>
         <MadeWithLove />
       </ScrollView>
+      <ProAhaSheet
+        visible={proAhaVisible}
+        onClose={() => setProAhaVisible(false)}
+        onRegister={() => { setProAhaVisible(false); navigation.navigate('ProDetail'); }}
+      />
     </SafeAreaView>
   );
 };
@@ -320,4 +363,32 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  proCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    marginBottom: SPACING.lg,
+    overflow: 'hidden' as const,
+    ...shadows.small,
+  },
+  proCardContent: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: SPACING.md,
+    gap: SPACING.md,
+  },
+  proCardText: { flex: 1 },
+  proTitle: { ...TYPOGRAPHY.body, color: colors.text },
+  proDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
+  proIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: SPACING.sm,
+  },
+  proIcon: { color: colors.background },
+  proChevron: { color: colors.textMuted },
+  proCtaLink: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: SPACING.xs },
 });

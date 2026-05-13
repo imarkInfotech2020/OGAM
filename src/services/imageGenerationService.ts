@@ -6,6 +6,7 @@ import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+import { checkProPromptForImage } from '../utils/proPrompt';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
@@ -102,6 +103,7 @@ class ImageGenerationService {
     if (useAppStore.getState().hasEngagedSharePrompt) return;
     const count = useAppStore.getState().incrementImageGenerationCount();
     if (shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('image'), SHARE_PROMPT_DELAY_MS);
+    checkProPromptForImage(SHARE_PROMPT_DELAY_MS);
   }
 
   private async _resetLlmAfterEnhancement(): Promise<void> {
