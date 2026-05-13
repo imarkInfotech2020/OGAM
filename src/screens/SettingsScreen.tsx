@@ -29,7 +29,7 @@ import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
 
-const FEEDBACK_EMAIL = 'work@wednesday.is';
+const FEEDBACK_EMAIL = 'support@offgridmobile.co';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
