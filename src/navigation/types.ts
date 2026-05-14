@@ -24,7 +24,6 @@ export type RootStackParamList = {
   Gallery: { conversationId?: string } | undefined;
   ProDetail: undefined;
   About: undefined;
-  DebugState: undefined;
 };
 
 // Tab navigator — simple, no sub-stacks
