@@ -37,8 +37,9 @@ import {
   SecuritySettingsScreen,
   GalleryScreen,
   RemoteServersScreen,
-  DebugLogsScreen,
   ProDetailScreen,
+  AboutScreen,
+  DebugStateScreen,
 } from '../screens';
 import {
   RootStackParamList,
@@ -238,6 +239,16 @@ export const AppNavigator: React.FC = () => {
           name="ProDetail"
           component={ProDetailScreen}
           options={{ headerShown: false, animation: 'slide_from_bottom' }}
+        />
+        <RootStack.Screen
+          name="About"
+          component={AboutScreen}
+          options={{ headerShown: false }}
+        />
+        <RootStack.Screen
+          name="DebugState"
+          component={DebugStateScreen}
+          options={{ headerShown: false }}
         />
         <RootStack.Screen
           name="DownloadManager"

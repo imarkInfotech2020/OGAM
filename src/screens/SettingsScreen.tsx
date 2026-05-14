@@ -248,15 +248,18 @@ export const SettingsScreen: React.FC = () => {
 
         {/* About */}
         <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
-          <Card style={styles.section}>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>Version</Text>
-              <Text style={styles.aboutValue}>{packageJson.version}</Text>
-            </View>
-            <Text style={styles.aboutText}>
-              Off Grid brings AI to your device without compromising your privacy.
-            </Text>
-          </Card>
+          <View style={styles.navSection}>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => navigation.navigate('About')}>
+              <View style={styles.navItemIcon}>
+                <Icon name="info" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>About</Text>
+                <Text style={styles.navItemDesc}>Version {packageJson.version}</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </AnimatedEntry>
 
         {/* Privacy */}
@@ -287,6 +290,20 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity style={styles.devButton} onPress={() => setProAhaVisible(true)}>
               <Icon name="zap" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Preview PRO Sheet</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.devButton} onPress={() => {
+              const s = useAppStore.getState();
+              s.setHasRegisteredPro(false);
+              s.setProAhaTriggeredBy(null);
+              s.setLastProAhaShownAt(0);
+              useAppStore.setState({ proAhaShowCount: 0 });
+            }}>
+              <Icon name="refresh-cw" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>Reset PRO State</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.devButton} onPress={() => navigation.navigate('DebugState')}>
+              <Icon name="activity" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>View Debug State</Text>
             </TouchableOpacity>
           </View>
         </AnimatedEntry>

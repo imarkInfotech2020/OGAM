@@ -103,7 +103,7 @@ interface AppState {
   hasRegisteredPro: boolean;
   setHasRegisteredPro: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
-  setProAhaTriggeredBy: (by: 'image' | 'text') => void;
+  setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
   proAhaShowCount: number;
   incrementProAhaShowCount: () => number;
   lastProAhaShownAt: number | null;

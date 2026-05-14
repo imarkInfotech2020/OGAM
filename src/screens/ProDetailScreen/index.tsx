@@ -16,6 +16,8 @@ import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { useAppStore } from '../../stores/appStore';
 import { MadeWithLove } from '../../components/MadeWithLove';
+import { submitProEmail } from '../../utils/proPrompt';
+import logger from '../../utils/logger';
 
 const FEATURES = [
   { icon: 'mic', title: 'Voice AI + Personas', desc: 'Talk to named AI assistants with personality and memory.' },
@@ -33,14 +35,24 @@ export const ProDetailScreen: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const isValidEmail = email.includes('@') && email.includes('.');
 
-  const handleSubmit = () => {
-    if (!isValidEmail) return;
-    // Backend integration point — email collected, store locally for now
-    setHasRegisteredPro(true);
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    if (!isValidEmail || loading) return;
+    setLoading(true);
+    logger.log('[ProDetail] Submitting email:', email);
+    try {
+      const result = await submitProEmail(email);
+      logger.log('[ProDetail] Submit success:', JSON.stringify(result));
+    } catch (err) {
+      logger.error('[ProDetail] Submit failed:', err);
+    } finally {
+      setHasRegisteredPro(true);
+      setSubmitted(true);
+      setLoading(false);
+    }
   };
 
   return (
@@ -105,11 +117,11 @@ export const ProDetailScreen: React.FC = () => {
                 autoCorrect={false}
               />
               <TouchableOpacity
-                style={[styles.ctaButton, !isValidEmail && styles.ctaButtonDisabled]}
+                style={[styles.ctaButton, (!isValidEmail || loading) && styles.ctaButtonDisabled]}
                 onPress={handleSubmit}
-                disabled={!isValidEmail}
+                disabled={!isValidEmail || loading}
               >
-                <Text style={styles.ctaText}>I'm in</Text>
+                <Text style={styles.ctaText}>{loading ? 'Registering...' : 'I am in 🔥'}</Text>
               </TouchableOpacity>
             </View>
           )}
