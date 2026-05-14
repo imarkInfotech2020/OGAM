@@ -130,7 +130,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageThreads: 4,
   imageWidth: 512,
   imageHeight: 512,
-  imageUseOpenCL: false,
+  imageUseOpenCL: true,
   enhanceImagePrompts: false,
   modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
