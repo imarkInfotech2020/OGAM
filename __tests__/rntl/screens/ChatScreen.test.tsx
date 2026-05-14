@@ -423,6 +423,7 @@ jest.mock('../../../src/components', () => ({
     );
   },
   SharePromptSheet: () => null,
+  ProAhaSheet: () => null,
 }));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
