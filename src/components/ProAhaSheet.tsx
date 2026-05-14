@@ -28,10 +28,6 @@ export const ProAhaSheet: React.FC<ProAhaSheetProps> = ({ visible, onClose, onRe
           Help us build what's next - and get it free for life.
         </Text>
 
-        <View style={styles.priceRow}>
-          <Text style={styles.price}>$10 lifetime access</Text>
-        </View>
-
         <View style={styles.featureList}>
           {[
             'Voice-native conversation',

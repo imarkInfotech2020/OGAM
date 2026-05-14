@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { AttachStep } from 'react-native-spotlight-tour';
 import { useNavigation, CommonActions, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Card, ProAhaSheet } from '../components';
+import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { MadeWithLove } from '../components/MadeWithLove';
@@ -42,7 +42,6 @@ export const SettingsScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
-  const [proAhaVisible, setProAhaVisible] = useState(false);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
@@ -275,31 +274,10 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.devButton} onPress={() => setProAhaVisible(true)}>
-              <Icon name="zap" size={14} color={colors.textMuted} />
-              <Text style={styles.devButtonText}>Preview PRO Sheet</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.devButton} onPress={() => {
-              const s = useAppStore.getState();
-              s.setHasRegisteredPro(false);
-              s.setProAhaTriggeredBy(null);
-            }}>
-              <Icon name="refresh-cw" size={14} color={colors.textMuted} />
-              <Text style={styles.devButtonText}>Reset PRO State</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.devButton} onPress={() => navigation.navigate('DebugState')}>
-              <Icon name="activity" size={14} color={colors.textMuted} />
-              <Text style={styles.devButtonText}>View Debug State</Text>
-            </TouchableOpacity>
           </View>
         </AnimatedEntry>
         <MadeWithLove />
       </ScrollView>
-      <ProAhaSheet
-        visible={proAhaVisible}
-        onClose={() => setProAhaVisible(false)}
-        onRegister={() => { setProAhaVisible(false); navigation.navigate('ProDetail'); }}
-      />
     </SafeAreaView>
   );
 };
