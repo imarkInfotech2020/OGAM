@@ -176,8 +176,29 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AttachStep>
 
-        {/* Community */}
+        {/* PRO */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
+          <TouchableOpacity
+            style={styles.proCard}
+            onPress={() => navigation.navigate('ProDetail')}
+            activeOpacity={0.75}
+          >
+            <View style={styles.proCardContent}>
+              <View style={styles.proIconContainer}>
+                <Icon name="award" size={16} color={styles.proIcon.color} />
+              </View>
+              <View style={styles.proCardText}>
+                <Text style={styles.proTitle}>Off Grid PRO</Text>
+                <Text style={styles.proDesc}>Voice. MCPs. Calendar. WhatsApp.</Text>
+                <Text style={styles.proCtaLink}>I am in 🔥</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={styles.proChevron.color} />
+            </View>
+          </TouchableOpacity>
+        </AnimatedEntry>
+
+        {/* Community */}
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
               <View style={styles.navItemIcon}>
@@ -213,20 +234,23 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* About */}
-        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
-          <Card style={styles.section}>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>Version</Text>
-              <Text style={styles.aboutValue}>{packageJson.version}</Text>
-            </View>
-            <Text style={styles.aboutText}>
-              Off Grid brings AI to your device without compromising your privacy.
-            </Text>
-          </Card>
+        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.navSection}>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => navigation.navigate('About')}>
+              <View style={styles.navItemIcon}>
+                <Icon name="info" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>About</Text>
+                <Text style={styles.navItemDesc}>Version {packageJson.version}</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </AnimatedEntry>
 
         {/* Privacy */}
-        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.privacyCard}>
             <View style={styles.privacyIconContainer}>
               <Icon name="shield" size={18} color={colors.textSecondary} />
@@ -240,7 +264,7 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Reset Onboarding */}
-        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
               <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
@@ -320,4 +344,32 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  proCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    marginBottom: SPACING.lg,
+    overflow: 'hidden' as const,
+    ...shadows.small,
+  },
+  proCardContent: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: SPACING.md,
+    gap: SPACING.md,
+  },
+  proCardText: { flex: 1 },
+  proTitle: { ...TYPOGRAPHY.body, color: colors.text },
+  proDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
+  proIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: SPACING.sm,
+  },
+  proIcon: { color: colors.background },
+  proChevron: { color: colors.textMuted },
+  proCtaLink: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: SPACING.xs },
 });

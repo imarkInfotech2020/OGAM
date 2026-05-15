@@ -1,5 +1,15 @@
 export { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS, TRENDING_FAMILIES, TRENDING_MODEL_IDS, MODEL_ORGS, QUANTIZATION_INFO } from './models';
 
+// External URLs
+export const WEDNESDAY_URL = 'https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=off-grid-mobile-app&utm_medium=made-with-love&utm_campaign=in-app';
+
+export const PRO_AHA_FEATURES = [
+  'Voice-native conversation',
+  'Custom MCP servers',
+  'Calendar and WhatsApp integration',
+  'More, shipping monthly',
+];
+
 // Hugging Face API configuration
 export const HF_API = {
   baseUrl: 'https://huggingface.co',

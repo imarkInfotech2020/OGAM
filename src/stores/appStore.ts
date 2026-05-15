@@ -99,6 +99,11 @@ interface AppState {
   incrementImageGenerationCount: () => number;
   hasEngagedSharePrompt: boolean;
   setHasEngagedSharePrompt: (v: boolean) => void;
+  // PRO pre-order state
+  hasRegisteredPro: boolean;
+  setHasRegisteredPro: (v: boolean) => void;
+  proAhaTriggeredBy: 'image' | 'text' | null;
+  setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
@@ -278,6 +283,10 @@ export const useAppStore = create<AppState>()(
       incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
       hasEngagedSharePrompt: false,
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
+      hasRegisteredPro: false,
+      setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
+      proAhaTriggeredBy: null,
+      setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
       loadedSettings: null,
       setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),
@@ -297,6 +306,8 @@ export const useAppStore = create<AppState>()(
         shownSpotlights: state.shownSpotlights,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
+        hasRegisteredPro: state.hasRegisteredPro,
+        proAhaTriggeredBy: state.proAhaTriggeredBy,
         loadedSettings: state.loadedSettings,
       }),
     }

@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, Linking, StyleSheet } from 'react-native';
-import { TYPOGRAPHY } from '../constants';
-
-const WEDNESDAY_URL = 'https://www.wednesday.is/?utm_source=off-grid-mobile-app';
+import { TYPOGRAPHY, WEDNESDAY_URL } from '../constants';
 
 export const MadeWithLove: React.FC = () => (
   <TouchableOpacity onPress={() => Linking.openURL(WEDNESDAY_URL)} style={styles.container}>
