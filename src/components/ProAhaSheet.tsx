@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { SPACING, TYPOGRAPHY } from '../constants';
+import { SPACING, TYPOGRAPHY, PRO_AHA_FEATURES } from '../constants';
 
 interface ProAhaSheetProps {
   visible: boolean;
@@ -29,12 +29,7 @@ export const ProAhaSheet: React.FC<ProAhaSheetProps> = ({ visible, onClose, onRe
         </Text>
 
         <View style={styles.featureList}>
-          {[
-            'Voice-native conversation',
-            'Custom MCP servers',
-            'Calendar and WhatsApp integration',
-            'More, shipping monthly',
-          ].map(feature => (
+          {PRO_AHA_FEATURES.map(feature => (
             <View key={feature} style={styles.featureRow}>
               <Icon name="check" size={14} color={styles.checkIcon.color} />
               <Text style={styles.featureText}>{feature}</Text>
