@@ -18,6 +18,7 @@ import {
   ragService,
   retrievalService,
 } from '../../services';
+import { liteRTService } from '../../services/litert';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
@@ -153,6 +154,11 @@ export async function handleImageGenerationFn(
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
   if (deps.activeModelInfo?.isRemote) return true;
+  if (deps.activeModel?.engine === 'litert') {
+    if (liteRTService.isModelLoaded()) return true;
+    await deps.ensureModelLoaded();
+    return liteRTService.isModelLoaded();
+  }
   const loadedPath = llmService.getLoadedModelPath();
   if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
   await deps.ensureModelLoaded();

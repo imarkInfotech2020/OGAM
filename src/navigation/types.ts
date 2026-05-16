@@ -22,6 +22,7 @@ export type RootStackParamList = {
   // Already in RootStack
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;
+  DebugLiteRT: undefined;
 };
 
 // Tab navigator — simple, no sub-stacks

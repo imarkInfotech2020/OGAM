@@ -250,6 +250,13 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={() => navigation.getParent()?.navigate('DebugLiteRT')}
+            >
+              <Icon name="cpu" size={14} color={colors.textMuted} />
+              <Text style={styles.devButtonText}>LiteRT Debug</Text>
+            </TouchableOpacity>
           </View>
         </AnimatedEntry>
         <MadeWithLove />

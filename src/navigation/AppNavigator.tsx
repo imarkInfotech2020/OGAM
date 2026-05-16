@@ -37,6 +37,7 @@ import {
   SecuritySettingsScreen,
   GalleryScreen,
   RemoteServersScreen,
+  DebugLiteRTScreen,
 } from '../screens';
 import {
   RootStackParamList,
@@ -242,6 +243,7 @@ export const AppNavigator: React.FC = () => {
           component={GalleryScreen}
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+        <RootStack.Screen name="DebugLiteRT" component={DebugLiteRTScreen} />
       </RootStack.Navigator>
     </SpotlightTourProvider>
   );

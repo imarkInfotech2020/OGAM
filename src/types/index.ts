@@ -41,6 +41,8 @@ export interface ModelFile {
   };
 }
 
+export type ModelEngine = 'llama' | 'litert';
+
 export interface DownloadedModel {
   id: string;
   name: string;
@@ -56,6 +58,10 @@ export interface DownloadedModel {
   mmProjPath?: string;
   mmProjFileName?: string;
   mmProjFileSize?: number;
+  // Inference engine — undefined means 'llama' (backwards compatible)
+  engine?: ModelEngine;
+  // LiteRT-specific: whether this model's vision encoder is compatible with visionBackend=GPU
+  liteRTVision?: boolean;
 }
 
 export interface PersistedDownloadInfo {

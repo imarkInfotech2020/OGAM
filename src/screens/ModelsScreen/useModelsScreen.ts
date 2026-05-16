@@ -130,19 +130,20 @@ export function useModelsScreen() {
 
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
       const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+      const singleLitert = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.litertlm');
 
-      if (!allGguf && !singleZip) {
+      if (!allGguf && !singleZip && !singleLitert) {
         setAlertState(showAlert(
           'Invalid File',
           resolvedFiles.length > 1
             ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
-            : 'Supported formats: .gguf (text models) and .zip (image models).',
+            : 'Supported formats: .gguf (text models), .litertlm (LiteRT models), and .zip (image models).',
         ));
         return;
       }
 
       if (resolvedFiles.length > 2) {
-        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
+        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip/litertlm) or 2 .gguf files (vision model + mmproj projector).'));
         return;
       }
 

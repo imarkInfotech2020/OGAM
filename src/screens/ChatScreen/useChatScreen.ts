@@ -40,6 +40,7 @@ export const useChatScreen = () => {
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [showLogsPanel, setShowLogsPanel] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
@@ -229,6 +230,8 @@ export const useChatScreen = () => {
   };
   // Check if there are pending settings that require model reload
   const hasPendingSettings = (() => {
+    // LiteRT manages its own backend internally — llama.cpp settings don't apply
+    if (activeModel?.engine === 'litert') return false;
     if (!loadedSettings) return false;
     return (
       settings.nThreads !== loadedSettings.nThreads ||
@@ -245,6 +248,8 @@ export const useChatScreen = () => {
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
+    // LiteRT manages its own backend — reloading via llama.cpp path is wrong
+    if (activeModel?.engine === 'litert') return;
     // Open the model selector bottom sheet before unloading so the user sees the
     // loading state inside it rather than the NoModelScreen ("Select Model").
     setShowModelSelector(true);
@@ -261,6 +266,7 @@ export const useChatScreen = () => {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
     showDebugPanel, setShowDebugPanel,
+    showLogsPanel, setShowLogsPanel,
     showModelSelector, setShowModelSelector,
     showSettingsPanel, setShowSettingsPanel,
     showToolPicker, setShowToolPicker, supportsToolCalling, supportsThinking,

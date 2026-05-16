@@ -2,6 +2,7 @@ import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
+import { copyFileWithProgress } from './copyFile';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
  
 export function isMMProjFile(fileName: string): boolean {
@@ -376,6 +377,8 @@ export interface ImportLocalModelOpts {
   fileName: string;
   modelsDir: string;
   sourceSize?: number | null;
+  engine?: import('../../types').ModelEngine;
+  liteRTVision?: boolean;
   onProgress?: (progress: { fraction: number; fileName: string }) => void;
   mmProjSourceUri?: string;
   mmProjFileName?: string;
@@ -393,10 +396,11 @@ function resolveUri(uri: string): string {
 
 
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
-  const { sourceUri, fileName, modelsDir, sourceSize, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
+  const { sourceUri, fileName, modelsDir, sourceSize, engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
 
-  if (!fileName.toLowerCase().endsWith('.gguf')) {
-    throw new Error('Only .gguf files can be imported');
+  const isLitert = fileName.toLowerCase().endsWith('.litertlm');
+  if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {
+    throw new Error('Only .gguf and .litertlm files can be imported');
   }
 
   const resolvedSource = resolveUri(sourceUri);
@@ -418,7 +422,7 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
 
   const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
   const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
-  const modelName = fileName.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, '');
+  const modelName = fileName.replace(/\.gguf$/i, '').replace(/\.litertlm$/i, '').replace(/[_-]Q\d+.*/i, '');
   const destStat = await RNFS.stat(destPath);
   const fileSize = parseSizeInt(destStat.size);
 
@@ -430,6 +434,8 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
     name: modelName,
     author: 'Local Import',
     credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
+    ...(engine ? { engine } : {}),
+    ...(liteRTVision !== undefined ? { liteRTVision } : {}),
   };
 
   // Copy mmproj and link it to the model: progress 0.5→1
@@ -450,51 +456,4 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
 
   await persistDownloadedModel(builtModel, modelsDir);
   return builtModel;
-}
-
-type CopyProgressOpts = { knownTotalBytes: number | null; onProgress?: (fraction: number) => void };
-
-async function copyFileWithProgress(
-  source: string,
-  dest: string,
-  { knownTotalBytes, onProgress }: CopyProgressOpts,
-): Promise<void> {
-  let totalBytes = knownTotalBytes ?? 0;
-  if (totalBytes === 0) {
-    try {
-      const sourceStat = await RNFS.stat(source);
-      totalBytes = parseSizeInt(sourceStat.size);
-    } catch {
-      // stat failed — progress will be indeterminate (stuck at 0%), non-fatal
-    }
-  }
-
-  let polling = true;
-
-  const pollInterval = setInterval(async () => {
-    if (!polling) return;
-    try {
-      const exists = await RNFS.exists(dest);
-      if (exists && totalBytes > 0) {
-        const stat = await RNFS.stat(dest);
-        const written = parseSizeInt(stat.size);
-        const pct = Math.min(written / totalBytes, 0.99);
-        onProgress?.(pct);
-      }
-    } catch {
-      // poll errors are non-fatal
-    }
-  }, 500);
-
-  try {
-    await RNFS.copyFile(source, dest);
-    polling = false;
-    clearInterval(pollInterval);
-    onProgress?.(1);
-  } catch (error) {
-    polling = false;
-    clearInterval(pollInterval);
-    await RNFS.unlink(dest).catch(() => {});
-    throw error;
-  }
 }

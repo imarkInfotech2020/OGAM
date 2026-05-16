@@ -5,8 +5,10 @@ import {
   hideAlert,
 } from '../../components';
 import { llmService, activeModelService, modelManager } from '../../services';
+import { liteRTService } from '../../services/litert';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
+import { useDebugLogsStore } from '../../stores/debugLogsStore';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -63,7 +65,7 @@ async function doLoadTextModel(deps: ModelActionDeps): Promise<void> {
   try {
     await activeModelService.loadTextModel(activeModelId);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(multimodalSupport?.vision || false);
+    deps.setSupportsVision(activeModel.engine === 'litert' ? true : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
@@ -111,15 +113,19 @@ export async function initiateModelLoad(
     await waitForRenderFrame();
   }
 
+  const dbg = useDebugLogsStore.getState().addLog;
+  dbg('log', `[LiteRT] initiateModelLoad — model=${activeModel.name} engine=${activeModel.engine ?? 'llama'}`);
   try {
     await activeModelService.loadTextModel(activeModelId);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(multimodalSupport?.vision || false);
+    deps.setSupportsVision(activeModel.engine === 'litert' ? true : (multimodalSupport?.vision || false));
+    dbg('log', `[LiteRT] loadTextModel success — engine=${activeModel.engine ?? 'llama'}`);
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
   } catch (error: any) {
+    dbg('error', `[LiteRT] loadTextModel failed — ${error?.message || 'Unknown error'}`);
     if (!alreadyLoading) {
       deps.setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
     }
@@ -137,6 +143,18 @@ export async function ensureModelLoadedFn(
 ): Promise<void> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return;
+  const dbg = useDebugLogsStore.getState().addLog;
+  if (activeModel.engine === 'litert') {
+    if (liteRTService.isModelLoaded()) {
+      dbg('log', `[LiteRT] ensureModelLoaded — already loaded, skipping`);
+      deps.setSupportsVision(true);
+      return;
+    }
+    dbg('log', `[LiteRT] ensureModelLoaded — model=${activeModel.name}, triggering load`);
+    deps.setSupportsVision(true);
+    if (deps.activeModelId) await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading);
+    return;
+  }
   const loadedPath = llmService.getLoadedModelPath();
   const currentVisionSupport = llmService.getMultimodalSupport()?.vision || false;
   const needsReload = loadedPath !== activeModel.filePath ||
@@ -160,7 +178,7 @@ export async function proceedWithModelLoadFn(
   try {
     await activeModelService.loadTextModel(model.id);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(multimodalSupport?.vision || false);
+    deps.setSupportsVision(model.engine === 'litert' ? true : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       deps.addMessage(deps.activeConversationId, {
@@ -308,6 +326,8 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   useEffect(() => {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
+    } else if (activeModel?.engine === 'litert') {
+      setSupportsVision(true);
     } else if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
       setSupportsVision(llmService.getMultimodalSupport()?.vision ?? false);
     } else {

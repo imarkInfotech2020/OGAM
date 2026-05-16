@@ -184,6 +184,7 @@ export const ChatScreen: React.FC = () => {
           setShowModelSelector={chat.setShowModelSelector}
           setShowSettingsPanel={chat.setShowSettingsPanel}
           setShowProjectSelector={chat.setShowProjectSelector}
+          setShowLogsPanel={chat.setShowLogsPanel}
           isRemote={chat.activeModelInfo?.isRemote}
         />
         <ChatMessageArea
@@ -222,6 +223,8 @@ export const ChatScreen: React.FC = () => {
           viewerImageUri={chat.viewerImageUri}
           setViewerImageUri={chat.setViewerImageUri}
           handleSaveImage={chat.handleSaveImage}
+          showLogsPanel={chat.showLogsPanel}
+          setShowLogsPanel={chat.setShowLogsPanel}
           isRemote={chat.activeModelInfo?.isRemote}
         />
       </KeyboardAvoidingView>

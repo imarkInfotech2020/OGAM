@@ -1149,7 +1149,7 @@ describe('ModelManager', () => {
     it('rejects non-.gguf files', async () => {
       await expect(
         modelManager.importLocalModel({ sourceUri: '/path/to/model.bin', fileName: 'model.bin' })
-      ).rejects.toThrow('Only .gguf files can be imported');
+      ).rejects.toThrow('Only .gguf and .litertlm files can be imported');
     });
 
     it('rejects when destination already exists', async () => {
@@ -2703,6 +2703,52 @@ describe('ModelManager', () => {
       expect(mockedResolveCoreML).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_coreml_v1`);
       expect(result[0].modelPath).toBe(`${IMAGE_MODELS_DIR}/sd_coreml_v1/model.mlpackage`);
       expect(result[0].backend).toBe('coreml');
+    });
+  });
+
+  describe('importLocalModel — LiteRT branches', () => {
+    function setupImportMocks() {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false); // destExists = false
+      mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+    }
+
+    it('imports a .litertlm file with engine=litert and liteRTVision=false', async () => {
+      setupImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/gemma.litertlm',
+        fileName: 'gemma-4-E2B-it.litertlm',
+        engine: 'litert',
+        liteRTVision: false,
+      });
+      expect(result.engine).toBe('litert');
+      expect(result.liteRTVision).toBe(false);
+      expect(result.id).toBe('local_import/gemma-4-E2B-it.litertlm');
+    });
+
+    it('imports a .litertlm file with liteRTVision=true', async () => {
+      setupImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/gemma-vision.litertlm',
+        fileName: 'gemma-vision.litertlm',
+        engine: 'litert',
+        liteRTVision: true,
+      });
+      expect(result.liteRTVision).toBe(true);
+    });
+
+    it('omits engine and liteRTVision when not provided', async () => {
+      setupImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/model.gguf',
+        fileName: 'model.gguf',
+      });
+      expect(result.engine).toBeUndefined();
+      expect(result.liteRTVision).toBeUndefined();
     });
   });
 });

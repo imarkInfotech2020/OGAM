@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores';
 import { useDebugLogsStore } from '../../stores/debugLogsStore';
 import { DownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
+import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { modelManager } from '../modelManager';
 import logger from '../../utils/logger';
@@ -97,7 +98,80 @@ export interface TextLoadContext {
   onFinally: () => void;
 }
 
+function inferenceBackendToLiteRT(backend: string | undefined): 'cpu' | 'gpu' | 'npu' {
+  switch (backend) {
+    case INFERENCE_BACKENDS.HTP:    return 'npu';
+    case INFERENCE_BACKENDS.OPENCL: return 'gpu';
+    case INFERENCE_BACKENDS.METAL:  return 'gpu';
+    default:                        return 'cpu';
+  }
+}
+
+async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
+  const addDebugLog = useDebugLogsStore.getState().addLog;
+  try {
+    addDebugLog('log', `[LiteRT] Starting model load: ${ctx.model.fileName}`);
+
+    if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
+      addDebugLog('log', '[LiteRT] Unloading previous LiteRT model before load.');
+      try {
+        await liteRTService.unloadModel();
+      } catch (unloadErr) {
+        logger.warn('[LiteRT] Error unloading previous model, continuing:', unloadErr);
+        addDebugLog('warn', `[LiteRT] Previous model unload warning: ${String(unloadErr)}`);
+      }
+      ctx.onError();
+    }
+
+    const preferredBackend = inferenceBackendToLiteRT(ctx.store.settings.inferenceBackend);
+    addDebugLog('log', `[LiteRT] Preferred backend: ${preferredBackend}`);
+
+    const timeoutMs = preferredBackend === 'npu' ? 45_000
+                    : preferredBackend === 'gpu' ? 20_000
+                    : 15_000;
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(`LiteRT model load timed out after ${timeoutMs / 1000}s.`)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      addDebugLog('log', `[LiteRT] Calling liteRTService.loadModel (timeout ${timeoutMs / 1000}s, vision=${ctx.model.liteRTVision ?? false}).`);
+      await Promise.race([
+        liteRTService.loadModel(ctx.model.filePath, preferredBackend, ctx.model.liteRTVision ?? false),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+
+    const actualBackend = liteRTService.getActiveBackend();
+    addDebugLog('log', `[LiteRT] Load complete — actual backend: ${actualBackend}`);
+    if (actualBackend !== preferredBackend) {
+      addDebugLog('warn', `[LiteRT] Requested ${preferredBackend}, fell back to ${actualBackend}`);
+    }
+
+    ctx.onLoaded(ctx.modelId);
+    ctx.store.setActiveModelId(ctx.modelId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addDebugLog('error', `[LiteRT] Model load failed: ${message}`);
+    ctx.onError();
+    throw error;
+  } finally {
+    ctx.onFinally();
+  }
+}
+
 export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
+  // Route LiteRT models to the LiteRT loader — existing llama path is untouched below
+  if (ctx.model.engine === 'litert') {
+    return doLoadLiteRTModel(ctx);
+  }
+
   const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
     addDebugLog('log', `[Reload] Starting text model load: ${ctx.model.fileName}`);
