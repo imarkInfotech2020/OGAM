@@ -906,10 +906,10 @@ extension DownloadManagerModule {
         NSLog("[DownloadManager] Polling timer already running, skipping")
         return
       }
-      self.pollingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+      self.pollingTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
         self?.pollProgress()
       }
-      NSLog("[DownloadManager] Polling timer STARTED (0.5s interval)")
+      NSLog("[DownloadManager] Polling timer STARTED (1.5s interval)")
     }
   }
 
