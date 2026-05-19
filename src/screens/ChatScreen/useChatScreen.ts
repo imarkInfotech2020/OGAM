@@ -8,6 +8,7 @@ import {
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
+import { liteRTService } from '../../services/litert';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
@@ -230,9 +231,11 @@ export const useChatScreen = () => {
   };
   // Check if there are pending settings that require model reload
   const hasPendingSettings = (() => {
-    // LiteRT manages its own backend internally — llama.cpp settings don't apply
-    if (activeModel?.engine === 'litert') return false;
     if (!loadedSettings) return false;
+    // LiteRT only reloads when the inference backend changes (cpu/gpu/npu)
+    if (activeModel?.engine === 'litert') {
+      return settings.inferenceBackend !== loadedSettings.inferenceBackend;
+    }
     return (
       settings.nThreads !== loadedSettings.nThreads ||
       settings.nBatch !== loadedSettings.nBatch ||
@@ -248,19 +251,22 @@ export const useChatScreen = () => {
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
-    // LiteRT manages its own backend — reloading via llama.cpp path is wrong
-    if (activeModel?.engine === 'litert') return;
-    // Open the model selector bottom sheet before unloading so the user sees the
-    // loading state inside it rather than the NoModelScreen ("Select Model").
     setShowModelSelector(true);
-    // Must unload first — loadTextModel skips if the same model ID is already loaded,
-    // which means setLoadedSettings would never run and the banner would persist.
-    if (llmService.isModelLoaded()) {
-      await activeModelService.unloadTextModel();
+    if (activeModel?.engine === 'litert') {
+      // Unload LiteRT engine before reloading with the new backend
+      if (liteRTService.isModelLoaded()) {
+        await liteRTService.unloadModel().catch(() => { });
+      }
+    } else {
+      // Must unload first — loadTextModel skips if the same model ID is already loaded,
+      // which means setLoadedSettings would never run and the banner would persist.
+      if (llmService.isModelLoaded()) {
+        await activeModelService.unloadTextModel();
+      }
     }
     await initiateModelLoad(modelDeps, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings]);
+  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
 
   return {
     isModelLoading, loadingModel, supportsVision,

@@ -9,6 +9,7 @@ import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
+import { liteRTService } from '../../services/litert';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
@@ -131,6 +132,11 @@ export function useModelsScreen() {
       const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
       const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
       const singleLitert = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.litertlm');
+
+      if (singleLitert && !liteRTService.isAvailable()) {
+        setAlertState(showAlert('Not Supported', 'LiteRT models are only supported on Android.'));
+        return;
+      }
 
       if (!allGguf && !singleZip && !singleLitert) {
         setAlertState(showAlert(

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSpotlightTour } from 'react-native-spotlight-tour';
 import { CustomAlert, hideAlert, SharePromptSheet } from '../../components';
+import { DeviceStatsChip } from '../../components/DeviceStatsChip';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
@@ -31,6 +32,7 @@ export const ChatScreen: React.FC = () => {
   const pendingNextRef = useRef<number | null>(null);
 
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
+  const [showStatsChip, setShowStatsChip] = useState(true);
   useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
   // chatSpotlight controls which index is active (3, 12, 15, or 16).
@@ -186,6 +188,10 @@ export const ChatScreen: React.FC = () => {
           setShowProjectSelector={chat.setShowProjectSelector}
           setShowLogsPanel={chat.setShowLogsPanel}
           isRemote={chat.activeModelInfo?.isRemote}
+        />
+        <DeviceStatsChip
+          visible={showStatsChip}
+          onPress={() => setShowStatsChip(v => !v)}
         />
         <ChatMessageArea
           flatListRef={flatListRef}

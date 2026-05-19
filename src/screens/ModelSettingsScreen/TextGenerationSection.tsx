@@ -16,6 +16,8 @@ export const TextGenerationSection: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
   const modelMaxContext = useAppStore((s) => s.modelMaxContext);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const { downloadedModels, activeModelId } = useAppStore.getState();
+  const isLiteRT = downloadedModels.find(m => m.id === activeModelId)?.engine === 'litert';
 
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const maxTokens = settings?.maxTokens || 512;
@@ -53,48 +55,52 @@ export const TextGenerationSection: React.FC = () => {
         />
       </View>
 
-      <View style={styles.sliderSection}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Max Tokens</Text>
-          <Text style={styles.sliderValue}>{maxTokensLabel}</Text>
+      {!isLiteRT && (
+        <View style={styles.sliderSection}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Max Tokens</Text>
+            <Text style={styles.sliderValue}>{maxTokensLabel}</Text>
+          </View>
+          <Text style={styles.sliderDesc}>Maximum response length</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={64}
+            maximumValue={8192}
+            step={64}
+            value={maxTokens}
+            onSlidingComplete={(value) => updateSettings({ maxTokens: value })}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surface}
+            thumbTintColor={colors.primary}
+          />
         </View>
-        <Text style={styles.sliderDesc}>Maximum response length</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={64}
-          maximumValue={8192}
-          step={64}
-          value={maxTokens}
-          onSlidingComplete={(value) => updateSettings({ maxTokens: value })}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.surface}
-          thumbTintColor={colors.primary}
-        />
-      </View>
+      )}
 
-      <View style={styles.sliderSection}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Context Length</Text>
-          <Text style={styles.sliderValue}>{contextLengthLabel}</Text>
+      {!isLiteRT && (
+        <View style={styles.sliderSection}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Context Length</Text>
+            <Text style={styles.sliderValue}>{contextLengthLabel}</Text>
+          </View>
+          <Text style={styles.sliderDesc}>KV cache size — larger uses more RAM (requires reload)</Text>
+          {contextLength > HIGH_CONTEXT_THRESHOLD && (
+            <Text style={[styles.sliderDesc, { color: colors.error }]}>
+              High context uses significant RAM and may crash on some devices
+            </Text>
+          )}
+          <Slider
+            style={styles.slider}
+            minimumValue={512}
+            maximumValue={ctxSliderMax}
+            step={1024}
+            value={contextLength}
+            onSlidingComplete={(value) => updateSettings({ contextLength: value })}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surface}
+            thumbTintColor={colors.primary}
+          />
         </View>
-        <Text style={styles.sliderDesc}>KV cache size — larger uses more RAM (requires reload)</Text>
-        {contextLength > HIGH_CONTEXT_THRESHOLD && (
-          <Text style={[styles.sliderDesc, { color: colors.error }]}>
-            High context uses significant RAM and may crash on some devices
-          </Text>
-        )}
-        <Slider
-          style={styles.slider}
-          minimumValue={512}
-          maximumValue={ctxSliderMax}
-          step={1024}
-          value={contextLength}
-          onSlidingComplete={(value) => updateSettings({ contextLength: value })}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.surface}
-          thumbTintColor={colors.primary}
-        />
-      </View>
+      )}
 
       <View style={styles.toggleRow}>
         <View style={styles.toggleInfo}>
@@ -113,7 +119,7 @@ export const TextGenerationSection: React.FC = () => {
 
       <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="text-advanced-toggle" />
 
-      {showAdvanced && <TextGenerationAdvanced />}
+      {showAdvanced && <TextGenerationAdvanced isLiteRT={isLiteRT} />}
     </Card>
   );
 };
