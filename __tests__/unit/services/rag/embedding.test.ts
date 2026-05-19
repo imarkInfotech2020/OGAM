@@ -121,4 +121,54 @@ describe('EmbeddingService', () => {
       expect(embeddingService.getDimension()).toBe(384);
     });
   });
+
+  describe('load — Android copyFileAssets branch', () => {
+    it('copies from assets on Android when file does not exist', async () => {
+      const { Platform } = require('react-native');
+      Platform.OS = 'android';
+      mockExists.mockResolvedValue(false);
+      mockCopyFileAssets.mockResolvedValue(undefined);
+
+      await embeddingService.load();
+
+      expect(mockCopyFileAssets).toHaveBeenCalled();
+      Platform.OS = 'ios'; // restore
+    });
+  });
+
+  describe('embed — error recovery branches', () => {
+    it('unloads model and throws wrapped error on ggml native error', async () => {
+      await embeddingService.load();
+      mockEmbedding.mockRejectedValue(new Error('ggml alloc failed'));
+      mockRelease.mockResolvedValue(undefined);
+
+      await expect(embeddingService.embed('test')).rejects.toThrow('Embedding failed (native error)');
+      expect(embeddingService.isLoaded()).toBe(false);
+    });
+
+    it('uses String(error) fallback when error has no message property', async () => {
+      await embeddingService.load();
+      // Throw a plain string, not an Error object — error?.message is undefined
+      mockEmbedding.mockRejectedValue('OOM string error');
+
+      await expect(embeddingService.embed('test')).rejects.toThrow('Embedding failed (native error)');
+    });
+
+    it('re-throws non-recovery errors unchanged', async () => {
+      await embeddingService.load();
+      mockEmbedding.mockRejectedValue(new Error('unexpected error'));
+
+      await expect(embeddingService.embed('test')).rejects.toThrow('unexpected error');
+    });
+  });
+
+  describe('unload — release error is swallowed', () => {
+    it('sets context to null even when release throws', async () => {
+      await embeddingService.load();
+      mockRelease.mockRejectedValue(new Error('bridge torn down'));
+
+      await embeddingService.unload();
+      expect(embeddingService.isLoaded()).toBe(false);
+    });
+  });
 });

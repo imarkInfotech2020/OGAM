@@ -680,12 +680,15 @@ final class DownloadManagerModuleTests: XCTestCase {
       bytesDownloaded: 1_000_000,
       status: "completed",
       startedAt: Date().timeIntervalSince1970 * 1000,
-      task: nil,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 1_000_000,
+      metadataJson: nil,
       taskIdentifier: nil,
       localUri: TestPaths.tmpTestModelGGUF,
-      fileTasks: [:],
       multiFileDestDir: nil,
-      isMultiFile: false
+      isMultiFile: false,
+      fileTasks: []
     )
     module.queue.sync(flags: .barrier) {
       self.module.downloads["100"] = info
@@ -728,12 +731,15 @@ final class DownloadManagerModuleTests: XCTestCase {
       bytesDownloaded: 256,
       status: "completed",
       startedAt: Date().timeIntervalSince1970 * 1000,
-      task: nil,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 256,
+      metadataJson: nil,
       taskIdentifier: nil,
       localUri: sourceFile,
-      fileTasks: [:],
       multiFileDestDir: nil,
-      isMultiFile: false
+      isMultiFile: false,
+      fileTasks: []
     )
     module.queue.sync(flags: .barrier) {
       self.module.downloads["200"] = info
@@ -781,12 +787,15 @@ final class DownloadManagerModuleTests: XCTestCase {
       bytesDownloaded: 500_000,
       status: "running",
       startedAt: Date().timeIntervalSince1970 * 1000,
-      task: nil,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 0,
+      metadataJson: nil,
       taskIdentifier: nil,
       localUri: nil,
-      fileTasks: [:],
       multiFileDestDir: nil,
-      isMultiFile: false
+      isMultiFile: false,
+      fileTasks: []
     )
     module.queue.sync(flags: .barrier) {
       self.module.downloads["300"] = info

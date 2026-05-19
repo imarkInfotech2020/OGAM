@@ -90,7 +90,7 @@ describe('SettingsScreen', () => {
 
   it('renders version number', () => {
     const { getByText } = render(<SettingsScreen />);
-    expect(getByText('1.0.0')).toBeTruthy();
+    expect(getByText(/1\.0\.0/)).toBeTruthy();
   });
 
   it('renders navigation items', () => {
@@ -156,7 +156,7 @@ describe('SettingsScreen', () => {
   it('renders about section text', () => {
     const { getByText } = render(<SettingsScreen />);
     expect(getByText('Version')).toBeTruthy();
-    expect(getByText(/Off Grid brings AI/)).toBeTruthy();
+    expect(getByText(/LiteRT engine/)).toBeTruthy();
   });
 
   it('renders Reset Onboarding button in __DEV__ mode', () => {
