@@ -1,15 +1,20 @@
 package ai.offgridmobile.litert
 
 import android.util.Log
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Debug
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import ai.offgridmobile.SafePromise
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.BenchmarkInfo
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.*
 import java.io.File
@@ -129,9 +134,9 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // -------------------------------------------------------------------------
 
     @ReactMethod
-    fun resetConversation(systemPrompt: String, promise: Promise) {
+    fun resetConversation(systemPrompt: String, temperature: Double, topK: Int, topP: Double, promise: Promise) {
         val safe = SafePromise(promise, TAG)
-        Log.i(TAG, "resetConversation — systemPrompt length=${systemPrompt.length}")
+        Log.i(TAG, "resetConversation — systemPrompt length=${systemPrompt.length} temperature=$temperature topK=$topK topP=$topP")
 
         scope.launch {
             try {
@@ -150,7 +155,11 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     Log.i(TAG, "resetConversation — NPU backend, skipping SamplerConfig")
                     null
                 } else {
-                    SamplerConfig(topK = 40, topP = 0.95, temperature = 0.8)
+                    SamplerConfig(
+                        topK = topK,
+                        topP = topP,
+                        temperature = temperature,
+                    )
                 }
 
                 val convConfig = ConversationConfig(
@@ -230,7 +239,15 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                             }
                         }
                     Log.i(TAG, "sendMessage — generation complete")
-                    sendEvent(EVENT_COMPLETE, "")
+                    @OptIn(ExperimentalApi::class)
+                    val benchmarkJson = try {
+                        val b = conv.getBenchmarkInfo()
+                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount}}"""
+                    } catch (e: Exception) {
+                        Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
+                        ""
+                    }
+                    sendEvent(EVENT_COMPLETE, benchmarkJson)
                     safe.resolve(null)
                 } catch (e: CancellationException) {
                     Log.i(TAG, "sendMessage — job cancelled")
@@ -332,6 +349,43 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             Log.w(TAG, "cleanupEngine — engine close error (ignored): ${e.message}")
         } finally {
             engine = null
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // getMemoryInfo — live RAM usage + process GPU memory
+    // -------------------------------------------------------------------------
+
+    @ReactMethod
+    fun getMemoryInfo(promise: Promise) {
+        val safe = SafePromise(promise, TAG)
+        try {
+            val am = reactContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+
+            // System RAM
+            val ramInfo = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(ramInfo)
+            val totalRamMb = ramInfo.totalMem / (1024 * 1024)
+            val availRamMb = ramInfo.availMem / (1024 * 1024)
+            val usedRamMb = totalRamMb - availRamMb
+
+            // Process GPU memory (graphics + GL textures) via Debug.MemoryInfo
+            val memInfo = Debug.MemoryInfo()
+            Debug.getMemoryInfo(memInfo)
+            val gpuPrivateMb = try {
+                (memInfo.getMemoryStat("summary.graphics") ?: "0").toLong() / 1024
+            } catch (e: Exception) { 0L }
+
+            val result = Arguments.createMap().apply {
+                putDouble("totalRamMb", totalRamMb.toDouble())
+                putDouble("usedRamMb", usedRamMb.toDouble())
+                putDouble("availRamMb", availRamMb.toDouble())
+                putDouble("gpuPrivateMb", gpuPrivateMb.toDouble())
+                putBoolean("lowMemory", ramInfo.lowMemory)
+            }
+            safe.resolve(result)
+        } catch (e: Exception) {
+            safe.reject("MEM_ERROR", "Failed to get memory info: ${e.message}", e)
         }
     }
 
