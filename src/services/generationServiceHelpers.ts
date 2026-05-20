@@ -79,15 +79,11 @@ export function buildGenerationMetaImpl(svc: any): GenerationMeta {
         modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
       };
     }
-    // Fallback estimate if BenchmarkInfo unavailable
-    const generationTime = svc.state.startTime ? (Date.now() - svc.state.startTime) / 1000 : 0;
-    const estimatedTokens = Math.ceil(svc.state.streamingContent.length / 4);
+    // BenchmarkInfo unavailable — return backend info only, no estimated tps
     return {
       gpu: backend !== 'cpu',
       gpuBackend: backend.toUpperCase(),
       modelName,
-      tokenCount: estimatedTokens,
-      tokensPerSecond: generationTime > 0 ? estimatedTokens / generationTime : undefined,
     };
   }
 

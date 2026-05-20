@@ -154,6 +154,14 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       addDebugLog('warn', `[LiteRT] Requested ${preferredBackend}, fell back to ${actualBackend}`);
     }
 
+    // Warmup on GPU/NPU only — primes shader/kernel caches so first real prompt runs at full speed
+    if (actualBackend === 'gpu' || actualBackend === 'npu') {
+      addDebugLog('log', `[LiteRT] Starting warmup on ${actualBackend}...`);
+      const warmupStart = Date.now();
+      await liteRTService.warmup();
+      addDebugLog('log', `[LiteRT] Warmup complete in ${((Date.now() - warmupStart) / 1000).toFixed(1)}s`);
+    }
+
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {

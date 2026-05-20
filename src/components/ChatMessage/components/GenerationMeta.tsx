@@ -42,7 +42,8 @@ function buildMetaItems(
 }
 
 export function GenerationMeta({ generationMeta, styles }: Readonly<GenerationMetaProps>) {
-  const tps = generationMeta.decodeTokensPerSecond ?? generationMeta.tokensPerSecond;
+  const rawTps = generationMeta.decodeTokensPerSecond ?? generationMeta.tokensPerSecond;
+  const tps = rawTps && rawTps > 0 ? rawTps : undefined;
   const items = buildMetaItems(generationMeta, tps);
 
   return (

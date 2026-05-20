@@ -11,6 +11,7 @@
 
 import { NativeModules, NativeEventEmitter, Platform, EmitterSubscription } from 'react-native';
 import logger from '../utils/logger';
+import { useDebugLogsStore } from '../stores/debugLogsStore';
 
 const TAG = '[LiteRTService]';
 
@@ -138,6 +139,32 @@ class LiteRTService {
   }
 
   // ---------------------------------------------------------------------------
+  // warmup — send a throwaway prompt to prime GPU/NPU shader caches
+  // ---------------------------------------------------------------------------
+
+  async warmup(): Promise<void> {
+    if (!this.isAvailable() || !this.loaded) return;
+    logger.log(TAG, 'warmup — starting');
+    try {
+      await this.resetConversation('');
+      await new Promise<void>((resolve) => {
+        this.sendMessage('Hi', {
+          onToken: () => {},
+          onReasoning: () => {},
+          onComplete: () => resolve(),
+          onError: () => resolve(),
+        });
+      });
+      // Clear warmup state so first real message gets a fresh conversation
+      this.activeConversationId = null;
+      this.activeSystemPrompt = null;
+      logger.log(TAG, 'warmup — done');
+    } catch (e) {
+      logger.log(TAG, `warmup — error (ignored): ${String(e)}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // sendMessage — sends current turn only, library holds history
   // ---------------------------------------------------------------------------
 
@@ -158,10 +185,17 @@ class LiteRTService {
     this.currentReasoning = '';
     this.currentCallbacks = callbacks;
 
+    // Wall-clock tracking
+    const sendStart = Date.now();
+    let firstTokenTime: number | undefined;
+    let decodeTokenCount = 0;
+
     // Register event listeners for this generation
     this.clearSubscriptions();
     this.subscriptions = [
       this.emitter!.addListener(EVENT_TOKEN, (token: string) => {
+        if (firstTokenTime === undefined) firstTokenTime = Date.now();
+        decodeTokenCount++;
         this.currentContent += token;
         callbacks.onToken(token);
       }),
@@ -173,11 +207,26 @@ class LiteRTService {
         logger.log(TAG, `sendMessage — complete, content=${this.currentContent.length} chars`);
         this.clearSubscriptions();
         this.currentCallbacks = null;
-        let stats: LiteRTBenchmarkStats | undefined;
-        if (benchmarkJson) {
-          try { stats = JSON.parse(benchmarkJson); } catch { /* ignore parse errors */ }
-        }
-        callbacks.onComplete(this.currentContent, this.currentReasoning, stats);
+        const addLog = useDebugLogsStore.getState().addLog;
+
+        // Build wall-clock stats
+        const completeTime = Date.now();
+        const ttft = firstTokenTime !== undefined ? (firstTokenTime - sendStart) / 1000 : undefined;
+        const decodeElapsed = firstTokenTime !== undefined ? (completeTime - firstTokenTime) / 1000 : undefined;
+        const decodeTokensPerSecond = decodeElapsed && decodeElapsed > 0 && decodeTokenCount > 1
+          ? decodeTokenCount / decodeElapsed
+          : undefined;
+
+        const wallClockStats: LiteRTBenchmarkStats = {
+          ttft: ttft ?? 0,
+          decodeTokensPerSecond: decodeTokensPerSecond ?? 0,
+          prefillTokensPerSecond: 0,
+          prefillTokenCount: decodeTokenCount,
+          initTimeSeconds: 0,
+        };
+
+        addLog('log', `[LiteRTService] wall-clock stats — ttft=${ttft?.toFixed(3)}s decode=${decodeTokensPerSecond?.toFixed(1)}tok/s tokens=${decodeTokenCount}`);
+        callbacks.onComplete(this.currentContent, this.currentReasoning, wallClockStats);
       }),
       this.emitter!.addListener(EVENT_ERROR, (message: string) => {
         logger.log(TAG, `sendMessage — error: ${message}`);
