@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Linking, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import LinearGradient from 'react-native-linear-gradient';
@@ -64,12 +64,13 @@ export const ProDetailScreen: React.FC = () => {
         </View>
 
         {/* Promo Banner */}
-        <LinearGradient
-          colors={['#2D4A38', '#1C2B22', '#141F19']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.promoBanner}
-        >
+        <View style={styles.promoBannerWrapper}>
+          <LinearGradient
+            colors={['#2D4A38', '#1C2B22', '#141F19']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.promoOfferRow}>
             <Icon name="star" size={13} color={colors.primary} />
             <Text style={styles.promoOfferLabel}>LIMITED TIME OFFER</Text>
@@ -78,7 +79,7 @@ export const ProDetailScreen: React.FC = () => {
           <Text style={styles.promoSubtitle}>
             Unlock all current and future integrations forever.
           </Text>
-        </LinearGradient>
+        </View>
 
         {/* Core Integrations */}
         <View style={styles.integrationsSection}>
@@ -109,12 +110,13 @@ export const ProDetailScreen: React.FC = () => {
           </View>
 
           {/* MCP Access full-width */}
-          <LinearGradient
-            colors={isDark ? ['#141414', '#141414', '#1A2B1E'] : ['#FFFFFF', '#FFFFFF', '#E8F5EE']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.mcpCard}
-          >
+          <View style={styles.mcpCard}>
+            <LinearGradient
+              colors={isDark ? ['#141414', '#141414', '#1A2B1E'] : ['#FFFFFF', '#FFFFFF', '#E8F5EE']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
             <View style={styles.mcpIconWrap}>
               <Icon name="cpu" size={20} color={colors.primary} />
             </View>
@@ -129,7 +131,7 @@ export const ProDetailScreen: React.FC = () => {
                 Full Model Context Protocol support for bespoke tool chaining and logic loops.
               </Text>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* CTA */}
@@ -208,16 +210,19 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
 
   // Promo Banner — fixed dark-green branded surface
-  promoBanner: {
+  promoBannerWrapper: {
+    alignSelf: 'stretch' as const,
     marginHorizontal: SPACING.xl,
     marginBottom: SPACING.xl,
     borderRadius: 16,
-    padding: SPACING.xl,
-    alignItems: 'center' as const,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
+    overflow: 'hidden' as const,
   },
   promoOfferRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: SPACING.xs,
     marginBottom: SPACING.sm,
   },
@@ -227,14 +232,18 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     letterSpacing: 0.8,
   },
   promoTitle: {
-    ...TYPOGRAPHY.h1,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '600' as const,
+    letterSpacing: -0.5,
     color: '#FFFFFF',
     textAlign: 'center' as const,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   promoSubtitle: {
-    ...TYPOGRAPHY.bodySmall,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    fontWeight: '400' as const,
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center' as const,
     lineHeight: 18,
   },
