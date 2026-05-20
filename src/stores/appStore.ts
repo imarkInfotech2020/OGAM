@@ -102,6 +102,8 @@ interface AppState {
   // PRO pre-order state
   hasRegisteredPro: boolean;
   setHasRegisteredPro: (v: boolean) => void;
+  proBannerDismissed: boolean;
+  setProBannerDismissed: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
   setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
   loadedSettings: Partial<AppSettings> | null;
@@ -285,6 +287,8 @@ export const useAppStore = create<AppState>()(
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
       hasRegisteredPro: false,
       setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
+      proBannerDismissed: false,
+      setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
       proAhaTriggeredBy: null,
       setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
       loadedSettings: null,
@@ -307,6 +311,7 @@ export const useAppStore = create<AppState>()(
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         hasRegisteredPro: state.hasRegisteredPro,
+        proBannerDismissed: state.proBannerDismissed,
         proAhaTriggeredBy: state.proAhaTriggeredBy,
         loadedSettings: state.loadedSettings,
       }),

@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
+import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { useNavigation, CommonActions, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,7 +41,7 @@ type NavigationProp = CompositeNavigationProp<
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
@@ -47,11 +49,12 @@ export const SettingsScreen: React.FC = () => {
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const deviceInfo = useAppStore((s) => s.deviceInfo);
+  const showProBanner = useAppStore((s) => !s.proBannerDismissed);
+  const setProBannerDismissed = useAppStore((s) => s.setProBannerDismissed);
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
-
-  }, []);
+  }, [completeChecklistStep]);
 
   const handleSendFeedback = async () => {
     const { downloadedModels, activeModelId } = useAppStore.getState();
@@ -113,6 +116,54 @@ export const SettingsScreen: React.FC = () => {
         <Text style={styles.title}>Settings</Text>
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+
+        {/* PRO Banner */}
+        {showProBanner && (
+          <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
+            <LinearGradient
+                colors={isDark ? ['#141414', '#141414', '#1A2B1E'] : ['#FFFFFF', '#FFFFFF', '#E8F5EE']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.proCard}
+              >
+              <View style={styles.proCardHeader}>
+                <View style={styles.proCardHeaderText}>
+                  <Text style={styles.proTitle}>Off Grid PRO</Text>
+                  <Text style={styles.proDesc}>
+                    Unlock advanced features for a premium local-first experience.
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setProBannerDismissed(true)} style={styles.proCloseButton}>
+                  <Icon name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.proFeatureGrid}>
+                {[
+                  [{ icon: 'mic', label: 'VOICE' }, { icon: 'star', label: 'MCPs' }],
+                  [{ icon: 'calendar', label: 'CALENDAR' }, { icon: 'message-square', label: 'MESSAGING' }],
+                ].map((row, i) => (
+                  <View key={i} style={styles.proFeatureRow}>
+                    {row.map(f => (
+                      <View key={f.label} style={styles.proFeatureItem}>
+                        <View style={styles.proFeatureIconWrap}>
+                          <Icon name={f.icon} size={16} color={colors.primary} />
+                        </View>
+                        <Text style={styles.proFeatureLabel}>{f.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.proCtaButton}
+                onPress={() => navigation.navigate('ProDetail')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.proCtaText}>I am in 🔥</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </AnimatedEntry>
+        )}
 
         {/* Theme Selector */}
         <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
@@ -176,24 +227,26 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AttachStep>
 
-        {/* PRO */}
+        {/* PRO Button */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
           <TouchableOpacity
-            style={styles.proCard}
+            style={styles.proNavButton}
             onPress={() => navigation.navigate('ProDetail')}
             activeOpacity={0.75}
           >
-            <View style={styles.proCardContent}>
-              <View style={styles.proIconContainer}>
-                <Icon name="award" size={16} color={styles.proIcon.color} />
-              </View>
-              <View style={styles.proCardText}>
-                <Text style={styles.proTitle}>Off Grid PRO</Text>
-                <Text style={styles.proDesc}>Voice. MCPs. Calendar. WhatsApp.</Text>
-                <Text style={styles.proCtaLink}>I am in 🔥</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={styles.proChevron.color} />
+            <View style={styles.proIconContainer}>
+              <IconMC name="crown" size={18} color={colors.primary} />
             </View>
+            <View style={styles.proCardText}>
+              <View style={styles.proTitleRow}>
+                <Text style={styles.proNavTitle}>Off Grid PRO</Text>
+                <View style={styles.proBadge}>
+                  <Text style={styles.proBadgeText}>PRO</Text>
+                </View>
+              </View>
+              <Text style={styles.proDesc}>Unlock premium features</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         </AnimatedEntry>
 
@@ -345,31 +398,83 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
   proCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: SPACING.lg,
     overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
     ...shadows.small,
   },
-  proCardContent: {
+  proCardText: { flex: 1 },
+  proTitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm, marginBottom: 2 },
+  proTitle: { ...TYPOGRAPHY.h1, color: colors.primary, marginBottom: SPACING.xs, fontWeight: '700' as const },
+  proBadge: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: SPACING.sm, paddingVertical: 2 },
+  proBadgeText: { ...TYPOGRAPHY.labelSmall, color: '#FFFFFF', letterSpacing: 0.5 },
+  proDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
+  proIconContainer: { width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.primary}1A`, alignItems: 'center' as const, justifyContent: 'center' as const },
+  proCardHeader: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, justifyContent: 'space-between' as const, padding: SPACING.lg, paddingBottom: SPACING.md },
+  proCardHeaderText: { flex: 1, marginRight: SPACING.md },
+  proFeatureGrid: {
+    flexDirection: 'column' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  proFeatureRow: {
+    flexDirection: 'row' as const,
+    gap: SPACING.sm,
+  },
+  proFeatureItem: {
+    flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    padding: SPACING.md,
-    gap: SPACING.md,
+    gap: SPACING.sm,
   },
-  proCardText: { flex: 1 },
-  proTitle: { ...TYPOGRAPHY.body, color: colors.text },
-  proDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted, marginTop: 2 },
-  proIconContainer: {
+  proFeatureIconWrap: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surfaceLight,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginRight: SPACING.sm,
   },
-  proIcon: { color: colors.background },
-  proChevron: { color: colors.textMuted },
-  proCtaLink: { ...TYPOGRAPHY.bodySmall, color: colors.primary, marginTop: SPACING.xs },
+  proFeatureLabel: {
+    ...TYPOGRAPHY.label,
+    color: colors.text,
+    letterSpacing: 0.5,
+    fontWeight: '500' as const,
+  },
+  proCtaButton: {
+    margin: SPACING.lg,
+    marginTop: SPACING.sm,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: SPACING.sm,
+  },
+  proCtaText: {
+    ...TYPOGRAPHY.body,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  proCloseButton: {
+    padding: SPACING.xs,
+  },
+  proNavButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: SPACING.md,
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
+    ...shadows.small,
+  },
+  proNavTitle: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+  },
 });
