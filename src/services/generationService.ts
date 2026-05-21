@@ -182,10 +182,14 @@ class GenerationService {
       });
 
       // If aborted, stopGeneration() already handled cleanup.
+      logger.log(`[GenService][ToolLoop] runToolLoop done — aborted=${this.abortRequested}, streamingContent=${this.state.streamingContent?.length ?? 0}ch, tokenBuffer=${this.tokenBuffer?.length ?? 0}ch`);
       if (!this.abortRequested) {
         this.forceFlushTokens();
+        const store = useChatStore.getState();
+        logger.log(`[GenService][ToolLoop] pre-finalize — streamingForConvId=${store.streamingForConversationId}, targetConvId=${conversationId}, streamingMsg=${store.streamingMessage?.length ?? 0}ch`);
         const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-        useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+        store.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+        logger.log(`[GenService][ToolLoop] finalizeStreamingMessage called — convId=${conversationId}`);
         this.checkSharePrompt();
         this.resetState();
       }

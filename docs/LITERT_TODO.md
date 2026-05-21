@@ -50,3 +50,36 @@
 - Library: `com.google.ai.edge.litertlm:litertlm-android:0.11.0`
 - iOS Swift SDK: not released yet, Coming Soon per Google
 - Gemma 4 E2B on GPU: TTFT ~7s, ~38-41 chars/sec
+
+
+i want to cleanup some branches haev got too many branches locally 
+add-mailfeedback-and-lovewithWednesday
+addmailto
+0.0.84
+85
+dev/integration -dont know what this is about dont delete 
+fdroid/wrapper-and-fastlane
+feat/remote-server-api-keys can do 
+ fix-file-delete-from-source-error
+ fix-file-import
+  fix-google-play-services
+  fix-threads-resetting-auto-error
+  fix-threads-resetting-auto-error2
+  fix-whisper-downlaod
+    fix/ios-document-picker-issue2
+    fix/issue-201-view-old-chats-without-model
+    fix/react-native-zip-archive-upgrade
+      fix/local-model-import
+        fix/remove-notification-permission
+  fix/vision-retry-mmproj-restore
+  fix/whisper-release-thread-join
+  react-native-zip-patch
+  remove-phi-list
+  ui-ux/improvements/0.0.88
+  make-tool-heuristic-based
+
+
+
+
+
+  

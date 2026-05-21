@@ -94,36 +94,55 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             else           -> listOf(Backend.CPU())
         }
 
+        // GPU/NPU failures can be transient (e.g. VRAM not yet released after a model switch).
+        // Retry up to 2 extra times with backoff before giving up on a non-CPU backend.
+        val GPU_RETRIES = 2
+        val GPU_RETRY_DELAY_MS = 600L
+
         var lastError: Exception? = null
         for (backend in chain) {
             val name = backendName(backend)
-            Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
-            try {
-                val cfg = EngineConfig(
-                    modelPath = modelPath,
-                    backend = backend,
-                    cacheDir = null,
-                    visionBackend = if (visionEnabled) Backend.GPU() else null,
-                )
-                val eng = Engine(cfg)
-                val timeoutMs = when (backend) {
-                    is Backend.NPU -> NPU_TIMEOUT_MS
-                    is Backend.GPU -> GPU_TIMEOUT_MS
-                    else           -> CPU_TIMEOUT_MS
+            val maxAttempts = if (backend is Backend.CPU) 1 else GPU_RETRIES + 1
+            var succeeded = false
+
+            for (attempt in 1..maxAttempts) {
+                if (attempt > 1) {
+                    Log.i(TAG, "initializeWithFallback — $name retry $attempt/$maxAttempts after ${GPU_RETRY_DELAY_MS}ms")
+                    delay(GPU_RETRY_DELAY_MS)
+                } else {
+                    Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
                 }
-                withTimeout(timeoutMs) {
-                    eng.initialize()
+                try {
+                    val cfg = EngineConfig(
+                        modelPath = modelPath,
+                        backend = backend,
+                        cacheDir = null,
+                        visionBackend = if (visionEnabled) Backend.GPU() else null,
+                    )
+                    val eng = Engine(cfg)
+                    val timeoutMs = when (backend) {
+                        is Backend.NPU -> NPU_TIMEOUT_MS
+                        is Backend.GPU -> GPU_TIMEOUT_MS
+                        else           -> CPU_TIMEOUT_MS
+                    }
+                    withTimeout(timeoutMs) {
+                        eng.initialize()
+                    }
+                    engine = eng
+                    Log.i(TAG, "initializeWithFallback — $name succeeded (attempt $attempt)")
+                    succeeded = true
+                    return backend
+                } catch (e: Exception) {
+                    Log.w(TAG, "initializeWithFallback — $name attempt $attempt failed: ${e.message}")
+                    engine?.close()
+                    engine = null
+                    lastError = e
                 }
-                engine = eng
-                Log.i(TAG, "initializeWithFallback — $name succeeded")
-                return backend
-            } catch (e: Exception) {
-                Log.w(TAG, "initializeWithFallback — $name failed: ${e.message}")
-                engine?.close()
-                engine = null
-                lastError = e
+            }
+
+            if (!succeeded) {
                 if (backend == chain.last()) break
-                Log.i(TAG, "initializeWithFallback — falling back to next tier")
+                Log.i(TAG, "initializeWithFallback — $name exhausted retries, falling back to next tier")
             }
         }
         throw lastError ?: IllegalStateException("All backends failed")

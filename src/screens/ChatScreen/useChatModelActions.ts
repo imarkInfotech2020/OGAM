@@ -339,6 +339,9 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     if (activeRemoteTextModelId) {
       setSupportsToolCalling(activeRemoteModel?.capabilities?.supportsToolCalling ?? false);
       setSupportsThinking(activeRemoteModel?.capabilities?.supportsThinking ?? false);
+    } else if (activeModel?.engine === 'litert' && liteRTService.isModelLoaded()) {
+      setSupportsToolCalling(true);
+      setSupportsThinking(false);
     } else if (llmService.isModelLoaded()) {
       setSupportsToolCalling(llmService.supportsToolCalling());
       setSupportsThinking(llmService.supportsThinking());
@@ -347,5 +350,5 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
       setSupportsThinking(false);
     }
 
-  }, [activeModelId, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
+  }, [activeModelId, activeModel?.engine, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
 }

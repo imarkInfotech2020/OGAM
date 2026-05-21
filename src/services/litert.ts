@@ -62,6 +62,7 @@ class LiteRTService {
   // Multi-turn tracking — reset conversation only when context changes
   private activeConversationId: string | null = null;
   private activeSystemPrompt: string | null = null;
+  private _lastBenchmarkStats: LiteRTBenchmarkStats | undefined = undefined;
 
   constructor() {
     if (Platform.OS === 'android' && LiteRTModule) {
@@ -248,6 +249,33 @@ class LiteRTService {
   }
 
   // ---------------------------------------------------------------------------
+  // generateRaw — used by the tool loop only.
+  // Wraps sendMessage into a Promise<string>. No chat store interaction.
+  // ---------------------------------------------------------------------------
+
+  async generateRaw(
+    text: string,
+    onToken?: (token: string) => void,
+  ): Promise<string> {
+    logger.log(TAG, `generateRaw — text=${text.length}ch, first100="${text.substring(0, 100)}"`);
+    return new Promise((resolve, reject) => {
+      this.sendMessage(text, {
+        onToken: t => onToken?.(t),
+        onReasoning: () => {},
+        onComplete: (fullContent, _reasoning, stats) => {
+          logger.log(TAG, `generateRaw — complete, response=${fullContent.length}ch, first200="${fullContent.substring(0, 200)}"`);
+          this._lastBenchmarkStats = stats;
+          resolve(fullContent);
+        },
+        onError: (err) => {
+          logger.log(TAG, `generateRaw — error: ${err.message}`);
+          reject(err);
+        },
+      }).catch(reject);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // stopGeneration
   // ---------------------------------------------------------------------------
 
@@ -256,8 +284,6 @@ class LiteRTService {
     logger.log(TAG, 'stopGeneration');
     this.clearSubscriptions();
     this.currentCallbacks = null;
-    // After a stop the native conversation state is indeterminate — force reset on next turn
-    this.activeConversationId = null;
     try {
       await LiteRTModule.stopGeneration();
     } catch (e) {
@@ -302,8 +328,21 @@ class LiteRTService {
     return this.activeBackend;
   }
 
+  getLastBenchmarkStats(): LiteRTBenchmarkStats | undefined {
+    return this._lastBenchmarkStats;
+  }
+
   isAvailable(): boolean {
     return Platform.OS === 'android' && !!LiteRTModule;
+  }
+
+  /**
+   * Force the next prepareConversation call to reset native history.
+   * Call before regeneration or edit — the JS message array is being rewound,
+   * so the native conversation must start fresh from that point.
+   */
+  invalidateConversation(): void {
+    this.activeConversationId = null;
   }
 
   async getMemoryInfo(): Promise<LiteRTMemoryInfo | null> {

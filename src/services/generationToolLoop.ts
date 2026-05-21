@@ -1,6 +1,7 @@
 /** Tool-calling generation loop. Extracted to keep generationService.ts under the max-lines limit. */
 import { llmService } from './llm';
 import type { StreamToken } from './llm';
+import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
@@ -23,12 +24,78 @@ function parseXmlStyleToolCall(body: string, idSuffix: number): ToolCall | null 
 }
 
 function parseToolCallBody(body: string, idSuffix: number): ToolCall | null {
+  const makeCall = (name: string, args: Record<string, any>): ToolCall =>
+    ({ id: `text-tc-${Date.now()}-${idSuffix}`, name, arguments: args });
+
+  // Standard JSON: {"name": "tool", "arguments": {...}}
   try {
     const parsed = JSON.parse(body);
-    if (parsed.name) return { id: `text-tc-${Date.now()}-${idSuffix}`, name: parsed.name, arguments: parsed.arguments || parsed.parameters || {} };
-  } catch { /* Not JSON — fall through to XML */ }
+    if (parsed.name) return makeCall(parsed.name, parsed.arguments || parsed.parameters || {});
+  } catch { /* fall through */ }
+
+  // Function-call style: tool_name({"key": "value"})
+  const funcMatch = body.match(/^(\w+)\s*\((\{[\s\S]*\})\)$/);
+  if (funcMatch) {
+    try { return makeCall(funcMatch[1], JSON.parse(funcMatch[2])); } catch { /* fall through */ }
+  }
+
+  // Bare style: tool_name{"key": "value"}
+  const bareMatch = body.match(/^(\w+)\s*(\{[\s\S]*\})$/);
+  if (bareMatch) {
+    try { return makeCall(bareMatch[1], JSON.parse(bareMatch[2])); } catch { /* fall through */ }
+  }
+
+  // No-args style: just a tool name with no arguments
+  const noArgsMatch = body.match(/^(\w+)$/);
+  if (noArgsMatch) return makeCall(noArgsMatch[1], {});
+
   return parseXmlStyleToolCall(body, idSuffix);
 }
+/** Parse Gemma 4's native tool call format: <|tool_call>call:NAME{...}<tool_call|> and <tool_call:NAME{...}<tool_call|> */
+function parseGemmaNativeToolCalls(text: string): { cleanText: string; toolCalls: ToolCall[] } {
+  const toolCalls: ToolCall[] = [];
+  // Matches <|tool_call>...<tool_call|>, <tool_call:NAME{...}<tool_call|>, and <tool_call:NAME{...}</tool_call>
+  const pattern = /(?:<\|tool_call>|<tool_call:)([\s\S]*?)(?:<tool_call\|>|<\/tool_call>)/g;
+  let match;
+  const matchedRanges: [number, number][] = [];
+
+  while ((match = pattern.exec(text)) !== null) {
+    matchedRanges.push([match.index, match.index + match[0].length]);
+    const raw = match[1].trim().replace(/<\|"\|>/g, '"');
+    // Extract tool name — handles: call:NAME, NAME, call:NAME({...}), call:NAME{...}
+    const nameMatch = raw.match(/^(?:call:)?(\w+)/);
+    if (nameMatch) {
+      const name = nameMatch[1];
+      const rest = raw.slice(nameMatch[0].length).trim();
+      let args: Record<string, any> = {};
+      // Args may be: ({"key":"val"}) function-call style, or {"key":"val"} bare object
+      const argsStr = rest.match(/^\((\{[\s\S]*\})\)$/)?.[1] ?? rest.match(/^(\{[\s\S]*\})$/)?.[1] ?? null;
+      if (argsStr) {
+        try {
+          // Gemma often emits unquoted keys like {queries:["x"]} — fix to valid JSON
+          const fixedJson = argsStr.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
+          args = JSON.parse(fixedJson);
+        } catch {
+          logger.warn(`[ToolLoop] Failed to parse Gemma tool args: ${argsStr.substring(0, 100)}`);
+        }
+      }
+      // Normalize Gemma's "queries" array to the single "query" string our tools expect
+      if (name === 'web_search' && !args.query && args.queries) {
+        args = { ...args, query: Array.isArray(args.queries) ? args.queries[0] : args.queries };
+      }
+      toolCalls.push({ id: `gemma-tc-${Date.now()}-${toolCalls.length}`, name, arguments: args });
+      logger.log(`[ToolLoop] Parsed Gemma native tool call: ${name}(${JSON.stringify(args).substring(0, 100)})`);
+    } else {
+      logger.warn(`[ToolLoop] Gemma tool call body did not match expected format: "${raw.substring(0, 100)}"`);
+    }
+  }
+
+  matchedRanges.sort((a, b) => b[0] - a[0]);
+  let cleanText = text;
+  for (const [start, end] of matchedRanges) { cleanText = cleanText.slice(0, start) + cleanText.slice(end); }
+  return { cleanText: cleanText.trim(), toolCalls };
+}
+
 /** Parse tool calls from text output (fallback for small models). Supports JSON and XML-like formats. */
 export function parseToolCallsFromText(text: string): { cleanText: string; toolCalls: ToolCall[] } {
   const toolCalls: ToolCall[] = [];
@@ -187,14 +254,98 @@ async function callLocalWithRetry(
   throw new Error(lastError?.message || String(lastError) || 'Unknown LLM error after tool execution');
 }
 
-interface CallLLMOptions { onStream?: (data: StreamToken) => void; forceRemote?: boolean; disableThinking?: boolean; }
+function isLiteRTActive(): boolean {
+  const { downloadedModels, activeModelId } = useAppStore.getState();
+  const m = downloadedModels.find((model: any) => model.id === activeModelId);
+  return m?.engine === 'litert' && liteRTService.isModelLoaded();
+}
+
+/** On first iteration: last user message. On tool-result iterations: formatted tool results. */
+function buildLiteRTSendText(messages: Message[]): string {
+  const toolResults: Message[] = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'tool') toolResults.unshift(messages[i]);
+    else break;
+  }
+  if (toolResults.length > 0) {
+    const parts = toolResults.map(m => `${m.toolName || 'tool'}: ${m.content}`);
+    return `Tool results:\n${parts.join('\n\n')}\n\nPlease continue based on these results.`;
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      const c = messages[i].content;
+      return typeof c === 'string' ? c : '';
+    }
+  }
+  return '';
+}
+
+function buildLiteRTToolSystemPrompt(basePrompt: string, tools: any[]): string {
+  if (tools.length === 0) return basePrompt;
+  const toolList = tools.map((t: any) => {
+    const fn = t.function || t;
+    const props = fn.parameters?.properties || {};
+    const paramStr = Object.entries(props)
+      .map(([k, v]: [string, any]) => `"${k}": ${JSON.stringify((v as any).description || (v as any).type || k)}`)
+      .join(', ');
+    return `  ${fn.name}({${paramStr}}): ${fn.description}`;
+  }).join('\n');
+  return `${basePrompt}
+
+TOOL USE RULES — follow strictly:
+- To call a tool output ONLY this on its own line, nothing else before or after:
+<tool_call>{"name": "tool_name", "arguments": {"param": "value"}}</tool_call>
+- Call tools IMMEDIATELY. Never say "I'll search" or "let me look that up" — just call the tool.
+- NEVER ask for clarification before calling a tool. Make your best guess at the arguments and call it.
+- NEVER say "I cannot browse", "I don't have access", or "I need more information" — you have tools, use them.
+- If a query is ambiguous, pick the most likely interpretation and call the tool right away.
+- Only respond in plain text when no tool is needed (e.g. simple math in your head, greetings).
+Tools:\n${toolList}`;
+}
+
+async function callLiteRTForLoop(
+  conversationId: string,
+  messages: Message[],
+  tools: any[],
+  onStream?: (data: StreamToken) => void,
+): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  const systemMsg = messages.find(m => m.role === 'system');
+  const basePrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
+  const systemPrompt = buildLiteRTToolSystemPrompt(basePrompt, tools);
+  const text = buildLiteRTSendText(messages);
+
+  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch`);
+  logger.log(`[ToolLoop][LiteRT] sysPrompt content: "${systemPrompt.substring(0, 500)}"`);
+  logger.log(`[ToolLoop][LiteRT] sending text: "${text.substring(0, 300)}"`);
+
+  if (!text) {
+    logger.warn('[ToolLoop][LiteRT] no message text — aborting');
+    return { fullResponse: '', toolCalls: [] };
+  }
+
+  // prepareConversation is idempotent — only resets native conversation when context changes
+  await liteRTService.prepareConversation(conversationId, systemPrompt);
+
+  const fullResponse = await liteRTService.generateRaw(text, token => {
+    onStream?.({ content: token });
+  });
+
+  logger.log(`[ToolLoop][LiteRT] raw response (${fullResponse.length}ch): "${fullResponse.substring(0, 400)}"`);
+  logger.log(`[ToolLoop][LiteRT] contains <tool_call>: ${fullResponse.includes('<tool_call>')} | contains <|tool_call>: ${fullResponse.includes('<|tool_call>')} | contains <tool_call:: ${fullResponse.includes('<tool_call:')}`);
+  return { fullResponse, toolCalls: [] };
+}
+
+interface CallLLMOptions { onStream?: (data: StreamToken) => void; forceRemote?: boolean; disableThinking?: boolean; conversationId?: string; }
 
 /** Call LLM with retry+backoff for transient native context errors. */
 async function callLLMWithRetry(
   messages: Message[],
   tools: any[],
-  { onStream, forceRemote, disableThinking }: CallLLMOptions = {},
+  { onStream, forceRemote, disableThinking, conversationId }: CallLLMOptions = {},
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  if (isLiteRTActive() && conversationId) {
+    return callLiteRTForLoop(conversationId, messages, tools, onStream);
+  }
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   const useRemote = forceRemote || (!!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded());
   logger.log(`[ToolLoop] callLLM — remote=${useRemote}, tools=${tools.length}`);
@@ -207,14 +358,22 @@ async function callLLMWithRetry(
   return callLocalWithRetry(messages, tools, onStream);
 }
 
-/** If no structured tool calls, try parsing <tool_call> tags from text. */
+/** If no structured tool calls, try parsing <tool_call> tags or Gemma's native format from text. */
 function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
-  if (toolCalls.length > 0 || !fullResponse.includes('<tool_call>'))
-    return { effectiveToolCalls: toolCalls, displayResponse: fullResponse };
-  const parsed = parseToolCallsFromText(fullResponse);
-  if (parsed.toolCalls.length > 0) {
-    logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from text output`);
-    return { effectiveToolCalls: parsed.toolCalls, displayResponse: parsed.cleanText };
+  if (toolCalls.length > 0) return { effectiveToolCalls: toolCalls, displayResponse: fullResponse };
+  if (fullResponse.includes('<tool_call>')) {
+    const parsed = parseToolCallsFromText(fullResponse);
+    if (parsed.toolCalls.length > 0) {
+      logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from <tool_call> tags`);
+      return { effectiveToolCalls: parsed.toolCalls, displayResponse: parsed.cleanText };
+    }
+  }
+  if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
+    const parsed = parseGemmaNativeToolCalls(fullResponse);
+    if (parsed.toolCalls.length > 0) {
+      logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from Gemma native format`);
+      return { effectiveToolCalls: parsed.toolCalls, displayResponse: parsed.cleanText };
+    }
   }
   return { effectiveToolCalls: toolCalls, displayResponse: fullResponse };
 }
@@ -264,7 +423,7 @@ async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState
   state.firstTokenFired = false;
   const forcedOnStream = buildStreamHandler(ctx, state);
   // Disable thinking so the model spends all tokens on actual content
-  const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true });
+  const { fullResponse: forcedResponse } = await callLLMWithRetry(loopMessages, [], { onStream: forcedOnStream, forceRemote: ctx.forceRemote, disableThinking: true, conversationId: ctx.conversationId });
   logger.log(`[ToolLoop][DEBUG] Forced response — length=${forcedResponse.length}, streamedContent=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
   emitFinalResponse(ctx, state, forcedResponse);
 }
@@ -299,7 +458,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     logger.log(`[ToolLoop][DEBUG] === Iteration ${iteration} === messages=${loopMessages.length}, tools=${toolSchemas.length}, totalCalls=${totalToolCalls}`);
 
     const onStream = buildStreamHandler(ctx, state);
-    const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, { onStream, forceRemote: ctx.forceRemote });
+    const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, toolSchemas, { onStream, forceRemote: ctx.forceRemote, conversationId: ctx.conversationId });
 
     logger.log(`[ToolLoop][DEBUG] LLM returned — response=${fullResponse.length}, toolCalls=${toolCalls.length}, streamed=${state.streamedContent.length}, reasoning=${state.reasoningContent.length}`);
     if (fullResponse.length === 0 && state.streamedContent.length === 0) {
@@ -320,7 +479,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
         state.firstTokenFired = false;
         const fallbackOnStream = buildStreamHandler(ctx, state);
         const { fullResponse: fallbackResp } = await callLLMWithRetry(
-          loopMessages, [], { onStream: fallbackOnStream, forceRemote: ctx.forceRemote, disableThinking: true },
+          loopMessages, [], { onStream: fallbackOnStream, forceRemote: ctx.forceRemote, disableThinking: true, conversationId: ctx.conversationId },
         );
         emitFinalResponse(ctx, state, fallbackResp);
         return;

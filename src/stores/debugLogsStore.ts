@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@debug_logs';
-const MAX_LOGS = 200;
+const MAX_LOGS = 2000;
 
 export interface DebugLogEntry {
   timestamp: number;

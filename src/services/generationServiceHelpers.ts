@@ -66,7 +66,9 @@ export function buildGenerationMetaImpl(svc: any): GenerationMeta {
   // LiteRT path — use real BenchmarkInfo stats if available, else estimate
   if (isLiteRTActive()) {
     const backend = liteRTService.getActiveBackend() ?? 'cpu';
-    const stats = svc.liteRTBenchmarkStats;
+    // svc.liteRTBenchmarkStats is set on the direct (non-tool) path;
+    // liteRTService.getLastBenchmarkStats() covers the generateRaw (tool loop) path
+    const stats = svc.liteRTBenchmarkStats ?? liteRTService.getLastBenchmarkStats();
     if (stats) {
       return {
         gpu: backend !== 'cpu',

@@ -81,7 +81,7 @@ android {
 
     namespace "ai.offgridmobile"
     defaultConfig {
-        applicationId "ai.offgridmobile"
+        applicationId "ai.offgridmobile.litert"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1778048025
