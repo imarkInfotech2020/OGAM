@@ -172,6 +172,9 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   return merged as AppState;
 }
 
+export const selectIsLiteRT = (state: AppState): boolean =>
+  state.downloadedModels.find(m => m.id === state.activeModelId)?.engine === 'litert' ?? false;
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({

@@ -220,8 +220,7 @@ export async function generateResponseImpl(
     try {
       const { settings } = useAppStore.getState();
       await liteRTService.prepareConversation(conversationId, systemPrompt, {
-        temperature: settings.temperature,
-        topP: settings.topP,
+        samplerConfig: { temperature: settings.temperature, topP: settings.topP },
       });
       dbg('log', `[LiteRT] sendMessage start — imageUri=${imageUri ?? 'none'}`);
 

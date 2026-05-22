@@ -126,9 +126,12 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     const preferredBackend = inferenceBackendToLiteRT(ctx.store.settings.inferenceBackend);
     addDebugLog('log', `[LiteRT] Preferred backend: ${preferredBackend}`);
 
-    const timeoutMs = preferredBackend === 'npu' ? 45_000
-                    : preferredBackend === 'gpu' ? 20_000
-                    : 15_000;
+    const maxTokens = ctx.store.settings.contextLength ?? 4096;
+    const contextScalar = Math.max(1, maxTokens / 4096);
+    const baseTimeoutMs = preferredBackend === 'npu' ? 45_000
+                        : preferredBackend === 'gpu' ? 20_000
+                        : 15_000;
+    const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -139,9 +142,9 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     });
 
     try {
-      addDebugLog('log', `[LiteRT] Calling liteRTService.loadModel (timeout ${timeoutMs / 1000}s, vision=${ctx.model.liteRTVision ?? false}).`);
+      addDebugLog('log', `[LiteRT] Calling liteRTService.loadModel (timeout ${timeoutMs / 1000}s, vision=${ctx.model.liteRTVision ?? false}, maxNumTokens=${maxTokens}).`);
       await Promise.race([
-        liteRTService.loadModel(ctx.model.filePath, preferredBackend, ctx.model.liteRTVision ?? false),
+        liteRTService.loadModel(ctx.model.filePath, preferredBackend, ctx.model.liteRTVision ?? false, maxTokens),
         timeoutPromise,
       ]);
     } finally {
@@ -161,6 +164,20 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       await liteRTService.warmup();
       addDebugLog('log', `[LiteRT] Warmup complete in ${((Date.now() - warmupStart) / 1000).toFixed(1)}s`);
     }
+
+    // Snapshot the settings that require a full engine reload so the pending-settings
+    // banner appears if the user changes them while the model is loaded.
+    ctx.store.setLoadedSettings({
+      inferenceBackend: ctx.store.settings.inferenceBackend,
+      contextLength: maxTokens,
+      // Fields not used by LiteRT — set to current values so llama checks don't misfire
+      enableGpu: ctx.store.settings.enableGpu,
+      gpuLayers: ctx.store.settings.gpuLayers,
+      nThreads: ctx.store.settings.nThreads,
+      nBatch: ctx.store.settings.nBatch,
+      flashAttn: ctx.store.settings.flashAttn,
+      cacheType: ctx.store.settings.cacheType,
+    });
 
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);

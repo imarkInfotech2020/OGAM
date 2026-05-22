@@ -16,10 +16,17 @@ import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.OpenApiTool
+import com.google.ai.edge.litertlm.ToolProvider
+import com.google.ai.edge.litertlm.tool
+import com.google.ai.edge.litertlm.Message as LiteRTMessage
+import com.google.gson.JsonParser
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -31,15 +38,30 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         private const val TAG = "LiteRTModule"
 
         // Streaming events sent to JS
-        const val EVENT_TOKEN = "litert_token"
-        const val EVENT_THINKING = "litert_thinking"
-        const val EVENT_COMPLETE = "litert_complete"
-        const val EVENT_ERROR = "litert_error"
+        const val EVENT_TOKEN     = "litert_token"
+        const val EVENT_THINKING  = "litert_thinking"
+        const val EVENT_COMPLETE  = "litert_complete"
+        const val EVENT_ERROR     = "litert_error"
+        const val EVENT_TOOL_CALL = "litert_tool_call"
 
-        // Timeouts per backend tier
-        private const val NPU_TIMEOUT_MS = 45_000L
-        private const val GPU_TIMEOUT_MS = 20_000L
-        private const val CPU_TIMEOUT_MS = 15_000L
+        // Base timeouts per backend tier (for default 4096-token context).
+        // Actual timeout scales up proportionally for larger context windows
+        // because KV-cache allocation takes longer at higher token counts.
+        private const val NPU_BASE_TIMEOUT_MS = 45_000L
+        private const val GPU_BASE_TIMEOUT_MS = 20_000L
+        private const val CPU_BASE_TIMEOUT_MS = 15_000L
+        private const val DEFAULT_CONTEXT_TOKENS = 4096
+
+        fun initTimeoutMs(backend: Backend, maxNumTokens: Int): Long {
+            val base = when (backend) {
+                is Backend.NPU -> NPU_BASE_TIMEOUT_MS
+                is Backend.GPU -> GPU_BASE_TIMEOUT_MS
+                else           -> CPU_BASE_TIMEOUT_MS
+            }
+            // Scale linearly above the default context size, capped at 3 minutes.
+            val scalar = maxOf(1.0, maxNumTokens.toDouble() / DEFAULT_CONTEXT_TOKENS)
+            return minOf((base * scalar).toLong(), 180_000L)
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -50,6 +72,10 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     private var supportsVision: Boolean = false
     private var currentJob: Job? = null
 
+    // Pending tool calls waiting for JS to respond via respondToToolCall()
+    private val pendingToolCalls = ConcurrentHashMap<String, CompletableDeferred<String>>()
+    private var configuredMaxTokens: Int = 4096
+
     override fun getName(): String = "LiteRTModule"
 
     // -------------------------------------------------------------------------
@@ -57,12 +83,13 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // -------------------------------------------------------------------------
 
     @ReactMethod
-    fun loadModel(modelPath: String, backendStr: String, visionEnabled: Boolean, promise: Promise) {
+    fun loadModel(modelPath: String, backendStr: String, visionEnabled: Boolean, maxNumTokens: Int, promise: Promise) {
         val safe = SafePromise(promise, TAG)
-        Log.i(TAG, "loadModel — path=$modelPath backend=$backendStr vision=$visionEnabled")
+        Log.i(TAG, "loadModel — path=$modelPath backend=$backendStr vision=$visionEnabled maxNumTokens=$maxNumTokens")
 
         scope.launch {
             try {
+                configuredMaxTokens = maxNumTokens
                 // Unload any existing engine first
                 cleanupEngine()
 
@@ -116,15 +143,12 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     val cfg = EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
+                        maxNumTokens = configuredMaxTokens,
                         cacheDir = null,
                         visionBackend = if (visionEnabled) Backend.GPU() else null,
                     )
                     val eng = Engine(cfg)
-                    val timeoutMs = when (backend) {
-                        is Backend.NPU -> NPU_TIMEOUT_MS
-                        is Backend.GPU -> GPU_TIMEOUT_MS
-                        else           -> CPU_TIMEOUT_MS
-                    }
+                    val timeoutMs = initTimeoutMs(backend, configuredMaxTokens)
                     withTimeout(timeoutMs) {
                         eng.initialize()
                     }
@@ -153,9 +177,9 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // -------------------------------------------------------------------------
 
     @ReactMethod
-    fun resetConversation(systemPrompt: String, temperature: Double, topK: Int, topP: Double, promise: Promise) {
+    fun resetConversation(systemPrompt: String, temperature: Double, topK: Int, topP: Double, toolsJson: String, historyJson: String, promise: Promise) {
         val safe = SafePromise(promise, TAG)
-        Log.i(TAG, "resetConversation — systemPrompt length=${systemPrompt.length} temperature=$temperature topK=$topK topP=$topP")
+        Log.i(TAG, "resetConversation — systemPrompt length=${systemPrompt.length} temperature=$temperature topK=$topK topP=$topP tools=${toolsJson.length}ch history=${historyJson.length}ch")
 
         scope.launch {
             try {
@@ -181,14 +205,19 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     )
                 }
 
+                val toolProviders = buildToolProviders(toolsJson)
+                val initialMessages = parseHistoryMessages(historyJson)
                 val convConfig = ConversationConfig(
                     systemInstruction = if (systemPrompt.isNotEmpty())
                         Contents.of(systemPrompt) else null,
+                    initialMessages = initialMessages,
+                    tools = toolProviders,
                     samplerConfig = samplerConfig,
+                    automaticToolCalling = toolProviders.isNotEmpty(),
                 )
 
                 conversation = eng.createConversation(convConfig)
-                Log.i(TAG, "resetConversation — new conversation created")
+                Log.i(TAG, "resetConversation — new conversation created (tools=${toolProviders.size}, history=${initialMessages.size})")
                 safe.resolve(null)
             } catch (e: Exception) {
                 Log.e(TAG, "resetConversation — error: ${e.message}", e)
@@ -261,8 +290,8 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     @OptIn(ExperimentalApi::class)
                     val benchmarkJson = try {
                         val b = conv.getBenchmarkInfo()
-                        Log.i(TAG, "getBenchmarkInfo — ttft=${b.timeToFirstTokenInSecond} decode=${b.lastDecodeTokensPerSecond} prefill=${b.lastPrefillTokensPerSecond} prefillCount=${b.lastPrefillTokenCount} init=${b.initTimeInSecond}")
-                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"initTimeSeconds":${b.initTimeInSecond}}"""
+                        Log.i(TAG, "getBenchmarkInfo — ttft=${b.timeToFirstTokenInSecond} decode=${b.lastDecodeTokensPerSecond} prefill=${b.lastPrefillTokensPerSecond} prefillCount=${b.lastPrefillTokenCount} decodeCount=${b.lastDecodeTokenCount} init=${b.initTimeInSecond}")
+                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"decodeTokenCount":${b.lastDecodeTokenCount},"maxNumTokens":$configuredMaxTokens,"initTimeSeconds":${b.initTimeInSecond}}"""
                     } catch (e: Exception) {
                         Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
                         ""
@@ -286,6 +315,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 }
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // respondToToolCall — called from JS to unblock a pending tool execute()
+    // -------------------------------------------------------------------------
+
+    @ReactMethod
+    fun respondToToolCall(callId: String, result: String) {
+        Log.d(TAG, "respondToToolCall — callId=$callId resultLen=${result.length}")
+        pendingToolCalls.remove(callId)?.complete(result)
     }
 
     // -------------------------------------------------------------------------
@@ -349,6 +388,13 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // -------------------------------------------------------------------------
 
     private fun closeConversation() {
+        // Cancel any tool calls blocked in execute() so their threads can unblock
+        pendingToolCalls.forEach { (callId, deferred) ->
+            Log.d(TAG, "closeConversation — cancelling pending tool call $callId")
+            deferred.cancel(CancellationException("Conversation closed"))
+        }
+        pendingToolCalls.clear()
+
         try {
             conversation?.close()
             Log.d(TAG, "closeConversation — closed")
@@ -459,6 +505,87 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         val newW = (w * scale).toInt()
         val newH = (h * scale).toInt()
         return Bitmap.createScaledBitmap(src, newW, newH, true)
+    }
+
+    /**
+     * Convert a JSON array of prior turns into LiteRT Message objects for ConversationConfig.initialMessages.
+     * Only user/assistant text turns are replayed — tool call bridge messages are skipped because
+     * the native SDK doesn't need them when automaticToolCalling handles the cycle.
+     * Format: [{"role":"user"|"assistant","content":"..."}]
+     */
+    private fun parseHistoryMessages(historyJson: String): List<LiteRTMessage> {
+        if (historyJson.isBlank()) return emptyList()
+        return try {
+            val arr = JsonParser.parseString(historyJson).asJsonArray
+            arr.mapNotNull { element ->
+                val obj = element.asJsonObject
+                val content = obj.get("content")?.asString?.trim() ?: return@mapNotNull null
+                if (content.isEmpty()) return@mapNotNull null
+                when (obj.get("role")?.asString) {
+                    "user"      -> LiteRTMessage.user(content)
+                    "assistant" -> LiteRTMessage.model(Contents.of(content))
+                    else        -> return@mapNotNull null
+                }
+            }.also { Log.i(TAG, "parseHistoryMessages — replaying ${it.size} turns") }
+        } catch (e: Exception) {
+            Log.w(TAG, "parseHistoryMessages — failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Parse toolsJson (OpenAPI-format array) into a list of ToolProviders.
+     * Each ToolProvider wraps one OpenApiTool whose execute() bridges the synchronous SDK
+     * callback to async JS via CompletableDeferred:
+     *   1. Emit litert_tool_call event to JS with a unique callId and the raw args JSON string
+     *   2. Block on a CompletableDeferred until JS calls respondToToolCall(callId, result)
+     *   3. Return the result string to the SDK
+     */
+    private fun buildToolProviders(toolsJson: String): List<ToolProvider> {
+        if (toolsJson.isBlank()) return emptyList()
+        return try {
+            val toolsArray = JsonParser.parseString(toolsJson).asJsonArray
+            if (toolsArray.size() == 0) return emptyList()
+
+            val providers = toolsArray.map { element ->
+                val toolObj = element.asJsonObject
+                val toolName = toolObj.get("name").asString
+                val toolDescriptionJson = toolObj.toString()
+
+                val openApiTool = object : OpenApiTool {
+                    override fun getToolDescriptionJsonString(): String = toolDescriptionJson
+
+                    override fun execute(argsJson: String): String {
+                        val callId = UUID.randomUUID().toString()
+                        val deferred = CompletableDeferred<String>()
+                        pendingToolCalls[callId] = deferred
+
+                        val eventJson = """{"id":"$callId","name":"$toolName","arguments":$argsJson}"""
+                        Log.d(TAG, "buildToolProviders — emitting tool call callId=$callId name=$toolName")
+                        sendEvent(EVENT_TOOL_CALL, eventJson)
+
+                        return try {
+                            runBlocking { withTimeout(30_000L) { deferred.await() } }
+                        } catch (e: TimeoutCancellationException) {
+                            Log.w(TAG, "buildToolProviders — tool call $callId timed out")
+                            pendingToolCalls.remove(callId)
+                            "Error: Tool call timed out"
+                        } catch (e: CancellationException) {
+                            Log.w(TAG, "buildToolProviders — tool call $callId cancelled")
+                            pendingToolCalls.remove(callId)
+                            "Error: Tool call cancelled"
+                        }
+                    }
+                }
+                tool(openApiTool)
+            }
+
+            Log.i(TAG, "buildToolProviders — registered ${providers.size} tools")
+            providers
+        } catch (e: Exception) {
+            Log.w(TAG, "buildToolProviders — failed to parse toolsJson: ${e.message}")
+            emptyList()
+        }
     }
 
     private fun sendEvent(eventName: String, data: String) {

@@ -1,4 +1,4 @@
-export { useAppStore } from './appStore';
+export { useAppStore, selectIsLiteRT } from './appStore';
 export { useChatStore } from './chatStore';
 export { useProjectStore } from './projectStore';
 export { useAuthStore } from './authStore';
