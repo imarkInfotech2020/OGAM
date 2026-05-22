@@ -36,7 +36,7 @@ const HTP_BACKEND: BackendOption = {
   id: INFERENCE_BACKENDS.HTP, label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
 };
 
-export const BackendSelector: React.FC = () => {
+export const BackendSelector: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpuLayers = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -80,7 +80,7 @@ export const BackendSelector: React.FC = () => {
         ))}
       </View>
 
-      {showLayers && (
+      {showLayers && !hideGpuLayers && (
         <View style={styles.gpuLayersInline}>
           <View style={styles.settingHeader}>
             <Text style={styles.settingLabel}>{layersLabel}</Text>

@@ -33,7 +33,7 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
 
 const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'HTP' };
 
-const BackendSelectorSection: React.FC = () => {
+const BackendSelectorSection: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpuLayers = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -82,7 +82,7 @@ const BackendSelectorSection: React.FC = () => {
         ))}
       </View>
 
-      {showLayers && (
+      {showLayers && !hideGpuLayers && (
         <View style={styles.sliderSection}>
           <View style={styles.sliderHeader}>
             <Text style={styles.sliderLabel}>
@@ -309,7 +309,7 @@ export const TextGenerationAdvanced: React.FC<{ isLiteRT?: boolean }> = ({ isLit
         </View>
       )}
 
-      {!isLiteRT && <BackendSelectorSection />}
+      <BackendSelectorSection hideGpuLayers={isLiteRT} />
       {!isLiteRT && <FlashAttentionSection trackColor={trackColor} />}
       {!isLiteRT && <KvCacheSection cacheDisabled={cacheDisabled} />}
       <ModelLoadingStrategySection />

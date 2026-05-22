@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useAppStore } from '../../stores';
+import { useAppStore, selectIsLiteRT } from '../../stores';
 import { createStyles } from './styles';
 import {
   CpuThreadsSlider,
@@ -42,8 +42,10 @@ const contextWarning = (v: number): string | null =>
   v > HIGH_CONTEXT_THRESHOLD ? 'High context uses significant RAM and may crash on some devices' : null;
 
 const BASIC_KEYS = ['temperature', 'maxTokens', 'contextLength'];
+const LITERT_BASIC_KEYS = ['temperature', 'contextLength'];
+const LITERT_ADVANCED_KEYS = ['topP'];
 
-const buildSettingsConfig = (modelMaxContext: number | null): SettingConfig[] => [
+const buildSettingsConfig = (modelMaxContext: number | null, isLiteRT: boolean): SettingConfig[] => [
   {
     key: 'temperature',
     label: 'Temperature',
@@ -82,12 +84,14 @@ const buildSettingsConfig = (modelMaxContext: number | null): SettingConfig[] =>
   },
   {
     key: 'contextLength',
-    label: 'Context Length',
+    label: isLiteRT ? 'Max Tokens' : 'Context Length',
     min: 512,
     max: modelMaxContext || FALLBACK_MAX_CONTEXT,
     step: 1024,
     format: formatContext,
-    description: 'KV cache size — larger uses more RAM (requires reload)',
+    description: isLiteRT
+      ? 'Total context window — input + history + output combined (requires reload)'
+      : 'KV cache size — larger uses more RAM (requires reload)',
     warning: contextWarning,
   },
 ];
@@ -174,11 +178,15 @@ const ShowGenerationDetailsToggle: React.FC = () => {
 export const TextGenerationSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const modelMaxContext = useAppStore((s) => s.modelMaxContext);
-  const settingsConfig = buildSettingsConfig(modelMaxContext);
+  const isLiteRT = useAppStore(selectIsLiteRT);
+  const settingsConfig = buildSettingsConfig(modelMaxContext, isLiteRT);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const basicSettings = settingsConfig.filter(c => BASIC_KEYS.includes(c.key));
-  const advancedSettings = settingsConfig.filter(c => !BASIC_KEYS.includes(c.key));
+  const basicKeys = isLiteRT ? LITERT_BASIC_KEYS : BASIC_KEYS;
+  const advancedKeys = isLiteRT ? LITERT_ADVANCED_KEYS : settingsConfig.filter(c => !BASIC_KEYS.includes(c.key)).map(c => c.key);
+
+  const basicSettings = settingsConfig.filter(c => basicKeys.includes(c.key));
+  const advancedSettings = settingsConfig.filter(c => advancedKeys.includes(c.key));
 
   return (
     <View style={styles.sectionCard}>
@@ -194,12 +202,12 @@ export const TextGenerationSection: React.FC = () => {
           {advancedSettings.map((config) => (
             <SettingSlider key={config.key} config={config} />
           ))}
-          <CpuThreadsSlider />
-          <BatchSizeSlider />
-          <BackendSelector />
-          <FlashAttentionToggle />
-          <KvCacheTypeToggle />
-          <ModelLoadingStrategyToggle />
+          {!isLiteRT && <CpuThreadsSlider />}
+          {!isLiteRT && <BatchSizeSlider />}
+          <BackendSelector hideGpuLayers={isLiteRT} />
+          {!isLiteRT && <FlashAttentionToggle />}
+          {!isLiteRT && <KvCacheTypeToggle />}
+          {!isLiteRT && <ModelLoadingStrategyToggle />}
         </>
       )}
     </View>

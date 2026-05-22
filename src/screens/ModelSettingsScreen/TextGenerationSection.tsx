@@ -3,7 +3,7 @@ import { View, Text, Switch } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { AdvancedToggle, Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useAppStore } from '../../stores';
+import { useAppStore, selectIsLiteRT } from '../../stores';
 import { createStyles } from './styles';
 import { TextGenerationAdvanced } from './TextGenerationAdvanced';
 
@@ -15,9 +15,8 @@ export const TextGenerationSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
   const modelMaxContext = useAppStore((s) => s.modelMaxContext);
+  const isLiteRT = useAppStore(selectIsLiteRT);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const isLiteRT = downloadedModels.find(m => m.id === activeModelId)?.engine === 'litert';
 
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const maxTokens = settings?.maxTokens || 512;
@@ -76,7 +75,31 @@ export const TextGenerationSection: React.FC = () => {
         </View>
       )}
 
-      {!isLiteRT && (
+      {isLiteRT ? (
+        <View style={styles.sliderSection}>
+          <View style={styles.sliderHeader}>
+            <Text style={styles.sliderLabel}>Max Tokens</Text>
+            <Text style={styles.sliderValue}>{contextLengthLabel}</Text>
+          </View>
+          <Text style={styles.sliderDesc}>Total context window — input + history + output combined (requires reload)</Text>
+          {contextLength > HIGH_CONTEXT_THRESHOLD && (
+            <Text style={[styles.sliderDesc, { color: colors.error }]}>
+              High values use significant RAM and may fail on some devices
+            </Text>
+          )}
+          <Slider
+            style={styles.slider}
+            minimumValue={512}
+            maximumValue={ctxSliderMax}
+            step={1024}
+            value={contextLength}
+            onSlidingComplete={(value) => updateSettings({ contextLength: value })}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surface}
+            thumbTintColor={colors.primary}
+          />
+        </View>
+      ) : (
         <View style={styles.sliderSection}>
           <View style={styles.sliderHeader}>
             <Text style={styles.sliderLabel}>Context Length</Text>

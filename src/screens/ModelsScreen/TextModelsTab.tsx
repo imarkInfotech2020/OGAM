@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
@@ -188,6 +188,72 @@ const ModelDetailView: React.FC<DetailProps> = ({
   );
 };
 
+const LITERT_FEATURED = [
+  {
+    id: 'gemma4-e2b-litert',
+    name: 'Gemma 4 E2B',
+    author: 'google',
+    description: 'Google\'s latest, thinking mode + vision, MoE architecture',
+    chips: ['NPU / GPU', 'Vision', 'Thinking', '~1.5 GB'],
+    highlight: 'Up to 2x faster than CPU via NPU hardware acceleration',
+    url: 'https://huggingface.co/google/gemma-4-E2B-it-litert-lm',
+  },
+  {
+    id: 'gemma4-e4b-litert',
+    name: 'Gemma 4 E4B',
+    author: 'google',
+    description: 'Stronger reasoning + vision, MoE fits more in less RAM',
+    chips: ['NPU / GPU', 'Vision', 'Thinking', '~3.5 GB'],
+    highlight: 'Higher quality, same hardware efficiency as E2B',
+    url: 'https://huggingface.co/google/gemma-4-E4B-it-litert-lm',
+  },
+] as const;
+
+const FeaturedLiteRTCard: React.FC<{ model: typeof LITERT_FEATURED[number]; styles: any; colors: any }> = ({ model, styles, colors }) => (
+  <TouchableOpacity
+    style={[styles.featuredCard]}
+    onPress={() => Linking.openURL(model.url)}
+    activeOpacity={0.85}
+  >
+    <View style={styles.featuredCardTopRow}>
+      <View style={styles.featuredCardNameGroup}>
+        <Text style={styles.featuredCardName}>{model.name}</Text>
+        <View style={styles.featuredAuthorTag}>
+          <Text style={styles.featuredAuthorTagText}>{model.author}</Text>
+        </View>
+        <View style={styles.featuredBadge}>
+          <Icon name="zap" size={9} color={colors.primary} />
+          <Text style={styles.featuredBadgeText}>LiteRT</Text>
+        </View>
+      </View>
+    </View>
+    <Text style={styles.featuredDescription}>{model.description}</Text>
+    <View style={styles.featuredChipsRow}>
+      {model.chips.map(chip => (
+        <View key={chip} style={styles.featuredChip}>
+          <Text style={styles.featuredChipText}>{chip}</Text>
+        </View>
+      ))}
+    </View>
+    <View style={styles.featuredFooter}>
+      <Text style={styles.featuredHighlight}>{model.highlight}</Text>
+      <View style={styles.featuredGetButton}>
+        <Icon name="download" size={12} color={colors.primary} />
+        <Text style={styles.featuredGetText}>Get</Text>
+      </View>
+    </View>
+  </TouchableOpacity>
+);
+
+const FeaturedLiteRTSection: React.FC<{ styles: any; colors: any }> = ({ styles, colors }) => (
+  <View style={styles.featuredSection}>
+    <Text style={styles.featuredSectionLabel}>Hardware-accelerated</Text>
+    {LITERT_FEATURED.map(model => (
+      <FeaturedLiteRTCard key={model.id} model={model} styles={styles} colors={colors} />
+    ))}
+  </View>
+);
+
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
   <View>
     <View style={styles.deviceBanner}><Text style={styles.deviceBannerText}>{Math.round(ramGB)}GB RAM — models up to {rec.maxParameters}B recommended ({rec.recommendedQuantization})</Text></View>
@@ -345,7 +411,12 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           contentContainerStyle={styles.listContent}
           testID="models-list"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-          ListHeaderComponent={hasSearched ? null : <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />}
+          ListHeaderComponent={hasSearched ? null : (
+            <>
+              <FeaturedLiteRTSection styles={styles} colors={colors} />
+              <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
+            </>
+          )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>
               <Text style={styles.emptyText}>{getEmptyText(hasSearched, hasActiveFilters)}</Text>
