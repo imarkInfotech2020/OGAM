@@ -23,6 +23,7 @@ const EVENT_THINKING  = 'litert_thinking';
 const EVENT_COMPLETE  = 'litert_complete';
 const EVENT_ERROR     = 'litert_error';
 const EVENT_TOOL_CALL = 'litert_tool_call';
+const EVENT_DEBUG_LOG = 'litert_debug_log';
 
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 
@@ -75,6 +76,9 @@ class LiteRTService {
   constructor() {
     if (Platform.OS === 'android' && LiteRTModule) {
       this.emitter = new NativeEventEmitter(LiteRTModule);
+      this.emitter.addListener(EVENT_DEBUG_LOG, (msg: string) => {
+        useDebugLogsStore.getState().addLog('log', `[Kotlin] ${msg}`);
+      });
       logger.log(TAG, 'initialized — native module available');
     } else {
       logger.log(TAG, 'native module not available on this platform');
@@ -128,6 +132,7 @@ class LiteRTService {
     const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : '';
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
     logger.log(TAG, `resetConversation — systemPrompt length=${systemPrompt.length} temperature=${temperature} topK=${topK} topP=${topP} tools=${tools?.length ?? 0} history=${history?.length ?? 0}`);
+    useDebugLogsStore.getState().addLog('log', `[LiteRT] Conv reset — temperature=${temperature} topK=${topK} topP=${topP} tools=${tools?.length ?? 0}`);
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;

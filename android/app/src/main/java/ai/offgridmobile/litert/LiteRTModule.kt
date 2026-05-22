@@ -43,13 +43,14 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         const val EVENT_COMPLETE  = "litert_complete"
         const val EVENT_ERROR     = "litert_error"
         const val EVENT_TOOL_CALL = "litert_tool_call"
+        const val EVENT_DEBUG_LOG = "litert_debug_log"
 
         // Base timeouts per backend tier (for default 4096-token context).
         // Actual timeout scales up proportionally for larger context windows
         // because KV-cache allocation takes longer at higher token counts.
-        private const val NPU_BASE_TIMEOUT_MS = 45_000L
-        private const val GPU_BASE_TIMEOUT_MS = 20_000L
-        private const val CPU_BASE_TIMEOUT_MS = 15_000L
+        private const val NPU_BASE_TIMEOUT_MS = 90_000L
+        private const val GPU_BASE_TIMEOUT_MS = 90_000L
+        private const val CPU_BASE_TIMEOUT_MS = 90_000L
         private const val DEFAULT_CONTEXT_TOKENS = 4096
 
         fun initTimeoutMs(backend: Backend, maxNumTokens: Int): Long {
@@ -140,6 +141,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
                 }
                 try {
+                    debugLog("EngineConfig — backend=$name maxNumTokens=$configuredMaxTokens vision=$visionEnabled")
                     val cfg = EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
@@ -149,11 +151,12 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     )
                     val eng = Engine(cfg)
                     val timeoutMs = initTimeoutMs(backend, configuredMaxTokens)
+                    debugLog("Engine.initialize — backend=$name timeoutMs=${timeoutMs / 1000}s")
                     withTimeout(timeoutMs) {
                         eng.initialize()
                     }
                     engine = eng
-                    Log.i(TAG, "initializeWithFallback — $name succeeded (attempt $attempt)")
+                    debugLog("Engine.initialize — $name succeeded (attempt $attempt)")
                     succeeded = true
                     return backend
                 } catch (e: Exception) {
@@ -195,9 +198,10 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
                 // SamplerConfig is not supported on NPU
                 val samplerConfig = if (activeBackend == "npu") {
-                    Log.i(TAG, "resetConversation — NPU backend, skipping SamplerConfig")
+                    debugLog("SamplerConfig — skipped (NPU backend does not support it)")
                     null
                 } else {
+                    debugLog("SamplerConfig — temperature=$temperature topK=$topK topP=$topP")
                     SamplerConfig(
                         topK = topK,
                         topP = topP,
@@ -207,6 +211,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
                 val toolProviders = buildToolProviders(toolsJson)
                 val initialMessages = parseHistoryMessages(historyJson)
+                debugLog("ConversationConfig — tools=${toolProviders.size} history=${initialMessages.size} hasSamplerConfig=${samplerConfig != null} autoToolCalling=${toolProviders.isNotEmpty()}")
                 val convConfig = ConversationConfig(
                     systemInstruction = if (systemPrompt.isNotEmpty())
                         Contents.of(systemPrompt) else null,
@@ -596,6 +601,11 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         } catch (e: Exception) {
             Log.w(TAG, "sendEvent — failed to emit $eventName: ${e.message}")
         }
+    }
+
+    private fun debugLog(msg: String) {
+        Log.i(TAG, msg)
+        sendEvent(EVENT_DEBUG_LOG, msg)
     }
 
     override fun onCatalystInstanceDestroy() {

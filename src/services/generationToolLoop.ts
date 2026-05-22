@@ -73,13 +73,29 @@ function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
       logger.warn(`[ToolLoop] Failed to parse Gemma tool args: ${argsStr.substring(0, 100)}`);
     }
   } else if (rest.startsWith(':')) {
-    // Colon-separated key:value format — e.g. read_url emits :url:https://...
     const colonArgs = rest.slice(1);
-    const firstColon = colonArgs.indexOf(':');
-    if (firstColon !== -1) {
-      const key = colonArgs.slice(0, firstColon);
-      const value = colonArgs.slice(firstColon + 1).trim();
-      args = { [key]: value };
+
+    // Pattern: repeated tool name + JSON body — e.g. "read_url{url: "https://..."}"
+    if (colonArgs.startsWith(name)) {
+      const jsonBody = colonArgs.slice(name.length).trim();
+      if (jsonBody.startsWith('{')) {
+        try {
+          const fixedJson = jsonBody.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
+          args = JSON.parse(fixedJson);
+        } catch { /* fall through */ }
+      }
+    }
+
+    // Pattern: simple key:value — e.g. "url:https://..."
+    if (Object.keys(args).length === 0) {
+      const firstColon = colonArgs.indexOf(':');
+      if (firstColon !== -1) {
+        const key = colonArgs.slice(0, firstColon).trim();
+        if (/^\w+$/.test(key)) {
+          const value = colonArgs.slice(firstColon + 1).trim();
+          args = { [key]: value };
+        }
+      }
     }
   }
 
@@ -340,14 +356,21 @@ async function callLiteRTForLoop(
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const text = buildLiteRTSendText(messages);
   const history = buildLiteRTHistory(messages);
+  const liteRTSettings = useAppStore.getState().settings;
+  const samplerConfig = {
+    temperature: liteRTSettings.temperature,
+    topK: 40,
+    topP: liteRTSettings.topP,
+  };
   logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}`);
+  logger.log(`[ToolLoop][LiteRT] samplerConfig — temperature=${samplerConfig.temperature} topK=${samplerConfig.topK} topP=${samplerConfig.topP}`);
   logger.log(`[ToolLoop][LiteRT] sysPrompt first500: "${systemPrompt.substring(0, 500)}"`);
   logger.log(`[ToolLoop][LiteRT] sending text: "${text.substring(0, 300)}"`);
   if (!text) {
     logger.warn('[ToolLoop][LiteRT] no message text — aborting');
     return { fullResponse: '', toolCalls: [] };
   }
-  await liteRTService.prepareConversation(conversationId, systemPrompt, { tools, history });
+  await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools, history });
   const onToolCall = ctx ? buildLiteRTToolCallHandler(ctx, conversationId) : undefined;
   const fullResponse = await liteRTService.generateRaw(
     text,

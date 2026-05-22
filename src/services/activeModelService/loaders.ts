@@ -128,9 +128,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
 
     const maxTokens = ctx.store.settings.contextLength ?? 4096;
     const contextScalar = Math.max(1, maxTokens / 4096);
-    const baseTimeoutMs = preferredBackend === 'npu' ? 45_000
-                        : preferredBackend === 'gpu' ? 20_000
-                        : 15_000;
+    const baseTimeoutMs = 90_000;
     const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -152,6 +150,8 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     }
 
     const actualBackend = liteRTService.getActiveBackend();
+    const s = ctx.store.settings;
+    addDebugLog('log', `[LiteRT] Engine init — backend=${actualBackend} maxTokens=${maxTokens} temperature=${s.temperature} topP=${s.topP} topK=40`);
     addDebugLog('log', `[LiteRT] Load complete — actual backend: ${actualBackend}`);
     if (actualBackend !== preferredBackend) {
       addDebugLog('warn', `[LiteRT] Requested ${preferredBackend}, fell back to ${actualBackend}`);
