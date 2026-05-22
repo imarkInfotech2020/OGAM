@@ -31,6 +31,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
 }) => {
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [inputHeight, setInputHeight] = useState(84);
+  const flatListHeightRef = useRef(0);
   const [contextUsage, setContextUsage] = useState<{ used: number; max: number } | undefined>(undefined);
   const isStreaming = chat.isStreaming || chat.isThinking;
   const prevIsStreamingRef = useRef(isStreaming);
@@ -69,7 +70,14 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
           onContentSizeChange={(_w, _h) => { if (isNearBottomRef.current) flatListRef.current?.scrollToEnd({ animated: false }); }}
-          onLayout={() => { }}
+          onLayout={(e) => {
+            const newHeight = e.nativeEvent.layout.height;
+            const prevHeight = flatListHeightRef.current;
+            flatListHeightRef.current = newHeight;
+            if (prevHeight > 0 && newHeight < prevHeight) {
+              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+            }
+          }}
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
