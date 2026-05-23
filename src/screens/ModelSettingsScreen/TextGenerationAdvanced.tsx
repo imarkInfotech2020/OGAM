@@ -260,9 +260,9 @@ const ModelLoadingStrategySection: React.FC = () => {
   );
 };
 
-// ─── Main Advanced Component ─────────────────────────────────────────────────
+// ─── Llama Advanced ──────────────────────────────────────────────────────────
 
-export const TextGenerationAdvanced: React.FC<{ isLiteRT?: boolean }> = ({ isLiteRT = false }) => {
+export const TextGenerationAdvanced: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -291,73 +291,100 @@ export const TextGenerationAdvanced: React.FC<{ isLiteRT?: boolean }> = ({ isLit
         />
       </View>
 
-      {!isLiteRT && (
-        <View style={styles.sliderSection}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Repeat Penalty</Text>
-            <Text style={styles.sliderValue}>{(settings?.repeatPenalty || 1.1).toFixed(2)}</Text>
-          </View>
-          <Text style={styles.sliderDesc}>Penalize repeated tokens</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={1.0}
-            maximumValue={2.0}
-            step={0.05}
-            value={settings?.repeatPenalty || 1.1}
-            onSlidingComplete={(value) => updateSettings({ repeatPenalty: value })}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={colors.surface}
-            thumbTintColor={colors.primary}
-          />
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>Repeat Penalty</Text>
+          <Text style={styles.sliderValue}>{(settings?.repeatPenalty || 1.1).toFixed(2)}</Text>
         </View>
-      )}
+        <Text style={styles.sliderDesc}>Penalize repeated tokens</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={1.0}
+          maximumValue={2.0}
+          step={0.05}
+          value={settings?.repeatPenalty || 1.1}
+          onSlidingComplete={(value) => updateSettings({ repeatPenalty: value })}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface}
+          thumbTintColor={colors.primary}
+        />
+      </View>
 
-      {!isLiteRT && (
-        <View style={styles.sliderSection}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>CPU Threads</Text>
-            <Text style={styles.sliderValue}>{cpuThreadsDisplayValue}</Text>
-          </View>
-          <Text style={styles.sliderDesc}>Parallel threads for inference</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={1}
-            maximumValue={12}
-            step={1}
-            value={cpuThreadsSliderValue}
-            onSlidingComplete={(value) => updateSettings({ nThreads: value })}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={colors.surface}
-            thumbTintColor={colors.primary}
-          />
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>CPU Threads</Text>
+          <Text style={styles.sliderValue}>{cpuThreadsDisplayValue}</Text>
         </View>
-      )}
+        <Text style={styles.sliderDesc}>Parallel threads for inference</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={1}
+          maximumValue={12}
+          step={1}
+          value={cpuThreadsSliderValue}
+          onSlidingComplete={(value) => updateSettings({ nThreads: value })}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface}
+          thumbTintColor={colors.primary}
+        />
+      </View>
 
-      {!isLiteRT && (
-        <View style={styles.sliderSection}>
-          <View style={styles.sliderHeader}>
-            <Text style={styles.sliderLabel}>Batch Size</Text>
-            <Text style={styles.sliderValue}>{settings?.nBatch || 256}</Text>
-          </View>
-          <Text style={styles.sliderDesc}>Tokens processed per batch</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={32}
-            maximumValue={512}
-            step={32}
-            value={settings?.nBatch || 256}
-            onSlidingComplete={(value) => updateSettings({ nBatch: value })}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={colors.surface}
-            thumbTintColor={colors.primary}
-          />
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>Batch Size</Text>
+          <Text style={styles.sliderValue}>{settings?.nBatch || 256}</Text>
         </View>
-      )}
+        <Text style={styles.sliderDesc}>Tokens processed per batch</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={32}
+          maximumValue={512}
+          step={32}
+          value={settings?.nBatch || 256}
+          onSlidingComplete={(value) => updateSettings({ nBatch: value })}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface}
+          thumbTintColor={colors.primary}
+        />
+      </View>
 
-      {isLiteRT ? <LiteRTBackendSelectorSection /> : <BackendSelectorSection />}
-      {!isLiteRT && <FlashAttentionSection trackColor={trackColor} />}
-      {!isLiteRT && <KvCacheSection cacheDisabled={cacheDisabled} />}
+      <BackendSelectorSection />
+      <FlashAttentionSection trackColor={trackColor} />
+      <KvCacheSection cacheDisabled={cacheDisabled} />
       <ModelLoadingStrategySection />
+    </>
+  );
+};
+
+// ─── LiteRT Advanced ─────────────────────────────────────────────────────────
+
+export const LiteRTTextGenerationAdvanced: React.FC = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+
+  return (
+    <>
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>Top P</Text>
+          <Text style={styles.sliderValue}>{(settings?.liteRTTopP || 0.9).toFixed(2)}</Text>
+        </View>
+        <Text style={styles.sliderDesc}>Nucleus sampling threshold</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={0.1}
+          maximumValue={1.0}
+          step={0.05}
+          value={settings?.liteRTTopP || 0.9}
+          onSlidingComplete={(value) => updateSettings({ liteRTTopP: value })}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface}
+          thumbTintColor={colors.primary}
+        />
+      </View>
+
+      <LiteRTBackendSelectorSection />
     </>
   );
 };

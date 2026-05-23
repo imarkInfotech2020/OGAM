@@ -28,89 +28,105 @@ interface SettingConfig {
   warningColor?: string;
 }
 
+const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : v.toString();
+
 const DEFAULT_SETTINGS: Record<string, number> = {
   temperature: 0.7,
   maxTokens: 1024,
   topP: 0.9,
   repeatPenalty: 1.1,
   contextLength: 4096,
+  liteRTTemperature: 0.7,
+  liteRTTopP: 0.9,
+  liteRTContextLength: 4096,
+  liteRTMaxOutputTokens: 1024,
 };
 
-const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : v.toString();
+// ─── Config builders ──────────────────────────────────────────────────────────
 
-const BASIC_KEYS = ['temperature', 'maxTokens', 'contextLength'];
-const LITERT_BASIC_KEYS = ['temperature', 'contextLength'];
-const LITERT_ADVANCED_KEYS = ['topP'];
-
-const buildSettingsConfig = (modelMaxContext: number | null, isLiteRT: boolean): SettingConfig[] => {
-  const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
-  const liteRTMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
-  const liteRTWarn = isLargeRam ? 16384 : 8192;
+function buildLlamaConfig(modelMaxContext: number | null): SettingConfig[] {
   const llmMax = modelMaxContext ?? 32768;
-
-  const contextWarning = (v: number): string | null => {
-    if (!isLiteRT) return v > 8192 ? 'High context uses significant RAM and may crash on some devices' : null;
-    return v > liteRTWarn ? 'High context uses significant RAM — may slow or crash on some devices' : null;
-  };
-
   return [
-  {
-    key: 'temperature',
-    label: 'Temperature',
-    min: 0,
-    max: 2,
-    step: 0.05,
-    format: (v) => v.toFixed(2),
-    description: 'Higher = more creative, Lower = more focused',
-  },
-  {
-    key: 'maxTokens',
-    label: 'Max Tokens',
-    min: 64,
-    max: 8192,
-    step: 64,
-    format: (v) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : v.toString(),
-    description: 'Maximum length of generated response',
-  },
-  {
-    key: 'topP',
-    label: 'Top P',
-    min: 0.1,
-    max: 1.0,
-    step: 0.05,
-    format: (v) => v.toFixed(2),
-    description: 'Nucleus sampling threshold',
-  },
-  {
-    key: 'repeatPenalty',
-    label: 'Repeat Penalty',
-    min: 1.0,
-    max: 2.0,
-    step: 0.05,
-    format: (v) => v.toFixed(2),
-    description: 'Penalize repeated tokens',
-  },
-  {
-    key: 'contextLength',
-    label: isLiteRT ? 'Max Tokens' : 'Context Length',
-    min: 512,
-    max: isLiteRT ? liteRTMax : llmMax,
-    step: 1024,
-    format: formatContext,
-    description: isLiteRT
-      ? 'Total context window — input + history + output combined (requires reload)'
-      : 'KV cache size — larger uses more RAM (requires reload)',
-    warning: contextWarning,
-    warningColor: isLiteRT ? '#F59E0B' : undefined,
-  },
+    {
+      key: 'temperature',
+      label: 'Temperature',
+      min: 0, max: 2, step: 0.05,
+      format: (v) => v.toFixed(2),
+      description: 'Higher = more creative, Lower = more focused',
+    },
+    {
+      key: 'maxTokens',
+      label: 'Max Tokens',
+      min: 64, max: 8192, step: 64,
+      format: (v) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : v.toString(),
+      description: 'Maximum length of generated response',
+    },
+    {
+      key: 'topP',
+      label: 'Top P',
+      min: 0.1, max: 1.0, step: 0.05,
+      format: (v) => v.toFixed(2),
+      description: 'Nucleus sampling threshold',
+    },
+    {
+      key: 'repeatPenalty',
+      label: 'Repeat Penalty',
+      min: 1.0, max: 2.0, step: 0.05,
+      format: (v) => v.toFixed(2),
+      description: 'Penalize repeated tokens',
+    },
+    {
+      key: 'contextLength',
+      label: 'Context Length',
+      min: 512, max: llmMax, step: 1024,
+      format: formatContext,
+      description: 'KV cache size — larger uses more RAM (requires reload)',
+      warning: (v) => v > 8192 ? 'High context uses significant RAM and may crash on some devices' : null,
+    },
   ];
-};
-
-interface SettingSliderProps {
-  config: SettingConfig;
 }
 
-const SettingSlider: React.FC<SettingSliderProps> = ({ config }) => {
+function buildLiteRTConfig(modelMaxContext: number | null): SettingConfig[] {
+  const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
+  const contextMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
+  const contextWarn = isLargeRam ? 16384 : 8192;
+  return [
+    {
+      key: 'liteRTTemperature',
+      label: 'Temperature',
+      min: 0, max: 2, step: 0.05,
+      format: (v) => v.toFixed(2),
+      description: 'Higher = more creative, Lower = more focused',
+    },
+    {
+      key: 'liteRTMaxOutputTokens',
+      label: 'Max Output Tokens',
+      min: 64, max: 8192, step: 64,
+      format: (v) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : v.toString(),
+      description: 'Maximum length of generated response',
+    },
+    {
+      key: 'liteRTTopP',
+      label: 'Top P',
+      min: 0.1, max: 1.0, step: 0.05,
+      format: (v) => v.toFixed(2),
+      description: 'Nucleus sampling threshold',
+    },
+    {
+      key: 'liteRTContextLength',
+      label: 'Context Length',
+      min: 512, max: contextMax, step: 1024,
+      format: formatContext,
+      description: 'Total context window — input + history + output combined (requires reload)',
+      warning: (v) => v > contextWarn ? 'High context uses significant RAM — may slow or crash on some devices' : null,
+      warningColor: '#F59E0B',
+    },
+  ];
+}
+
+// ─── Shared slider component ──────────────────────────────────────────────────
+
+const SettingSlider: React.FC<{ config: SettingConfig }> = ({ config }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -184,25 +200,24 @@ const ShowGenerationDetailsToggle: React.FC = () => {
   );
 };
 
-// ─── Main Section ─────────────────────────────────────────────────────────────
+// ─── LiteRT Section ───────────────────────────────────────────────────────────
 
-export const TextGenerationSection: React.FC = () => {
+const LiteRTTextGenerationSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const modelMaxContext = useAppStore((s) => s.modelMaxContext);
-  const isLiteRT = useAppStore(selectIsLiteRT);
-  const settingsConfig = buildSettingsConfig(modelMaxContext, isLiteRT);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const basicKeys = isLiteRT ? LITERT_BASIC_KEYS : BASIC_KEYS;
-  const advancedKeys = isLiteRT ? LITERT_ADVANCED_KEYS : settingsConfig.filter(c => !BASIC_KEYS.includes(c.key)).map(c => c.key);
+  const config = buildLiteRTConfig(modelMaxContext);
+  const basicKeys = ['liteRTTemperature', 'liteRTMaxOutputTokens', 'liteRTContextLength'];
+  const advancedKeys = ['liteRTTopP'];
 
-  const basicSettings = settingsConfig.filter(c => basicKeys.includes(c.key));
-  const advancedSettings = settingsConfig.filter(c => advancedKeys.includes(c.key));
+  const basicSettings = config.filter(c => basicKeys.includes(c.key));
+  const advancedSettings = config.filter(c => advancedKeys.includes(c.key));
 
   return (
     <View style={styles.sectionCard}>
-      {basicSettings.map((config) => (
-        <SettingSlider key={config.key} config={config} />
+      {basicSettings.map((c) => (
+        <SettingSlider key={c.key} config={c} />
       ))}
       <ShowGenerationDetailsToggle />
 
@@ -210,17 +225,59 @@ export const TextGenerationSection: React.FC = () => {
 
       {showAdvanced && (
         <>
-          {advancedSettings.map((config) => (
-            <SettingSlider key={config.key} config={config} />
+          {advancedSettings.map((c) => (
+            <SettingSlider key={c.key} config={c} />
           ))}
-          {!isLiteRT && <CpuThreadsSlider />}
-          {!isLiteRT && <BatchSizeSlider />}
-          {isLiteRT ? <LiteRTBackendSelector /> : <BackendSelector />}
-          {!isLiteRT && <FlashAttentionToggle />}
-          {!isLiteRT && <KvCacheTypeToggle />}
-          {!isLiteRT && <ModelLoadingStrategyToggle />}
+          <LiteRTBackendSelector />
         </>
       )}
     </View>
   );
+};
+
+// ─── Llama Section ────────────────────────────────────────────────────────────
+
+const LlamaTextGenerationSection: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const modelMaxContext = useAppStore((s) => s.modelMaxContext);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const config = buildLlamaConfig(modelMaxContext);
+  const basicKeys = ['temperature', 'maxTokens', 'contextLength'];
+  const advancedKeys = ['topP', 'repeatPenalty'];
+
+  const basicSettings = config.filter(c => basicKeys.includes(c.key));
+  const advancedSettings = config.filter(c => advancedKeys.includes(c.key));
+
+  return (
+    <View style={styles.sectionCard}>
+      {basicSettings.map((c) => (
+        <SettingSlider key={c.key} config={c} />
+      ))}
+      <ShowGenerationDetailsToggle />
+
+      <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="modal-text-advanced-toggle" />
+
+      {showAdvanced && (
+        <>
+          {advancedSettings.map((c) => (
+            <SettingSlider key={c.key} config={c} />
+          ))}
+          <CpuThreadsSlider />
+          <BatchSizeSlider />
+          <BackendSelector />
+          <FlashAttentionToggle />
+          <KvCacheTypeToggle />
+          <ModelLoadingStrategyToggle />
+        </>
+      )}
+    </View>
+  );
+};
+
+// ─── Dispatch ─────────────────────────────────────────────────────────────────
+
+export const TextGenerationSection: React.FC = () => {
+  const isLiteRT = useAppStore(selectIsLiteRT);
+  return isLiteRT ? <LiteRTTextGenerationSection /> : <LlamaTextGenerationSection />;
 };

@@ -149,7 +149,7 @@ class ModelManager {
 
   async getStorageUsed(): Promise<number> {
     const models = await this.getDownloadedModels();
-    return models.reduce((total, model) => total + model.fileSize + (model.mmProjFileSize || 0), 0);
+    return models.reduce((total, model) => total + model.fileSize + ((model.engine === 'llama' ? model.mmProjFileSize : undefined) || 0), 0);
   }
 
   async getAvailableStorage(): Promise<number> {

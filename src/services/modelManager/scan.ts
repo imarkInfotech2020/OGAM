@@ -352,7 +352,7 @@ async function doScanForUntrackedTextModels(
       continue;
     }
 
-    const newModel: DownloadedModel = {
+    const newModel: LlamaDownloadedModel = {
       id: `recovered_${item.name}_${Date.now()}`,
       name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
       author,
@@ -362,6 +362,7 @@ async function doScanForUntrackedTextModels(
       quantization,
       downloadedAt: new Date().toISOString(),
       credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
+      engine: 'llama',
     };
 
     const models = await getModels();
