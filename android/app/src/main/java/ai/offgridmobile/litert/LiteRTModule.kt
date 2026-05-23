@@ -201,7 +201,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 }
 
                 // Close existing conversation first
-                closeConversation()
+                closeConversationSafely()
 
                 // SamplerConfig is not supported on NPU
                 val samplerConfig = if (activeBackend == "npu") {
@@ -218,7 +218,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
                 val toolProviders = buildToolProviders(toolsJson)
                 val initialMessages = parseHistoryMessages(historyJson)
-                debugLog("ConversationConfig — tools=${toolProviders.size} history=${initialMessages.size} hasSamplerConfig=${samplerConfig != null} autoToolCalling=${toolProviders.isNotEmpty()}")
+                debugLog("ConversationConfig — historyTurns=${initialMessages.size} tools=${toolProviders.size} maxTokenBudget=$configuredMaxTokens autoToolCalling=${toolProviders.isNotEmpty()}")
                 val convConfig = ConversationConfig(
                     systemInstruction = if (systemPrompt.isNotEmpty())
                         Contents.of(systemPrompt) else null,
@@ -228,8 +228,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     automaticToolCalling = toolProviders.isNotEmpty(),
                 )
 
-                conversation = eng.createConversation(convConfig)
-                Log.i(TAG, "resetConversation — new conversation created (tools=${toolProviders.size}, history=${initialMessages.size})")
+                try {
+                    conversation = eng.createConversation(convConfig)
+                } catch (e: Exception) {
+                    if (e.message?.contains("session already exists", ignoreCase = true) == true) {
+                        Log.w(TAG, "resetConversation — stale session detected, forcing teardown and retrying")
+                        closeConversationSafely()
+                        conversation = eng.createConversation(convConfig)
+                    } else throw e
+                }
+                debugLog("conversation ready — historyTurns=${initialMessages.size} tools=${toolProviders.size} maxTokenBudget=$configuredMaxTokens")
                 safe.resolve(null)
             } catch (e: Exception) {
                 Log.e(TAG, "resetConversation — error: ${e.message}", e)
@@ -302,7 +310,8 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     @OptIn(ExperimentalApi::class)
                     val benchmarkJson = try {
                         val b = conv.getBenchmarkInfo()
-                        Log.i(TAG, "getBenchmarkInfo — ttft=${b.timeToFirstTokenInSecond} decode=${b.lastDecodeTokensPerSecond} prefill=${b.lastPrefillTokensPerSecond} prefillCount=${b.lastPrefillTokenCount} decodeCount=${b.lastDecodeTokenCount} init=${b.initTimeInSecond}")
+                        val contextUsed = b.lastPrefillTokenCount + b.lastDecodeTokenCount
+                        debugLog("context — prefill=${b.lastPrefillTokenCount} decoded=${b.lastDecodeTokenCount} total=$contextUsed/$configuredMaxTokens ttft=${b.timeToFirstTokenInSecond}s decode=${b.lastDecodeTokensPerSecond}tok/s")
                         """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"decodeTokenCount":${b.lastDecodeTokenCount},"maxNumTokens":$configuredMaxTokens,"initTimeSeconds":${b.initTimeInSecond}}"""
                     } catch (e: Exception) {
                         Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
@@ -346,17 +355,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun stopGeneration(promise: Promise) {
         val safe = SafePromise(promise, TAG)
-        Log.i(TAG, "stopGeneration — cancelling current job")
+        Log.i(TAG, "stopGeneration — tearing down conversation")
 
         scope.launch {
             try {
-                currentJob?.cancel()
-                currentJob?.join()
+                closeConversationSafely()
                 Log.i(TAG, "stopGeneration — done")
                 safe.resolve(null)
             } catch (e: Exception) {
-                Log.w(TAG, "stopGeneration — error during cancel: ${e.message}")
-                safe.resolve(null) // resolve anyway — stop is best-effort
+                Log.w(TAG, "stopGeneration — error during teardown: ${e.message}")
+                safe.resolve(null)
             }
         }
     }
@@ -372,8 +380,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
         scope.launch {
             try {
-                currentJob?.cancel()
-                currentJob?.join()
                 cleanupEngine()
                 activeBackend = "cpu"
                 supportsVision = false
@@ -399,27 +405,30 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // Helpers
     // -------------------------------------------------------------------------
 
-    private fun closeConversation() {
-        // Cancel any tool calls blocked in execute() so their threads can unblock
+    private suspend fun closeConversationSafely() {
+        currentJob?.cancel()
+        currentJob?.join()
+        currentJob = null
+
         pendingToolCalls.forEach { (callId, deferred) ->
-            Log.d(TAG, "closeConversation — cancelling pending tool call $callId")
+            Log.d(TAG, "closeConversationSafely — cancelling pending tool call $callId")
             deferred.cancel(CancellationException("Conversation closed"))
         }
         pendingToolCalls.clear()
 
         try {
             conversation?.close()
-            Log.d(TAG, "closeConversation — closed")
+            Log.d(TAG, "closeConversationSafely — closed")
         } catch (e: Exception) {
-            Log.w(TAG, "closeConversation — error (ignored): ${e.message}")
+            Log.w(TAG, "closeConversationSafely — error: ${e.message}")
         } finally {
             conversation = null
         }
     }
 
-    private fun cleanupEngine() {
+    private suspend fun cleanupEngine() {
         // conversation MUST be closed before engine
-        closeConversation()
+        closeConversationSafely()
         try {
             engine?.close()
             Log.d(TAG, "cleanupEngine — engine closed")
@@ -633,7 +642,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     override fun onCatalystInstanceDestroy() {
         Log.i(TAG, "onCatalystInstanceDestroy — cleaning up")
         scope.cancel()
-        cleanupEngine()
+        runBlocking { cleanupEngine() }
         super.onCatalystInstanceDestroy()
     }
 }
