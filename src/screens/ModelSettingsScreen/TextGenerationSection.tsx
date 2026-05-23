@@ -4,11 +4,9 @@ import Slider from '@react-native-community/slider';
 import { AdvancedToggle, Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
+import { hardwareService } from '../../services';
 import { createStyles } from './styles';
 import { TextGenerationAdvanced } from './TextGenerationAdvanced';
-
-const FALLBACK_MAX_CONTEXT = 32768;
-const HIGH_CONTEXT_THRESHOLD = 8192;
 
 export const TextGenerationSection: React.FC = () => {
   const { colors } = useTheme();
@@ -17,6 +15,11 @@ export const TextGenerationSection: React.FC = () => {
   const modelMaxContext = useAppStore((s) => s.modelMaxContext);
   const isLiteRT = useAppStore(selectIsLiteRT);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
+  const liteRTSliderMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
+  const liteRTWarnThreshold = isLargeRam ? 16384 : 8192;
+  const llmSliderMax = modelMaxContext ?? 32768;
 
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
   const maxTokens = settings?.maxTokens || 512;
@@ -27,7 +30,6 @@ export const TextGenerationSection: React.FC = () => {
   const contextLengthLabel = contextLength >= 1024
     ? `${(contextLength / 1024).toFixed(0)}K`
     : String(contextLength);
-  const ctxSliderMax = modelMaxContext || FALLBACK_MAX_CONTEXT;
 
   return (
     <Card style={styles.section}>
@@ -82,15 +84,15 @@ export const TextGenerationSection: React.FC = () => {
             <Text style={styles.sliderValue}>{contextLengthLabel}</Text>
           </View>
           <Text style={styles.sliderDesc}>Total context window — input + history + output combined (requires reload)</Text>
-          {contextLength > HIGH_CONTEXT_THRESHOLD && (
-            <Text style={[styles.sliderDesc, { color: colors.error }]}>
-              High values use significant RAM and may fail on some devices
+          {contextLength > liteRTWarnThreshold && (
+            <Text style={[styles.sliderDesc, { color: '#F59E0B' }]}>
+              High context uses significant RAM — may slow or crash on some devices
             </Text>
           )}
           <Slider
             style={styles.slider}
             minimumValue={512}
-            maximumValue={ctxSliderMax}
+            maximumValue={liteRTSliderMax}
             step={1024}
             value={contextLength}
             onSlidingComplete={(value) => updateSettings({ contextLength: value })}
@@ -106,7 +108,7 @@ export const TextGenerationSection: React.FC = () => {
             <Text style={styles.sliderValue}>{contextLengthLabel}</Text>
           </View>
           <Text style={styles.sliderDesc}>KV cache size — larger uses more RAM (requires reload)</Text>
-          {contextLength > HIGH_CONTEXT_THRESHOLD && (
+          {contextLength > 8192 && (
             <Text style={[styles.sliderDesc, { color: colors.error }]}>
               High context uses significant RAM and may crash on some devices
             </Text>
@@ -114,7 +116,7 @@ export const TextGenerationSection: React.FC = () => {
           <Slider
             style={styles.slider}
             minimumValue={512}
-            maximumValue={ctxSliderMax}
+            maximumValue={llmSliderMax}
             step={1024}
             value={contextLength}
             onSlidingComplete={(value) => updateSettings({ contextLength: value })}

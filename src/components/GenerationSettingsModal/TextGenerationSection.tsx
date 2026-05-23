@@ -4,6 +4,7 @@ import Slider from '@react-native-community/slider';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
+import { hardwareService } from '../../services';
 import { createStyles } from './styles';
 import {
   CpuThreadsSlider,
@@ -23,6 +24,7 @@ interface SettingConfig {
   format: (value: number) => string;
   description?: string;
   warning?: (value: number) => string | null;
+  warningColor?: string;
 }
 
 const DEFAULT_SETTINGS: Record<string, number> = {
@@ -33,19 +35,24 @@ const DEFAULT_SETTINGS: Record<string, number> = {
   contextLength: 4096,
 };
 
-const FALLBACK_MAX_CONTEXT = 32768;
-const HIGH_CONTEXT_THRESHOLD = 8192;
-
 const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : v.toString();
-
-const contextWarning = (v: number): string | null =>
-  v > HIGH_CONTEXT_THRESHOLD ? 'High context uses significant RAM and may crash on some devices' : null;
 
 const BASIC_KEYS = ['temperature', 'maxTokens', 'contextLength'];
 const LITERT_BASIC_KEYS = ['temperature', 'contextLength'];
 const LITERT_ADVANCED_KEYS = ['topP'];
 
-const buildSettingsConfig = (modelMaxContext: number | null, isLiteRT: boolean): SettingConfig[] => [
+const buildSettingsConfig = (modelMaxContext: number | null, isLiteRT: boolean): SettingConfig[] => {
+  const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
+  const liteRTMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
+  const liteRTWarn = isLargeRam ? 16384 : 8192;
+  const llmMax = modelMaxContext ?? 32768;
+
+  const contextWarning = (v: number): string | null => {
+    if (!isLiteRT) return v > 8192 ? 'High context uses significant RAM and may crash on some devices' : null;
+    return v > liteRTWarn ? 'High context uses significant RAM — may slow or crash on some devices' : null;
+  };
+
+  return [
   {
     key: 'temperature',
     label: 'Temperature',
@@ -86,15 +93,17 @@ const buildSettingsConfig = (modelMaxContext: number | null, isLiteRT: boolean):
     key: 'contextLength',
     label: isLiteRT ? 'Max Tokens' : 'Context Length',
     min: 512,
-    max: modelMaxContext || FALLBACK_MAX_CONTEXT,
+    max: isLiteRT ? liteRTMax : llmMax,
     step: 1024,
     format: formatContext,
     description: isLiteRT
       ? 'Total context window — input + history + output combined (requires reload)'
       : 'KV cache size — larger uses more RAM (requires reload)',
     warning: contextWarning,
+    warningColor: isLiteRT ? '#F59E0B' : undefined,
   },
-];
+  ];
+};
 
 interface SettingSliderProps {
   config: SettingConfig;
@@ -107,6 +116,7 @@ const SettingSlider: React.FC<SettingSliderProps> = ({ config }) => {
   const rawValue = (settings as Record<string, unknown>)[config.key];
   const value = (rawValue ?? DEFAULT_SETTINGS[config.key]) as number;
   const warningText = config.warning?.(value) ?? null;
+  const warningColor = config.warningColor ?? colors.error;
 
   return (
     <View style={styles.settingGroup}>
@@ -118,7 +128,7 @@ const SettingSlider: React.FC<SettingSliderProps> = ({ config }) => {
         <Text style={styles.settingDescription}>{config.description}</Text>
       )}
       {warningText && (
-        <Text style={[styles.settingDescription, { color: colors.error }]}>{warningText}</Text>
+        <Text style={[styles.settingDescription, { color: warningColor }]}>{warningText}</Text>
       )}
       <Slider
         style={styles.slider}
