@@ -3,6 +3,7 @@
  * Extracted to keep index.ts under the max-lines limit.
  */
 
+import { Platform, ToastAndroid } from 'react-native';
 import { useAppStore } from '../../stores';
 import { useDebugLogsStore } from '../../stores/debugLogsStore';
 import { DownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
@@ -155,6 +156,13 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     addDebugLog('log', `[LiteRT] Load complete — actual backend: ${actualBackend}`);
     if (actualBackend !== preferredBackend) {
       addDebugLog('warn', `[LiteRT] Requested ${preferredBackend}, fell back to ${actualBackend}`);
+      if (preferredBackend === 'gpu' && actualBackend === 'cpu' && maxTokens > 8192 && Platform.OS === 'android') {
+        ToastAndroid.showWithGravity(
+          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU — reduce context length to use GPU.`,
+          ToastAndroid.LONG,
+          ToastAndroid.BOTTOM,
+        );
+      }
     }
 
     // Warmup on GPU/NPU only — primes shader/kernel caches so first real prompt runs at full speed
