@@ -398,7 +398,7 @@ function resolveUri(uri: string): string {
 
 
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
-  const { sourceUri, fileName, modelsDir, sourceSize, engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
+  const { sourceUri, fileName, modelsDir, sourceSize, engine: _engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
 
   const isLitert = fileName.toLowerCase().endsWith('.litertlm');
   if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {

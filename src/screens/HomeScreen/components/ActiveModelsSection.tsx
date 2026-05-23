@@ -6,6 +6,7 @@ import { AnimatedPressable } from '../../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
+import { getMmProjFileSize } from '../../../utils/modelHelpers';
 import { LoadingState } from '../hooks/useHomeScreen';
 
 function ModelLoadingState({ loadingState, styles }: { loadingState: LoadingState; styles: ReturnType<typeof createStyles> }) {
@@ -85,7 +86,7 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
               </View>
               {isDownloadedModel(activeTextModel) ? (
                 <Text style={styles.modelCardMeta}>
-                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + ((activeTextModel.engine === 'llama' ? activeTextModel.mmProjFileSize : undefined) || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + getMmProjFileSize(activeTextModel)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
                 </Text>
               ) : (
                 <Text style={styles.modelCardMeta}>

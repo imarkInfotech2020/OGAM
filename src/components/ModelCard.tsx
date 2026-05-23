@@ -4,6 +4,7 @@ import { useThemedStyles } from '../theme';
 import { QUANTIZATION_INFO, CREDIBILITY_LABELS } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { needsVisionRepair } from '../utils/visionRepair';
+import { getMmProjFileSize } from '../utils/modelHelpers';
 import { createStyles } from './ModelCard.styles';
 import {
   CompactModelCardContent,
@@ -54,7 +55,7 @@ function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
 
 function resolveFileSize(file?: ModelFile, downloadedModel?: DownloadedModel) {
   const main = file?.size ?? downloadedModel?.fileSize ?? 0;
-  const mmProj = file?.mmProjFile?.size ?? (downloadedModel?.engine === 'llama' ? downloadedModel.mmProjFileSize : undefined) ?? 0;
+  const mmProj = file?.mmProjFile?.size ?? getMmProjFileSize(downloadedModel);
   return main + mmProj;
 }
 

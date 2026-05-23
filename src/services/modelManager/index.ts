@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import logger from '../../utils/logger';
+import { getMmProjFileSize } from '../../utils/modelHelpers';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
 import { useAppStore } from '../../stores';
@@ -149,7 +150,7 @@ class ModelManager {
 
   async getStorageUsed(): Promise<number> {
     const models = await this.getDownloadedModels();
-    return models.reduce((total, model) => total + model.fileSize + ((model.engine === 'llama' ? model.mmProjFileSize : undefined) || 0), 0);
+    return models.reduce((total, model) => total + model.fileSize + getMmProjFileSize(model), 0);
   }
 
   async getAvailableStorage(): Promise<number> {
