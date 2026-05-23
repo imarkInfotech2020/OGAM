@@ -6,7 +6,7 @@
 import { Platform, ToastAndroid } from 'react-native';
 import { useAppStore } from '../../stores';
 import { useDebugLogsStore } from '../../stores/debugLogsStore';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
@@ -100,7 +100,10 @@ export interface TextLoadContext {
 }
 
 async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
-  const liteRTModel = ctx.model as LiteRTDownloadedModel;
+  if (ctx.model.engine !== 'litert') {
+    throw new Error('doLoadLiteRTModel called with non-LiteRT model');
+  }
+  const liteRTModel = ctx.model;
   const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
     addDebugLog('log', `[LiteRT] Starting model load: ${ctx.model.fileName}`);
@@ -119,7 +122,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     const preferredBackend = ctx.store.settings.liteRTBackend;
     addDebugLog('log', `[LiteRT] Preferred backend: ${preferredBackend}`);
 
-    const maxTokens = ctx.store.settings.liteRTContextLength ?? 4096;
+    const maxTokens = ctx.store.settings.liteRTMaxTokens ?? 4096;
     const contextScalar = Math.max(1, maxTokens / 4096);
     const baseTimeoutMs = 90_000;
     const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
@@ -169,7 +172,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     // banner appears if the user changes them while the model is loaded.
     ctx.store.setLoadedSettings({
       liteRTBackend: ctx.store.settings.liteRTBackend,
-      liteRTContextLength: maxTokens,
+      liteRTMaxTokens: maxTokens,
       // Fields not used by LiteRT — set to current values so llama checks don't misfire
       contextLength: ctx.store.settings.contextLength,
       enableGpu: ctx.store.settings.enableGpu,
@@ -213,7 +216,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
 
-    const mmProjPath = await resolveMmProjPath(ctx.model as LlamaDownloadedModel, ctx.modelId);
+    const mmProjPath = await resolveMmProjPath(ctx.model, ctx.modelId);
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {

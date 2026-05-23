@@ -43,8 +43,7 @@ type AppSettings = {
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;
   liteRTTopP: number;
-  liteRTContextLength: number;
-  liteRTMaxOutputTokens: number;
+  liteRTMaxTokens: number;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -144,8 +143,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   liteRTBackend: 'gpu' as LiteRTBackend,
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
-  liteRTContextLength: 4096,
-  liteRTMaxOutputTokens: 1024,
+  liteRTMaxTokens: 4096,
 };
 
 function migrateEnabledTools(merged: any): void {
@@ -154,7 +152,11 @@ function migrateEnabledTools(merged: any): void {
   }
 }
 function migratePersistedState(persistedState: any, currentState: AppState): AppState {
-  const merged = { ...currentState, ...persistedState };
+  const merged = {
+    ...currentState,
+    ...persistedState,
+    settings: { ...DEFAULT_SETTINGS, ...(persistedState?.settings ?? {}) },
+  };
   // Drop legacy download tracking fields. The unified downloadStore (backed
   // by the native Room DB) is now the source of truth. Persisted entries
   // from old versions are silently ignored on rehydrate.
@@ -179,16 +181,6 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
-  // Seed per-engine LiteRT settings from shared values on first install of this version.
-  if (persistedState?.settings && merged.settings.liteRTTemperature === undefined) {
-    merged.settings = {
-      ...merged.settings,
-      liteRTTemperature: persistedState.settings.temperature ?? DEFAULT_SETTINGS.temperature,
-      liteRTTopP: persistedState.settings.topP ?? DEFAULT_SETTINGS.topP,
-      liteRTContextLength: persistedState.settings.contextLength ?? DEFAULT_SETTINGS.liteRTContextLength,
-      liteRTMaxOutputTokens: persistedState.settings.maxTokens ?? DEFAULT_SETTINGS.liteRTMaxOutputTokens,
-    };
-  }
   return merged as AppState;
 }
 

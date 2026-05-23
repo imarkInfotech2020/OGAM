@@ -235,7 +235,7 @@ export const useChatScreen = () => {
     // LiteRT reloads when backend or context length changes — both are baked into the engine at load time
     if (activeModel?.engine === 'litert') {
       return settings.liteRTBackend !== loadedSettings.liteRTBackend ||
-             settings.liteRTContextLength !== loadedSettings.liteRTContextLength;
+             settings.liteRTMaxTokens !== loadedSettings.liteRTMaxTokens;
     }
     return (
       settings.nThreads !== loadedSettings.nThreads ||

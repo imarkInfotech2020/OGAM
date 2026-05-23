@@ -50,12 +50,7 @@ const LiteRTTextSettings: React.FC = () => {
   const contextWarnThreshold = isLargeRam ? 16384 : 8192;
 
   const temperature = settings?.liteRTTemperature ?? 0.7;
-  const maxOutputTokens = settings?.liteRTMaxOutputTokens ?? 1024;
-  const contextLength = settings?.liteRTContextLength ?? 4096;
-
-  const maxOutputLabel = maxOutputTokens >= 1024
-    ? `${(maxOutputTokens / 1024).toFixed(1)}K`
-    : String(maxOutputTokens);
+  const maxTokens = settings?.liteRTMaxTokens ?? 4096;
 
   return (
     <Card style={styles.section}>
@@ -82,31 +77,12 @@ const LiteRTTextSettings: React.FC = () => {
 
       <View style={styles.sliderSection}>
         <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Max Output Tokens</Text>
-          <Text style={styles.sliderValue}>{maxOutputLabel}</Text>
+          <Text style={styles.sliderLabel}>Max Tokens</Text>
+          <Text style={styles.sliderValue}>{formatContext(maxTokens)}</Text>
         </View>
-        <Text style={styles.sliderDesc}>Maximum length of generated response</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={64}
-          maximumValue={8192}
-          step={64}
-          value={maxOutputTokens}
-          onSlidingComplete={(value) => updateSettings({ liteRTMaxOutputTokens: value })}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.surface}
-          thumbTintColor={colors.primary}
-        />
-      </View>
-
-      <View style={styles.sliderSection}>
-        <View style={styles.sliderHeader}>
-          <Text style={styles.sliderLabel}>Context Length</Text>
-          <Text style={styles.sliderValue}>{formatContext(contextLength)}</Text>
-        </View>
-        <Text style={styles.sliderDesc}>Total context window — input + history + output combined (requires reload)</Text>
-        {contextLength > contextWarnThreshold && (
-          <Text style={[styles.sliderDesc, { color: '#F59E0B' }]}>
+        <Text style={styles.sliderDesc}>Total token budget — input, history, and output combined (requires reload)</Text>
+        {maxTokens > contextWarnThreshold && (
+          <Text style={styles.warningText}>
             High context uses significant RAM — may slow or crash on some devices
           </Text>
         )}
@@ -115,8 +91,8 @@ const LiteRTTextSettings: React.FC = () => {
           minimumValue={512}
           maximumValue={contextMax}
           step={1024}
-          value={contextLength}
-          onSlidingComplete={(value) => updateSettings({ liteRTContextLength: value })}
+          value={maxTokens}
+          onSlidingComplete={(value) => updateSettings({ liteRTMaxTokens: value })}
           minimumTrackTintColor={colors.primary}
           maximumTrackTintColor={colors.surface}
           thumbTintColor={colors.primary}

@@ -4,6 +4,7 @@
  */
 import { llmService } from './llm';
 import { liteRTService } from './litert';
+import { getActiveEngineService } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { useDebugLogsStore } from '../stores/debugLogsStore';
 import type { Message, GenerationMeta } from '../types';
@@ -17,9 +18,7 @@ type StreamChunk = string | { content?: string; reasoningContent?: string };
 
 /** Returns true when the currently active model uses LiteRT engine. */
 function isLiteRTActive(): boolean {
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const activeModel = downloadedModels.find((m: any) => m.id === activeModelId);
-  return activeModel?.engine === 'litert';
+  return getActiveEngineService() === liteRTService;
 }
 
 export interface GenerationRequest {

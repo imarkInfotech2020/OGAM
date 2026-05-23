@@ -361,9 +361,9 @@ async function callLiteRTForLoop(
   const imageUri = imageAttachment?.uri as string | undefined;
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
-    temperature: liteRTSettings.temperature,
+    temperature: liteRTSettings.liteRTTemperature,
     topK: 40,
-    topP: liteRTSettings.topP,
+    topP: liteRTSettings.liteRTTopP,
   };
   logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}, hasImage=${!!imageUri}`);
   logger.log(`[ToolLoop][LiteRT] samplerConfig — temperature=${samplerConfig.temperature} topK=${samplerConfig.topK} topP=${samplerConfig.topP}`);

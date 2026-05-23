@@ -38,8 +38,7 @@ const DEFAULT_SETTINGS: Record<string, number> = {
   contextLength: 4096,
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
-  liteRTContextLength: 4096,
-  liteRTMaxOutputTokens: 1024,
+  liteRTMaxTokens: 4096,
 };
 
 // ─── Config builders ──────────────────────────────────────────────────────────
@@ -99,13 +98,6 @@ function buildLiteRTConfig(modelMaxContext: number | null): SettingConfig[] {
       description: 'Higher = more creative, Lower = more focused',
     },
     {
-      key: 'liteRTMaxOutputTokens',
-      label: 'Max Output Tokens',
-      min: 64, max: 8192, step: 64,
-      format: (v) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : v.toString(),
-      description: 'Maximum length of generated response',
-    },
-    {
       key: 'liteRTTopP',
       label: 'Top P',
       min: 0.1, max: 1.0, step: 0.05,
@@ -113,11 +105,11 @@ function buildLiteRTConfig(modelMaxContext: number | null): SettingConfig[] {
       description: 'Nucleus sampling threshold',
     },
     {
-      key: 'liteRTContextLength',
-      label: 'Context Length',
+      key: 'liteRTMaxTokens',
+      label: 'Max Tokens',
       min: 512, max: contextMax, step: 1024,
       format: formatContext,
-      description: 'Total context window — input + history + output combined (requires reload)',
+      description: 'Total token budget — input, history, and output combined (requires reload)',
       warning: (v) => v > contextWarn ? 'High context uses significant RAM — may slow or crash on some devices' : null,
       warningColor: '#F59E0B',
     },
@@ -208,7 +200,7 @@ const LiteRTTextGenerationSection: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const config = buildLiteRTConfig(modelMaxContext);
-  const basicKeys = ['liteRTTemperature', 'liteRTMaxOutputTokens', 'liteRTContextLength'];
+  const basicKeys = ['liteRTTemperature', 'liteRTMaxTokens'];
   const advancedKeys = ['liteRTTopP'];
 
   const basicSettings = config.filter(c => basicKeys.includes(c.key));
