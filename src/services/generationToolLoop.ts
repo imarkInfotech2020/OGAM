@@ -315,7 +315,7 @@ function buildLiteRTSendText(messages: Message[]): string {
   return '';
 }
 
-function buildLiteRTHistory(messages: Message[]): Array<{ role: 'user' | 'assistant'; content: string }> {
+export function buildLiteRTHistory(messages: Message[]): Array<{ role: 'user' | 'assistant'; content: string }> {
   let lastUserIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) { if (messages[i].role === 'user') { lastUserIdx = i; break; } }
   if (lastUserIdx <= 0) return [];
@@ -356,13 +356,16 @@ async function callLiteRTForLoop(
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const text = buildLiteRTSendText(messages);
   const history = buildLiteRTHistory(messages);
+  const lastUser = [...messages].reverse().find(m => m.role === 'user');
+  const imageAttachment = lastUser?.attachments?.find((a: any) => a.type === 'image');
+  const imageUri = imageAttachment?.uri as string | undefined;
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.temperature,
     topK: 40,
     topP: liteRTSettings.topP,
   };
-  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}`);
+  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}, hasImage=${!!imageUri}`);
   logger.log(`[ToolLoop][LiteRT] samplerConfig — temperature=${samplerConfig.temperature} topK=${samplerConfig.topK} topP=${samplerConfig.topP}`);
   logger.log(`[ToolLoop][LiteRT] sysPrompt first500: "${systemPrompt.substring(0, 500)}"`);
   logger.log(`[ToolLoop][LiteRT] sending text: "${text.substring(0, 300)}"`);
@@ -376,6 +379,8 @@ async function callLiteRTForLoop(
     text,
     token => onStream?.({ content: token }),
     onToolCall,
+    imageUri,
+    token => onStream?.({ reasoningContent: token }),
   );
   logger.log(`[ToolLoop][LiteRT] raw response (${fullResponse.length}ch): "${fullResponse.substring(0, 400)}"`);
   // Native SDK handles all tool→model cycles internally; toolCalls always empty here
@@ -449,7 +454,9 @@ function buildStreamHandler(ctx: ToolLoopContext, state: ToolLoopState): ((data:
   return (data: StreamChunk) => {
     if (ctx.isAborted()) return;
     const chunk = normalizeStreamChunk(data);
-    if (!state.firstTokenFired) {
+    // Only fire onThinkingDone when the first *content* token arrives — reasoning
+    // tokens mean the model is still thinking, so keep isThinking=true until then.
+    if (chunk.content && !state.firstTokenFired) {
       state.firstTokenFired = true;
       state.thinkingDoneFired = true;
       ctx.onThinkingDone();
