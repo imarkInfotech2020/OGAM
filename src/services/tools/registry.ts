@@ -5,7 +5,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'web_search',
     name: 'web_search',
     displayName: 'Web Search',
-    description: 'Search the web',
+    description: 'Search the web and return result titles, snippets, and URLs. When the snippet is insufficient, call read_url on the most relevant result URL to get the full page content.',
     icon: 'globe',
     requiresNetwork: true,
     parameters: {
@@ -75,13 +75,13 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     id: 'read_url',
     name: 'read_url',
     displayName: 'URL Reader',
-    description: 'Fetch and read a web page',
+    description: 'Fetch the full content of a URL. Use this after web_search to read the complete text of a result page when the search snippet does not contain enough detail.',
     icon: 'link',
     requiresNetwork: true,
     parameters: {
       url: {
         type: 'string',
-        description: 'URL to fetch',
+        description: 'Full URL to fetch',
         required: true,
       },
     },
