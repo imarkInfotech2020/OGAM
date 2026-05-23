@@ -9,7 +9,7 @@
  * - onComplete receives fully accumulated content, not an empty string.
  */
 
-import { NativeModules, NativeEventEmitter, Platform, EmitterSubscription } from 'react-native';
+import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
 import logger from '../utils/logger';
 import { useDebugLogsStore } from '../stores/debugLogsStore';
 import { contextCompactionService } from './contextCompaction';
@@ -75,7 +75,7 @@ class LiteRTService {
   private configuredMaxTokens = 4096;
 
   constructor() {
-    if (Platform.OS === 'android' && LiteRTModule) {
+    if (LiteRTModule) {
       this.emitter = new NativeEventEmitter(LiteRTModule);
       this.emitter.addListener(EVENT_DEBUG_LOG, (msg: string) => {
         useDebugLogsStore.getState().addLog('log', `[Kotlin] ${msg}`);
@@ -548,7 +548,7 @@ class LiteRTService {
   }
 
   isAvailable(): boolean {
-    return Platform.OS === 'android' && !!LiteRTModule;
+    return !!LiteRTModule;
   }
 
   /**
