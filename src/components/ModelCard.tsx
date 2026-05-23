@@ -54,7 +54,7 @@ function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
 
 function resolveFileSize(file?: ModelFile, downloadedModel?: DownloadedModel) {
   const main = file?.size ?? downloadedModel?.fileSize ?? 0;
-  const mmProj = file?.mmProjFile?.size ?? downloadedModel?.mmProjFileSize ?? 0;
+  const mmProj = file?.mmProjFile?.size ?? (downloadedModel?.engine === 'llama' ? downloadedModel.mmProjFileSize : undefined) ?? 0;
   return main + mmProj;
 }
 
@@ -113,7 +113,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
-  const isVisionModel = !!(file?.mmProjFile || downloadedModel?.isVisionModel);
+  const isVisionModel = !!(file?.mmProjFile || (downloadedModel?.engine === 'llama' && downloadedModel.isVisionModel));
   const needsRepair = needsVisionRepair(downloadedModel, file);
 
   const sizeRange = React.useMemo(() => {

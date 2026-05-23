@@ -85,7 +85,7 @@ const TextModelCard: React.FC<TextModelCardProps> = ({
               </View>
               {isDownloadedModel(activeTextModel) ? (
                 <Text style={styles.modelCardMeta}>
-                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
+                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + ((activeTextModel.engine === 'llama' ? activeTextModel.mmProjFileSize : undefined) || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
                 </Text>
               ) : (
                 <Text style={styles.modelCardMeta}>

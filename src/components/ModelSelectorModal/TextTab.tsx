@@ -115,7 +115,7 @@ export const TextTab: React.FC<TextTabProps> = ({
                         <Text style={styles.modelQuant}>{model.quantization}</Text>
                       </>
                     )}
-                    {model.isVisionModel && (
+                    {model.engine === 'llama' && model.isVisionModel && (
                       <>
                         <Text style={styles.metaSeparator}>•</Text>
                         <View style={styles.visionBadge}>

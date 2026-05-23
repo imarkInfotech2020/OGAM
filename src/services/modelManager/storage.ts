@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
 import logger from '../../utils/logger';
 
@@ -81,7 +81,7 @@ async function tryResolveMmProjPath(
   model: DownloadedModel,
   modelsDir: string,
 ): Promise<boolean> {
-  if (!model.mmProjPath) return false;
+  if (model.engine !== 'llama' || !model.mmProjPath) return false;
   const mmExists = await RNFS.exists(model.mmProjPath);
   if (mmExists) return false;
   const resolvedMm = resolveStoredPath(model.mmProjPath, modelsDir);
@@ -165,7 +165,13 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
 
   let models: DownloadedModel[];
   try {
-    models = JSON.parse(stored) as DownloadedModel[];
+    // Backfill engine: 'llama' for records written before the discriminated union.
+    // LiteRT records always had engine: 'litert' set explicitly, so this is safe.
+    models = (JSON.parse(stored) as any[]).map((m): DownloadedModel =>
+      m.engine === 'litert'
+        ? { ...m, liteRTVision: m.liteRTVision ?? false } as LiteRTDownloadedModel
+        : { ...m, engine: 'llama' as const } as LlamaDownloadedModel,
+    );
   } catch (error) {
     // Corrupt AsyncStorage should not prevent the app from loading other state.
     logger.error('[ModelManagerStorage] Failed to parse downloaded models JSON', {
@@ -269,7 +275,7 @@ export interface BuildModelOpts {
   expectedMmProjFileName?: string;
 }
 
-export async function buildDownloadedModel(opts: BuildModelOpts): Promise<DownloadedModel> {
+export async function buildDownloadedModel(opts: BuildModelOpts): Promise<LlamaDownloadedModel> {
   const { modelId, file, resolvedLocalPath, mmProjPath, expectedMmProjFileName } = opts;
   const stat = await RNFS.stat(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
@@ -302,6 +308,7 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     quantization: file.quantization,
     downloadedAt: new Date().toISOString(),
     credibility: determineCredibility(author),
+    engine: 'llama',
     isVisionModel: !!mmProjPath,
     mmProjPath,
     mmProjFileName,

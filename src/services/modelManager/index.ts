@@ -80,6 +80,7 @@ class ModelManager {
 
     const toSave: typeof models = [];
     for (const m of models) {
+      if (m.engine !== 'llama') continue;
       const baseName = extractBaseName(m.fileName);
       const match = findMatchingMmProj(baseName, mmProjFiles);
 
@@ -122,18 +123,19 @@ class ModelManager {
     if (!model.filePath.startsWith(this.modelsDir)) {
       throw new Error('Invalid model path: outside app directory');
     }
-    if (model.mmProjPath && !model.mmProjPath.startsWith(this.modelsDir)) {
+    const llamaModel = model.engine === 'llama' ? model : null;
+    if (llamaModel?.mmProjPath && !llamaModel.mmProjPath.startsWith(this.modelsDir)) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
     await RNFS.unlink(model.filePath);
 
     // Only delete mmproj if no other models reference it
-    if (model.mmProjPath) {
+    if (llamaModel?.mmProjPath) {
       const otherModelsUsingMmproj = models.some(
-        m => m.id !== modelId && m.mmProjPath === model.mmProjPath,
+        m => m.engine === 'llama' && m.id !== modelId && m.mmProjPath === llamaModel.mmProjPath,
       );
       if (!otherModelsUsingMmproj) {
-        await RNFS.unlink(model.mmProjPath).catch(() => {});
+        await RNFS.unlink(llamaModel.mmProjPath).catch(() => {});
       }
     }
 

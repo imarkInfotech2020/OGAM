@@ -43,7 +43,7 @@ export interface ModelFile {
 
 export type ModelEngine = 'llama' | 'litert';
 
-export interface DownloadedModel {
+interface DownloadedModelBase {
   id: string;
   name: string;
   author: string;
@@ -53,15 +53,29 @@ export interface DownloadedModel {
   quantization: string;
   downloadedAt: string;
   credibility?: ModelCredibility;
-  // Vision model support
+}
+
+export interface LlamaDownloadedModel extends DownloadedModelBase {
+  engine: 'llama';
   isVisionModel?: boolean;
   mmProjPath?: string;
   mmProjFileName?: string;
   mmProjFileSize?: number;
-  // Inference engine — undefined means 'llama' (backwards compatible)
-  engine?: ModelEngine;
-  // LiteRT-specific: whether this model's vision encoder is compatible with visionBackend=GPU
-  liteRTVision?: boolean;
+}
+
+export interface LiteRTDownloadedModel extends DownloadedModelBase {
+  engine: 'litert';
+  liteRTVision: boolean;
+}
+
+export type DownloadedModel = LlamaDownloadedModel | LiteRTDownloadedModel;
+
+export function isLlamaModel(m: DownloadedModel): m is LlamaDownloadedModel {
+  return m.engine === 'llama';
+}
+
+export function isLiteRTModel(m: DownloadedModel): m is LiteRTDownloadedModel {
+  return m.engine === 'litert';
 }
 
 export interface PersistedDownloadInfo {

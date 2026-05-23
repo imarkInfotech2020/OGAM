@@ -223,7 +223,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       // Clear the entry once the model is registered — UI then reads "downloaded" state
       // from downloadedModels rather than a lingering store entry stuck at 100%.
       useDownloadStore.getState().remove(modelKey);
-      if (file.mmProjFile && !dm.isVisionModel) {
+      if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
         setAlertState(showAlert(
           'Model Downloaded',
           `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,

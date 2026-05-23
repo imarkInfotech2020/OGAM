@@ -21,7 +21,7 @@ export async function getOrphanedTextFiles(
   const trackedPaths = new Set<string>();
   for (const model of models) {
     trackedPaths.add(model.filePath);
-    if (model.mmProjPath) trackedPaths.add(model.mmProjPath);
+    if (model.engine === 'llama' && model.mmProjPath) trackedPaths.add(model.mmProjPath);
   }
 
   for (const file of files) {

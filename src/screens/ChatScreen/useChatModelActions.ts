@@ -318,23 +318,24 @@ type ModelStateSyncDeps = {
 };
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   const { activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
+  const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
   useEffect(() => {
     if (activeModelInfo.isRemote) return;
     if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
 
-  }, [activeModelId, activeModel?.mmProjPath]);
+  }, [activeModelId, activeModelMmProjPath]);
   useEffect(() => {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
     } else if (activeModel?.engine === 'litert') {
       setSupportsVision(true);
-    } else if (activeModel?.mmProjPath && llmService.isModelLoaded()) {
+    } else if (activeModelMmProjPath && llmService.isModelLoaded()) {
       setSupportsVision(llmService.getMultimodalSupport()?.vision ?? false);
     } else {
       setSupportsVision(false);
     }
 
-  }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModel?.mmProjPath, isModelLoading]);
+  }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading]);
   useEffect(() => {
     if (activeRemoteTextModelId) {
       setSupportsToolCalling(activeRemoteModel?.capabilities?.supportsToolCalling ?? false);

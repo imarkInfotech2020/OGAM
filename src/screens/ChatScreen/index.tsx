@@ -148,7 +148,7 @@ export const ChatScreen: React.FC = () => {
           navigation={chat.navigation}
           loadingModelName={modelName}
           modelSize={sizeSource ? chat.hardwareService.formatModelSize(sizeSource) : ''}
-          hasVision={!!(chat.loadingModel?.mmProjPath || chat.activeModel?.mmProjPath)}
+          hasVision={!!((chat.loadingModel?.engine === 'llama' && chat.loadingModel.mmProjPath) || (chat.activeModel?.engine === 'llama' && chat.activeModel.mmProjPath))}
         />
         {alertEl}
       </>

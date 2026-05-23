@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
 import { copyFileWithProgress } from './copyFile';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
@@ -75,6 +75,7 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
       const mmProjFiles = files.filter(f => f.isFile() && isMMProjFile(f.name));
 
       for (const model of cleanedModels) {
+        if (model.engine !== 'llama') continue;
         if (model.mmProjPath) continue;
         if (!looksLikeVisionModel(model)) continue;
 
@@ -427,16 +428,23 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
   const fileSize = parseSizeInt(destStat.size);
 
   const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
-  const model = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
-  const builtModel: DownloadedModel = {
-    ...model,
+  const baseModel = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
+  const baseFields = {
     id: `local_import/${fileName}`,
     name: modelName,
     author: 'Local Import',
-    credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
-    ...(engine ? { engine } : {}),
-    ...(liteRTVision !== undefined ? { liteRTVision } : {}),
+    credibility: { source: 'community' as const, isOfficial: false, isVerifiedQuantizer: false },
   };
+
+  if (isLitert) {
+    const liteRTModel: LiteRTDownloadedModel = {
+      ...baseModel, ...baseFields, engine: 'litert', liteRTVision: liteRTVision ?? false,
+    };
+    await persistDownloadedModel(liteRTModel, modelsDir);
+    return liteRTModel;
+  }
+
+  const llamaModel: LlamaDownloadedModel = { ...baseModel, ...baseFields, engine: 'llama' };
 
   // Copy mmproj and link it to the model: progress 0.5→1
   if (mmProjFileName && resolvedMmProjSource) {
@@ -448,12 +456,12 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
         : undefined,
     });
     const mmProjStat = await RNFS.stat(mmProjDestPath);
-    builtModel.mmProjPath = mmProjDestPath;
-    builtModel.mmProjFileName = mmProjFileName;
-    builtModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
-    builtModel.isVisionModel = true;
+    llamaModel.mmProjPath = mmProjDestPath;
+    llamaModel.mmProjFileName = mmProjFileName;
+    llamaModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+    llamaModel.isVisionModel = true;
   }
 
-  await persistDownloadedModel(builtModel, modelsDir);
-  return builtModel;
+  await persistDownloadedModel(llamaModel, modelsDir);
+  return llamaModel;
 }
