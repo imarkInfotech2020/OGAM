@@ -220,9 +220,10 @@ export async function generateResponseImpl(
     // Guard: image attached but model was not imported with vision support
     if (imageUri) {
       const { downloadedModels, activeModelId } = useAppStore.getState();
-      const activeModel = downloadedModels.find((m: any) => m.id === activeModelId);
-      dbg('log', `[Vision] model check — activeModelId=${activeModelId?.substring(0, 12)} liteRTVision=${activeModel?.liteRTVision} modelFound=${!!activeModel}`);
-      if (!activeModel?.liteRTVision) {
+      const activeModel = downloadedModels.find(m => m.id === activeModelId);
+      const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
+      dbg('log', `[Vision] model check — activeModelId=${activeModelId?.substring(0, 12)} liteRTVision=${liteRTActiveModel?.liteRTVision} modelFound=${!!activeModel}`);
+      if (!liteRTActiveModel?.liteRTVision) {
         dbg('warn', '[Vision] BLOCKED — model does not have vision support (liteRTVision=false). Re-import model with vision enabled.');
         chatStore.clearStreamingMessage();
         svc.resetState();
@@ -237,7 +238,7 @@ export async function generateResponseImpl(
     try {
       const { settings } = useAppStore.getState();
       await liteRTService.prepareConversation(conversationId, systemPrompt, {
-        samplerConfig: { temperature: settings.temperature, topP: settings.topP },
+        samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
         history,
       });
       dbg('log', `[Vision] calling sendMessage — imageUri=${imageUri ? imageUri.substring(0, 60) : 'none'} textLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);

@@ -41,6 +41,10 @@ type AppSettings = {
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
   liteRTBackend: LiteRTBackend;
+  liteRTTemperature: number;
+  liteRTTopP: number;
+  liteRTContextLength: number;
+  liteRTMaxOutputTokens: number;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -138,6 +142,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: true,
   liteRTBackend: 'gpu' as LiteRTBackend,
+  liteRTTemperature: 0.7,
+  liteRTTopP: 0.9,
+  liteRTContextLength: 4096,
+  liteRTMaxOutputTokens: 1024,
 };
 
 function migrateEnabledTools(merged: any): void {
@@ -171,6 +179,16 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   if (merged.checklistDismissed && merged.onboardingChecklist &&
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
+  // Seed per-engine LiteRT settings from shared values on first install of this version.
+  if (persistedState?.settings && merged.settings.liteRTTemperature === undefined) {
+    merged.settings = {
+      ...merged.settings,
+      liteRTTemperature: persistedState.settings.temperature ?? DEFAULT_SETTINGS.temperature,
+      liteRTTopP: persistedState.settings.topP ?? DEFAULT_SETTINGS.topP,
+      liteRTContextLength: persistedState.settings.contextLength ?? DEFAULT_SETTINGS.liteRTContextLength,
+      liteRTMaxOutputTokens: persistedState.settings.maxTokens ?? DEFAULT_SETTINGS.liteRTMaxOutputTokens,
+    };
+  }
   return merged as AppState;
 }
 
