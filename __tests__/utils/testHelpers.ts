@@ -71,6 +71,7 @@ export const resetStores = (): void => {
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
       thinkingEnabled: true,
+      liteRTBackend: 'gpu' as const,
     },
     downloadedImageModels: [],
     activeImageModelId: null,

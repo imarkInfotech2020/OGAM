@@ -99,15 +99,6 @@ export interface TextLoadContext {
   onFinally: () => void;
 }
 
-function inferenceBackendToLiteRT(backend: string | undefined): 'cpu' | 'gpu' | 'npu' {
-  switch (backend) {
-    case INFERENCE_BACKENDS.HTP:    return 'npu';
-    case INFERENCE_BACKENDS.OPENCL: return 'gpu';
-    case INFERENCE_BACKENDS.METAL:  return 'gpu';
-    default:                        return 'cpu';
-  }
-}
-
 async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
   const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
@@ -124,7 +115,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       ctx.onError();
     }
 
-    const preferredBackend = inferenceBackendToLiteRT(ctx.store.settings.inferenceBackend);
+    const preferredBackend = ctx.store.settings.liteRTBackend;
     addDebugLog('log', `[LiteRT] Preferred backend: ${preferredBackend}`);
 
     const maxTokens = ctx.store.settings.contextLength ?? 4096;
@@ -176,7 +167,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     // Snapshot the settings that require a full engine reload so the pending-settings
     // banner appears if the user changes them while the model is loaded.
     ctx.store.setLoadedSettings({
-      inferenceBackend: ctx.store.settings.inferenceBackend,
+      liteRTBackend: ctx.store.settings.liteRTBackend,
       contextLength: maxTokens,
       // Fields not used by LiteRT — set to current values so llama checks don't misfire
       enableGpu: ctx.store.settings.enableGpu,

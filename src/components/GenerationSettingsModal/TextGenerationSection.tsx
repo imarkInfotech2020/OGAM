@@ -10,6 +10,7 @@ import {
   CpuThreadsSlider,
   BatchSizeSlider,
   BackendSelector,
+  LiteRTBackendSelector,
   FlashAttentionToggle,
   KvCacheTypeToggle,
   ModelLoadingStrategyToggle,
@@ -214,7 +215,7 @@ export const TextGenerationSection: React.FC = () => {
           ))}
           {!isLiteRT && <CpuThreadsSlider />}
           {!isLiteRT && <BatchSizeSlider />}
-          <BackendSelector hideGpuLayers={isLiteRT} />
+          {isLiteRT ? <LiteRTBackendSelector /> : <BackendSelector />}
           {!isLiteRT && <FlashAttentionToggle />}
           {!isLiteRT && <KvCacheTypeToggle />}
           {!isLiteRT && <ModelLoadingStrategyToggle />}

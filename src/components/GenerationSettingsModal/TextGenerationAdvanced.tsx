@@ -3,7 +3,7 @@ import { Platform, View, Text, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
+import { CacheType, InferenceBackend, LiteRTBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
@@ -36,7 +36,7 @@ const HTP_BACKEND: BackendOption = {
   id: INFERENCE_BACKENDS.HTP, label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
 };
 
-export const BackendSelector: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpuLayers = false }) => {
+export const BackendSelector: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -80,7 +80,7 @@ export const BackendSelector: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpu
         ))}
       </View>
 
-      {showLayers && !hideGpuLayers && (
+      {showLayers && (
         <View style={styles.gpuLayersInline}>
           <View style={styles.settingHeader}>
             <Text style={styles.settingLabel}>{layersLabel}</Text>
@@ -100,6 +100,46 @@ export const BackendSelector: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpu
           />
         </View>
       )}
+    </View>
+  );
+};
+
+// ─── LiteRT Acceleration ─────────────────────────────────────────────────────
+
+type LiteRTBackendOption = { id: LiteRTBackend; label: string; desc: string };
+
+const LITERT_BACKENDS: LiteRTBackendOption[] = [
+  { id: 'gpu', label: 'GPU', desc: 'Run on GPU via OpenCL. Best performance on most devices.' },
+  { id: 'cpu', label: 'CPU', desc: 'Always available. Use for battery savings or thermal relief.' },
+];
+
+export const LiteRTBackendSelector: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const current = settings.liteRTBackend ?? 'gpu';
+
+  return (
+    <View style={styles.modeToggleContainer}>
+      <View style={styles.modeToggleInfo}>
+        <Text style={styles.modeToggleLabel}>Acceleration</Text>
+        <Text style={styles.modeToggleDesc}>
+          {LITERT_BACKENDS.find(b => b.id === current)?.desc ?? ''}
+        </Text>
+      </View>
+      <View style={styles.modeToggleButtons}>
+        {LITERT_BACKENDS.map(b => (
+          <TouchableOpacity
+            key={b.id}
+            testID={`litert-backend-${b.id}-button`}
+            style={[styles.modeButton, current === b.id && styles.modeButtonActive]}
+            onPress={() => updateSettings({ liteRTBackend: b.id })}
+          >
+            <Text style={[styles.modeButtonText, current === b.id && styles.modeButtonTextActive]}>
+              {b.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 };

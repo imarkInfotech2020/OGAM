@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
+import { CacheType, InferenceBackend, LiteRTBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
@@ -33,7 +33,7 @@ const ANDROID_BASE_BACKENDS: BackendOption[] = [
 
 const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'HTP' };
 
-const BackendSelectorSection: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpuLayers = false }) => {
+const BackendSelectorSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
@@ -82,7 +82,7 @@ const BackendSelectorSection: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpu
         ))}
       </View>
 
-      {showLayers && !hideGpuLayers && (
+      {showLayers && (
         <View style={styles.sliderSection}>
           <View style={styles.sliderHeader}>
             <Text style={styles.sliderLabel}>
@@ -104,6 +104,51 @@ const BackendSelectorSection: React.FC<{ hideGpuLayers?: boolean }> = ({ hideGpu
           />
         </View>
       )}
+    </>
+  );
+};
+
+// ─── LiteRT Acceleration ─────────────────────────────────────────────────────
+
+type LiteRTBackendOption = { id: LiteRTBackend; label: string };
+
+const LITERT_BACKENDS: LiteRTBackendOption[] = [
+  { id: 'gpu', label: 'GPU' },
+  { id: 'cpu', label: 'CPU' },
+];
+
+const LiteRTBackendSelectorSection: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const current = settings.liteRTBackend ?? 'gpu';
+
+  const descriptions: Partial<Record<LiteRTBackend, string>> = {
+    gpu: 'Run on GPU via OpenCL. Best performance on most devices.',
+    cpu: 'Always available. Use for battery savings or thermal relief.',
+  };
+
+  return (
+    <>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleLabel}>Acceleration</Text>
+          <Text style={styles.toggleDesc}>{descriptions[current]}</Text>
+        </View>
+      </View>
+      <View style={styles.strategyButtons}>
+        {LITERT_BACKENDS.map(b => (
+          <Button
+            key={b.id}
+            title={b.label}
+            variant="secondary"
+            size="small"
+            testID={`litert-backend-${b.id}-button`}
+            active={current === b.id}
+            onPress={() => updateSettings({ liteRTBackend: b.id })}
+            style={styles.flex1}
+          />
+        ))}
+      </View>
     </>
   );
 };
@@ -309,7 +354,7 @@ export const TextGenerationAdvanced: React.FC<{ isLiteRT?: boolean }> = ({ isLit
         </View>
       )}
 
-      <BackendSelectorSection hideGpuLayers={isLiteRT} />
+      {isLiteRT ? <LiteRTBackendSelectorSection /> : <BackendSelectorSection />}
       {!isLiteRT && <FlashAttentionSection trackColor={trackColor} />}
       {!isLiteRT && <KvCacheSection cacheDisabled={cacheDisabled} />}
       <ModelLoadingStrategySection />
