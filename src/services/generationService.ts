@@ -2,6 +2,7 @@
 import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
+import { useDebugLogsStore } from '../stores/debugLogsStore';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
@@ -85,11 +86,13 @@ class GenerationService {
 
   private flushTokenBuffer(): void {
     const store = useChatStore.getState();
+    const dbg = useDebugLogsStore.getState().addLog;
     if (this.tokenBuffer) {
       store.appendToStreamingMessage(this.tokenBuffer);
       this.tokenBuffer = '';
     }
     if (this.reasoningBuffer) {
+      dbg('log', `[Flush] reasoningBuffer → store — len=${this.reasoningBuffer.length}ch totalReasoning=${this.totalReasoningLength}ch storeIsThinking=${store.isThinking}`);
       store.appendToStreamingReasoningContent(this.reasoningBuffer);
       this.reasoningBuffer = '';
     }

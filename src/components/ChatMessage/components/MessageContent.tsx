@@ -35,6 +35,24 @@ export function MessageContent({
     );
   }
 
+  // If no content yet but we have live reasoning tokens, show the thinking block so
+  // reasoning streams incrementally rather than appearing all at once when content arrives.
+  if (!content && isStreaming && parsedContent.thinking) {
+    return (
+      <View>
+        <ThinkingBlock
+          parsedContent={parsedContent}
+          showThinking={showThinking}
+          onToggle={onToggleThinking}
+          styles={styles}
+        />
+        <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
+          <ThinkingIndicator />
+        </View>
+      </View>
+    );
+  }
+
   if (!content) {
     if (isStreaming) {
       return (
