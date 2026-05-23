@@ -140,6 +140,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 } else {
                     Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
                 }
+                var eng: Engine? = null
                 try {
                     debugLog("EngineConfig — backend=$name maxNumTokens=$configuredMaxTokens vision=$visionEnabled")
                     val cfg = EngineConfig(
@@ -149,7 +150,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                         cacheDir = null,
                         visionBackend = if (visionEnabled) Backend.GPU() else null,
                     )
-                    val eng = Engine(cfg)
+                    eng = Engine(cfg)
                     val timeoutMs = initTimeoutMs(backend, configuredMaxTokens)
                     debugLog("Engine.initialize — backend=$name timeoutMs=${timeoutMs / 1000}s")
                     withTimeout(timeoutMs) {
@@ -161,8 +162,14 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                     return backend
                 } catch (e: Exception) {
                     Log.w(TAG, "initializeWithFallback — $name attempt $attempt failed: ${e.message}")
-                    engine?.close()
-                    engine = null
+                    // Close the local engine attempt — not the module-level `engine` field,
+                    // which belongs to a previous successful load and must not be touched here.
+                    try {
+                        eng?.close()
+                        Log.d(TAG, "initializeWithFallback — $name attempt $attempt engine closed after failure")
+                    } catch (closeEx: Exception) {
+                        Log.w(TAG, "initializeWithFallback — $name attempt $attempt engine close error: ${closeEx.message}")
+                    }
                     lastError = e
                 }
             }
@@ -552,13 +559,29 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             val toolsArray = JsonParser.parseString(toolsJson).asJsonArray
             if (toolsArray.size() == 0) return emptyList()
 
-            val providers = toolsArray.map { element ->
-                val toolObj = element.asJsonObject
-                val toolName = toolObj.get("name").asString
-                val toolDescriptionJson = toolObj.toString()
+            val providers = toolsArray.mapNotNull { element ->
+                val wrapper = element.asJsonObject
+
+                // JS sends OpenAI format: { type: "function", function: { name, description, parameters } }
+                // LiteRT SDK expects the unwrapped OpenAPI object: { name, description, parameters }
+                val funcObj = if (wrapper.has("function"))
+                    wrapper.getAsJsonObject("function")
+                else
+                    wrapper
+
+                val toolName = funcObj.get("name")?.asString ?: return@mapNotNull null
+
+                // Build clean OpenAPI JSON for the SDK
+                val openApiJson = com.google.gson.JsonObject().apply {
+                    addProperty("name", toolName)
+                    funcObj.get("description")?.let { addProperty("description", it.asString) }
+                    funcObj.get("parameters")?.let { add("parameters", it) }
+                }.toString()
+
+                debugLog("tool schema — $toolName: $openApiJson")
 
                 val openApiTool = object : OpenApiTool {
-                    override fun getToolDescriptionJsonString(): String = toolDescriptionJson
+                    override fun getToolDescriptionJsonString(): String = openApiJson
 
                     override fun execute(argsJson: String): String {
                         val callId = UUID.randomUUID().toString()
@@ -566,17 +589,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                         pendingToolCalls[callId] = deferred
 
                         val eventJson = """{"id":"$callId","name":"$toolName","arguments":$argsJson}"""
-                        Log.d(TAG, "buildToolProviders — emitting tool call callId=$callId name=$toolName")
+                        debugLog("tool_call — callId=$callId name=$toolName argsLen=${argsJson.length}")
                         sendEvent(EVENT_TOOL_CALL, eventJson)
 
                         return try {
                             runBlocking { withTimeout(30_000L) { deferred.await() } }
                         } catch (e: TimeoutCancellationException) {
-                            Log.w(TAG, "buildToolProviders — tool call $callId timed out")
+                            debugLog("tool_call timed out — callId=$callId name=$toolName")
                             pendingToolCalls.remove(callId)
                             "Error: Tool call timed out"
                         } catch (e: CancellationException) {
-                            Log.w(TAG, "buildToolProviders — tool call $callId cancelled")
                             pendingToolCalls.remove(callId)
                             "Error: Tool call cancelled"
                         }
@@ -585,10 +607,10 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 tool(openApiTool)
             }
 
-            Log.i(TAG, "buildToolProviders — registered ${providers.size} tools")
+            debugLog("buildToolProviders — registered ${providers.size} tools: [${toolsArray.mapNotNull { it.asJsonObject.getAsJsonObject("function")?.get("name")?.asString }.joinToString()}]")
             providers
         } catch (e: Exception) {
-            Log.w(TAG, "buildToolProviders — failed to parse toolsJson: ${e.message}")
+            debugLog("buildToolProviders — failed to parse toolsJson: ${e.message}")
             emptyList()
         }
     }
