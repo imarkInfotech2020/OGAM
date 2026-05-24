@@ -117,7 +117,7 @@ describe('runCompaction', () => {
       resetFn,
     });
 
-    const callArgs = resetFn.mock.calls[0];
+    const callArgs = resetFn.mock.calls[0] as any[];
     const compactedHistory = callArgs[1].history;
     // First turn should be the summary context turn
     expect(compactedHistory[0].content).toContain('A summary.');
@@ -139,7 +139,7 @@ describe('runCompaction', () => {
     });
 
     expect(summarize).not.toHaveBeenCalled();
-    const compactedHistory = resetFn.mock.calls[0][1].history;
+    const compactedHistory = (resetFn.mock.calls[0] as any[])[1].history;
     // No summary prefix turn
     expect(compactedHistory[0].content).not.toContain('Context from earlier');
   });
@@ -156,7 +156,7 @@ describe('runCompaction', () => {
       resetFn,
     });
 
-    const compactedHistory = resetFn.mock.calls[0][1].history;
+    const compactedHistory = (resetFn.mock.calls[0] as any[])[1].history;
     expect(compactedHistory[0].content).not.toContain('Context from earlier');
   });
 
@@ -183,7 +183,7 @@ describe('runCompaction', () => {
       resetFn,
     });
 
-    const compactedHistory = resetFn.mock.calls[0][1].history;
+    const compactedHistory = (resetFn.mock.calls[0] as any[])[1].history;
     // Should be fewer than the original 10 turns
     expect(compactedHistory.length).toBeLessThan(10);
   });
