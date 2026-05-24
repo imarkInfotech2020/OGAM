@@ -35,6 +35,8 @@ jest.mock('../../../src/stores', () => ({
   },
   useAppStore: {
     getState: () => ({
+      downloadedModels: [],
+      activeModelId: null,
       settings: {
         temperature: 0.7,
         maxTokens: 1024,

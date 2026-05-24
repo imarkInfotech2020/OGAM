@@ -543,17 +543,15 @@ describe('startGenerationFn', () => {
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 
-  it('falls back to pure text path when heuristic matches no enabled tools', async () => {
-    const { classifyToolsNeeded: mockClassifyToolsNeeded } = require('../../../src/services/intentClassifier');
-    (mockClassifyToolsNeeded as jest.Mock).mockReturnValueOnce([]);
+  it('uses generateResponse when no tools are enabled', async () => {
     (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
     const deps = makeGenerationDeps({
-      settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] },
+      settings: { ...makeGenerationDeps().settings, enabledTools: [] },
     });
 
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'Hi' });
 
-    // No tools matched → generateResponse (pure text), not generateWithTools
+    // No tools enabled → generateResponse (pure text), not generateWithTools
     expect(mockGenerateResponse).toHaveBeenCalled();
     expect(mockGenerateWithTools).not.toHaveBeenCalled();
   });
@@ -591,7 +589,7 @@ describe('RAG context injection in startGenerationFn', () => {
     expect(mockGetDocsByProject).toHaveBeenCalledWith('proj-1');
     expect(mockSearchProject).toHaveBeenCalledWith('proj-1', 'hello');
     expect(mockFormatForPrompt).toHaveBeenCalled();
-    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateWithTools).toHaveBeenCalled();
   });
 
   it('injects doc list even when BM25 returns no chunks', async () => {
@@ -608,7 +606,7 @@ describe('RAG context injection in startGenerationFn', () => {
 
     expect(mockGetDocsByProject).toHaveBeenCalledWith('proj-1');
     expect(mockFormatForPrompt).not.toHaveBeenCalled();
-    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateWithTools).toHaveBeenCalled();
   });
 
   it('does not inject RAG context when conversation has no projectId', async () => {
@@ -643,7 +641,7 @@ describe('RAG context injection in startGenerationFn', () => {
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hello' });
 
     // Generation should still proceed despite RAG error
-    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateWithTools).toHaveBeenCalled();
   });
 
   it('auto-enables search_knowledge_base tool for project conversations', async () => {
@@ -894,6 +892,7 @@ describe('startGenerationFn — remote model path', () => {
 describe('regenerateResponseFn — model not loaded', () => {
   it('returns early when local model is not loaded', async () => {
     mockIsModelLoaded.mockReturnValue(false);
+    mockGetLoadedModelPath.mockReturnValue(null);
     const userMsg = { id: 'm1', role: 'user' as const, content: 'hello', timestamp: 0 };
     const deps = makeGenerationDeps({
       activeModelInfo: { isRemote: false, model: baseModel, modelId: 'model-1', modelName: 'Test' },

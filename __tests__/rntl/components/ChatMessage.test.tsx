@@ -757,7 +757,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showGenerationDetails={true} />
       );
 
-      expect(getByText(/TTFT.*0.5s/)).toBeTruthy();
+      expect(getByText(/TTFT.*0\.45s/)).toBeTruthy();
     });
 
     it('displays model name', () => {
