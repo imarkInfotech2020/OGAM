@@ -49,7 +49,7 @@ function buildLiteRTMeta(svc: any, modelName: string | undefined): GenerationMet
       modelName,
       decodeTokensPerSecond: stats.decodeTokensPerSecond,
       prefillTokensPerSecond: stats.prefillTokensPerSecond,
-      timeToFirstToken: stats.ttft * 1000,
+      timeToFirstToken: stats.ttft,
       tokenCount: stats.prefillTokenCount,
       modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
     };

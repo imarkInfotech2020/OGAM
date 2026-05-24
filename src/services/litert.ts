@@ -136,10 +136,6 @@ class LiteRTService {
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
     const dbg = useDebugLogsStore.getState().addLog;
     dbg('log', `[LiteRT] resetConversation — systemLen=${systemPrompt.length} temp=${temperature} topK=${topK} topP=${topP} tools=${tools?.length ?? 0} historyTurns=${history?.length ?? 0}`);
-    if (history?.length) {
-      const totalChars = history.reduce((s, m) => s + m.content.length, 0);
-      dbg('log', `[LiteRT] resetConversation history — ${history.length} turns, totalChars=${totalChars} (~${Math.ceil(totalChars / 4)} tokens)`);
-    }
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;
@@ -215,21 +211,9 @@ class LiteRTService {
       this.activeConversationId !== conversationId ||
       this.activeSystemPrompt !== systemPrompt ||
       this.activeToolsJson !== toolsJson;
-    const reasons: string[] = [];
-    if (this.activeConversationId !== conversationId) reasons.push('newConv');
-    if (this.activeSystemPrompt !== systemPrompt) reasons.push('sysPromptChanged');
-    if (this.activeToolsJson !== toolsJson) reasons.push('toolsChanged');
-    const resetReason = needsReset ? reasons.join('+') : 'none';
-
-    dbg('log', `[LiteRT] prepareConversation decision — needsReset=${needsReset} reason=${resetReason} historyTurns=${opts?.history?.length ?? 0}`);
-
     if (needsReset) {
       await this.resetConversation(systemPrompt, { samplerConfig: opts?.samplerConfig, tools: opts?.tools, history: opts?.history });
       this.activeConversationId = conversationId;
-      dbg('log', `[LiteRT] prepareConversation reset complete — activeConvId set to ${conversationId.substring(0, 8)}`);
-    } else {
-      dbg('log', '[LiteRT] prepareConversation — reusing existing session (multi-turn, no reset)');
-      logger.log(TAG, 'prepareConversation — reusing existing conversation (multi-turn)');
     }
   }
 
@@ -277,9 +261,6 @@ class LiteRTService {
     imageUri?: string,
   ): Promise<void> {
     if (!this.isAvailable() || !this.loaded) { callbacks.onError(new Error('No LiteRT model loaded')); return; }
-
-    const sendMsgDbg = useDebugLogsStore.getState().addLog;
-    sendMsgDbg('log', `[Vision] sendMessage called — textLen=${text.length} hasImage=${imageUri != null} imageUri=${imageUri ? imageUri.substring(0, 80) : 'none'}`);
 
     // Reset accumulators
     this.currentContent = '';
@@ -376,7 +357,6 @@ class LiteRTService {
     ];
 
     try {
-      sendMsgDbg('log', `[Vision] → LiteRTModule.sendMessage — imageArg=${imageUri === null ? 'NULL' : 'SET'}`);
       await LiteRTModule.sendMessage(text, imageUri ?? null);
     } catch (e) {
       this.clearSubscriptions();

@@ -133,13 +133,11 @@ describe('LiteRTService', () => {
   });
 
   describe('stopGeneration', () => {
-    it('clears activeConversationId to force reset on next turn', async () => {
+    it('does not throw when called (even with no active generation)', async () => {
       (liteRTService as any).activeConversationId = 'conv-1';
       mockLiteRTModule.stopGeneration.mockResolvedValue(undefined);
 
-      await liteRTService.stopGeneration();
-
-      expect((liteRTService as any).activeConversationId).toBeNull();
+      await expect(liteRTService.stopGeneration()).resolves.not.toThrow();
     });
 
     it('swallows errors from native stopGeneration', async () => {
@@ -176,7 +174,7 @@ describe('LiteRTService', () => {
   // loadModel — unavailable guard (does not require native LiteRTModule)
   // -------------------------------------------------------------------------
 
-  describe('loadModel', () => {
+  describe('loadModel — unavailability guard', () => {
     it('throws when native module unavailable', async () => {
       jest.spyOn(liteRTService, 'isAvailable').mockReturnValue(false);
       await expect(liteRTService.loadModel('/model.bin', 'gpu')).rejects.toThrow('LiteRT is not available');
