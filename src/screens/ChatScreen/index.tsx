@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Keyboard, KeyboardAvoidingView, InteractionManager, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 import { useSpotlightTour } from 'react-native-spotlight-tour';
-import { CustomAlert, hideAlert, SharePromptSheet } from '../../components';
+import { CustomAlert, hideAlert, SharePromptSheet, ProAhaSheet } from '../../components';
 import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
+import { subscribeProPrompt } from '../../utils/proPrompt';
 import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
@@ -24,6 +27,7 @@ function countConversationImages(conv: Conversation | undefined): number {
 export const ChatScreen: React.FC = () => {
   const flatListRef = React.useRef<FlatList>(null);
   const isNearBottomRef = React.useRef(true);
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
@@ -32,6 +36,19 @@ export const ChatScreen: React.FC = () => {
 
   const [sharePromptVisible, setSharePromptVisible] = useState(false);
   useEffect(() => subscribeSharePrompt(() => setSharePromptVisible(true)), []);
+
+  const [proAhaVisible, setProAhaVisible] = useState(false);
+  const proAhaShownThisSession = useRef(false);
+  useEffect(() => {
+    // Reset cycle on each new chat session so PRO sheet can fire again
+    useAppStore.getState().setProAhaTriggeredBy(null);
+    proAhaShownThisSession.current = false;
+  }, []);
+  useEffect(() => subscribeProPrompt(() => {
+    if (proAhaShownThisSession.current) return;
+    proAhaShownThisSession.current = true;
+    setProAhaVisible(true);
+  }), []);
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
   // chatSpotlight controls which index is active (3, 12, 15, or 16).
   const [chatSpotlight, setChatSpotlight] = useState<number | null>(null);
@@ -239,6 +256,11 @@ export const ChatScreen: React.FC = () => {
       </KeyboardAvoidingView>
       {alertEl}
       <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
+      <ProAhaSheet
+        visible={proAhaVisible}
+        onClose={() => setProAhaVisible(false)}
+        onRegister={() => rootNavigation.navigate('ProDetail')}
+      />
     </SafeAreaView>
   );
 };

@@ -22,6 +22,7 @@ export { ProjectSelectorSheet } from './ProjectSelectorSheet';
 export { DebugSheet } from './DebugSheet';
 export { ToolPickerSheet } from './ToolPickerSheet';
 export { SharePromptSheet } from './SharePromptSheet';
+export { ProAhaSheet } from './ProAhaSheet';
 export {
   OnboardingSheet,
   PulsatingIcon,

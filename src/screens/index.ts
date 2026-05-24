@@ -21,3 +21,5 @@ export { DeviceInfoScreen } from './DeviceInfoScreen';
 export { StorageSettingsScreen } from './StorageSettingsScreen';
 export { SecuritySettingsScreen } from './SecuritySettingsScreen';
 export { RemoteServersScreen } from './RemoteServersScreen';
+export { ProDetailScreen } from './ProDetailScreen';
+export { AboutScreen } from './AboutScreen';

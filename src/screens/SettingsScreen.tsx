@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
+import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { useNavigation, CommonActions, CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,7 +41,7 @@ type NavigationProp = CompositeNavigationProp<
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
@@ -47,11 +49,12 @@ export const SettingsScreen: React.FC = () => {
   const completeChecklistStep = useAppStore((s) => s.completeChecklistStep);
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const deviceInfo = useAppStore((s) => s.deviceInfo);
+  const showProBanner = useAppStore((s) => !s.proBannerDismissed);
+  const setProBannerDismissed = useAppStore((s) => s.setProBannerDismissed);
 
   useEffect(() => {
     completeChecklistStep('exploredSettings');
-
-  }, []);
+  }, [completeChecklistStep]);
 
   const handleSendFeedback = async () => {
     const { downloadedModels, activeModelId } = useAppStore.getState();
@@ -113,6 +116,54 @@ export const SettingsScreen: React.FC = () => {
         <Text style={styles.title}>Settings</Text>
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+
+        {/* PRO Banner */}
+        {showProBanner && (
+          <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
+            <LinearGradient
+                colors={isDark ? ['#141414', '#141414', '#1A2B1E'] : ['#FFFFFF', '#FFFFFF', '#E8F5EE']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.proCard}
+              >
+              <View style={styles.proCardHeader}>
+                <View style={styles.proCardHeaderText}>
+                  <Text style={styles.proTitle}>Off Grid PRO</Text>
+                  <Text style={styles.proDesc}>
+                    Unlock advanced features for a premium local-first experience.
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setProBannerDismissed(true)} style={styles.proCloseButton}>
+                  <Icon name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.proFeatureGrid}>
+                {[
+                  [{ icon: 'mic', label: 'VOICE' }, { icon: 'star', label: 'MCPs' }],
+                  [{ icon: 'calendar', label: 'CALENDAR' }, { icon: 'message-square', label: 'MESSAGING' }],
+                ].map((row, i) => (
+                  <View key={i} style={styles.proFeatureRow}>
+                    {row.map(f => (
+                      <View key={f.label} style={styles.proFeatureItem}>
+                        <View style={styles.proFeatureIconWrap}>
+                          <Icon name={f.icon} size={16} color={colors.primary} />
+                        </View>
+                        <Text style={styles.proFeatureLabel}>{f.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.proCtaButton}
+                onPress={() => navigation.navigate('ProDetail')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.proCtaText}>I am in 🔥</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </AnimatedEntry>
+        )}
 
         {/* Theme Selector */}
         <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
@@ -176,8 +227,31 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </AttachStep>
 
-        {/* Community */}
+        {/* PRO Button */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
+          <TouchableOpacity
+            style={styles.proNavButton}
+            onPress={() => navigation.navigate('ProDetail')}
+            activeOpacity={0.75}
+          >
+            <View style={styles.proIconContainer}>
+              <IconMC name="crown" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.proCardText}>
+              <View style={styles.proTitleRow}>
+                <Text style={styles.proNavTitle}>Off Grid PRO</Text>
+                <View style={styles.proBadge}>
+                  <Text style={styles.proBadgeText}>PRO</Text>
+                </View>
+              </View>
+              <Text style={styles.proDesc}>Unlock premium features</Text>
+            </View>
+            <Icon name="chevron-right" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        </AnimatedEntry>
+
+        {/* Community */}
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.navSection}>
             <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
               <View style={styles.navItemIcon}>
@@ -213,20 +287,23 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* About */}
-        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
-          <Card style={styles.section}>
-            <View style={styles.aboutRow}>
-              <Text style={styles.aboutLabel}>Version</Text>
-              <Text style={styles.aboutValue}>{packageJson.version} (litertsupport)</Text>
-            </View>
-            <Text style={styles.aboutText}>
-              LiteRT engine: multi-turn memory, stop generation, sampler settings, iOS guard, memory budget.
-            </Text>
-          </Card>
+        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.navSection}>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => navigation.navigate('About')}>
+              <View style={styles.navItemIcon}>
+                <Icon name="info" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>About</Text>
+                <Text style={styles.navItemDesc}>Version {packageJson.version}</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </AnimatedEntry>
 
         {/* Privacy */}
-        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.privacyCard}>
             <View style={styles.privacyIconContainer}>
               <Icon name="shield" size={18} color={colors.textSecondary} />
@@ -240,7 +317,7 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Reset Onboarding */}
-        <AnimatedEntry index={9} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
               <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
@@ -320,4 +397,84 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   devButtonGroup: { gap: 12 },
   devButtonText: { ...TYPOGRAPHY.bodySmall, color: colors.textMuted },
+  proCard: {
+    borderRadius: 12,
+    marginBottom: SPACING.lg,
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
+    ...shadows.small,
+  },
+  proCardText: { flex: 1 },
+  proTitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm, marginBottom: 2 },
+  proTitle: { ...TYPOGRAPHY.h1, color: colors.primary, marginBottom: SPACING.xs, fontWeight: '700' as const },
+  proBadge: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: SPACING.sm, paddingVertical: 2 },
+  proBadgeText: { ...TYPOGRAPHY.labelSmall, color: '#FFFFFF', letterSpacing: 0.5 },
+  proDesc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
+  proIconContainer: { width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.primary}1A`, alignItems: 'center' as const, justifyContent: 'center' as const },
+  proCardHeader: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, justifyContent: 'space-between' as const, padding: SPACING.lg, paddingBottom: SPACING.md },
+  proCardHeaderText: { flex: 1, marginRight: SPACING.md },
+  proFeatureGrid: {
+    flexDirection: 'column' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  proFeatureRow: {
+    flexDirection: 'row' as const,
+    gap: SPACING.sm,
+  },
+  proFeatureItem: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
+  proFeatureIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceLight,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  proFeatureLabel: {
+    ...TYPOGRAPHY.label,
+    color: colors.text,
+    letterSpacing: 0.5,
+    fontWeight: '500' as const,
+  },
+  proCtaButton: {
+    margin: SPACING.lg,
+    marginTop: SPACING.sm,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: SPACING.sm,
+  },
+  proCtaText: {
+    ...TYPOGRAPHY.body,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  proCloseButton: {
+    padding: SPACING.xs,
+  },
+  proNavButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: SPACING.md,
+    gap: SPACING.md,
+    marginBottom: SPACING.lg,
+    ...shadows.small,
+  },
+  proNavTitle: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
+  },
 });
