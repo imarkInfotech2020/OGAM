@@ -171,4 +171,33 @@ describe('LiteRTService', () => {
       expect(liteRTService.getActiveBackend()).toBeNull();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // loadModel — unavailable guard (does not require native LiteRTModule)
+  // -------------------------------------------------------------------------
+
+  describe('loadModel', () => {
+    it('throws when native module unavailable', async () => {
+      jest.spyOn(liteRTService, 'isAvailable').mockReturnValue(false);
+      await expect(liteRTService.loadModel('/model.bin', 'gpu')).rejects.toThrow('LiteRT is not available');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resetConversation — guard + state (via spied resetConversation)
+  // -------------------------------------------------------------------------
+
+  describe('resetConversation', () => {
+    it('throws when not loaded', async () => {
+      (liteRTService as any).loaded = false;
+      jest.spyOn(liteRTService, 'isAvailable').mockReturnValue(true);
+      await expect(liteRTService.resetConversation('sys')).rejects.toThrow('No LiteRT model loaded');
+    });
+
+    it('throws when native module unavailable', async () => {
+      (liteRTService as any).loaded = true;
+      jest.spyOn(liteRTService, 'isAvailable').mockReturnValue(false);
+      await expect(liteRTService.resetConversation('sys')).rejects.toThrow('No LiteRT model loaded');
+    });
+  });
 });

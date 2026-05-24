@@ -148,8 +148,9 @@ class LiteRTService {
     // in lastPrefillTokenCount, causing cumulativeTokens to undercount and auto-compact to fire too late.
     const historyChars = (history ?? []).reduce((sum, m) => sum + m.content.length, 0);
     const systemChars = systemPrompt.length;
-    this.cumulativeTokens = Math.ceil((historyChars + systemChars) / 4);
-    dbg('log', `[LiteRT] resetConversation done — seeded cumulativeTokens=${this.cumulativeTokens} (historyChars=${historyChars} systemChars=${systemChars})`);
+    const toolsChars = toolsJson.length;
+    this.cumulativeTokens = Math.ceil((historyChars + systemChars + toolsChars) / 4);
+    dbg('log', `[LiteRT] resetConversation done — seeded cumulativeTokens=${this.cumulativeTokens} (historyChars=${historyChars} systemChars=${systemChars} toolsChars=${toolsChars})`);
   }
 
   /**
@@ -178,15 +179,19 @@ class LiteRTService {
 
     const maxTokens = this.configuredMaxTokens;
     const history = opts?.history;
-    const incomingEstimate = history ? Math.ceil((history.reduce((s, m) => s + m.content.length, 0) + systemPrompt.length) / 4) : 0;
+    const incomingEstimate = history ? Math.ceil((history.reduce((s, m) => s + m.content.length, 0) + systemPrompt.length + toolsJson.length) / 4) : 0;
 
     dbg('log', `[LiteRT] prepareConversation — convId=${conversationId.substring(0, 8)} sameConv=${this.activeConversationId === conversationId} cumul=${this.cumulativeTokens}/${maxTokens} historyTurns=${history?.length ?? 0} incomingEstimate=~${incomingEstimate}`);
 
     const COMPACT_THRESHOLD = 0.65;
     const threshold = maxTokens * COMPACT_THRESHOLD;
+    // For an active session cumulativeTokens tracks actual KV cache usage — use it directly.
+    // For a new/switched session cumulativeTokens is stale; use incomingEstimate instead.
+    const isActiveSession = this.activeConversationId === conversationId;
+    const tokenMeasure = isActiveSession ? this.cumulativeTokens : incomingEstimate;
     const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
-      (this.cumulativeTokens > threshold || incomingEstimate > threshold);
-    dbg('log', `[LiteRT] prepareConversation compact check — needsCompact=${needsCompact} threshold=${Math.floor(threshold)} cumul=${this.cumulativeTokens} incoming=~${incomingEstimate}`);
+      tokenMeasure > threshold;
+    dbg('log', `[LiteRT] prepareConversation compact check — needsCompact=${needsCompact} threshold=${Math.floor(threshold)} cumul=${this.cumulativeTokens} incoming=~${incomingEstimate} measure=~${tokenMeasure} activeSession=${isActiveSession}`);
 
     if (needsCompact && history) {
       await runCompaction({
@@ -232,6 +237,7 @@ class LiteRTService {
     return summarizeSession(
       (text, cbs) => this.sendMessage(text, cbs),
       this.isAvailable() && this.loaded,
+      (h) => { const p = this.currentToolCallHandler; this.currentToolCallHandler = h; return () => { this.currentToolCallHandler = p; }; },
     );
   }
 
@@ -360,7 +366,7 @@ class LiteRTService {
             arguments: Record<string, unknown>;
           };
           const handler = this.currentToolCallHandler;
-          const result = handler ? await handler(name, args) : '';
+          const result = handler ? await handler(name, args) : 'Tool unavailable during this operation. Please respond directly without using tools.';
           logger.log(TAG, `sendMessage — responding to tool call id=${id} name=${name} resultLen=${result.length}`);
           await LiteRTModule.respondToToolCall(id, result);
         } catch (e) {
@@ -419,7 +425,12 @@ class LiteRTService {
     if (!this.isAvailable()) return;
     logger.log(TAG, 'stopGeneration');
     this.clearSubscriptions();
-    this.activeConversationId = null;
+    // Don't null activeConversationId — the native conversation is still loaded and
+    // its KV cache still reflects cumulativeTokens. Clearing the id would force the
+    // next prepareConversation to classify the same conversation as "new", falling
+    // back to incomingEstimate (which sums all JS history) and triggering an unnecessary
+    // compaction. Caller can invalidate explicitly via invalidateConversation() if
+    // the message rewind requires a fresh native conversation.
     try { await LiteRTModule.stopGeneration(); }
     catch (e) { logger.log(TAG, `stopGeneration — error (ignored): ${String(e)}`); }
   }
