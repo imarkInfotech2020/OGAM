@@ -201,20 +201,16 @@ function assertLiteRTImageSupport(
   imageUri: string | undefined,
   svc: any,
   chatStore: ReturnType<typeof useChatStore.getState>,
-  dbg: ReturnType<typeof useDebugLogsStore.getState>['addLog'],
 ): void {
   if (!imageUri) return;
   const { downloadedModels, activeModelId } = useAppStore.getState();
   const activeModel = downloadedModels.find((m: any) => m.id === activeModelId);
   const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
-  dbg('log', `[Vision] model check — activeModelId=${activeModelId?.substring(0, 12)} liteRTVision=${liteRTActiveModel?.liteRTVision} modelFound=${!!activeModel}`);
   if (!liteRTActiveModel?.liteRTVision) {
-    dbg('warn', '[Vision] BLOCKED — model does not have vision support (liteRTVision=false). Re-import model with vision enabled.');
     chatStore.clearStreamingMessage();
     svc.resetState();
     throw new Error('This model does not support images. Import it with vision enabled, or remove the image.');
   }
-  dbg('log', '[Vision] model vision check passed');
 }
 
 async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<void> {
@@ -240,7 +236,7 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   dbg('log', `[Vision] imageUri — ${imageUri ? imageUri.substring(0, 80) : 'none'}`);
   dbg('log', `[LiteRT] generateResponse — hasImage=${!!imageUri} conversationId=${conversationId.substring(0, 8)} messages=${messages.length} systemLen=${systemPrompt.length} userTextLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
 
-  assertLiteRTImageSupport(imageUri, svc, chatStore, dbg);
+  assertLiteRTImageSupport(imageUri, svc, chatStore);
 
   const history = buildLiteRTHistory(messages);
   dbg('log', `[Vision] history built — turns=${history.length} (messages before last user turn, excluding system)`);
