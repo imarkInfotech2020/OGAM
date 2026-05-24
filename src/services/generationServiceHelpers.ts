@@ -75,16 +75,21 @@ export function buildGenerationMetaImpl(svc: any): GenerationMeta {
         modelName,
         decodeTokensPerSecond: stats.decodeTokensPerSecond,
         prefillTokensPerSecond: stats.prefillTokensPerSecond,
-        timeToFirstToken: stats.ttft,
+        timeToFirstToken: stats.ttft * 1000,
         tokenCount: stats.prefillTokenCount,
         modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
       };
     }
-    // BenchmarkInfo unavailable — return backend info only, no estimated tps
+    // BenchmarkInfo unavailable — estimate from streaming content
+    const contentLength = svc.state.streamingContent?.length ?? 0;
+    const estimatedTokenCount = Math.ceil(contentLength / 4);
+    const genTime = svc.state.startTime ? (Date.now() - svc.state.startTime) / 1000 : 0;
     return {
       gpu: backend !== 'cpu',
       gpuBackend: backend.toUpperCase(),
       modelName,
+      tokenCount: estimatedTokenCount,
+      tokensPerSecond: genTime > 0 && estimatedTokenCount > 0 ? estimatedTokenCount / genTime : undefined,
     };
   }
 
@@ -187,117 +192,123 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
   return true;
 }
 
+async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<void> {
+  const { conversationId, messages, onFirstToken } = req;
+  const chatStore = useChatStore.getState();
+  const dbg = useDebugLogsStore.getState().addLog;
+  let firstTokenReceived = false;
+
+  const lastUser = [...messages].reverse().find(m => m.role === 'user');
+  if (!lastUser) {
+    dbg('warn', '[LiteRT] generateResponse: no user message found');
+    chatStore.clearStreamingMessage();
+    svc.resetState();
+    return;
+  }
+  const systemMsg = messages.find(m => m.role === 'system');
+  const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
+  const allAttachments = lastUser.attachments ?? [];
+  const imageAttachment = allAttachments.find((a: any) => a.type === 'image');
+  const imageUri = imageAttachment?.uri as string | undefined;
+
+  dbg('log', `[Vision] attachments — total=${allAttachments.length} types=[${allAttachments.map((a: any) => a.type).join(',')}] imageFound=${!!imageAttachment}`);
+  dbg('log', `[Vision] imageUri — ${imageUri ? imageUri.substring(0, 80) : 'none'}`);
+  dbg('log', `[LiteRT] generateResponse — hasImage=${!!imageUri} conversationId=${conversationId.substring(0, 8)} messages=${messages.length} systemLen=${systemPrompt.length} userTextLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
+
+  if (imageUri) {
+    const { downloadedModels, activeModelId } = useAppStore.getState();
+    const activeModel = downloadedModels.find(m => m.id === activeModelId);
+    const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
+    dbg('log', `[Vision] model check — activeModelId=${activeModelId?.substring(0, 12)} liteRTVision=${liteRTActiveModel?.liteRTVision} modelFound=${!!activeModel}`);
+    if (!liteRTActiveModel?.liteRTVision) {
+      dbg('warn', '[Vision] BLOCKED — model does not have vision support (liteRTVision=false). Re-import model with vision enabled.');
+      chatStore.clearStreamingMessage();
+      svc.resetState();
+      throw new Error('This model does not support images. Import it with vision enabled, or remove the image.');
+    }
+    dbg('log', '[Vision] model vision check passed');
+  }
+
+  const history = buildLiteRTHistory(messages);
+  dbg('log', `[Vision] history built — turns=${history.length} (messages before last user turn, excluding system)`);
+
+  try {
+    const { settings } = useAppStore.getState();
+    await liteRTService.prepareConversation(conversationId, systemPrompt, {
+      samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
+      history,
+    });
+    dbg('log', `[Vision] calling sendMessage — imageUri=${imageUri ? imageUri.substring(0, 60) : 'none'} textLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
+
+    await liteRTService.sendMessage(
+      typeof lastUser.content === 'string' ? lastUser.content : '',
+      {
+        onToken: (token: string) => {
+          if (svc.abortRequested) return;
+          if (!firstTokenReceived) {
+            firstTokenReceived = true;
+            svc.updateState({ isThinking: false });
+            onFirstToken?.();
+            dbg('log', '[LiteRT] first token received');
+          }
+          svc.state.streamingContent += token;
+          svc.tokenBuffer += token;
+          if (!svc.flushTimer) {
+            svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
+          }
+        },
+        onReasoning: (token: string) => {
+          if (svc.abortRequested) return;
+          svc.reasoningBuffer += token;
+          if (!svc.flushTimer) {
+            svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
+          }
+        },
+        onComplete: (_content: string, _reasoning: string, stats) => {
+          if (svc.abortRequested) return;
+          svc.forceFlushTokens();
+          svc.liteRTBenchmarkStats = stats;
+          const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
+          dbg('log', `[LiteRT] generation complete — ${generationTime}ms, tok/s=${stats?.decodeTokensPerSecond?.toFixed(1) ?? 'n/a'}`);
+          chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
+          svc.checkSharePrompt();
+          svc.resetState();
+        },
+        onError: (err: Error) => {
+          if (svc.abortRequested) return;
+          dbg('error', `[LiteRT] sendMessage error: ${err.message}`);
+          if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
+          svc.tokenBuffer = '';
+          chatStore.clearStreamingMessage();
+          svc.resetState();
+        },
+      },
+      imageUri,
+    );
+  } catch (error: any) {
+    if (svc.abortRequested) return;
+    dbg('error', `[LiteRT] generateResponse caught: ${error?.message ?? error}`);
+    if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
+    svc.tokenBuffer = '';
+    chatStore.clearStreamingMessage();
+    svc.resetState();
+    throw error;
+  }
+}
+
 export async function generateResponseImpl(
   svc: any,
   req: GenerationRequest,
 ): Promise<void> {
   const { conversationId, messages, onFirstToken } = req;
   if (!(await prepareGenerationImpl(svc, conversationId))) return;
+
+  if (isLiteRTActive()) {
+    return runLiteRTResponseImpl(svc, req);
+  }
+
   const chatStore = useChatStore.getState();
   let firstTokenReceived = false;
-
-  // LiteRT path — stateful engine, send only current user message
-  if (isLiteRTActive()) {
-    const dbg = useDebugLogsStore.getState().addLog;
-    const lastUser = [...messages].reverse().find(m => m.role === 'user');
-    if (!lastUser) {
-      dbg('warn', '[LiteRT] generateResponse: no user message found');
-      chatStore.clearStreamingMessage();
-      svc.resetState();
-      return;
-    }
-    const systemMsg = messages.find(m => m.role === 'system');
-    const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
-    const allAttachments = lastUser.attachments ?? [];
-    const imageAttachment = allAttachments.find((a: any) => a.type === 'image');
-    const imageUri = imageAttachment?.uri as string | undefined;
-
-    dbg('log', `[Vision] attachments — total=${allAttachments.length} types=[${allAttachments.map((a: any) => a.type).join(',')}] imageFound=${!!imageAttachment}`);
-    dbg('log', `[Vision] imageUri — ${imageUri ? imageUri.substring(0, 80) : 'none'}`);
-    dbg('log', `[LiteRT] generateResponse — hasImage=${!!imageUri} conversationId=${conversationId.substring(0, 8)} messages=${messages.length} systemLen=${systemPrompt.length} userTextLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
-
-    // Guard: image attached but model was not imported with vision support
-    if (imageUri) {
-      const { downloadedModels, activeModelId } = useAppStore.getState();
-      const activeModel = downloadedModels.find(m => m.id === activeModelId);
-      const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
-      dbg('log', `[Vision] model check — activeModelId=${activeModelId?.substring(0, 12)} liteRTVision=${liteRTActiveModel?.liteRTVision} modelFound=${!!activeModel}`);
-      if (!liteRTActiveModel?.liteRTVision) {
-        dbg('warn', '[Vision] BLOCKED — model does not have vision support (liteRTVision=false). Re-import model with vision enabled.');
-        chatStore.clearStreamingMessage();
-        svc.resetState();
-        throw new Error('This model does not support images. Import it with vision enabled, or remove the image.');
-      }
-      dbg('log', '[Vision] model vision check passed');
-    }
-
-    const history = buildLiteRTHistory(messages);
-    dbg('log', `[Vision] history built — turns=${history.length} (messages before last user turn, excluding system)`);
-
-    try {
-      const { settings } = useAppStore.getState();
-      await liteRTService.prepareConversation(conversationId, systemPrompt, {
-        samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
-        history,
-      });
-      dbg('log', `[Vision] calling sendMessage — imageUri=${imageUri ? imageUri.substring(0, 60) : 'none'} textLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
-
-      await liteRTService.sendMessage(
-        typeof lastUser.content === 'string' ? lastUser.content : '',
-        {
-          onToken: (token: string) => {
-            if (svc.abortRequested) return;
-            if (!firstTokenReceived) {
-              firstTokenReceived = true;
-              svc.updateState({ isThinking: false });
-              onFirstToken?.();
-              dbg('log', '[LiteRT] first token received');
-            }
-            svc.state.streamingContent += token;
-            svc.tokenBuffer += token;
-            if (!svc.flushTimer) {
-              svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
-            }
-          },
-          onReasoning: (token: string) => {
-            if (svc.abortRequested) return;
-            svc.reasoningBuffer += token;
-            if (!svc.flushTimer) {
-              svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
-            }
-          },
-          onComplete: (_content: string, _reasoning: string, stats) => {
-            if (svc.abortRequested) return;
-            svc.forceFlushTokens();
-            svc.liteRTBenchmarkStats = stats;
-            const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
-            dbg('log', `[LiteRT] generation complete — ${generationTime}ms, tok/s=${stats?.decodeTokensPerSecond?.toFixed(1) ?? 'n/a'}`);
-            chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
-            svc.checkSharePrompt();
-            svc.resetState();
-          },
-          onError: (err: Error) => {
-            if (svc.abortRequested) return;
-            dbg('error', `[LiteRT] sendMessage error: ${err.message}`);
-            if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
-            svc.tokenBuffer = '';
-            chatStore.clearStreamingMessage();
-            svc.resetState();
-          },
-        },
-        imageUri,
-      );
-    } catch (error: any) {
-      if (svc.abortRequested) return;
-      dbg('error', `[LiteRT] generateResponse caught: ${error?.message ?? error}`);
-      if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
-      svc.tokenBuffer = '';
-      chatStore.clearStreamingMessage();
-      svc.resetState();
-      throw error;
-    }
-    return;
-  }
 
   // llama.cpp path — unchanged
   try {

@@ -26,6 +26,7 @@ jest.mock('../../../src/services/litert', () => ({
     getActiveBackend: jest.fn(() => 'cpu'),
     prepareConversation: jest.fn(() => Promise.resolve()),
     sendMessage: jest.fn(() => Promise.resolve()),
+    getLastBenchmarkStats: jest.fn().mockReturnValue(undefined),
   },
 }));
 
@@ -184,7 +185,7 @@ describe('buildGenerationMetaImpl — LiteRT path', () => {
 
     const meta = buildGenerationMetaImpl(svc);
 
-    expect(meta.tokensPerSecond).toBe(42);
+    expect(meta.decodeTokensPerSecond).toBe(42);
     expect(meta.timeToFirstToken).toBeCloseTo(120, 0);
     expect(meta.tokenCount).toBe(128);
     expect(meta.gpu).toBe(true);
