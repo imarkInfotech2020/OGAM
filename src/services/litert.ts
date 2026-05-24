@@ -321,8 +321,12 @@ class LiteRTService {
 
         // Build wall-clock stats
         const completeTime = Date.now();
-        const ttft = firstTokenTime !== undefined ? (firstTokenTime - sendStart) / 1000 : undefined;
-        const decodeElapsed = firstTokenTime !== undefined ? (completeTime - firstTokenTime) / 1000 : undefined;
+        let ttft: number | undefined;
+        let decodeElapsed: number | undefined;
+        if (firstTokenTime !== undefined) {
+          ttft = (firstTokenTime - sendStart) / 1000;
+          decodeElapsed = (completeTime - firstTokenTime) / 1000;
+        }
         const decodeTokensPerSecond = decodeElapsed && decodeElapsed > 0 && jsDecodeTokenCount > 1
           ? jsDecodeTokenCount / decodeElapsed
           : undefined;

@@ -341,7 +341,7 @@ describe('ModelsScreen', () => {
 
       await waitFor(() => {
         // The banner shows "XGB RAM — models up to YB recommended (Q4_K_M)"
-        expect(getByText(/\d+GB RAM/)).toBeTruthy();
+        expect(getByText(/\d+GB RAM/)).toBeTruthy(); // NOSONAR — regex matches short rendered UI strings, not user input; ReDoS not applicable
       });
     });
 
