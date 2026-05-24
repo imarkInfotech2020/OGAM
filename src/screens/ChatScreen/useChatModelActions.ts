@@ -65,7 +65,7 @@ async function doLoadTextModel(deps: ModelActionDeps): Promise<void> {
   try {
     await activeModelService.loadTextModel(activeModelId);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(activeModel.engine === 'litert' ? true : (multimodalSupport?.vision || false));
+    deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
@@ -118,7 +118,7 @@ export async function initiateModelLoad(
   try {
     await activeModelService.loadTextModel(activeModelId);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(activeModel.engine === 'litert' ? true : (multimodalSupport?.vision || false));
+    deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
     dbg('log', `[LiteRT] loadTextModel success — engine=${activeModel.engine ?? 'llama'}`);
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
@@ -147,11 +147,11 @@ export async function ensureModelLoadedFn(
   if (activeModel.engine === 'litert') {
     if (liteRTService.isModelLoaded()) {
       dbg('log', `[LiteRT] ensureModelLoaded — already loaded, skipping`);
-      deps.setSupportsVision(true);
+      deps.setSupportsVision(!!activeModel.liteRTVision);
       return;
     }
     dbg('log', `[LiteRT] ensureModelLoaded — model=${activeModel.name}, triggering load`);
-    deps.setSupportsVision(true);
+    deps.setSupportsVision(!!activeModel.liteRTVision);
     if (deps.activeModelId) await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading);
     return;
   }
@@ -178,7 +178,7 @@ export async function proceedWithModelLoadFn(
   try {
     await activeModelService.loadTextModel(model.id);
     const multimodalSupport = llmService.getMultimodalSupport();
-    deps.setSupportsVision(model.engine === 'litert' ? true : (multimodalSupport?.vision || false));
+    deps.setSupportsVision(model.engine === 'litert' ? !!model.liteRTVision : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       deps.addMessage(deps.activeConversationId, {
@@ -328,7 +328,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
     } else if (activeModel?.engine === 'litert') {
-      setSupportsVision(true);
+      setSupportsVision(!!activeModel.liteRTVision);
     } else if (activeModelMmProjPath && llmService.isModelLoaded()) {
       setSupportsVision(llmService.getMultimodalSupport()?.vision ?? false);
     } else {
