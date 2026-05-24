@@ -49,7 +49,8 @@ function buildLiteRTMeta(svc: any, modelName: string | undefined): GenerationMet
       modelName,
       decodeTokensPerSecond: stats.decodeTokensPerSecond,
       prefillTokensPerSecond: stats.prefillTokensPerSecond,
-      timeToFirstToken: stats.ttft,
+      // LiteRT reports ttft in seconds; GenerationMeta expects milliseconds.
+      timeToFirstToken: stats.ttft * 1000,
       tokenCount: stats.prefillTokenCount,
       modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
     };

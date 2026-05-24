@@ -11,6 +11,7 @@ import {
   StandardModelCardContent,
   ModelInfoBadges,
   ModelCardActions,
+  RecommendedConfig,
 } from './ModelCardContent';
 
 interface ModelCardProps {
@@ -46,6 +47,7 @@ interface ModelCardProps {
   onCancel?: () => void;
   compact?: boolean;
   isTrending?: boolean;
+  recommended?: RecommendedConfig;
 }
 
 function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
@@ -109,6 +111,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onCancel,
   compact,
   isTrending,
+  recommended,
 }) => {
   const styles = useThemedStyles(createStyles);
 
@@ -137,6 +140,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       style={[
         styles.card,
         compact && styles.cardCompact,
+        recommended && compact && styles.cardRecommended,
         isActive && styles.cardActive,
         !isCompatible && styles.cardIncompatible,
       ]}
@@ -153,6 +157,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               credibility={credibility}
               credibilityInfo={credibilityInfo}
               isTrending={isTrending}
+              recommended={recommended}
             />
           ) : (
             <StandardModelCardContent
@@ -160,6 +165,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               credibility={credibility}
               credibilityInfo={credibilityInfo}
               isActive={isActive}
+              recommended={recommended}
             />
           )}
 

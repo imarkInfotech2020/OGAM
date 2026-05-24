@@ -183,6 +183,15 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
 
   const handleSelectModel = async (model: ModelInfo) => {
     setSelectedModel(model); setIsLoadingFiles(true);
+    // Curated entries under the offgrid/ namespace (e.g. the synthetic LiteRT
+    // parent) ship with their files baked into the ModelInfo — skip the
+    // HuggingFace fetch and use them as-is. Real HF models always go through
+    // the fetch path even when factories/mocks pre-populate model.files.
+    if (model.id.startsWith('offgrid/') && model.files && model.files.length > 0) {
+      setModelFiles(model.files);
+      setIsLoadingFiles(false);
+      return;
+    }
     try {
       const files = await huggingFaceService.getModelFiles(model.id);
       setModelFiles(files);

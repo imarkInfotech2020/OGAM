@@ -146,6 +146,50 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   recommendedText: {
     color: colors.info,
   },
+  recommendedPill: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  recommendedPillText: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.surface,
+  },
+  cardRecommended: {
+    padding: 16,
+    marginBottom: 20,
+    marginTop: 4,
+    borderRadius: 14,
+    borderRightWidth: 3,
+    borderRightColor: colors.primary,
+    ...shadows.glow,
+  },
+  compactNameRecommended: {
+    ...TYPOGRAPHY.h2,
+    color: colors.text,
+  },
+  recommendedHighlight: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  recommendedChip: {
+    backgroundColor: `${colors.primary}20`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  recommendedChipText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+  },
+  recommendedHighlightCompact: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+    marginTop: 6,
+  },
   warningBadge: {
     backgroundColor: `${colors.warning}30`,
     paddingHorizontal: 8,

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Linking } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
@@ -115,9 +115,14 @@ const ModelDetailView: React.FC<DetailProps> = ({
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     } : undefined;
+    const liteRTMeta = LITERT_FILE_META[item.name];
+    const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
+    const recommended = liteRTMeta
+      ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight }
+      : undefined;
     const card = (
       <ModelCard
-        model={{ id: selectedModel.id, name: item.name.replace('.gguf', ''), author: selectedModel.author, credibility: selectedModel.credibility }}
+        model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
         isDownloading={!!s.progress} downloadProgress={s.progress?.progress}
         downloadBytes={s.progress ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
@@ -127,6 +132,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
+        recommended={recommended}
       />
     );
     return index === 0 ? <AttachStep index={9} fill>{card}</AttachStep> : card;
@@ -155,16 +161,24 @@ const ModelDetailView: React.FC<DetailProps> = ({
           )}
         </View>
         <Text style={styles.modelDescription}>{selectedModel.description}</Text>
-        <View style={styles.modelStats}>
-          <Text style={styles.statText}>{formatNumber(selectedModel.downloads)} downloads</Text>
-          <Text style={styles.statText}>{formatNumber(selectedModel.likes)} likes</Text>
-        </View>
+        {(selectedModel.downloads > 0 || selectedModel.likes > 0) && (
+          <View style={styles.modelStats}>
+            {selectedModel.downloads > 0 && (
+              <Text style={styles.statText}>{formatNumber(selectedModel.downloads)} downloads</Text>
+            )}
+            {selectedModel.likes > 0 && (
+              <Text style={styles.statText}>{formatNumber(selectedModel.likes)} likes</Text>
+            )}
+          </View>
+        )}
       </Card>
       <Text style={styles.sectionTitle}>Available Files</Text>
-      <Text style={styles.sectionSubtitle}>
-        Choose a quantization level. Q4_K_M is recommended for mobile.
-        {modelFiles.some(f => f.mmProjFile) && ' Vision files include mmproj.'}
-      </Text>
+      {selectedModel.id !== LITERT_PARENT_ID && (
+        <Text style={styles.sectionSubtitle}>
+          Choose a quantization level. Q4_K_M is recommended for mobile.
+          {modelFiles.some(f => f.mmProjFile) && ' Vision files include mmproj.'}
+        </Text>
+      )}
       {isLoadingFiles ? (
         <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>
       ) : (
@@ -172,6 +186,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
           data={modelFiles
             .filter(f => f.size > 0 && f.size / (1024 ** 3) < ramGB * 0.6 && (filterState.quant === 'all' || f.name.includes(filterState.quant)))
             .sort((a, b) => {
+              // LiteRT files: smaller-first (E2B before E4B) — both are curated,
+              // no Q4_K_M concept, and the smaller variant fits more devices.
+              if (selectedModel.id === LITERT_PARENT_ID) return a.size - b.size;
               const aRec = a.name.includes('Q4_K_M') ? 0 : 1;
               const bRec = b.name.includes('Q4_K_M') ? 0 : 1;
               if (aRec !== bRec) return aRec - bRec;
@@ -188,71 +205,49 @@ const ModelDetailView: React.FC<DetailProps> = ({
   );
 };
 
-const LITERT_FEATURED = [
-  {
-    id: 'gemma4-e2b-litert',
-    name: 'Gemma 4 E2B',
-    author: 'google',
-    description: 'Google\'s latest, thinking mode + vision, MoE architecture',
-    chips: ['NPU / GPU', 'Vision', 'Thinking', '~1.5 GB'],
-    highlight: 'Up to 2x faster than CPU via NPU hardware acceleration',
-    url: 'https://huggingface.co/google/gemma-4-E2B-it-litert-lm',
+const GB = 1024 ** 3;
+
+export const LITERT_PARENT_ID = 'offgrid/litert-recommended';
+
+export const LITERT_FILE_META: Record<string, { displayName: string; highlight: string }> = {
+  'gemma-4-E2B-it.litertlm': {
+    displayName: 'Gemma 4 E2B',
+    highlight: 'Up to 2x faster than CPU via GPU',
   },
-  {
-    id: 'gemma4-e4b-litert',
-    name: 'Gemma 4 E4B',
-    author: 'google',
-    description: 'Stronger reasoning + vision, MoE fits more in less RAM',
-    chips: ['NPU / GPU', 'Vision', 'Thinking', '~3.5 GB'],
+  'gemma-4-E4B-it.litertlm': {
+    displayName: 'Gemma 4 E4B',
     highlight: 'Higher quality, same hardware efficiency as E2B',
-    url: 'https://huggingface.co/google/gemma-4-E4B-it-litert-lm',
   },
-] as const;
+};
 
-const FeaturedLiteRTCard: React.FC<{ model: typeof LITERT_FEATURED[number]; styles: any; colors: any }> = ({ model, styles, colors }) => (
-  <TouchableOpacity
-    style={styles.featuredCard}
-    onPress={() => Linking.openURL(model.url)}
-    activeOpacity={0.85}
-  >
-    <View style={styles.featuredCardTopRow}>
-      <View style={styles.featuredCardNameGroup}>
-        <Text style={styles.featuredCardName}>{model.name}</Text>
-        <View style={styles.featuredAuthorTag}>
-          <Text style={styles.featuredAuthorTagText}>{model.author}</Text>
-        </View>
-        <View style={styles.featuredBadge}>
-          <Icon name="zap" size={9} color={colors.primary} />
-          <Text style={styles.featuredBadgeText}>LiteRT</Text>
-        </View>
-      </View>
-    </View>
-    <Text style={styles.featuredDescription}>{model.description}</Text>
-    <View style={styles.featuredChipsRow}>
-      {model.chips.map(chip => (
-        <View key={chip} style={styles.featuredChip}>
-          <Text style={styles.featuredChipText}>{chip}</Text>
-        </View>
-      ))}
-    </View>
-    <View style={styles.featuredFooter}>
-      <Text style={styles.featuredHighlight}>{model.highlight}</Text>
-      <View style={styles.featuredGetButton}>
-        <Icon name="download" size={12} color={colors.primary} />
-        <Text style={styles.featuredGetText}>Get</Text>
-      </View>
-    </View>
-  </TouchableOpacity>
-);
+export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
+  id: LITERT_PARENT_ID,
+  name: 'Gemma 4 LiteRT',
+  author: 'google',
+  description: 'Hardware-accelerated inference with vision support.',
+  downloads: 0, likes: 0, tags: ['litert'], lastModified: '',
+  modelType: 'vision',
+  files: [
+    {
+      name: 'gemma-4-E2B-it.litertlm',
+      size: Math.round(2.59 * GB),
+      quantization: 'mixed',
+      downloadUrl: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
+    },
+    {
+      name: 'gemma-4-E4B-it.litertlm',
+      size: Math.round(3.66 * GB),
+      quantization: 'mixed',
+      downloadUrl: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm',
+    },
+  ],
+};
 
-const FeaturedLiteRTSection: React.FC<{ styles: any; colors: any }> = ({ styles, colors }) => (
-  <View style={styles.featuredSection}>
-    <Text style={styles.featuredSectionLabel}>Hardware-accelerated</Text>
-    {LITERT_FEATURED.map(model => (
-      <FeaturedLiteRTCard key={model.id} model={model} styles={styles} colors={colors} />
-    ))}
-  </View>
-);
+const LITERT_PARENT_RECOMMENDED = {
+  pillLabel: 'Recommended',
+  chips: ['Vision', 'GPU'],
+  highlightText: 'Hardware-accelerated inference with vision support',
+};
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
   <View>
@@ -267,7 +262,13 @@ interface ModelListItemProps {
 }
 const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={item} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} /></AnimatedEntry>);
+  const isLiteRTParent = item.id === LITERT_PARENT_ID;
+  const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
+  // Strip files for the LiteRT parent so ModelCard doesn't render the size-range
+  // and "N files" badges — the curated chips already convey the relevant info.
+  // The original item (with files) still flows through onPress → handleSelectModel.
+  const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 
@@ -405,17 +406,14 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         </View>
       ) : (
         <FlatList
-          data={hasSearched ? filteredResults : recommendedAsModelInfo}
+          data={hasSearched ? filteredResults : [LITERT_RECOMMENDED_MODEL, ...recommendedAsModelInfo]}
           renderItem={renderModelItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           testID="models-list"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           ListHeaderComponent={hasSearched ? null : (
-            <>
-              <FeaturedLiteRTSection styles={styles} colors={colors} />
-              <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
-            </>
+            <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
           )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>

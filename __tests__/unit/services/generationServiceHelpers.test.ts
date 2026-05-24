@@ -3,7 +3,7 @@
  * Focuses on vision guard and buildGenerationMetaImpl LiteRT branches.
  */
 
-import { buildGenerationMetaImpl } from '../../../src/services/generationServiceHelpers';
+import { buildGenerationMetaImpl, prepareGenerationImpl, generateResponseImpl } from '../../../src/services/generationServiceHelpers';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
@@ -59,13 +59,14 @@ jest.mock('../../../src/stores/debugLogsStore', () => ({
 
 jest.mock('../../../src/services/generationToolLoop', () => ({
   runToolLoop: jest.fn(() => Promise.resolve()),
+  buildLiteRTHistory: jest.fn(() => []),
 }));
 
 jest.mock('../../../src/utils/logger', () => ({
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-import { useAppStore } from '../../../src/stores';
+import { useAppStore, useChatStore } from '../../../src/stores';
 import { liteRTService } from '../../../src/services/litert';
 
 const mockedGetState = useAppStore.getState as jest.Mock;
@@ -251,5 +252,168 @@ describe('buildGenerationMetaImpl — LiteRT path', () => {
 
     const meta = buildGenerationMetaImpl(svc);
     expect(meta.tokensPerSecond).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// prepareGenerationImpl
+// ---------------------------------------------------------------------------
+
+function makeSvc(overrides: any = {}) {
+  const state = { isGenerating: false, startTime: Date.now(), streamingContent: '', ...(overrides.state ?? {}) };
+  const svc = {
+    state,
+    updateState: jest.fn((patch: any) => { Object.assign(state, patch); }),
+    pendingStop: null,
+    abortRequested: false,
+    resetState: jest.fn(),
+    tokenBuffer: '',
+    reasoningBuffer: '',
+    totalReasoningLength: 0,
+    remoteTimeToFirstToken: undefined,
+    isUsingRemoteProvider: () => false,
+    getCurrentProvider: () => null,
+  };
+  const { state: _s, ...rest } = overrides;
+  return { ...svc, ...rest };
+}
+
+// Non-LiteRT store state — getActiveEngineService() returns llmService
+function makeLlmAppState() {
+  return {
+    downloadedModels: [{ id: 'llm-1', engine: 'ggml', name: 'Llama' }],
+    activeModelId: 'llm-1',
+    downloadedImageModels: [],
+    activeImageModelId: null,
+    settings: { temperature: 0.7, topP: 0.9, cacheType: 'q8_0', maxTokens: 512, thinkingEnabled: false, liteRTTemperature: 0.7, liteRTTopP: 0.9, liteRTMaxTokens: 512 },
+  };
+}
+
+describe('prepareGenerationImpl', () => {
+  it('returns false immediately when already generating', async () => {
+    const svc = makeSvc({ state: { isGenerating: true } });
+    const result = await prepareGenerationImpl(svc, 'conv-1');
+    expect(result).toBe(false);
+  });
+
+  it('throws when LiteRT active but no model loaded', async () => {
+    // engine: 'litert' makes getActiveEngineService() return liteRTService → isLiteRTActive() = true
+    mockedGetState.mockReturnValue(makeLiteRTAppState());
+    mockedLiteRT.isModelLoaded.mockReturnValue(false);
+
+    const svc = makeSvc();
+    await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('No LiteRT model loaded');
+    expect(svc.resetState).toHaveBeenCalled();
+  });
+
+  it('returns true when LiteRT active and model is loaded', async () => {
+    mockedGetState.mockReturnValue(makeLiteRTAppState());
+    mockedLiteRT.isModelLoaded.mockReturnValue(true);
+
+    const svc = makeSvc();
+    const result = await prepareGenerationImpl(svc, 'conv-1');
+    expect(result).toBe(true);
+  });
+
+  it('throws when llama.cpp not loaded', async () => {
+    const { llmService: llm } = require('../../../src/services/llm');
+    llm.isModelLoaded.mockReturnValue(false);
+    mockedGetState.mockReturnValue(makeLlmAppState());
+
+    const svc = makeSvc();
+    await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('No model loaded');
+  });
+
+  it('throws when llama.cpp is busy', async () => {
+    const { llmService: llm } = require('../../../src/services/llm');
+    llm.isModelLoaded.mockReturnValue(true);
+    llm.isCurrentlyGenerating.mockReturnValue(true);
+    mockedGetState.mockReturnValue(makeLlmAppState());
+
+    const svc = makeSvc();
+    await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('LLM service busy');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateResponseImpl — LiteRT branch
+// ---------------------------------------------------------------------------
+
+describe('generateResponseImpl — LiteRT path', () => {
+  function makeLiteRTState() {
+    return {
+      ...makeLiteRTAppState(),
+      settings: { liteRTTemperature: 0.7, liteRTTopP: 0.9, liteRTMaxTokens: 512, cacheType: 'q8_0', temperature: 0.7, maxTokens: 512, thinkingEnabled: false, topP: 0.9 },
+    };
+  }
+
+  function makeLiteRTSvc() {
+    return {
+      ...makeSvc(),
+      flushTimer: null,
+      liteRTBenchmarkStats: null,
+      forceFlushTokens: jest.fn(),
+      flushTokenBuffer: jest.fn(),
+      checkSharePrompt: jest.fn(),
+      isUsingRemoteProvider: () => false,
+      getCurrentProvider: () => null,
+    };
+  }
+
+  beforeEach(() => {
+    mockedLiteRT.isModelLoaded.mockReturnValue(true);
+    mockedGetState.mockReturnValue(makeLiteRTState());
+  });
+
+  it('enters LiteRT path and calls prepareConversation', async () => {
+    const finalize = jest.fn();
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(), clearStreamingMessage: jest.fn(),
+      appendToStreamingMessage: jest.fn(), finalizeStreamingMessage: finalize,
+    });
+    mockedLiteRT.sendMessage.mockImplementation((_text: any, callbacks: any) => {
+      callbacks.onComplete('', '', null);
+      return Promise.resolve();
+    });
+
+    await generateResponseImpl(makeLiteRTSvc(), {
+      conversationId: 'conv-1',
+      messages: [{ id: '1', timestamp: 0, role: 'system' as const, content: 'sys' }, { id: '2', timestamp: 1, role: 'user' as const, content: 'Hello' }],
+    });
+    expect(mockedLiteRT.prepareConversation).toHaveBeenCalled();
+    expect(finalize).toHaveBeenCalled();
+  });
+
+  it('exits early when no user message in history', async () => {
+    const clear = jest.fn();
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(), clearStreamingMessage: clear,
+      appendToStreamingMessage: jest.fn(), finalizeStreamingMessage: jest.fn(),
+    });
+
+    await generateResponseImpl(makeLiteRTSvc(), {
+      conversationId: 'conv-1',
+      messages: [{ id: '1', timestamp: 0, role: 'system' as const, content: 'sys' }],
+    });
+    expect(mockedLiteRT.sendMessage).not.toHaveBeenCalled();
+    expect(clear).toHaveBeenCalled();
+  });
+
+  it('calls clearStreamingMessage on sendMessage onError', async () => {
+    const clear = jest.fn();
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(), clearStreamingMessage: clear,
+      appendToStreamingMessage: jest.fn(), finalizeStreamingMessage: jest.fn(),
+    });
+    mockedLiteRT.sendMessage.mockImplementation((_text: any, callbacks: any) => {
+      callbacks.onError(new Error('gpu error'));
+      return Promise.resolve();
+    });
+
+    await generateResponseImpl(makeLiteRTSvc(), {
+      conversationId: 'conv-1',
+      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+    });
+    expect(clear).toHaveBeenCalled();
   });
 });

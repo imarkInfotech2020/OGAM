@@ -43,20 +43,34 @@ describe('summarizeSession', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('returns summary text from onComplete', async () => {
+  it('returns summary text from onComplete when at least 30 chars', async () => {
+    // Real summaries from the model are typically 300-500 chars; the 30-char
+    // floor only rejects degenerate single-token outputs (see "too short" test).
+    const summary = 'We discussed the project plan, milestones, and the next steps.';
     const sendMessage = jest.fn((_text, callbacks) => {
-      callbacks.onToken('hello ');
-      callbacks.onToken('world');
+      callbacks.onToken(summary);
       callbacks.onComplete('', '');
     });
 
     const result = await summarizeSession(sendMessage, true);
-    expect(result).toBe('hello world');
+    expect(result).toBe(summary);
   });
 
   it('returns null when summary is empty string after trim', async () => {
     const sendMessage = jest.fn((_text, callbacks) => {
       callbacks.onToken('   ');
+      callbacks.onComplete('', '');
+    });
+
+    const result = await summarizeSession(sendMessage, true);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when summary is under the 30-char minimum (degenerate output)', async () => {
+    // Guards against the bug from log13 where the model emitted a 0/1-char
+    // response after a tool exchange — too short to be a real summary.
+    const sendMessage = jest.fn((_text, callbacks) => {
+      callbacks.onToken('hello world');
       callbacks.onComplete('', '');
     });
 

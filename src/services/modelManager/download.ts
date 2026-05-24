@@ -116,7 +116,10 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const mmProjSize = file.mmProjFile?.size || 0;
   const combinedTotalBytes = file.size + mmProjSize;
-  const downloadUrl = huggingFaceService.getDownloadUrl(modelId, file.name);
+  // Prefer per-file URL when set — lets curated entries point at a different
+  // repo than the parent modelId (e.g. a synthetic parent collecting models from
+  // multiple HF repos under one card).
+  const downloadUrl = file.downloadUrl || huggingFaceService.getDownloadUrl(modelId, file.name);
   const author = modelId.split('/')[0] || 'Unknown';
   const modelKey = makeModelKey(modelId, file.name);
 
