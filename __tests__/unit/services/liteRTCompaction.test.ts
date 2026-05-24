@@ -169,7 +169,7 @@ describe('runCompaction', () => {
   it('slices history to stay within recent budget', async () => {
     const resetFn = jest.fn(() => Promise.resolve());
     // 10 turns, each with long content that exceeds the budget
-    const history = Array.from({ length: 10 }, (_, i) => ({
+    const history: Array<{ role: 'user' | 'assistant'; content: string }> = Array.from({ length: 10 }, (_, i) => ({
       role: i % 2 === 0 ? 'user' : 'assistant',
       content: 'x'.repeat(500),
     }));
