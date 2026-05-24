@@ -258,12 +258,10 @@ export const useChatScreen = () => {
       if (liteRTService.isModelLoaded()) {
         await liteRTService.unloadModel().catch(() => { });
       }
-    } else {
-      // Must unload first — loadTextModel skips if the same model ID is already loaded,
-      // which means setLoadedSettings would never run and the banner would persist.
-      if (llmService.isModelLoaded()) {
-        await activeModelService.unloadTextModel();
-      }
+    // Must unload first — loadTextModel skips if the same model ID is already loaded,
+    // which means setLoadedSettings would never run and the banner would persist.
+    } else if (llmService.isModelLoaded()) {
+      await activeModelService.unloadTextModel();
     }
     await initiateModelLoad(modelDeps, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

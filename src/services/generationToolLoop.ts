@@ -353,7 +353,7 @@ async function callLiteRTForLoop(
   const history = buildLiteRTHistory(messages);
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
   const imageAttachment = lastUser?.attachments?.find((a: any) => a.type === 'image');
-  const imageUri = imageAttachment?.uri as string | undefined;
+  const imageUri = imageAttachment?.uri;
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.liteRTTemperature,

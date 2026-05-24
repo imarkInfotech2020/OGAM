@@ -188,9 +188,9 @@ class LiteRTService {
       (this.cumulativeTokens > threshold || incomingEstimate > threshold);
     dbg('log', `[LiteRT] prepareConversation compact check — needsCompact=${needsCompact} threshold=${Math.floor(threshold)} cumul=${this.cumulativeTokens} incoming=~${incomingEstimate}`);
 
-    if (needsCompact) {
+    if (needsCompact && history) {
       await runCompaction({
-        history: history!,
+        history,
         systemPrompt,
         maxTokens,
         cumulativeTokens: this.cumulativeTokens,
@@ -321,7 +321,7 @@ class LiteRTService {
 
         // Build wall-clock stats
         const completeTime = Date.now();
-        const ttft = firstTokenTime === undefined ? undefined : (firstTokenTime - sendStart) / 1000;
+        const ttft = firstTokenTime !== undefined ? (firstTokenTime - sendStart) / 1000 : undefined;
         const decodeElapsed = firstTokenTime !== undefined ? (completeTime - firstTokenTime) / 1000 : undefined;
         const decodeTokensPerSecond = decodeElapsed && decodeElapsed > 0 && jsDecodeTokenCount > 1
           ? jsDecodeTokenCount / decodeElapsed
@@ -366,7 +366,7 @@ class LiteRTService {
     ];
 
     try {
-      sendMsgDbg('log', `[Vision] → LiteRTModule.sendMessage — imageArg=${imageUri !== null ? 'SET' : 'NULL'}`);
+      sendMsgDbg('log', `[Vision] → LiteRTModule.sendMessage — imageArg=${imageUri === null ? 'NULL' : 'SET'}`);
       await LiteRTModule.sendMessage(text, imageUri ?? null);
     } catch (e) {
       this.clearSubscriptions();

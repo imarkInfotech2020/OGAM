@@ -230,7 +230,7 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const allAttachments = lastUser.attachments ?? [];
   const imageAttachment = allAttachments.find((a: any) => a.type === 'image');
-  const imageUri = imageAttachment?.uri as string | undefined;
+  const imageUri = imageAttachment?.uri;
 
   dbg('log', `[Vision] attachments — total=${allAttachments.length} types=[${allAttachments.map((a: any) => a.type).join(',')}] imageFound=${!!imageAttachment}`);
   dbg('log', `[Vision] imageUri — ${imageUri ? imageUri.substring(0, 80) : 'none'}`);

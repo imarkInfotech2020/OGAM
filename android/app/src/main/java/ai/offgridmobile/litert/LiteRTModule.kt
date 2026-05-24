@@ -111,27 +111,52 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     }
 
     // 3-tier fallback: NPU → GPU → CPU
-    private suspend fun initializeWithFallback(modelPath: String, requested: Backend, visionEnabled: Boolean): Backend {
-        val chain = when (requested) {
-            is Backend.NPU -> listOf(
-                Backend.NPU(nativeLibraryDir = reactContext.applicationInfo.nativeLibraryDir),
-                Backend.GPU(),
-                Backend.CPU(),
+    private fun buildBackendChain(requested: Backend): List<Backend> = when (requested) {
+        is Backend.NPU -> listOf(
+            Backend.NPU(nativeLibraryDir = reactContext.applicationInfo.nativeLibraryDir),
+            Backend.GPU(),
+            Backend.CPU(),
+        )
+        is Backend.GPU -> listOf(Backend.GPU(), Backend.CPU())
+        else           -> listOf(Backend.CPU())
+    }
+
+    private suspend fun tryInitBackend(modelPath: String, backend: Backend, name: String, visionEnabled: Boolean): Boolean {
+        var eng: Engine? = null
+        return try {
+            val cfg = EngineConfig(
+                modelPath = modelPath,
+                backend = backend,
+                maxNumTokens = configuredMaxTokens,
+                cacheDir = null,
+                visionBackend = if (visionEnabled) Backend.GPU() else null,
             )
-            is Backend.GPU -> listOf(Backend.GPU(), Backend.CPU())
-            else           -> listOf(Backend.CPU())
+            eng = Engine(cfg)
+            withTimeout(initTimeoutMs(backend, configuredMaxTokens)) { eng.initialize() }
+            engine = eng
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "initializeWithFallback — $name failed: ${e.message}")
+            // Close the local engine attempt — not the module-level `engine` field,
+            // which belongs to a previous successful load and must not be touched here.
+            try { eng?.close() } catch (closeEx: Exception) {
+                Log.w(TAG, "initializeWithFallback — $name engine close error: ${closeEx.message}")
+            }
+            false
         }
+    }
+
+    private suspend fun initializeWithFallback(modelPath: String, requested: Backend, visionEnabled: Boolean): Backend {
+        val chain = buildBackendChain(requested)
 
         // GPU/NPU failures can be transient (e.g. VRAM not yet released after a model switch).
         // Retry up to 2 extra times with backoff before giving up on a non-CPU backend.
         val gpuRetries = 2
         val gpuRetryDelayMs = 600L
 
-        var lastError: Exception? = null
         for (backend in chain) {
             val name = backendName(backend)
             val maxAttempts = if (backend is Backend.CPU) 1 else gpuRetries + 1
-            var succeeded = false
 
             for (attempt in 1..maxAttempts) {
                 if (attempt > 1) {
@@ -140,46 +165,14 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 } else {
                     Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
                 }
-                var eng: Engine? = null
-                try {
-                    debugLog("EngineConfig — backend=$name maxNumTokens=$configuredMaxTokens vision=$visionEnabled")
-                    val cfg = EngineConfig(
-                        modelPath = modelPath,
-                        backend = backend,
-                        maxNumTokens = configuredMaxTokens,
-                        cacheDir = null,
-                        visionBackend = if (visionEnabled) Backend.GPU() else null,
-                    )
-                    eng = Engine(cfg)
-                    val timeoutMs = initTimeoutMs(backend, configuredMaxTokens)
-                    debugLog("Engine.initialize — backend=$name timeoutMs=${timeoutMs / 1000}s")
-                    withTimeout(timeoutMs) {
-                        eng.initialize()
-                    }
-                    engine = eng
-                    debugLog("Engine.initialize — $name succeeded (attempt $attempt)")
-                    succeeded = true
-                    return backend
-                } catch (e: Exception) {
-                    Log.w(TAG, "initializeWithFallback — $name attempt $attempt failed: ${e.message}")
-                    // Close the local engine attempt — not the module-level `engine` field,
-                    // which belongs to a previous successful load and must not be touched here.
-                    try {
-                        eng?.close()
-                        Log.d(TAG, "initializeWithFallback — $name attempt $attempt engine closed after failure")
-                    } catch (closeEx: Exception) {
-                        Log.w(TAG, "initializeWithFallback — $name attempt $attempt engine close error: ${closeEx.message}")
-                    }
-                    lastError = e
-                }
+                if (tryInitBackend(modelPath, backend, name, visionEnabled)) return backend
             }
 
-            if (!succeeded) {
-                if (backend == chain.last()) break
+            if (backend != chain.last()) {
                 Log.i(TAG, "initializeWithFallback — $name exhausted retries, falling back to next tier")
             }
         }
-        throw lastError ?: IllegalStateException("All backends failed")
+        throw IllegalStateException("All backends failed")
     }
 
     // -------------------------------------------------------------------------

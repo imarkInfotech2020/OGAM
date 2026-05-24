@@ -57,6 +57,16 @@ import { resolveCoreMLModelDir as mockedResolveCoreML } from '../../../src/utils
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 
+function setupLiteRTImportMocks() {
+  mockedRNFS.exists
+    .mockResolvedValueOnce(true)   // modelsDir
+    .mockResolvedValueOnce(true)   // imageModelsDir
+    .mockResolvedValueOnce(false); // destExists = false
+  mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
+  (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+  mockedAsyncStorage.getItem.mockResolvedValue('[]');
+}
+
 describe('ModelManager', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -2705,16 +2715,6 @@ describe('ModelManager', () => {
       expect(result[0].backend).toBe('coreml');
     });
   });
-
-  function setupLiteRTImportMocks() {
-    mockedRNFS.exists
-      .mockResolvedValueOnce(true)   // modelsDir
-      .mockResolvedValueOnce(true)   // imageModelsDir
-      .mockResolvedValueOnce(false); // destExists = false
-    mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
-    (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
-    mockedAsyncStorage.getItem.mockResolvedValue('[]');
-  }
 
   describe('importLocalModel — LiteRT branches', () => {
     it('imports a .litertlm file with engine=litert and liteRTVision=false', async () => {
