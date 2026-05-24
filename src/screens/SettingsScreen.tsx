@@ -25,7 +25,6 @@ import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import { useAppStore, useRemoteServerStore } from '../stores';
 import { hardwareService } from '../services';
-import { liteRTService } from '../services/litert';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
@@ -251,15 +250,6 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
-            {liteRTService.isAvailable() && (
-              <TouchableOpacity
-                style={styles.devButton}
-                onPress={() => navigation.getParent()?.navigate('DebugLiteRT')}
-              >
-                <Icon name="cpu" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>LiteRT Debug</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </AnimatedEntry>
         <MadeWithLove />
