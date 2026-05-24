@@ -802,7 +802,7 @@ describe('httpClient', () => {
         get: () => onTimeout,
       });
 
-      (global as any).XMLHttpRequest = jest.fn(() => mockXHR);
+      (globalThis as any).XMLHttpRequest = jest.fn(() => mockXHR);
 
       jest.useFakeTimers();
       streamEvents = [];
@@ -1131,7 +1131,7 @@ describe('httpClient', () => {
         onerror: null as any,
         ontimeout: null as any,
       };
-      (global as any).XMLHttpRequest = jest.fn(() => mockXHR);
+      (globalThis as any).XMLHttpRequest = jest.fn(() => mockXHR);
     });
 
     function simulateSuccess(responseText = '') {

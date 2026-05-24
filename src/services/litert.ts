@@ -62,7 +62,7 @@ export interface LiteRTGenerationCallbacks {
 class LiteRTService {
   private loaded = false;
   private activeBackend: LiteRTBackend | null = null;
-  private emitter: NativeEventEmitter | null = null;
+  private readonly emitter: NativeEventEmitter | null = null;
   private subscriptions: EmitterSubscription[] = [];
 
   // Accumulated content for current generation
@@ -184,7 +184,7 @@ class LiteRTService {
 
     const COMPACT_THRESHOLD = 0.65;
     const threshold = maxTokens * COMPACT_THRESHOLD;
-    const needsCompact = maxTokens > 0 && !!history && history.length > 2 &&
+    const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
       (this.cumulativeTokens > threshold || incomingEstimate > threshold);
     dbg('log', `[LiteRT] prepareConversation compact check — needsCompact=${needsCompact} threshold=${Math.floor(threshold)} cumul=${this.cumulativeTokens} incoming=~${incomingEstimate}`);
 
@@ -210,11 +210,11 @@ class LiteRTService {
       this.activeConversationId !== conversationId ||
       this.activeSystemPrompt !== systemPrompt ||
       this.activeToolsJson !== toolsJson;
-    const resetReason = !needsReset ? 'none' : [
-      this.activeConversationId !== conversationId ? 'newConv' : '',
-      this.activeSystemPrompt !== systemPrompt ? 'sysPromptChanged' : '',
-      this.activeToolsJson !== toolsJson ? 'toolsChanged' : '',
-    ].filter(Boolean).join('+');
+    const reasons: string[] = [];
+    if (this.activeConversationId !== conversationId) reasons.push('newConv');
+    if (this.activeSystemPrompt !== systemPrompt) reasons.push('sysPromptChanged');
+    if (this.activeToolsJson !== toolsJson) reasons.push('toolsChanged');
+    const resetReason = needsReset ? reasons.join('+') : 'none';
 
     dbg('log', `[LiteRT] prepareConversation decision — needsReset=${needsReset} reason=${resetReason} historyTurns=${opts?.history?.length ?? 0}`);
 
@@ -289,7 +289,7 @@ class LiteRTService {
     this.clearSubscriptions();
     this.subscriptions = [
       this.emitter!.addListener(EVENT_TOKEN, (token: string) => {
-        if (firstTokenTime === undefined) firstTokenTime = Date.now();
+        firstTokenTime ??= Date.now();
         jsDecodeTokenCount++;
         this.currentContent += token;
         callbacks.onToken(token);
@@ -321,7 +321,7 @@ class LiteRTService {
 
         // Build wall-clock stats
         const completeTime = Date.now();
-        const ttft = firstTokenTime !== undefined ? (firstTokenTime - sendStart) / 1000 : undefined;
+        const ttft = firstTokenTime === undefined ? undefined : (firstTokenTime - sendStart) / 1000;
         const decodeElapsed = firstTokenTime !== undefined ? (completeTime - firstTokenTime) / 1000 : undefined;
         const decodeTokensPerSecond = decodeElapsed && decodeElapsed > 0 && jsDecodeTokenCount > 1
           ? jsDecodeTokenCount / decodeElapsed
@@ -366,7 +366,7 @@ class LiteRTService {
     ];
 
     try {
-      sendMsgDbg('log', `[Vision] → LiteRTModule.sendMessage — imageArg=${imageUri != null ? 'SET' : 'NULL'}`);
+      sendMsgDbg('log', `[Vision] → LiteRTModule.sendMessage — imageArg=${imageUri !== null ? 'SET' : 'NULL'}`);
       await LiteRTModule.sendMessage(text, imageUri ?? null);
     } catch (e) {
       this.clearSubscriptions();

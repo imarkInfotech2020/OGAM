@@ -147,7 +147,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showGenerationDetails: false,
   enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: true,
-  liteRTBackend: 'gpu' as LiteRTBackend,
+  liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
   liteRTMaxTokens: 4096,
@@ -162,7 +162,7 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   const merged = {
     ...currentState,
     ...persistedState,
-    settings: { ...DEFAULT_SETTINGS, ...(persistedState?.settings ?? {}) },
+    settings: { ...DEFAULT_SETTINGS, ...persistedState?.settings },
   };
   // Drop legacy download tracking fields. The unified downloadStore (backed
   // by the native Room DB) is now the source of truth. Persisted entries

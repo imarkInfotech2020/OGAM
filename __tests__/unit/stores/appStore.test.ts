@@ -1170,4 +1170,138 @@ describe('appStore', () => {
     });
   });
 
+  // ============================================================================
+  // Suspicious recovered model filtering (isSuspiciousRecoveredTextModel)
+  // ============================================================================
+  describe('suspicious recovered model filtering', () => {
+    it('setDownloadedModels filters out recovered_ model with unknown author', () => {
+      const { setDownloadedModels } = useAppStore.getState();
+      const suspicious = createDownloadedModel({ id: 'recovered_abc', author: 'unknown', quantization: 'Q4_K_M' });
+      const clean = createDownloadedModel({ id: 'clean-model' });
+
+      setDownloadedModels([suspicious, clean]);
+
+      const models = getAppState().downloadedModels;
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('clean-model');
+    });
+
+    it('setDownloadedModels filters out recovered_ model with empty author', () => {
+      const { setDownloadedModels } = useAppStore.getState();
+      const suspicious = createDownloadedModel({ id: 'recovered_xyz', author: '  ', quantization: 'Q4' });
+
+      setDownloadedModels([suspicious]);
+
+      expect(getAppState().downloadedModels).toHaveLength(0);
+    });
+
+    it('setDownloadedModels filters out recovered_ model with unknown quantization', () => {
+      const { setDownloadedModels } = useAppStore.getState();
+      const suspicious = createDownloadedModel({ id: 'recovered_xyz', author: 'Meta', quantization: 'unknown' });
+
+      setDownloadedModels([suspicious]);
+
+      expect(getAppState().downloadedModels).toHaveLength(0);
+    });
+
+    it('setDownloadedModels keeps recovered_ model with known author and quantization', () => {
+      const { setDownloadedModels } = useAppStore.getState();
+      const legit = createDownloadedModel({ id: 'recovered_xyz', author: 'Meta', quantization: 'Q4_K_M' });
+
+      setDownloadedModels([legit]);
+
+      expect(getAppState().downloadedModels).toHaveLength(1);
+    });
+
+    it('addDownloadedModel ignores suspicious recovered_ model', () => {
+      const { addDownloadedModel } = useAppStore.getState();
+      const suspicious = createDownloadedModel({ id: 'recovered_bad', author: 'unknown', quantization: 'unknown' });
+
+      addDownloadedModel(suspicious);
+
+      expect(getAppState().downloadedModels).toHaveLength(0);
+    });
+
+    it('addDownloadedModel accepts non-recovered model regardless of author', () => {
+      const { addDownloadedModel } = useAppStore.getState();
+      const model = createDownloadedModel({ id: 'normal-model', author: 'unknown' });
+
+      addDownloadedModel(model);
+
+      // Non-recovered_ prefix → not suspicious
+      expect(getAppState().downloadedModels).toHaveLength(1);
+    });
+
+    it('setDownloadedImageModels filters out recovered_ image models', () => {
+      const { setDownloadedImageModels } = useAppStore.getState();
+      const suspicious = createONNXImageModel({ id: 'recovered_img' });
+      const clean = createONNXImageModel({ id: 'clean-img' });
+
+      setDownloadedImageModels([suspicious, clean]);
+
+      const models = getAppState().downloadedImageModels;
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('clean-img');
+    });
+
+    it('addDownloadedImageModel ignores recovered_ image model', () => {
+      const { addDownloadedImageModel } = useAppStore.getState();
+      const suspicious = createONNXImageModel({ id: 'recovered_bad_img' });
+
+      addDownloadedImageModel(suspicious);
+
+      expect(getAppState().downloadedImageModels).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
+  // migratePersistedState branches (via actual merge function)
+  // ============================================================================
+  describe('migratePersistedState via persist merge', () => {
+    const getMergeFn = () => (useAppStore as any).persist?.getOptions?.().merge as (p: any, c: any) => any;
+
+    it('migrates missing cacheType with flashAttn=true to q8_0', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { flashAttn: true } }, // no cacheType
+        useAppStore.getState(),
+      );
+      expect(result.settings.cacheType).toBe('q8_0');
+    });
+
+    it('migrates missing cacheType with flashAttn=false to f16', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { flashAttn: false } }, // no cacheType
+        useAppStore.getState(),
+      );
+      expect(result.settings.cacheType).toBe('f16');
+    });
+
+    it('migrates missing inferenceBackend to platform default', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        { settings: { temperature: 0.7 } }, // no inferenceBackend
+        useAppStore.getState(),
+      );
+      // Should be set to something (not undefined)
+      expect(result.settings.inferenceBackend).toBeDefined();
+    });
+
+    it('resets checklistDismissed when checklist is incomplete', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        {
+          checklistDismissed: true,
+          onboardingChecklist: {
+            downloadedModel: false, loadedModel: false, sentMessage: false,
+            triedImageGen: false, exploredSettings: false, createdProject: false,
+          },
+        },
+        useAppStore.getState(),
+      );
+      expect(result.checklistDismissed).toBe(false);
+    });
+  });
+
 });

@@ -18,7 +18,10 @@ export const ContextRing: React.FC<ContextRingProps> = ({ used, max, size = 16, 
   if (!max || !used) return null;
 
   const pct = Math.min(used / max, 1);
-  const fillColor = pct < 0.7 ? colors.primary : pct < 0.85 ? AMBER : colors.error;
+  let fillColor: string;
+  if (pct < 0.7) { fillColor = colors.primary; }
+  else if (pct < 0.85) { fillColor = AMBER; }
+  else { fillColor = colors.error; }
   const emptyColor = colors.border;
 
   // Each border segment covers one 90-degree arc of the circle.

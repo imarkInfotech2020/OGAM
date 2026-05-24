@@ -2706,19 +2706,19 @@ describe('ModelManager', () => {
     });
   });
 
-  describe('importLocalModel — LiteRT branches', () => {
-    function setupImportMocks() {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false); // destExists = false
-      mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
-      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-    }
+  function setupLiteRTImportMocks() {
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true)   // modelsDir
+      .mockResolvedValueOnce(true)   // imageModelsDir
+      .mockResolvedValueOnce(false); // destExists = false
+    mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
+    (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+    mockedAsyncStorage.getItem.mockResolvedValue('[]');
+  }
 
+  describe('importLocalModel — LiteRT branches', () => {
     it('imports a .litertlm file with engine=litert and liteRTVision=false', async () => {
-      setupImportMocks();
+      setupLiteRTImportMocks();
       const result = await modelManager.importLocalModel({
         sourceUri: '/path/to/gemma.litertlm',
         fileName: 'gemma-4-E2B-it.litertlm',
@@ -2731,7 +2731,7 @@ describe('ModelManager', () => {
     });
 
     it('imports a .litertlm file with liteRTVision=true', async () => {
-      setupImportMocks();
+      setupLiteRTImportMocks();
       const result = await modelManager.importLocalModel({
         sourceUri: '/path/to/gemma-vision.litertlm',
         fileName: 'gemma-vision.litertlm',
@@ -2742,7 +2742,7 @@ describe('ModelManager', () => {
     });
 
     it('omits engine and liteRTVision when not provided', async () => {
-      setupImportMocks();
+      setupLiteRTImportMocks();
       const result = await modelManager.importLocalModel({
         sourceUri: '/path/to/model.gguf',
         fileName: 'model.gguf',

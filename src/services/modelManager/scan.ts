@@ -63,6 +63,20 @@ export function findMatchingMmProj(
   });
 }
 
+function linkMmProjToModel(model: DownloadedModel, mmProjFiles: RNFS.ReadDirItem[]): void {
+  if (model.engine !== 'llama') return;
+  if (model.mmProjPath) return;
+  if (!looksLikeVisionModel(model)) return;
+  const baseName = extractBaseName(model.fileName);
+  const match = findMatchingMmProj(baseName, mmProjFiles);
+  if (match) {
+    model.mmProjPath = match.path;
+    model.mmProjFileName = match.name;
+    model.mmProjFileSize = parseSizeInt(match.size);
+    model.isVisionModel = true;
+  }
+}
+
 export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
   const models = await loadDownloadedModels(modelsDir);
   const cleanedModels = models.filter(m => !isMMProjFile(m.fileName));
@@ -73,20 +87,8 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
     if (dirExists) {
       const files = await RNFS.readDir(modelsDir);
       const mmProjFiles = files.filter(f => f.isFile() && isMMProjFile(f.name));
-
       for (const model of cleanedModels) {
-        if (model.engine !== 'llama') continue;
-        if (model.mmProjPath) continue;
-        if (!looksLikeVisionModel(model)) continue;
-
-        const baseName = extractBaseName(model.fileName);
-        const match = findMatchingMmProj(baseName, mmProjFiles);
-        if (match) {
-          model.mmProjPath = match.path;
-          model.mmProjFileName = match.name;
-          model.mmProjFileSize = parseSizeInt(match.size);
-          model.isVisionModel = true;
-        }
+        linkMmProjToModel(model, mmProjFiles);
       }
     }
   } catch {

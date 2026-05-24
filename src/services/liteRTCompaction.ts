@@ -66,7 +66,7 @@ export async function runCompaction(params: {
   const dbg = useDebugLogsStore.getState().addLog;
   contextCompactionService.signalCompacting(true);
   try {
-    const recentBudgetChars = Math.floor(maxTokens * 0.40) * 4;
+    const recentBudgetChars = Math.floor(maxTokens * 0.4) * 4;
     let charCount = 0;
     let recentStart = history.length;
     for (let i = history.length - 1; i >= 0; i--) {

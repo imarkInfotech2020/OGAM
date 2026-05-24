@@ -281,7 +281,7 @@ export const TextGenerationAdvanced: React.FC = () => {
         <Slider
           style={styles.slider}
           minimumValue={0.1}
-          maximumValue={1.0}
+          maximumValue={1}
           step={0.05}
           value={settings?.topP || 0.9}
           onSlidingComplete={(value) => updateSettings({ topP: value })}
@@ -374,7 +374,7 @@ export const LiteRTTextGenerationAdvanced: React.FC = () => {
         <Slider
           style={styles.slider}
           minimumValue={0.1}
-          maximumValue={1.0}
+          maximumValue={1}
           step={0.05}
           value={settings?.liteRTTopP || 0.9}
           onSlidingComplete={(value) => updateSettings({ liteRTTopP: value })}

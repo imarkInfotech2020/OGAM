@@ -124,19 +124,19 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
         // GPU/NPU failures can be transient (e.g. VRAM not yet released after a model switch).
         // Retry up to 2 extra times with backoff before giving up on a non-CPU backend.
-        val GPU_RETRIES = 2
-        val GPU_RETRY_DELAY_MS = 600L
+        val gpuRetries = 2
+        val gpuRetryDelayMs = 600L
 
         var lastError: Exception? = null
         for (backend in chain) {
             val name = backendName(backend)
-            val maxAttempts = if (backend is Backend.CPU) 1 else GPU_RETRIES + 1
+            val maxAttempts = if (backend is Backend.CPU) 1 else gpuRetries + 1
             var succeeded = false
 
             for (attempt in 1..maxAttempts) {
                 if (attempt > 1) {
-                    Log.i(TAG, "initializeWithFallback — $name retry $attempt/$maxAttempts after ${GPU_RETRY_DELAY_MS}ms")
-                    delay(GPU_RETRY_DELAY_MS)
+                    Log.i(TAG, "initializeWithFallback — $name retry $attempt/$maxAttempts after ${gpuRetryDelayMs}ms")
+                    delay(gpuRetryDelayMs)
                 } else {
                     Log.i(TAG, "initializeWithFallback — trying $name vision=$visionEnabled")
                 }
@@ -246,6 +246,44 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun dispatchStreamToken(message: LiteRTMessage) {
+        val thought = message.channels["thought"]
+        if (thought != null && thought.isNotEmpty()) {
+            sendEvent(EVENT_THINKING, thought)
+        } else {
+            val token = message.contents.contents
+                .filterIsInstance<Content.Text>()
+                .joinToString("") { it.text }
+            if (token.isNotEmpty()) sendEvent(EVENT_TOKEN, token)
+        }
+    }
+
+    @OptIn(ExperimentalApi::class)
+    private fun buildBenchmarkJson(conv: com.google.ai.edge.litertlm.Conversation): String {
+        return try {
+            val b = conv.getBenchmarkInfo()
+            val contextUsed = b.lastPrefillTokenCount + b.lastDecodeTokenCount
+            debugLog("context — prefill=${b.lastPrefillTokenCount} decoded=${b.lastDecodeTokenCount} total=$contextUsed/$configuredMaxTokens ttft=${b.timeToFirstTokenInSecond}s decode=${b.lastDecodeTokensPerSecond}tok/s")
+            """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"decodeTokenCount":${b.lastDecodeTokenCount},"maxNumTokens":$configuredMaxTokens,"initTimeSeconds":${b.initTimeInSecond}}"""
+        } catch (e: Exception) {
+            Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
+            ""
+        }
+    }
+
+    private suspend fun buildSendContents(imageUri: String?, text: String, safe: SafePromise): Contents? {
+        if (imageUri == null || !supportsVision) return Contents.of(text)
+        return try {
+            val pngBytes = readImageAsPngBytes(imageUri)
+            Contents.of(Content.ImageBytes(pngBytes), Content.Text(text))
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMessage — failed to read/decode image: ${e.message}", e)
+            sendEvent(EVENT_ERROR, "Failed to read image: ${e.message}")
+            safe.reject("LITERT_IMG_ERROR", "Failed to read image: ${e.message}", e)
+            null
+        }
+    }
+
     // -------------------------------------------------------------------------
     // sendMessage — sends only the current user turn, library holds history
     // -------------------------------------------------------------------------
@@ -256,7 +294,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         Log.i(TAG, "sendMessage — text length=${text.length} hasImage=${imageUri != null}")
 
         scope.launch {
-            // Wait for any in-flight generation to finish
             currentJob?.join()
 
             val conv = conversation
@@ -266,58 +303,14 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 return@launch
             }
 
-            if (imageUri != null && !supportsVision) {
-                Log.w(TAG, "sendMessage — image provided but model was not loaded with vision support, ignoring image")
-            }
-
             currentJob = launch {
                 try {
-                    Log.i(TAG, "sendMessage — starting generation")
+                    val contents = buildSendContents(imageUri, text, safe) ?: return@launch
 
-                    val contents = if (imageUri != null && supportsVision) {
-                        Log.i(TAG, "sendMessage — reading image from URI: $imageUri")
-                        val pngBytes = try {
-                            readImageAsPngBytes(imageUri)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "sendMessage — failed to read/decode image: ${e.message}", e)
-                            sendEvent(EVENT_ERROR, "Failed to read image: ${e.message}")
-                            safe.reject("LITERT_IMG_ERROR", "Failed to read image: ${e.message}", e)
-                            return@launch
-                        }
-                        Log.i(TAG, "sendMessage — image decoded to PNG, bytes=${pngBytes.size}")
-                        // Image before text — matches reference implementation order
-                        Contents.of(Content.ImageBytes(pngBytes), Content.Text(text))
-                    } else {
-                        Contents.of(text)
-                    }
-
-                    Log.i(TAG, "sendMessage — calling sendMessageAsync")
                     conv.sendMessageAsync(contents)
-                        .collect { message ->
-                            val thought = message.channels["thought"]
-                            if (thought != null && thought.isNotEmpty()) {
-                                Log.d(TAG, "sendMessage — thinking token")
-                                sendEvent(EVENT_THINKING, thought)
-                            } else {
-                                val token = message.contents.contents
-                                    .filterIsInstance<Content.Text>()
-                                    .joinToString("") { it.text }
-                                Log.d(TAG, "sendMessage — token: '$token'")
-                                if (token.isNotEmpty()) sendEvent(EVENT_TOKEN, token)
-                            }
-                        }
-                    Log.i(TAG, "sendMessage — generation complete")
-                    @OptIn(ExperimentalApi::class)
-                    val benchmarkJson = try {
-                        val b = conv.getBenchmarkInfo()
-                        val contextUsed = b.lastPrefillTokenCount + b.lastDecodeTokenCount
-                        debugLog("context — prefill=${b.lastPrefillTokenCount} decoded=${b.lastDecodeTokenCount} total=$contextUsed/$configuredMaxTokens ttft=${b.timeToFirstTokenInSecond}s decode=${b.lastDecodeTokensPerSecond}tok/s")
-                        """{"ttft":${b.timeToFirstTokenInSecond},"decodeTokensPerSecond":${b.lastDecodeTokensPerSecond},"prefillTokensPerSecond":${b.lastPrefillTokensPerSecond},"prefillTokenCount":${b.lastPrefillTokenCount},"decodeTokenCount":${b.lastDecodeTokenCount},"maxNumTokens":$configuredMaxTokens,"initTimeSeconds":${b.initTimeInSecond}}"""
-                    } catch (e: Exception) {
-                        Log.w(TAG, "getBenchmarkInfo failed: ${e.message}")
-                        ""
-                    }
-                    sendEvent(EVENT_COMPLETE, benchmarkJson)
+                        .collect { message -> dispatchStreamToken(message) }
+
+                    sendEvent(EVENT_COMPLETE, buildBenchmarkJson(conv))
                     safe.resolve(null)
                 } catch (e: CancellationException) {
                     Log.i(TAG, "sendMessage — job cancelled")

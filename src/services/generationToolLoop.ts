@@ -35,25 +35,47 @@ function parseToolCallBody(body: string, idSuffix: number): ToolCall | null {
   } catch { /* fall through */ }
 
   // Function-call style: tool_name({"key": "value"})
-  const funcMatch = body.match(/^(\w+)\s*\((\{[\s\S]*\})\)$/);
+  const funcMatch = (/^(\w+)\s*\((\{[\s\S]*\})\)$/).exec(body);
   if (funcMatch) {
     try { return makeCall(funcMatch[1], JSON.parse(funcMatch[2])); } catch { /* fall through */ }
   }
 
   // Bare style: tool_name{"key": "value"}
-  const bareMatch = body.match(/^(\w+)\s*(\{[\s\S]*\})$/);
+  const bareMatch = (/^(\w+)\s*(\{[\s\S]*\})$/).exec(body);
   if (bareMatch) {
     try { return makeCall(bareMatch[1], JSON.parse(bareMatch[2])); } catch { /* fall through */ }
   }
 
   // No-args style: just a tool name with no arguments
-  const noArgsMatch = body.match(/^(\w+)$/);
+  const noArgsMatch = (/^(\w+)$/).exec(body);
   if (noArgsMatch) return makeCall(noArgsMatch[1], {});
 
   return parseXmlStyleToolCall(body, idSuffix);
 }
+function fixUnquotedKeys(json: string): string {
+  return json.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
+}
+
+function parseGemmaColonArgs(name: string, colonArgs: string): Record<string, any> {
+  if (colonArgs.startsWith(name)) {
+    const jsonBody = colonArgs.slice(name.length).trim();
+    if (jsonBody.startsWith('{')) {
+      try { return JSON.parse(fixUnquotedKeys(jsonBody)) as Record<string, any>; }
+      catch { /* fall through */ }
+    }
+  }
+  const firstColon = colonArgs.indexOf(':');
+  if (firstColon !== -1) {
+    const key = colonArgs.slice(0, firstColon).trim();
+    if (/^\w+$/.test(key)) {
+      return { [key]: colonArgs.slice(firstColon + 1).trim() };
+    }
+  }
+  return {};
+}
+
 function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
-  const nameMatch = raw.match(/^(?:call:)?(\w+)/);
+  const nameMatch = (/^(?:call:)?(\w+)/).exec(raw);
   if (!nameMatch) {
     logger.warn(`[ToolLoop] Gemma tool call body did not match expected format: "${raw.substring(0, 100)}"`);
     return;
@@ -62,44 +84,17 @@ function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
   const rest = raw.slice(nameMatch[0].length).trim();
   let args: Record<string, any> = {};
 
-  // Args may be: ({"key":"val"}) function-call style, {"key":"val"} bare object
-  const argsStr = rest.match(/^\((\{[\s\S]*\})\)$/)?.[1] ?? rest.match(/^(\{[\s\S]*\})$/)?.[1] ?? null;
+  const argsStr = (/^\((\{[\s\S]*\})\)$/).exec(rest)?.[1] ?? (/^(\{[\s\S]*\})$/).exec(rest)?.[1] ?? null;
   if (argsStr) {
     try {
-      // Gemma often emits unquoted keys like {queries:["x"]} — fix to valid JSON
-      const fixedJson = argsStr.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
-      args = JSON.parse(fixedJson);
+      args = JSON.parse(fixUnquotedKeys(argsStr));
     } catch {
       logger.warn(`[ToolLoop] Failed to parse Gemma tool args: ${argsStr.substring(0, 100)}`);
     }
   } else if (rest.startsWith(':')) {
-    const colonArgs = rest.slice(1);
-
-    // Pattern: repeated tool name + JSON body — e.g. "read_url{url: "https://..."}"
-    if (colonArgs.startsWith(name)) {
-      const jsonBody = colonArgs.slice(name.length).trim();
-      if (jsonBody.startsWith('{')) {
-        try {
-          const fixedJson = jsonBody.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
-          args = JSON.parse(fixedJson);
-        } catch { /* fall through */ }
-      }
-    }
-
-    // Pattern: simple key:value — e.g. "url:https://..."
-    if (Object.keys(args).length === 0) {
-      const firstColon = colonArgs.indexOf(':');
-      if (firstColon !== -1) {
-        const key = colonArgs.slice(0, firstColon).trim();
-        if (/^\w+$/.test(key)) {
-          const value = colonArgs.slice(firstColon + 1).trim();
-          args = { [key]: value };
-        }
-      }
-    }
+    args = parseGemmaColonArgs(name, rest.slice(1));
   }
 
-  // Normalize Gemma's "queries" array to the single "query" string our tools expect
   if (name === 'web_search' && !args.query && args.queries) {
     args = { ...args, query: Array.isArray(args.queries) ? args.queries[0] : args.queries };
   }
@@ -116,14 +111,14 @@ function parseGemmaNativeToolCalls(text: string): { cleanText: string; toolCalls
 
   while ((match = pattern.exec(text)) !== null) {
     matchedRanges.push([match.index, match.index + match[0].length]);
-    parseGemmaToolCallBody(match[1].trim().replace(/<\|"\|>/g, '"'), toolCalls);
+    parseGemmaToolCallBody(match[1].trim().replaceAll('<|"|>', '"'), toolCalls);
   }
 
   // Fallback: unclosed <|tool_call> at end of text (model hit EOS without closing tag)
   if (toolCalls.length === 0) {
     const unclosedMatch = /(?:<\|tool_call>|<tool_call:)([\s\S]+)$/.exec(text);
     if (unclosedMatch) {
-      parseGemmaToolCallBody(unclosedMatch[1].trim().replace(/<\|"\|>/g, '"'), toolCalls);
+      parseGemmaToolCallBody(unclosedMatch[1].trim().replaceAll('<|"|>', '"'), toolCalls);
       if (toolCalls.length > 0) {
         matchedRanges.push([unclosedMatch.index, text.length]);
       }

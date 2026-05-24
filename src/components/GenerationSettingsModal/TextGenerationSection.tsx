@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS: Record<string, number> = {
 
 // ─── Config builders ──────────────────────────────────────────────────────────
 
-function buildLlamaConfig(modelMaxContext: number | null): SettingConfig[] {
+function buildLlamaConfig(modelMaxContext: number | null = null): SettingConfig[] {
   const llmMax = modelMaxContext ?? 32768;
   return [
     {
@@ -63,14 +63,14 @@ function buildLlamaConfig(modelMaxContext: number | null): SettingConfig[] {
     {
       key: 'topP',
       label: 'Top P',
-      min: 0.1, max: 1.0, step: 0.05,
+      min: 0.1, max: 1, step: 0.05,
       format: (v) => v.toFixed(2),
       description: 'Nucleus sampling threshold',
     },
     {
       key: 'repeatPenalty',
       label: 'Repeat Penalty',
-      min: 1.0, max: 2.0, step: 0.05,
+      min: 1, max: 2, step: 0.05,
       format: (v) => v.toFixed(2),
       description: 'Penalize repeated tokens',
     },
@@ -85,7 +85,7 @@ function buildLlamaConfig(modelMaxContext: number | null): SettingConfig[] {
   ];
 }
 
-function buildLiteRTConfig(modelMaxContext: number | null): SettingConfig[] {
+function buildLiteRTConfig(modelMaxContext: number | null = null): SettingConfig[] {
   const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
   const contextMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
   const contextWarn = isLargeRam ? 16384 : 8192;
@@ -100,7 +100,7 @@ function buildLiteRTConfig(modelMaxContext: number | null): SettingConfig[] {
     {
       key: 'liteRTTopP',
       label: 'Top P',
-      min: 0.1, max: 1.0, step: 0.05,
+      min: 0.1, max: 1, step: 0.05,
       format: (v) => v.toFixed(2),
       description: 'Nucleus sampling threshold',
     },
@@ -200,11 +200,11 @@ const LiteRTTextGenerationSection: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const config = buildLiteRTConfig(modelMaxContext);
-  const basicKeys = ['liteRTTemperature', 'liteRTMaxTokens'];
-  const advancedKeys = ['liteRTTopP'];
+  const basicKeys = new Set(['liteRTTemperature', 'liteRTMaxTokens']);
+  const advancedKeys = new Set(['liteRTTopP']);
 
-  const basicSettings = config.filter(c => basicKeys.includes(c.key));
-  const advancedSettings = config.filter(c => advancedKeys.includes(c.key));
+  const basicSettings = config.filter(c => basicKeys.has(c.key));
+  const advancedSettings = config.filter(c => advancedKeys.has(c.key));
 
   return (
     <View style={styles.sectionCard}>
@@ -235,11 +235,11 @@ const LlamaTextGenerationSection: React.FC = () => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const config = buildLlamaConfig(modelMaxContext);
-  const basicKeys = ['temperature', 'maxTokens', 'contextLength'];
-  const advancedKeys = ['topP', 'repeatPenalty'];
+  const basicKeys = new Set(['temperature', 'maxTokens', 'contextLength']);
+  const advancedKeys = new Set(['topP', 'repeatPenalty']);
 
-  const basicSettings = config.filter(c => basicKeys.includes(c.key));
-  const advancedSettings = config.filter(c => advancedKeys.includes(c.key));
+  const basicSettings = config.filter(c => basicKeys.has(c.key));
+  const advancedSettings = config.filter(c => advancedKeys.has(c.key));
 
   return (
     <View style={styles.sectionCard}>
