@@ -377,10 +377,12 @@ async function callLiteRTForLoop(
   const onToolCall = ctx ? buildLiteRTToolCallHandler(ctx, conversationId) : undefined;
   const fullResponse = await liteRTService.generateRaw(
     text,
-    token => onStream?.({ content: token }),
-    onToolCall,
     imageUri,
-    token => onStream?.({ reasoningContent: token }),
+    {
+      onToken: token => onStream?.({ content: token }),
+      onToolCall,
+      onReasoning: token => onStream?.({ reasoningContent: token }),
+    },
   );
   logger.log(`[ToolLoop][LiteRT] raw response (${fullResponse.length}ch): "${fullResponse.substring(0, 400)}"`);
   // Native SDK handles all tool→model cycles internally; toolCalls always empty here

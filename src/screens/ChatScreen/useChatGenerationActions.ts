@@ -222,7 +222,8 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
   return prompt;
 }
 /** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT. */
-const applyGemma4ThinkToken = (prompt: string, isRemote: boolean, isLiteRT: boolean = false, thinkingEnabled: boolean = false): string => {
+const applyGemma4ThinkToken = (prompt: string, isRemote: boolean, opts?: { isLiteRT?: boolean; thinkingEnabled?: boolean }): string => {
+  const { isLiteRT = false, thinkingEnabled = false } = opts ?? {};
   const liteRTWantsThink = !isRemote && isLiteRT && thinkingEnabled;
   const llamaWantsThink = !isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled();
   return (liteRTWantsThink || llamaWantsThink) ? `<|think|>\n${prompt}` : prompt;
@@ -276,8 +277,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const systemPrompt = applyGemma4ThinkToken(
     useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
     isRemote,
-    isLiteRT,
-    deps.settings.thinkingEnabled,
+    { isLiteRT, thinkingEnabled: deps.settings.thinkingEnabled },
   );
   logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, isLiteRT=${isLiteRT}, useTextHint=${useTextHint}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
   logger.log(`[ChatGen][PROMPT] systemPrompt (${systemPrompt.length}ch): "${systemPrompt.substring(0, 800)}"`);
@@ -372,8 +372,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const systemPrompt = applyGemma4ThinkToken(
     useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
     isRemote,
-    isLiteRTRegen,
-    deps.settings.thinkingEnabled,
+    { isLiteRT: isLiteRTRegen, thinkingEnabled: deps.settings.thinkingEnabled },
   );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
