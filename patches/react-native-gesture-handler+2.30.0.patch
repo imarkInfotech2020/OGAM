@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerModule.kt b/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerModule.kt
+--- a/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerModule.kt
++++ b/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerModule.kt
+@@ -170,7 +170,7 @@
+     }
+     synchronized(roots) {
+       return roots.firstOrNull {
+-        it.rootView is ReactRootView && it.rootView.rootViewTag == rootViewTag
++        it.rootView is ReactRootView && (it.rootView as ReactRootView).getRootViewTag() == rootViewTag
+       }
+     }
+   }
