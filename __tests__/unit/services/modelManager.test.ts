@@ -1460,7 +1460,7 @@ describe('ModelManager', () => {
       const models = await modelManager.getDownloadedModels();
 
       expect(models).toHaveLength(1);
-      expect(models[0].mmProjPath).toBeDefined();
+      expect((models[0] as any).mmProjPath).toBeDefined();
     });
   });
 
@@ -2726,7 +2726,7 @@ describe('ModelManager', () => {
         liteRTVision: false,
       });
       expect(result.engine).toBe('litert');
-      expect(result.liteRTVision).toBe(false);
+      expect((result as any).liteRTVision).toBe(false);
       expect(result.id).toBe('local_import/gemma-4-E2B-it.litertlm');
     });
 
@@ -2738,7 +2738,7 @@ describe('ModelManager', () => {
         engine: 'litert',
         liteRTVision: true,
       });
-      expect(result.liteRTVision).toBe(true);
+      expect((result as any).liteRTVision).toBe(true);
     });
 
     it('omits engine and liteRTVision when not provided', async () => {
@@ -2748,7 +2748,7 @@ describe('ModelManager', () => {
         fileName: 'model.gguf',
       });
       expect(result.engine).toBe('llama');
-      expect(result.liteRTVision).toBeUndefined();
+      expect((result as any).liteRTVision).toBeUndefined();
     });
   });
 });

@@ -32,8 +32,9 @@ function makeDownloadedModel(overrides: Partial<DownloadedModel> = {}): Download
     fileSize: 4_000_000_000,
     quantization: 'Q4_K_M',
     downloadedAt: new Date().toISOString(),
+    engine: 'llama',
     ...overrides,
-  };
+  } as DownloadedModel;
 }
 
 function makeImageModel(overrides: Partial<ONNXImageModel> = {}): ONNXImageModel {

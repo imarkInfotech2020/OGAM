@@ -1,11 +1,11 @@
-import { DownloadedModel } from '../../../../src/types';
+import { LlamaDownloadedModel } from '../../../../src/types';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return normalized.length === 0 || normalized === 'unknown';
 }
 
-function isSuspiciousRecoveredModel(model: DownloadedModel): boolean {
+function isSuspiciousRecoveredModel(model: LlamaDownloadedModel): boolean {
   const isRecovered = model.id.startsWith('recovered_');
   if (!isRecovered) return false;
 
@@ -17,7 +17,8 @@ function isSuspiciousRecoveredModel(model: DownloadedModel): boolean {
 
 describe('isSuspiciousRecoveredModel', () => {
   it('should filter recovered models with unknown author', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'recovered_gemma-4_123456',
       name: 'gemma-4',
       author: 'Unknown',
@@ -31,7 +32,8 @@ describe('isSuspiciousRecoveredModel', () => {
   });
 
   it('should filter recovered models with unknown quantization', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'recovered_qwen_123456',
       name: 'qwen',
       author: 'unsloth',
@@ -45,7 +47,8 @@ describe('isSuspiciousRecoveredModel', () => {
   });
 
   it('should filter recovered models with both unknown author and quantization', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'recovered_model_123456',
       name: 'model',
       author: 'Unknown',
@@ -59,7 +62,8 @@ describe('isSuspiciousRecoveredModel', () => {
   });
 
   it('should not filter recovered models with valid metadata', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'recovered_model_123456',
       name: 'model',
       author: 'huggingface',
@@ -73,7 +77,8 @@ describe('isSuspiciousRecoveredModel', () => {
   });
 
   it('should not filter non-recovered models even with unknown metadata', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'unsloth/Qwen2.5-7B-Instruct-GGUF',
       name: 'Qwen2.5-7B-Instruct',
       author: 'Unknown',
@@ -87,7 +92,8 @@ describe('isSuspiciousRecoveredModel', () => {
   });
 
   it('should handle empty author/quantization as unknown', () => {
-    const model: DownloadedModel = {
+    const model: LlamaDownloadedModel = {
+      engine: 'llama',
       id: 'recovered_model_123456',
       name: 'model',
       author: '',
