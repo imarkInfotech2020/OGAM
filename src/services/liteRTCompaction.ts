@@ -46,7 +46,7 @@ export async function summarizeSession(
     };
     const timeout = setTimeout(() => {
       // Stop native generation before resetConversation is called to avoid race condition
-      stopGeneration?.().catch(() => {}).finally(() => finish(null));
+      (stopGeneration?.() ?? Promise.resolve()).catch(() => {}).finally(() => finish(null));
     }, 20_000);
     sendMessage(
       'Briefly summarize our conversation so far — key topics, decisions, and context. 3 to 5 sentences maximum. Do not call any tools, just answer in plain text.',
