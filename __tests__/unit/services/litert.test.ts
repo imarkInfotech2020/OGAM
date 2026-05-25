@@ -8,6 +8,7 @@ const mockLiteRTModule = {
   loadModel: jest.fn(),
   resetConversation: jest.fn(),
   sendMessage: jest.fn(),
+  sendMessageWithImages: jest.fn(),
   stopGeneration: jest.fn(),
   unloadModel: jest.fn(),
   getMemoryInfo: jest.fn(),
@@ -100,6 +101,23 @@ describe('LiteRTService', () => {
       const callbacks = { onToken: jest.fn(), onReasoning: jest.fn(), onComplete: jest.fn(), onError };
       await liteRTService.sendMessage('hello', callbacks);
       expect(onError).toHaveBeenCalledWith(expect.any(Error));
+      expect(mockLiteRTModule.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('uses sendMessageWithImages when multiple image URIs are provided', async () => {
+      (liteRTService as any).loaded = true;
+      mockLiteRTModule.sendMessageWithImages.mockResolvedValue(undefined);
+
+      const callbacks = {
+        onToken: jest.fn(),
+        onReasoning: jest.fn(),
+        onComplete: jest.fn(),
+        onError: jest.fn(),
+      };
+
+      await liteRTService.sendMessage('hello', callbacks, ['file:///one.png', 'file:///two.png']);
+
+      expect(mockLiteRTModule.sendMessageWithImages).toHaveBeenCalledWith('hello', ['file:///one.png', 'file:///two.png']);
       expect(mockLiteRTModule.sendMessage).not.toHaveBeenCalled();
     });
   });

@@ -8,6 +8,7 @@
 
 import { runToolLoop, ToolLoopContext, parseToolCallsFromText } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
+import { liteRTService } from '../../../src/services/litert';
 import { Message } from '../../../src/types';
 import { createMessage } from '../../utils/factories';
 import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
@@ -56,6 +57,15 @@ jest.mock('../../../src/services/llm', () => ({
   },
 }));
 
+jest.mock('../../../src/services/litert', () => ({
+  liteRTService: {
+    isModelLoaded: jest.fn(() => false),
+    prepareConversation: jest.fn(),
+    generateRaw: jest.fn(),
+    getLastBenchmarkStats: jest.fn(() => undefined),
+  },
+}));
+
 jest.mock('../../../src/services/providers', () => ({
   providerRegistry: {
     hasProvider: jest.fn(() => false),
@@ -72,6 +82,7 @@ jest.mock('../../../src/services/tools', () => ({
 }));
 
 const mockedGenerateResponseWithTools = llmService.generateResponseWithTools as jest.Mock;
+const mockedLiteRTService = liteRTService as jest.Mocked<typeof liteRTService>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,6 +136,9 @@ describe('runToolLoop', () => {
     mockGetToolsAsOpenAISchema.mockReturnValue([
       { type: 'function', function: { name: 'web_search' } },
     ]);
+    mockedLiteRTService.isModelLoaded.mockReturnValue(false);
+    mockedLiteRTService.prepareConversation.mockResolvedValue(undefined);
+    mockedLiteRTService.generateRaw.mockResolvedValue('LiteRT response');
   });
 
   // ==========================================================================
@@ -182,6 +196,38 @@ describe('runToolLoop', () => {
       await runToolLoop(ctx);
 
       expect(mockAddMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('LiteRT image forwarding', () => {
+    it('forwards all image attachments from the last user message to LiteRT', async () => {
+      mockedLiteRTService.isModelLoaded.mockReturnValue(true);
+
+      const ctx = createContext({
+        messages: [
+          makeMessage({ role: 'system', content: 'You are helpful.' }),
+          makeMessage({
+            role: 'user',
+            content: 'Compare these images',
+            attachments: [
+              { id: 'img-1', type: 'image', uri: 'file:///one.png' },
+              { id: 'doc-1', type: 'document', uri: 'file:///note.pdf' },
+              { id: 'img-2', type: 'image', uri: 'file:///two.png' },
+            ],
+          }),
+        ],
+      });
+
+      await runToolLoop(ctx);
+
+      expect(mockedLiteRTService.generateRaw).toHaveBeenCalledWith(
+        'Compare these images',
+        ['file:///one.png', 'file:///two.png'],
+        expect.objectContaining({
+          onToken: expect.any(Function),
+          onReasoning: expect.any(Function),
+        }),
+      );
     });
   });
 
@@ -1364,4 +1410,3 @@ describe('callRemoteLLMWithTools via forceRemote', () => {
     await expect(runToolLoop(ctx)).rejects.toThrow('Remote provider not found');
   });
 });
-

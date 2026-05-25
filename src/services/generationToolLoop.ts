@@ -352,15 +352,16 @@ async function callLiteRTForLoop(
   const text = buildLiteRTSendText(messages);
   const history = buildLiteRTHistory(messages);
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
-  const imageAttachment = lastUser?.attachments?.find((a: any) => a.type === 'image');
-  const imageUri = imageAttachment?.uri;
+  const imageUris = lastUser?.attachments
+    ?.filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
+    .map((a: any) => a.uri);
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.liteRTTemperature,
     topK: 40,
     topP: liteRTSettings.liteRTTopP,
   };
-  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}, hasImage=${!!imageUri}`);
+  logger.log(`[ToolLoop][LiteRT] callLiteRTForLoop — convId=${conversationId}, text=${text.length}ch, sysPrompt=${systemPrompt.length}ch, tools=${tools.length}, history=${history.length}, imageCount=${imageUris?.length ?? 0}`);
   logger.log(`[ToolLoop][LiteRT] samplerConfig — temperature=${samplerConfig.temperature} topK=${samplerConfig.topK} topP=${samplerConfig.topP}`);
   logger.log(`[ToolLoop][LiteRT] sysPrompt first500: "${systemPrompt.substring(0, 500)}"`);
   logger.log(`[ToolLoop][LiteRT] sending text: "${text.substring(0, 300)}"`);
@@ -372,7 +373,7 @@ async function callLiteRTForLoop(
   const onToolCall = ctx ? buildLiteRTToolCallHandler(ctx, conversationId) : undefined;
   const fullResponse = await liteRTService.generateRaw(
     text,
-    imageUri,
+    imageUris,
     {
       onToken: token => onStream?.({ content: token }),
       onToolCall,

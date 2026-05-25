@@ -185,11 +185,11 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
 }
 
 function assertLiteRTImageSupport(
-  imageUri: string | undefined,
+  imageUris: string[] | undefined,
   svc: any,
   chatStore: ReturnType<typeof useChatStore.getState>,
 ): void {
-  if (!imageUri) return;
+  if (!imageUris || imageUris.length === 0) return;
   const { downloadedModels, activeModelId } = useAppStore.getState();
   const activeModel = downloadedModels.find((m: any) => m.id === activeModelId);
   const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
@@ -215,10 +215,11 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const systemMsg = messages.find(m => m.role === 'system');
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const allAttachments = lastUser.attachments ?? [];
-  const imageAttachment = allAttachments.find((a: any) => a.type === 'image');
-  const imageUri = imageAttachment?.uri;
+  const imageUris = allAttachments
+    .filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
+    .map((a: any) => a.uri);
 
-  assertLiteRTImageSupport(imageUri, svc, chatStore);
+  assertLiteRTImageSupport(imageUris, svc, chatStore);
 
   const history = buildLiteRTHistory(messages);
 
@@ -277,7 +278,7 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
           svc.resetState();
         },
       },
-      imageUri,
+      imageUris,
     );
   } catch (error: any) {
     if (svc.abortRequested) return;

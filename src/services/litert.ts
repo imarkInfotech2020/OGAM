@@ -254,7 +254,7 @@ class LiteRTService {
   async sendMessage(
     text: string,
     callbacks: LiteRTGenerationCallbacks,
-    imageUri?: string,
+    imageUris?: string[],
   ): Promise<void> {
     if (!this.isAvailable() || !this.loaded) { callbacks.onError(new Error('No LiteRT model loaded')); return; }
 
@@ -355,7 +355,12 @@ class LiteRTService {
     ];
 
     try {
-      await LiteRTModule.sendMessage(text, imageUri ?? null);
+      const normalizedImageUris = imageUris?.filter(Boolean) ?? [];
+      if (normalizedImageUris.length > 0) {
+        await LiteRTModule.sendMessageWithImages(text, normalizedImageUris);
+      } else {
+        await LiteRTModule.sendMessage(text, null);
+      }
     } catch (e) {
       this.clearSubscriptions();
       const err = e instanceof Error ? e : new Error(String(e));
@@ -371,11 +376,11 @@ class LiteRTService {
 
   async generateRaw(
     text: string,
-    imageUri?: string,
+    imageUris?: string[],
     handlers?: GenerateRawHandlers,
   ): Promise<string> {
     const { onToken, onToolCall, onReasoning } = handlers ?? {};
-    logger.log(TAG, `generateRaw — text=${text.length}ch, hasToolHandler=${!!onToolCall}, hasImage=${!!imageUri}, first100="${text.substring(0, 100)}"`);
+    logger.log(TAG, `generateRaw — text=${text.length}ch, hasToolHandler=${!!onToolCall}, imageCount=${imageUris?.length ?? 0}, first100="${text.substring(0, 100)}"`);
     this.currentToolCallHandler = onToolCall ?? null;
     return new Promise((resolve, reject) => {
       this.sendMessage(text, {
@@ -391,7 +396,7 @@ class LiteRTService {
           this.currentToolCallHandler = null;
           reject(err);
         },
-      }, imageUri).catch(reject);
+      }, imageUris).catch(reject);
     });
   }
 

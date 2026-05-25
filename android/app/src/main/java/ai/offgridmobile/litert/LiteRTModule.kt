@@ -264,11 +264,15 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    private suspend fun buildSendContents(imageUri: String?, text: String, safe: SafePromise): Contents? {
-        if (imageUri == null || !supportsVision) return Contents.of(text)
+    private suspend fun buildSendContents(imageUris: List<String>, text: String, safe: SafePromise): Contents? {
+        if (imageUris.isEmpty() || !supportsVision) return Contents.of(text)
         return try {
-            val pngBytes = readImageAsPngBytes(imageUri)
-            Contents.of(Content.ImageBytes(pngBytes), Content.Text(text))
+            val contents = mutableListOf<Content>()
+            imageUris.forEach { imageUri ->
+                contents += Content.ImageBytes(readImageAsPngBytes(imageUri))
+            }
+            contents += Content.Text(text)
+            Contents.of(*contents.toTypedArray())
         } catch (e: Exception) {
             Log.e(TAG, "sendMessage — failed to read/decode image: ${e.message}", e)
             sendEvent(EVENT_ERROR, "Failed to read image: ${e.message}")
@@ -285,7 +289,18 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     fun sendMessage(text: String, imageUri: String?, promise: Promise) {
         val safe = SafePromise(promise, TAG)
         Log.i(TAG, "sendMessage — text length=${text.length} hasImage=${imageUri != null}")
+        sendMessageInternal(text, imageUri?.let { listOf(it) } ?: emptyList(), safe)
+    }
 
+    @ReactMethod
+    fun sendMessageWithImages(text: String, imageUris: ReadableArray?, promise: Promise) {
+        val safe = SafePromise(promise, TAG)
+        val uris = readableArrayToStringList(imageUris)
+        Log.i(TAG, "sendMessageWithImages — text length=${text.length} imageCount=${uris.size}")
+        sendMessageInternal(text, uris, safe)
+    }
+
+    private fun sendMessageInternal(text: String, imageUris: List<String>, safe: SafePromise) {
         scope.launch {
             currentJob?.join()
 
@@ -298,7 +313,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
             currentJob = launch {
                 try {
-                    val contents = buildSendContents(imageUri, text, safe) ?: return@launch
+                    val contents = buildSendContents(imageUris, text, safe) ?: return@launch
 
                     conv.sendMessageAsync(contents)
                         .collect { message -> dispatchStreamToken(message) }
@@ -322,6 +337,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 }
             }
         }
+    }
+
+    private fun readableArrayToStringList(array: ReadableArray?): List<String> {
+        if (array == null) return emptyList()
+        val values = mutableListOf<String>()
+        for (i in 0 until array.size()) {
+            val value = array.getString(i)?.trim()
+            if (!value.isNullOrEmpty()) values += value
+        }
+        return values
     }
 
     // -------------------------------------------------------------------------
