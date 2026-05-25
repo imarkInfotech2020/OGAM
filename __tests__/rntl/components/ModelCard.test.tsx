@@ -790,4 +790,91 @@ describe('ModelCard', () => {
       expect(treeStr).toContain('0.6'); // cardIncompatible opacity
     });
   });
+
+  // ============================================================================
+  // Recommended config (curated entries like the LiteRT parent card)
+  // ============================================================================
+  describe('recommended config', () => {
+    it('renders the pill with the default "Recommended" label when no pillLabel given', () => {
+      const { getByText } = render(
+        <ModelCard model={baseModel} compact={true} recommended={{}} />,
+      );
+      expect(getByText('Recommended')).toBeTruthy();
+    });
+
+    it('renders the pill with a custom pillLabel', () => {
+      const { getByText } = render(
+        <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
+      );
+      expect(getByText('Featured')).toBeTruthy();
+    });
+
+    it('renders custom chips in place of the modelType chip row (compact)', () => {
+      const { getByText, queryByText } = render(
+        <ModelCard
+          model={{ ...baseModel, modelType: 'vision' }}
+          compact={true}
+          recommended={{ chips: ['Vision', 'GPU'] }}
+        />,
+      );
+      expect(getByText('GPU')).toBeTruthy();
+      // Both "Vision" (custom chip) and the auto-derived modelType "Vision" would
+      // collide on text — assert only one matching node renders (custom chip path).
+      expect(queryByText('Vision')).toBeTruthy();
+    });
+
+    it('renders the highlight line below chips in compact mode', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          compact={true}
+          recommended={{ highlightText: 'Hardware-accelerated inference with vision support' }}
+        />,
+      );
+      expect(getByText('Hardware-accelerated inference with vision support')).toBeTruthy();
+    });
+
+    it('suppresses the compact description when highlightText is provided', () => {
+      const { queryByText } = render(
+        <ModelCard
+          model={{ ...baseModel, description: 'Should not appear in compact' }}
+          compact={true}
+          recommended={{ highlightText: 'Replaces description in compact' }}
+        />,
+      );
+      expect(queryByText('Should not appear in compact')).toBeNull();
+      expect(queryByText('Replaces description in compact')).toBeTruthy();
+    });
+
+    it('still renders the description when no highlightText is provided', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, description: 'Visible description' }}
+          compact={true}
+          recommended={{ pillLabel: 'Recommended' }}
+        />,
+      );
+      expect(getByText('Visible description')).toBeTruthy();
+    });
+
+    it('renders pill + highlight in standard (non-compact) mode below description', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={{ ...baseModel, description: 'Detail description' }}
+          recommended={{ pillLabel: 'Recommended', highlightText: 'Up to 2x faster via GPU' }}
+        />,
+      );
+      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByText('Detail description')).toBeTruthy();
+      expect(getByText('Up to 2x faster via GPU')).toBeTruthy();
+    });
+
+    it('does not render pill or highlight when recommended prop is absent', () => {
+      const { queryByText } = render(
+        <ModelCard model={{ ...baseModel, description: 'Plain card' }} compact={true} />,
+      );
+      expect(queryByText('Recommended')).toBeNull();
+      expect(queryByText('Hardware-accelerated inference with vision support')).toBeNull();
+    });
+  });
 });

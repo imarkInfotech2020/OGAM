@@ -592,6 +592,42 @@ describe('ModelManager', () => {
         expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
       );
     });
+
+    it('uses file.downloadUrl when set (cross-repo curated entries)', async () => {
+      // Curated entries (e.g. LiteRT recommended) carry an explicit downloadUrl that
+      // points at a different repo than the parent modelId. The download path must
+      // honor it instead of constructing one from modelId + file.name.
+      const customUrl = 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+      const curated = createModelFile({
+        name: 'gemma-4-E2B-it.litertlm',
+        size: 2_590_000_000,
+        quantization: 'mixed',
+        downloadUrl: customUrl,
+      });
+
+      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false)  // main doesn't exist
+        .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
+
+      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
+        downloadId: 99,
+        fileName: 'gemma-4-E2B-it.litertlm',
+        modelId: 'offgrid/litert-recommended',
+        status: 'pending',
+        bytesDownloaded: 0,
+        totalBytes: curated.size,
+        startedAt: Date.now(),
+      } as any);
+
+      await modelManager.downloadModelBackground('offgrid/litert-recommended', curated);
+
+      expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
+        expect.objectContaining({ url: customUrl }),
+      );
+    });
   });
 
   describe('resetMmProjForRetry', () => {

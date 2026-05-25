@@ -9,6 +9,7 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(() => false),
     isCurrentlyGenerating: jest.fn(() => false),
+    generateResponse: jest.fn(),
     getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
     getPerformanceStats: jest.fn(() => ({
       lastTokensPerSecond: 10,
@@ -63,6 +64,7 @@ jest.mock('../../../src/services/generationToolLoop', () => ({
 }));
 
 jest.mock('../../../src/utils/logger', () => ({
+  __esModule: true,
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
@@ -260,7 +262,7 @@ describe('buildGenerationMetaImpl — LiteRT path', () => {
 // ---------------------------------------------------------------------------
 
 function makeSvc(overrides: any = {}) {
-  const state = { isGenerating: false, startTime: Date.now(), streamingContent: '', ...(overrides.state ?? {}) };
+  const state = Object.assign({ isGenerating: false, startTime: Date.now(), streamingContent: '' }, overrides.state);
   const svc = {
     state,
     updateState: jest.fn((patch: any) => { Object.assign(state, patch); }),
@@ -339,27 +341,27 @@ describe('prepareGenerationImpl', () => {
 // generateResponseImpl — LiteRT branch
 // ---------------------------------------------------------------------------
 
+function makeLiteRTState() {
+  return {
+    ...makeLiteRTAppState(),
+    settings: { liteRTTemperature: 0.7, liteRTTopP: 0.9, liteRTMaxTokens: 512, cacheType: 'q8_0', temperature: 0.7, maxTokens: 512, thinkingEnabled: false, topP: 0.9 },
+  };
+}
+
+function makeLiteRTSvc() {
+  return {
+    ...makeSvc(),
+    flushTimer: null,
+    liteRTBenchmarkStats: null,
+    forceFlushTokens: jest.fn(),
+    flushTokenBuffer: jest.fn(),
+    checkSharePrompt: jest.fn(),
+    isUsingRemoteProvider: () => false,
+    getCurrentProvider: () => null,
+  };
+}
+
 describe('generateResponseImpl — LiteRT path', () => {
-  function makeLiteRTState() {
-    return {
-      ...makeLiteRTAppState(),
-      settings: { liteRTTemperature: 0.7, liteRTTopP: 0.9, liteRTMaxTokens: 512, cacheType: 'q8_0', temperature: 0.7, maxTokens: 512, thinkingEnabled: false, topP: 0.9 },
-    };
-  }
-
-  function makeLiteRTSvc() {
-    return {
-      ...makeSvc(),
-      flushTimer: null,
-      liteRTBenchmarkStats: null,
-      forceFlushTokens: jest.fn(),
-      flushTokenBuffer: jest.fn(),
-      checkSharePrompt: jest.fn(),
-      isUsingRemoteProvider: () => false,
-      getCurrentProvider: () => null,
-    };
-  }
-
   beforeEach(() => {
     mockedLiteRT.isModelLoaded.mockReturnValue(true);
     mockedGetState.mockReturnValue(makeLiteRTState());
@@ -414,6 +416,83 @@ describe('generateResponseImpl — LiteRT path', () => {
       conversationId: 'conv-1',
       messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
     });
+    expect(clear).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateResponseImpl — llama.cpp path (isLiteRTActive = false)
+// ---------------------------------------------------------------------------
+
+describe('generateResponseImpl — llama.cpp path', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedGetState.mockReturnValue(makeLlmAppState());
+  });
+
+  function makeLlmSvc() {
+    return {
+      ...makeSvc(),
+      flushTimer: null,
+      liteRTBenchmarkStats: null,
+      forceFlushTokens: jest.fn(),
+      flushTokenBuffer: jest.fn(),
+      checkSharePrompt: jest.fn(),
+      isUsingRemoteProvider: () => false,
+      getCurrentProvider: () => null,
+    };
+  }
+
+  it('calls finalizeStreamingMessage on successful completion', async () => {
+    const { llmService: llm } = require('../../../src/services/llm');
+    llm.isModelLoaded.mockReturnValue(true);
+    llm.isCurrentlyGenerating.mockReturnValue(false);
+
+    const finalize = jest.fn();
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(),
+      clearStreamingMessage: jest.fn(),
+      appendToStreamingMessage: jest.fn(),
+      finalizeStreamingMessage: finalize,
+    });
+
+    llm.generateResponse.mockImplementation((_msgs: any, onChunk: any, onComplete: any) => {
+      onChunk({ content: 'hello', reasoningContent: undefined });
+      onChunk({ content: undefined, reasoningContent: 'thinking' });
+      onComplete();
+      return Promise.resolve();
+    });
+
+    await generateResponseImpl(makeLlmSvc(), {
+      conversationId: 'conv-1',
+      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+    });
+
+    expect(finalize).toHaveBeenCalled();
+  });
+
+  it('clears streaming message and rethrows on generateResponse error', async () => {
+    const { llmService: llm } = require('../../../src/services/llm');
+    llm.isModelLoaded.mockReturnValue(true);
+    llm.isCurrentlyGenerating.mockReturnValue(false);
+
+    const clear = jest.fn();
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(),
+      clearStreamingMessage: clear,
+      appendToStreamingMessage: jest.fn(),
+      finalizeStreamingMessage: jest.fn(),
+    });
+
+    llm.generateResponse.mockRejectedValue(new Error('gpu crash'));
+
+    await expect(
+      generateResponseImpl(makeLlmSvc(), {
+        conversationId: 'conv-1',
+        messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      }),
+    ).rejects.toThrow('gpu crash');
+
     expect(clear).toHaveBeenCalled();
   });
 });

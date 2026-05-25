@@ -234,3 +234,56 @@ describe('runSearch', () => {
     );
   });
 });
+
+// ── handleSelectModel ────────────────────────────────────────────────
+
+describe('handleSelectModel', () => {
+  it('short-circuits HF fetch when model id is in the offgrid/ namespace and ships files', async () => {
+    const { huggingFaceService } = jest.requireMock('../../../../src/services');
+    const getModelFilesSpy = jest.spyOn(huggingFaceService, 'getModelFiles');
+    const { result } = renderHook(() => useTextModels(setAlertState));
+
+    const curatedFile = { name: 'gemma-4-E2B-it.litertlm', size: 1000, quantization: 'mixed', downloadUrl: 'https://hf/x' };
+    const curatedModel: any = {
+      id: 'offgrid/litert-recommended',
+      name: 'Gemma 4 LiteRT',
+      author: 'google',
+      description: '',
+      downloads: 0, likes: 0, tags: ['litert'], lastModified: '',
+      files: [curatedFile],
+    };
+
+    await act(async () => {
+      await result.current.handleSelectModel(curatedModel);
+    });
+
+    expect(getModelFilesSpy).not.toHaveBeenCalled();
+    expect(result.current.modelFiles).toEqual([curatedFile]);
+    expect(result.current.selectedModel).toBe(curatedModel);
+  });
+
+  it('falls through to HF fetch for non-offgrid models even when factories pre-populate files', async () => {
+    const { huggingFaceService } = jest.requireMock('../../../../src/services');
+    const fetched = [{ name: 'q4.gguf', size: 2000, quantization: 'Q4_K_M', downloadUrl: 'https://hf/q4' }];
+    huggingFaceService.getModelFiles.mockResolvedValueOnce(fetched);
+
+    const { result } = renderHook(() => useTextModels(setAlertState));
+
+    // Factory-style model with prepopulated files — must NOT short-circuit
+    const hfModel: any = {
+      id: 'test-org/test-model',
+      name: 'Test Model',
+      author: 'test-org',
+      description: '',
+      downloads: 1000, likes: 100, tags: [], lastModified: '',
+      files: [{ name: 'model-q4_k_m.gguf', size: 100, quantization: 'Q4_K_M', downloadUrl: '' }],
+    };
+
+    await act(async () => {
+      await result.current.handleSelectModel(hfModel);
+    });
+
+    expect(huggingFaceService.getModelFiles).toHaveBeenCalledWith('test-org/test-model');
+    expect(result.current.modelFiles).toEqual(fetched);
+  });
+});

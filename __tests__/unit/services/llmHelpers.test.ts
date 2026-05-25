@@ -464,3 +464,69 @@ describe('initContextWithFallback — HTP device stripping and timeout', () => {
     );
   });
 });
+
+// ==========================================================================
+// GPU timeout on Android — withTimeout, tryGpuInit catch, safeRelease
+// ==========================================================================
+
+describe('initContextWithFallback — GPU timeout on Android', () => {
+  const { initLlama } = require('llama.rn');
+  const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
+  const origPlatform = Platform.OS;
+
+  beforeEach(() => {
+    (Platform as any).OS = 'android';
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    (Platform as any).OS = origPlatform;
+    jest.useRealTimers();
+  });
+
+  it('falls back to CPU when GPU init times out (withTimeout + tryGpuInit catch)', async () => {
+    let resolveGpu!: (ctx: any) => void;
+    const slowGpu = new Promise<any>(resolve => { resolveGpu = resolve; });
+    const cpuCtx = { gpu: false, release: jest.fn() };
+
+    mockedInitLlama
+      .mockReturnValueOnce(slowGpu)
+      .mockResolvedValueOnce(cpuCtx);
+
+    const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
+    jest.advanceTimersByTime(8001);
+    const result = await resultPromise;
+
+    expect(result.gpuAttemptFailed).toBe(true);
+    expect(result.context).toBe(cpuCtx);
+
+    // Resolve the late GPU promise after timeout — exercises safeRelease(nonNullCtx)
+    const lateCtx = { release: jest.fn() };
+    resolveGpu(lateCtx);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lateCtx.release).toHaveBeenCalled();
+  });
+
+  it('safeRelease swallows error when late GPU ctx release throws', async () => {
+    let resolveGpu!: (ctx: any) => void;
+    const slowGpu = new Promise<any>(resolve => { resolveGpu = resolve; });
+    const cpuCtx = { gpu: false, release: jest.fn() };
+
+    mockedInitLlama
+      .mockReturnValueOnce(slowGpu)
+      .mockResolvedValueOnce(cpuCtx);
+
+    const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
+    jest.advanceTimersByTime(8001);
+    await resultPromise;
+
+    // Late ctx whose release() throws — safeRelease must swallow the error
+    const lateCtx = { release: jest.fn().mockRejectedValue(new Error('release fail')) };
+    resolveGpu(lateCtx);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lateCtx.release).toHaveBeenCalled();
+  });
+});
