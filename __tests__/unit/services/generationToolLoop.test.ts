@@ -20,6 +20,17 @@ import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 const mockAddMessage = jest.fn();
 const mockSetStreamingMessage = jest.fn();
 const mockSetIsThinking = jest.fn();
+let mockAppState: any = {
+  downloadedModels: [],
+  activeModelId: null,
+  settings: {
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: 0.9,
+    liteRTTemperature: 0.7,
+    liteRTTopP: 0.9,
+  },
+};
 
 jest.mock('../../../src/stores', () => ({
   useChatStore: {
@@ -35,15 +46,7 @@ jest.mock('../../../src/stores', () => ({
     }),
   },
   useAppStore: {
-    getState: () => ({
-      downloadedModels: [],
-      activeModelId: null,
-      settings: {
-        temperature: 0.7,
-        maxTokens: 1024,
-        topP: 0.9,
-      },
-    }),
+    getState: () => mockAppState,
   },
 }));
 
@@ -133,6 +136,17 @@ describe('runToolLoop', () => {
     jest.clearAllMocks();
     mockExecuteToolCall.mockReset();
     mockedGenerateResponseWithTools.mockReset();
+    mockAppState = {
+      downloadedModels: [],
+      activeModelId: null,
+      settings: {
+        temperature: 0.7,
+        maxTokens: 1024,
+        topP: 0.9,
+        liteRTTemperature: 0.7,
+        liteRTTopP: 0.9,
+      },
+    };
     mockGetToolsAsOpenAISchema.mockReturnValue([
       { type: 'function', function: { name: 'web_search' } },
     ]);
@@ -201,6 +215,11 @@ describe('runToolLoop', () => {
 
   describe('LiteRT image forwarding', () => {
     it('forwards all image attachments from the last user message to LiteRT', async () => {
+      mockAppState = {
+        ...mockAppState,
+        downloadedModels: [{ id: 'litert-1', engine: 'litert' }],
+        activeModelId: 'litert-1',
+      };
       mockedLiteRTService.isModelLoaded.mockReturnValue(true);
 
       const ctx = createContext({

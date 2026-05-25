@@ -105,8 +105,34 @@ describe('LiteRTService', () => {
     });
 
     it('uses sendMessageWithImages when multiple image URIs are provided', async () => {
-      (liteRTService as any).loaded = true;
-      mockLiteRTModule.sendMessageWithImages.mockResolvedValue(undefined);
+      const isolatedLiteRTModule = {
+        loadModel: jest.fn(),
+        resetConversation: jest.fn(),
+        sendMessage: jest.fn().mockResolvedValue(undefined),
+        sendMessageWithImages: jest.fn().mockResolvedValue(undefined),
+        stopGeneration: jest.fn(),
+        unloadModel: jest.fn(),
+        getMemoryInfo: jest.fn(),
+      };
+      const isolatedEmitter = { addListener: jest.fn(() => ({ remove: jest.fn() })) };
+
+      jest.resetModules();
+      jest.doMock('react-native', () => ({
+        NativeModules: { LiteRTModule: isolatedLiteRTModule },
+        NativeEventEmitter: jest.fn(() => isolatedEmitter),
+        Platform: {
+          OS: 'android',
+          select: (spec: Record<string, any>) => spec.android ?? spec.default ?? null,
+        },
+      }));
+      jest.doMock('../../../src/utils/logger', () => {
+        const log = jest.fn();
+        return { __esModule: true, default: { log, error: log, warn: log } };
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { liteRTService: isolatedService } = require('../../../src/services/litert');
+      (isolatedService as any).loaded = true;
 
       const callbacks = {
         onToken: jest.fn(),
@@ -115,10 +141,11 @@ describe('LiteRTService', () => {
         onError: jest.fn(),
       };
 
-      await liteRTService.sendMessage('hello', callbacks, ['file:///one.png', 'file:///two.png']);
+      await isolatedService.sendMessage('hello', callbacks, ['file:///one.png', 'file:///two.png']);
 
-      expect(mockLiteRTModule.sendMessageWithImages).toHaveBeenCalledWith('hello', ['file:///one.png', 'file:///two.png']);
-      expect(mockLiteRTModule.sendMessage).not.toHaveBeenCalled();
+      expect(callbacks.onError).not.toHaveBeenCalled();
+      expect(isolatedLiteRTModule.sendMessageWithImages).toHaveBeenCalledWith('hello', ['file:///one.png', 'file:///two.png']);
+      expect(isolatedLiteRTModule.sendMessage).not.toHaveBeenCalled();
     });
   });
 

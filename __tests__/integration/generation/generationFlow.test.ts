@@ -375,7 +375,18 @@ describe('Generation Flow Integration', () => {
 
   describe('generationService → LiteRT image flow', () => {
     it('passes multiple image attachments to LiteRT for LiteRT models', async () => {
-      const model = createDownloadedModel({ id: 'litert-1', name: 'LiteRT Model', engine: 'litert' as const, liteRTVision: true } as any);
+      const model = {
+        id: 'litert-1',
+        name: 'LiteRT Model',
+        author: 'Test',
+        filePath: '/mock/path/model.litertlm',
+        fileName: 'model.litertlm',
+        fileSize: 1024,
+        quantization: 'mixed',
+        downloadedAt: '2026-01-01T00:00:00.000Z',
+        engine: 'litert' as const,
+        liteRTVision: true,
+      };
       const conversationId = setupWithConversation({ modelId: model.id });
       useAppStore.setState({
         downloadedModels: [model],
