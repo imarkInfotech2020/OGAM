@@ -2533,6 +2533,8 @@ describe('ModelManager', () => {
         mmProjPath: mmProjLocalPath,
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
       expect(model.mmProjPath).toBe(mmProjLocalPath);
       expect(model.isVisionModel).toBe(true);
@@ -2549,6 +2551,8 @@ describe('ModelManager', () => {
         expectedMmProjFileName: file.mmProjFile?.name,
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
       expect(model.mmProjPath).toBeUndefined();
       expect(model.isVisionModel).toBe(false);
@@ -2563,6 +2567,8 @@ describe('ModelManager', () => {
         resolvedLocalPath: '/models/llama-3.2-1b.gguf',
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBeUndefined();
       expect(model.mmProjPath).toBeUndefined();
       expect(model.isVisionModel).toBe(false);

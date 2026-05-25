@@ -19,6 +19,7 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
+import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTUrl } from '../../services/curatedLiteRTRegistry';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -205,21 +206,19 @@ const ModelDetailView: React.FC<DetailProps> = ({
   );
 };
 
-const GB = 1024 ** 3;
-
 export const LITERT_PARENT_ID = 'offgrid/litert-recommended';
 
-export const LITERT_FILE_META: Record<string, { displayName: string; highlight: string }> = {
-  'gemma-4-E2B-it.litertlm': {
-    displayName: 'Gemma 4 E2B',
-    highlight: 'Up to 2x faster than CPU via GPU',
-  },
-  'gemma-4-E4B-it.litertlm': {
-    displayName: 'Gemma 4 E4B',
-    highlight: 'Higher quality, same hardware efficiency as E2B',
-  },
-};
+// LiteRT-specific per-file metadata (display name + highlight) used to render
+// individual file cards in the detail view. Derived from the curated registry —
+// the registry is the single source of truth; this map is just a UI-shaped view.
+export const LITERT_FILE_META: Record<string, { displayName: string; highlight: string }> =
+  Object.fromEntries(
+    CURATED_LITERT_ENTRIES.map(e => [e.fileName, { displayName: e.displayName, highlight: e.highlight }]),
+  );
 
+// Synthetic parent ModelInfo whose `files` are derived from the curated registry.
+// Adding a new curated LiteRT model only requires updating the registry — this
+// list, the display map above, and the download flow all pick it up automatically.
 export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
   id: LITERT_PARENT_ID,
   name: 'Gemma 4 LiteRT',
@@ -227,20 +226,13 @@ export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
   description: 'Hardware-accelerated inference with vision support.',
   downloads: 0, likes: 0, tags: ['litert'], lastModified: '',
   modelType: 'vision',
-  files: [
-    {
-      name: 'gemma-4-E2B-it.litertlm',
-      size: Math.round(2.59 * GB),
-      quantization: 'mixed',
-      downloadUrl: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm',
-    },
-    {
-      name: 'gemma-4-E4B-it.litertlm',
-      size: Math.round(3.66 * GB),
-      quantization: 'mixed',
-      downloadUrl: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm',
-    },
-  ],
+  files: CURATED_LITERT_ENTRIES.map(e => ({
+    name: e.fileName,
+    size: e.sizeBytes,
+    quantization: 'mixed',
+    downloadUrl: buildCuratedLiteRTUrl(e),
+    liteRTVision: e.liteRTVision,
+  })),
 };
 
 const LITERT_PARENT_RECOMMENDED = {

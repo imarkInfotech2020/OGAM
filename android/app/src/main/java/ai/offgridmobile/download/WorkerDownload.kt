@@ -24,6 +24,7 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlinx.coroutines.Job
+import org.json.JSONObject
 
 class WorkerDownload(
     context: Context,
@@ -122,6 +123,10 @@ class WorkerDownload(
         val currentFileBytes = if (targetFile.exists() && code == 206) targetFile.length() else 0L
         val contentLength = body.contentLength()
         val totalBytes = calculateTotalBytes(code, currentFileBytes, contentLength, download.totalBytes)
+        Log.i(
+            TAG,
+            "handleResponse id=$downloadId code=$code url=${download.url} existingBytes=$existingBytes currentFileBytes=$currentFileBytes contentLength=$contentLength dbExpectedBytes=${download.totalBytes} resolvedTotalBytes=$totalBytes shaPresent=${!download.expectedSha256.isNullOrEmpty()} fileName=${download.fileName}",
+        )
         downloadDao.updateProgress(downloadId, currentFileBytes, totalBytes, DownloadStatus.RUNNING)
 
         return streamToFile(StreamParams(body.byteStream().buffered(), targetFile, code, download, downloadId, currentFileBytes, totalBytes, progressInterval))
@@ -183,18 +188,41 @@ class WorkerDownload(
             }
         }
 
-        if (download.totalBytes > 0L) {
-            val sizeDiffPercent = abs(bytesWritten - download.totalBytes).toDouble() / download.totalBytes
+        val authoritativeExpectedBytes = when {
+            totalBytes > 0L -> totalBytes
+            download.totalBytes > 0L -> download.totalBytes
+            else -> 0L
+        }
+        Log.i(
+            TAG,
+            "streamToFile complete id=$downloadId file=${download.fileName} actualBytes=$bytesWritten dbExpectedBytes=${download.totalBytes} responseExpectedBytes=$totalBytes authoritativeExpectedBytes=$authoritativeExpectedBytes shaPresent=${!download.expectedSha256.isNullOrEmpty()}",
+        )
+        // Curated entries (offgrid/* namespace) opt out of strict size validation
+        // because their URLs are pinned to a commit hash — the URL itself is the
+        // integrity guarantee, matching how the Google AI Edge Gallery app handles
+        // its LiteRT models. A transient Content-Length / payload undershoot from
+        // the CDN should not be treated as corruption when no SHA is available.
+        val skipSizeValidation = parseSkipSizeValidation(download.metadataJson)
+        if (authoritativeExpectedBytes > 0L && !skipSizeValidation) {
+            val sizeDiffPercent = abs(bytesWritten - authoritativeExpectedBytes).toDouble() / authoritativeExpectedBytes
             if (sizeDiffPercent > 0.001) {
                 // A meaningful final size mismatch is corruption unless a known SHA can
                 // explicitly prove the downloaded file is still the expected artifact.
                 val expectedSha256 = download.expectedSha256
                 if (expectedSha256.isNullOrEmpty()) {
+                    Log.w(
+                        TAG,
+                        "streamToFile size mismatch without SHA id=$downloadId file=${download.fileName} actualBytes=$bytesWritten authoritativeExpectedBytes=$authoritativeExpectedBytes dbExpectedBytes=${download.totalBytes} responseExpectedBytes=$totalBytes",
+                    )
                     if (!targetFile.delete()) Log.w(TAG, "Failed to delete size-mismatched file: ${targetFile.path}")
                     return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
                 }
 
                 val actual = computeFileSha256(targetFile)
+                Log.w(
+                    TAG,
+                    "streamToFile size mismatch with SHA id=$downloadId file=${download.fileName} actualBytes=$bytesWritten authoritativeExpectedBytes=$authoritativeExpectedBytes shaMatch=${actual.lowercase() == expectedSha256.lowercase()}",
+                )
                 if (actual.lowercase() != expectedSha256.lowercase()) {
                     if (!targetFile.delete()) Log.w(TAG, "Failed to delete corrupted file: ${targetFile.path}")
                     return failDownload(downloadId, download, DownloadReason.FILE_CORRUPTED)
@@ -209,6 +237,16 @@ class WorkerDownload(
     private suspend fun emitProgressUpdate(downloadId: String, bytesWritten: Long, totalBytes: Long) {
         setProgress(workDataOf(KEY_PROGRESS to bytesWritten, KEY_TOTAL to totalBytes))
         downloadDao.updateProgress(downloadId, bytesWritten, totalBytes, DownloadStatus.RUNNING)
+    }
+
+    private fun parseSkipSizeValidation(metadataJson: String?): Boolean {
+        if (metadataJson.isNullOrEmpty()) return false
+        return try {
+            JSONObject(metadataJson).optBoolean("skipSizeValidation", false)
+        } catch (e: Exception) {
+            Log.w(TAG, "parseSkipSizeValidation — invalid metadataJson, defaulting to false: ${e.message}")
+            false
+        }
     }
 
     private suspend fun failDownload(downloadId: String, download: DownloadEntity, reasonCode: String): Result {

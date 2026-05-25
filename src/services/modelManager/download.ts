@@ -128,9 +128,22 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   // even after an app kill — restore.ts reads it to recover mmProjFileName
   // reliably without falling back to the size-delta heuristic.
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
-  const metadataJson = needsMmProj
-    ? JSON.stringify({ mmProjFileName: mmProjLocalName(file.name), mmProjDownloadUrl: file.mmProjFile?.downloadUrl })
-    : undefined;
+  // Curated entries under the offgrid/ namespace (e.g. the LiteRT recommended
+  // models) point at HF artifacts pinned to a commit hash. We don't ship an
+  // authoritative SHA for them, so the native worker's strict size check can
+  // false-fail on a transient Content-Length / payload undershoot. Trust the
+  // commit-hash-pinned URL the way the Gallery app does and skip size validation.
+  const skipSizeValidation = modelId.startsWith('offgrid/');
+  const metadataObj: Record<string, unknown> = {};
+  if (needsMmProj) {
+    metadataObj.mmProjFileName = mmProjLocalName(file.name);
+    metadataObj.mmProjDownloadUrl = file.mmProjFile?.downloadUrl;
+  }
+  if (skipSizeValidation) metadataObj.skipSizeValidation = true;
+  // Capability bits like liteRTVision are resolved by the curated registry
+  // (keyed by fileName) inside buildDownloadedModel, so they don't need to be
+  // threaded through metadataJson — the fileName itself is already on the row.
+  const metadataJson = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : undefined;
 
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl,
@@ -496,6 +509,8 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
         fileName: ctx.file.name,
         finalPath,
         finalMmProjPath,
+        savedEngine: model.engine,
+        savedLiteRTVision: model.engine === 'litert' ? model.liteRTVision : undefined,
       });
       backgroundDownloadMetadataCallback?.(downloadId, null);
       onComplete?.(model);

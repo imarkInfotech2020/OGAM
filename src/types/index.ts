@@ -39,6 +39,11 @@ export interface ModelFile {
     downloadUrl: string;
     sha256?: string;
   };
+  // LiteRT-specific: whether this .litertlm file supports vision input. Used by
+  // buildDownloadedModel to set liteRTVision on the resulting DownloadedModel.
+  // Unset for non-LiteRT files and for LiteRT files imported locally where the
+  // capability is unknown.
+  liteRTVision?: boolean;
 }
 
 export type ModelEngine = 'llama' | 'litert';
