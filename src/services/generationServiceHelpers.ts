@@ -6,7 +6,6 @@ import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { getActiveEngineService } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
-import { useDebugLogsStore } from '../stores/debugLogsStore';
 import type { Message, GenerationMeta } from '../types';
 import { runToolLoop, buildLiteRTHistory } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
@@ -106,26 +105,18 @@ export function buildGenerationMetaImpl(svc: any): GenerationMeta {
 }
 
 function handleStreamChunk(svc: any, chunk: { content?: string; reasoningContent?: string }): void {
-  const dbg = useDebugLogsStore.getState().addLog;
   if (chunk.content) {
     if (!svc.state.streamingContent && svc.remoteTimeToFirstToken === undefined) {
       svc.remoteTimeToFirstToken = svc.state.startTime
         ? (Date.now() - svc.state.startTime) / 1000
         : undefined;
     }
-    if (!svc.state.streamingContent) {
-      dbg('log', `[Stream] first content token — reasoningAccum=${svc.reasoningBuffer.length + svc.totalReasoningLength}ch flushTimer=${svc.flushTimer != null}`);
-    }
     svc.state.streamingContent += chunk.content;
     svc.tokenBuffer += chunk.content;
   }
   if (chunk.reasoningContent) {
-    const wasEmpty = svc.reasoningBuffer.length === 0 && svc.totalReasoningLength === 0;
     svc.reasoningBuffer += chunk.reasoningContent;
     svc.totalReasoningLength += chunk.reasoningContent.length;
-    if (wasEmpty) {
-      dbg('log', `[Stream] first reasoning token — token="${chunk.reasoningContent.substring(0, 40)}" flushTimer=${svc.flushTimer != null}`);
-    }
   }
 }
 
@@ -153,16 +144,14 @@ export function buildToolLoopHandlersImpl(svc: any) {
   };
 }
 
-async function checkProviderReadiness(svc: any, dbg: ReturnType<typeof useDebugLogsStore.getState>['addLog']): Promise<string | null> {
+async function checkProviderReadiness(svc: any): Promise<string | null> {
   if (svc.isUsingRemoteProvider()) {
     const provider = svc.getCurrentProvider();
     if (!provider) return 'Remote provider not found';
     const ready = await provider.isReady();
     if (!ready) return 'Remote provider not ready';
   } else if (isLiteRTActive()) {
-    const loaded = liteRTService.isModelLoaded();
-    dbg('log', `[LiteRT] prepareGeneration — isLoaded=${loaded}`);
-    if (!loaded) { dbg('error', '[LiteRT] prepareGeneration failed: no model loaded'); return 'No LiteRT model loaded'; }
+    if (!liteRTService.isModelLoaded()) return 'No LiteRT model loaded';
   } else {
     if (!llmService.isModelLoaded()) return 'No model loaded';
     if (llmService.isCurrentlyGenerating()) return 'LLM service busy';
@@ -182,9 +171,7 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
   if (!svc.state.isGenerating) return false; // stop called during drain
   svc.abortRequested = false;
 
-  const dbg = useDebugLogsStore.getState().addLog;
-
-  const readinessError = await checkProviderReadiness(svc, dbg);
+  const readinessError = await checkProviderReadiness(svc);
   if (readinessError) {
     svc.resetState();
     useChatStore.getState().clearStreamingMessage();
@@ -217,12 +204,10 @@ function assertLiteRTImageSupport(
 async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<void> {
   const { conversationId, messages, onFirstToken } = req;
   const chatStore = useChatStore.getState();
-  const dbg = useDebugLogsStore.getState().addLog;
   let firstTokenReceived = false;
 
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
   if (!lastUser) {
-    dbg('warn', '[LiteRT] generateResponse: no user message found');
     chatStore.clearStreamingMessage();
     svc.resetState();
     return;
@@ -233,14 +218,9 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const imageAttachment = allAttachments.find((a: any) => a.type === 'image');
   const imageUri = imageAttachment?.uri;
 
-  dbg('log', `[Vision] attachments — total=${allAttachments.length} types=[${allAttachments.map((a: any) => a.type).join(',')}] imageFound=${!!imageAttachment}`);
-  dbg('log', `[Vision] imageUri — ${imageUri ? imageUri.substring(0, 80) : 'none'}`);
-  dbg('log', `[LiteRT] generateResponse — hasImage=${!!imageUri} conversationId=${conversationId.substring(0, 8)} messages=${messages.length} systemLen=${systemPrompt.length} userTextLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
-
   assertLiteRTImageSupport(imageUri, svc, chatStore);
 
   const history = buildLiteRTHistory(messages);
-  dbg('log', `[Vision] history built — turns=${history.length} (messages before last user turn, excluding system)`);
 
   try {
     const { settings } = useAppStore.getState();
@@ -248,7 +228,6 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
       samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
       history,
     });
-    dbg('log', `[Vision] calling sendMessage — imageUri=${imageUri ? imageUri.substring(0, 60) : 'none'} textLen=${typeof lastUser.content === 'string' ? lastUser.content.length : 0}`);
 
     await liteRTService.sendMessage(
       typeof lastUser.content === 'string' ? lastUser.content : '',
@@ -259,7 +238,6 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
             firstTokenReceived = true;
             svc.updateState({ isThinking: false });
             onFirstToken?.();
-            dbg('log', '[LiteRT] first token received');
           }
           svc.state.streamingContent += token;
           svc.tokenBuffer += token;
@@ -279,14 +257,13 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
           svc.forceFlushTokens();
           svc.liteRTBenchmarkStats = stats;
           const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
-          dbg('log', `[LiteRT] generation complete — ${generationTime}ms, tok/s=${stats?.decodeTokensPerSecond?.toFixed(1) ?? 'n/a'}`);
           chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
           svc.checkSharePrompt();
           svc.resetState();
         },
         onError: (err: Error) => {
           if (svc.abortRequested) return;
-          dbg('error', `[LiteRT] sendMessage error: ${err.message}`);
+          logger.error('[LiteRT] sendMessage error:', err.message);
           if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
           svc.tokenBuffer = '';
           chatStore.clearStreamingMessage();
@@ -297,7 +274,6 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
     );
   } catch (error: any) {
     if (svc.abortRequested) return;
-    dbg('error', `[LiteRT] generateResponse caught: ${error?.message ?? error}`);
     if (svc.flushTimer) { clearTimeout(svc.flushTimer); svc.flushTimer = null; }
     svc.tokenBuffer = '';
     chatStore.clearStreamingMessage();

@@ -1,5 +1,4 @@
 import RNFS from 'react-native-fs';
-import { useDebugLogsStore } from '../stores/debugLogsStore';
 
 const LOG_FILE_NAME = 'download-debug.log';
 const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
@@ -52,11 +51,6 @@ function appendPersistentLog(level: 'log' | 'warn' | 'error', args: unknown[]): 
 
 function capture(level: 'log' | 'warn' | 'error', args: unknown[]): void {
   appendPersistentLog(level, args);
-  try {
-    useDebugLogsStore.getState().addLog(level, args.map(formatArg).join(' '));
-  } catch {
-    // Ignore store failures during logger bootstrap.
-  }
 }
 
 const logger = {

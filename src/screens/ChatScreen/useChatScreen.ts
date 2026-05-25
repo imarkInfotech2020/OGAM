@@ -41,7 +41,6 @@ export const useChatScreen = () => {
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
-  const [showLogsPanel, setShowLogsPanel] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
@@ -271,7 +270,6 @@ export const useChatScreen = () => {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
     showDebugPanel, setShowDebugPanel,
-    showLogsPanel, setShowLogsPanel,
     showModelSelector, setShowModelSelector,
     showSettingsPanel, setShowSettingsPanel,
     showToolPicker, setShowToolPicker, supportsToolCalling, supportsThinking,

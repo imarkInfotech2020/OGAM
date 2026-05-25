@@ -11,7 +11,6 @@
 
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
 import logger from '../utils/logger';
-import { useDebugLogsStore } from '../stores/debugLogsStore';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
 const TAG = '[LiteRTService]';
@@ -24,7 +23,6 @@ const EVENT_THINKING  = 'litert_thinking';
 const EVENT_COMPLETE  = 'litert_complete';
 const EVENT_ERROR     = 'litert_error';
 const EVENT_TOOL_CALL = 'litert_tool_call';
-const EVENT_DEBUG_LOG = 'litert_debug_log';
 
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 
@@ -83,9 +81,6 @@ class LiteRTService {
   constructor() {
     if (LiteRTModule) {
       this.emitter = new NativeEventEmitter(LiteRTModule);
-      this.emitter.addListener(EVENT_DEBUG_LOG, (msg: string) => {
-        useDebugLogsStore.getState().addLog('log', `[Kotlin] ${msg}`);
-      });
       logger.log(TAG, 'initialized — native module available');
     } else {
       logger.log(TAG, 'native module not available on this platform');
@@ -134,8 +129,6 @@ class LiteRTService {
     const topP = samplerConfig?.topP ?? 0.95;
     const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : '';
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
-    const dbg = useDebugLogsStore.getState().addLog;
-    dbg('log', `[LiteRT] resetConversation — systemLen=${systemPrompt.length} temp=${temperature} topK=${topK} topP=${topP} tools=${tools?.length ?? 0} historyTurns=${history?.length ?? 0}`);
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;
@@ -146,7 +139,6 @@ class LiteRTService {
     const systemChars = systemPrompt.length;
     const toolsChars = toolsJson.length;
     this.cumulativeTokens = Math.ceil((historyChars + systemChars + toolsChars) / 4);
-    dbg('log', `[LiteRT] resetConversation done — seeded cumulativeTokens=${this.cumulativeTokens} (historyChars=${historyChars} systemChars=${systemChars} toolsChars=${toolsChars})`);
   }
 
   /**
@@ -170,14 +162,11 @@ class LiteRTService {
       history?: Array<{ role: 'user' | 'assistant'; content: string }>;
     },
   ): Promise<void> {
-    const dbg = useDebugLogsStore.getState().addLog;
     const toolsJson = opts?.tools && opts.tools.length > 0 ? JSON.stringify(opts.tools) : '';
 
     const maxTokens = this.configuredMaxTokens;
     const history = opts?.history;
     const incomingEstimate = history ? Math.ceil((history.reduce((s, m) => s + m.content.length, 0) + systemPrompt.length + toolsJson.length) / 4) : 0;
-
-    dbg('log', `[LiteRT] prepareConversation — convId=${conversationId.substring(0, 8)} sameConv=${this.activeConversationId === conversationId} cumul=${this.cumulativeTokens}/${maxTokens} historyTurns=${history?.length ?? 0} incomingEstimate=~${incomingEstimate}`);
 
     const COMPACT_THRESHOLD = 0.65;
     const threshold = maxTokens * COMPACT_THRESHOLD;
@@ -187,7 +176,6 @@ class LiteRTService {
     const tokenMeasure = isActiveSession ? this.cumulativeTokens : incomingEstimate;
     const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
       tokenMeasure > threshold;
-    dbg('log', `[LiteRT] prepareConversation compact check — needsCompact=${needsCompact} threshold=${Math.floor(threshold)} cumul=${this.cumulativeTokens} incoming=~${incomingEstimate} measure=~${tokenMeasure} activeSession=${isActiveSession}`);
 
     if (needsCompact && history) {
       await runCompaction({
@@ -290,7 +278,6 @@ class LiteRTService {
         this.clearSubscriptions();
 
         this.currentToolCallHandler = null;
-        const addLog = useDebugLogsStore.getState().addLog;
 
         // Parse native benchmark stats for accurate token counts
         let nativePrefillCount = 0;
@@ -328,7 +315,6 @@ class LiteRTService {
           initTimeSeconds: 0,
         };
 
-        addLog('log', `[LiteRTService] wall-clock stats — ttft=${ttft?.toFixed(3)}s decode=${decodeTokensPerSecond?.toFixed(1)}tok/s tokens=${jsDecodeTokenCount} cumulative=${this.cumulativeTokens}/${this.configuredMaxTokens}`);
         callbacks.onComplete(this.currentContent, this.currentReasoning, wallClockStats);
       }),
       this.emitter!.addListener(EVENT_ERROR, (message: string) => {

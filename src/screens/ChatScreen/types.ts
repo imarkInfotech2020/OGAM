@@ -1,6 +1,4 @@
 import { Message } from '../../types';
-import { useDebugLogsStore } from '../../stores/debugLogsStore';
-
 export type ChatMessageItem = {
   id: string;
   role: 'assistant';
@@ -27,7 +25,6 @@ export function getDisplayMessages(
   if (isThinking && isStreamingForThisConversation) {
     if (_lastDisplayBranch !== 'thinking') {
       _lastDisplayBranch = 'thinking';
-      useDebugLogsStore.getState().addLog('log', `[Display] branch=thinking — reasoningLen=${streamingReasoningContent.length} msgLen=${streamingMessage.length}`);
     }
     return [
       ...allMessages,
@@ -37,7 +34,6 @@ export function getDisplayMessages(
   if ((streamingMessage || streamingReasoningContent) && isStreamingForThisConversation) {
     if (_lastDisplayBranch !== 'streaming') {
       _lastDisplayBranch = 'streaming';
-      useDebugLogsStore.getState().addLog('log', `[Display] branch=streaming — reasoningLen=${streamingReasoningContent.length} msgLen=${streamingMessage.length}`);
     }
     return [
       ...allMessages,
@@ -46,7 +42,6 @@ export function getDisplayMessages(
   }
   if (_lastDisplayBranch !== 'done') {
     _lastDisplayBranch = 'done';
-    useDebugLogsStore.getState().addLog('log', `[Display] branch=done — finalMessages=${allMessages.length}`);
   }
   return allMessages;
 }

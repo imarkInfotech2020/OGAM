@@ -113,9 +113,8 @@ export const ChatHeader: React.FC<{
   setShowModelSelector: (v: boolean) => void;
   setShowSettingsPanel: (v: boolean) => void;
   setShowProjectSelector: (v: boolean) => void;
-  setShowLogsPanel: (v: boolean) => void;
   isRemote?: boolean;
-}> = ({ styles, colors, activeConversation, activeModel, activeModelName, activeImageModel, activeProject, navigation, setShowModelSelector, setShowSettingsPanel, setShowProjectSelector, setShowLogsPanel, isRemote }) => (
+}> = ({ styles, colors, activeConversation, activeModel, activeModelName, activeImageModel, activeProject, navigation, setShowModelSelector, setShowSettingsPanel, setShowProjectSelector, isRemote }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -150,9 +149,6 @@ export const ChatHeader: React.FC<{
         </View>
       </View>
       <View style={styles.headerActions}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowLogsPanel(true)}>
-          <Icon name="terminal" size={16} color={colors.textSecondary} />
-        </TouchableOpacity>
         <AttachStep index={16}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
             <Icon name="sliders" size={16} color={colors.textSecondary} />

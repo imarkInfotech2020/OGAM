@@ -5,7 +5,6 @@
 
 import { Platform, ToastAndroid } from 'react-native';
 import { useAppStore } from '../../stores';
-import { useDebugLogsStore } from '../../stores/debugLogsStore';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
@@ -104,23 +103,17 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     throw new Error('doLoadLiteRTModel called with non-LiteRT model');
   }
   const liteRTModel = ctx.model;
-  const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
-    addDebugLog('log', `[LiteRT] Starting model load: ${ctx.model.fileName}`);
-
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      addDebugLog('log', '[LiteRT] Unloading previous LiteRT model before load.');
       try {
         await liteRTService.unloadModel();
       } catch (unloadErr) {
         logger.warn('[LiteRT] Error unloading previous model, continuing:', unloadErr);
-        addDebugLog('warn', `[LiteRT] Previous model unload warning: ${String(unloadErr)}`);
       }
       ctx.onError();
     }
 
     const preferredBackend = ctx.store.settings.liteRTBackend;
-    addDebugLog('log', `[LiteRT] Preferred backend: ${preferredBackend}`);
 
     const maxTokens = ctx.store.settings.liteRTMaxTokens ?? 4096;
     const contextScalar = Math.max(1, maxTokens / 4096);
@@ -136,7 +129,6 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     });
 
     try {
-      addDebugLog('log', `[LiteRT] Calling liteRTService.loadModel (timeout ${timeoutMs / 1000}s, vision=${liteRTModel.liteRTVision ?? false}, maxNumTokens=${maxTokens}).`);
       await Promise.race([
         liteRTService.loadModel(ctx.model.filePath, preferredBackend, { supportsVision: liteRTModel.liteRTVision ?? false, maxNumTokens: maxTokens }),
         timeoutPromise,
@@ -146,11 +138,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     }
 
     const actualBackend = liteRTService.getActiveBackend();
-    const s = ctx.store.settings;
-    addDebugLog('log', `[LiteRT] Engine init — backend=${actualBackend} maxTokens=${maxTokens} temperature=${s.liteRTTemperature} topP=${s.liteRTTopP} topK=40`);
-    addDebugLog('log', `[LiteRT] Load complete — actual backend: ${actualBackend}`);
     if (actualBackend !== preferredBackend) {
-      addDebugLog('warn', `[LiteRT] Requested ${preferredBackend}, fell back to ${actualBackend}`);
       if (preferredBackend === 'gpu' && actualBackend === 'cpu' && maxTokens > 8192 && Platform.OS === 'android') {
         ToastAndroid.showWithGravity(
           `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU — reduce context length to use GPU.`,
@@ -162,10 +150,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
 
     // Warmup on GPU/NPU only — primes shader/kernel caches so first real prompt runs at full speed
     if (actualBackend === 'gpu' || actualBackend === 'npu') {
-      addDebugLog('log', `[LiteRT] Starting warmup on ${actualBackend}...`);
-      const warmupStart = Date.now();
       await liteRTService.warmup();
-      addDebugLog('log', `[LiteRT] Warmup complete in ${((Date.now() - warmupStart) / 1000).toFixed(1)}s`);
     }
 
     // Snapshot the settings that require a full engine reload so the pending-settings
@@ -186,8 +171,6 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    addDebugLog('error', `[LiteRT] Model load failed: ${message}`);
     ctx.onError();
     throw error;
   } finally {
@@ -201,17 +184,13 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     return doLoadLiteRTModel(ctx);
   }
 
-  const addDebugLog = useDebugLogsStore.getState().addLog;
   try {
-    addDebugLog('log', `[Reload] Starting text model load: ${ctx.model.fileName}`);
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      addDebugLog('log', '[Reload] Unloading previous text model before load.');
       try {
         await llmService.unloadModel();
       } catch (unloadErr) {
         // Log but continue — loadModel will also attempt to release the old context
         logger.warn('[ActiveModel] Error unloading previous model, continuing:', unloadErr);
-        addDebugLog('warn', `[Reload] Previous model unload warning: ${String(unloadErr)}`);
       }
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
@@ -233,7 +212,6 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     });
 
     try {
-      addDebugLog('log', `[Reload] Calling llmService.loadModel (timeout ${ctx.timeoutMs / 1000}s).`);
       await Promise.race([
         llmService.loadModel(ctx.model.filePath, mmProjPath),
         timeoutPromise,
@@ -269,10 +247,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
-    addDebugLog('log', `[Reload] Text model load complete: ${ctx.model.fileName}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    addDebugLog('error', `[Reload] Text model load failed: ${message}`);
     ctx.onError();
     throw error;
   } finally {

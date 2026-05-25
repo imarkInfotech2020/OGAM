@@ -1,6 +1,5 @@
 import logger from '../utils/logger';
 import { contextCompactionService } from './contextCompaction';
-import { useDebugLogsStore } from '../stores/debugLogsStore';
 
 const TAG = '[LiteRTService]';
 
@@ -79,7 +78,6 @@ export async function runCompaction(params: {
   resetFn: ResetFn;
 }): Promise<void> {
   const { history, systemPrompt, maxTokens, cumulativeTokens, conversationId, activeConversationId, opts, summarize, resetFn } = params;
-  const dbg = useDebugLogsStore.getState().addLog;
   contextCompactionService.signalCompacting(true);
   try {
     // Aim for the post-compact KV cache to sit around 45% of maxTokens, not 65%.
@@ -110,13 +108,9 @@ export async function runCompaction(params: {
 
     let summary: string | null = null;
     if (hasActiveSession) {
-      dbg('log', `[LiteRT] compact — active session, requesting summary (cumulative=${cumulativeTokens}/${maxTokens})`);
       logger.log(TAG, `prepareConversation — compact: active session at cumulative=${cumulativeTokens}/${maxTokens}, requesting summary`);
       summary = await summarize();
-      dbg('log', `[LiteRT] compact summary — got=${!!summary} length=${summary?.length ?? 0} chars`);
-      if (summary) dbg('log', `[LiteRT] compact summary content — "${summary.substring(0, 300)}"`);
     } else {
-      dbg('log', '[LiteRT] compact — no active session, slicing only');
       logger.log(TAG, 'prepareConversation — compact: first load, no active session — slicing');
     }
 
@@ -128,7 +122,6 @@ export async function runCompaction(params: {
         ]
       : recentHistory;
 
-    dbg('log', `[LiteRT] compact done — ${history.length} → ${compactedHistory.length} turns, summarized=${!!summary}`);
     logger.log(TAG, `prepareConversation — compact done: ${history.length} → ${compactedHistory.length} turns, summarized=${!!summary}`);
     await resetFn(systemPrompt, { samplerConfig: opts.samplerConfig, tools: opts.tools, history: compactedHistory });
   } finally {

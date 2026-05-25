@@ -3,7 +3,6 @@ import {
   ModelSelectorModal, GenerationSettingsModal,
   ProjectSelectorSheet, DebugSheet,
 } from '../../components';
-import { DebugLogsScreen } from '../../components/DebugLogsScreen';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
@@ -39,8 +38,6 @@ type ChatModalSectionProps = {
   viewerImageUri: string | null;
   setViewerImageUri: (v: string | null) => void;
   handleSaveImage: () => void;
-  showLogsPanel: boolean;
-  setShowLogsPanel: (v: boolean) => void;
   isRemote?: boolean;
 };
 
@@ -54,10 +51,9 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
   handleSelectProject, handleModelSelect, handleUnloadModel, handleDeleteConversation,
   isModelLoading, imageCount, activeConversationId, navigation,
   viewerImageUri, setViewerImageUri, handleSaveImage,
-  showLogsPanel, setShowLogsPanel, isRemote,
+  isRemote,
 }) => (
   <>
-    <DebugLogsScreen visible={showLogsPanel} onClose={() => setShowLogsPanel(false)} />
     <ProjectSelectorSheet
       visible={showProjectSelector}
       onClose={() => setShowProjectSelector(false)}

@@ -8,7 +8,6 @@ import { llmService, activeModelService, modelManager } from '../../services';
 import { liteRTService } from '../../services/litert';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
-import { useDebugLogsStore } from '../../stores/debugLogsStore';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -113,19 +112,15 @@ export async function initiateModelLoad(
     await waitForRenderFrame();
   }
 
-  const dbg = useDebugLogsStore.getState().addLog;
-  dbg('log', `[LiteRT] initiateModelLoad — model=${activeModel.name} engine=${activeModel.engine ?? 'llama'}`);
   try {
     await activeModelService.loadTextModel(activeModelId);
     const multimodalSupport = llmService.getMultimodalSupport();
     deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
-    dbg('log', `[LiteRT] loadTextModel success — engine=${activeModel.engine ?? 'llama'}`);
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
   } catch (error: any) {
-    dbg('error', `[LiteRT] loadTextModel failed — ${error?.message || 'Unknown error'}`);
     if (!alreadyLoading) {
       deps.setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
     }
@@ -143,14 +138,11 @@ export async function ensureModelLoadedFn(
 ): Promise<void> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return;
-  const dbg = useDebugLogsStore.getState().addLog;
   if (activeModel.engine === 'litert') {
     if (liteRTService.isModelLoaded()) {
-      dbg('log', `[LiteRT] ensureModelLoaded — already loaded, skipping`);
       deps.setSupportsVision(!!activeModel.liteRTVision);
       return;
     }
-    dbg('log', `[LiteRT] ensureModelLoaded — model=${activeModel.name}, triggering load`);
     deps.setSupportsVision(!!activeModel.liteRTVision);
     if (deps.activeModelId) await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading);
     return;
