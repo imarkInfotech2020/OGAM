@@ -129,7 +129,6 @@ class LiteRTService {
     const topP = samplerConfig?.topP ?? 0.95;
     const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : '';
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
-    logger.log(TAG, `resetConversation — calling native: systemPromptLen=${systemPrompt.length}, historyTurns=${history?.length ?? 0}, toolsLen=${toolsJson.length}`);
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;
@@ -139,11 +138,7 @@ class LiteRTService {
     const historyChars = (history ?? []).reduce((sum, m) => sum + m.content.length, 0);
     const systemChars = systemPrompt.length;
     const toolsChars = toolsJson.length;
-    const prevTokens = this.cumulativeTokens;
     this.cumulativeTokens = Math.ceil((historyChars + systemChars + toolsChars) / 4);
-    const maxTok = this.configuredMaxTokens;
-    const remaining = maxTok - this.cumulativeTokens;
-    logger.log(TAG, `resetConversation — DONE: cumulativeTokens ${prevTokens} → ${this.cumulativeTokens}/${maxTok} (${remaining} remaining, ${maxTok > 0 ? ((this.cumulativeTokens / maxTok) * 100).toFixed(1) : '?'}% used)`);
   }
 
   /**
@@ -182,10 +177,7 @@ class LiteRTService {
     const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
       tokenMeasure > threshold;
 
-    logger.log(TAG, `prepareConversation — convId=${conversationId}, isActive=${isActiveSession}, tokenMeasure=${tokenMeasure}, threshold=${threshold}, needsCompact=${needsCompact}, historyTurns=${history?.length ?? 0}, cumulativeTokens=${this.cumulativeTokens}`);
-
     if (needsCompact && history) {
-      logger.log(TAG, `prepareConversation — triggering compaction (${tokenMeasure}/${maxTokens} tokens = ${((tokenMeasure / maxTokens) * 100).toFixed(0)}%)`);
       await runCompaction({
         history,
         systemPrompt,
@@ -200,7 +192,6 @@ class LiteRTService {
       this.activeConversationId = conversationId;
       this.activeSystemPrompt = systemPrompt;
       this.activeToolsJson = toolsJson;
-      logger.log(TAG, `prepareConversation — compaction done, cumulativeTokens now=${this.cumulativeTokens}`);
       return;
     }
 
@@ -221,7 +212,6 @@ class LiteRTService {
   ): Promise<string | null> {
     // Strip <|think|> prefix so the summary call doesn't burn context on reasoning
     const noThinkPrompt = systemPrompt.replace(/^<\|think\|>\n?/, '');
-    logger.log(TAG, `summarizeCurrentSession — resetting with noThinkPrompt (stripped=${noThinkPrompt !== systemPrompt}), historyTurns=${fullHistory.length}`);
     await this.resetConversation(noThinkPrompt, { tools, history: fullHistory });
     return summarizeSession(
       (text, cbs) => this.sendMessage(text, cbs),
@@ -313,12 +303,7 @@ class LiteRTService {
         // Reasoning/thinking tokens fill the KV cache but are not included in
         // nativeDecodeCount, so estimate them from character length.
         const reasoningTokenEstimate = Math.ceil(this.currentReasoning.length / 4);
-        const prevCumulative = this.cumulativeTokens;
         this.cumulativeTokens += nativePrefillCount + nativeDecodeCount + reasoningTokenEstimate;
-        const maxTok = this.configuredMaxTokens;
-        const remaining = maxTok - this.cumulativeTokens;
-        const usedPct = maxTok > 0 ? ((this.cumulativeTokens / maxTok) * 100).toFixed(1) : '?';
-        logger.log(TAG, `sendMessage complete — prefill=${nativePrefillCount}, decode=${nativeDecodeCount}, reasoning≈${reasoningTokenEstimate}, cumulative: ${prevCumulative} → ${this.cumulativeTokens}/${maxTok} (${usedPct}% used, ${remaining} remaining)`);
 
         // Build wall-clock stats
         const completeTime = Date.now();
