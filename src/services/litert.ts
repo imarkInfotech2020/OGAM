@@ -129,6 +129,7 @@ class LiteRTService {
     const topP = samplerConfig?.topP ?? 0.95;
     const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : '';
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
+    logger.log(TAG, `resetConversation — calling native: systemPromptLen=${systemPrompt.length}, historyTurns=${history?.length ?? 0}, toolsLen=${toolsJson.length}`);
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
     this.activeToolsJson = toolsJson;
@@ -138,7 +139,11 @@ class LiteRTService {
     const historyChars = (history ?? []).reduce((sum, m) => sum + m.content.length, 0);
     const systemChars = systemPrompt.length;
     const toolsChars = toolsJson.length;
+    const prevTokens = this.cumulativeTokens;
     this.cumulativeTokens = Math.ceil((historyChars + systemChars + toolsChars) / 4);
+    const maxTok = this.configuredMaxTokens;
+    const remaining = maxTok - this.cumulativeTokens;
+    logger.log(TAG, `resetConversation — DONE: cumulativeTokens ${prevTokens} → ${this.cumulativeTokens}/${maxTok} (${remaining} remaining, ${maxTok > 0 ? ((this.cumulativeTokens / maxTok) * 100).toFixed(1) : '?'}% used)`);
   }
 
   /**
@@ -177,7 +182,10 @@ class LiteRTService {
     const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
       tokenMeasure > threshold;
 
+    logger.log(TAG, `prepareConversation — convId=${conversationId}, isActive=${isActiveSession}, tokenMeasure=${tokenMeasure}, threshold=${threshold}, needsCompact=${needsCompact}, historyTurns=${history?.length ?? 0}, cumulativeTokens=${this.cumulativeTokens}`);
+
     if (needsCompact && history) {
+      logger.log(TAG, `prepareConversation — triggering compaction (${tokenMeasure}/${maxTokens} tokens = ${((tokenMeasure / maxTokens) * 100).toFixed(0)}%)`);
       await runCompaction({
         history,
         systemPrompt,
@@ -186,12 +194,13 @@ class LiteRTService {
         conversationId,
         activeConversationId: this.activeConversationId,
         opts: { samplerConfig: opts?.samplerConfig, tools: opts?.tools },
-        summarize: () => this.summarizeCurrentSession(),
+        summarize: (fullHistory) => this.summarizeCurrentSession(systemPrompt, fullHistory, opts?.tools),
         resetFn: (p, o) => this.resetConversation(p, o),
       });
       this.activeConversationId = conversationId;
       this.activeSystemPrompt = systemPrompt;
       this.activeToolsJson = toolsJson;
+      logger.log(TAG, `prepareConversation — compaction done, cumulativeTokens now=${this.cumulativeTokens}`);
       return;
     }
 
@@ -205,11 +214,20 @@ class LiteRTService {
     }
   }
 
-  private summarizeCurrentSession(): Promise<string | null> {
+  private async summarizeCurrentSession(
+    systemPrompt: string,
+    fullHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    tools?: any[],
+  ): Promise<string | null> {
+    // Strip <|think|> prefix so the summary call doesn't burn context on reasoning
+    const noThinkPrompt = systemPrompt.replace(/^<\|think\|>\n?/, '');
+    logger.log(TAG, `summarizeCurrentSession — resetting with noThinkPrompt (stripped=${noThinkPrompt !== systemPrompt}), historyTurns=${fullHistory.length}`);
+    await this.resetConversation(noThinkPrompt, { tools, history: fullHistory });
     return summarizeSession(
       (text, cbs) => this.sendMessage(text, cbs),
       this.isAvailable() && this.loaded,
       (h) => { const p = this.currentToolCallHandler; this.currentToolCallHandler = h; return () => { this.currentToolCallHandler = p; }; },
+      () => this.stopGeneration(),
     );
   }
 
@@ -270,6 +288,7 @@ class LiteRTService {
         callbacks.onToken(token);
       }),
       this.emitter!.addListener(EVENT_THINKING, (token: string) => {
+        firstTokenTime ??= Date.now();
         this.currentReasoning += token;
         callbacks.onReasoning(token);
       }),
@@ -290,8 +309,16 @@ class LiteRTService {
           } catch { /* use JS fallback counts */ }
         }
 
-        // Accumulate into cumulative context usage
-        this.cumulativeTokens += nativePrefillCount + nativeDecodeCount;
+        // Accumulate into cumulative context usage.
+        // Reasoning/thinking tokens fill the KV cache but are not included in
+        // nativeDecodeCount, so estimate them from character length.
+        const reasoningTokenEstimate = Math.ceil(this.currentReasoning.length / 4);
+        const prevCumulative = this.cumulativeTokens;
+        this.cumulativeTokens += nativePrefillCount + nativeDecodeCount + reasoningTokenEstimate;
+        const maxTok = this.configuredMaxTokens;
+        const remaining = maxTok - this.cumulativeTokens;
+        const usedPct = maxTok > 0 ? ((this.cumulativeTokens / maxTok) * 100).toFixed(1) : '?';
+        logger.log(TAG, `sendMessage complete — prefill=${nativePrefillCount}, decode=${nativeDecodeCount}, reasoning≈${reasoningTokenEstimate}, cumulative: ${prevCumulative} → ${this.cumulativeTokens}/${maxTok} (${usedPct}% used, ${remaining} remaining)`);
 
         // Build wall-clock stats
         const completeTime = Date.now();

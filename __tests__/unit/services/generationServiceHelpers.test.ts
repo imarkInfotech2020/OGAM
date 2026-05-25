@@ -189,7 +189,7 @@ describe('buildGenerationMetaImpl — LiteRT path', () => {
     const meta = buildGenerationMetaImpl(svc);
 
     expect(meta.decodeTokensPerSecond).toBe(42);
-    expect(meta.timeToFirstToken).toBeCloseTo(120, 0);
+    expect(meta.timeToFirstToken).toBeCloseTo(0.12, 2);
     expect(meta.tokenCount).toBe(128);
     expect(meta.gpu).toBe(true);
     expect(meta.gpuBackend).toBe('GPU');

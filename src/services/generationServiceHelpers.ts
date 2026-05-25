@@ -48,8 +48,7 @@ function buildLiteRTMeta(svc: any, modelName: string | undefined): GenerationMet
       modelName,
       decodeTokensPerSecond: stats.decodeTokensPerSecond,
       prefillTokensPerSecond: stats.prefillTokensPerSecond,
-      // LiteRT reports ttft in seconds; GenerationMeta expects milliseconds.
-      timeToFirstToken: stats.ttft * 1000,
+      timeToFirstToken: stats.ttft,
       tokenCount: stats.prefillTokenCount,
       modelLoadTimeSeconds: stats.initTimeSeconds > 0 ? stats.initTimeSeconds : undefined,
     };
@@ -205,6 +204,7 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const { conversationId, messages, onFirstToken } = req;
   const chatStore = useChatStore.getState();
   let firstTokenReceived = false;
+  let jsTtftSeconds: number | undefined;
 
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
   if (!lastUser) {
@@ -234,6 +234,9 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
       {
         onToken: (token: string) => {
           if (svc.abortRequested) return;
+          if (jsTtftSeconds === undefined && svc.state.startTime) {
+            jsTtftSeconds = (Date.now() - svc.state.startTime) / 1000;
+          }
           if (!firstTokenReceived) {
             firstTokenReceived = true;
             svc.updateState({ isThinking: false });
@@ -247,6 +250,10 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
         },
         onReasoning: (token: string) => {
           if (svc.abortRequested) return;
+          // Capture TTFT on first thinking token so it reflects time-to-first-visible-output
+          if (jsTtftSeconds === undefined && svc.state.startTime) {
+            jsTtftSeconds = (Date.now() - svc.state.startTime) / 1000;
+          }
           svc.reasoningBuffer += token;
           if (!svc.flushTimer) {
             svc.flushTimer = setTimeout(() => svc.flushTokenBuffer(), FLUSH_INTERVAL_MS);
@@ -255,7 +262,7 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
         onComplete: (_content: string, _reasoning: string, stats) => {
           if (svc.abortRequested) return;
           svc.forceFlushTokens();
-          svc.liteRTBenchmarkStats = stats;
+          svc.liteRTBenchmarkStats = stats ? { ...stats, ttft: jsTtftSeconds ?? stats.ttft } : stats;
           const generationTime = svc.state.startTime ? Date.now() - svc.state.startTime : undefined;
           chatStore.finalizeStreamingMessage(conversationId, generationTime, buildGenerationMetaImpl(svc));
           svc.checkSharePrompt();
