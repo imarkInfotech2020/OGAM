@@ -161,9 +161,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 20,
     marginTop: 4,
     borderRadius: 14,
-    borderRightWidth: 3,
-    borderRightColor: colors.primary,
-    ...shadows.glow,
   },
   compactNameRecommended: {
     ...TYPOGRAPHY.h2,
