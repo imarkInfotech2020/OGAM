@@ -14,7 +14,6 @@ import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useAppStore } from '../../stores';
-import { AVAILABLE_TOOLS } from '../../services/tools';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -255,20 +254,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <View style={{ position: 'relative' }}>
-                <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
-                {showSettingsDot && (
-                  <View style={{
-                    position: 'absolute',
-                    top: -2,
-                    right: -2,
-                    width: 7,
-                    height: 7,
-                    borderRadius: 4,
-                    backgroundColor: '#F59E0B',
-                  }} />
-                )}
-              </View>
+              <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+              {showSettingsDot && <View style={styles.toolWarningDot} />}
             </TouchableOpacity>
 
           </Animated.View>

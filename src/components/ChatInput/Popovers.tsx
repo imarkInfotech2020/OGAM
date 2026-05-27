@@ -6,7 +6,6 @@ import { ImageModeState } from '../../types';
 import { useAppStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS } from '../../constants';
-import { AVAILABLE_TOOLS } from '../../services/tools';
 
 const TOOL_WARNING_COLOR = '#F59E0B';
 

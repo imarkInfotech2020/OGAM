@@ -8,6 +8,8 @@ import { AVAILABLE_TOOLS } from '../services/tools';
 import { useAppStore } from '../stores';
 import type { ThemeColors, ThemeShadows } from '../theme';
 
+const TOOL_WARNING_COLOR = '#F59E0B';
+
 interface ToolPickerSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -36,14 +38,14 @@ export const ToolPickerSheet: React.FC<ToolPickerSheetProps> = ({
     >
       <View style={styles.container}>
         {showHint && (
-          <View style={[styles.hintBanner, { backgroundColor: colors.surface, borderColor: '#F59E0B' }]}>
-            <Icon name="alert-circle" size={16} color="#F59E0B" style={styles.hintIcon} />
+          <View style={[styles.hintBanner, { backgroundColor: colors.surface }]}>
+            <Icon name="alert-circle" size={16} color={TOOL_WARNING_COLOR} style={styles.hintIcon} />
             <View style={styles.hintBody}>
               <Text style={[styles.hintText, { color: colors.text }]}>
                 Too many tools can confuse the model and increase latency on the first response. Stick to 2-3 tools for best results.
               </Text>
               <TouchableOpacity onPress={setToolCountHintDismissed} style={styles.hintDismiss}>
-                <Text style={[styles.hintDismissText, { color: '#F59E0B' }]}>Got it</Text>
+                <Text style={styles.hintDismissText}>Got it</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -135,6 +137,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     borderWidth: 1,
+    borderColor: TOOL_WARNING_COLOR,
     borderRadius: 10,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
@@ -156,5 +159,6 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   hintDismissText: {
     ...TYPOGRAPHY.bodySmall,
     fontWeight: '400' as const,
+    color: TOOL_WARNING_COLOR,
   },
 });

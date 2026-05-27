@@ -7,6 +7,7 @@ const NUM_PILL_ICONS = 2;
 export const PILL_ICONS_WIDTH = PILL_ICON_SIZE * NUM_PILL_ICONS;
 export const ANIM_DURATION_IN = 180;
 export const ANIM_DURATION_OUT = 200;
+const TOOL_WARNING_COLOR = '#F59E0B';
 
 export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
@@ -150,6 +151,15 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   pillIconButtonActive: {},
   pillIconButtonDisabled: {
     opacity: 0.4,
+  },
+  toolWarningDot: {
+    position: 'absolute' as const,
+    top: -2,
+    right: -2,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: TOOL_WARNING_COLOR,
   },
   // Small badge on image gen icon
   iconBadge: {
