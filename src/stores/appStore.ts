@@ -148,7 +148,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
-  thinkingEnabled: true,
+  thinkingEnabled: false,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
