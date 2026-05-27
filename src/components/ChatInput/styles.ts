@@ -152,6 +152,9 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   pillIconButtonDisabled: {
     opacity: 0.4,
   },
+  iconWrapper: {
+    position: 'relative' as const,
+  },
   toolWarningDot: {
     position: 'absolute' as const,
     top: -2,

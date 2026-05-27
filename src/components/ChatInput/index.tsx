@@ -253,8 +253,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
-              {showSettingsDot && <View style={styles.toolWarningDot} />}
+              <View style={styles.iconWrapper}>
+                <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+                {showSettingsDot && <View style={styles.toolWarningDot} />}
+              </View>
             </TouchableOpacity>
 
           </Animated.View>
