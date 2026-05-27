@@ -263,10 +263,6 @@ export const useChatStore = create<ChatState>()(
       finalizeStreamingMessage: (conversationId, generationTimeMs, generationMeta) => {
         const { streamingMessage, streamingReasoningContent, streamingForConversationId, addMessage } = get();
 
-        // Extract channel-based thinking BEFORE stripping control tokens.
-        // stripControlTokens removes thinking delimiters as a safety net, but that
-        // prevents extraction here. We pull them out and store as reasoningContent so
-        // the ThinkingBlock renders correctly on the finalized message.
         let reasoningContent = streamingReasoningContent.trim() || undefined;
         let rawContent = streamingMessage;
         if (!reasoningContent) {
@@ -275,7 +271,6 @@ export const useChatStore = create<ChatState>()(
           rawContent = extracted.responseContent;
         }
 
-        // Only finalize if this is the conversation we were generating for
         const sanitizedMessage = stripControlTokens(rawContent).trim();
         if (streamingForConversationId === conversationId && (sanitizedMessage || reasoningContent)) {
           addMessage(conversationId, {

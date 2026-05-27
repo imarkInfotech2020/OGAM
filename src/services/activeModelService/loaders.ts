@@ -13,18 +13,12 @@ import { modelManager } from '../modelManager';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
 
-// ---------------------------------------------------------------------------
-// mmproj path resolver
-// ---------------------------------------------------------------------------
-
 function isMMProjFile(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   if (!lower.endsWith('.gguf')) return false;
   return (
     lower.includes('mmproj') ||
     lower.includes('projector') ||
-    // LLaVA/InternVL-style CLIP vision encoder projectors, e.g.
-    // "mmproj-model-f16-clip-vit-large-patch14-336.gguf"
     (lower.includes('clip') && lower.includes('vit'))
   );
 }
@@ -46,13 +40,8 @@ export async function resolveMmProjPath(
     if (await RNFS.exists(model.mmProjPath)) {
       return model.mmProjPath;
     }
-    // Path is stale — fall through to directory scan
   }
 
-  // Scan the model directory for any mmproj file regardless of model name.
-  // Previous code only scanned for models whose name contained "vl"/"vision"/
-  // "smolvlm", which silently broke vision for models like llava, pixtral,
-  // moondream, internvl, minicpm, etc.
   try {
     const mmProjFile = await scanDirForMmProj(model.filePath);
     if (!mmProjFile) {

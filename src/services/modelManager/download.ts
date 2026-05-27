@@ -116,23 +116,11 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const mmProjSize = file.mmProjFile?.size || 0;
   const combinedTotalBytes = file.size + mmProjSize;
-  // Prefer per-file URL when set — lets curated entries point at a different
-  // repo than the parent modelId (e.g. a synthetic parent collecting models from
-  // multiple HF repos under one card).
   const downloadUrl = file.downloadUrl || huggingFaceService.getDownloadUrl(modelId, file.name);
   const author = modelId.split('/')[0] || 'Unknown';
   const modelKey = makeModelKey(modelId, file.name);
 
-  // Determine whether a parallel mmproj download is needed.
-  // Also embed this in metadataJson so the native DB row carries the sentinel
-  // even after an app kill — restore.ts reads it to recover mmProjFileName
-  // reliably without falling back to the size-delta heuristic.
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
-  // Curated entries under the offgrid/ namespace (e.g. the LiteRT recommended
-  // models) point at HF artifacts pinned to a commit hash. We don't ship an
-  // authoritative SHA for them, so the native worker's strict size check can
-  // false-fail on a transient Content-Length / payload undershoot. Trust the
-  // commit-hash-pinned URL the way the Gallery app does and skip size validation.
   const skipSizeValidation = modelId.startsWith('offgrid/');
   const metadataObj: Record<string, unknown> = {};
   if (needsMmProj) {
@@ -140,9 +128,6 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     metadataObj.mmProjDownloadUrl = file.mmProjFile?.downloadUrl;
   }
   if (skipSizeValidation) metadataObj.skipSizeValidation = true;
-  // Capability bits like liteRTVision are resolved by the curated registry
-  // (keyed by fileName) inside buildDownloadedModel, so they don't need to be
-  // threaded through metadataJson — the fileName itself is already on the row.
   const metadataJson = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : undefined;
 
   const downloadInfo = await backgroundDownloadService.startDownload({
@@ -168,16 +153,8 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     mmProjLocalPath,
   });
 
-  // Populate new store immediately — no awaits between startDownload and add().
-  // If a non-active entry already exists for this modelKey (e.g. previous run
-  // ended in 'failed' and the user is starting again), reuse the same logical
-  // record via retryEntry instead of overwriting via add(). add() is strict
-  // and refuses to clobber any existing entry.
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing) {
-    // Cancel any running/queued native worker before retryEntry swaps the
-    // downloadId. Without this, the old worker keeps running with no store
-    // listener after the index is updated to the new downloadId.
     await backgroundDownloadService.cancelDownload(existing.downloadId).catch(() => {});
     if (existing.mmProjDownloadId) {
       await backgroundDownloadService.cancelDownload(existing.mmProjDownloadId).catch(() => {});
