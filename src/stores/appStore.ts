@@ -110,6 +110,8 @@ interface AppState {
   setProBannerDismissed: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
   setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
+  toolCountHintDismissed: boolean;
+  setToolCountHintDismissed: () => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
@@ -306,6 +308,8 @@ export const useAppStore = create<AppState>()(
       setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
       proAhaTriggeredBy: null,
       setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
+      toolCountHintDismissed: false,
+      setToolCountHintDismissed: () => set({ toolCountHintDismissed: true }),
       loadedSettings: null,
       setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),

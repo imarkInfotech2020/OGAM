@@ -13,6 +13,8 @@ import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
+import { useAppStore } from '../../stores';
+import { AVAILABLE_TOOLS } from '../../services/tools';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -64,6 +66,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { settings, toolCountHintDismissed } = useAppStore();
+  const showSettingsDot = settings.enabledTools.length > 3 && !toolCountHintDismissed;
   const [message, setMessage] = useState('');
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -251,7 +255,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+              <View style={{ position: 'relative' }}>
+                <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+                {showSettingsDot && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -2,
+                    right: -2,
+                    width: 7,
+                    height: 7,
+                    borderRadius: 4,
+                    backgroundColor: '#F59E0B',
+                  }} />
+                )}
+              </View>
             </TouchableOpacity>
 
           </Animated.View>

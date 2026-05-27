@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, Switch } from 'react-native';
+import { View, Text, Switch, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { useTheme, useThemedStyles } from '../theme';
-import { FONTS } from '../constants';
+import { FONTS, TYPOGRAPHY, SPACING } from '../constants';
 import { AVAILABLE_TOOLS } from '../services/tools';
+import { useAppStore } from '../stores';
 import type { ThemeColors, ThemeShadows } from '../theme';
 
 interface ToolPickerSheetProps {
@@ -22,6 +23,9 @@ export const ToolPickerSheet: React.FC<ToolPickerSheetProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { toolCountHintDismissed, setToolCountHintDismissed } = useAppStore();
+
+  const showHint = enabledTools.length > 3 && !toolCountHintDismissed;
 
   return (
     <AppSheet
@@ -31,6 +35,19 @@ export const ToolPickerSheet: React.FC<ToolPickerSheetProps> = ({
       title="Tools"
     >
       <View style={styles.container}>
+        {showHint && (
+          <View style={[styles.hintBanner, { backgroundColor: colors.surface, borderColor: '#F59E0B' }]}>
+            <Icon name="alert-circle" size={16} color="#F59E0B" style={styles.hintIcon} />
+            <View style={styles.hintBody}>
+              <Text style={[styles.hintText, { color: colors.text }]}>
+                Too many tools can confuse the model and increase latency on the first response. Stick to 2-3 tools for best results.
+              </Text>
+              <TouchableOpacity onPress={setToolCountHintDismissed} style={styles.hintDismiss}>
+                <Text style={[styles.hintDismissText, { color: '#F59E0B' }]}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
         {AVAILABLE_TOOLS.map(tool => {
           const isEnabled = enabledTools.includes(tool.id);
           return (
@@ -56,6 +73,9 @@ export const ToolPickerSheet: React.FC<ToolPickerSheetProps> = ({
             </View>
           );
         })}
+        <Text style={styles.hint}>
+          Enabling more tools can confuse the model and increases latency on first response.
+        </Text>
       </View>
     </AppSheet>
   );
@@ -104,5 +124,37 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     fontFamily: FONTS.mono,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  hint: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    marginTop: SPACING.lg,
+    textAlign: 'center' as const,
+  },
+  hintBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  hintIcon: {
+    marginRight: SPACING.sm,
+    marginTop: 1,
+  },
+  hintBody: {
+    flex: 1,
+  },
+  hintText: {
+    ...TYPOGRAPHY.bodySmall,
+    lineHeight: 18,
+  },
+  hintDismiss: {
+    marginTop: SPACING.sm,
+  },
+  hintDismissText: {
+    ...TYPOGRAPHY.bodySmall,
+    fontWeight: '400' as const,
   },
 });

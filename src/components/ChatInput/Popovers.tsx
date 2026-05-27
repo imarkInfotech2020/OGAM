@@ -6,6 +6,9 @@ import { ImageModeState } from '../../types';
 import { useAppStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS } from '../../constants';
+import { AVAILABLE_TOOLS } from '../../services/tools';
+
+const TOOL_WARNING_COLOR = '#F59E0B';
 
 // ─── Shared Styles ──────────────────────────────────────────────────────────
 
@@ -99,12 +102,15 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
   supportsToolCalling, enabledToolCount, onToolsPress,
 }) => {
   const { colors } = useTheme();
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, toolCountHintDismissed } = useAppStore();
 
   if (!visible) return null;
 
   const imgBadge = getImageModeBadge(imageMode, colors);
   const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
+  const showToolWarning = supportsToolCalling && enabledToolCount > 3 && !toolCountHintDismissed;
+  const toolIconColor = showToolWarning ? TOOL_WARNING_COLOR : tools.iconColor;
+  const toolBadgeBg = showToolWarning ? TOOL_WARNING_COLOR : tools.badgeBg;
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -159,9 +165,9 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   if (supportsToolCalling) { onToolsPress?.(); }
                 }}
               >
-                <Icon name="tool" size={16} color={tools.iconColor} />
+                <Icon name="tool" size={16} color={toolIconColor} />
                 <Text style={[popoverStyles.rowLabel, { color: tools.labelColor }]}>Tools</Text>
-                <View style={[popoverStyles.badge, { backgroundColor: tools.badgeBg }]}>
+                <View style={[popoverStyles.badge, { backgroundColor: toolBadgeBg }]}>
                   <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{tools.badgeLabel}</Text>
                 </View>
               </TouchableOpacity>
