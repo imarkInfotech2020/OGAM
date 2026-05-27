@@ -289,7 +289,8 @@ export async function generateOllamaChatImpl(
     ...(options.tools && options.tools.length > 0 && { tools: options.tools }),
     options: {
       ...(options.temperature !== undefined && { temperature: options.temperature }),
-      ...(options.maxTokens !== undefined && { num_predict: options.maxTokens }),
+      // num_predict intentionally omitted — Ollama defaults to -1 (until natural stop).
+      // A client-side cap truncates reasoning models mid-<think>.
       ...(options.topP !== undefined && { top_p: options.topP }),
     },
   };
