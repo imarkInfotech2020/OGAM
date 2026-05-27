@@ -40,6 +40,13 @@ export interface CuratedLiteRTEntry {
   highlight: string;
   /** Whether this artifact supports vision (image) input. */
   liteRTVision: boolean;
+  /**
+   * Optional pre-download confirmation prompt. When set, tapping Download in
+   * the file detail view first shows this alert with a Cancel + Download anyway
+   * choice. Useful for heavier models where most devices should pick the
+   * smaller variant first.
+   */
+  confirmDownload?: { title: string; message: string };
 }
 
 /**
@@ -69,6 +76,11 @@ export const CURATED_LITERT_ENTRIES: readonly CuratedLiteRTEntry[] = [
     displayName: 'Gemma 4 E4B',
     highlight: 'Higher quality, same hardware efficiency as E2B',
     liteRTVision: true,
+    confirmDownload: {
+      title: 'Warning',
+      message:
+        "The model you have selected may exceed your device's memory and might not run reliably. For the best experience, try a smaller model.",
+    },
   },
 ];
 

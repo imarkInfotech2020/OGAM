@@ -280,13 +280,19 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
           </Text>
         </View>
       )}
-      {quantInfo && (
-        <View style={[styles.infoBadge, quantInfo.recommended && styles.recommendedBadge]}>
-          <Text style={[styles.infoText, quantInfo.recommended && styles.recommendedText]}>
+      {/* Label chip renders for any non-empty quantization string — llama quants
+          (Q4_K_M etc.) get the green "recommended" highlight via quantInfo, and
+          non-table values (e.g. "LiteRT" for the curated LiteRT entries) still
+          render as a plain label instead of disappearing. */}
+      {!!quantization && (
+        <View style={[styles.infoBadge, quantInfo?.recommended && styles.recommendedBadge]}>
+          <Text style={[styles.infoText, quantInfo?.recommended && styles.recommendedText]}>
             {quantization}
           </Text>
         </View>
       )}
+      {/* Quality chip stays gated on quantInfo so we don't render a phantom
+          second chip for non-llama quant strings. */}
       {quantInfo && (
         <View style={styles.infoBadge}>
           <Text style={styles.infoText}>{quantInfo.quality}</Text>
@@ -387,3 +393,5 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   }
   return null;
 };
+
+

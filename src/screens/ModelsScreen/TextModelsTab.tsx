@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
-import { CustomAlert, hideAlert } from '../../components/CustomAlert';
+import { CustomAlert, hideAlert, showAlert } from '../../components/CustomAlert';
 import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -19,7 +19,7 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTUrl } from '../../services/curatedLiteRTRegistry';
+import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTUrl, getCuratedLiteRTEntry } from '../../services/curatedLiteRTRegistry';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -112,10 +112,30 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     const s = getFileCardState(item);
-    const onDownload = !s.downloaded && !s.progress ? () => {
+    const curatedEntry = getCuratedLiteRTEntry(item.name);
+    const proceedDownload = () => {
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
-    } : undefined;
+    };
+    // Curated entries with confirmDownload (e.g. the heavier Gemma 4 E4B) show
+    // a pre-download alert. Cancel dismisses; "Download anyway" proceeds with
+    // the normal download flow.
+    const onDownload = !s.downloaded && !s.progress
+      ? () => {
+        if (curatedEntry?.confirmDownload) {
+          setAlertState(showAlert(
+            curatedEntry.confirmDownload.title,
+            curatedEntry.confirmDownload.message,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
+              { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
+            ],
+          ));
+          return;
+        }
+        proceedDownload();
+      }
+      : undefined;
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
     const recommended = liteRTMeta
@@ -229,7 +249,11 @@ export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
   files: CURATED_LITERT_ENTRIES.map(e => ({
     name: e.fileName,
     size: e.sizeBytes,
-    quantization: 'mixed',
+    // Repurpose the quant chip slot as an engine label for curated LiteRT
+    // entries. Llama files keep their real quant strings (Q4_K_M etc.); this
+    // value never appears on a .gguf card. Mixed-precision is what the actual
+    // weights use, but "LiteRT" is what's useful to the reader.
+    quantization: 'LiteRT',
     downloadUrl: buildCuratedLiteRTUrl(e),
     liteRTVision: e.liteRTVision,
   })),
