@@ -33,15 +33,13 @@ export const ChatsListScreen: React.FC = () => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { conversations, deleteConversation, setActiveConversation } = useChatStore();
+  const conversations = useChatStore(s => s.conversations);
+  const { deleteConversation, setActiveConversation } = useChatStore.getState();
   const { getProject } = useProjectStore();
-  const {
-    removeImagesByConversationId,
-    activeImageModelId,
-    onboardingChecklist,
-    shownSpotlights,
-    markSpotlightShown,
-  } = useAppStore();
+  const activeImageModelId = useAppStore(s => s.activeImageModelId);
+  const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
+  const shownSpotlights = useAppStore(s => s.shownSpotlights);
+  const { removeImagesByConversationId, markSpotlightShown } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
