@@ -239,7 +239,6 @@ class LLMService {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log(`[LLM][THINKING] First token raw data — token: ${JSON.stringify(data.token)}, content: ${JSON.stringify(data.content)}, reasoning_content: ${JSON.stringify(data.reasoning_content)}`); }
         tokenCount++;
-        if (data.reasoning_content) logger.log(`[LLM][THINKING] reasoning_content chunk received: ${JSON.stringify(data.reasoning_content)}`);
         const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
         const reasoningContent = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
         if (data.content) streamedContentSoFar = data.content;

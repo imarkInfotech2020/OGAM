@@ -19,12 +19,10 @@ export function useDownloadListeners() {
       const { downloadIdIndex, downloads } = useDownloadStore.getState();
       const modelKey = downloadIdIndex[event.downloadId];
       if (!modelKey) {
-        console.debug('[useDownloads] progress event: downloadId not in index', { downloadId: event.downloadId });
         return;
       }
       const entry = downloads[modelKey];
       if (!entry) {
-        console.debug('[useDownloads] progress event: entry not found', { modelKey, downloadId: event.downloadId });
         return;
       }
 
@@ -39,7 +37,6 @@ export function useDownloadListeners() {
       if (entry.downloadId === event.downloadId) {
         useDownloadStore.getState().updateProgress(event.downloadId, event.bytesDownloaded, event.totalBytes);
       } else if (entry.mmProjDownloadId === event.downloadId) {
-        console.log('[useDownloads] routing mmproj progress', { modelKey, mmProjDownloadId: event.downloadId, bytes: event.bytesDownloaded });
         useDownloadStore.getState().updateMmProjProgress(event.downloadId, event.bytesDownloaded);
       } else {
         console.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
