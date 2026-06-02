@@ -12,6 +12,11 @@ import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
+// LiteRT runs the tool loop natively (automaticToolCalling), so the JS caps above don't
+// apply to it. Bound the native loop here instead: once a single response exceeds this many
+// tool calls we stop executing them and tell the model to answer, which prevents the KV cache
+// from overflowing the (small, ~4096) context window mid-turn → degenerate output / crash.
+const MAX_LITERT_TOOL_CALLS = 3;
 type StreamChunk = string | StreamToken;
 function parseXmlStyleToolCall(body: string, idSuffix: number): ToolCall | null {
   const funcMatch = body.match(/<function=(\w+)>/);
@@ -321,9 +326,17 @@ export function buildLiteRTHistory(messages: Message[]): Array<{ role: 'user' | 
 }
 
 function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string) {
+  // Per-turn counter: this closure is rebuilt once per generation, so it resets each new
+  // message and the native loop reuses it for every tool call within the turn.
+  let toolCallCount = 0;
   return async (name: string, args: Record<string, unknown>): Promise<string> => {
     if (ctx.isAborted()) return 'Aborted';
-    logger.log(`[ToolLoop][LiteRT] native tool call — name=${name}, args=${JSON.stringify(args).substring(0, 200)}`);
+    toolCallCount++;
+    if (toolCallCount > MAX_LITERT_TOOL_CALLS) {
+      logger.log(`[ToolLoop][LiteRT] tool call cap reached (${MAX_LITERT_TOOL_CALLS}) — refusing "${name}", instructing model to answer`);
+      return `Tool call limit reached (${MAX_LITERT_TOOL_CALLS} per response). Do not call any more tools. Answer now using the information you already have.`;
+    }
+    logger.log(`[ToolLoop][LiteRT] native tool call ${toolCallCount}/${MAX_LITERT_TOOL_CALLS} — name=${name}, args=${JSON.stringify(args).substring(0, 200)}`);
     ctx.callbacks?.onToolCallStart?.(name, args as Record<string, any>);
     const toolCall: ToolCall = { id: `native-tc-${Date.now()}`, name, arguments: args as Record<string, any> };
     if (ctx.projectId) (toolCall as any).context = { projectId: ctx.projectId };
