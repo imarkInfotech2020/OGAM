@@ -4,7 +4,14 @@ import { useDownloadStore } from '../stores/downloadStore';
 import { toUserMessage } from '../utils/downloadErrors';
 import { ModelKey } from '../utils/modelKey';
 
-export function useDownloads() {
+/**
+ * Lightweight hook for App root — registers native download event listeners only.
+ * Has NO store subscription, so download progress never re-renders the root
+ * component and the entire navigation tree.
+ *
+ * Screens that need to read download state should use useDownloads() directly.
+ */
+export function useDownloadListeners() {
   useEffect(() => {
     if (!backgroundDownloadService.isAvailable()) return;
 
@@ -97,6 +104,10 @@ export function useDownloads() {
       unsubError();
     };
   }, []);
+}
+
+export function useDownloads() {
+  useDownloadListeners();
 
   const cancel = async (modelKey: ModelKey) => {
     const entry = useDownloadStore.getState().downloads[modelKey];

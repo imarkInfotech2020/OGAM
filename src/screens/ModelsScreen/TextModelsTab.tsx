@@ -20,6 +20,8 @@ import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
 import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTUrl, getCuratedLiteRTEntry } from '../../services/curatedLiteRTRegistry';
+import { backgroundDownloadService, modelManager } from '../../services';
+import { useAppStore } from '../../stores';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -69,6 +71,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const { setDownloadedModels } = useAppStore();
   const { goTo } = useSpotlightTour();
 
   // If user arrived here via onboarding spotlight flow, show file card spotlight
@@ -106,8 +109,33 @@ const ModelDetailView: React.FC<DetailProps> = ({
     if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
       progress = undefined;
     }
-    const canCancel = !!entry && isActiveStatus(entry.status);
-    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel };
+    const canCancel   = !!entry && isActiveStatus(entry.status);
+    const hasFailed   = entry?.status === 'failed';
+    const errorMessage = hasFailed ? (entry?.errorMessage ?? 'Download failed') : undefined;
+    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel, hasFailed, errorMessage };
+  };
+
+  const handleRetryDownload = async (modelKey: string, downloadId: string) => {
+    const store = useDownloadStore.getState();
+    store.setStatus(downloadId, 'pending');
+    try {
+      await backgroundDownloadService.retryDownload(downloadId);
+      modelManager.watchDownload(
+        downloadId,
+        async () => {
+          const models = await modelManager.getDownloadedModels();
+          setDownloadedModels(models);
+          const key = store.downloadIdIndex[downloadId] ?? modelKey;
+          if (key) store.remove(key);
+        },
+        (error: Error) => {
+          store.setStatus(downloadId, 'failed', { message: error.message });
+        },
+      );
+      backgroundDownloadService.startProgressPolling();
+    } catch (error: any) {
+      store.setStatus(downloadId, 'failed', { message: error?.message ?? 'Retry failed' });
+    }
   };
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
@@ -117,10 +145,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
-    // Curated entries with confirmDownload (e.g. the heavier Gemma 4 E4B) show
-    // a pre-download alert. Cancel dismisses; "Download anyway" proceeds with
-    // the normal download flow.
-    const onDownload = !s.downloaded && !s.progress
+    const onDownload = !s.downloaded && !s.progress && !s.hasFailed
       ? () => {
         if (curatedEntry?.confirmDownload) {
           setAlertState(showAlert(
@@ -141,12 +166,22 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const recommended = liteRTMeta
       ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight }
       : undefined;
-    const card = (
+    const storeEntry = useDownloadStore.getState().downloads[s.downloadKey];
+    const failedState = s.hasFailed && s.errorMessage && storeEntry?.downloadId
+      ? {
+        errorMessage: s.errorMessage,
+        bytesDownloaded: storeEntry.bytesDownloaded,
+        totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
+        onRetry: () => handleRetryDownload(s.downloadKey, storeEntry.downloadId),
+        onRemove: () => handleCancelDownload(s.downloadKey),
+      }
+      : undefined;
+    const inner = (
       <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        isDownloading={!!s.progress} downloadProgress={s.progress?.progress}
-        downloadBytes={s.progress ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
+        isDownloading={!!s.progress && !s.hasFailed} downloadProgress={s.progress?.progress}
+        downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
         isCompatible={item.size / (1024 ** 3) < ramGB * 0.6} testID={`file-card-${index}`}
         onDownload={onDownload}
@@ -154,9 +189,10 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
         recommended={recommended}
+        failedState={failedState}
       />
     );
-    return index === 0 ? <AttachStep index={9} fill>{card}</AttachStep> : card;
+    return index === 0 ? <AttachStep index={9} fill>{inner}</AttachStep> : inner;
   };
 
   return (
