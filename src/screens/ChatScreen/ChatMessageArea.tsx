@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform } from 'react-native';
+import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -127,9 +127,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         && chat.activeModel?.engine === 'llama'
         && !chat.activeModelInfo?.isRemote
         && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, backgroundColor: `${colors.warning}15` }}>
+        <View style={[openCLBannerStyles.row, { backgroundColor: `${colors.warning}15` }]}>
           <Icon name="info" size={13} color={colors.warning} />
-          <Text style={{ ...TYPOGRAPHY.meta, color: colors.warning, flex: 1 }}>
+          <Text style={[openCLBannerStyles.text, { color: colors.warning }]}>
             OpenCL is not recommended. Consider switching to CPU in Settings.
           </Text>
         </View>
@@ -175,3 +175,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
     </>
   );
 };
+
+const openCLBannerStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  text: { ...TYPOGRAPHY.meta, flex: 1 },
+});

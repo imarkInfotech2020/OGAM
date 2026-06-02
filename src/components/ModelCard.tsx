@@ -162,7 +162,6 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   failedState,
 }) => {
   const styles = useThemedStyles(createStyles);
-  const { colors } = useTheme();
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
