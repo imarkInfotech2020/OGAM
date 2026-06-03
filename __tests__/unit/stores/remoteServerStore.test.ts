@@ -4,6 +4,7 @@
  * Tests for Zustand store managing remote LLM server configurations.
  */
 
+import { act } from '@testing-library/react-native';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
 import * as httpClient from '../../../src/services/httpClient';
@@ -269,7 +270,7 @@ describe('remoteServerStore', () => {
       });
 
       let result;
-      await actStoreUpdate(async () => {
+      await act(async () => {
         result = await useRemoteServerStore.getState().testConnection(serverId);
       });
 
@@ -293,7 +294,7 @@ describe('remoteServerStore', () => {
       });
 
       let result;
-      await actStoreUpdate(async () => {
+      await act(async () => {
         result = await useRemoteServerStore.getState().testConnection(serverId);
       });
 
@@ -310,7 +311,7 @@ describe('remoteServerStore', () => {
       });
 
       let result;
-      await actStoreUpdate(async () => {
+      await act(async () => {
         result = await useRemoteServerStore.getState().testConnectionByEndpoint('http://test:11434');
       });
 
