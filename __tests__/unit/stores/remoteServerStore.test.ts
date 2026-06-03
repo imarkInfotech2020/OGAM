@@ -587,10 +587,11 @@ describe('remoteServerStore', () => {
         });
       });
 
-      let models: any;
-      await actStoreUpdate(async () => {
-        models = await useRemoteServerStore.getState().discoverModels(serverId);
+      let modelsPromise: any;
+      act(() => {
+        modelsPromise = useRemoteServerStore.getState().discoverModels(serverId);
       });
+      const models = await modelsPromise;
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('gpt-4');
