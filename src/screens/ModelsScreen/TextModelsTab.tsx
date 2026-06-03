@@ -138,7 +138,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         async () => {
           const models = await modelManager.getDownloadedModels();
           setDownloadedModels(models);
-          const key = store.downloadIdIndex[downloadId] ?? modelKey;
+          const key = useDownloadStore.getState().downloadIdIndex[downloadId] ?? modelKey;
           if (key) store.remove(key);
         },
         (error: Error) => {
