@@ -19,26 +19,16 @@ jest.mock('../../../src/services', () => ({
 
 import { useWhisperStore } from '../../../src/stores/whisperStore';
 import { whisperService } from '../../../src/services';
+import { resetWhisperStore } from '../../utils/testHelpers';
 
 // Cast to jest mocks for type-safe access
 const mockWhisperService = whisperService as jest.Mocked<typeof whisperService>;
 
 const getState = () => useWhisperStore.getState();
 
-const resetState = () => {
-  useWhisperStore.setState({
-    downloadedModelId: null,
-    isDownloading: false,
-    downloadProgress: 0,
-    isModelLoading: false,
-    isModelLoaded: false,
-    error: null,
-  });
-};
-
 describe('whisperStore', () => {
   beforeEach(() => {
-    resetState();
+    resetWhisperStore();
     jest.clearAllMocks();
   });
 
