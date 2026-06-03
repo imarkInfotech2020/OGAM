@@ -275,9 +275,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
           status: 'completed',
           downloadedAt: model.downloadedAt,
           filePath: model.filePath,
-          isVisionModel: model.isVisionModel,
-          mmProjPath: model.mmProjPath,
-          mmProjFileName: model.mmProjFileName,
+          isVisionModel: model.engine === 'llama' ? model.isVisionModel : undefined,
+          mmProjPath: model.engine === 'llama' ? model.mmProjPath : undefined,
+          mmProjFileName: model.engine === 'llama' ? model.mmProjFileName : undefined,
           name: model.name,
         };
       }),

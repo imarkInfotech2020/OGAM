@@ -5,7 +5,6 @@ import { APP_CONFIG } from '../constants';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
-import { useDebugLogsStore } from '../stores/debugLogsStore';
 
 /** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
 const HTP_ENABLED = false;
@@ -18,9 +17,6 @@ const DEFAULT_BATCH = 512;
 export const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
 export function getOptimalThreadCount(): number { return DEFAULT_THREADS; }
 export function getOptimalBatchSize(): number { return DEFAULT_BATCH; }
-function logInferenceInit(level: 'log' | 'warn' | 'error', message: string): void {
-  useDebugLogsStore.getState().addLog(level, `[LLM:init] ${message}`);
-}
 const REPACKABLE_QUANTS = ['q4_0', 'iq4_nl'];
 /** Detect repackable quant formats where disabling mmap improves inference speed. */
 export function shouldDisableMmap(modelPath: string): boolean {
@@ -131,24 +127,20 @@ export async function initContextWithFallback(
   const modelPath = (params as any).model || 'unknown';
   const isHtp = HTP_ENABLED && Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
   logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}`);
-  logInferenceInit('log', `Init started: ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}.`);
   let gpuAttemptFailed = false;
   try {
     logger.log(`[LLM] Attempt 1/3: ${isHtp ? 'HTP' : 'GPU'} init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
     const context = await tryGpuInit(gpuInitPromise, nGpuLayers, isHtp);
     logger.log('[LLM] GPU init succeeded');
-    logInferenceInit('log', `${isHtp ? 'HTP' : 'GPU'} init succeeded.`);
     return { context, gpuAttemptFailed, actualLength: contextLength };
   } catch (gpuError: any) {
     const gpuMsg = gpuError?.message || String(gpuError);
     if (nGpuLayers > 0) {
       logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
-      logInferenceInit('warn', `Attempt 1 failed (${isHtp ? 'HTP' : 'GPU'}): ${gpuMsg}`);
       gpuAttemptFailed = true;
     } else {
       logger.warn(`[LLM] Attempt 1/3 failed (no GPU requested): ${gpuMsg}`);
-      logInferenceInit('warn', `Attempt 1 failed (no GPU requested): ${gpuMsg}`);
     }
     try {
       logger.log(`[LLM] Attempt 2/3: CPU init (ctx=${contextLength}, gpu_layers=0)`);
@@ -157,26 +149,22 @@ export async function initContextWithFallback(
       delete cpuParams.devices;
       const context = await initLlama({ ...cpuParams, n_ctx: contextLength, n_gpu_layers: 0 } as any);
       logger.log('[LLM] CPU init succeeded');
-      logInferenceInit('warn', 'Fell back to CPU and init succeeded.');
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
       const cpuMsg = cpuError?.message || String(cpuError);
       logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
-      logInferenceInit('error', `Attempt 2 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
       try {
         logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
         const cpuMinParams = { ...(params as Record<string, unknown>) };
         delete cpuMinParams.devices;
         const context = await initLlama({ ...cpuMinParams, n_ctx: 2048, n_gpu_layers: 0 } as any);
         logger.log('[LLM] CPU init with ctx=2048 succeeded');
-        logInferenceInit('warn', 'Recovered with CPU at ctx=2048.');
         return { context, gpuAttemptFailed, actualLength: 2048 };
       } catch (finalError: any) {
         const finalMsg = finalError?.message || String(finalError);
         logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
         logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
         logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);
-        logInferenceInit('error', `All init attempts failed. GPU: ${gpuMsg} | CPU: ${cpuMsg} | min-ctx: ${finalMsg}`);
         const errorParts = [
           gpuMsg && gpuMsg !== finalMsg ? `GPU: ${gpuMsg}` : null,
           cpuMsg && cpuMsg !== finalMsg ? `CPU: ${cpuMsg}` : null,

@@ -16,6 +16,15 @@ interface CredibilityInfo {
 
 // ── Compact header (name + author tag + optional downloads + description + type badges) ──
 
+export interface RecommendedConfig {
+  pillLabel?: string;
+  highlightText?: string;
+  // When provided, replaces the default modelType/paramCount/RAM chips in
+  // compact mode. Lets curated entries surface custom badges (e.g. "Vision",
+  // "GPU") instead of the auto-derived ones.
+  chips?: string[];
+}
+
 interface CompactModelCardContentProps {
   model: {
     name: string;
@@ -29,6 +38,7 @@ interface CompactModelCardContentProps {
   credibility?: ModelCredibility;
   credibilityInfo: CredibilityInfo | null;
   isTrending?: boolean;
+  recommended?: RecommendedConfig;
 }
 
 function formatNumber(num: number): string {
@@ -68,6 +78,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
   credibility,
   credibilityInfo,
   isTrending,
+  recommended,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -76,7 +87,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
     <>
       <View style={styles.compactTopRow}>
         <View style={styles.compactNameGroup}>
-          <Text style={[styles.name, styles.compactName]} numberOfLines={1}>
+          <Text style={[styles.name, styles.compactName, recommended && styles.compactNameRecommended]} numberOfLines={1}>
             {model.name}
           </Text>
           <View style={styles.authorTag}>
@@ -92,7 +103,12 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
               </Text>
             </View>
           )}
-          {isTrending && <MaterialIcon name="whatshot" size={14} color={colors.trending} />}
+          {(isTrending || recommended) && <MaterialIcon name="whatshot" size={14} color={colors.trending} />}
+          {recommended && (
+            <View style={styles.recommendedPill}>
+              <Text style={styles.recommendedPillText}>{recommended.pillLabel ?? 'Recommended'}</Text>
+            </View>
+          )}
         </View>
         {model.downloads !== undefined && model.downloads > 0 && (
           <View style={styles.authorTag}>
@@ -100,12 +116,20 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           </View>
         )}
       </View>
-      {model.description && (
+      {model.description && !recommended?.highlightText && (
         <Text style={styles.descriptionCompact} numberOfLines={1}>
           {model.description}
         </Text>
       )}
-      {(model.modelType || model.paramCount) && (
+      {recommended?.chips && recommended.chips.length > 0 ? (
+        <View style={[styles.infoRow, styles.infoRowCompact]}>
+          {recommended.chips.map(chip => (
+            <View key={chip} style={styles.recommendedChip}>
+              <Text style={styles.recommendedChipText}>{chip}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (model.modelType || model.paramCount) && (
         <View style={[styles.infoRow, styles.infoRowCompact]}>
           {model.modelType && (
             <View style={[styles.infoBadge, modelTypeBadgeStyle(styles, model.modelType)]}>
@@ -126,6 +150,9 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
           )}
         </View>
       )}
+      {recommended?.highlightText && (
+        <Text style={styles.recommendedHighlightCompact}>{recommended.highlightText}</Text>
+      )}
     </>
   );
 };
@@ -141,6 +168,7 @@ interface StandardModelCardContentProps {
   credibility?: ModelCredibility;
   credibilityInfo: CredibilityInfo | null;
   isActive?: boolean;
+  recommended?: RecommendedConfig;
 }
 
 export const StandardModelCardContent: React.FC<StandardModelCardContentProps> = ({
@@ -148,7 +176,9 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
   credibility,
   credibilityInfo,
   isActive,
+  recommended,
 }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
@@ -179,11 +209,22 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
             <Text style={styles.activeBadgeText}>Active</Text>
           </View>
         )}
+        {recommended && (
+          <>
+            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
+            <View style={styles.recommendedPill}>
+              <Text style={styles.recommendedPillText}>{recommended.pillLabel ?? 'Recommended'}</Text>
+            </View>
+          </>
+        )}
       </View>
       {model.description && (
         <Text style={styles.description} numberOfLines={2}>
           {model.description}
         </Text>
+      )}
+      {recommended?.highlightText && (
+        <Text style={styles.recommendedHighlight}>{recommended.highlightText}</Text>
       )}
     </>
   );
@@ -239,13 +280,19 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
           </Text>
         </View>
       )}
-      {quantInfo && (
-        <View style={[styles.infoBadge, quantInfo.recommended && styles.recommendedBadge]}>
-          <Text style={[styles.infoText, quantInfo.recommended && styles.recommendedText]}>
+      {/* Label chip renders for any non-empty quantization string — llama quants
+          (Q4_K_M etc.) get the green "recommended" highlight via quantInfo, and
+          non-table values (e.g. "LiteRT" for the curated LiteRT entries) still
+          render as a plain label instead of disappearing. */}
+      {!!quantization && (
+        <View style={[styles.infoBadge, quantInfo?.recommended && styles.recommendedBadge]}>
+          <Text style={[styles.infoText, quantInfo?.recommended && styles.recommendedText]}>
             {quantization}
           </Text>
         </View>
       )}
+      {/* Quality chip stays gated on quantInfo so we don't render a phantom
+          second chip for non-llama quant strings. */}
       {quantInfo && (
         <View style={styles.infoBadge}>
           <Text style={styles.infoText}>{quantInfo.quality}</Text>
@@ -346,3 +393,5 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   }
   return null;
 };
+
+

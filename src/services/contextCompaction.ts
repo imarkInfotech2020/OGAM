@@ -57,6 +57,11 @@ class ContextCompactionService {
     this.compactingListeners.forEach(fn => fn(v));
   }
 
+  /** Allow external services (e.g. LiteRT) to surface compaction state in the UI. */
+  signalCompacting(v: boolean): void {
+    this.setCompacting(v);
+  }
+
   isContextFullError(error: unknown): boolean {
     const msg = (error instanceof Error ? error.message : `${error as string}`).toLowerCase();
     return CONTEXT_FULL_PATTERNS.some(p => msg.includes(p));

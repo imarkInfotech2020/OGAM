@@ -39,9 +39,16 @@ export interface ModelFile {
     downloadUrl: string;
     sha256?: string;
   };
+  // LiteRT-specific: whether this .litertlm file supports vision input. Used by
+  // buildDownloadedModel to set liteRTVision on the resulting DownloadedModel.
+  // Unset for non-LiteRT files and for LiteRT files imported locally where the
+  // capability is unknown.
+  liteRTVision?: boolean;
 }
 
-export interface DownloadedModel {
+export type ModelEngine = 'llama' | 'litert';
+
+interface DownloadedModelBase {
   id: string;
   name: string;
   author: string;
@@ -51,11 +58,29 @@ export interface DownloadedModel {
   quantization: string;
   downloadedAt: string;
   credibility?: ModelCredibility;
-  // Vision model support
+}
+
+export interface LlamaDownloadedModel extends DownloadedModelBase {
+  engine: 'llama';
   isVisionModel?: boolean;
   mmProjPath?: string;
   mmProjFileName?: string;
   mmProjFileSize?: number;
+}
+
+export interface LiteRTDownloadedModel extends DownloadedModelBase {
+  engine: 'litert';
+  liteRTVision: boolean;
+}
+
+export type DownloadedModel = LlamaDownloadedModel | LiteRTDownloadedModel;
+
+export function isLlamaModel(m: DownloadedModel): m is LlamaDownloadedModel {
+  return m.engine === 'llama';
+}
+
+export function isLiteRTModel(m: DownloadedModel): m is LiteRTDownloadedModel {
+  return m.engine === 'litert';
 }
 
 export interface PersistedDownloadInfo {
@@ -154,10 +179,14 @@ export interface GenerationMeta {
   tokensPerSecond?: number;
   /** Tokens per second — decode only, excluding prefill (text generation only) */
   decodeTokensPerSecond?: number;
-  /** Time to first token in seconds (text generation only) */
+  /** Tokens per second — prefill/prompt processing speed (LiteRT only) */
+  prefillTokensPerSecond?: number;
+  /** Time to first token in milliseconds (text generation only) */
   timeToFirstToken?: number;
   /** Token count (text generation only) */
   tokenCount?: number;
+  /** Model load/init time in seconds */
+  modelLoadTimeSeconds?: number;
   /** Image generation steps */
   steps?: number;
   /** Image guidance scale */
@@ -285,6 +314,7 @@ export type AutoDetectMethod = 'pattern' | 'llm';
 export type ModelLoadingStrategy = 'performance' | 'memory';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
 export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
+export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 export const INFERENCE_BACKENDS = {
   CPU: 'cpu' as InferenceBackend,
   OPENCL: 'opencl' as InferenceBackend,

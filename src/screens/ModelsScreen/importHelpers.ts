@@ -47,10 +47,29 @@ export async function importGgufFiles(
 
   if (files.length === 1) {
     const resolvedFileName = files[0].name ?? 'unknown';
+    const isLitert = resolvedFileName.toLowerCase().endsWith('.litertlm');
+
+    let liteRTVision = false;
+    if (isLitert) {
+      liteRTVision = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Vision Support',
+          'Does this model support image/vision input?\n\nEnable this only for multimodal models (e.g. Gemma 3n). Enabling it on a text-only model will cause a load error.',
+          [
+            { text: 'Text Only', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Vision', style: 'default', onPress: () => resolve(true) },
+          ],
+          { cancelable: false },
+        );
+      });
+    }
+
     const model = await modelManager.importLocalModel({
       sourceUri: files[0].uri,
       fileName: resolvedFileName,
       sourceSize: files[0].size,
+      engine: isLitert ? 'litert' : undefined,
+      liteRTVision: isLitert ? liteRTVision : undefined,
       onProgress: p => {
         setImportProgress(p);
       },

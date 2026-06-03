@@ -35,6 +35,7 @@ interface ChatInputProps {
   onRepairVision?: () => void;
   /** When set, mounts a single AttachStep for that index. Only one at a time to avoid waypoint dots. */
   activeSpotlight?: number | null;
+  showSettingsDot?: boolean;
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
@@ -61,6 +62,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   supportsThinking = false,
   onRepairVision,
   activeSpotlight = null,
+  showSettingsDot = false,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -251,7 +253,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+              <View style={styles.iconWrapper}>
+                <Icon name="settings" size={18} color={disabled ? colors.textMuted : colors.textSecondary} />
+                {showSettingsDot && <View style={styles.toolWarningDot} />}
+              </View>
             </TouchableOpacity>
 
           </Animated.View>

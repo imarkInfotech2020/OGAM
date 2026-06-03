@@ -187,7 +187,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
-  const [showThinking, setShowThinking] = useState(false);
+  const [showThinking, setShowThinking] = useState(!!isStreaming);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { displayContent, parsedContent } = buildMessageData(message);

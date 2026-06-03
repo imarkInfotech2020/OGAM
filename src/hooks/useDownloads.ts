@@ -4,7 +4,14 @@ import { useDownloadStore } from '../stores/downloadStore';
 import { toUserMessage } from '../utils/downloadErrors';
 import { ModelKey } from '../utils/modelKey';
 
-export function useDownloads() {
+/**
+ * Lightweight hook for App root — registers native download event listeners only.
+ * Has NO store subscription, so download progress never re-renders the root
+ * component and the entire navigation tree.
+ *
+ * Screens that need to read download state should use useDownloads() directly.
+ */
+export function useDownloadListeners() {
   useEffect(() => {
     if (!backgroundDownloadService.isAvailable()) return;
 
@@ -12,12 +19,10 @@ export function useDownloads() {
       const { downloadIdIndex, downloads } = useDownloadStore.getState();
       const modelKey = downloadIdIndex[event.downloadId];
       if (!modelKey) {
-        console.debug('[useDownloads] progress event: downloadId not in index', { downloadId: event.downloadId });
         return;
       }
       const entry = downloads[modelKey];
       if (!entry) {
-        console.debug('[useDownloads] progress event: entry not found', { modelKey, downloadId: event.downloadId });
         return;
       }
 
@@ -32,7 +37,6 @@ export function useDownloads() {
       if (entry.downloadId === event.downloadId) {
         useDownloadStore.getState().updateProgress(event.downloadId, event.bytesDownloaded, event.totalBytes);
       } else if (entry.mmProjDownloadId === event.downloadId) {
-        console.log('[useDownloads] routing mmproj progress', { modelKey, mmProjDownloadId: event.downloadId, bytes: event.bytesDownloaded });
         useDownloadStore.getState().updateMmProjProgress(event.downloadId, event.bytesDownloaded);
       } else {
         console.warn('[useDownloads] progress event: downloadId matches neither main nor mmproj', { downloadId: event.downloadId, mainId: entry.downloadId, mmProjId: entry.mmProjDownloadId });
@@ -97,7 +101,9 @@ export function useDownloads() {
       unsubError();
     };
   }, []);
+}
 
+export function useDownloads() {
   const cancel = async (modelKey: ModelKey) => {
     const entry = useDownloadStore.getState().downloads[modelKey];
     if (!entry) return;

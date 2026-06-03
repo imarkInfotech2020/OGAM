@@ -341,7 +341,7 @@ describe('ModelsScreen', () => {
 
       await waitFor(() => {
         // The banner shows "XGB RAM — models up to YB recommended (Q4_K_M)"
-        expect(getByText(/RAM/)).toBeTruthy();
+        expect(getByText(/\d+GB RAM/)).toBeTruthy(); // NOSONAR — regex matches short rendered UI strings, not user input; ReDoS not applicable
       });
     });
 
@@ -1586,7 +1586,7 @@ describe('ModelsScreen', () => {
         }),
       ]);
 
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+      const { getByTestId, getByText, getAllByText, queryByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -1597,9 +1597,9 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.press(getByText(/Type/));
       });
-      await waitFor(() => expect(getByText('Vision')).toBeTruthy());
+      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
       await act(async () => {
-        fireEvent.press(getByText('Vision'));
+        fireEvent.press(getAllByText('Vision')[0]);
       });
 
       // Search
@@ -1655,7 +1655,7 @@ describe('ModelsScreen', () => {
     it('shows empty state with filter message when filters active but no results', async () => {
       mockSearchModels.mockResolvedValue([]);
 
-      const { getByTestId, getByText } = renderModelsScreen();
+      const { getByTestId, getByText, getAllByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -1666,9 +1666,9 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.press(getByText(/Type/));
       });
-      await waitFor(() => expect(getByText('Vision')).toBeTruthy());
+      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
       await act(async () => {
-        fireEvent.press(getByText('Vision'));
+        fireEvent.press(getAllByText('Vision')[0]);
       });
 
       // Search with no results
@@ -2062,7 +2062,7 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('recommended models with filters', () => {
     it('filters recommended models by type filter', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
+      const { getByTestId, getByText, getAllByText } = renderModelsScreen();
 
       await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
 
@@ -2073,9 +2073,9 @@ describe('ModelsScreen', () => {
       await act(async () => {
         fireEvent.press(getByText(/Type/));
       });
-      await waitFor(() => expect(getByText('Vision')).toBeTruthy());
+      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
       await act(async () => {
-        fireEvent.press(getByText('Vision'));
+        fireEvent.press(getAllByText('Vision')[0]);
       });
 
       // The recommended models list should now be filtered by vision type
@@ -2502,7 +2502,7 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('handleSearch with active filters', () => {
     it('triggers HuggingFace search when vision type filter is set and query is empty', async () => {
-      const { getByText, getByTestId } = renderModelsScreen();
+      const { getByText, getByTestId, getAllByText } = renderModelsScreen();
 
       await waitFor(() => {
         expect(getByText(/Recommended for your device/)).toBeTruthy();
@@ -2519,7 +2519,7 @@ describe('ModelsScreen', () => {
       });
 
       await act(async () => {
-        fireEvent.press(getByText('Vision'));
+        fireEvent.press(getAllByText('Vision')[0]);
       });
 
       // Hit search with empty query but vision filter active

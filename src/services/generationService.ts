@@ -1,5 +1,7 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
+import { liteRTService } from './litert';
+import { getActiveEngineService } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
@@ -183,10 +185,14 @@ class GenerationService {
       });
 
       // If aborted, stopGeneration() already handled cleanup.
+      logger.log(`[GenService][ToolLoop] runToolLoop done — aborted=${this.abortRequested}, streamingContent=${this.state.streamingContent?.length ?? 0}ch, tokenBuffer=${this.tokenBuffer?.length ?? 0}ch`);
       if (!this.abortRequested) {
         this.forceFlushTokens();
+        const store = useChatStore.getState();
+        logger.log(`[GenService][ToolLoop] pre-finalize — streamingForConvId=${store.streamingForConversationId}, targetConvId=${conversationId}, streamingMsg=${store.streamingMessage?.length ?? 0}ch`);
         const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-        useChatStore.getState().finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+        store.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+        logger.log(`[GenService][ToolLoop] finalizeStreamingMessage called — convId=${conversationId}`);
         this.checkSharePrompt();
         this.resetState();
       }
@@ -207,8 +213,9 @@ class GenerationService {
   /** Stop the current generation. Returns partial content if any was generated. */
   async stopGeneration(): Promise<string> {
     if (!this.state.isGenerating) {
-      // Stop both local and remote
+      // Stop all engines and remote
       await llmService.stopGeneration().catch(() => { });
+      await liteRTService.stopGeneration().catch(() => { });
       const provider = this.getCurrentProvider();
       if (provider) provider.stopGeneration().catch(() => { });
       if (this.currentRemoteAbortController) {
@@ -254,9 +261,10 @@ class GenerationService {
     // Stop the native completion after we've already updated UI state,
     // so the user sees immediate feedback. Store the promise so new
     // generations can drain it before starting.
-    this.pendingStop = llmService.stopGeneration().catch(() => { }).finally(() => {
-      this.pendingStop = null;
-    });
+    const engine = getActiveEngineService();
+    this.pendingStop = (engine?.stopGeneration() ?? Promise.resolve())
+      .catch(() => { })
+      .finally(() => { this.pendingStop = null; });
 
     return streamingContent;
   }

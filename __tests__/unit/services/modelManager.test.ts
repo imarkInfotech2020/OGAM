@@ -57,6 +57,16 @@ import { resolveCoreMLModelDir as mockedResolveCoreML } from '../../../src/utils
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 
+function setupLiteRTImportMocks() {
+  mockedRNFS.exists
+    .mockResolvedValueOnce(true)   // modelsDir
+    .mockResolvedValueOnce(true)   // imageModelsDir
+    .mockResolvedValueOnce(false); // destExists = false
+  mockedRNFS.stat.mockResolvedValue({ size: 500000000, isFile: () => true } as any);
+  (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+  mockedAsyncStorage.getItem.mockResolvedValue('[]');
+}
+
 describe('ModelManager', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -580,6 +590,42 @@ describe('ModelManager', () => {
       );
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
         expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
+      );
+    });
+
+    it('uses file.downloadUrl when set (cross-repo curated entries)', async () => {
+      // Curated entries (e.g. LiteRT recommended) carry an explicit downloadUrl that
+      // points at a different repo than the parent modelId. The download path must
+      // honor it instead of constructing one from modelId + file.name.
+      const customUrl = 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
+      const curated = createModelFile({
+        name: 'gemma-4-E2B-it.litertlm',
+        size: 2_590_000_000,
+        quantization: 'mixed',
+        downloadUrl: customUrl,
+      });
+
+      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false)  // main doesn't exist
+        .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
+
+      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
+        downloadId: 99,
+        fileName: 'gemma-4-E2B-it.litertlm',
+        modelId: 'offgrid/litert-recommended',
+        status: 'pending',
+        bytesDownloaded: 0,
+        totalBytes: curated.size,
+        startedAt: Date.now(),
+      } as any);
+
+      await modelManager.downloadModelBackground('offgrid/litert-recommended', curated);
+
+      expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
+        expect.objectContaining({ url: customUrl }),
       );
     });
   });
@@ -1149,7 +1195,7 @@ describe('ModelManager', () => {
     it('rejects non-.gguf files', async () => {
       await expect(
         modelManager.importLocalModel({ sourceUri: '/path/to/model.bin', fileName: 'model.bin' })
-      ).rejects.toThrow('Only .gguf files can be imported');
+      ).rejects.toThrow('Only .gguf and .litertlm files can be imported');
     });
 
     it('rejects when destination already exists', async () => {
@@ -1460,7 +1506,7 @@ describe('ModelManager', () => {
       const models = await modelManager.getDownloadedModels();
 
       expect(models).toHaveLength(1);
-      expect(models[0].mmProjPath).toBeDefined();
+      expect((models[0] as any).mmProjPath).toBeDefined();
     });
   });
 
@@ -2487,6 +2533,8 @@ describe('ModelManager', () => {
         mmProjPath: mmProjLocalPath,
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
       expect(model.mmProjPath).toBe(mmProjLocalPath);
       expect(model.isVisionModel).toBe(true);
@@ -2503,6 +2551,8 @@ describe('ModelManager', () => {
         expectedMmProjFileName: file.mmProjFile?.name,
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBe(file.mmProjFile?.name);
       expect(model.mmProjPath).toBeUndefined();
       expect(model.isVisionModel).toBe(false);
@@ -2517,6 +2567,8 @@ describe('ModelManager', () => {
         resolvedLocalPath: '/models/llama-3.2-1b.gguf',
       });
 
+      expect(model.engine).toBe('llama');
+      if (model.engine !== 'llama') throw new Error('expected llama model');
       expect(model.mmProjFileName).toBeUndefined();
       expect(model.mmProjPath).toBeUndefined();
       expect(model.isVisionModel).toBe(false);
@@ -2703,6 +2755,42 @@ describe('ModelManager', () => {
       expect(mockedResolveCoreML).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_coreml_v1`);
       expect(result[0].modelPath).toBe(`${IMAGE_MODELS_DIR}/sd_coreml_v1/model.mlpackage`);
       expect(result[0].backend).toBe('coreml');
+    });
+  });
+
+  describe('importLocalModel — LiteRT branches', () => {
+    it('imports a .litertlm file with engine=litert and liteRTVision=false', async () => {
+      setupLiteRTImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/gemma.litertlm',
+        fileName: 'gemma-4-E2B-it.litertlm',
+        engine: 'litert',
+        liteRTVision: false,
+      });
+      expect(result.engine).toBe('litert');
+      expect((result as any).liteRTVision).toBe(false);
+      expect(result.id).toBe('local_import/gemma-4-E2B-it.litertlm');
+    });
+
+    it('imports a .litertlm file with liteRTVision=true', async () => {
+      setupLiteRTImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/gemma-vision.litertlm',
+        fileName: 'gemma-vision.litertlm',
+        engine: 'litert',
+        liteRTVision: true,
+      });
+      expect((result as any).liteRTVision).toBe(true);
+    });
+
+    it('omits engine and liteRTVision when not provided', async () => {
+      setupLiteRTImportMocks();
+      const result = await modelManager.importLocalModel({
+        sourceUri: '/path/to/model.gguf',
+        fileName: 'model.gguf',
+      });
+      expect(result.engine).toBe('llama');
+      expect((result as any).liteRTVision).toBeUndefined();
     });
   });
 });

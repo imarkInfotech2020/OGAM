@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, InteractionManager } from 'react-native';
+import { FlatList, Keyboard, KeyboardAvoidingView, InteractionManager, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -118,6 +118,14 @@ export const ChatScreen: React.FC = () => {
       setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
     }
   }, [chat.activeConversation?.messages.length]);
+
+  React.useEffect(() => {
+    const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(event, () => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
   const alertEl = (
     <CustomAlert
       visible={chat.alertState.visible}
@@ -155,7 +163,7 @@ export const ChatScreen: React.FC = () => {
           navigation={chat.navigation}
           loadingModelName={modelName}
           modelSize={sizeSource ? chat.hardwareService.formatModelSize(sizeSource) : ''}
-          hasVision={!!(chat.loadingModel?.mmProjPath || chat.activeModel?.mmProjPath)}
+          hasVision={!!((chat.loadingModel?.engine === 'llama' && chat.loadingModel.mmProjPath) || (chat.activeModel?.engine === 'llama' && chat.activeModel.mmProjPath))}
         />
         {alertEl}
       </>
@@ -164,7 +172,8 @@ export const ChatScreen: React.FC = () => {
 
   const handleScroll = (event: any) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    isNearBottomRef.current = contentSize.height - layoutMeasurement.height - contentOffset.y < 100;
+    const distFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    isNearBottomRef.current = distFromBottom < 100;
     chat.setShowScrollToBottom(!isNearBottomRef.current);
   };
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, GeneratedImage } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -40,6 +40,10 @@ type AppSettings = {
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
+  liteRTBackend: LiteRTBackend;
+  liteRTTemperature: number;
+  liteRTTopP: number;
+  liteRTMaxTokens: number;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';
@@ -106,6 +110,8 @@ interface AppState {
   setProBannerDismissed: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
   setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
+  toolCountHintDismissed: boolean;
+  setToolCountHintDismissed: () => void;
   loadedSettings: Partial<AppSettings> | null;
   setLoadedSettings: (settings: Partial<AppSettings> | null) => void;
 }
@@ -141,8 +147,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   flashAttn: true,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
-  enabledTools: ['web_search', 'calculator', 'get_current_datetime', 'get_device_info', 'read_url', 'search_knowledge_base'],
-  thinkingEnabled: true,
+  enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
+  thinkingEnabled: false,
+  liteRTBackend: 'gpu',
+  liteRTTemperature: 0.7,
+  liteRTTopP: 0.9,
+  liteRTMaxTokens: 4096,
 };
 
 function migrateEnabledTools(merged: any): void {
@@ -151,7 +161,11 @@ function migrateEnabledTools(merged: any): void {
   }
 }
 function migratePersistedState(persistedState: any, currentState: AppState): AppState {
-  const merged = { ...currentState, ...persistedState };
+  const merged = {
+    ...currentState,
+    ...persistedState,
+    settings: { ...DEFAULT_SETTINGS, ...persistedState?.settings },
+  };
   // Drop legacy download tracking fields. The unified downloadStore (backed
   // by the native Room DB) is now the source of truth. Persisted entries
   // from old versions are silently ignored on rehydrate.
@@ -178,6 +192,9 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   migrateEnabledTools(merged);
   return merged as AppState;
 }
+
+export const selectIsLiteRT = (state: AppState): boolean =>
+  state.downloadedModels.find(m => m.id === state.activeModelId)?.engine === 'litert';
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -291,6 +308,8 @@ export const useAppStore = create<AppState>()(
       setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
       proAhaTriggeredBy: null,
       setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
+      toolCountHintDismissed: false,
+      setToolCountHintDismissed: () => set({ toolCountHintDismissed: true }),
       loadedSettings: null,
       setLoadedSettings: (settings) => set({ loadedSettings: settings }),
     }),

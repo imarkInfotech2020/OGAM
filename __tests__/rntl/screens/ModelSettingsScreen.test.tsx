@@ -829,6 +829,10 @@ describe('ModelSettingsScreen', () => {
           enhanceImagePrompts: undefined as any,
           enabledTools: undefined as any,
           thinkingEnabled: undefined as any,
+          liteRTBackend: undefined as any,
+          liteRTTemperature: undefined as any,
+          liteRTTopP: undefined as any,
+          liteRTMaxTokens: undefined as any,
         },
       });
 

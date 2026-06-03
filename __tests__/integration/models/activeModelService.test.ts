@@ -78,7 +78,7 @@ describe('ActiveModelService Integration', () => {
       // Verify llmService was called correctly
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        model.mmProjPath
+        (model as any).mmProjPath
       );
 
       // Verify store was updated
@@ -176,7 +176,7 @@ describe('ActiveModelService Integration', () => {
       // Should have loaded second model
       expect(mockLlmService.loadModel).toHaveBeenLastCalledWith(
         model2.filePath,
-        model2.mmProjPath
+        (model2 as any).mmProjPath
       );
     });
 
@@ -1260,7 +1260,7 @@ describe('ActiveModelService Integration', () => {
       // Other model should be untouched, vision model should have mmProjPath
       const models = getAppState().downloadedModels;
       const otherModel = models.find(m => m.id === 'other-model');
-      expect(otherModel?.mmProjPath).toBeUndefined();
+      expect((otherModel as any)?.mmProjPath).toBeUndefined();
     });
   });
 

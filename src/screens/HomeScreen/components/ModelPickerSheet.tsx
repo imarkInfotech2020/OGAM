@@ -8,6 +8,7 @@ import { Button } from '../../../components';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
 import { hardwareService, ResourceUsage } from '../../../services';
+import { getMmProjFileSize } from '../../../utils/modelHelpers';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
 import { ModelPickerType, LoadingState } from '../hooks/useHomeScreen';
 import { useRemoteServerStore } from '../../../stores';
@@ -199,7 +200,7 @@ export const ModelPickerSheet: React.FC<Props> = ({
                   <>
                     <Text style={styles.sectionLabel}>Local Models</Text>
                     {downloadedModels.map((model, idx) => {
-                      const totalSize = model.fileSize + (model.mmProjFileSize || 0);
+                      const totalSize = model.fileSize + getMmProjFileSize(model);
                       const estimatedMemoryGB = (totalSize * 1.5) / (1024 * 1024 * 1024);
                       const memoryFits = memoryInfo
                         ? estimatedMemoryGB < memoryInfo.memoryAvailable / (1024 * 1024 * 1024) - 1.5
@@ -215,11 +216,11 @@ export const ModelPickerSheet: React.FC<Props> = ({
                           <View style={styles.pickerItemInfo}>
                             <Text style={styles.pickerItemName}>
                               {model.name}{' '}
-                              {model.isVisionModel && <Icon name="eye" size={14} color={colors.info} />}
+                              {model.engine === 'llama' && model.isVisionModel && <Icon name="eye" size={14} color={colors.info} />}
                             </Text>
                             <Text style={styles.pickerItemMeta}>
                               {model.quantization} · {hardwareService.formatModelSize(model)}
-                              {model.isVisionModel && ' (Vision)'}
+                              {model.engine === 'llama' && model.isVisionModel && ' (Vision)'}
                             </Text>
                             <Text style={[styles.pickerItemMemory, !memoryFits && styles.pickerItemMemoryWarning]}>
                               ~{estimatedMemoryGB.toFixed(1)} GB RAM {!memoryFits && '(may not fit)'}

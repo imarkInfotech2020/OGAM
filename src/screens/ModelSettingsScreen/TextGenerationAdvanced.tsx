@@ -4,7 +4,7 @@ import Slider from '@react-native-community/slider';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { CacheType, InferenceBackend, INFERENCE_BACKENDS } from '../../types';
+import { CacheType, InferenceBackend, LiteRTBackend, INFERENCE_BACKENDS } from '../../types';
 import {
   useTextGenerationAdvanced,
   CACHE_TYPE_DESCRIPTIONS,
@@ -104,6 +104,51 @@ const BackendSelectorSection: React.FC = () => {
           />
         </View>
       )}
+    </>
+  );
+};
+
+// ─── LiteRT Acceleration ─────────────────────────────────────────────────────
+
+type LiteRTBackendOption = { id: LiteRTBackend; label: string };
+
+const LITERT_BACKENDS: LiteRTBackendOption[] = [
+  { id: 'gpu', label: 'GPU' },
+  { id: 'cpu', label: 'CPU' },
+];
+
+const LiteRTBackendSelectorSection: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+  const current = settings.liteRTBackend ?? 'gpu';
+
+  const descriptions: Partial<Record<LiteRTBackend, string>> = {
+    gpu: 'Run on GPU via OpenCL. Best performance on most devices.',
+    cpu: 'Always available. Use for battery savings or thermal relief.',
+  };
+
+  return (
+    <>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleInfo}>
+          <Text style={styles.toggleLabel}>Acceleration</Text>
+          <Text style={styles.toggleDesc}>{descriptions[current]}</Text>
+        </View>
+      </View>
+      <View style={styles.strategyButtons}>
+        {LITERT_BACKENDS.map(b => (
+          <Button
+            key={b.id}
+            title={b.label}
+            variant="secondary"
+            size="small"
+            testID={`litert-backend-${b.id}-button`}
+            active={current === b.id}
+            onPress={() => updateSettings({ liteRTBackend: b.id })}
+            style={styles.flex1}
+          />
+        ))}
+      </View>
     </>
   );
 };
@@ -215,7 +260,7 @@ const ModelLoadingStrategySection: React.FC = () => {
   );
 };
 
-// ─── Main Advanced Component ─────────────────────────────────────────────────
+// ─── Llama Advanced ──────────────────────────────────────────────────────────
 
 export const TextGenerationAdvanced: React.FC = () => {
   const { colors } = useTheme();
@@ -236,7 +281,7 @@ export const TextGenerationAdvanced: React.FC = () => {
         <Slider
           style={styles.slider}
           minimumValue={0.1}
-          maximumValue={1.0}
+          maximumValue={1}
           step={0.05}
           value={settings?.topP || 0.9}
           onSlidingComplete={(value) => updateSettings({ topP: value })}
@@ -307,6 +352,39 @@ export const TextGenerationAdvanced: React.FC = () => {
       <FlashAttentionSection trackColor={trackColor} />
       <KvCacheSection cacheDisabled={cacheDisabled} />
       <ModelLoadingStrategySection />
+    </>
+  );
+};
+
+// ─── LiteRT Advanced ─────────────────────────────────────────────────────────
+
+export const LiteRTTextGenerationAdvanced: React.FC = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings } = useAppStore();
+
+  return (
+    <>
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderHeader}>
+          <Text style={styles.sliderLabel}>Top P</Text>
+          <Text style={styles.sliderValue}>{(settings?.liteRTTopP || 0.9).toFixed(2)}</Text>
+        </View>
+        <Text style={styles.sliderDesc}>Nucleus sampling threshold</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={0.1}
+          maximumValue={1}
+          step={0.05}
+          value={settings?.liteRTTopP || 0.9}
+          onSlidingComplete={(value) => updateSettings({ liteRTTopP: value })}
+          minimumTrackTintColor={colors.primary}
+          maximumTrackTintColor={colors.surface}
+          thumbTintColor={colors.primary}
+        />
+      </View>
+
+      <LiteRTBackendSelectorSection />
     </>
   );
 };

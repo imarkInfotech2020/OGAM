@@ -71,6 +71,10 @@ export const resetStores = (): void => {
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
       thinkingEnabled: true,
+      liteRTBackend: 'gpu' as const,
+      liteRTTemperature: 0.7,
+      liteRTTopP: 0.9,
+      liteRTMaxTokens: 4096,
     },
     downloadedImageModels: [],
     activeImageModelId: null,
@@ -492,4 +496,94 @@ export const createGalleryImages = (count: number, conversationId?: string): str
 
   useAppStore.setState({ generatedImages: images });
   return ids;
+};
+
+// ============================================================================
+// Store-Specific Reset Utilities
+// ============================================================================
+
+/**
+ * Resets download store to initial state.
+ */
+export const resetDownloadStore = (): void => {
+  const useDownloadStore = require('../../src/stores/downloadStore').useDownloadStore;
+  useDownloadStore.setState({
+    downloads: {},
+    downloadIdIndex: {},
+  });
+};
+
+/**
+ * Resets remote server store to initial state.
+ */
+export const resetRemoteServerStore = (): void => {
+  useRemoteServerStore.setState({
+    servers: [],
+    activeServerId: null,
+    discoveredModels: {},
+    serverHealth: {},
+    isLoading: false,
+    testingServerId: null,
+    discoveringServerId: null,
+    activeRemoteTextModelId: null,
+    activeRemoteImageModelId: null,
+  });
+};
+
+/**
+ * Resets whisper store to initial state.
+ */
+export const resetWhisperStore = (): void => {
+  useWhisperStore.setState({
+    downloadedModelId: null,
+    isDownloading: false,
+    downloadProgress: 0,
+    isModelLoading: false,
+    isModelLoaded: false,
+    error: null,
+  });
+};
+
+/**
+ * Resets project store to initial state.
+ */
+export const resetProjectStore = (): void => {
+  useProjectStore.setState({
+    projects: [],
+  });
+};
+
+/**
+ * Resets auth store to initial state.
+ */
+export const resetAuthStore = (): void => {
+  useAuthStore.setState({
+    isEnabled: false,
+    isLocked: true,
+    failedAttempts: 0,
+    lockoutUntil: null,
+    lastBackgroundTime: null,
+  });
+};
+
+// ============================================================================
+// Act() Wrapper Utilities
+// ============================================================================
+
+/**
+ * Wraps a synchronous function call in act() for store updates.
+ */
+export const actStoreUpdate = (fn: () => void): void => {
+  act(() => {
+    fn();
+  });
+};
+
+/**
+ * Wraps an async function call in act() for store updates.
+ */
+export const actAsyncStoreUpdate = async (fn: () => Promise<void>): Promise<void> => {
+  await act(async () => {
+    await fn();
+  });
 };

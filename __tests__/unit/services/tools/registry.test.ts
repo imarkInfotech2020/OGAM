@@ -132,7 +132,7 @@ describe('Tool Registry', () => {
       const hint = buildToolSystemPromptHint(['calculator', 'web_search']);
 
       expect(hint).toContain('- calculator: Evaluate math expressions');
-      expect(hint).toContain('- web_search: Search the web');
+      expect(hint).toContain('- web_search: Search the live web');
       expect(hint).toContain('Tools available');
     });
 
@@ -148,7 +148,7 @@ describe('Tool Registry', () => {
     it('includes read_url when read_url is enabled', () => {
       const hint = buildToolSystemPromptHint(['read_url']);
       expect(hint).toContain('read_url');
-      expect(hint).toContain('web page');
+      expect(hint).toContain('result page');
     });
 
     it('includes get_current_datetime when enabled', () => {

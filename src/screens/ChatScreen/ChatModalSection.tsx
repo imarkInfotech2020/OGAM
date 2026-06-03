@@ -50,7 +50,8 @@ export const ChatModalSection: React.FC<ChatModalSectionProps> = ({
   debugInfo, activeProject, activeConversation, settings, projects,
   handleSelectProject, handleModelSelect, handleUnloadModel, handleDeleteConversation,
   isModelLoading, imageCount, activeConversationId, navigation,
-  viewerImageUri, setViewerImageUri, handleSaveImage, isRemote,
+  viewerImageUri, setViewerImageUri, handleSaveImage,
+  isRemote,
 }) => (
   <>
     <ProjectSelectorSheet

@@ -1,15 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { ChatInput, ToolPickerSheet, ThinkingIndicator } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
+import { INFERENCE_BACKENDS } from '../../types';
+import { TYPOGRAPHY, SPACING } from '../../constants';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
+import { useAppStore } from '../../stores';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
@@ -29,7 +32,15 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { toolCountHintDismissed } = useAppStore();
+  const showSettingsDot = chat.enabledTools.length > 3 && !toolCountHintDismissed;
   const [inputHeight, setInputHeight] = useState(84);
+  const flatListHeightRef = useRef(0);
+  const isStreaming = chat.isStreaming || chat.isThinking;
+  const prevIsStreamingRef = useRef(isStreaming);
+  useEffect(() => {
+    prevIsStreamingRef.current = isStreaming;
+  }, [isStreaming]);
   const activeModelRepoId = chat.activeModelId?.split('/').slice(0, 2).join('/');
   const handleRepairVision = activeModelRepoId
     ? () => tabNav.navigate('DownloadManager')
@@ -58,7 +69,14 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
           onContentSizeChange={(_w, _h) => { if (isNearBottomRef.current) flatListRef.current?.scrollToEnd({ animated: false }); }}
-          onLayout={() => { }}
+          onLayout={(e) => {
+            const newHeight = e.nativeEvent.layout.height;
+            const prevHeight = flatListHeightRef.current;
+            flatListHeightRef.current = newHeight;
+            if (prevHeight > 0 && newHeight < prevHeight) {
+              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+            }
+          }}
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -105,6 +123,17 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
+      {chat.settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL
+        && chat.activeModel?.engine === 'llama'
+        && !chat.activeModelInfo?.isRemote
+        && (
+        <View style={[openCLBannerStyles.row, { backgroundColor: `${colors.warning}15` }]}>
+          <Icon name="info" size={13} color={colors.warning} />
+          <Text style={[openCLBannerStyles.text, { color: colors.warning }]}>
+            OpenCL is not recommended. Consider switching to CPU in Settings.
+          </Text>
+        </View>
+      )}
       {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
          Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
       <View onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}>
@@ -129,6 +158,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             })}
             onToolsPress={() => chat.setShowToolPicker(true)}
             enabledToolCount={chat.enabledTools.length}
+            showSettingsDot={showSettingsDot}
             supportsToolCalling={chat.supportsToolCalling}
             supportsThinking={chat.supportsThinking}
             onRepairVision={handleRepairVision}
@@ -145,3 +175,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
     </>
   );
 };
+
+const openCLBannerStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
+  text: { ...TYPOGRAPHY.meta, flex: 1 },
+});

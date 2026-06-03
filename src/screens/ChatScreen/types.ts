@@ -1,5 +1,4 @@
 import { Message } from '../../types';
-
 export type ChatMessageItem = {
   id: string;
   role: 'assistant';
@@ -17,22 +16,32 @@ export type StreamingState = {
   isStreamingForThisConversation: boolean;
 };
 
+let _lastDisplayBranch = '';
 export function getDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   const { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation } = streaming;
   if (isThinking && isStreamingForThisConversation) {
+    if (_lastDisplayBranch !== 'thinking') {
+      _lastDisplayBranch = 'thinking';
+    }
     return [
       ...allMessages,
       { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true },
     ];
   }
   if ((streamingMessage || streamingReasoningContent) && isStreamingForThisConversation) {
+    if (_lastDisplayBranch !== 'streaming') {
+      _lastDisplayBranch = 'streaming';
+    }
     return [
       ...allMessages,
       { id: 'streaming', role: 'assistant' as const, content: streamingMessage, reasoningContent: streamingReasoningContent || undefined, timestamp: Date.now(), isStreaming: true },
     ];
+  }
+  if (_lastDisplayBranch !== 'done') {
+    _lastDisplayBranch = 'done';
   }
   return allMessages;
 }

@@ -116,18 +116,19 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const mmProjSize = file.mmProjFile?.size || 0;
   const combinedTotalBytes = file.size + mmProjSize;
-  const downloadUrl = huggingFaceService.getDownloadUrl(modelId, file.name);
+  const downloadUrl = file.downloadUrl || huggingFaceService.getDownloadUrl(modelId, file.name);
   const author = modelId.split('/')[0] || 'Unknown';
   const modelKey = makeModelKey(modelId, file.name);
 
-  // Determine whether a parallel mmproj download is needed.
-  // Also embed this in metadataJson so the native DB row carries the sentinel
-  // even after an app kill — restore.ts reads it to recover mmProjFileName
-  // reliably without falling back to the size-delta heuristic.
   const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
-  const metadataJson = needsMmProj
-    ? JSON.stringify({ mmProjFileName: mmProjLocalName(file.name), mmProjDownloadUrl: file.mmProjFile?.downloadUrl })
-    : undefined;
+  const skipSizeValidation = modelId.startsWith('offgrid/');
+  const metadataObj: Record<string, unknown> = {};
+  if (needsMmProj) {
+    metadataObj.mmProjFileName = mmProjLocalName(file.name);
+    metadataObj.mmProjDownloadUrl = file.mmProjFile?.downloadUrl;
+  }
+  if (skipSizeValidation) metadataObj.skipSizeValidation = true;
+  const metadataJson = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : undefined;
 
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl,
@@ -152,16 +153,8 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     mmProjLocalPath,
   });
 
-  // Populate new store immediately — no awaits between startDownload and add().
-  // If a non-active entry already exists for this modelKey (e.g. previous run
-  // ended in 'failed' and the user is starting again), reuse the same logical
-  // record via retryEntry instead of overwriting via add(). add() is strict
-  // and refuses to clobber any existing entry.
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing) {
-    // Cancel any running/queued native worker before retryEntry swaps the
-    // downloadId. Without this, the old worker keeps running with no store
-    // listener after the index is updated to the new downloadId.
     await backgroundDownloadService.cancelDownload(existing.downloadId).catch(() => {});
     if (existing.mmProjDownloadId) {
       await backgroundDownloadService.cancelDownload(existing.mmProjDownloadId).catch(() => {});
@@ -493,6 +486,8 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
         fileName: ctx.file.name,
         finalPath,
         finalMmProjPath,
+        savedEngine: model.engine,
+        savedLiteRTVision: model.engine === 'litert' ? model.liteRTVision : undefined,
       });
       backgroundDownloadMetadataCallback?.(downloadId, null);
       onComplete?.(model);

@@ -1,15 +1,18 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { useThemedStyles } from '../theme';
+import Icon from 'react-native-vector-icons/Feather';
+import { useThemedStyles, useTheme } from '../theme';
 import { QUANTIZATION_INFO, CREDIBILITY_LABELS } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { needsVisionRepair } from '../utils/visionRepair';
+import { getMmProjFileSize } from '../utils/modelHelpers';
 import { createStyles } from './ModelCard.styles';
 import {
   CompactModelCardContent,
   StandardModelCardContent,
   ModelInfoBadges,
   ModelCardActions,
+  RecommendedConfig,
 } from './ModelCardContent';
 
 interface ModelCardProps {
@@ -45,6 +48,14 @@ interface ModelCardProps {
   onCancel?: () => void;
   compact?: boolean;
   isTrending?: boolean;
+  recommended?: RecommendedConfig;
+  failedState?: {
+    errorMessage: string;
+    bytesDownloaded: number;
+    totalBytes: number;
+    onRetry: () => void;
+    onRemove: () => void;
+  };
 }
 
 function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
@@ -54,7 +65,7 @@ function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
 
 function resolveFileSize(file?: ModelFile, downloadedModel?: DownloadedModel) {
   const main = file?.size ?? downloadedModel?.fileSize ?? 0;
-  const mmProj = file?.mmProjFile?.size ?? downloadedModel?.mmProjFileSize ?? 0;
+  const mmProj = file?.mmProjFile?.size ?? getMmProjFileSize(downloadedModel);
   return main + mmProj;
 }
 
@@ -87,6 +98,45 @@ const DownloadProgressSection: React.FC<{
   );
 };
 
+const FailedSection: React.FC<{
+  errorMessage: string;
+  bytesDownloaded: number;
+  totalBytes: number;
+  onRetry: () => void;
+  onRemove: () => void;
+}> = ({ errorMessage, bytesDownloaded, totalBytes, onRetry, onRemove }) => {
+  const styles = useThemedStyles(createStyles);
+  const { colors } = useTheme();
+  const progress = totalBytes > 0 ? bytesDownloaded / totalBytes : 0;
+  return (
+    <View style={styles.failedSection}>
+      <View style={styles.progressContainer}>
+        <View style={styles.progressBar}>
+          <View style={[styles.failedProgressFill, { width: `${progress * 100}%` }]} />
+        </View>
+        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+      </View>
+      {totalBytes > 0 && (
+        <Text style={styles.progressBytesText}>{formatBytes(bytesDownloaded)} / {formatBytes(totalBytes)}</Text>
+      )}
+      <View style={styles.failedMessageRow}>
+        <Icon name="alert-circle" size={13} color={colors.error} />
+        <Text style={styles.failedMessageText}>{errorMessage}</Text>
+      </View>
+      <View style={styles.failedActionsRow}>
+        <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+          <Icon name="refresh-cw" size={13} color={colors.primary} />
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.removeButton} onPress={onRemove}>
+          <Icon name="trash-2" size={13} color={colors.error} />
+          <Text style={styles.removeButtonText}>Remove</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
 export const ModelCard: React.FC<ModelCardProps> = ({
   model,
   file,
@@ -108,12 +158,14 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onCancel,
   compact,
   isTrending,
+  recommended,
+  failedState,
 }) => {
   const styles = useThemedStyles(createStyles);
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
-  const isVisionModel = !!(file?.mmProjFile || downloadedModel?.isVisionModel);
+  const isVisionModel = !!(file?.mmProjFile || (downloadedModel?.engine === 'llama' && downloadedModel.isVisionModel));
   const needsRepair = needsVisionRepair(downloadedModel, file);
 
   const sizeRange = React.useMemo(() => {
@@ -136,6 +188,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       style={[
         styles.card,
         compact && styles.cardCompact,
+        recommended && compact && styles.cardRecommended,
         isActive && styles.cardActive,
         !isCompatible && styles.cardIncompatible,
       ]}
@@ -152,6 +205,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               credibility={credibility}
               credibilityInfo={credibilityInfo}
               isTrending={isTrending}
+              recommended={recommended}
             />
           ) : (
             <StandardModelCardContent
@@ -159,6 +213,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
               credibility={credibility}
               credibilityInfo={credibilityInfo}
               isActive={isActive}
+              recommended={recommended}
             />
           )}
 
@@ -188,22 +243,33 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           {isDownloading && (
             <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} />
           )}
+          {failedState && (
+            <FailedSection
+              errorMessage={failedState.errorMessage}
+              bytesDownloaded={failedState.bytesDownloaded}
+              totalBytes={failedState.totalBytes}
+              onRetry={failedState.onRetry}
+              onRemove={failedState.onRemove}
+            />
+          )}
         </View>
 
-        <ModelCardActions
-          isDownloaded={isDownloaded}
-          isDownloading={isDownloading}
-          isActive={isActive}
-          isCompatible={isCompatible}
-          incompatibleReason={incompatibleReason}
-          testID={testID}
-          onDownload={onDownload}
-          onSelect={onSelect}
-          onDelete={onDelete}
-          onRepairVision={onRepairVision}
-          isRepairingVision={isRepairingVision}
-          onCancel={onCancel}
-        />
+        {!failedState && (
+          <ModelCardActions
+            isDownloaded={isDownloaded}
+            isDownloading={isDownloading}
+            isActive={isActive}
+            isCompatible={isCompatible}
+            incompatibleReason={incompatibleReason}
+            testID={testID}
+            onDownload={onDownload}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onRepairVision={onRepairVision}
+            isRepairingVision={isRepairingVision}
+            onCancel={onCancel}
+          />
+        )}
       </View>
     </TouchableOpacity>
   );

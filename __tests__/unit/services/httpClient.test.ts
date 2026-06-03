@@ -15,6 +15,7 @@ import {
   imageToBase64DataUrl,
   detectServerType,
   createStreamingRequest,
+  createNDJSONStreamingRequest,
 } from '../../../src/services/httpClient';
 
 // Mock React Native FS
@@ -801,7 +802,7 @@ describe('httpClient', () => {
         get: () => onTimeout,
       });
 
-      (global as any).XMLHttpRequest = jest.fn(() => mockXHR);
+      (globalThis as any).XMLHttpRequest = jest.fn(() => mockXHR);
 
       jest.useFakeTimers();
       streamEvents = [];
@@ -1106,5 +1107,137 @@ describe('httpClient', () => {
       const result = parseAnthropicMessage(event);
       expect(result).toBeNull();
     });
+  });
+
+  // ─── createNDJSONStreamingRequest ─────────────────────────────────────────
+
+  describe('createNDJSONStreamingRequest', () => {
+    let mockXHR: any;
+
+    beforeEach(() => {
+      mockXHR = {
+        open: jest.fn(),
+        setRequestHeader: jest.fn(),
+        send: jest.fn(),
+        abort: jest.fn(),
+        addEventListener: jest.fn((event: string, cb: () => void) => {
+          if (event === 'abort') mockXHR._abortCb = cb;
+        }),
+        readyState: 0,
+        status: 200,
+        responseText: '',
+        onreadystatechange: null as any,
+        onprogress: null as any,
+        onerror: null as any,
+        ontimeout: null as any,
+      };
+      (globalThis as any).XMLHttpRequest = jest.fn(() => mockXHR);
+    });
+
+    function simulateSuccess(responseText = '') {
+      mockXHR.responseText = responseText;
+      mockXHR.readyState = 4;
+      mockXHR.status = 200;
+      mockXHR.onreadystatechange?.();
+    }
+
+    it('resolves and calls onLine for each complete NDJSON line', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      simulateSuccess('{"done":false}\n{"done":true}\n');
+      await promise;
+      expect(onLine).toHaveBeenCalledTimes(2);
+      expect(onLine).toHaveBeenCalledWith({ done: false });
+      expect(onLine).toHaveBeenCalledWith({ done: true });
+    });
+
+    it('flushes partial buffered line on readyState=4', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      // No trailing newline — sits in lineBuffer until completion
+      simulateSuccess('{"done":true}');
+      await promise;
+      expect(onLine).toHaveBeenCalledWith({ done: true });
+    });
+
+    it('rejects on HTTP error status', async () => {
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
+      mockXHR.responseText = 'Internal Server Error';
+      mockXHR.readyState = 4;
+      mockXHR.status = 500;
+      mockXHR.onreadystatechange?.();
+      await expect(promise).rejects.toThrow('HTTP 500');
+    });
+
+    it('rejects on network error', async () => {
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
+      mockXHR.onerror?.();
+      await expect(promise).rejects.toThrow('Network error');
+    });
+
+    it('rejects on timeout', async () => {
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
+      mockXHR.ontimeout?.();
+      await expect(promise).rejects.toThrow('Request timeout');
+    });
+
+    it('skips empty/blank lines', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      simulateSuccess('\n\n{"done":true}\n\n');
+      await promise;
+      expect(onLine).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns and skips invalid JSON lines', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      simulateSuccess('not-json\n{"ok":true}\n');
+      await promise;
+      expect(onLine).toHaveBeenCalledTimes(1);
+      expect(onLine).toHaveBeenCalledWith({ ok: true });
+    });
+
+    it('sets custom headers', async () => {
+      const promise = createNDJSONStreamingRequest(
+        'http://localhost/api/chat',
+        { body: {}, headers: { Authorization: 'Bearer token' } },
+        jest.fn(),
+      );
+      simulateSuccess('');
+      await promise;
+      expect(mockXHR.setRequestHeader).toHaveBeenCalledWith('Authorization', 'Bearer token');
+    });
+
+    it('processes onprogress chunks and merges partial lines', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      // First progress event delivers half a line
+      mockXHR.responseText = '{"a":1}\n{"b":';
+      mockXHR.onprogress?.();
+      // Second progress delivers rest
+      mockXHR.responseText = '{"a":1}\n{"b":2}\n';
+      mockXHR.onprogress?.();
+      simulateSuccess('{"a":1}\n{"b":2}\n');
+      await promise;
+      expect(onLine).toHaveBeenCalledWith({ a: 1 });
+      expect(onLine).toHaveBeenCalledWith({ b: 2 });
+    });
+
+    it('warns and skips invalid JSON in buffered final line', async () => {
+      const onLine = jest.fn();
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, onLine);
+      // No trailing newline so it ends up in lineBuffer — invalid JSON
+      simulateSuccess('not-valid-json');
+      await promise;
+      expect(onLine).not.toHaveBeenCalled();
+    });
+
+    it('rejects when xhr.send throws', async () => {
+      mockXHR.send = jest.fn(() => { throw new Error('send failed'); });
+      const promise = createNDJSONStreamingRequest('http://localhost/api/chat', { body: {} }, jest.fn());
+      await expect(promise).rejects.toThrow('send failed');
+    });
+
   });
 });

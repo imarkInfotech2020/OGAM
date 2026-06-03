@@ -1,7 +1,8 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
+import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
 
 export const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
@@ -81,7 +82,7 @@ async function tryResolveMmProjPath(
   model: DownloadedModel,
   modelsDir: string,
 ): Promise<boolean> {
-  if (!model.mmProjPath) return false;
+  if (model.engine !== 'llama' || !model.mmProjPath) return false;
   const mmExists = await RNFS.exists(model.mmProjPath);
   if (mmExists) return false;
   const resolvedMm = resolveStoredPath(model.mmProjPath, modelsDir);
@@ -165,7 +166,20 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
 
   let models: DownloadedModel[];
   try {
-    models = JSON.parse(stored) as DownloadedModel[];
+    // Backfill engine: 'llama' for records written before the discriminated union.
+    // LiteRT records always had engine: 'litert' set explicitly, so this is safe.
+    // For LiteRT, consult the curated registry by fileName — this rescues
+    // already-downloaded curated models whose row was written before liteRTVision
+    // was being set correctly. Locally-imported .litertlm files aren't in the
+    // registry and keep whatever flag they were saved with.
+    models = (JSON.parse(stored) as any[]).map((m): DownloadedModel => {
+      if (m.engine === 'litert') {
+        const curated = getCuratedLiteRTEntry(m.fileName);
+        const liteRTVision = curated?.liteRTVision ?? m.liteRTVision ?? false;
+        return { ...m, liteRTVision } as LiteRTDownloadedModel;
+      }
+      return { ...m, engine: 'llama' as const } as LlamaDownloadedModel;
+    });
   } catch (error) {
     // Corrupt AsyncStorage should not prevent the app from loading other state.
     logger.error('[ModelManagerStorage] Failed to parse downloaded models JSON', {
@@ -273,6 +287,7 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
   const { modelId, file, resolvedLocalPath, mmProjPath, expectedMmProjFileName } = opts;
   const stat = await RNFS.stat(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
+  const isLiteRT = file.name.toLowerCase().endsWith('.litertlm');
   const mmProjFile = file.mmProjFile;
   let mmProjFileSize = mmProjPath ? mmProjFile?.size : undefined;
   if (mmProjPath) {
@@ -292,9 +307,17 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     ? (mmProjFile?.name ?? mmProjPath.split('/').pop())
     : (expectedMmProjFileName ?? mmProjFile?.name);
 
-  return {
+  // Registry wins for curated LiteRT artifacts: display name and capability bits
+  // come from a single source of truth keyed by fileName. Falls back to the
+  // file's metadata for locally-imported .litertlm files, then to modelId basename
+  // for everything else.
+  const curatedLiteRT = isLiteRT ? getCuratedLiteRTEntry(file.name) : undefined;
+  const derivedName = curatedLiteRT?.displayName
+    ?? (isLiteRT ? file.name.replace(/\.litertlm$/i, '') : (modelId.split('/').pop() || modelId));
+
+  const commonFields = {
     id: `${modelId}/${file.name}`,
-    name: modelId.split('/').pop() || modelId,
+    name: derivedName,
     author,
     filePath: resolvedLocalPath,
     fileName: file.name,
@@ -302,11 +325,27 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     quantization: file.quantization,
     downloadedAt: new Date().toISOString(),
     credibility: determineCredibility(author),
+  };
+
+  if (isLiteRT) {
+    const liteRTVision = curatedLiteRT?.liteRTVision ?? file.liteRTVision ?? false;
+    const liteRTModel: LiteRTDownloadedModel = {
+      ...commonFields,
+      engine: 'litert',
+      liteRTVision,
+    };
+    return liteRTModel;
+  }
+
+  const llamaModel: LlamaDownloadedModel = {
+    ...commonFields,
+    engine: 'llama',
     isVisionModel: !!mmProjPath,
     mmProjPath,
     mmProjFileName,
     mmProjFileSize,
   };
+  return llamaModel;
 }
 
 export async function persistDownloadedModel(

@@ -41,7 +41,9 @@ const mockSetActiveImageModelId = jest.fn();
 let mockStoreValues: any = {};
 
 jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn(() => mockStoreValues),
+  useAppStore: jest.fn((sel?: any) => typeof sel === 'function' ? sel(mockStoreValues) : mockStoreValues),
+  selectIsLiteRT: (state: any) =>
+    state.downloadedModels?.find((m: any) => m.id === state.activeModelId)?.engine === 'litert',
 }));
 
 jest.mock('../../../src/services', () => ({
@@ -54,6 +56,7 @@ jest.mock('../../../src/services', () => ({
   },
   hardwareService: {
     formatModelSize: jest.fn(() => '4.0 GB'),
+    getTotalMemoryGB: jest.fn().mockReturnValue(8),
   },
 }));
 

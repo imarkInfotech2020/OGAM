@@ -9,6 +9,7 @@ import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { modelManager } from '../../services';
+import { liteRTService } from '../../services/litert';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
@@ -113,6 +114,18 @@ export function useModelsScreen() {
 
   const isPickingRef = useRef(false);
 
+  const validateImportFiles = (resolvedFiles: Array<{ name: string; uri: string }>): string | null => {
+    const singleLitert = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.litertlm');
+    if (singleLitert && !liteRTService.isAvailable()) {
+      return 'litert_unsupported';
+    }
+    const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
+    const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
+    if (!allGguf && !singleZip && !singleLitert) return 'invalid_format';
+    if (resolvedFiles.length > 2) return 'too_many';
+    return null;
+  };
+
   const handleImportLocalModel = async () => {
     if (isImporting || isPickingRef.current) return;
     isPickingRef.current = true;
@@ -122,27 +135,27 @@ export function useModelsScreen() {
 
       if (!result || result.length === 0) return;
 
-      // Resolve filename: use picker name if available, fall back to last path segment of URI
       const resolvedFiles = result.map(f => ({
         ...f,
         name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
       }));
 
-      const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
-
-      if (!allGguf && !singleZip) {
+      const validationError = validateImportFiles(resolvedFiles);
+      if (validationError === 'litert_unsupported') {
+        setAlertState(showAlert('Not Supported', 'LiteRT models are only supported on Android.'));
+        return;
+      }
+      if (validationError === 'invalid_format') {
         setAlertState(showAlert(
           'Invalid File',
           resolvedFiles.length > 1
             ? 'When selecting multiple files, all must be .gguf files (main model + mmproj projector).'
-            : 'Supported formats: .gguf (text models) and .zip (image models).',
+            : 'Supported formats: .gguf (text models), .litertlm (LiteRT models), and .zip (image models).',
         ));
         return;
       }
-
-      if (resolvedFiles.length > 2) {
-        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip) or 2 .gguf files (vision model + mmproj projector).'));
+      if (validationError === 'too_many') {
+        setAlertState(showAlert('Too Many Files', 'Select 1 file (text/zip/litertlm) or 2 .gguf files (vision model + mmproj projector).'));
         return;
       }
 
@@ -150,6 +163,7 @@ export function useModelsScreen() {
       const firstFileName = resolvedFiles[0].name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
+      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
       if (singleZip) {
         await handleImportImageModelZip(firstUri, firstFileName);
         return;

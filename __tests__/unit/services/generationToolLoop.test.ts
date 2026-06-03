@@ -8,6 +8,7 @@
 
 import { runToolLoop, ToolLoopContext, parseToolCallsFromText } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
+import { liteRTService } from '../../../src/services/litert';
 import { Message } from '../../../src/types';
 import { createMessage } from '../../utils/factories';
 import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
@@ -19,6 +20,17 @@ import type { ToolCall, ToolResult } from '../../../src/services/tools/types';
 const mockAddMessage = jest.fn();
 const mockSetStreamingMessage = jest.fn();
 const mockSetIsThinking = jest.fn();
+let mockAppState: any = {
+  downloadedModels: [],
+  activeModelId: null,
+  settings: {
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: 0.9,
+    liteRTTemperature: 0.7,
+    liteRTTopP: 0.9,
+  },
+};
 
 jest.mock('../../../src/stores', () => ({
   useChatStore: {
@@ -34,13 +46,7 @@ jest.mock('../../../src/stores', () => ({
     }),
   },
   useAppStore: {
-    getState: () => ({
-      settings: {
-        temperature: 0.7,
-        maxTokens: 1024,
-        topP: 0.9,
-      },
-    }),
+    getState: () => mockAppState,
   },
 }));
 
@@ -51,6 +57,15 @@ jest.mock('../../../src/services/llm', () => ({
     isThinkingEnabled: jest.fn(() => false),
     stopGeneration: jest.fn().mockResolvedValue(undefined),
     isModelLoaded: jest.fn(() => true),
+  },
+}));
+
+jest.mock('../../../src/services/litert', () => ({
+  liteRTService: {
+    isModelLoaded: jest.fn(() => false),
+    prepareConversation: jest.fn(),
+    generateRaw: jest.fn(),
+    getLastBenchmarkStats: jest.fn(() => undefined),
   },
 }));
 
@@ -70,6 +85,7 @@ jest.mock('../../../src/services/tools', () => ({
 }));
 
 const mockedGenerateResponseWithTools = llmService.generateResponseWithTools as jest.Mock;
+const mockedLiteRTService = liteRTService as jest.Mocked<typeof liteRTService>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,9 +136,23 @@ describe('runToolLoop', () => {
     jest.clearAllMocks();
     mockExecuteToolCall.mockReset();
     mockedGenerateResponseWithTools.mockReset();
+    mockAppState = {
+      downloadedModels: [],
+      activeModelId: null,
+      settings: {
+        temperature: 0.7,
+        maxTokens: 1024,
+        topP: 0.9,
+        liteRTTemperature: 0.7,
+        liteRTTopP: 0.9,
+      },
+    };
     mockGetToolsAsOpenAISchema.mockReturnValue([
       { type: 'function', function: { name: 'web_search' } },
     ]);
+    mockedLiteRTService.isModelLoaded.mockReturnValue(false);
+    mockedLiteRTService.prepareConversation.mockResolvedValue(undefined);
+    mockedLiteRTService.generateRaw.mockResolvedValue('LiteRT response');
   });
 
   // ==========================================================================
@@ -180,6 +210,43 @@ describe('runToolLoop', () => {
       await runToolLoop(ctx);
 
       expect(mockAddMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('LiteRT image forwarding', () => {
+    it('forwards all image attachments from the last user message to LiteRT', async () => {
+      mockAppState = {
+        ...mockAppState,
+        downloadedModels: [{ id: 'litert-1', engine: 'litert' }],
+        activeModelId: 'litert-1',
+      };
+      mockedLiteRTService.isModelLoaded.mockReturnValue(true);
+
+      const ctx = createContext({
+        messages: [
+          makeMessage({ role: 'system', content: 'You are helpful.' }),
+          makeMessage({
+            role: 'user',
+            content: 'Compare these images',
+            attachments: [
+              { id: 'img-1', type: 'image', uri: 'file:///one.png' },
+              { id: 'doc-1', type: 'document', uri: 'file:///note.pdf' },
+              { id: 'img-2', type: 'image', uri: 'file:///two.png' },
+            ],
+          }),
+        ],
+      });
+
+      await runToolLoop(ctx);
+
+      expect(mockedLiteRTService.generateRaw).toHaveBeenCalledWith(
+        'Compare these images',
+        ['file:///one.png', 'file:///two.png'],
+        expect.objectContaining({
+          onToken: expect.any(Function),
+          onReasoning: expect.any(Function),
+        }),
+      );
     });
   });
 
@@ -1363,3 +1430,106 @@ describe('callRemoteLLMWithTools via forceRemote', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// LiteRT tool call cap (buildLiteRTToolCallHandler via runToolLoop)
+// ---------------------------------------------------------------------------
+
+describe('runToolLoop – LiteRT tool call cap', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExecuteToolCall.mockResolvedValue({ toolCallId: 'tc-1', name: 'web_search', content: 'result', durationMs: 10 });
+    mockAppState = {
+      downloadedModels: [{ id: 'litert-model', engine: 'litert', liteRTVision: false }],
+      activeModelId: 'litert-model',
+      settings: { temperature: 0.7, maxTokens: 512, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+    };
+    mockedLiteRTService.isModelLoaded.mockReturnValue(true);
+    mockedLiteRTService.prepareConversation.mockResolvedValue(undefined);
+  });
+
+  it('executes up to MAX_LITERT_TOOL_CALLS (3) tool calls without hitting cap', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'final answer';
+    });
+
+    const ctx = createContext();
+    await runToolLoop(ctx);
+
+    // Call the handler exactly 3 times — all should execute the tool
+    const results = await Promise.all([
+      capturedToolHandler?.('web_search', { query: 'q1' }),
+      capturedToolHandler?.('web_search', { query: 'q2' }),
+      capturedToolHandler?.('web_search', { query: 'q3' }),
+    ]);
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    results.forEach(r => expect(r).toBe('result'));
+  });
+
+  it('returns cap message on the 4th call and does not execute the tool', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'final answer';
+    });
+
+    const ctx = createContext();
+    await runToolLoop(ctx);
+
+    // Exhaust the 3-call allowance
+    await capturedToolHandler?.('web_search', { query: 'q1' });
+    await capturedToolHandler?.('web_search', { query: 'q2' });
+    await capturedToolHandler?.('web_search', { query: 'q3' });
+
+    // 4th call should be refused
+    const capResult = await capturedToolHandler?.('web_search', { query: 'q4' });
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    expect(capResult).toContain('Tool call limit reached');
+    expect(capResult).toContain('Answer now');
+  });
+
+  it('returns Aborted immediately when context is aborted', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'answer';
+    });
+
+    let aborted = false;
+    const ctx = createContext({ isAborted: () => aborted });
+    await runToolLoop(ctx);
+
+    aborted = true;
+    const result = await capturedToolHandler?.('web_search', { query: 'q' });
+
+    expect(mockExecuteToolCall).not.toHaveBeenCalled();
+    expect(result).toBe('Aborted');
+  });
+
+  it('cap counter resets per generation (new runToolLoop call resets count)', async () => {
+    let capturedHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedHandler = handlers?.onToolCall;
+      return 'answer';
+    });
+
+    const ctx = createContext();
+
+    // First generation: exhaust cap
+    await runToolLoop(ctx);
+    await capturedHandler?.('web_search', { query: 'q1' });
+    await capturedHandler?.('web_search', { query: 'q2' });
+    await capturedHandler?.('web_search', { query: 'q3' });
+    const cappedResult = await capturedHandler?.('web_search', { query: 'q4' });
+    expect(cappedResult).toContain('Tool call limit reached');
+
+    // Second generation: counter resets, calls work again
+    await runToolLoop(ctx);
+    const freshResult = await capturedHandler?.('web_search', { query: 'q1-fresh' });
+    expect(freshResult).toBe('result');
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(4); // 3 + 1
+  });
+});

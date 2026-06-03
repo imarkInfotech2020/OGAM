@@ -3,18 +3,15 @@
  * Extracted to keep index.ts under the max-lines limit.
  */
 
+import { Platform, ToastAndroid } from 'react-native';
 import { useAppStore } from '../../stores';
-import { useDebugLogsStore } from '../../stores/debugLogsStore';
-import { DownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
 import { llmService } from '../llm';
+import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { modelManager } from '../modelManager';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
-
-// ---------------------------------------------------------------------------
-// mmproj path resolver
-// ---------------------------------------------------------------------------
 
 function isMMProjFile(fileName: string): boolean {
   const lower = fileName.toLowerCase();
@@ -22,8 +19,6 @@ function isMMProjFile(fileName: string): boolean {
   return (
     lower.includes('mmproj') ||
     lower.includes('projector') ||
-    // LLaVA/InternVL-style CLIP vision encoder projectors, e.g.
-    // "mmproj-model-f16-clip-vit-large-patch14-336.gguf"
     (lower.includes('clip') && lower.includes('vit'))
   );
 }
@@ -37,7 +32,7 @@ async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirItem
 }
 
 export async function resolveMmProjPath(
-  model: DownloadedModel,
+  model: LlamaDownloadedModel,
   modelId: string,
 ): Promise<string | undefined> {
   // Fast path: persisted mmProjPath still exists on disk
@@ -45,13 +40,8 @@ export async function resolveMmProjPath(
     if (await RNFS.exists(model.mmProjPath)) {
       return model.mmProjPath;
     }
-    // Path is stale — fall through to directory scan
   }
 
-  // Scan the model directory for any mmproj file regardless of model name.
-  // Previous code only scanned for models whose name contained "vl"/"vision"/
-  // "smolvlm", which silently broke vision for models like llava, pixtral,
-  // moondream, internvl, minicpm, etc.
   try {
     const mmProjFile = await scanDirForMmProj(model.filePath);
     if (!mmProjFile) {
@@ -97,18 +87,99 @@ export interface TextLoadContext {
   onFinally: () => void;
 }
 
-export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
-  const addDebugLog = useDebugLogsStore.getState().addLog;
+async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
+  if (ctx.model.engine !== 'litert') {
+    throw new Error('doLoadLiteRTModel called with non-LiteRT model');
+  }
+  const liteRTModel = ctx.model;
   try {
-    addDebugLog('log', `[Reload] Starting text model load: ${ctx.model.fileName}`);
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      addDebugLog('log', '[Reload] Unloading previous text model before load.');
+      try {
+        await liteRTService.unloadModel();
+      } catch (unloadErr) {
+        logger.warn('[LiteRT] Error unloading previous model, continuing:', unloadErr);
+      }
+      ctx.onError();
+    }
+
+    const preferredBackend = ctx.store.settings.liteRTBackend;
+
+    const maxTokens = ctx.store.settings.liteRTMaxTokens ?? 4096;
+    const contextScalar = Math.max(1, maxTokens / 4096);
+    const baseTimeoutMs = 90_000;
+    const timeoutMs = Math.min(Math.ceil(baseTimeoutMs * contextScalar), 180_000);
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(`LiteRT model load timed out after ${timeoutMs / 1000}s.`)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      await Promise.race([
+        liteRTService.loadModel(ctx.model.filePath, preferredBackend, { supportsVision: liteRTModel.liteRTVision ?? false, maxNumTokens: maxTokens }),
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+
+    const actualBackend = liteRTService.getActiveBackend();
+    if (actualBackend !== preferredBackend) {
+      if (preferredBackend === 'gpu' && actualBackend === 'cpu' && maxTokens > 8192 && Platform.OS === 'android') {
+        ToastAndroid.showWithGravity(
+          `GPU unavailable at ${maxTokens.toLocaleString()} token context. Running on CPU — reduce context length to use GPU.`,
+          ToastAndroid.LONG,
+          ToastAndroid.BOTTOM,
+        );
+      }
+    }
+
+    // Warmup on GPU/NPU only — primes shader/kernel caches so first real prompt runs at full speed
+    if (actualBackend === 'gpu' || actualBackend === 'npu') {
+      await liteRTService.warmup();
+    }
+
+    // Snapshot the settings that require a full engine reload so the pending-settings
+    // banner appears if the user changes them while the model is loaded.
+    ctx.store.setLoadedSettings({
+      liteRTBackend: ctx.store.settings.liteRTBackend,
+      liteRTMaxTokens: maxTokens,
+      // Fields not used by LiteRT — set to current values so llama checks don't misfire
+      contextLength: ctx.store.settings.contextLength,
+      enableGpu: ctx.store.settings.enableGpu,
+      gpuLayers: ctx.store.settings.gpuLayers,
+      nThreads: ctx.store.settings.nThreads,
+      nBatch: ctx.store.settings.nBatch,
+      flashAttn: ctx.store.settings.flashAttn,
+      cacheType: ctx.store.settings.cacheType,
+    });
+
+    ctx.onLoaded(ctx.modelId);
+    ctx.store.setActiveModelId(ctx.modelId);
+  } catch (error) {
+    ctx.onError();
+    throw error;
+  } finally {
+    ctx.onFinally();
+  }
+}
+
+export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
+  // Route LiteRT models to the LiteRT loader — existing llama path is untouched below
+  if (ctx.model.engine === 'litert') {
+    return doLoadLiteRTModel(ctx);
+  }
+
+  try {
+    if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
       try {
         await llmService.unloadModel();
       } catch (unloadErr) {
         // Log but continue — loadModel will also attempt to release the old context
         logger.warn('[ActiveModel] Error unloading previous model, continuing:', unloadErr);
-        addDebugLog('warn', `[Reload] Previous model unload warning: ${String(unloadErr)}`);
       }
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
@@ -130,7 +201,6 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     });
 
     try {
-      addDebugLog('log', `[Reload] Calling llmService.loadModel (timeout ${ctx.timeoutMs / 1000}s).`);
       await Promise.race([
         llmService.loadModel(ctx.model.filePath, mmProjPath),
         timeoutPromise,
@@ -166,10 +236,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
     ctx.onLoaded(ctx.modelId);
     ctx.store.setActiveModelId(ctx.modelId);
-    addDebugLog('log', `[Reload] Text model load complete: ${ctx.model.fileName}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    addDebugLog('error', `[Reload] Text model load failed: ${message}`);
     ctx.onError();
     throw error;
   } finally {

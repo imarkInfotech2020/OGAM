@@ -146,6 +146,47 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   recommendedText: {
     color: colors.info,
   },
+  recommendedPill: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  recommendedPillText: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.surface,
+  },
+  cardRecommended: {
+    padding: 16,
+    marginBottom: 20,
+    marginTop: 4,
+    borderRadius: 14,
+  },
+  compactNameRecommended: {
+    ...TYPOGRAPHY.h2,
+    color: colors.text,
+  },
+  recommendedHighlight: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  recommendedChip: {
+    backgroundColor: `${colors.primary}20`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  recommendedChipText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+  },
+  recommendedHighlightCompact: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+    marginTop: 6,
+  },
   warningBadge: {
     backgroundColor: `${colors.warning}30`,
     paddingHorizontal: 8,
@@ -216,5 +257,62 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   iconButton: {
     padding: 4,
     flexShrink: 0,
+  },
+  failedSection: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  failedProgressFill: {
+    height: '100%' as const,
+    backgroundColor: colors.error,
+    borderRadius: 4,
+  },
+  failedMessageRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  failedMessageText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.error,
+    flex: 1,
+  },
+  failedActionsRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+  },
+  retryButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: `${colors.primary}15` as const,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40` as const,
+  },
+  retryButtonText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+  },
+  removeButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: `${colors.error}12` as const,
+    borderWidth: 1,
+    borderColor: `${colors.error}30` as const,
+  },
+  removeButtonText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.error,
   },
 });

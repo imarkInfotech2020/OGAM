@@ -956,6 +956,7 @@ describe('IntentClassifier', () => {
         fileSize: 1000,
         quantization: 'Q4',
         downloadedAt: new Date().toISOString(),
+        engine: 'llama' as const,
       };
 
       mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/different.gguf');
@@ -1004,6 +1005,7 @@ describe('IntentClassifier', () => {
         fileSize: 1000,
         quantization: 'Q4',
         downloadedAt: new Date().toISOString(),
+        engine: 'llama' as const,
       };
 
       mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/different.gguf');
@@ -1046,6 +1048,7 @@ describe('IntentClassifier', () => {
         fileSize: 1000,
         quantization: 'Q4',
         downloadedAt: new Date().toISOString(),
+        engine: 'llama' as const,
       };
 
       mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/same.gguf');

@@ -304,17 +304,57 @@ function isPrivateUrl(url: string): boolean {
     || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
 }
 
+function nodeToText(node: any): string {
+  if (node.nodeType === 3) return node.text ?? '';
+  const tag = (node.tagName ?? '').toLowerCase();
+  const skip = ['script','style','nav','header','footer','aside','noscript','iframe','form','button','figure','picture','img','video','audio','svg','canvas'];
+  if (skip.includes(tag)) return '';
+  const children = (node.childNodes ?? []).map(nodeToText).join('');
+  if (['h1','h2','h3'].includes(tag)) return `\n\n## ${children.trim()}\n`;
+  if (tag === 'h4' || tag === 'h5' || tag === 'h6') return `\n\n### ${children.trim()}\n`;
+  if (tag === 'p') return `\n\n${children.trim()}`;
+  if (tag === 'li') return `\n- ${children.trim()}`;
+  if (tag === 'br') return '\n';
+  if (tag === 'blockquote') return `\n> ${children.trim()}\n`;
+  if (tag === 'code' || tag === 'pre') return `\`${children.trim()}\``;
+  return children;
+}
+
+function htmlToMarkdown(html: string): string {
+  const { parse } = require('node-html-parser'); // NOSONAR
+  const root = parse(html);
+
+  // strip boilerplate
+  ['script','style','nav','header','footer','aside','noscript','iframe','form','button'].forEach(
+    tag => root.querySelectorAll(tag).forEach((el: any) => el.remove()),
+  );
+
+  // prefer semantic content containers
+  const content = root.querySelector('article')
+    ?? root.querySelector('[role="main"]')
+    ?? root.querySelector('main')
+    ?? root.querySelector('.post-content, .article-body, .entry-content, .content')
+    ?? root.querySelector('body')
+    ?? root;
+
+  return nodeToText(content)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function handleReadUrl(rawUrl: string): Promise<string> {
+  const MAX_CHARS = 4000;
   // Strip surrounding quotes/angle brackets that models sometimes emit
   let url = rawUrl.trim();
   while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
   while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
   if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
-  logger.log(`[Tools] read_url fetching: "${url}" (raw: "${rawUrl}")`);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
+    // On-device fetch + parse (privacy-preserving — no third-party proxy)
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
@@ -322,13 +362,15 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
         'Accept': 'text/html, text/plain, */*',
       },
     });
-    logger.log(`[Tools] read_url response: status=${response.status}, ok=${response.ok}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    const text = stripHtmlTags(await response.text()).replaceAll(/\s+/g, ' ').trim();
+    const html = await response.text();
+    const text = htmlToMarkdown(html);
+
     if (!text) return `The page at ${url} returned no readable content.`;
-    return text.length > 4000 ? `${text.slice(0, 4000)}\n\n[Content truncated]` : text;
+
+    return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n\n[Content truncated]` : text;
   } catch (e: any) {
-    logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`, e?.stack || '');
+    logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`);
     throw e;
   } finally { clearTimeout(timeout); }
 }

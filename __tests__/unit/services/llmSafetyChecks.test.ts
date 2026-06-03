@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { validateModelFile, checkMemoryForModel } from '../../../src/services/llmSafetyChecks';
+import { validateModelFile, checkMemoryForModel, safeCompletion } from '../../../src/services/llmSafetyChecks';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
@@ -99,5 +99,61 @@ describe('checkMemoryForModel', () => {
 
     const result = await checkMemoryForModel(500 * 1024 * 1024, 2048, mockGetMemory);
     expect(result.safe).toBe(true);
+  });
+});
+
+describe('safeCompletion', () => {
+  it('returns result of completionFn on success', async () => {
+    const mockContext = { clearCache: jest.fn() };
+    const result = await safeCompletion(mockContext as any, async () => 'ok');
+    expect(result).toBe('ok');
+  });
+
+  it('throws wrapped error and clears KV cache on native crash (ggml)', async () => {
+    const mockContext = { clearCache: jest.fn().mockResolvedValue(undefined) };
+    await expect(
+      safeCompletion(mockContext as any, async () => {
+        throw new Error('ggml alloc failed');
+      }),
+    ).rejects.toThrow('Model inference failed (native error)');
+    expect(mockContext.clearCache).toHaveBeenCalledWith(true);
+  });
+
+  it('throws wrapped error even when clearCache also fails', async () => {
+    const mockContext = { clearCache: jest.fn().mockRejectedValue(new Error('cache clear failed')) };
+    await expect(
+      safeCompletion(mockContext as any, async () => {
+        throw new Error('abort detected');
+      }),
+    ).rejects.toThrow('Model inference failed (native error)');
+  });
+
+  it('re-throws non-native errors unchanged', async () => {
+    const mockContext = { clearCache: jest.fn() };
+    await expect(
+      safeCompletion(mockContext as any, async () => {
+        throw new Error('unknown error');
+      }),
+    ).rejects.toThrow('unknown error');
+    expect(mockContext.clearCache).not.toHaveBeenCalled();
+  });
+
+  it('recognises OOM as native crash keyword', async () => {
+    const mockContext = { clearCache: jest.fn().mockResolvedValue(undefined) };
+    await expect(
+      safeCompletion(mockContext as any, async () => {
+        throw new Error('OOM: out of memory');
+      }),
+    ).rejects.toThrow('Model inference failed (native error)');
+    expect(mockContext.clearCache).toHaveBeenCalled();
+  });
+
+  it('uses String(error) when thrown value has no message', async () => {
+    const mockContext = { clearCache: jest.fn().mockResolvedValue(undefined) };
+    await expect(
+      safeCompletion(mockContext as any, async () => {
+        throw new Error('tensor error string');
+      }),
+    ).rejects.toThrow('Model inference failed (native error)');
   });
 });

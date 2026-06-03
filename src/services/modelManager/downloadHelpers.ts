@@ -21,7 +21,7 @@ export async function getOrphanedTextFiles(
   const trackedPaths = new Set<string>();
   for (const model of models) {
     trackedPaths.add(model.filePath);
-    if (model.mmProjPath) trackedPaths.add(model.mmProjPath);
+    if (model.engine === 'llama' && model.mmProjPath) trackedPaths.add(model.mmProjPath);
   }
 
   for (const file of files) {
@@ -123,6 +123,10 @@ async function processCompletedDownload(
 
   const mainFileSize = metadata.mainFileSize ?? metadata.totalBytes;
   const mmProjFileSize = metadata.mmProjFileSize ?? 0;
+  // We deliberately do NOT thread liteRTVision through metadata here — the
+  // curated registry in buildDownloadedModel resolves capability bits by
+  // fileName, so the restore-after-kill path produces the same result as
+  // the in-session path without explicit plumbing.
   const fileInfo: ModelFile = {
     name: metadata.fileName, size: mainFileSize,
     quantization: metadata.quantization, downloadUrl: '',

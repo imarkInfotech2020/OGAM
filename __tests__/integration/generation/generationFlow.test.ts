@@ -12,6 +12,7 @@
 import { useAppStore } from '../../../src/stores/appStore';
 import { generationService } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
+import { liteRTService } from '../../../src/services/litert';
 import { activeModelService } from '../../../src/services/activeModelService';
 import {
   resetStores,
@@ -26,9 +27,11 @@ import { createMessage, createDownloadedModel } from '../../utils/factories';
 
 // Mock the services
 jest.mock('../../../src/services/llm');
+jest.mock('../../../src/services/litert');
 jest.mock('../../../src/services/activeModelService');
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
+const mockLiteRTService = liteRTService as jest.Mocked<typeof liteRTService>;
 const mockActiveModelService = activeModelService as jest.Mocked<typeof activeModelService>;
 
 describe('Generation Flow Integration', () => {
@@ -53,6 +56,9 @@ describe('Generation Flow Integration', () => {
       lastTokenCount: 100,
     });
     mockLlmService.stopGeneration.mockResolvedValue();
+    mockLiteRTService.isModelLoaded.mockReturnValue(false);
+    mockLiteRTService.stopGeneration.mockResolvedValue();
+    mockLiteRTService.sendMessage.mockResolvedValue();
 
     mockActiveModelService.getActiveModels.mockReturnValue({
       text: { model: null, isLoaded: true, isLoading: false },
@@ -364,6 +370,58 @@ describe('Generation Flow Integration', () => {
       expect(chatState.streamingMessage).toBe('');
       expect(chatState.streamingForConversationId).toBe(null);
       expect(chatState.isStreaming).toBe(false);
+    });
+  });
+
+  describe('generationService → LiteRT image flow', () => {
+    it('passes multiple image attachments to LiteRT for LiteRT models', async () => {
+      const model = {
+        id: 'litert-1',
+        name: 'LiteRT Model',
+        author: 'Test',
+        filePath: '/mock/path/model.litertlm',
+        fileName: 'model.litertlm',
+        fileSize: 1024,
+        quantization: 'mixed',
+        downloadedAt: '2026-01-01T00:00:00.000Z',
+        engine: 'litert' as const,
+        liteRTVision: true,
+      };
+      const conversationId = setupWithConversation({ modelId: model.id });
+      useAppStore.setState({
+        downloadedModels: [model],
+        activeModelId: model.id,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      mockLiteRTService.isModelLoaded.mockReturnValue(true);
+
+      const messages = [createMessage({
+        role: 'user',
+        content: 'What is different?',
+        attachments: [
+          { id: 'img-1', type: 'image', uri: 'file:///one.png' },
+          { id: 'img-2', type: 'image', uri: 'file:///two.png' },
+        ],
+      } as any)];
+
+      const generatePromise = generationService.generateResponse(conversationId, messages);
+      await flushPromises();
+
+      expect(mockLiteRTService.sendMessage).toHaveBeenCalledWith(
+        'What is different?',
+        expect.objectContaining({
+          onToken: expect.any(Function),
+          onReasoning: expect.any(Function),
+          onComplete: expect.any(Function),
+          onError: expect.any(Function),
+        }),
+        ['file:///one.png', 'file:///two.png'],
+      );
+
+      const [, callbacks] = mockLiteRTService.sendMessage.mock.calls[0];
+      (callbacks as any).onComplete('Done', '', undefined);
+      await generatePromise;
     });
   });
 
