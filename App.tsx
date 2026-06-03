@@ -15,7 +15,7 @@ import { hardwareService, modelManager, authService, ragService, remoteServerMan
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
-import { useDownloads } from './src/hooks/useDownloads';
+import { useDownloadListeners } from './src/hooks/useDownloads';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
@@ -31,7 +31,7 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
-  useDownloads();
+  useDownloadListeners();
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);

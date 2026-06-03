@@ -49,7 +49,7 @@ jest.mock('../../../src/utils/downloadErrors', () => ({
   toUserMessage: jest.fn((reason: string) => reason),
 }));
 
-import { useDownloads } from '../../../src/hooks/useDownloads';
+import { useDownloads, useDownloadListeners } from '../../../src/hooks/useDownloads';
 
 function fireProgress(event: Parameters<ProgressCb>[0]) {
   if (!onAnyProgressCb) throw new Error('onAnyProgressCb not set');
@@ -106,14 +106,14 @@ describe('useDownloads', () => {
 
   it('subscribes to all three event channels on mount', () => {
     const { backgroundDownloadService: svc } = jest.requireMock('../../../src/services/backgroundDownloadService');
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     expect(svc.onAnyProgress).toHaveBeenCalled();
     expect(svc.onAnyComplete).toHaveBeenCalled();
     expect(svc.onAnyError).toHaveBeenCalled();
   });
 
   it('unsubscribes all listeners on unmount', () => {
-    const { unmount } = renderHook(() => useDownloads());
+    const { unmount } = renderHook(() => useDownloadListeners());
     unmount();
     expect(mockUnsubProgress).toHaveBeenCalled();
     expect(mockUnsubComplete).toHaveBeenCalled();
@@ -123,19 +123,19 @@ describe('useDownloads', () => {
   it('skips subscription when service is unavailable', () => {
     const { backgroundDownloadService: svc } = jest.requireMock('../../../src/services/backgroundDownloadService');
     (svc.isAvailable as jest.Mock).mockReturnValueOnce(false);
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     expect(svc.onAnyProgress).not.toHaveBeenCalled();
   });
 
   it('ignores progress event when downloadId not in index', () => {
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 1000 }); });
     expect(mockUpdateProgress).not.toHaveBeenCalled();
   });
 
   it('routes retrying status through setStatus instead of updateProgress', () => {
     withSingleTextEntry();
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'retrying' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'retrying');
     expect(mockUpdateProgress).not.toHaveBeenCalled();
@@ -143,14 +143,14 @@ describe('useDownloads', () => {
 
   it('routes waiting_for_network status through setStatus', () => {
     withSingleTextEntry();
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 0, totalBytes: 0, status: 'waiting_for_network' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'waiting_for_network');
   });
 
   it('calls updateProgress for main download progress event', () => {
     withSingleTextEntry();
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalledWith('dl-1', 500, 1000);
   });
@@ -160,7 +160,7 @@ describe('useDownloads', () => {
       downloadIdIndex: { 'mmproj-1': 'llm:model' },
       downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', modelType: 'text' } },
     }));
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'mmproj-1', bytesDownloaded: 200, totalBytes: 400 }); });
     expect(mockUpdateMmProjProgress).toHaveBeenCalledWith('mmproj-1', 200);
   });
@@ -171,7 +171,7 @@ describe('useDownloads', () => {
       downloadIdIndex: { 'other': 'llm:model' },
       downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', modelType: 'text' } },
     }));
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireProgress({ downloadId: 'other', bytesDownloaded: 100, totalBytes: 200 }); });
     expect(mockUpdateProgress).not.toHaveBeenCalled();
     expect(mockUpdateMmProjProgress).not.toHaveBeenCalled();
@@ -179,7 +179,7 @@ describe('useDownloads', () => {
   });
 
   it('ignores complete event when downloadId not in index', () => {
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'unknown', bytesDownloaded: 100, totalBytes: 100 }); });
     expect(mockSetCompleted).not.toHaveBeenCalled();
   });
@@ -194,7 +194,7 @@ describe('useDownloads', () => {
       storeState.downloads['llm:model'] = updatedEntry;
     });
     mockGetState.mockReturnValue(storeState);
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
     expect(storeState.setMmProjCompleted).toHaveBeenCalledWith('mmproj-1', 400);
     expect(mockSetCompleted).toHaveBeenCalledWith('dl-1');
@@ -206,7 +206,7 @@ describe('useDownloads', () => {
       downloads: { 'llm:model': { downloadId: 'dl-1', mmProjDownloadId: 'mmproj-1', status: 'running', modelType: 'text' } },
     });
     mockGetState.mockReturnValue(storeState);
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'mmproj-1', bytesDownloaded: 400, totalBytes: 400 }); });
     expect(mockSetMmProjCompleted).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe('useDownloads', () => {
 
   it('calls updateProgress when main gguf finishes but mmproj not yet done', () => {
     withSingleTextEntry('dl-1', { mmProjDownloadId: 'mmproj-1', mmProjStatus: 'running' });
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe('useDownloads', () => {
       downloadIdIndex: { 'dl-1': 'image:model' },
       downloads: { 'image:model': { downloadId: 'dl-1', modelType: 'image' } },
     }));
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
     expect(mockSetProcessing).toHaveBeenCalledWith('dl-1');
     expect(mockSetCompleted).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe('useDownloads', () => {
 
   it('calls updateProgress for text model on complete (finalization handled elsewhere)', () => {
     withSingleTextEntry();
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 1000, totalBytes: 1000 }); });
     expect(mockUpdateProgress).toHaveBeenCalled();
     expect(mockSetCompleted).not.toHaveBeenCalled();
@@ -244,20 +244,20 @@ describe('useDownloads', () => {
       downloadIdIndex: { 'dl-1': 'other:model' },
       downloads: { 'other:model': { downloadId: 'dl-1', modelType: 'other' } },
     }));
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireComplete({ downloadId: 'dl-1', bytesDownloaded: 500, totalBytes: 500 }); });
     expect(mockSetCompleted).toHaveBeenCalledWith('dl-1');
   });
 
   it('ignores error event when downloadId not in index', () => {
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireError({ downloadId: 'unknown', reason: 'oops' }); });
     expect(mockSetStatus).not.toHaveBeenCalled();
   });
 
   it('calls setStatus with failed on error event', () => {
     withSingleTextEntry();
-    renderHook(() => useDownloads());
+    renderHook(() => useDownloadListeners());
     act(() => { fireError({ downloadId: 'dl-1', reason: 'timeout', reasonCode: 'E_TIMEOUT' }); });
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'failed', expect.objectContaining({ message: 'timeout' }));
   });

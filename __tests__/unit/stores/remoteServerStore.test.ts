@@ -6,6 +6,7 @@
 
 import { act } from '@testing-library/react-native';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
 import * as httpClient from '../../../src/services/httpClient';
 
 // Mock httpClient
@@ -16,14 +17,18 @@ jest.mock('../../../src/services/httpClient', () => ({
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
-  setItem: jest.fn(),
-  getItem: jest.fn(),
-  removeItem: jest.fn(),
+  setItem: jest.fn(() => Promise.resolve()),
+  getItem: jest.fn(() => Promise.resolve(null)),
+  removeItem: jest.fn(() => Promise.resolve()),
+  multiSet: jest.fn(() => Promise.resolve()),
+  multiGet: jest.fn(() => Promise.resolve([])),
+  clear: jest.fn(() => Promise.resolve()),
+  getAllKeys: jest.fn(() => Promise.resolve([])),
 }));
 
-function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string { // NOSONAR
+function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string {
   let serverId = '';
-  act(() => {
+  actStoreUpdate(() => {
     serverId = useRemoteServerStore.getState().addServer({
       name,
       endpoint,
@@ -35,7 +40,7 @@ function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): st
 
 function addServerWithModel(modelId = 'model1', modelName = 'Model 1'): string {
   const serverId = addTestServer();
-  act(() => {
+  actStoreUpdate(() => {
     useRemoteServerStore.getState().setDiscoveredModels(serverId, [
       { id: modelId, name: modelName, serverId, capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
     ]);
@@ -45,10 +50,7 @@ function addServerWithModel(modelId = 'model1', modelName = 'Model 1'): string {
 
 describe('remoteServerStore', () => {
   beforeEach(() => {
-    // Reset store before each test
-    act(() => {
-      useRemoteServerStore.getState().clearAllServers();
-    });
+    resetRemoteServerStore();
     jest.clearAllMocks();
   });
 
@@ -61,7 +63,7 @@ describe('remoteServerStore', () => {
       };
 
       let serverId: string = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer(serverData);
       });
 
@@ -82,7 +84,7 @@ describe('remoteServerStore', () => {
         notes: 'Local development server',
       };
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().addServer(serverData);
       });
 
@@ -95,7 +97,7 @@ describe('remoteServerStore', () => {
   describe('updateServer', () => {
     it('should update existing server', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Original Name',
           endpoint: 'http://original:11434',
@@ -103,7 +105,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().updateServer(serverId, {
           name: 'Updated Name',
           endpoint: 'http://updated:11434',
@@ -119,7 +121,7 @@ describe('remoteServerStore', () => {
     it('should not modify other servers', () => {
       let server1Id = '';
       let _server2Id = '';
-      act(() => {
+      actStoreUpdate(() => {
         server1Id = useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://server1:11434',
@@ -132,7 +134,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().updateServer(server1Id, { name: 'Updated Server 1' });
       });
 
@@ -146,7 +148,7 @@ describe('remoteServerStore', () => {
   describe('removeServer', () => {
     it('should remove server from list', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -154,7 +156,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().removeServer(serverId);
       });
 
@@ -166,13 +168,13 @@ describe('remoteServerStore', () => {
     it('should clear activeServerId if removed server was active', () => {
       const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
       });
 
       expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().removeServer(serverId);
       });
 
@@ -184,7 +186,7 @@ describe('remoteServerStore', () => {
     it('should set active server', () => {
       const serverId = addTestServer();
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
       });
 
@@ -192,7 +194,7 @@ describe('remoteServerStore', () => {
     });
 
     it('should allow clearing active server', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveServerId(null);
       });
 
@@ -204,7 +206,7 @@ describe('remoteServerStore', () => {
     it('should return active server', () => {
       const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveServerId(serverId);
       });
 
@@ -224,7 +226,7 @@ describe('remoteServerStore', () => {
     it('should store discovered models for a server', () => {
       const serverId = addTestServer();
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setDiscoveredModels(serverId, [
           { id: 'llama2', name: 'Llama 2', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
           { id: 'mistral', name: 'Mistral', serverId, capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false }, lastUpdated: new Date().toISOString() },
@@ -242,7 +244,7 @@ describe('remoteServerStore', () => {
     it('should clear models for a server', () => {
       const serverId = addServerWithModel();
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().clearDiscoveredModels(serverId);
       });
 
@@ -259,7 +261,7 @@ describe('remoteServerStore', () => {
       (httpClient.detectServerType as jest.Mock).mockResolvedValue({ type: 'ollama' });
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -283,7 +285,7 @@ describe('remoteServerStore', () => {
       });
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Bad Server',
           endpoint: 'http://bad:11434',
@@ -321,7 +323,7 @@ describe('remoteServerStore', () => {
   describe('getServerById', () => {
     it('should return server by ID', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -359,7 +361,7 @@ describe('remoteServerStore', () => {
 
   describe('clearAllServers', () => {
     it('should remove all servers', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://s1:11434',
@@ -372,7 +374,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().clearAllServers();
       });
 
@@ -383,7 +385,7 @@ describe('remoteServerStore', () => {
 
   describe('activeRemoteTextModelId', () => {
     it('should set active remote text model ID', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
       });
 
@@ -391,13 +393,13 @@ describe('remoteServerStore', () => {
     });
 
     it('should clear active remote text model ID', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
       });
 
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-123');
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
       });
 
@@ -407,7 +409,7 @@ describe('remoteServerStore', () => {
 
   describe('activeRemoteImageModelId', () => {
     it('should set active remote image model ID', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
       });
 
@@ -415,13 +417,13 @@ describe('remoteServerStore', () => {
     });
 
     it('should clear active remote image model ID', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-model-456');
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().setActiveRemoteImageModelId(null);
       });
 
@@ -432,7 +434,7 @@ describe('remoteServerStore', () => {
   describe('getActiveRemoteTextModel', () => {
     it('should return active remote text model when set', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -461,7 +463,7 @@ describe('remoteServerStore', () => {
 
     it('should return null when activeRemoteTextModelId is set but activeServerId is not', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -484,7 +486,7 @@ describe('remoteServerStore', () => {
   describe('getActiveRemoteImageModel', () => {
     it('should return active remote image model when set', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -513,7 +515,7 @@ describe('remoteServerStore', () => {
 
   describe('clearAllServers clears remote model IDs', () => {
     it('should clear activeRemoteTextModelId and activeRemoteImageModelId', () => {
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://s1:11434',
@@ -526,7 +528,7 @@ describe('remoteServerStore', () => {
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-1');
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-1');
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().clearAllServers();
       });
 
@@ -540,14 +542,14 @@ describe('remoteServerStore', () => {
       const serverId = addServerWithModel();
 
       // Set up health status
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().updateServerHealth(serverId, true);
       });
 
       expect(useRemoteServerStore.getState().discoveredModels[serverId]).toBeDefined();
       expect(useRemoteServerStore.getState().serverHealth[serverId]).toBeDefined();
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().removeServer(serverId);
       });
 
@@ -577,7 +579,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -585,10 +587,11 @@ describe('remoteServerStore', () => {
         });
       });
 
-      let models: any;
-      await act(async () => {
-        models = await useRemoteServerStore.getState().discoverModels(serverId);
+      let modelsPromise: any;
+      act(() => {
+        modelsPromise = useRemoteServerStore.getState().discoverModels(serverId);
       });
+      const models = await modelsPromise;
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('gpt-4');
@@ -601,7 +604,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -629,7 +632,7 @@ describe('remoteServerStore', () => {
       (httpClient.testEndpoint as jest.Mock).mockRejectedValue(new Error('Network failure'));
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -667,7 +670,7 @@ describe('remoteServerStore', () => {
   describe('updateServerHealth', () => {
     it('should update server health status', () => {
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
@@ -675,7 +678,7 @@ describe('remoteServerStore', () => {
         });
       });
 
-      act(() => {
+      actStoreUpdate(() => {
         useRemoteServerStore.getState().updateServerHealth(serverId, true);
       });
 
@@ -697,7 +700,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'API Key Server',
           endpoint: 'http://test:11434',
@@ -728,7 +731,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama Server',
           endpoint: 'http://test:11434',
@@ -766,7 +769,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama Server',
           endpoint: 'http://test:11434',
@@ -789,7 +792,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Failing Server',
           endpoint: 'http://test:11434',
@@ -814,7 +817,7 @@ describe('remoteServerStore', () => {
     (global as any).fetch = mockFetch;
 
     let serverId = '';
-    act(() => {
+    actStoreUpdate(() => {
       serverId = useRemoteServerStore.getState().addServer({
         name: 'Test Server',
         endpoint: 'http://test:11434', // NOSONAR
@@ -887,7 +890,7 @@ describe('remoteServerStore', () => {
       (global as any).fetch = mockFetch;
 
       let serverId = '';
-      act(() => {
+      actStoreUpdate(() => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama',
           endpoint: 'http://test:11434', // NOSONAR

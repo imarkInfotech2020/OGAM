@@ -877,4 +877,91 @@ describe('ModelCard', () => {
       expect(queryByText('Hardware-accelerated inference with vision support')).toBeNull();
     });
   });
+
+  // ============================================================================
+  // Failed download state (FailedSection)
+  // ============================================================================
+  describe('failedState', () => {
+    const baseFailedState = {
+      errorMessage: 'Network connection lost.',
+      bytesDownloaded: 192_000_000,
+      totalBytes: 386_000_000,
+      onRetry: jest.fn(),
+      onRemove: jest.fn(),
+    };
+
+    it('renders error message when failedState is provided', () => {
+      const { getByText } = render(
+        <ModelCard model={baseModel} failedState={baseFailedState} />,
+      );
+      expect(getByText('Network connection lost.')).toBeTruthy();
+    });
+
+    it('renders Retry and Remove buttons when failedState is provided', () => {
+      const { getByText } = render(
+        <ModelCard model={baseModel} failedState={baseFailedState} />,
+      );
+      expect(getByText('Retry')).toBeTruthy();
+      expect(getByText('Remove')).toBeTruthy();
+    });
+
+    it('calls onRetry when Retry is pressed', () => {
+      const onRetry = jest.fn();
+      const { getByText } = render(
+        <ModelCard model={baseModel} failedState={{ ...baseFailedState, onRetry }} />,
+      );
+      fireEvent.press(getByText('Retry'));
+      expect(onRetry).toHaveBeenCalled();
+    });
+
+    it('calls onRemove when Remove is pressed', () => {
+      const onRemove = jest.fn();
+      const { getByText } = render(
+        <ModelCard model={baseModel} failedState={{ ...baseFailedState, onRemove }} />,
+      );
+      fireEvent.press(getByText('Remove'));
+      expect(onRemove).toHaveBeenCalled();
+    });
+
+    it('shows progress percentage from bytesDownloaded / totalBytes', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          failedState={{ ...baseFailedState, bytesDownloaded: 193_000_000, totalBytes: 386_000_000 }}
+        />,
+      );
+      expect(getByText('50%')).toBeTruthy();
+    });
+
+    it('shows 0% when totalBytes is 0 (unknown size)', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          failedState={{ ...baseFailedState, bytesDownloaded: 0, totalBytes: 0 }}
+        />,
+      );
+      expect(getByText('0%')).toBeTruthy();
+    });
+
+    it('hides ModelCardActions when failedState is set', () => {
+      const onDownload = jest.fn();
+      const { queryByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          failedState={baseFailedState}
+          onDownload={onDownload}
+          testID="card"
+        />,
+      );
+      expect(queryByTestId('card-download')).toBeNull();
+    });
+
+    it('does not render FailedSection when failedState is absent', () => {
+      const { queryByText } = render(
+        <ModelCard model={baseModel} />,
+      );
+      expect(queryByText('Retry')).toBeNull();
+      expect(queryByText('Remove')).toBeNull();
+    });
+  });
 });

@@ -262,7 +262,7 @@ describe('buildGenerationMetaImpl — LiteRT path', () => {
 // ---------------------------------------------------------------------------
 
 function makeSvc(overrides: any = {}) {
-  const state = Object.assign({ isGenerating: false, startTime: Date.now(), streamingContent: '' }, overrides.state);
+  const state = { isGenerating: false, startTime: Date.now(), streamingContent: '', ...overrides.state };
   const svc = {
     state,
     updateState: jest.fn((patch: any) => { Object.assign(state, patch); }),
@@ -348,7 +348,7 @@ function makeLiteRTState() {
   };
 }
 
-function makeLiteRTSvc() {
+function makeServiceSvc() {
   return {
     ...makeSvc(),
     flushTimer: null,
@@ -360,6 +360,9 @@ function makeLiteRTSvc() {
     getCurrentProvider: () => null,
   };
 }
+
+const makeLiteRTSvc = makeServiceSvc;
+const makeLlmSvc = makeServiceSvc;
 
 describe('generateResponseImpl — LiteRT path', () => {
   beforeEach(() => {
@@ -429,19 +432,6 @@ describe('generateResponseImpl — llama.cpp path', () => {
     jest.clearAllMocks();
     mockedGetState.mockReturnValue(makeLlmAppState());
   });
-
-  function makeLlmSvc() {
-    return {
-      ...makeSvc(),
-      flushTimer: null,
-      liteRTBenchmarkStats: null,
-      forceFlushTokens: jest.fn(),
-      flushTokenBuffer: jest.fn(),
-      checkSharePrompt: jest.fn(),
-      isUsingRemoteProvider: () => false,
-      getCurrentProvider: () => null,
-    };
-  }
 
   it('calls finalizeStreamingMessage on successful completion', async () => {
     const { llmService: llm } = require('../../../src/services/llm');
