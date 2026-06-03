@@ -84,7 +84,7 @@ describe('resolveMmProjPath', () => {
     expect(result).toBeUndefined();
   });
 
-  it('finds mmproj file via directory scan when stored path is stale', async () => {
+  it('finds mmproj file via directory scan when stored path is stale (vision model)', async () => {
     mockedRNFS.exists.mockResolvedValue(false);
     mockedRNFS.readDir.mockResolvedValue([
       { name: 'mmproj-model-f16.gguf', path: '/models/mmproj-model-f16.gguf', isFile: () => true, size: 500 } as any,
@@ -96,9 +96,39 @@ describe('resolveMmProjPath', () => {
     const { modelManager } = require('../../../src/services/modelManager');
     modelManager.saveModelWithMmproj.mockResolvedValue(undefined);
 
-    const model = { filePath: '/models/m.gguf', mmProjPath: '/stale/path.gguf' } as any;
+    // isVisionModel: true so the guard allows the scan
+    const model = { filePath: '/models/m.gguf', mmProjPath: '/stale/path.gguf', isVisionModel: true } as any;
     const result = await resolveMmProjPath(model, 'model-1');
     expect(result).toBe('/models/mmproj-model-f16.gguf');
+  });
+
+  it('returns undefined for text-only model when no mmproj file exists in the directory', async () => {
+    // Text-only model: neither isVisionModel nor mmProjFileName is set,
+    // and the models directory contains no mmproj file.
+    mockedRNFS.exists.mockResolvedValue(false);
+    mockedRNFS.readDir.mockResolvedValue([]);
+
+    const model = { filePath: '/models/SmolLM2-360M-Instruct-Q8_0.gguf' } as any;
+    const result = await resolveMmProjPath(model, 'bartowski/SmolLM2-360M-Instruct-GGUF/SmolLM2-360M-Instruct-Q8_0.gguf');
+
+    expect(result).toBeUndefined();
+  });
+
+  it('allows scan for model with mmProjFileName sentinel even when isVisionModel is false (repair case)', async () => {
+    // After a failed mmproj download buildDownloadedModel sets mmProjFileName as a sentinel
+    // so needsVisionRepair can detect the gap. resolveMmProjPath must still scan for
+    // this model so that if the user repairs vision the path can be recovered.
+    mockedRNFS.exists.mockResolvedValue(false);
+    mockedRNFS.readDir.mockResolvedValue([]); // mmproj not on disk yet
+    const model = {
+      filePath: '/models/SmolVLM2-256M-Video-Instruct-Q8_0.gguf',
+      isVisionModel: false,
+      mmProjFileName: 'SmolVLM2-256M-Video-Instruct-Q8_0-mmproj.gguf',
+    } as any;
+    const result = await resolveMmProjPath(model, 'ggml-org/SmolVLM2');
+
+    expect(result).toBeUndefined(); // mmproj not on disk → scan found nothing
+    expect(mockedRNFS.readDir).toHaveBeenCalled(); // guard did NOT block the scan
   });
 });
 

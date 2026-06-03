@@ -1429,3 +1429,107 @@ describe('callRemoteLLMWithTools via forceRemote', () => {
     await expect(runToolLoop(ctx)).rejects.toThrow('Remote provider not found');
   });
 });
+
+// ---------------------------------------------------------------------------
+// LiteRT tool call cap (buildLiteRTToolCallHandler via runToolLoop)
+// ---------------------------------------------------------------------------
+
+describe('runToolLoop – LiteRT tool call cap', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExecuteToolCall.mockResolvedValue({ toolCallId: 'tc-1', name: 'web_search', content: 'result', durationMs: 10 });
+    mockAppState = {
+      downloadedModels: [{ id: 'litert-model', engine: 'litert', liteRTVision: false }],
+      activeModelId: 'litert-model',
+      settings: { temperature: 0.7, maxTokens: 512, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+    };
+    mockedLiteRTService.isModelLoaded.mockReturnValue(true);
+    mockedLiteRTService.prepareConversation.mockResolvedValue(undefined);
+  });
+
+  it('executes up to MAX_LITERT_TOOL_CALLS (3) tool calls without hitting cap', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'final answer';
+    });
+
+    const ctx = createContext();
+    await runToolLoop(ctx);
+
+    // Call the handler exactly 3 times — all should execute the tool
+    const results = await Promise.all([
+      capturedToolHandler?.('web_search', { query: 'q1' }),
+      capturedToolHandler?.('web_search', { query: 'q2' }),
+      capturedToolHandler?.('web_search', { query: 'q3' }),
+    ]);
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    results.forEach(r => expect(r).toBe('result'));
+  });
+
+  it('returns cap message on the 4th call and does not execute the tool', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'final answer';
+    });
+
+    const ctx = createContext();
+    await runToolLoop(ctx);
+
+    // Exhaust the 3-call allowance
+    await capturedToolHandler?.('web_search', { query: 'q1' });
+    await capturedToolHandler?.('web_search', { query: 'q2' });
+    await capturedToolHandler?.('web_search', { query: 'q3' });
+
+    // 4th call should be refused
+    const capResult = await capturedToolHandler?.('web_search', { query: 'q4' });
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    expect(capResult).toContain('Tool call limit reached');
+    expect(capResult).toContain('Answer now');
+  });
+
+  it('returns Aborted immediately when context is aborted', async () => {
+    let capturedToolHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedToolHandler = handlers?.onToolCall;
+      return 'answer';
+    });
+
+    let aborted = false;
+    const ctx = createContext({ isAborted: () => aborted });
+    await runToolLoop(ctx);
+
+    aborted = true;
+    const result = await capturedToolHandler?.('web_search', { query: 'q' });
+
+    expect(mockExecuteToolCall).not.toHaveBeenCalled();
+    expect(result).toBe('Aborted');
+  });
+
+  it('cap counter resets per generation (new runToolLoop call resets count)', async () => {
+    let capturedHandler: ((name: string, args: Record<string, unknown>) => Promise<string>) | undefined;
+    mockedLiteRTService.generateRaw.mockImplementation(async (_text, _images, handlers) => {
+      capturedHandler = handlers?.onToolCall;
+      return 'answer';
+    });
+
+    const ctx = createContext();
+
+    // First generation: exhaust cap
+    await runToolLoop(ctx);
+    await capturedHandler?.('web_search', { query: 'q1' });
+    await capturedHandler?.('web_search', { query: 'q2' });
+    await capturedHandler?.('web_search', { query: 'q3' });
+    const cappedResult = await capturedHandler?.('web_search', { query: 'q4' });
+    expect(cappedResult).toContain('Tool call limit reached');
+
+    // Second generation: counter resets, calls work again
+    await runToolLoop(ctx);
+    const freshResult = await capturedHandler?.('web_search', { query: 'q1-fresh' });
+    expect(freshResult).toBe('result');
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(4); // 3 + 1
+  });
+});
