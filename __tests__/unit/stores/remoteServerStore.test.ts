@@ -6,7 +6,7 @@
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
-import { createAsyncStorageMock, createHttpClientMock } from '../../utils/mocks';
+import { createAsyncStorageMock } from '../../utils/mocks';
 import * as httpClient from '../../../src/services/httpClient';
 
 // Mock httpClient
