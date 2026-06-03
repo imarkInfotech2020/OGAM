@@ -104,8 +104,6 @@ export function useDownloadListeners() {
 }
 
 export function useDownloads() {
-  useDownloadListeners();
-
   const cancel = async (modelKey: ModelKey) => {
     const entry = useDownloadStore.getState().downloads[modelKey];
     if (!entry) return;

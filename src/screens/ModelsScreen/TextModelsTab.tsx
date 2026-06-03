@@ -116,10 +116,23 @@ const ModelDetailView: React.FC<DetailProps> = ({
   };
 
   const handleRetryDownload = async (modelKey: string, downloadId: string) => {
+    if (Platform.OS !== 'android') return; // iOS uses fresh download via proceedDownload
     const store = useDownloadStore.getState();
+    const entry = store.downloads[modelKey];
     store.setStatus(downloadId, 'pending');
     try {
       await backgroundDownloadService.retryDownload(downloadId);
+      if (entry?.mmProjDownloadId && entry.mmProjStatus === 'failed') {
+        useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
+        let mmProjRetried = false;
+        try {
+          await backgroundDownloadService.retryDownload(entry.mmProjDownloadId);
+          mmProjRetried = true;
+        } catch {
+          useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'failed', { message: 'Retry failed' });
+        }
+        if (mmProjRetried) modelManager.resetMmProjForRetry(downloadId);
+      }
       modelManager.watchDownload(
         downloadId,
         async () => {
@@ -166,13 +179,15 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const recommended = liteRTMeta
       ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight }
       : undefined;
-    const storeEntry = useDownloadStore.getState().downloads[s.downloadKey];
+    const storeEntry = storeDownloads[s.downloadKey];
     const failedState = s.hasFailed && s.errorMessage && storeEntry?.downloadId
       ? {
         errorMessage: s.errorMessage,
         bytesDownloaded: storeEntry.bytesDownloaded,
         totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
-        onRetry: () => handleRetryDownload(s.downloadKey, storeEntry.downloadId),
+        onRetry: () => Platform.OS === 'android'
+          ? handleRetryDownload(s.downloadKey, storeEntry.downloadId)
+          : proceedDownload(),
         onRemove: () => handleCancelDownload(s.downloadKey),
       }
       : undefined;
