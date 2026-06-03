@@ -6,7 +6,6 @@
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetRemoteServerStore, actStoreUpdate } from '../../utils/testHelpers';
-import { createAsyncStorageMock } from '../../utils/mocks';
 import * as httpClient from '../../../src/services/httpClient';
 
 // Mock httpClient
@@ -16,7 +15,15 @@ jest.mock('../../../src/services/httpClient', () => ({
 }));
 
 // Mock AsyncStorage
-jest.mock('@react-native-async-storage/async-storage', () => createAsyncStorageMock());
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  setItem: jest.fn(() => Promise.resolve()),
+  getItem: jest.fn(() => Promise.resolve(null)),
+  removeItem: jest.fn(() => Promise.resolve()),
+  multiSet: jest.fn(() => Promise.resolve()),
+  multiGet: jest.fn(() => Promise.resolve([])),
+  clear: jest.fn(() => Promise.resolve()),
+  getAllKeys: jest.fn(() => Promise.resolve([])),
+}));
 
 function addTestServer(name = 'Test Server', endpoint = 'http://test:11434'): string {
   let serverId = '';
