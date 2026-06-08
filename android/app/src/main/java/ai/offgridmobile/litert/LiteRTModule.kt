@@ -69,7 +69,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var engine: Engine? = null
-    private var conversation: com.google.ai.edge.litertlm.Conversation? = null
+    @Volatile private var conversation: com.google.ai.edge.litertlm.Conversation? = null
     private var activeBackend: String = "cpu"
     private var supportsVision: Boolean = false
     private var currentJob: Job? = null
@@ -371,18 +371,17 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun stopGeneration(promise: Promise) {
         val safe = SafePromise(promise, TAG)
-        Log.i(TAG, "stopGeneration — tearing down conversation")
-
-        scope.launch {
-            try {
-                closeConversationSafely()
-                Log.i(TAG, "stopGeneration — done")
-                safe.resolve(null)
-            } catch (e: Exception) {
-                Log.w(TAG, "stopGeneration — error during teardown: ${e.message}")
-                safe.resolve(null)
-            }
+        Log.i(TAG, "stopGeneration — signalling stop")
+        // Cancel the coroutine job — CancellationException propagates into sendMessageAsync
+        currentJob?.cancel()
+        // Signal the native inference thread to stop — safe to call from any thread
+        try {
+            conversation?.cancelProcess()
+        } catch (e: Exception) {
+            Log.w(TAG, "stopGeneration — cancelProcess error: ${e.message}")
         }
+        Log.i(TAG, "stopGeneration — done")
+        safe.resolve(null)
     }
 
     // -------------------------------------------------------------------------
@@ -422,6 +421,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // -------------------------------------------------------------------------
 
     private suspend fun closeConversationSafely() {
+        // Cancel and wait for any running inference job to fully stop before closing
         currentJob?.cancel()
         currentJob?.join()
         currentJob = null
@@ -432,22 +432,21 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         }
         pendingToolCalls.clear()
 
-        // Signal the native inference thread to stop before freeing the Conversation object.
-        // Without this, the native thread can fire onDone after close() frees the native handle,
-        // causing a use-after-free SIGSEGV in nativeSendMessageAsync.
+        // Null first — any concurrent caller gets null and returns, preventing double-close
+        val conv = conversation ?: return
+        conversation = null
+
+        // Safety net: signal stop in case stopGeneration was not called before close
         try {
-            conversation?.cancelProcess()
+            conv.cancelProcess()
         } catch (e: Exception) {
             Log.w(TAG, "closeConversationSafely — cancelProcess error: ${e.message}")
         }
-
         try {
-            conversation?.close()
+            conv.close()
             Log.d(TAG, "closeConversationSafely — closed")
         } catch (e: Exception) {
             Log.w(TAG, "closeConversationSafely — error: ${e.message}")
-        } finally {
-            conversation = null
         }
     }
 
