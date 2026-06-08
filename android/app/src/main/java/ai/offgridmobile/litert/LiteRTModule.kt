@@ -3,6 +3,7 @@ package ai.offgridmobile.litert
 import android.util.Log
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import android.os.Debug
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -111,14 +112,18 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     }
 
     // 3-tier fallback: NPU → GPU → CPU
-    private fun buildBackendChain(requested: Backend): List<Backend> = when (requested) {
-        is Backend.NPU -> listOf(
-            Backend.NPU(nativeLibraryDir = reactContext.applicationInfo.nativeLibraryDir),
-            Backend.GPU(),
-            Backend.CPU(),
-        )
-        is Backend.GPU -> listOf(Backend.GPU(), Backend.CPU())
-        else           -> listOf(Backend.CPU())
+    private fun buildBackendChain(requested: Backend): List<Backend> {
+        // GPU init crashes on Pixel 10 — open LiteRT SDK bug.
+        val skipGpu = Build.MODEL?.lowercase()?.contains("pixel 10") == true
+        return when (requested) {
+            is Backend.NPU -> listOfNotNull(
+                Backend.NPU(nativeLibraryDir = reactContext.applicationInfo.nativeLibraryDir),
+                if (skipGpu) null else Backend.GPU(),
+                Backend.CPU(),
+            )
+            is Backend.GPU -> if (skipGpu) listOf(Backend.CPU()) else listOf(Backend.GPU(), Backend.CPU())
+            else           -> listOf(Backend.CPU())
+        }
     }
 
     private suspend fun tryInitBackend(modelPath: String, backend: Backend, name: String, visionEnabled: Boolean): Boolean {
@@ -426,6 +431,15 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             deferred.cancel(CancellationException("Conversation closed"))
         }
         pendingToolCalls.clear()
+
+        // Signal the native inference thread to stop before freeing the Conversation object.
+        // Without this, the native thread can fire onDone after close() frees the native handle,
+        // causing a use-after-free SIGSEGV in nativeSendMessageAsync.
+        try {
+            conversation?.cancelProcess()
+        } catch (e: Exception) {
+            Log.w(TAG, "closeConversationSafely — cancelProcess error: ${e.message}")
+        }
 
         try {
             conversation?.close()
