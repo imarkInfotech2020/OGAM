@@ -245,13 +245,10 @@ const ModelDetailView: React.FC<DetailProps> = ({
           </View>
         )}
       </Card>
-      {selectedModel.id === LITERT_PARENT_ID && Platform.OS === 'android' &&
-        DeviceInfo.getModel().toLowerCase().includes('pixel 10') && (
+      {selectedModel.id === LITERT_PARENT_ID && Platform.OS === 'android' && DeviceInfo.getModel().toLowerCase().includes('pixel 10') && (
         <Card style={styles.deviceBanner}>
           <Icon name="info" size={14} color={colors.primary} />
-          <Text style={styles.deviceBannerText}>
-            {'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU.'}
-          </Text>
+          <Text style={styles.deviceBannerText}>{'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU.'}</Text>
         </Card>
       )}
       <Text style={styles.sectionTitle}>Available Files</Text>
@@ -388,7 +385,6 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
   } = props;
-
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
   const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
   const isSortActive = filterState.sort !== 'recommended';
