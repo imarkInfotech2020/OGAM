@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Platform } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
@@ -244,6 +245,15 @@ const ModelDetailView: React.FC<DetailProps> = ({
           </View>
         )}
       </Card>
+      {selectedModel.id === LITERT_PARENT_ID && Platform.OS === 'android' &&
+        DeviceInfo.getModel().toLowerCase().includes('pixel 10') && (
+        <Card style={styles.deviceBanner}>
+          <Icon name="info" size={14} color={colors.primary} />
+          <Text style={styles.deviceBannerText}>
+            {'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU.'}
+          </Text>
+        </Card>
+      )}
       <Text style={styles.sectionTitle}>Available Files</Text>
       {selectedModel.id !== LITERT_PARENT_ID && (
         <Text style={styles.sectionSubtitle}>
