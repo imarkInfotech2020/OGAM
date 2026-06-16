@@ -37,7 +37,7 @@ Off Grid is built by [**Wednesday Solutions**](https://wednesday.is/?utm_source=
 
 <div align="center">
 
-# Off Grid Pro
+## Off Grid Pro
 
 **Lifetime access for $50.**
 
