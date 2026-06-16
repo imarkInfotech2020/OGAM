@@ -17,7 +17,10 @@
     root.RevenueCatLink = factory();
   }
 })(typeof self !== 'undefined' ? self : this, function () {
-  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Linear-time email check (no overlapping quantifiers, so no catastrophic
+  // backtracking / ReDoS): local part, '@', then dot-separated domain labels
+  // that themselves contain no dots.
+  var EMAIL_RE = /^[^\s@]+@[^\s.@]+(\.[^\s.@]+)+$/;
 
   function isValidEmail(email) {
     return typeof email === 'string' && EMAIL_RE.test(email.trim());
