@@ -14,7 +14,7 @@ description: Buy Off Grid Pro. Enter your email and check out. $50 one-time, no 
 <div class="early-access-form-section ea-form-top">
   <form id="payForm" class="early-access-form" novalidate>
     <div class="ea-inline-group">
-      <input type="email" id="payEmail" class="ea-input" placeholder="your@email.com" autocomplete="email" aria-invalid="false" required>
+      <input type="email" id="payEmail" class="ea-input" placeholder="your@email.com" autocomplete="email" aria-invalid="false" aria-describedby="payStatus" required>
       <button type="submit" class="ea-submit" id="paySubmit" disabled>Continue to checkout</button>
     </div>
     <div class="ea-form-footer">
@@ -119,10 +119,15 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       var email = emailInput.value.trim();
-      var url = RevenueCatLink.buildPurchaseUrl(LINK_ID, email);
-      if (!url) {
+      if (!RevenueCatLink.isValidEmail(email)) {
         showError('Enter a valid email address.');
         emailInput.focus();
+        return;
+      }
+      var url = RevenueCatLink.buildPurchaseUrl(LINK_ID, email);
+      if (!url) {
+        // Email is valid, so a null URL means the link id is not configured.
+        showError('Checkout is not available right now. Please try again later.');
         return;
       }
       if (typeof posthog !== 'undefined') {
@@ -139,7 +144,9 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
       }
       status.innerHTML = 'Checkout opened in a new tab. <a href="' + url + '" target="_blank" rel="noopener">Reopen it</a> if your browser blocked the popup.';
       status.className = 'ea-status ea-status-success';
-      window.open(url, '_blank', 'noopener');
+      // No features string: a non-empty one forces a popup window; '_blank'
+      // alone opens a real new tab and already defaults to noopener.
+      window.open(url, '_blank');
     });
   })();
 </script>
