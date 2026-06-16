@@ -83,7 +83,7 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
 <script src="{{ '/assets/js/revenuecat-link.js' | relative_url }}"></script>
 <script>
   (function() {
-    var TOKEN = {{ site.revenuecat_token | jsonify }};
+    var LINK_ID = {{ site.revenuecat_link_id | jsonify }};
     var form = document.getElementById('payForm');
     var emailInput = document.getElementById('payEmail');
     var submit = document.getElementById('paySubmit');
@@ -119,7 +119,7 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       var email = emailInput.value.trim();
-      var url = RevenueCatLink.buildPurchaseUrl(TOKEN, email);
+      var url = RevenueCatLink.buildPurchaseUrl(LINK_ID, email);
       if (!url) {
         showError('Enter a valid email address.');
         emailInput.focus();
