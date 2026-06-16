@@ -34,11 +34,15 @@
 
     var trimmed = email.trim();
     var encoded = encodeURIComponent(trimmed);
-    var url = `https://pay.rev.cat/${encodeURIComponent(token)}/${encoded}?email=${encoded}`;
+    // String concatenation (not template literals) keeps this file ES5-only.
+    /* eslint-disable prefer-template */
+    var url =
+      'https://pay.rev.cat/' + encodeURIComponent(token) + '/' + encoded + '?email=' + encoded;
 
     if (opts && opts.packageId) {
-      url += `&package_id=${encodeURIComponent(opts.packageId)}`;
+      url += '&package_id=' + encodeURIComponent(opts.packageId);
     }
+    /* eslint-enable prefer-template */
     return url;
   }
 

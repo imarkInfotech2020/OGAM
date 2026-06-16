@@ -90,6 +90,10 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
     var status = document.getElementById('payStatus');
     if (!form || !window.RevenueCatLink) return;
 
+    // Sync the button state on load too - the browser may have autofilled the
+    // field (or restored it on back-navigation) without firing an input event.
+    submit.disabled = emailInput.value.trim() === '';
+
     function clearError() {
       emailInput.classList.remove('ea-input-error');
       emailInput.setAttribute('aria-invalid', 'false');
@@ -122,11 +126,16 @@ If we do not ship Pro within 12 weeks, email us and you get a full refund.
         return;
       }
       if (typeof posthog !== 'undefined') {
-        posthog.identify(email, { email: email });
-        posthog.capture('pro_checkout_started', {
-          email: email,
-          source: window.location.pathname
-        });
+        // Never let an analytics failure (blocked, errored) stop the purchase.
+        try {
+          posthog.identify(email, { email: email });
+          posthog.capture('pro_checkout_started', {
+            email: email,
+            source: window.location.pathname
+          });
+        } catch (err) {
+          console.warn('PostHog tracking failed:', err);
+        }
       }
       status.innerHTML = 'Checkout opened in a new tab. <a href="' + url + '" target="_blank" rel="noopener">Reopen it</a> if your browser blocked the popup.';
       status.className = 'ea-status ea-status-success';
