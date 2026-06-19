@@ -226,7 +226,13 @@ export async function handleModelSelectFn(
           {
             text: 'Unload others & load', style: 'default' as const, onPress: () => {
               deps.setAlertState(hideAlert());
-              activeModelService.unloadAllModels()
+              // Show the loading state before unloading — unloading can take a
+              // few seconds and would otherwise leave the UI looking frozen.
+              deps.setIsModelLoading(true);
+              deps.setLoadingModel(model);
+              deps.modelLoadStartTimeRef.current = Date.now();
+              waitForRenderFrame()
+                .then(() => activeModelService.unloadAllModels())
                 .catch(err => logger.error('Failed to unload models before load:', err))
                 .then(() => proceedWithModelLoadFn(deps, model));
             },

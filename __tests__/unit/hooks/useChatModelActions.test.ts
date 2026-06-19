@@ -416,6 +416,9 @@ describe('handleModelSelectFn — Load Anyway button', () => {
     expect(alertButton(deps, 'Load Anyway')).toBeUndefined();
 
     unloadBtn.onPress();
+    // Loading indicator is shown before unloading begins so the UI doesn't
+    // look frozen during the (potentially multi-second) unload.
+    expect(deps.setIsModelLoading).toHaveBeenCalledWith(true);
     await flushRecoveryChain();
 
     expect(mockUnloadAllModels).toHaveBeenCalled();
