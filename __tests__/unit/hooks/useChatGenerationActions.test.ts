@@ -206,7 +206,6 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
       imageGenerationMode: 'auto',
       autoDetectMethod: 'simple',
       classifierModelId: null,
-      modelLoadingStrategy: 'performance' as const,
       systemPrompt: 'Be helpful',
       imageSteps: 8,
       imageGuidanceScale: 2,

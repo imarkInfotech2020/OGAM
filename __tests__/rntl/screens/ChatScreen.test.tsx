@@ -3189,7 +3189,6 @@ describe('ChatScreen', () => {
           imageGenerationMode: 'auto',
           autoDetectMethod: 'llm',
           classifierModelId: model.id,
-          modelLoadingStrategy: 'performance',
         },
       });
       const conv = createConversation({ modelId: model.id });
@@ -3227,7 +3226,6 @@ describe('ChatScreen', () => {
           imageGenerationMode: 'auto',
           autoDetectMethod: 'llm',
           classifierModelId: model.id,
-          modelLoadingStrategy: 'performance',
         },
       });
       const conv = createConversation({ modelId: model.id });

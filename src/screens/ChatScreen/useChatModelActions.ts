@@ -257,7 +257,7 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
 
 type ImageModelEffectsDeps = {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
-  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined; modelLoadingStrategy: string };
+  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined };
   activeImageModelId: string | null;
   downloadedModels: DownloadedModel[];
 };
@@ -279,7 +279,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     const preload = async () => {
       if (
         settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
-        settings.classifierModelId && activeImageModelId && settings.modelLoadingStrategy === 'performance'
+        settings.classifierModelId && activeImageModelId
       ) {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
         if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
@@ -293,7 +293,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     preload();
     return () => { cancelled = true; };
 
-  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
+  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId]);
 }
 
 type ModelStateSyncDeps = {

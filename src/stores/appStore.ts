@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -35,7 +35,7 @@ type AppSettings = {
   imageGenerationMode: ImageGenerationMode; autoDetectMethod: AutoDetectMethod;
   classifierModelId: string | null; imageSteps: number; imageGuidanceScale: number;
   imageThreads: number; imageWidth: number; imageHeight: number;
-  imageUseOpenCL: boolean; enhanceImagePrompts: boolean; modelLoadingStrategy: ModelLoadingStrategy;
+  imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
@@ -140,7 +140,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageHeight: 512,
   imageUseOpenCL: true,
   enhanceImagePrompts: false,
-  modelLoadingStrategy: 'performance' as ModelLoadingStrategy,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
   gpuLayers: 99,
@@ -174,8 +173,9 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
   delete merged.imageModelDownloading;
   delete merged.imageModelDownloadIds;
   delete merged.imageModelDownloadId;
-  if (persistedState?.settings?.modelLoadingStrategy === 'memory') {
-    merged.settings = { ...merged.settings, modelLoadingStrategy: 'performance' };
+  // modelLoadingStrategy was removed (the residency manager owns swapping now).
+  if (merged.settings?.modelLoadingStrategy !== undefined) {
+    delete merged.settings.modelLoadingStrategy;
   }
   if (persistedState?.settings && !persistedState.settings.cacheType) {
     merged.settings = { ...merged.settings, cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16', flashAttn: true };

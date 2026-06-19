@@ -90,7 +90,6 @@ const defaultSettings = {
   inferenceBackend: 'cpu' as const,
   gpuLayers: 99,
   flashAttn: false,
-  modelLoadingStrategy: 'memory',
   showGenerationDetails: false,
   classifierModelId: null,
 };
@@ -221,12 +220,12 @@ describe('GenerationSettingsModal', () => {
     );
 
     // Performance settings should be collapsed initially
-    expect(queryByText('Model Loading Strategy')).toBeNull();
+    expect(queryByText('CPU Threads')).toBeNull();
 
     fireEvent.press(getByText('TEXT GENERATION'));
     fireEvent.press(getByTestId('modal-text-advanced-toggle'));
 
-    expect(getByText('Model Loading Strategy')).toBeTruthy();
+    expect(getByText('CPU Threads')).toBeTruthy();
   });
 
   it('calls updateSettings when Reset to Defaults is pressed', () => {
@@ -631,43 +630,6 @@ describe('GenerationSettingsModal', () => {
   // ============================================================================
   // NEW TESTS: Performance section details
   // ============================================================================
-  it('shows model loading strategy toggle in text generation section', () => {
-    const { getByText, getByTestId } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('TEXT GENERATION'));
-    fireEvent.press(getByTestId('modal-text-advanced-toggle'));
-
-    expect(getByText('Save Memory')).toBeTruthy();
-    expect(getByText('Fast')).toBeTruthy();
-  });
-
-  it('calls updateSettings when switching model loading strategy to performance', () => {
-    const { getByText, getByTestId } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('TEXT GENERATION'));
-    fireEvent.press(getByTestId('modal-text-advanced-toggle'));
-    fireEvent.press(getByText('Fast'));
-
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ modelLoadingStrategy: 'performance' });
-  });
-
-  it('calls updateSettings when switching model loading strategy to memory', () => {
-    mockStoreValues.settings = { ...defaultSettings, modelLoadingStrategy: 'performance' };
-
-    const { getByText, getByTestId } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('TEXT GENERATION'));
-    fireEvent.press(getByTestId('modal-text-advanced-toggle'));
-    fireEvent.press(getByText('Save Memory'));
-
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ modelLoadingStrategy: 'memory' });
-  });
 
   it('shows generation details toggle in text generation section', () => {
     const { getByText } = render(
@@ -823,10 +785,10 @@ describe('GenerationSettingsModal', () => {
 
     fireEvent.press(getByText('TEXT GENERATION'));
     fireEvent.press(getByTestId('modal-text-advanced-toggle'));
-    expect(getByText('Model Loading Strategy')).toBeTruthy();
+    expect(getByText('CPU Threads')).toBeTruthy();
 
     fireEvent.press(getByText('TEXT GENERATION'));
-    expect(queryByText('Model Loading Strategy')).toBeNull();
+    expect(queryByText('CPU Threads')).toBeNull();
   });
 
   // ============================================================================

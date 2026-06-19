@@ -13,7 +13,6 @@ import {
   LiteRTBackendSelector,
   FlashAttentionToggle,
   KvCacheTypeToggle,
-  ModelLoadingStrategyToggle,
 } from './TextGenerationAdvanced';
 
 interface SettingConfig {
@@ -248,7 +247,6 @@ const LlamaTextGenerationSection: React.FC = () => {
           <BackendSelector />
           <FlashAttentionToggle />
           <KvCacheTypeToggle />
-          <ModelLoadingStrategyToggle />
         </>
       )}
     </View>

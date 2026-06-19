@@ -458,28 +458,6 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('512')).toBeTruthy();
     });
 
-    it('shows Model Loading Strategy label', () => {
-      const { getByText } = renderWithSections('text');
-      expect(getByText('Model Loading Strategy')).toBeTruthy();
-    });
-
-    it('shows Save Memory and Fast buttons', () => {
-      const { getByText } = renderWithSections('text');
-      expect(getByText('Save Memory')).toBeTruthy();
-      expect(getByText('Fast')).toBeTruthy();
-    });
-
-    it('shows memory strategy description when memory mode', () => {
-      useAppStore.getState().updateSettings({ modelLoadingStrategy: 'memory' });
-      const { getByText } = renderWithSections('text');
-      expect(getByText(/Load models on demand/)).toBeTruthy();
-    });
-
-    it('shows performance strategy description when performance mode', () => {
-      useAppStore.getState().updateSettings({ modelLoadingStrategy: 'performance' });
-      const { getByText } = renderWithSections('text');
-      expect(getByText(/Keep models loaded/)).toBeTruthy();
-    });
   });
 
   // ============================================================================
@@ -555,23 +533,6 @@ describe('ModelSettingsScreen', () => {
   // ============================================================================
   // Model Loading Strategy Buttons
   // ============================================================================
-  describe('model loading strategy buttons', () => {
-    it('updates to memory strategy when "Save Memory" is pressed', () => {
-      useAppStore.getState().updateSettings({ modelLoadingStrategy: 'performance' });
-      const { getByTestId } = renderWithSections('text');
-
-      fireEvent.press(getByTestId('strategy-memory-button'));
-      expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('memory');
-    });
-
-    it('updates to performance strategy when "Fast" is pressed', () => {
-      useAppStore.getState().updateSettings({ modelLoadingStrategy: 'memory' });
-      const { getByTestId } = renderWithSections('text');
-
-      fireEvent.press(getByTestId('strategy-performance-button'));
-      expect(useAppStore.getState().settings.modelLoadingStrategy).toBe('performance');
-    });
-  });
 
   // ============================================================================
   // Back Button
@@ -831,7 +792,6 @@ describe('ModelSettingsScreen', () => {
           imageWidth: undefined as any,
           imageHeight: undefined as any,
           imageUseOpenCL: undefined as any,
-          modelLoadingStrategy: undefined as any,
           enableGpu: undefined as any,
           inferenceBackend: undefined as any,
           gpuLayers: undefined as any,

@@ -212,46 +212,6 @@ export const KvCacheTypeToggle: React.FC = () => {
   );
 };
 
-// ─── Model Loading Strategy ───────────────────────────────────────────────────
-
-export const ModelLoadingStrategyToggle: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-  const isPerformance = settings.modelLoadingStrategy === 'performance';
-  const isMemory = settings.modelLoadingStrategy === 'memory';
-
-  return (
-    <View style={styles.modeToggleContainer}>
-      <View style={styles.modeToggleInfo}>
-        <Text style={styles.modeToggleLabel}>Model Loading Strategy</Text>
-        <Text style={styles.modeToggleDesc}>
-          {isPerformance
-            ? 'Keep models loaded for faster responses (uses more memory)'
-            : 'Load models on demand to save memory (slower switching)'}
-        </Text>
-      </View>
-      <View style={styles.modeToggleButtons}>
-        <TouchableOpacity
-          style={[styles.modeButton, isMemory && styles.modeButtonActive]}
-          onPress={() => updateSettings({ modelLoadingStrategy: 'memory' })}
-        >
-          <Text style={[styles.modeButtonText, isMemory && styles.modeButtonTextActive]}>
-            Save Memory
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.modeButton, isPerformance && styles.modeButtonActive]}
-          onPress={() => updateSettings({ modelLoadingStrategy: 'performance' })}
-        >
-          <Text style={[styles.modeButtonText, isPerformance && styles.modeButtonTextActive]}>
-            Fast
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
 // ─── CPU Threads & Batch Size ────────────────────────────────────────────────
 
 export const CpuThreadsSlider: React.FC = () => {

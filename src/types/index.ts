@@ -313,7 +313,6 @@ export interface ImageGenerationState {
 
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
-export type ModelLoadingStrategy = 'performance' | 'memory';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
 export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';

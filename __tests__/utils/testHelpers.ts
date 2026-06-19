@@ -61,7 +61,6 @@ export const resetStores = (): void => {
       imageWidth: 512,
       imageHeight: 512,
       imageUseOpenCL: true,
-      modelLoadingStrategy: 'performance',
       enableGpu: true,
       inferenceBackend: 'cpu' as const,
       gpuLayers: 99,

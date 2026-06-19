@@ -22,7 +22,7 @@ import { liteRTService } from '../../services/litert';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
@@ -46,7 +46,6 @@ export type GenerationDeps = {
     imageGenerationMode: string;
     autoDetectMethod: string;
     classifierModelId?: string | null;
-    modelLoadingStrategy: ModelLoadingStrategy;
     systemPrompt?: string;
     imageSteps?: number;
     imageGuidanceScale?: number;
@@ -116,7 +115,6 @@ export async function shouldRouteToImageGenerationFn(
       classifierModel,
       currentModelPath: llmService.getLoadedModelPath(),
       onStatusChange: useLLM ? deps.setAppImageGenerationStatus : undefined,
-      modelLoadingStrategy: deps.settings.modelLoadingStrategy,
     });
     deps.setIsClassifying(false);
     if (intent !== 'image' && useLLM) {

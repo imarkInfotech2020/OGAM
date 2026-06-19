@@ -211,48 +211,6 @@ const KvCacheSection: React.FC<{ cacheDisabled: boolean }> = ({ cacheDisabled })
   );
 };
 
-// ─── Model Loading Strategy ───────────────────────────────────────────────────
-
-const ModelLoadingStrategySection: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-
-  return (
-    <>
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleInfo}>
-          <Text style={styles.toggleLabel}>Model Loading Strategy</Text>
-          <Text style={styles.toggleDesc}>
-            {settings?.modelLoadingStrategy === 'performance'
-              ? 'Keep models loaded for faster responses'
-              : 'Load models on demand to save memory'}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.strategyButtons}>
-        <Button
-          title="Save Memory"
-          variant="secondary"
-          size="small"
-          testID="strategy-memory-button"
-          active={settings?.modelLoadingStrategy === 'memory'}
-          onPress={() => updateSettings({ modelLoadingStrategy: 'memory' })}
-          style={styles.flex1}
-        />
-        <Button
-          title="Fast"
-          variant="secondary"
-          size="small"
-          testID="strategy-performance-button"
-          active={settings?.modelLoadingStrategy === 'performance'}
-          onPress={() => updateSettings({ modelLoadingStrategy: 'performance' })}
-          style={styles.flex1}
-        />
-      </View>
-    </>
-  );
-};
-
 // ─── Llama Advanced ──────────────────────────────────────────────────────────
 
 export const TextGenerationAdvanced: React.FC = () => {
@@ -308,7 +266,6 @@ export const TextGenerationAdvanced: React.FC = () => {
       <BackendSelectorSection />
       <FlashAttentionSection trackColor={trackColor} />
       <KvCacheSection cacheDisabled={cacheDisabled} />
-      <ModelLoadingStrategySection />
     </>
   );
 };
