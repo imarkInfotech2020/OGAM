@@ -105,11 +105,29 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
   if (!deps.imageModelLoaded) return false;
-  // No text model loaded: still differentiate by fast heuristics (no model
-  // needed). A chat request returns false so the caller can load a text model.
+  // No text model loaded (e.g. image-only): use the SMOL classifier model to
+  // decide text vs image when one is available (real intelligence); fall back
+  // to fast heuristics only when no classifier model is downloaded. A chat
+  // request returns false so the caller can load a text model.
   if (deps.hasTextModel === false) {
-    const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
-    return intent === 'image';
+    const classifierModel = deps.settings.classifierModelId
+      ? deps.downloadedModels.find(m => m.id === deps.settings.classifierModelId)
+      : null;
+    if (!classifierModel) {
+      const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
+      return intent === 'image';
+    }
+    deps.setIsClassifying(true);
+    try {
+      const intent = await intentClassifier.classifyIntent(text, {
+        useLLM: true,
+        classifierModel,
+        currentModelPath: llmService.getLoadedModelPath(),
+      });
+      return intent === 'image';
+    } finally {
+      deps.setIsClassifying(false);
+    }
   }
   try {
     const useLLM = deps.settings.autoDetectMethod === 'llm';

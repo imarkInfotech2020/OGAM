@@ -274,6 +274,21 @@ describe('shouldRouteToImageGenerationFn', () => {
     expect(await shouldRouteToImageGenerationFn(deps, 'draw a dog')).toBe(true);
   });
 
+  it('with no text model but a classifier configured, uses the SMOL LLM', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('text');
+    const classifier = { ...baseModel, id: 'smol-1' };
+    const deps = makeGenerationDeps({
+      imageModelLoaded: true, hasTextModel: false,
+      downloadedModels: [baseModel, classifier],
+      settings: { ...makeGenerationDeps().settings, classifierModelId: 'smol-1' },
+    });
+    const result = await shouldRouteToImageGenerationFn(deps, 'tell me a joke');
+    expect(result).toBe(false);
+    expect(mockClassifyIntent).toHaveBeenCalledWith('tell me a joke', expect.objectContaining({ useLLM: true, classifierModel: classifier }));
+    expect(deps.setIsClassifying).toHaveBeenCalledWith(true);
+    expect(deps.setIsClassifying).toHaveBeenCalledWith(false);
+  });
+
   it('classifies intent via LLM when autoDetectMethod=llm', async () => {
     mockClassifyIntent.mockResolvedValueOnce('image');
     const deps = makeGenerationDeps({
