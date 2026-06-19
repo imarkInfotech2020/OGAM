@@ -3,9 +3,11 @@
  *
  * Decides which on-device models stay in RAM. A phone can't hold every model
  * at once, so before loading a model we evict others to fit a RAM budget:
- *  - generation models (text / image) are mutually exclusive — one resident;
+ *  - it's purely budget-driven: models co-reside as long as they fit, so a
+ *    high-RAM device can keep e.g. a text + image model loaded together;
  *  - pinned models (e.g. the ~100MB SMOL classifier) are never evicted;
- *  - otherwise evict least-recently-used until the incoming model fits.
+ *  - when the incoming model doesn't fit, evict least-recently-used until it
+ *    does (so a constrained device naturally ends up with one model).
  *
  * See docs/design/MODEL_ROUTING.md §4–5.2. Pure + deterministic so the policy
  * can be unit-tested without touching native model loading.
@@ -39,11 +41,6 @@ export interface EvictionPlan {
   freedMB: number;
 }
 
-/** Generation targets are mutually exclusive — at most one resident at a time. */
-const GENERATION_TYPES: readonly ResidentType[] = ['text', 'image'];
-
-const isGeneration = (t: ResidentType): boolean => GENERATION_TYPES.includes(t);
-
 /**
  * Compute a RAM budget for resident models from total device RAM, leaving
  * headroom for the OS and the rest of the app.
@@ -69,13 +66,6 @@ export function planEviction(
   const evict: Resident[] = [];
   const isEvicted = (r: Resident) => evict.some(e => e.key === r.key);
   const alreadyResident = current.some(r => r.key === incoming.key);
-
-  // 1. A new generation model evicts any other resident generation model.
-  if (isGeneration(incoming.type)) {
-    for (const r of current) {
-      if (r.key !== incoming.key && isGeneration(r.type) && !r.pinned) evict.push(r);
-    }
-  }
 
   const usedMB = () =>
     current

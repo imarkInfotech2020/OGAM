@@ -12,6 +12,7 @@
 
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../../src/services/activeModelService';
+import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { hardwareService } from '../../../src/services/hardware';
@@ -43,6 +44,7 @@ describe('ActiveModelService Integration', () => {
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
+    modelResidencyManager._reset();
 
     // Default mock implementations
     mockLlmService.isModelLoaded.mockReturnValue(false);
@@ -60,6 +62,15 @@ describe('ActiveModelService Integration', () => {
       usedMemory: 4 * 1024 * 1024 * 1024,
       availableMemory: 4 * 1024 * 1024 * 1024,
     } as any);
+    // Real sizing math (the auto-mock returns undefined otherwise), so the
+    // residency manager's budget/eviction has actual model sizes to work with.
+    mockHardwareService.getModelTotalSize.mockImplementation(
+      (m: any) => (m?.fileSize || m?.size || 0) + (m?.mmProjFileSize || 0),
+    );
+    mockHardwareService.estimateModelRam.mockImplementation(
+      (m: any, mult = 1.5) => ((m?.fileSize || m?.size || 0) + (m?.mmProjFileSize || 0)) * mult,
+    );
+    mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
 
     // Reset the activeModelService's internal state to match mock state
     await activeModelService.syncWithNativeState();
@@ -1599,11 +1610,12 @@ describe('ActiveModelService Integration', () => {
       mockHardwareService.getTotalMemoryGB.mockReturnValue(4);
     };
 
-    it('auto-unloads text model before loading image model', async () => {
-      setupLowMemDevice();
+    it('evicts the text model when text + image do not fit the RAM budget', async () => {
+      setupLowMemDevice(); // 4GB → ~2.4GB budget
 
-      const textModel = createDownloadedModel({ id: 'txt', fileSize: 512 * 1024 * 1024 });
-      const imageModel = createONNXImageModel({ id: 'img', size: 512 * 1024 * 1024 });
+      // 1.5GB + 1.5GB exceeds the budget, so the residency manager evicts text.
+      const textModel = createDownloadedModel({ id: 'txt', fileSize: 1536 * 1024 * 1024 });
+      const imageModel = createONNXImageModel({ id: 'img', size: 1536 * 1024 * 1024 });
       useAppStore.setState({
         downloadedModels: [textModel],
         downloadedImageModels: [imageModel],
@@ -1615,7 +1627,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('txt');
       expect(getAppState().activeModelId).toBe('txt');
 
-      // Now load image model — should auto-unload text
+      // Now load image model — too big to co-reside, so text is evicted.
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
       mockLocalDreamService.loadModel.mockResolvedValue(true);
       await activeModelService.loadImageModel('img');
@@ -1625,6 +1637,31 @@ describe('ActiveModelService Integration', () => {
       expect(getAppState().activeModelId).toBe(null);
       // Image model should be loaded
       expect(getAppState().activeImageModelId).toBe('img');
+    });
+
+    it('keeps a small text model resident alongside a small image model (fits the budget)', async () => {
+      setupLowMemDevice();
+
+      const textModel = createDownloadedModel({ id: 'txt-s', fileSize: 400 * 1024 * 1024 });
+      const imageModel = createONNXImageModel({ id: 'img-s', size: 400 * 1024 * 1024 });
+      useAppStore.setState({
+        downloadedModels: [textModel],
+        downloadedImageModels: [imageModel],
+        settings: { imageThreads: 4 } as any,
+      });
+
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('txt-s');
+      mockLlmService.unloadModel.mockClear();
+
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+      mockLocalDreamService.loadModel.mockResolvedValue(true);
+      await activeModelService.loadImageModel('img-s');
+
+      // Both fit (~0.8GB total), so text is NOT evicted.
+      expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
+      expect(getAppState().activeModelId).toBe('txt-s');
+      expect(getAppState().activeImageModelId).toBe('img-s');
     });
 
     it('passes cpuOnly=false to native loader', async () => {

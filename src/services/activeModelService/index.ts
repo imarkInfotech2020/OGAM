@@ -2,6 +2,7 @@
 import { llmService } from '../llm';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
+import { modelResidencyManager } from '../modelResidency';
 import { useAppStore } from '../../stores';
 import { ONNXImageModel } from '../../types';
 import type {
@@ -110,6 +111,12 @@ class ActiveModelService {
       if (!model) {
         throw new Error('Model not found');
       }
+      // Use estimated runtime RAM (file size + overhead), not just file size,
+      // so the residency budget reflects the model's real memory footprint.
+      const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
+      // Residency manager is authoritative: evict other generation models (and
+      // extras) to fit the RAM budget before loading this text model.
+      await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB });
       this.loadingState.text = true;
       this.notifyListeners();
       this.textLoadPromise = doLoadTextModel({
@@ -120,6 +127,10 @@ class ActiveModelService {
         loadedTextModelId: this.loadedTextModelId,
         onLoaded: id => {
           this.loadedTextModelId = id;
+          modelResidencyManager.register(
+            { key: 'text', type: 'text', sizeMB: textSizeMB },
+            () => this.unloadTextModel(),
+          );
         },
         onError: () => {
           this.loadedTextModelId = null;
@@ -152,6 +163,7 @@ class ActiveModelService {
       }
       this.loadedTextModelId = null;
       useAppStore.getState().setActiveModelId(null);
+      modelResidencyManager.release('text');
     } finally {
       this.loadingState.text = false;
       this.notifyListeners();
@@ -171,13 +183,20 @@ class ActiveModelService {
         };
       }
     }
-    const totalMemGB = hardwareService.getTotalMemoryGB();
-    if (totalMemGB <= 4 && this.loadedTextModelId && llmService.isModelLoaded()) {
-      await this.unloadTextModel();
-    }
-    const memCheck = await this.checkMemoryForModel(modelId, 'image');
-    if (memCheck.severity === 'critical') {
-      return { canLoad: false, error: memCheck.message };
+    // Residency manager is authoritative for memory: evict other generation
+    // models (and extras) to fit the RAM budget before loading this image
+    // model. (Replaces the old per-load critical-memory gate.) If it can't fit
+    // even after eviction, block the load.
+    const { fits } = await modelResidencyManager.makeRoomFor({
+      key: 'image',
+      type: 'image',
+      sizeMB: Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024)),
+    });
+    if (!fits) {
+      return {
+        canLoad: false,
+        error: `Not enough memory to load ${model.name}. Free up space or choose a smaller model.`,
+      };
     }
     return { canLoad: true };
   }
@@ -230,6 +249,10 @@ class ActiveModelService {
       onLoaded: (id, threads) => {
         this.loadedImageModelId = id;
         this.loadedImageModelThreads = threads;
+        modelResidencyManager.register(
+          { key: 'image', type: 'image', sizeMB: Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024)) },
+          () => this.unloadImageModel(),
+        );
       },
       onError: () => {
         this.loadedImageModelId = null;
@@ -265,6 +288,7 @@ class ActiveModelService {
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
       store.setActiveImageModelId(null);
+      modelResidencyManager.release('image');
     } finally {
       this.loadingState.image = false;
       this.notifyListeners();

@@ -25,10 +25,17 @@ describe('computeBudgetMB', () => {
 });
 
 describe('planEviction', () => {
-  it('evicts a resident image model when a text model loads (mutual exclusion)', () => {
+  it('lets a text + image model co-reside when the budget fits both', () => {
     const current = [R('img', 'image', 400, 1)];
     const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 4000);
-    expect(plan.evict.map(e => e.key)).toEqual(['img']);
+    expect(plan.evict).toEqual([]); // 400 + 800 <= 4000, both stay
+    expect(plan.fits).toBe(true);
+  });
+
+  it('evicts the other generation model only when the budget is too tight for both', () => {
+    const current = [R('img', 'image', 400, 1)];
+    const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 1000);
+    expect(plan.evict.map(e => e.key)).toEqual(['img']); // 400 + 800 > 1000 → evict
     expect(plan.fits).toBe(true);
   });
 
