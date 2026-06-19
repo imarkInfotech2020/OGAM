@@ -25,8 +25,9 @@ export const ProDetailScreen: React.FC = () => {
 
   const openEmailModal = () => setEmailModalVisible(true);
 
-  // The modal handles the restart via RNRestart after showing the success state.
-  // Nothing to do here — onUnlocked is a signal that purchase completed.
+  // Purchase verified: the modal shows its own success card and the keychain is
+  // already written. Pro features load on the next app launch (checkProStatus
+  // reads the entitlement at boot), so there is nothing to do here.
   const handleUnlocked = () => {};
 
   return (

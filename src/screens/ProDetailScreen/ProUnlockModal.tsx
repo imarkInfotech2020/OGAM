@@ -48,14 +48,21 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
     onClose();
   };
 
+  // Dismiss the success card once the user has read it. The keychain write is
+  // already done at this point; Pro features load on the next app launch.
+  const finishSuccess = () => {
+    reset();
+    onClose();
+  };
+
   const clearError = () => { if (error) setError(null); };
 
   const handlePrimary = async () => {
+    // Strip leading/trailing whitespace so stray spaces never reach the URL or
+    // the RevenueCat identity. The button is disabled when empty, so this is a
+    // defensive guard rather than a validation message.
     const trimmed = email.trim();
-    if (!trimmed) {
-      setError('Enter your email first.');
-      return;
-    }
+    if (!trimmed) return;
 
     if (mode === 'pay') {
       try {
@@ -86,7 +93,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
   if (success) {
     return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => {}}>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={finishSuccess}>
         <View style={styles.overlay}>
           <View style={styles.card}>
             <View style={styles.successIconWrap}>
@@ -94,6 +101,9 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
             </View>
             <Text style={styles.successTitle}>Pro activated</Text>
             <Text style={styles.successSub}>Close and reopen the app to load your Pro features.</Text>
+            <TouchableOpacity style={styles.successBtn} onPress={finishSuccess} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Got it</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -101,6 +111,9 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
   }
 
   const isPay = mode === 'pay';
+  // Enable the CTA only once non-whitespace text is entered. No format check —
+  // any text is allowed; only whitespace-only input keeps the button disabled.
+  const hasInput = email.trim().length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -140,9 +153,9 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
           {/* Primary CTA */}
           <TouchableOpacity
-            style={[styles.primaryBtn, loading && styles.disabled]}
+            style={[styles.primaryBtn, (loading || !hasInput) && styles.disabled]}
             onPress={handlePrimary}
-            disabled={loading}
+            disabled={loading || !hasInput}
             activeOpacity={0.85}
           >
             {isPay ? (
@@ -187,6 +200,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.xl,
@@ -299,5 +314,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.textSecondary,
     textAlign: 'center' as const,
+  },
+  successBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    alignSelf: 'stretch' as const,
+    marginTop: SPACING.xl,
   },
 });

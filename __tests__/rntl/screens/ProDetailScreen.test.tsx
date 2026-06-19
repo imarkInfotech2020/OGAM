@@ -61,6 +61,18 @@ describe('ProDetailScreen', () => {
     await waitFor(() => expect(getByText('Pro activated')).toBeTruthy());
   });
 
+  it('lets the user dismiss the success card with Got it', async () => {
+    mockActivateProByEmail.mockResolvedValueOnce(true);
+    const { getAllByText, getByText, queryByText, getByPlaceholderText } = render(<ProDetailScreen />);
+    fireEvent.press(getAllByText('Get Pro')[0]);
+    fireEvent.changeText(getByPlaceholderText('you@example.com'), 'buyer@example.com');
+    fireEvent.press(getByText('Already paid? Verify email instead'));
+    fireEvent.press(getByText('Verify and unlock'));
+    await waitFor(() => expect(getByText('Pro activated')).toBeTruthy());
+    fireEvent.press(getByText('Got it'));
+    await waitFor(() => expect(queryByText('Pro activated')).toBeNull());
+  });
+
   it('shows inline error when no purchase is found for that email', async () => {
     mockActivateProByEmail.mockResolvedValueOnce(false);
     const { getAllByText, getByText, getByPlaceholderText } = render(<ProDetailScreen />);
@@ -71,11 +83,32 @@ describe('ProDetailScreen', () => {
     await waitFor(() => expect(getByText(/No Pro purchase found/)).toBeTruthy());
   });
 
-  it('shows inline error when email is empty on checkout', async () => {
-    const { getAllByText, getByText } = render(<ProDetailScreen />);
+  it('keeps the checkout button disabled until text is entered', async () => {
+    const { getAllByText, getByText, getByPlaceholderText } = render(<ProDetailScreen />);
     fireEvent.press(getAllByText('Get Pro')[0]);
+    // Empty input: the disabled button ignores the press, no checkout opens.
     fireEvent.press(getByText('Continue to payment'));
-    await waitFor(() => expect(getByText('Enter your email first.')).toBeTruthy());
+    expect(linkingSpy).not.toHaveBeenCalled();
+    // Once text is entered the button is enabled and opens checkout.
+    fireEvent.changeText(getByPlaceholderText('you@example.com'), 'buyer@example.com');
+    fireEvent.press(getByText('Continue to payment'));
+    await waitFor(() => expect(linkingSpy).toHaveBeenCalled());
+  });
+
+  it('treats whitespace-only input as empty so the button stays disabled', () => {
+    const { getAllByText, getByText, getByPlaceholderText } = render(<ProDetailScreen />);
+    fireEvent.press(getAllByText('Get Pro')[0]);
+    fireEvent.changeText(getByPlaceholderText('you@example.com'), '   ');
+    fireEvent.press(getByText('Continue to payment'));
+    expect(linkingSpy).not.toHaveBeenCalled();
+  });
+
+  it('strips surrounding whitespace before opening checkout', async () => {
+    const { getAllByText, getByText, getByPlaceholderText } = render(<ProDetailScreen />);
+    fireEvent.press(getAllByText('Get Pro')[0]);
+    fireEvent.changeText(getByPlaceholderText('you@example.com'), '  buyer@example.com  ');
+    fireEvent.press(getByText('Continue to payment'));
+    await waitFor(() => expect(mockGetWebPurchaseUrl).toHaveBeenCalledWith('buyer@example.com'));
   });
 
   it('renders the Pro Active state when the user already owns Pro', () => {
