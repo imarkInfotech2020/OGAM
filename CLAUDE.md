@@ -46,6 +46,15 @@ The emotional arc for all content: **Recognition -> Return -> Freedom**. Name wh
 - Never use `lucide-react` or any other icon library — only `react-native-vector-icons`.
 - Follow the 5-category text hierarchy: TITLE → BODY → SUBTITLE/DESCRIPTION → META.
 
+## Reuse Before Building
+
+**Before writing any new component, style, hook, or service, search for an existing one and reuse it.** Building a parallel version of something that already exists creates visual and behavioural drift (e.g. a search box that looks different from every other search box).
+
+- For UI: grep `src/components/` and the relevant screen folder for an existing component or shared style (e.g. `ModelCard`, `Card`, `Button`, shared `searchContainer`/`searchInput` styles) before creating your own. Two screens that show the same kind of thing must use the same component.
+- For logic: check for an existing hook/service/store action (`grep -rn`) before adding a new one.
+- If an existing component is close but not exact, extend it with a prop rather than forking a copy.
+- Only build new when nothing fits — and say so in the PR description.
+
 ## Pre-Commit Quality Gates
 
 All quality gates run automatically via Husky on every `git commit`, scoped to the file types you staged:
