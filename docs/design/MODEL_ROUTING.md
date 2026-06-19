@@ -105,13 +105,23 @@ Responsibilities:
 
 ### 5.3 The classifier (avoid "load a model just to choose a model")
 
-Loading a 1GB LLM only to decide "text vs image" defeats the purpose. So:
-- **Default: heuristics-first** (the keyword classifier already exists, ~instant,
-  no load). Route on that unless ambiguous.
-- **Optional LLM classifier**: only when the user opts in *and* a small
-  classifier model is downloaded. Ideally a tiny (<300MB) model kept pinned so
-  classification never triggers a big swap. If not pinned, classification reuses
-  the already-loaded text model when there is one.
+**Routing only runs when there is a real choice.** If only one generation model
+is available, skip classification entirely and use it — no model, no overhead.
+The classifier earns its keep only in the ambiguous multi-model case. (See §6.)
+
+Loading a 1GB LLM only to decide "text vs image" defeats the purpose. So, in
+order of preference:
+- **Heuristics-first** (the keyword classifier already exists, ~instant, no
+  load). Route on that unless genuinely ambiguous.
+- **Pinned SMOL LLM — default model: `SmolLM2-135M-Instruct` (GGUF, Q4/Q5,
+  ~100MB).** Runs on the existing llama.rn runtime, small enough to keep
+  **pinned resident** (reserved in the budget, excluded from eviction) so
+  classification never triggers a big swap. Prompted for a one-word label.
+- **Upgrade path (not now): encoder/embedding classifier** — e.g.
+  `all-MiniLM-L6-v2` (embedding + cosine-to-label, ~22–90MB) or a fine-tuned
+  MobileBERT/TinyBERT. Strictly better classification per-MB (discriminative,
+  single forward pass), but needs an ONNX/embeddings runtime the app doesn't
+  ship today. Revisit only if heuristics + SmolLM2 prove insufficient.
 - Cache decisions per prompt (already done via `intentCache`).
 
 ### 5.4 STT / TTS integration (modalities)
@@ -125,13 +135,22 @@ Loading a 1GB LLM only to decide "text vs image" defeats the purpose. So:
 ## 6. Routing decision flow (per turn)
 
 1. Input arrives (typed, or STT-transcribed voice note).
-2. `forceTarget`? (explicit image button / image-only because no text model) →
-   skip classify.
-3. Else classify text vs image (heuristics, or opt-in LLM).
-4. `ensureResident(target)`: if cold, show "Loading <model>…", evict as needed,
+2. **Gate — is there a choice?** Count the *available* generation models
+   (downloaded text + downloaded image). **If ≤ 1, skip routing entirely**: use
+   the one that exists (or the image-only path). No classifier runs. Routing and
+   the SMOL classifier only engage when **2+ generation targets are available.**
+3. `forceTarget`? (explicit image button) → skip classify, use it.
+4. Else classify text vs image (heuristics first; pinned SMOL model only if
+   ambiguous).
+5. `ensureResident(target)`: if cold, show "Loading <model>…", evict as needed,
    load. If warm, proceed instantly.
-5. Run generation; stream result.
-6. If audio mode on and target was text → TTS speaks it.
+6. Run generation; stream result.
+7. If audio mode on and target was text → TTS speaks it.
+
+> Note: under the one-resident-generation-model budget (§4), text and image
+> generation models are never resident simultaneously. "Multiple models" in the
+> gate means **available/downloaded**, not co-resident — routing decides which
+> one to make resident.
 
 ## 7. Phasing (each phase shippable on its own)
 
