@@ -9,6 +9,7 @@
 
 import { Linking } from 'react-native';
 import type { ToolCall } from '../../../../src/services/tools/types';
+import type { ToolExtension } from '../../../../src/services/tools/extensions';
 
 let mockEnabledTools: string[] = [];
 jest.mock('@offgrid/core/stores', () => ({
@@ -27,8 +28,23 @@ jest.mock('react-native-calendar-events', () => ({
   },
 }));
 
-// Imported after the mocks above are registered (jest hoists jest.mock).
-import { EmailCalendarExtension } from '../../../../pro/tools/EmailCalendarExtension';
+// The implementation lives in the private pro submodule, which is not checked
+// out in the open-core CI. Load it dynamically via a computed path (so tsc does
+// not try to resolve the absent module) and skip the suite when it is missing.
+// jest hoists the jest.mock calls above this, so the mocks are already registered.
+function loadProExtension(): ToolExtension | null {
+  const proPath = ['..', '..', '..', '..', 'pro', 'tools', 'EmailCalendarExtension'].join('/');
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require(proPath).EmailCalendarExtension as ToolExtension;
+  } catch {
+    return null;
+  }
+}
+
+const proExtension = loadProExtension();
+const EmailCalendarExtension = proExtension ?? ({} as ToolExtension);
+const describeIfPro = proExtension ? describe : describe.skip;
 
 const mockOpenURL = jest.spyOn(Linking, 'openURL');
 
@@ -36,7 +52,7 @@ function call(name: string, args: Record<string, any> = {}): ToolCall {
   return { id: `c-${name}`, name, arguments: args };
 }
 
-describe('EmailCalendarExtension', () => {
+describeIfPro('EmailCalendarExtension', () => {
   beforeEach(() => {
     mockEnabledTools = [];
     mockOpenURL.mockReset().mockResolvedValue(undefined as never);

@@ -23,3 +23,11 @@ export const RC_API_KEY_ANDROID = 'goog_REPLACE_WITH_ANDROID_KEY';
  */
 export const RC_API_KEY_TEST_STORE = 'test_UDUmOVwoEWFUtYONRUfQOOjVisB';
 export const USE_RC_TEST_STORE = false;
+
+/**
+ * RevenueCat Web Purchase Link (RC Billing / Stripe checkout). Not a secret — safe to
+ * commit. Get it from the RC dashboard → Web → Web Purchase Links (for the offering).
+ * The app appends `?app_user_id=<email>` so the purchase attaches to the buyer's email
+ * identity, which is the same identity the app logs in as to unlock Pro.
+ */
+export const RC_WEB_PURCHASE_URL = 'https://pay.rev.cat/avvnmcnfsgbmjaee/';
