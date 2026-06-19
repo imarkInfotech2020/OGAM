@@ -223,6 +223,7 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
     generatingForConversationRef: makeRef<string | null>(null),
     navigation: { goBack: jest.fn(), navigate: jest.fn() },
     ensureModelLoaded: jest.fn(() => Promise.resolve()),
+    ensureTextModelForChat: jest.fn(() => Promise.resolve(true)),
     createConversation: jest.fn(() => 'new-conv-id'),
     pendingProjectId: undefined,
     ...overrides,
@@ -257,6 +258,20 @@ describe('shouldRouteToImageGenerationFn', () => {
     const deps = makeGenerationDeps({ imageModelLoaded: false });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw a cat');
     expect(result).toBe(false);
+  });
+
+  it('with no text model, routes a chat request to text (heuristics)', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('text');
+    const deps = makeGenerationDeps({ imageModelLoaded: true, hasTextModel: false });
+    const result = await shouldRouteToImageGenerationFn(deps, 'tell me a joke');
+    expect(result).toBe(false);
+    expect(mockClassifyIntent).toHaveBeenCalledWith('tell me a joke', { useLLM: false });
+  });
+
+  it('with no text model, routes an image request to image (heuristics)', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('image');
+    const deps = makeGenerationDeps({ imageModelLoaded: true, hasTextModel: false });
+    expect(await shouldRouteToImageGenerationFn(deps, 'draw a dog')).toBe(true);
   });
 
   it('classifies intent via LLM when autoDetectMethod=llm', async () => {
@@ -440,6 +455,30 @@ describe('handleSendFn', () => {
     expect(deps.createConversation).toHaveBeenCalledWith('model-1', undefined, undefined);
     expect(deps.setActiveConversation).toHaveBeenCalledWith('new-conv-id');
     expect(startGeneration).toHaveBeenCalledWith('new-conv-id', 'hello');
+  });
+
+  it('loads a text model on demand for a chat request in image-only mode', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('text'); // chat intent, heuristic
+    const startGeneration = jest.fn(() => Promise.resolve());
+    const ensureTextModelForChat = jest.fn(() => Promise.resolve(true));
+    const deps = makeGenerationDeps({
+      imageModelLoaded: true, hasTextModel: false, activeImageModel: { id: 'img' }, ensureTextModelForChat,
+    });
+    await handleSendFn(deps, { text: 'tell me a joke', imageMode: 'auto', startGeneration, setDebugInfo: jest.fn() });
+    expect(ensureTextModelForChat).toHaveBeenCalled();
+    expect(startGeneration).toHaveBeenCalled();
+  });
+
+  it('aborts the send when no text model is chosen (selector opens)', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('text');
+    const startGeneration = jest.fn(() => Promise.resolve());
+    const ensureTextModelForChat = jest.fn(() => Promise.resolve(false)); // opened selector
+    const deps = makeGenerationDeps({
+      imageModelLoaded: true, hasTextModel: false, activeImageModel: { id: 'img' }, ensureTextModelForChat,
+    });
+    await handleSendFn(deps, { text: 'tell me a joke', imageMode: 'auto', startGeneration, setDebugInfo: jest.fn() });
+    expect(ensureTextModelForChat).toHaveBeenCalled();
+    expect(startGeneration).not.toHaveBeenCalled();
   });
 
   it('shows alert when no activeModel', async () => {

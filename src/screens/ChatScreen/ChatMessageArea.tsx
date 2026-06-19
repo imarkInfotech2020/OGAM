@@ -41,6 +41,30 @@ const INPUT_FOOTER_BASE_PAD = 8;
 const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom: number): number =>
   keyboardVisible ? 0 : Math.max(insetBottom - INPUT_FOOTER_BASE_PAD, 0);
 
+// Small status bar above the input: classifying takes precedence over the
+// background model-load indicator.
+const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any; colors: any }> = ({
+  loading, classifying, modelName, styles, colors,
+}) => {
+  if (classifying) {
+    return (
+      <View style={styles.classifyingBar}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.classifyingText}>Understanding your request...</Text>
+      </View>
+    );
+  }
+  if (loading) {
+    return (
+      <View style={styles.classifyingBar}>
+        <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.classifyingText}>{modelName ? `Loading ${modelName}...` : 'Loading model...'}</Text>
+      </View>
+    );
+  }
+  return null;
+};
+
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
@@ -152,12 +176,13 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           onStop={chat.handleStop}
         />
       )}
-      {chat.isClassifying && (
-        <View style={styles.classifyingBar}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.classifyingText}>Understanding your request...</Text>
-        </View>
-      )}
+      <ModelStatusBar
+        loading={chat.isModelLoading}
+        classifying={chat.isClassifying}
+        modelName={chat.loadingModel?.name}
+        styles={styles}
+        colors={colors}
+      />
       {chat.isCompacting && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>
           <ThinkingIndicator text="Compacting your conversation..." />

@@ -67,6 +67,9 @@ export type GenerationDeps = {
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
+  /** Loads the last-selected text model for a chat request that has none; opens
+   *  the model selector and returns false when no text model was ever chosen. */
+  ensureTextModelForChat: () => Promise<boolean>;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
 };
@@ -102,8 +105,12 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
   if (!deps.imageModelLoaded) return false;
-  // In image-only mode (no text model loaded), always route to image generation
-  if (deps.hasTextModel === false) return true;
+  // No text model loaded: still differentiate by fast heuristics (no model
+  // needed). A chat request returns false so the caller can load a text model.
+  if (deps.hasTextModel === false) {
+    const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
+    return intent === 'image';
+  }
   try {
     const useLLM = deps.settings.autoDetectMethod === 'llm';
     const classifierModel = deps.settings.classifierModelId
@@ -247,8 +254,9 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.hasActiveModel) return;
-  // In image-only mode (no text model), route directly to image generation
-  if (deps.imageModelLoaded && deps.hasTextModel === false) {
+  // In image-only mode (no text model), route directly to image generation.
+  // Live check (not stale deps) so a model loaded mid-send routes to text.
+  if (deps.imageModelLoaded && !llmService.isModelLoaded() && !deps.activeModelInfo?.isRemote) {
     deps.generatingForConversationRef.current = targetConversationId;
     await handleImageGenerationFn(deps, { prompt: messageText, conversationId: targetConversationId });
     deps.generatingForConversationRef.current = null;
@@ -350,6 +358,13 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   if (shouldGenerateImage && deps.activeImageModel) {
     await handleImageGenerationFn(deps, { prompt: text, conversationId: targetConversationId });
     return;
+  }
+  // Chat request but no text model loaded (e.g. image-only): load the last one,
+  // or open the selector so the user can pick. The generation path below reads
+  // live model state, so it proceeds correctly once a model is loaded.
+  if (!shouldGenerateImage && deps.hasTextModel === false && !deps.activeModelInfo?.isRemote) {
+    const ready = await deps.ensureTextModelForChat();
+    if (!ready) return;
   }
   if (shouldGenerateImage && !deps.activeImageModel) messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
   if (generationService.getState().isGenerating) {

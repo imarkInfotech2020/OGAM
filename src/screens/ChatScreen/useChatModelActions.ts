@@ -6,6 +6,7 @@ import {
 } from '../../components';
 import { llmService, activeModelService, modelManager } from '../../services';
 import { liteRTService } from '../../services/litert';
+import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
 
@@ -130,6 +131,34 @@ export async function initiateModelLoad(
       deps.setLoadingModel(null);
       deps.modelLoadStartTimeRef.current = null;
     }
+  }
+}
+
+/**
+ * For a chat request with no text model loaded: load the last-selected text
+ * model (residency manager fits it into memory), or open the model selector
+ * if the user never chose one. Returns true when a model is loading/loaded.
+ */
+export async function ensureTextModelForChatFn(deps: {
+  setShowModelSelector: (v: boolean) => void;
+  setLoadingModel: (m: DownloadedModel | null) => void;
+  setIsModelLoading: (v: boolean) => void;
+}): Promise<boolean> {
+  const { lastTextModelId, downloadedModels } = useAppStore.getState();
+  if (!lastTextModelId) {
+    deps.setShowModelSelector(true);
+    return false;
+  }
+  deps.setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
+  deps.setIsModelLoading(true);
+  try {
+    await activeModelService.loadTextModel(lastTextModelId);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    deps.setIsModelLoading(false);
+    deps.setLoadingModel(null);
   }
 }
 

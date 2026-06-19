@@ -13,7 +13,7 @@ import {
 import { liteRTService } from '../../services/litert';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages, getPlaceholderText, ChatMessageItem, StreamingState } from './types';
@@ -64,13 +64,19 @@ export const useChatScreen = () => {
 
   // Preload the user's last text model in the background when the chat opens,
   // so they can start typing while it loads. Skip if a generation model is
-  // already loaded (don't disrupt an active text/image session).
+  // already loaded (don't disrupt an active text/image session). Surfaces a
+  // "Loading model" bar above the input via isModelLoading/loadingModel.
   useEffect(() => {
-    const { lastTextModelId } = useAppStore.getState();
+    const { lastTextModelId, downloadedModels } = useAppStore.getState();
     if (!lastTextModelId) return;
     const { text, image } = activeModelService.getActiveModels();
     if (text.isLoaded || text.isLoading || image.isLoaded) return;
-    activeModelService.loadTextModel(lastTextModelId).catch(() => {});
+    setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
+    setIsModelLoading(true);
+    activeModelService.loadTextModel(lastTextModelId)
+      .catch(() => {})
+      .finally(() => { setIsModelLoading(false); setLoadingModel(null); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Stop TTS when navigating away, app backgrounded, or screen locked.
@@ -184,6 +190,7 @@ export const useChatScreen = () => {
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
     setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
+    ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
     createConversation,
     pendingProjectId,
   };
