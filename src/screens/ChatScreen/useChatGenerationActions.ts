@@ -1,4 +1,4 @@
-import { Dispatch, MutableRefObject, SetStateAction } from 'react';
+ import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import {
   AlertState,
   showAlert,
@@ -17,6 +17,7 @@ import {
   ragService,
   retrievalService,
 } from '../../services';
+import { getToolExtensions } from '../../services/tools/extensions';
 import { liteRTService } from '../../services/litert';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
@@ -121,8 +122,7 @@ export async function shouldRouteToImageGenerationFn(
       deps.setAppIsGeneratingImage(false);
     }
     return intent === 'image';
-  } catch (error) {
-    logger.warn('[ChatScreen] Intent classification failed:', error);
+  } catch {
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);
@@ -168,11 +168,10 @@ async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string,
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
     setDebugInfo({ systemPrompt, ...contextDebug });
-    logger.log(`[ChatGen] Context prepared: ${contextDebug.contextUsagePercent}% used, ${contextDebug.truncatedCount} truncated`);
     if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
       await llmService.clearKVCache(false).catch(() => { });
     }
-  } catch (e) { logger.log('Debug info error:', e); }
+  } catch { /* ignore */ }
 }
 /** Run generation; if context is full, compact old messages and retry once. */
 async function generateWithCompactionRetry(
@@ -180,17 +179,16 @@ async function generateWithCompactionRetry(
   enabledTools: string[],
   projectId?: string,
 ): Promise<void> {
-  const gen = (msgs: Message[]) => enabledTools.length > 0
+  const extCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
+  const gen = (msgs: Message[]) => (enabledTools.length > 0 || extCount > 0)
     ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);
   try { await gen(opts.messages); } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
-    logger.log('[ChatGen] Context full — compacting');
     await llmService.stopGeneration().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
-      logger.log(`[ChatGen] Compaction failed — falling back to last ${FALLBACK_RECENT_MESSAGE_COUNT} messages`);
       await llmService.clearKVCache(true).catch(() => { });
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
@@ -244,7 +242,6 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   }
 
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
-  logger.log(`[ChatGen][resolveTools] isLiteRT=${isLiteRT}, canUseTools=${canUseTools}, enabledTools=[${enabledTools.join(', ')}]`);
   return { enabledTools, rawPrompt, isLiteRT };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
@@ -274,13 +271,20 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // LiteRT passes tools natively via ConversationConfig — text hint would double-inject.
   // llama.cpp uses text hint only when it lacks native Jinja tool calling support.
   const useTextHint = !isRemote && !isLiteRT && activeTools.length > 0 && !llmService.supportsToolCalling();
+
+  // Collect extension hints (MCP tools etc.) and append when using text-hint mode
+  const extensions = getToolExtensions();
+  const extHints = extensions.map(e => e.getSystemPromptHint()).filter(Boolean);
+
+  const extHintBlock = extHints.join('');
+
   const systemPrompt = applyGemma4ThinkToken(
-    useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    useTextHint
+      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}${extHintBlock}`
+      : `${basePrompt}${extHintBlock}`,
     isRemote,
     { isLiteRT, thinkingEnabled: deps.settings.thinkingEnabled },
   );
-  logger.log(`[ChatGen][DEBUG] isRemote=${isRemote}, isLiteRT=${isLiteRT}, useTextHint=${useTextHint}, tools=[${activeTools.join(', ')}], path=${activeTools.length > 0 ? 'withTools' : 'generate'}`);
-  logger.log(`[ChatGen][PROMPT] systemPrompt (${systemPrompt.length}ch): "${systemPrompt.substring(0, 800)}"`);
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
   try {
@@ -288,7 +292,35 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   } catch (error: any) {
     const msg = error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
-    deps.setAlertState(showAlert('Generation Error', msg));
+    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    if (isContextOverflow) {
+      deps.setAlertState({
+        ...showAlert(
+          'Context window full',
+          'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+          [
+            {
+              text: 'Settings',
+              onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
+            },
+            {
+              text: 'New chat',
+              onPress: () => {
+                deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+                const modelId = deps.activeModelInfo?.modelId;
+                if (modelId) {
+                  const newId = deps.createConversation(modelId);
+                  deps.setActiveConversation(newId);
+                }
+              },
+            },
+          ],
+        ),
+        prominentMessage: true,
+      });
+    } else {
+      deps.setAlertState(showAlert('Generation Error', msg));
+    }
     deps.generatingForConversationRef.current = null;
     return;
   }
@@ -369,8 +401,11 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
   const useTextHint = !isRemote && !isLiteRTRegen && activeTools.length > 0 && !llmService.supportsToolCalling();
+  const regenExtHints = getToolExtensions().map(e => e.getSystemPromptHint()).filter(Boolean).join('');
   const systemPrompt = applyGemma4ThinkToken(
-    useTextHint ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}` : basePrompt,
+    useTextHint
+      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}${regenExtHints}`
+      : `${basePrompt}${regenExtHints}`,
     isRemote,
     { isLiteRT: isLiteRTRegen, thinkingEnabled: deps.settings.thinkingEnabled },
   );
@@ -378,7 +413,36 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   try {
     await generateWithCompactionRetry({ id: targetConversationId, prompt: systemPrompt, messages: [...prefix, ...filtered] }, activeTools, conversation?.projectId);
   } catch (error: any) {
-    deps.setAlertState(showAlert('Generation Error', error.message || 'Failed to generate response'));
+    const msg = error?.message || 'Failed to generate response';
+    const isContextOverflow = msg.includes('too long') || msg.includes('Exceeding the maximum number of tokens') || msg.includes('Input token ids');
+    if (isContextOverflow) {
+      deps.setAlertState({
+        ...showAlert(
+          'Context window full',
+          'The conversation is too long for this model\'s context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.',
+          [
+            {
+              text: 'Settings',
+              onPress: () => { deps.setAlertState({ visible: false, title: '', message: '', buttons: [] }); deps.setShowSettingsPanel?.(true); },
+            },
+            {
+              text: 'New chat',
+              onPress: () => {
+                deps.setAlertState({ visible: false, title: '', message: '', buttons: [] });
+                const modelId = deps.activeModelInfo?.modelId;
+                if (modelId) {
+                  const newId = deps.createConversation(modelId);
+                  deps.setActiveConversation(newId);
+                }
+              },
+            },
+          ],
+        ),
+        prominentMessage: true,
+      });
+    } else {
+      deps.setAlertState(showAlert('Generation Error', msg));
+    }
   }
   deps.generatingForConversationRef.current = null;
 }

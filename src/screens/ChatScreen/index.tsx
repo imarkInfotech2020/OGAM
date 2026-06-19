@@ -72,7 +72,7 @@ export const ChatScreen: React.FC = () => {
       const task = InteractionManager.runAfterInteractions(() => goTo(pending));
       return () => task.cancel();
     }
-  }, []);
+  }, [goTo]);
   const chainingRef = useRef(false);
   // When the spotlight tour stops after step 3, fire the chained step 12
   useEffect(() => {
@@ -132,6 +132,7 @@ export const ChatScreen: React.FC = () => {
       title={chat.alertState.title}
       message={chat.alertState.message}
       buttons={chat.alertState.buttons}
+      prominentMessage={chat.alertState.prominentMessage}
       onClose={() => chat.setAlertState(hideAlert())}
     />
   );
