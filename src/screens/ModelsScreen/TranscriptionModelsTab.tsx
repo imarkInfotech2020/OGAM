@@ -22,6 +22,7 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useWhisperStore } from '../../stores';
 import { WHISPER_MODELS } from '../../services';
 import { huggingFaceService } from '../../services/huggingface';
+import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 
 interface HFRepo { id: string; author: string; downloads: number }
@@ -65,6 +66,9 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
 export const TranscriptionModelsTab: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  // Reuse the Models screen's shared search + banner styling so the search
+  // field is identical to the Text/Image tabs.
+  const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [searchQuery, setSearchQuery] = useState('');
   const [hfRepos, setHfRepos] = useState<HFRepo[]>([]);
@@ -155,15 +159,14 @@ export const TranscriptionModelsTab: React.FC = () => {
 
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.deviceBanner}>
+      <View style={shared.deviceBanner}>
         <Icon name="shield" size={11} color={colors.trending} />
-        <Text style={styles.deviceBannerText}>Transcription runs on your phone, audio is never sent anywhere</Text>
+        <Text style={shared.deviceBannerText}>Transcription runs on your phone, audio is never sent anywhere</Text>
       </View>
 
-      <View style={styles.searchBar}>
-        <Icon name="search" size={16} color={colors.textMuted} />
+      <View style={[shared.searchContainer, shared.searchContainerNoPadding]}>
         <TextInput
-          style={styles.searchInput}
+          style={shared.searchInput}
           value={searchQuery}
           onChangeText={handleSearch}
           placeholder="Search HuggingFace for other languages..."
@@ -228,37 +231,10 @@ export const TranscriptionModelsTab: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
   ({
     flex: { flex: 1 },
     content: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.xs, paddingBottom: SPACING.xxl },
-    deviceBanner: {
-      backgroundColor: `${colors.trending}15`,
-      borderRadius: 8,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.sm,
-      marginBottom: SPACING.md,
-      borderWidth: 1,
-      borderColor: `${colors.trending}40`,
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: SPACING.xs,
-    },
-    deviceBannerText: { ...TYPOGRAPHY.meta, color: colors.trending, flex: 1 },
-    searchBar: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: SPACING.sm,
-      backgroundColor: colors.surface,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.sm,
-      marginBottom: SPACING.md,
-      ...shadows.small,
-    },
-    searchInput: { ...TYPOGRAPHY.body, flex: 1, color: colors.text, padding: 0 },
     sectionLabel: {
       ...TYPOGRAPHY.label, textTransform: 'uppercase' as const, color: colors.textMuted,
       letterSpacing: 0.3, marginBottom: SPACING.sm, marginTop: SPACING.xs,
