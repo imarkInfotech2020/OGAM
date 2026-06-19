@@ -88,21 +88,38 @@ export async function initiateModelLoad(
   if (!alreadyLoading) {
     const memoryCheck = await activeModelService.checkMemoryForModel(activeModelId, 'text');
     if (!memoryCheck.canLoad) {
+      const startLoad = () => {
+        deps.setAlertState(hideAlert());
+        deps.setIsModelLoading(true);
+        deps.setLoadingModel(activeModel);
+        deps.modelLoadStartTimeRef.current = Date.now();
+        return waitForRenderFrame();
+      };
+      // When the block is caused by other loaded models, offer a one-tap
+      // "unload others & load" recovery so the user is never left stuck.
+      const buttons = memoryCheck.resolvableByUnload
+        ? [
+            { text: 'Cancel', style: 'cancel' as const },
+            {
+              text: 'Unload others & load', style: 'default' as const, onPress: () => {
+                startLoad()
+                  .then(() => activeModelService.unloadAllModels())
+                  .then(() => doLoadTextModel(deps));
+              },
+            },
+          ]
+        : [
+            { text: 'Cancel', style: 'cancel' as const },
+            {
+              text: 'Load Anyway', style: 'destructive' as const, onPress: () => {
+                startLoad().then(() => doLoadTextModel(deps));
+              },
+            },
+          ];
       deps.setAlertState(showAlert(
         'Insufficient Memory',
-        `Cannot load ${activeModel.name}. ${memoryCheck.message}\n\nTry unloading other models from the Home screen.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Load Anyway', style: 'destructive', onPress: () => {
-              deps.setAlertState(hideAlert());
-              deps.setIsModelLoading(true);
-              deps.setLoadingModel(activeModel);
-              deps.modelLoadStartTimeRef.current = Date.now();
-              waitForRenderFrame().then(() => doLoadTextModel(deps));
-            }
-          },
-        ],
+        `Cannot load ${activeModel.name}. ${memoryCheck.message}`,
+        buttons,
       ));
       return;
     }
@@ -199,15 +216,29 @@ export async function handleModelSelectFn(
   }
   const memoryCheck = await activeModelService.checkMemoryForModel(model.id, 'text');
   if (!memoryCheck.canLoad) {
-    deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Load Anyway', style: 'destructive', onPress: () => {
-          deps.setAlertState(hideAlert());
-          proceedWithModelLoadFn(deps, model);
-        }
-      },
-    ]));
+    // When other loaded models are the cause, offer a one-tap "unload others &
+    // load" recovery so the user is never left at a dead end. Otherwise the
+    // model is too large on its own and only "Load Anyway" makes sense.
+    const buttons = memoryCheck.resolvableByUnload
+      ? [
+          { text: 'Cancel', style: 'cancel' as const },
+          {
+            text: 'Unload others & load', style: 'default' as const, onPress: () => {
+              deps.setAlertState(hideAlert());
+              activeModelService.unloadAllModels().then(() => proceedWithModelLoadFn(deps, model));
+            },
+          },
+        ]
+      : [
+          { text: 'Cancel', style: 'cancel' as const },
+          {
+            text: 'Load Anyway', style: 'destructive' as const, onPress: () => {
+              deps.setAlertState(hideAlert());
+              proceedWithModelLoadFn(deps, model);
+            },
+          },
+        ];
+    deps.setAlertState(showAlert('Insufficient Memory', memoryCheck.message, buttons));
     return;
   }
   if (memoryCheck.severity === 'warning') {
