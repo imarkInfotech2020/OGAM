@@ -214,8 +214,11 @@ export const ChatScreen: React.FC = () => {
 
   const imageCount = countConversationImages(chat.activeConversation);
 
+  // Bottom safe-area is applied on the input footer (ChatMessageArea), not here
+  // — otherwise the inset stacks on top of the input's own padding and leaves a
+  // gap below the bar.
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView testID="chat-screen" style={styles.keyboardView} behavior="padding" keyboardVerticalOffset={0}>
         <ChatHeader
           styles={styles} colors={colors}

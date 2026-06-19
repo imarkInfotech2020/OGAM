@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -31,6 +33,14 @@ export type ChatMessageAreaProps = {
   chatSpotlight: number | null;
 };
 
+// The ChatInput container already pads its bottom by this much; subtracting it
+// makes the footer's total bottom space equal the safe-area inset (not inset +
+// pad), so the bar clears the home indicator with no extra gap. Collapses to 0
+// while the keyboard is up, since the keyboard covers the safe area.
+const INPUT_FOOTER_BASE_PAD = 8;
+const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom: number): number =>
+  keyboardVisible ? 0 : Math.max(insetBottom - INPUT_FOOTER_BASE_PAD, 0);
+
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
@@ -53,6 +63,16 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const showSettingsDot = totalToolCount > 3 && !toolCountHintDismissed;
   const [inputHeight, setInputHeight] = useState(84);
   const flatListHeightRef = useRef(0);
+
+  // Bottom safe-area for the input footer. We own it here (rather than on the
+  // screen's SafeAreaView) so the inset replaces — not stacks on top of — the
+  // input's own bottom padding, and collapses while the keyboard is open (the
+  // keyboard already covers the home-indicator / gesture area). Using the live
+  // inset value keeps this correct on both iOS and Android without any
+  // Platform.OS layout branching.
+  const insets = useSafeAreaInsets();
+  const keyboardVisible = useKeyboardVisible();
+  const footerPaddingBottom = computeFooterPaddingBottom(keyboardVisible, insets.bottom);
   const isStreaming = chat.isStreaming || chat.isThinking;
   const prevIsStreamingRef = useRef(isStreaming);
   useEffect(() => {
@@ -167,7 +187,10 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       )}
       {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
          Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
-      <View onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}>
+      <View
+        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
+        style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
+      >
         <AttachStep index={[3, 15]} fill>
           <ChatInput
             onSend={chat.handleSend}
