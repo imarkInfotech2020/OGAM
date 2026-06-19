@@ -16,9 +16,17 @@ jest.mock('../../../src/services/proLicenseService', () => ({
 }));
 
 describe('loadProFeatures()', () => {
+  let originalDev: any;
   beforeEach(() => {
     jest.resetModules();
     mockReadProFromKeychain.mockResolvedValue(false);
+    // Exercise the production gating (DEV_UNLOCK_PRO = __DEV__ would otherwise
+    // force activation in the jest environment where __DEV__ is true).
+    originalDev = (global as any).__DEV__;
+    (global as any).__DEV__ = false;
+  });
+  afterEach(() => {
+    (global as any).__DEV__ = originalDev;
   });
 
   it('returns without error when @offgrid/pro package is not installed', async () => {
