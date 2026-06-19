@@ -19,6 +19,7 @@ import {
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
 import { liteRTService } from '../../services/litert';
+import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -114,6 +115,9 @@ export async function shouldRouteToImageGenerationFn(
       ? deps.downloadedModels.find(m => m.id === deps.settings.classifierModelId)
       : null;
     if (!classifierModel) {
+      // No classifier yet: provision SmolLM2 in the background for next time,
+      // and use fast heuristics for this turn.
+      ensureDefaultClassifier().catch(() => {});
       const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
       return intent === 'image';
     }
