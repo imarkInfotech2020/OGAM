@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useChatStore } from '../../stores';
-import { useTTSStore } from '../../stores/ttsStore';
+import { useWhisperStore, useChatStore, useUiModeStore } from '../../stores';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { llmService } from '../../services/llm';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
@@ -47,7 +47,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const isInAudioInterfaceMode = (): boolean =>
-    useTTSStore.getState().settings.interfaceMode === 'audio';
+    useUiModeStore.getState().interfaceMode === 'audio';
 
   // Use file-based transcription path when: Audio Mode + Whisper available + not direct audio model
   const shouldUseFilePath = (): boolean =>
@@ -63,9 +63,9 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const startRecording = async () => {
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
-    // Stop any TTS playback before recording — mic and speaker shouldn't overlap
-    const tts = useTTSStore.getState();
-    if (tts.isSpeaking) { tts.stop(); }
+    // Stop any TTS playback before recording — mic and speaker shouldn't overlap.
+    // No-op without the pro audio feature.
+    callHook(HOOKS.audioStop);
 
     if (supportsDirectAudio()) {
       try {

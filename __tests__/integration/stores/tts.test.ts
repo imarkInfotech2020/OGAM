@@ -51,7 +51,7 @@ const mockEngine = {
   resume: jest.fn(),
 };
 
-jest.mock('../../../src/engine', () => ({
+jest.mock('../../../pro/audio/engine', () => ({
   ttsRegistry: {
     register: jest.fn(),
     has: jest.fn(() => true),
@@ -64,12 +64,12 @@ jest.mock('../../../src/engine', () => ({
   OuteTTSEngine: class {},
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+jest.mock('@offgrid/core/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-import { useTTSStore } from '../../../src/stores/ttsStore';
+import { useTTSStore } from '../../../pro/audio/ttsStore';
 
 const getState = () => useTTSStore.getState();
 

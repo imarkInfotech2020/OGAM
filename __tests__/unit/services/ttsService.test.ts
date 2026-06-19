@@ -38,15 +38,15 @@ jest.mock('react-native-audio-api', () => ({
   })),
 }));
 
-jest.mock('../../../src/utils/logger', () => ({
+jest.mock('@offgrid/core/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
 import RNFS from 'react-native-fs';
 import { initLlama } from 'llama.rn';
-import { ttsService } from '../../../src/services/ttsService';
-import { TTS_BACKBONE_MODEL } from '../../../src/constants/ttsModels';
+import { ttsService } from '../../../pro/audio/services/ttsService';
+import { TTS_BACKBONE_MODEL } from '../../../pro/audio/constants/ttsModels';
 
 const mockRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockInitLlama = initLlama as jest.Mock;

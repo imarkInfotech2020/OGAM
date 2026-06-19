@@ -20,28 +20,13 @@ import {
 import { getToolExtensions } from '../../services/tools/extensions';
 import { liteRTService } from '../../services/litert';
 import { embeddingService } from '../../services/rag/embedding';
-import { useChatStore, useProjectStore, useRemoteServerStore, useTTSStore } from '../../stores';
+import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
 import logger from '../../utils/logger';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
-/**
- * Appended to the system prompt when TTS audio mode is active.
- * Guides the model to respond conversationally for voice output.
- */
-const AUDIO_MODE_PROMPT_HINT = `
-
-[VOICE MODE ACTIVE — your response will be spoken aloud via text-to-speech]
-Respond as if you are speaking to the user in a natural conversation:
-- Be concise and conversational — talk like a person, not a document
-- Never use markdown formatting (no headers, bullets, bold, code blocks, tables)
-- Never use special characters, symbols, or emoji that sound awkward when read aloud
-- Use short sentences and natural spoken transitions ("So,", "Basically,", "Here's the thing —")
-- If summarizing research or long content, give the key takeaways in a few spoken paragraphs, not an essay
-- Numbers: say "about two thousand" not "~2,000"
-- Keep responses under 2-3 paragraphs unless the user explicitly asks for detail
-- Use expressive punctuation for natural prosody: exclamation marks for emphasis!, question marks for curiosity?, ellipses for pauses..., and vary sentence length for rhythm`;
 export type GenerationDeps = {
   activeModelId: string | null;
   activeModel: DownloadedModel | null | undefined;
@@ -284,10 +269,9 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   const { enabledTools, rawPrompt, isLiteRT } = resolveToolsAndPrompt(deps, conversation, messageText);
   let basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
 
-  // In audio mode, append instructions for conversational voice-friendly responses
-  if (useTTSStore.getState().settings.interfaceMode === 'audio') {
-    basePrompt += AUDIO_MODE_PROMPT_HINT;
-  }
+  // In voice/audio mode the pro audio feature augments the prompt for spoken
+  // output. No-op (returns undefined) in free builds.
+  basePrompt = callHook<string>(HOOKS.audioAugmentPrompt, basePrompt) ?? basePrompt;
 
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;

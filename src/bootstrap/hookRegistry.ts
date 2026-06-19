@@ -1,0 +1,52 @@
+/**
+ * Function-hook seam. Pro features register plain functions against named hooks
+ * during activation; core calls them when present and falls back to a no-op /
+ * default when absent. Use this for behaviour (not UI — see slotRegistry for UI):
+ * reading the audio interface mode, triggering speech after generation, and
+ * augmenting the prompt in voice mode.
+ *
+ * Free builds register nothing, so callHook returns undefined and getHook
+ * returns undefined — core keeps its default behaviour.
+ */
+type HookFn = (...args: any[]) => any;
+
+const hooks: Record<string, HookFn> = {};
+
+export function registerHook(name: string, fn: HookFn): void {
+  hooks[name] = fn;
+}
+
+export function getHook<T extends HookFn = HookFn>(name: string): T | undefined {
+  return hooks[name] as T | undefined;
+}
+
+/** Call a hook if registered; returns its result, or undefined when absent. */
+export function callHook<R = any>(name: string, ...args: any[]): R | undefined {
+  const fn = hooks[name];
+  return fn ? (fn(...args) as R) : undefined;
+}
+
+export function _clearHooksForTesting(): void {
+  for (const key of Object.keys(hooks)) {
+    delete hooks[key];
+  }
+}
+
+/** Known hook names, centralised so core and pro stay in sync. */
+export const HOOKS = {
+  /** () => boolean — whether a message can be spoken (TTS enabled + ready). */
+  audioCanSpeak: 'audio.canSpeak',
+  /** (text: string, messageId: string) => void — speak a message aloud. */
+  audioSpeak: 'audio.speak',
+  /** () => void — stop any in-progress speech. */
+  audioStop: 'audio.stop',
+  /** (conversationId: string) => void — when streaming ends, speak the final
+   *  assistant message if voice mode is active (pro checks mode/readiness). */
+  audioOnStreamingEnd: 'audio.onStreamingEnd',
+  /** () => void — app went to background: pause speech if playing. */
+  audioOnAppBackground: 'audio.onAppBackground',
+  /** () => void — app returned to foreground: resume paused speech. */
+  audioOnAppForeground: 'audio.onAppForeground',
+  /** (basePrompt: string) => string — augment the prompt when in voice mode. */
+  audioAugmentPrompt: 'audio.augmentPrompt',
+} as const;

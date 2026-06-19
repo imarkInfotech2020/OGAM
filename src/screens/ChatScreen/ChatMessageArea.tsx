@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
-import { useTTSStore } from '../../stores/ttsStore';
+import { useUiModeStore } from '../../stores/uiModeStore';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -37,7 +37,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
   const [isListReady, setIsListReady] = useState(false);
   const hasScrolledRef = React.useRef(false);
-  const interfaceMode = useTTSStore((s) => s.settings.interfaceMode);
+  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
   const extToolCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);

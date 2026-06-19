@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useTTSStore } from '../../stores/ttsStore';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import Icon from 'react-native-vector-icons/Feather';
 import { stripControlTokens } from '../../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
@@ -192,9 +192,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const ttsCanSpeak = useTTSStore(
-    s => s.settings.enabled && s.isReady,
-  );
+  const ttsCanSpeak = callHook<boolean>(HOOKS.audioCanSpeak) ?? false;
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
@@ -261,7 +259,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       onSpeakProp();
       return;
     }
-    useTTSStore.getState().speak(displayContent, message.id);
+    callHook(HOOKS.audioSpeak, displayContent, message.id);
   };
 
   if (message.isSystemInfo) {

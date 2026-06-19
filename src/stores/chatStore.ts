@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, GenerationMeta } from '../types';
 import { stripControlTokens, stripStreamingControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
-import '../types/tts';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
   const now = Date.now();

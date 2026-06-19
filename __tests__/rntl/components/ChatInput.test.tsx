@@ -51,21 +51,20 @@ jest.mock('../../../src/services/documentService', () => ({
 // Mock the stores
 const mockUseWhisperStore = jest.fn();
 const mockUseAppStore = jest.fn();
-const mockUseTTSStore = jest.fn(() => ({
-  settings: { interfaceMode: 'chat', enabled: false, speed: 1.0 },
-  isBackboneDownloaded: false,
-  isVocoderDownloaded: false,
-  isModelLoaded: false,
-  loadModels: jest.fn(),
-  unloadModels: jest.fn(),
-  updateSettings: jest.fn(),
-}));
+const mockUseUiModeStore = jest.fn((selector?: (s: { interfaceMode: string }) => unknown) => {
+  const state = { interfaceMode: 'chat' };
+  return selector ? selector(state) : state;
+});
 
-jest.mock('../../../src/stores', () => ({
-  useWhisperStore: () => mockUseWhisperStore(),
-  useAppStore: () => mockUseAppStore(),
-  useTTSStore: () => mockUseTTSStore(),
-}));
+jest.mock('../../../src/stores', () => {
+  const useUiModeStore = (selector?: (s: { interfaceMode: string }) => unknown) => mockUseUiModeStore(selector);
+  useUiModeStore.getState = () => ({ interfaceMode: 'chat' });
+  return {
+    useWhisperStore: () => mockUseWhisperStore(),
+    useAppStore: () => mockUseAppStore(),
+    useUiModeStore,
+  };
+});
 
 // Mock the whisper hook
 const mockUseWhisperTranscription = jest.fn();

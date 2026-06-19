@@ -19,14 +19,7 @@ import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
-import { useTTSStore } from './src/stores/ttsStore';
-import { initExecutorch } from 'react-native-executorch';
-import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
-import { EngineBridge } from './src/components/EngineBridge';
-
-// Initialise executorch resource fetcher once at module load time.
-// This must run before any useTextToSpeech hook is mounted.
-initExecutorch({ resourceFetcher: BareResourceFetcher });
+import { getSlot, SLOTS } from './src/bootstrap/slotRegistry';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
@@ -191,16 +184,19 @@ function App() {
         configureRevenueCat();
         const isPro = await checkProStatus();
 
-        // Load pro features — only activates if the keychain entitlement is set.
-        // Reuse the entitlement read above to avoid a second keychain round-trip.
+        // Load pro features — only activates if the keychain entitlement is set
+        // (or in dev, where loadProFeatures force-unlocks). Reuse the entitlement
+        // read above to avoid a second keychain round-trip.
         await loadProFeatures(isPro);
+
+        // DEV ONLY: treat dev builds as Pro so the upsell banner hides and pro
+        // UI is unlocked for local testing. Never runs in release (__DEV__ false).
+        if (__DEV__) {
+          useAppStore.getState().setHasRegisteredPro(true);
+        }
       } catch (proError) {
         logger.error('[App] Pro initialization failed, continuing without Pro:', proError);
       }
-
-      // Initialize TTS engine from persisted settings and sync download state
-      const ttsState = useTTSStore.getState();
-      ttsState.setEngine(ttsState.settings.engineId).catch(() => {});
 
       // Show the UI immediately
       setIsInitializing(false);
@@ -259,7 +255,7 @@ function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-        <EngineBridge />
+        {(() => { const AppRoot = getSlot(SLOTS.appRoot); return AppRoot ? <AppRoot /> : null; })()}
         <NavigationContainer
           theme={{
             dark: isDark,

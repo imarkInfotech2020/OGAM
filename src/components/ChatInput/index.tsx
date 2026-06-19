@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -13,10 +13,9 @@ import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
-import { useTTSStore } from '../../stores/ttsStore';
 import { useAppStore } from '../../stores';
-import type { TTSVoice } from '../../engine';
-import { AudioModeLayout } from './AudioModeLayout';
+import { useUiModeStore } from '../../stores';
+import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -94,14 +93,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
   attachmentsRef.current = attachments;
-  const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
-  const activeVoiceId = useTTSStore((s) => s.activeVoiceId);
-  const voices = useTTSStore((s) => s.voices);
-  const isAudioMode = ttsInterfaceMode === 'audio';
-  const currentVoice: TTSVoice = useMemo(
-    () => voices.find((v) => v.id === activeVoiceId) ?? voices[0] ?? { id: 'default', label: 'Default', metadata: {} },
-    [activeVoiceId, voices],
-  );
+  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
+  const isAudioMode = interfaceMode === 'audio';
 
   const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
@@ -205,10 +198,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  // ─── Audio mode: simplified mic-only layout ─────────────────────────────────
-  if (isAudioMode) {
+  // ─── Audio mode: pro renders the mic-only layout via a slot ─────────────────
+  // Free builds have no audio slot, so interfaceMode never becomes 'audio' and
+  // this branch is skipped entirely.
+  const AudioInput = getSlot(SLOTS.chatInputAudioMode);
+  if (isAudioMode && AudioInput) {
     return (
-      <AudioModeLayout
+      <AudioInput
         styles={styles}
         disabled={disabled}
         isGenerating={isGenerating}
@@ -218,7 +214,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         supportsToolCalling={supportsToolCalling}
         enabledToolCount={enabledToolCount}
         thinkingEnabled={thinkingEnabled}
-        currentVoice={currentVoice}
         attachments={attachments}
         onRemoveAttachment={removeAttachment}
         queueCount={queueCount}

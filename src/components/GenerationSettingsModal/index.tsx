@@ -9,7 +9,7 @@ import { createStyles } from './styles';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
-import { TTSSection } from './TTSSection';
+import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 const DEFAULT_SETTINGS = {
   temperature: 0.7,
@@ -52,6 +52,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
   const [textSettingsOpen, setTextSettingsOpen] = useState(false);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(false);
+  // TTS settings come from the pro audio feature via a slot. Free builds have
+  // no TTS section.
+  const TtsSection = getSlot(SLOTS.generationSettingsTts);
 
   useEffect(() => {
     if (visible) {
@@ -148,21 +151,25 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           </>
         )}
 
-        {/* TTS SETTINGS */}
-        <TouchableOpacity
-          style={styles.accordionHeader}
-          onPress={() => setTtsSettingsOpen(!ttsSettingsOpen)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.accordionTitle}>TEXT TO SPEECH</Text>
-          <Icon
-            name={ttsSettingsOpen ? 'chevron-up' : 'chevron-down'}
-            size={16}
-            color={colors.textMuted}
-          />
-        </TouchableOpacity>
-        {ttsSettingsOpen && (
-          <TTSSection onNavigateToTTSSettings={onOpenTTSSettings} />
+        {/* TTS SETTINGS (pro audio feature) */}
+        {TtsSection && (
+          <>
+            <TouchableOpacity
+              style={styles.accordionHeader}
+              onPress={() => setTtsSettingsOpen(!ttsSettingsOpen)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.accordionTitle}>TEXT TO SPEECH</Text>
+              <Icon
+                name={ttsSettingsOpen ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={colors.textMuted}
+              />
+            </TouchableOpacity>
+            {ttsSettingsOpen && (
+              <TtsSection onNavigateToTTSSettings={onOpenTTSSettings} />
+            )}
+          </>
         )}
 
         <TouchableOpacity style={styles.resetButton} onPress={handleResetDefaults}>

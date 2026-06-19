@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Keyboard, KeyboardAvoidingView, InteractionManager, Platform } from 'react-native';
-import { useTTSStore } from '../../stores/ttsStore';
+import { useUiModeStore } from '../../stores/uiModeStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -129,7 +129,7 @@ export const ChatScreen: React.FC = () => {
   }, []);
 
   // Reset scroll when switching between chat/audio interface modes
-  const interfaceMode = useTTSStore((s) => s.settings.interfaceMode);
+  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const prevModeRef = React.useRef(interfaceMode);
   React.useEffect(() => {
     if (prevModeRef.current !== interfaceMode) {
