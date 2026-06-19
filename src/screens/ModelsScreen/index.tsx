@@ -13,11 +13,17 @@ import { createStyles } from './styles';
 import { initialFilterState } from './constants';
 import { TextModelsTab } from './TextModelsTab';
 import { ImageModelsTab } from './ImageModelsTab';
+import { VoiceModelsUpsell } from './VoiceModelsUpsell';
+import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 export const ModelsScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const vm = useModelsScreen();
+  // Pro fills this slot with the real voice-models panel (engine + downloads).
+  // The Voice tab always renders; when the slot is empty (free / non-pro) we
+  // show an upsell so users can see what Pro adds.
+  const VoiceModelsPanel = getSlot(SLOTS.modelsScreenVoiceTab);
   const route = useRoute<RouteProp<MainTabParamList, 'ModelsTab'>>();
 
   // Reset to model list view when tab loses focus (e.g. user switches away)
@@ -123,6 +129,19 @@ export const ModelsScreen: React.FC = () => {
               {vm.activeTab === 'image' && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
           </AttachStep>
+          <TouchableOpacity
+            style={styles.tabItem}
+            testID="voice-models-tab"
+            onPress={() => {
+              vm.setActiveTab('voice');
+              vm.setFilterState(initialFilterState);
+              vm.setTextFiltersVisible(false);
+              vm.setImageFiltersVisible(false);
+            }}
+          >
+            <Text style={[styles.tabText, vm.activeTab === 'voice' && styles.tabTextActive]}>Voice Models</Text>
+            {vm.activeTab === 'voice' && <View style={styles.tabIndicator} />}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -207,6 +226,13 @@ export const ModelsScreen: React.FC = () => {
           setUserChangedBackendFilter={vm.setUserChangedBackendFilter}
           isRecommendedModel={vm.isRecommendedModel}
         />
+      )}
+
+      {/* Voice Models Tab: pro panel when registered, otherwise an upsell. */}
+      {vm.activeTab === 'voice' && (
+        VoiceModelsPanel
+          ? <VoiceModelsPanel />
+          : <VoiceModelsUpsell onGetPro={() => vm.navigation.navigate('ProDetail')} />
       )}
 
       <CustomAlert {...vm.alertState} onClose={() => vm.setAlertState(hideAlert())} />

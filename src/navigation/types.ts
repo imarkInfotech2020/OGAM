@@ -32,6 +32,6 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ChatsTab: undefined;
   ProjectsTab: undefined;
-  ModelsTab: { initialTab?: 'text' | 'image'; repairModelId?: string } | undefined;
+  ModelsTab: { initialTab?: 'text' | 'image' | 'voice'; repairModelId?: string } | undefined;
   SettingsTab: undefined;
 };
