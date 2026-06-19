@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -13,6 +13,10 @@ import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
+import { useTTSStore } from '../../stores/ttsStore';
+import { useAppStore } from '../../stores';
+import type { TTSVoice } from '../../engine';
+import { AudioModeLayout } from './AudioModeLayout';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -35,7 +39,6 @@ interface ChatInputProps {
   onMcpPress?: () => void;
   supportsThinking?: boolean;
   onRepairVision?: () => void;
-  /** When set, mounts a single AttachStep for that index. Only one at a time to avoid waypoint dots. */
   activeSpotlight?: number | null;
   showSettingsDot?: boolean;
 }
@@ -75,7 +78,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const quickSettings = useKeyboardAwarePopover();
   const attachPicker = useKeyboardAwarePopover();
+  const voicePicker = useKeyboardAwarePopover();
   const inputRef = useRef<TextInput>(null);
+  const attachmentsRef = useRef<MediaAttachment[]>([]);
   const hasText = message.length > 0;
   const iconsAnim = useRef(new Animated.Value(0)).current;
 
@@ -87,9 +92,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }).start();
   }, [hasText, iconsAnim]);
 
-  const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument } = useAttachments(setAlertState);
+  const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
+  attachmentsRef.current = attachments;
+  const ttsInterfaceMode = useTTSStore((s) => s.settings.interfaceMode);
+  const activeVoiceId = useTTSStore((s) => s.activeVoiceId);
+  const voices = useTTSStore((s) => s.voices);
+  const isAudioMode = ttsInterfaceMode === 'audio';
+  const currentVoice: TTSVoice = useMemo(
+    () => voices.find((v) => v.id === activeVoiceId) ?? voices[0] ?? { id: 'default', label: 'Default', metadata: {} },
+    [activeVoiceId, voices],
+  );
 
-  const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, clearResult } = useVoiceInput({
+  const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
     onTranscript: (text) => {
       setMessage(prev => {
@@ -97,7 +111,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         return prefix + text;
       });
     },
+    onAudioAttachment: (uri, format, durationSeconds) => {
+      addAudioAttachment(uri, format, durationSeconds);
+    },
+    onAutoSend: isAudioMode ? (text, audio) => {
+      const audioAttachment: MediaAttachment = {
+        id: `audio-${Date.now()}`,
+        type: 'audio',
+        uri: audio.uri,
+        audioFormat: audio.format,
+        audioDurationSeconds: audio.durationSeconds,
+        fileName: audio.uri.split('/').pop(),
+      };
+      triggerHaptic('impactMedium');
+      const all = [...attachmentsRef.current, audioAttachment];
+      onSend(text, all, imageMode);
+      clearAttachments();
+    } : undefined,
   });
+
+  const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();
+  const thinkingEnabled = appSettings.thinkingEnabled;
+
+  const handleThinkingToggle = () => {
+    triggerHaptic('impactLight');
+    updateAppSettings({ thinkingEnabled: !thinkingEnabled });
+  };
 
   const canSend = (message.trim().length > 0 || attachments.length > 0) && !disabled;
 
@@ -166,6 +205,50 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  // ─── Audio mode: simplified mic-only layout ─────────────────────────────────
+  if (isAudioMode) {
+    return (
+      <AudioModeLayout
+        styles={styles}
+        disabled={disabled}
+        isGenerating={isGenerating}
+        imageMode={imageMode}
+        imageModelLoaded={imageModelLoaded}
+        supportsThinking={supportsThinking}
+        supportsToolCalling={supportsToolCalling}
+        enabledToolCount={enabledToolCount}
+        thinkingEnabled={thinkingEnabled}
+        currentVoice={currentVoice}
+        attachments={attachments}
+        onRemoveAttachment={removeAttachment}
+        queueCount={queueCount}
+        queuedTexts={queuedTexts}
+        onClearQueue={onClearQueue}
+        isRecording={isRecording}
+        voiceAvailable={voiceAvailable}
+        isModelLoading={isModelLoading}
+        isTranscribing={isTranscribing}
+        partialResult={partialResult}
+        error={error}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onCancelRecording={cancelRecording}
+        onStop={onStop}
+        onImageModeToggle={handleImageModeToggle}
+        onThinkingToggle={handleThinkingToggle}
+        onToolsPress={onToolsPress}
+        onVisionPress={handleVisionPress}
+        onPickDocument={handlePickDocument}
+        attachPicker={attachPicker}
+        voicePicker={voicePicker}
+        quickSettings={quickSettings}
+        supportsVision={supportsVision}
+        alertState={alertState}
+        setAlertState={setAlertState}
+      />
+    );
+  }
+
   const actionButton = canSend ? (
     <TouchableOpacity
       testID="send-button"
@@ -194,11 +277,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       disabled={disabled}
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
-      onCancelRecording={() => { stopRecording(); clearResult(); }}
+      onCancelRecording={cancelRecording}
     />
   );
 
-  const content = (
+  return (
     <View style={styles.container}>
       <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
       <QueueRow
@@ -207,7 +290,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         onClearQueue={onClearQueue}
       />
       <View style={styles.mainRow}>
-        {/* Pill: text input + right icons */}
         <View style={styles.pill}>
           <TextInput
             ref={inputRef}
@@ -223,7 +305,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             blurOnSubmit={false}
             returnKeyType="default"
           />
-          {/* Icons collapse when user starts typing, reappear when input is empty */}
           <Animated.View
             pointerEvents={hasText ? 'none' : 'auto'}
             style={[styles.pillIcons, {
@@ -232,7 +313,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               overflow: 'hidden' as const,
             }]}
           >
-            {/* Attach button — opens picker for image or document */}
             <TouchableOpacity
               ref={attachPicker.triggerRef}
               testID="attach-button"
@@ -241,14 +321,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               disabled={disabled}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Icon
-                name="plus"
-                size={20}
-                color={disabled ? colors.textMuted : colors.textSecondary}
-              />
+              <Icon name="plus" size={20} color={disabled ? colors.textMuted : colors.textSecondary} />
             </TouchableOpacity>
-
-            {/* Quick settings button */}
+            {supportsThinking && (
+              <TouchableOpacity
+                testID="thinking-toggle-button"
+                style={styles.pillIconButton}
+                onPress={handleThinkingToggle}
+                disabled={disabled}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <Icon name="zap" size={18} color={thinkingEnabled ? colors.primary : (disabled ? colors.textMuted : colors.textSecondary)} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               ref={quickSettings.triggerRef}
               testID="quick-settings-button"
@@ -262,11 +347,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {showSettingsDot && <View style={styles.toolWarningDot} />}
               </View>
             </TouchableOpacity>
-
           </Animated.View>
         </View>
 
-        {/* Circular action button — conditionally wrapped with AttachStep */}
         {activeSpotlight === 12 ? (
           <AttachStep index={12} style={spotlightStyles.centered}>{actionButton}</AttachStep>
         ) : actionButton}
@@ -299,7 +382,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         mcpToolCount={mcpToolCount}
         onMcpPress={onMcpPress}
       />
-
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}
@@ -309,11 +391,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       />
     </View>
   );
-
-  return content;
 };
 
 const spotlightStyles = StyleSheet.create({
   centered: { alignSelf: 'center' },
 });
-

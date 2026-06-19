@@ -133,18 +133,35 @@ function parseGemmaNativeToolCalls(text: string): { cleanText: string; toolCalls
   return { cleanText: cleanText.trim(), toolCalls };
 }
 
-/** Parse tool calls from text output (fallback for small models). Supports JSON and XML-like formats. */
+/** Parse <invoke name="fn"><parameter name="k">v</parameter></invoke> blocks (minimax, Anthropic-style). */
+function parseInvokeBlocks(text: string, toolCalls: ToolCall[], matchedRanges: [number, number][]): void {
+  const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g;
+  let match;
+  while ((match = invokePattern.exec(text)) !== null) {
+    const name = match[1];
+    const args: Record<string, any> = {};
+    const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+    let pm;
+    while ((pm = paramPattern.exec(match[2])) !== null) { args[pm[1]] = pm[2].trim(); }
+    toolCalls.push({ id: `text-tc-${Date.now()}-${toolCalls.length}`, name, arguments: args });
+    matchedRanges.push([match.index, match.index + match[0].length]);
+  }
+}
+
+/** Parse tool calls from text output (fallback for small models). Supports JSON, XML, and invoke formats. */
 export function parseToolCallsFromText(text: string): { cleanText: string; toolCalls: ToolCall[] } {
   const toolCalls: ToolCall[] = [];
+  const matchedRanges: [number, number][] = [];
+
+  // 1. Standard <tool_call>...</tool_call> blocks (JSON or XML body)
   const closedPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
   let match;
-  const matchedRanges: [number, number][] = [];
   while ((match = closedPattern.exec(text)) !== null) {
     matchedRanges.push([match.index, match.index + match[0].length]);
     const call = parseToolCallBody(match[1].trim(), toolCalls.length);
     if (call) { toolCalls.push(call); }
   }
-  // Also match unclosed <tool_call> at end of text (model hit EOS without closing tag)
+  // Unclosed <tool_call> at end of text (model hit EOS without closing tag)
   const unclosedMatch = /<tool_call>([\s\S]+)$/.exec(text);
   if (unclosedMatch) {
     const unclosedStart = text.lastIndexOf(unclosedMatch[0]);
@@ -155,6 +172,21 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
       matchedRanges.push([unclosedStart, text.length]);
     }
   }
+
+  // 2. <invoke name="...">...</invoke> blocks (minimax, Anthropic-style)
+  parseInvokeBlocks(text, toolCalls, matchedRanges);
+
+  // 3. Namespaced wrapper blocks: namespace:tool_call ... </namespace:tool_call>
+  const nsPattern = /[\w]+:tool_call[\s\S]*?<\/[\w]+:tool_call>/g;
+  while ((match = nsPattern.exec(text)) !== null) {
+    const alreadyMatched = matchedRanges.some(([s, e]) => match!.index >= s && match!.index < e);
+    if (!alreadyMatched) {
+      // Parse invoke blocks within this namespace wrapper
+      parseInvokeBlocks(match[0], toolCalls, []);
+      matchedRanges.push([match.index, match.index + match[0].length]);
+    }
+  }
+
   // Remove all matched ranges from text (reverse order to preserve indices)
   matchedRanges.sort((a, b) => b[0] - a[0]);
   let cleanText = text;
@@ -462,22 +494,32 @@ async function callLLMWithRetry(
   return callLocalWithRetry(augmentedMessages, tools, onStream);
 }
 
-/** If no structured tool calls, try parsing <tool_call> tags or Gemma's native format from text.
- *  Also collects tool calls from any registered extensions and strips their syntax from display text. */
+/** Detect if text contains any tool call pattern (various model formats). */
+function containsToolCallMarkup(text: string): boolean {
+  return text.includes('<tool_call>') ||
+    text.includes('<invoke') ||
+    /\w+:tool_call/.test(text) ||
+    text.includes('<function_call>');
+}
+
+/** If no structured tool calls, try parsing tool-call markup (<tool_call>, <invoke>, namespaced
+ *  wrappers, <function_call>) or Gemma's native format from text. Also collects tool calls from
+ *  any registered extensions and strips their syntax from display text. */
 function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
   let effectiveToolCalls: ToolCall[] = toolCalls.length > 0 ? [...toolCalls] : [];
   let displayResponse = fullResponse;
 
   if (effectiveToolCalls.length === 0) {
-    if (fullResponse.includes('<tool_call>')) {
-      const parsed = parseToolCallsFromText(fullResponse);
+    if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
+      const parsed = parseGemmaNativeToolCalls(fullResponse);
       if (parsed.toolCalls.length > 0) {
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }
-    } else if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
-      const parsed = parseGemmaNativeToolCalls(fullResponse);
+    } else if (containsToolCallMarkup(fullResponse)) {
+      const parsed = parseToolCallsFromText(fullResponse);
       if (parsed.toolCalls.length > 0) {
+        logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from text output`);
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }

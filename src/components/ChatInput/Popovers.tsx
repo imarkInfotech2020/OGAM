@@ -1,11 +1,15 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../theme';
 import { ImageModeState } from '../../types';
-import { useAppStore } from '../../stores';
+import { useAppStore, useTTSStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
-import { FONTS } from '../../constants';
+import { FONTS, TYPOGRAPHY } from '../../constants';
+import type { TTSVoice } from '../../engine';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/types';
 
 const TOOL_WARNING_COLOR = '#F59E0B';
 
@@ -105,11 +109,28 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 }) => {
   const { colors } = useTheme();
   const { settings, updateSettings, toolCountHintDismissed } = useAppStore();
+  const { settings: ttsSettings, isReady: ttsReady, updateSettings: updateTTSSettings, initializeEngine } = useTTSStore();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   if (!visible) return null;
 
   const imgBadge = getImageModeBadge(imageMode, colors);
   const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
+  const ttsMode = ttsSettings.interfaceMode;
+  const ttsBadge = !ttsReady
+    ? { label: 'N/A', bg: colors.textMuted }
+    : ttsMode === 'audio'
+      ? { label: 'Audio', bg: colors.primary }
+      : { label: 'Chat', bg: `${colors.textMuted}80` };
+
+  const handleTTSToggle = () => {
+    triggerHaptic('impactLight');
+    if (!ttsReady) { onClose(); navigation.navigate('TTSSettings'); return; }
+    onClose();
+    const next = ttsMode === 'audio' ? 'chat' : 'audio';
+    updateTTSSettings({ interfaceMode: next });
+    if (next === 'audio') initializeEngine();
+  };
 
   // Tools and MCP warnings are independent — each turns amber at 3+
   const showToolsWarning = supportsToolCalling && enabledToolCount >= 3 && !toolCountHintDismissed;
@@ -163,6 +184,18 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   </View>
                 </TouchableOpacity>
               )}
+
+              <TouchableOpacity
+                testID="quick-tts-mode"
+                style={popoverStyles.row}
+                onPress={handleTTSToggle}
+              >
+                <Icon name={ttsMode === 'audio' ? 'volume-2' : 'volume-1'} size={16} color={ttsReady ? colors.text : colors.textMuted} />
+                <Text style={[popoverStyles.rowLabel, { color: ttsReady ? colors.text : colors.textMuted }]}>Voice</Text>
+                <View style={[popoverStyles.badge, { backgroundColor: ttsBadge.bg }]}>
+                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{ttsBadge.label}</Text>
+                </View>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 testID="quick-tools"
@@ -257,3 +290,84 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
     </Modal>
   );
 };
+
+// ─── Voice Picker Popover ──────────────────────────────────────────────────
+
+interface VoicePickerPopoverProps {
+  visible: boolean;
+  onClose: () => void;
+  anchorY: number;
+  anchorX: number;
+}
+
+export const VoicePickerPopover: React.FC<VoicePickerPopoverProps> = ({
+  visible, onClose, anchorY, anchorX,
+}) => {
+  const { colors } = useTheme();
+  const { voices, activeVoiceId, isSpeaking, stop, setVoice } = useTTSStore();
+
+  if (!visible) return null;
+
+  const handleSelect = (voice: TTSVoice) => {
+    triggerHaptic('impactLight');
+    if (isSpeaking) { stop(); }
+    setVoice(voice.id);
+    onClose();
+  };
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={popoverStyles.overlay}>
+          <TouchableWithoutFeedback>
+            <View style={[popoverStyles.popover, voicePickerStyles.popover, {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              bottom: anchorY + 8,
+              right: anchorX,
+            }]}>
+              {voices.map((voice) => {
+                const isActive = voice.id === activeVoiceId;
+                return (
+                  <TouchableOpacity
+                    key={voice.id}
+                    style={popoverStyles.row}
+                    onPress={() => handleSelect(voice)}
+                  >
+                    <Icon
+                      name="user"
+                      size={14}
+                      color={isActive ? colors.primary : colors.textMuted}
+                    />
+                    <View style={voicePickerStyles.labelCol}>
+                      <Text style={[popoverStyles.rowLabel, { color: isActive ? colors.primary : colors.text }]}>
+                        {voice.label}
+                      </Text>
+                      <Text style={[voicePickerStyles.accent, { color: colors.textMuted }]}>
+                        {voice.metadata.persona || ''}
+                      </Text>
+                    </View>
+                    {isActive && <Icon name="check" size={14} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+};
+
+const voicePickerStyles = StyleSheet.create({
+  popover: {
+    minWidth: 200,
+  },
+  labelCol: {
+    flex: 1,
+  },
+  accent: {
+    ...TYPOGRAPHY.meta,
+    marginTop: 1,
+  },
+});

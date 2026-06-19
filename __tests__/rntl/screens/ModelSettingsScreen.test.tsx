@@ -433,10 +433,13 @@ describe('ModelSettingsScreen', () => {
   // Performance Settings
   // ============================================================================
   describe('performance settings', () => {
-    it('shows CPU Threads slider label and auto value when nThreads uses the auto sentinel', async () => {
-      const { getByText, findByText } = renderWithSections('text');
+    it('shows CPU Threads stepper with numeric value when nThreads uses the auto sentinel', () => {
+      // The CPU Threads control migrated from a Slider (which displayed an
+      // "Auto (N)" label) to a NumericStepper that shows the resolved numeric
+      // value. With the auto sentinel (nThreads: 0) the stepper value is 1.
+      const { getByText, queryByText } = renderWithSections('text');
       expect(getByText('CPU Threads')).toBeTruthy();
-      await findByText(/^Auto \(\d+\)$/);
+      expect(queryByText(/^Auto \(\d+\)$/)).toBeNull();
     });
 
     it('shows Batch Size slider label and default value', () => {
@@ -645,14 +648,13 @@ describe('ModelSettingsScreen', () => {
         expect(useAppStore.getState().settings.inferenceBackend).toBe('opencl');
       });
 
-      it('updates gpuLayers when GPU Layers slider completes', () => {
+      it('updates gpuLayers when GPU Layers stepper is incremented', () => {
         useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 6 });
         const { getByTestId } = renderWithSections('text');
 
-        const slider = getByTestId('gpu-layers-slider');
-        fireEvent(slider, 'slidingComplete', 12);
+        fireEvent.press(getByTestId('gpu-layers-stepper-increment'));
 
-        expect(useAppStore.getState().settings.gpuLayers).toBe(12);
+        expect(useAppStore.getState().settings.gpuLayers).toBe(7);
       });
     });
   });

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import Slider from '@react-native-community/slider';
+import { NumericStepper } from '../NumericStepper';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
@@ -126,35 +126,23 @@ const SettingSlider: React.FC<{ config: SettingConfig }> = ({ config }) => {
   const value = (rawValue ?? DEFAULT_SETTINGS[config.key]) as number;
   const warningText = config.warning?.(value) ?? null;
   const warningColor = config.warningColor ?? colors.error;
+  const decimals = config.step < 1 ? 2 : 0;
 
   return (
     <View style={styles.settingGroup}>
-      <View style={styles.settingHeader}>
-        <Text style={styles.settingLabel}>{config.label}</Text>
-        <Text style={styles.settingValue}>{config.format(value)}</Text>
-      </View>
+      <Text style={styles.settingLabel}>{config.label}</Text>
       {config.description && (
         <Text style={styles.settingDescription}>{config.description}</Text>
       )}
       {warningText && (
         <Text style={[styles.settingDescription, { color: warningColor }]}>{warningText}</Text>
       )}
-      <Slider
-        style={styles.slider}
-        minimumValue={config.min}
-        maximumValue={config.max}
-        step={config.step}
+      <NumericStepper
         value={value}
-        onValueChange={(v) => updateSettings({ [config.key]: v })}
-        onSlidingComplete={() => {}}
-        minimumTrackTintColor={colors.primary}
-        maximumTrackTintColor={colors.surfaceLight}
-        thumbTintColor={colors.primary}
+        min={config.min} max={config.max} step={config.step} decimals={decimals}
+        formatValue={config.format}
+        onChange={(v) => updateSettings({ [config.key]: v })}
       />
-      <View style={styles.sliderLabels}>
-        <Text style={styles.sliderMinMax}>{config.format(config.min)}</Text>
-        <Text style={styles.sliderMinMax}>{config.format(config.max)}</Text>
-      </View>
     </View>
   );
 };

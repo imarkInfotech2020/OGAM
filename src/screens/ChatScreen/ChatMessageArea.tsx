@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
+import { useTTSStore } from '../../stores/ttsStore';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
@@ -33,6 +34,10 @@ export type ChatMessageAreaProps = {
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
 }) => {
+  // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
+  const [isListReady, setIsListReady] = useState(false);
+  const hasScrolledRef = React.useRef(false);
+  const interfaceMode = useTTSStore((s) => s.settings.interfaceMode);
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
   const extToolCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
@@ -75,12 +80,26 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       ) : (
         <FlatList
           ref={flatListRef}
+          style={isListReady ? undefined : hiddenStyle.hidden}
           data={chat.displayMessages}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
+          extraData={interfaceMode}
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
-          onContentSizeChange={(_w, _h) => { if (isNearBottomRef.current) flatListRef.current?.scrollToEnd({ animated: false }); }}
+          onContentSizeChange={(_w, h) => {
+            if (!hasScrolledRef.current && h > 0) {
+              // Initial layout: force scroll to bottom regardless of isNearBottom
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasScrolledRef.current = true;
+              // Reveal after a frame so the scroll position settles
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => setIsListReady(true));
+              });
+            } else if (isNearBottomRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
           onLayout={(e) => {
             const newHeight = e.nativeEvent.layout.height;
             const prevHeight = flatListHeightRef.current;
@@ -193,4 +212,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
 const openCLBannerStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   text: { ...TYPOGRAPHY.meta, flex: 1 },
+});
+
+const hiddenStyle = StyleSheet.create({
+  hidden: { opacity: 0 },
 });

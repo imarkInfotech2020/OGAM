@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
-import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore, useTTSStore } from '../../stores';
+import '../../types/tts';
 import logger from '../../utils/logger';
 import {
   llmService, generationService, imageGenerationService, activeModelService,
@@ -20,9 +22,15 @@ import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
 } from '../../utils/modelSelectorFilters';
+import { stripControlTokens, stripMarkdownForSpeech } from '../../utils/messageContent';
 
 export type { AlertState, ChatMessageItem, StreamingState };
 export { getDisplayMessages, getPlaceholderText };
+
+function _triggerAudioModeGeneration(conversationId: string, messageId: string, content: string) {
+  useChatStore.getState().updateMessageAudio(conversationId, messageId, { isAudioModeMessage: true });
+  useTTSStore.getState().speak(stripMarkdownForSpeech(stripControlTokens(content)), messageId);
+}
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -59,6 +67,26 @@ export const useChatScreen = () => {
   const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(route.params?.projectId);
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
+
+  // Stop TTS when navigating away, app backgrounded, or screen locked
+  useEffect(() => {
+    const unsubBlur = navigation.addListener('blur', () => {
+      useTTSStore.getState().stop();
+    });
+    // beforeRemove fires on back button — more reliable than blur for native-stack
+    const unsubRemove = navigation.addListener('beforeRemove', () => {
+      useTTSStore.getState().stop();
+    });
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      const tts = useTTSStore.getState();
+      if (nextState !== 'active') {
+        if (tts.isSpeaking && !tts.isPaused) { tts.pause(); }
+      } else {
+        if (tts.isSpeaking && tts.isPaused) { tts.resume(); }
+      }
+    });
+    return () => { unsubBlur(); unsubRemove(); appStateSub.remove(); };
+  }, [navigation]);
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
   const addMessageRef = useRef<typeof addMessage>(null as any);
@@ -218,6 +246,40 @@ export const useChatScreen = () => {
     lastMessageCountRef.current = curr;
   }, [displayMessages.length]);
   useEffect(() => { lastMessageCountRef.current = 0; setAnimateLastN(0); }, [activeConversationId]);
+  const prevStreamingRef = useRef(false);
+
+  // Stop any in-flight TTS when a new streaming response begins
+  useEffect(() => {
+    if (isStreamingForThisConversation && useTTSStore.getState().isSpeaking) {
+      useTTSStore.getState().stop();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreamingForThisConversation]);
+
+  // When streaming ends, speak the full response as a single TTS call
+  useEffect(() => {
+    const was = prevStreamingRef.current;
+    prevStreamingRef.current = isStreamingForThisConversation;
+    if (!was || isStreamingForThisConversation || !activeConversationId) return;
+    const tts = useTTSStore.getState();
+    if (tts.settings.interfaceMode !== 'audio') return;
+    const conv = useChatStore.getState().conversations.find((c) => c.id === activeConversationId);
+    const last = (conv?.messages ?? []).at(-1);
+    if (!last || last.role !== 'assistant' || last.isSystemInfo || last.toolCalls?.length || last.audioPath) return;
+    // Stamp as audio-mode. Estimate duration from word count (avg 2.5 words/sec)
+    const wordCount = last.content.split(/\s+/).filter(Boolean).length;
+    const speed = useTTSStore.getState().settings.speed || 1;
+    const estDuration = Math.max(1, wordCount / (2.5 * speed));
+    useChatStore.getState().updateMessageAudio(activeConversationId, last.id, {
+      isAudioModeMessage: true,
+      audioDurationSeconds: estDuration,
+    });
+    if (!tts.isReady) return;
+    const fullText = stripMarkdownForSpeech(stripControlTokens(last.content)).trim();
+    if (fullText) {
+      useTTSStore.getState().speak(fullText, last.id);
+    }
+  }, [isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startGeneration = async (targetConversationId: string, messageText: string) => {
     await startGenerationFn(genDeps, { setDebugInfo, targetConversationId, messageText });

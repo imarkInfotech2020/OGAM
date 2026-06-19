@@ -19,6 +19,14 @@ import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
+import { useTTSStore } from './src/stores/ttsStore';
+import { initExecutorch } from 'react-native-executorch';
+import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
+import { EngineBridge } from './src/components/EngineBridge';
+
+// Initialise executorch resource fetcher once at module load time.
+// This must run before any useTextToSpeech hook is mounted.
+initExecutorch({ resourceFetcher: BareResourceFetcher });
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
@@ -190,6 +198,10 @@ function App() {
         logger.error('[App] Pro initialization failed, continuing without Pro:', proError);
       }
 
+      // Initialize TTS engine from persisted settings and sync download state
+      const ttsState = useTTSStore.getState();
+      ttsState.setEngine(ttsState.settings.engineId).catch(() => {});
+
       // Show the UI immediately
       setIsInitializing(false);
 
@@ -247,6 +259,7 @@ function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <EngineBridge />
         <NavigationContainer
           theme={{
             dark: isDark,

@@ -260,8 +260,9 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('shows empty state when no downloads', () => {
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('No active downloads')).toBeTruthy();
+    const { getByText, queryByText } = render(<DownloadManagerScreen />);
+    // Active Downloads section is hidden when there are no active items
+    expect(queryByText('Active Downloads')).toBeNull();
     expect(getByText('No models downloaded yet')).toBeTruthy();
   });
 
@@ -293,14 +294,16 @@ describe('DownloadManagerScreen', () => {
   });
 
   it('shows section headers for active and completed', () => {
-    const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('Active Downloads')).toBeTruthy();
+    const { getByText, queryByText } = render(<DownloadManagerScreen />);
+    // Active Downloads section is hidden when empty
+    expect(queryByText('Active Downloads')).toBeNull();
+    // Downloaded Models section is always shown
     expect(getByText('Downloaded Models')).toBeTruthy();
   });
 
   it('shows empty subtext when no models downloaded', () => {
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('Go to the Models tab to browse and download models')).toBeTruthy();
+    expect(getByText('No models downloaded yet')).toBeTruthy();
   });
 
   it('renders completed text model with details', () => {
@@ -381,12 +384,14 @@ describe('DownloadManagerScreen', () => {
     expect(getByText(/Total storage used/)).toBeTruthy();
   });
 
-  it('shows count badges for active and completed sections', () => {
+  it('shows count badge for completed section', () => {
     setupSingleModelState();
 
-    const { getAllByText } = render(<DownloadManagerScreen />);
-    expect(getAllByText('0').length).toBeGreaterThan(0);
-    expect(getAllByText('1').length).toBeGreaterThan(0);
+    const { getByText, queryByText } = render(<DownloadManagerScreen />);
+    // Active section is hidden when empty (no "0" badge)
+    // Completed section shows count of 1
+    expect(queryByText('0')).toBeNull();
+    expect(getByText('1')).toBeTruthy();
   });
 
   it('pressing delete button on completed model shows confirmation alert', () => {
@@ -941,7 +946,6 @@ describe('DownloadManagerScreen', () => {
     // The size is shown without any quantization badge text
     expect(queryByText('Unknown')).toBeNull();
   });
-
 
 
 });
