@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { showAlert, hideAlert, AlertState } from '../../../components';
 import { activeModelService, hardwareService } from '../../../services';
+import { useAppStore } from '../../../stores';
 import { DownloadedModel, ONNXImageModel } from '../../../types';
 import { LoadingState, ModelPickerType } from './useHomeScreen';
 
@@ -34,6 +35,9 @@ export const useModelLoading = ({
       setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
       await waitForOverlay();
       try {
+        // Remember the user's explicit text-model choice so routing can reload
+        // it on demand even after the residency manager evicts it.
+        useAppStore.getState().setLastTextModelId(model.id);
         await activeModelService.loadTextModel(model.id);
       } catch (error) {
         setAlertState(

@@ -62,6 +62,17 @@ export const useChatScreen = () => {
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
 
+  // Preload the user's last text model in the background when the chat opens,
+  // so they can start typing while it loads. Skip if a generation model is
+  // already loaded (don't disrupt an active text/image session).
+  useEffect(() => {
+    const { lastTextModelId } = useAppStore.getState();
+    if (!lastTextModelId) return;
+    const { text, image } = activeModelService.getActiveModels();
+    if (text.isLoaded || text.isLoading || image.isLoaded) return;
+    activeModelService.loadTextModel(lastTextModelId).catch(() => {});
+  }, []);
+
   // Stop TTS when navigating away, app backgrounded, or screen locked.
   // No-op without the pro audio feature.
   useEffect(() => {

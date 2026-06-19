@@ -68,6 +68,10 @@ interface AppState {
   removeDownloadedModel: (modelId: string) => void;
   activeModelId: string | null;
   setActiveModelId: (modelId: string | null) => void;
+  /** Last text model the user explicitly selected. Persists across residency
+   *  eviction so routing can reload it on demand. */
+  lastTextModelId: string | null;
+  setLastTextModelId: (modelId: string | null) => void;
   isLoadingModel: boolean;
   setIsLoadingModel: (loading: boolean) => void;
   modelMaxContext: number | null;
@@ -230,6 +234,8 @@ export const useAppStore = create<AppState>()(
         })),
       activeModelId: null,
       setActiveModelId: (modelId) => set({ activeModelId: modelId }),
+      lastTextModelId: null,
+      setLastTextModelId: (modelId) => set({ lastTextModelId: modelId }),
       isLoadingModel: false,
       setIsLoadingModel: (loading) => set({ isLoadingModel: loading }),
       modelMaxContext: null,
@@ -323,6 +329,7 @@ export const useAppStore = create<AppState>()(
         onboardingChecklist: state.onboardingChecklist,
         checklistDismissed: state.checklistDismissed,
         activeModelId: state.activeModelId,
+        lastTextModelId: state.lastTextModelId,
         settings: state.settings,
         activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,

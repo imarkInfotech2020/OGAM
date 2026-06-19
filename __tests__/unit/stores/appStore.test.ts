@@ -140,6 +140,16 @@ describe('appStore', () => {
       expect(getAppState().activeModelId).toBeNull();
     });
 
+    it('setLastTextModelId records the selected text model as a preference', () => {
+      const { setLastTextModelId } = useAppStore.getState();
+      expect(getAppState().lastTextModelId).toBeNull();
+      setLastTextModelId('my-text-model');
+      expect(getAppState().lastTextModelId).toBe('my-text-model');
+      // Independent of activeModelId, so it survives residency eviction.
+      useAppStore.getState().setActiveModelId(null);
+      expect(getAppState().lastTextModelId).toBe('my-text-model');
+    });
+
     it('removeDownloadedModel preserves activeModelId if different model removed', () => {
       const { addDownloadedModel, setActiveModelId, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });
