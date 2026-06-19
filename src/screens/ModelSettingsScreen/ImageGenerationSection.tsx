@@ -13,24 +13,33 @@ import { createStyles } from './styles';
 const EnhanceImageToggle: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const { settings, updateSettings, downloadedModels } = useAppStore();
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
+  // Enhancement runs the prompt through a text model, so it needs one available.
+  const hasTextModel = downloadedModels.length > 0;
+  const enabled = (settings?.enhanceImagePrompts ?? false) && hasTextModel;
+
+  let description: string;
+  if (!hasTextModel) {
+    description = 'Download a text model to enable prompt enhancement';
+  } else if (settings?.enhanceImagePrompts) {
+    description = 'Text model refines your prompt before image generation (slower but better results)';
+  } else {
+    description = 'Use your prompt directly for image generation (faster)';
+  }
 
   return (
-    <View style={styles.toggleRow}>
+    <View style={[styles.toggleRow, !hasTextModel && styles.dimmed]}>
       <View style={styles.toggleInfo}>
         <Text style={styles.toggleLabel}>Enhance Image Prompts</Text>
-        <Text style={styles.toggleDesc}>
-          {settings?.enhanceImagePrompts
-            ? 'Text model refines your prompt before image generation (slower but better results)'
-            : 'Use your prompt directly for image generation (faster)'}
-        </Text>
+        <Text style={styles.toggleDesc}>{description}</Text>
       </View>
       <Switch
-        value={settings?.enhanceImagePrompts ?? false}
+        value={enabled}
+        disabled={!hasTextModel}
         onValueChange={(value) => updateSettings({ enhanceImagePrompts: value })}
         trackColor={trackColor}
-        thumbColor={settings?.enhanceImagePrompts ? colors.primary : colors.textMuted}
+        thumbColor={enabled ? colors.primary : colors.textMuted}
       />
     </View>
   );

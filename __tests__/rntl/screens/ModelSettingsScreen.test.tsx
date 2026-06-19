@@ -356,6 +356,8 @@ describe('ModelSettingsScreen', () => {
 
     it('toggles enhance image prompts', () => {
       expect(useAppStore.getState().settings.enhanceImagePrompts).toBe(false);
+      // Enhancement needs a text model available, else the toggle is disabled.
+      useAppStore.setState({ downloadedModels: [{ id: 'text-1' } as any] });
 
       const { getAllByRole } = renderWithSections('image');
       const switches = getAllByRole('switch');
@@ -372,15 +374,23 @@ describe('ModelSettingsScreen', () => {
     });
 
     it('shows enhance prompts on description', () => {
+      useAppStore.setState({ downloadedModels: [{ id: 'text-1' } as any] });
       useAppStore.getState().updateSettings({ enhanceImagePrompts: true });
       const { getByText } = renderWithSections('image');
       expect(getByText(/Text model refines your prompt/)).toBeTruthy();
     });
 
     it('shows enhance prompts off description', () => {
+      useAppStore.setState({ downloadedModels: [{ id: 'text-1' } as any] });
       useAppStore.getState().updateSettings({ enhanceImagePrompts: false });
       const { getByText } = renderWithSections('image');
       expect(getByText(/Use your prompt directly/)).toBeTruthy();
+    });
+
+    it('disables enhance prompts when no text model is available', () => {
+      useAppStore.setState({ downloadedModels: [] });
+      const { getByText } = renderWithSections('image');
+      expect(getByText(/Download a text model to enable/)).toBeTruthy();
     });
   });
 

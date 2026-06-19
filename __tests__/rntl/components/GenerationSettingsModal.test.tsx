@@ -567,6 +567,8 @@ describe('GenerationSettingsModal', () => {
   });
 
   it('calls updateSettings to enable enhance image prompts', () => {
+    // Enhancement needs a text model available, else the toggle is disabled.
+    mockStoreValues.downloadedModels = [{ id: 'text-1' } as any];
     const { getByText, getByTestId, getAllByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
