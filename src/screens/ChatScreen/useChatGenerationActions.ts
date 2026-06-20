@@ -71,6 +71,8 @@ export type GenerationDeps = {
   /** Loads the last-selected text model for a chat request that has none; opens
    *  the model selector and returns false when no text model was ever chosen. */
   ensureTextModelForChat: () => Promise<boolean>;
+  /** Stash a message to replay after the user picks a text model. */
+  setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
 };
@@ -386,7 +388,12 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   // live model state, so it proceeds correctly once a model is loaded.
   if (!shouldGenerateImage && deps.hasTextModel === false && !deps.activeModelInfo?.isRemote) {
     const ready = await deps.ensureTextModelForChat();
-    if (!ready) return;
+    if (!ready) {
+      // Selector opened (no text model chosen yet) — remember the message so it
+      // sends automatically once the user picks one, instead of being lost.
+      deps.setPendingMessage?.(text, attachments);
+      return;
+    }
   }
   if (shouldGenerateImage && !deps.activeImageModel) messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
   if (generationService.getState().isGenerating) {

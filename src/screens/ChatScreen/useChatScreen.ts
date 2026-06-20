@@ -61,11 +61,11 @@ export const useChatScreen = () => {
   const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(route.params?.projectId);
   const lastMessageCountRef = useRef(0);
   const generatingForConversationRef = useRef<string | null>(null);
+  // Stashed when the model selector opens with no text model; replayed on pick.
+  const pendingMessageRef = useRef<{ text: string; attachments?: MediaAttachment[] } | null>(null);
 
-  // Preload the user's last text model in the background when the chat opens,
-  // so they can start typing while it loads. Skip if a generation model is
-  // already loaded (don't disrupt an active text/image session). Surfaces a
-  // "Loading model" bar above the input via isModelLoading/loadingModel.
+  // Preload the last text model in the background on chat open (skip if a
+  // generation model is already loaded); shows the "Loading model" bar.
   useEffect(() => {
     const { lastTextModelId, downloadedModels } = useAppStore.getState();
     if (!lastTextModelId) return;
@@ -191,6 +191,7 @@ export const useChatScreen = () => {
     setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
     ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
+    setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
     createConversation,
     pendingProjectId,
   };
@@ -325,6 +326,19 @@ export const useChatScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
 
+  const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
+    handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
+
+  // After picking a text model, replay the stashed message (no retype needed).
+  const handleModelSelect = async (model: DownloadedModel) => {
+    await handleModelSelectFn(modelDeps, model);
+    const pending = pendingMessageRef.current;
+    if (pending) {
+      pendingMessageRef.current = null;
+      handleSend(pending.text, pending.attachments);
+    }
+  };
+
   return {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
@@ -345,10 +359,9 @@ export const useChatScreen = () => {
     imagePreviewPath: imageGenState.previewPath,
     isStreaming, isThinking, isCompacting, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
     navigation, hardwareService,
-    handleSend: (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
-      handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo }),
+    handleSend,
     handleStop: () => handleStopFn(genDeps),
-    handleModelSelect: (model: DownloadedModel) => handleModelSelectFn(modelDeps, model),
+    handleModelSelect,
     handleUnloadModel: () => handleUnloadModelFn(modelDeps),
     handleDeleteConversation: () =>
       handleDeleteConversationFn(genDeps, { activeConversationId, activeConversation, setAlertState }),
