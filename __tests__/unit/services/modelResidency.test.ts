@@ -105,6 +105,15 @@ describe('ModelResidencyManager', () => {
     expect(modelResidencyManager.isResident('img')).toBe(true);
   });
 
+  it('canLoadWithoutEviction is true only when the model fits alongside residents', async () => {
+    await modelResidencyManager.ensureResident({ key: 'text', type: 'text', sizeMB: 700 }, { load: async () => {}, unload: async () => {} }, 1);
+    // budget 1000: 700 + 200 fits, 700 + 400 does not.
+    expect(modelResidencyManager.canLoadWithoutEviction({ key: 'whisper', sizeMB: 200 })).toBe(true);
+    expect(modelResidencyManager.canLoadWithoutEviction({ key: 'image', sizeMB: 400 })).toBe(false);
+    // An already-resident model always "fits".
+    expect(modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB: 700 })).toBe(true);
+  });
+
   it('keeps a pinned classifier resident across a generation-model swap', async () => {
     const unloadClassifier = jest.fn(async () => {});
     modelResidencyManager.register({ key: 'smol', type: 'classifier', sizeMB: 100, pinned: true }, unloadClassifier, 1);

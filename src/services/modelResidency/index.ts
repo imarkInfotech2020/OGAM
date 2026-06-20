@@ -55,6 +55,17 @@ class ModelResidencyManager {
     return this.residents.has(key);
   }
 
+  /**
+   * Whether `spec` fits the budget alongside everything already resident,
+   * WITHOUT evicting anything. Used by the boot preloader so warming a
+   * lower-priority model never kicks out a higher-priority one.
+   */
+  canLoadWithoutEviction(spec: { key: string; sizeMB: number }): boolean {
+    if (this.residents.has(spec.key)) return true;
+    const usedMB = [...this.residents.values()].reduce((sum, r) => sum + r.sizeMB, 0);
+    return usedMB + spec.sizeMB <= this.getBudgetMB();
+  }
+
   markUsed(key: string, now: number = Date.now()): void {
     const r = this.residents.get(key);
     if (r) r.lastUsedAt = now;

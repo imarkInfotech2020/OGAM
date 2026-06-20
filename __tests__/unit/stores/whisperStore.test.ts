@@ -15,6 +15,11 @@ jest.mock('../../../src/services', () => ({
     unloadModel: jest.fn(),
     deleteModel: jest.fn(),
   },
+  WHISPER_MODELS: [{ id: 'tiny', size: 75 }],
+}));
+
+jest.mock('../../../src/services/modelResidency', () => ({
+  modelResidencyManager: { register: jest.fn(), release: jest.fn() },
 }));
 
 import { useWhisperStore } from '../../../src/stores/whisperStore';

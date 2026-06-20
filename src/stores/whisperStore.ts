@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { whisperService } from '../services';
+import { whisperService, WHISPER_MODELS } from '../services';
+import { modelResidencyManager } from '../services/modelResidency';
 
 interface WhisperState {
   // Downloaded model ID
@@ -91,6 +92,12 @@ export const useWhisperStore = create<WhisperState>()(
           const modelPath = whisperService.getModelPath(downloadedModelId);
           await whisperService.loadModel(modelPath);
           set({ isModelLoaded: true, isModelLoading: false, error: null });
+          // Account for the loaded STT model in the residency budget.
+          const sizeMB = WHISPER_MODELS.find(m => m.id === downloadedModelId)?.size ?? 200;
+          modelResidencyManager.register(
+            { key: 'whisper', type: 'whisper', sizeMB },
+            () => get().unloadModel(),
+          );
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state

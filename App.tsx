@@ -16,6 +16,7 @@ import logger, { setLogListener } from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
+import { preloadSelectedModels } from './src/services/modelPreloader';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
@@ -208,8 +209,11 @@ function App() {
       // Show the UI immediately
       setIsInitializing(false);
 
-      // Models are loaded on-demand when the user opens a chat,
-      // not eagerly on startup, to avoid freezing the UI.
+      // Warm the selected models in the background (text → image → TTS → STT,
+      // budget-gated, sequential) so the common paths have no cold-start wait.
+      // Fire-and-forget after the UI is up; loads run one at a time off the JS
+      // thread so they don't freeze the screen.
+      preloadSelectedModels();
     } catch (error) {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);

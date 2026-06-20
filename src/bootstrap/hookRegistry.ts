@@ -54,4 +54,7 @@ export const HOOKS = {
   downloadsListVoiceModels: 'downloads.listVoiceModels',
   /** (engineId: string) => Promise<void> — delete a downloaded TTS voice model. */
   downloadsDeleteVoiceModel: 'downloads.deleteVoiceModel',
+  /** () => Promise<void> — warm the active TTS engine at boot if its model is
+   *  downloaded and fits the residency budget (no-op otherwise). */
+  audioPreload: 'audio.preload',
 } as const;
