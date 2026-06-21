@@ -52,7 +52,10 @@ export const SettingsScreen: React.FC = () => {
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const deviceInfo = useAppStore((s) => s.deviceInfo);
-  const showProBanner = useAppStore((s) => !s.proBannerDismissed);
+  // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
+  // sense to a paid user). hasRegisteredPro only flips true after RC verification
+  // (activateProByEmail / revalidatePro), so this also covers "paid and verified".
+  const showProBanner = useAppStore((s) => !s.proBannerDismissed && !s.hasRegisteredPro);
   const setProBannerDismissed = useAppStore((s) => s.setProBannerDismissed);
 
   useEffect(() => {
