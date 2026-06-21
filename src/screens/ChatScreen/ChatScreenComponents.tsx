@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  ActivityIndicator,
   TouchableOpacity,
   Modal,
   Image,
@@ -66,38 +65,6 @@ export const NoModelScreen: React.FC<{
       isLoading={isModelLoading}
       currentModelPath={llmService.getLoadedModelPath()}
     />
-  </SafeAreaView>
-);
-
-export const LoadingScreen: React.FC<{
-  styles: StylesType;
-  colors: ColorsType;
-  navigation: any;
-  loadingModelName: string;
-  modelSize: string;
-  hasVision: boolean;
-}> = ({ styles, colors, navigation, loadingModelName, modelSize, hasVision }) => (
-  <SafeAreaView style={styles.container} edges={['top']}>
-    <View style={styles.header}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={20} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Loading Model</Text>
-        </View>
-        <View style={styles.headerActions} />
-      </View>
-    </View>
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.loadingText}>Loading {loadingModelName}</Text>
-      {modelSize ? <Text style={styles.loadingSubtext}>{modelSize}</Text> : null}
-      <Text style={styles.loadingHint}>
-        Preparing model for inference. This may take a moment for larger models.
-      </Text>
-      {hasVision && <Text style={styles.loadingHint}>Vision capabilities will be enabled.</Text>}
-    </View>
   </SafeAreaView>
 );
 

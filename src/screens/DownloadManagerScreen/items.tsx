@@ -43,18 +43,6 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(i > 1 ? 2 : 0)} ${sizes[i]}`;
 }
 
-export function extractQuantization(fileName: string): string {
-  if (fileName.toLowerCase().includes('coreml')) return 'Core ML';
-  const upperName = fileName.toUpperCase();
-  const patterns = ['Q2_K', 'Q3_K_S', 'Q3_K_M', 'Q4_0', 'Q4_K_S', 'Q4_K_M', 'Q5_K_S', 'Q5_K_M', 'Q6_K', 'Q8_0'];
-  for (const pattern of patterns) {
-    if (upperName.includes(pattern.replace('_', ''))) return pattern;
-    if (upperName.includes(pattern)) return pattern;
-  }
-  const match = /[QqFf]\d+_?[KkMmSs]*/.exec(fileName);
-  return match ? match[0].toUpperCase() : 'Unknown';
-}
-
 export function getStatusText(status: string): string {
   if (status === 'running') return 'Downloading...';
   if (status === 'pending') return 'Queued';

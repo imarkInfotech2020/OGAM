@@ -5,8 +5,8 @@
  * reading the audio interface mode, triggering speech after generation, and
  * augmenting the prompt in voice mode.
  *
- * Free builds register nothing, so callHook returns undefined and getHook
- * returns undefined — core keeps its default behaviour.
+ * Free builds register nothing, so callHook returns undefined and core keeps
+ * its default behaviour.
  */
 type HookFn = (...args: any[]) => any;
 
@@ -14,10 +14,6 @@ const hooks: Record<string, HookFn> = {};
 
 export function registerHook(name: string, fn: HookFn): void {
   hooks[name] = fn;
-}
-
-export function getHook<T extends HookFn = HookFn>(name: string): T | undefined {
-  return hooks[name] as T | undefined;
 }
 
 /** Call a hook if registered; returns its result, or undefined when absent. */
