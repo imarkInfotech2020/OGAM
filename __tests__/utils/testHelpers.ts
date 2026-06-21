@@ -42,6 +42,7 @@ export const resetStores = (): void => {
     modelRecommendation: null,
     downloadedModels: [],
     activeModelId: null,
+    lastTextModelId: null,
     isLoadingModel: false,
     settings: {
       systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',

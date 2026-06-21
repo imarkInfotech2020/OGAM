@@ -154,10 +154,6 @@ jest.mock('../../../src/screens/HomeScreen/components/ModelPickerSheet', () => (
   ModelPickerSheet: () => null,
 }));
 
-jest.mock('../../../src/screens/HomeScreen/components/LoadingOverlay', () => ({
-  LoadingOverlay: () => null,
-}));
-
 import { HomeScreen } from '../../../src/screens/HomeScreen';
 
 let unmountFn: (() => void) | null = null;

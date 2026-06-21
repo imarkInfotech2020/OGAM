@@ -3,7 +3,7 @@
  *
  * The pro-only inline Chat→Audio interface toggle rendered in the chat-input
  * pill row. Verifies:
- *  - when no audio engine is ready → routes to the TTS settings screen
+ *  - when no audio engine is ready → routes to the Models Voice tab
  *  - when ready → flips interfaceMode inline (chat→audio)
  */
 import React from 'react';
@@ -36,13 +36,13 @@ describe('ChatInputModeToggle', () => {
     setReady(false, 'chat');
   });
 
-  it('routes to TTS settings when no audio engine is ready', () => {
+  it('routes to the Models Voice tab when no audio engine is ready', () => {
     setReady(false);
     const { getByTestId } = render(<ChatInputModeToggle styles={styles} />);
 
     fireEvent.press(getByTestId('chat-input-mode-toggle'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('TTSSettings');
+    expect(mockNavigate).toHaveBeenCalledWith('ModelsTab', { initialTab: 'voice' });
     // Must NOT switch into a broken Audio Mode.
     expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
   });
