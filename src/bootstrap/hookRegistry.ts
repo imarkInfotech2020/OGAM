@@ -36,8 +36,6 @@ export function _clearHooksForTesting(): void {
 export const HOOKS = {
   /** () => boolean — whether a message can be spoken (TTS enabled + ready). */
   audioCanSpeak: 'audio.canSpeak',
-  /** () => string | null — short active-voice label for the home Models summary. */
-  audioSummaryLabel: 'audio.summaryLabel',
   /** (text: string, messageId: string) => void — speak a message aloud. */
   audioSpeak: 'audio.speak',
   /** () => void — stop any in-progress speech. */

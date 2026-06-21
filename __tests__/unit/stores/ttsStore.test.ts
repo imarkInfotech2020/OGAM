@@ -91,7 +91,6 @@ const resetState = () => {
     settings: {
       interfaceMode: 'chat',
       enabled: true,
-      autoPlay: false,
       speed: 1.0,
       engineId: 'mock-tts',
       voiceByEngine: {},
@@ -180,10 +179,9 @@ describe('ttsStore', () => {
 
   describe('updateSettings', () => {
     it('merges partial settings', () => {
-      getState().updateSettings({ speed: 1.5, autoPlay: true });
+      getState().updateSettings({ speed: 1.5 });
       const { settings } = getState();
       expect(settings.speed).toBe(1.5);
-      expect(settings.autoPlay).toBe(true);
       expect(settings.enabled).toBe(true);
     });
 

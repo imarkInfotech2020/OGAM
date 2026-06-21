@@ -96,7 +96,6 @@ const resetStore = () => {
     settings: {
       interfaceMode: 'chat',
       enabled: true,
-      autoPlay: false,
       speed: 1.0,
       engineId: 'mock-tts',
       voiceByEngine: {},
@@ -175,11 +174,7 @@ describe('TTS integration', () => {
   // ── Engine-agnostic speak ─────────────────────────────────────────────
 
   describe('auto-play', () => {
-    it('speak delegates to engine when autoPlay and engine ready', async () => {
-      useTTSStore.setState({
-        settings: { ...getState().settings, autoPlay: true },
-      });
-
+    it('speak delegates to the engine when ready', async () => {
       await getState().speak('AI response', 'last-msg');
 
       expect(mockEngine.speak).toHaveBeenCalledWith('AI response', expect.objectContaining({
