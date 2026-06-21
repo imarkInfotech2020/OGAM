@@ -325,7 +325,8 @@ export const SettingsScreen: React.FC = () => {
         {/* Pro feature sections registered at runtime by @offgrid/pro */}
         {getSettingsSections().map((Section, i) => <Section key={Section.displayName ?? String(i)} />)}
 
-        {/* Reset Onboarding */}
+        {/* Dev-only tooling — stripped from release builds */}
+        {__DEV__ && (
         <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
@@ -342,8 +343,9 @@ export const SettingsScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
         </AnimatedEntry>
+        )}
         <MadeWithLove />
-        <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />
+        {__DEV__ && <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />}
       </ScrollView>
     </SafeAreaView>
   );
