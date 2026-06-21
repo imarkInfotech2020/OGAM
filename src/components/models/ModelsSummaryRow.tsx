@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { AnimatedPressable } from '../../../components/AnimatedPressable';
-import { useTheme, useThemedStyles } from '../../../theme';
-import type { ThemeColors } from '../../../theme';
-import { TYPOGRAPHY, SPACING } from '../../../constants';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { useTheme, useThemedStyles } from '../../theme';
+import type { ThemeColors, ThemeShadows } from '../../theme';
+import { TYPOGRAPHY, SPACING } from '../../constants';
 import type { ModelRowType } from './ModelsManagerSheet';
 
 type Props = {
@@ -52,15 +52,16 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, isLoading, onPress }
   );
 };
 
-const createStyles = (colors: ThemeColors) => ({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
-    backgroundColor: colors.surfaceLight,
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     gap: SPACING.md,
     marginTop: SPACING.md,
     marginBottom: SPACING.lg,
+    ...shadows.small,
   },
   header: {
     flexDirection: 'row' as const,

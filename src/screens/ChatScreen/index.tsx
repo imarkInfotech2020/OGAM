@@ -20,9 +20,9 @@ import { MessageRenderer } from './MessageRenderer';
 import { NoModelScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 import { ChatMessageArea } from './ChatMessageArea';
-import { ModelsManagerSheet, ModelRowType } from '../HomeScreen/components/ModelsManagerSheet';
-import { WhisperPickerSheet } from '../HomeScreen/components/WhisperPickerSheet';
-import { VoiceModelsSheet } from '../HomeScreen/components/VoiceModelsSheet';
+import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
+import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
+import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 

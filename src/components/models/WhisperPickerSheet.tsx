@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { AppSheet } from '../../../components/AppSheet';
-import { AnimatedPressable } from '../../../components/AnimatedPressable';
-import { useTheme, useThemedStyles } from '../../../theme';
-import type { ThemeColors } from '../../../theme';
-import { TYPOGRAPHY, SPACING } from '../../../constants';
-import { WHISPER_MODELS } from '../../../services';
-import { useWhisperStore } from '../../../stores/whisperStore';
+import { AppSheet } from '../../components/AppSheet';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { useTheme, useThemedStyles } from '../../theme';
+import type { ThemeColors } from '../../theme';
+import { TYPOGRAPHY, SPACING } from '../../constants';
+import { WHISPER_MODELS } from '../../services';
+import { useWhisperStore } from '../../stores/whisperStore';
 
 type Props = {
   visible: boolean;

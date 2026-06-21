@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { AppSheet } from '../../../components/AppSheet';
-import { AnimatedPressable } from '../../../components/AnimatedPressable';
-import { useTheme, useThemedStyles } from '../../../theme';
-import type { ThemeColors } from '../../../theme';
-import { TYPOGRAPHY, SPACING } from '../../../constants';
+import { AppSheet } from '../../components/AppSheet';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { useTheme, useThemedStyles } from '../../theme';
+import type { ThemeColors } from '../../theme';
+import { TYPOGRAPHY, SPACING } from '../../constants';
 
 export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
 

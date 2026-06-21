@@ -1,21 +1,14 @@
 /**
  * VoiceModelsPanel tests
  *
- * The Voice tab body on the Models screen. It presents each TTS engine as a
- * ModelCard (matching the Text/Image tabs). Verifies:
- *  - one card per registered engine + the device RAM banner
- *  - a not-downloaded engine shows Download, which selects that engine then
- *    downloads its model
- *  - a downloaded, non-active engine shows a select action that activates it
- *  - the footer links to the full TTS settings screen
+ * The Voice picker (Models screen tab + home/chat Voice sheet). With a single
+ * engine it is a VOICE picker, not an engine picker. Verifies:
+ *  - the RAM privacy banner
+ *  - not-downloaded → a single "Download voice" action (opt-in)
+ *  - downloaded → a selectable list of voices; tapping one selects it
  */
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
-
-const mockNavigate = jest.fn();
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
-}));
 
 jest.mock('@offgrid/core/services/hardware', () => ({
   hardwareService: { getTotalMemoryGB: jest.fn(() => 8) },
@@ -25,71 +18,53 @@ jest.mock('@offgrid/core/components/CustomAlert', () => {
   const { View } = require('react-native');
   return {
     CustomAlert: () => <View testID="custom-alert" />,
-    // showAlert returns the alert state with buttons so the test can invoke them.
     showAlert: (title: string, message: string, buttons: any[]) => ({ visible: true, title, message, buttons }),
     hideAlert: () => ({ visible: false }),
     initialAlertState: { visible: false },
   };
 });
 
-jest.mock('@offgrid/core/components', () => {
-  const { Text, TouchableOpacity } = require('react-native');
+jest.mock('@offgrid/core/components/AnimatedPressable', () => {
+  const { TouchableOpacity } = require('react-native');
   return {
-    ModelCard: ({ model, isDownloaded, onPress, onDownload, onDelete, testID }: any) => (
-      <TouchableOpacity testID={testID} onPress={onPress} disabled={!onPress}>
-        <Text testID={`${testID}-name`}>{model.name}</Text>
-        <Text testID={`${testID}-author`}>{model.author}</Text>
-        {isDownloaded && <Text testID={`${testID}-downloaded`}>downloaded</Text>}
-        {onDownload && <TouchableOpacity testID={`${testID}-download`} onPress={onDownload}><Text>Download</Text></TouchableOpacity>}
-        {onDelete && <TouchableOpacity testID={`${testID}-delete`} onPress={onDelete}><Text>Delete</Text></TouchableOpacity>}
-      </TouchableOpacity>
+    AnimatedPressable: ({ children, onPress, disabled, testID }: any) => (
+      <TouchableOpacity testID={testID} onPress={onPress} disabled={disabled}>{children}</TouchableOpacity>
     ),
   };
 });
 
-const makeEngine = (id: string, opts: { name: string; sizeMB: number; downloaded: boolean; supported?: boolean; streaming?: boolean; voiceCloning?: boolean }) => ({
-  id,
-  displayName: opts.name,
-  capabilities: { streaming: !!opts.streaming, voiceCloning: !!opts.voiceCloning, peakRamMB: opts.sizeMB, generateAndSave: false },
-  isSupported: () => opts.supported ?? true,
-  getRequiredAssets: () => [{ id: `${id}-asset`, sizeBytes: opts.sizeMB * 1024 * 1024 }],
-  isFullyDownloaded: () => opts.downloaded,
-  getOverallDownloadProgress: () => (opts.downloaded ? 1 : 0),
+let mockDownloaded = true;
+const mockEngine = {
+  displayName: 'Kokoro TTS',
+  capabilities: { peakRamMB: 82 },
+  getRequiredAssets: () => [{ id: 'a', sizeBytes: 82 * 1024 * 1024 }],
+  isFullyDownloaded: () => mockDownloaded,
   checkAssetStatus: jest.fn(async () => []),
-});
-
-// mock-prefixed so jest.mock factories may reference them (referenced lazily).
-const mockEngines: Record<string, ReturnType<typeof makeEngine>> = {
-  kokoro: makeEngine('kokoro', { name: 'Kokoro TTS', sizeMB: 82, downloaded: true, streaming: true }),
-  outetts: makeEngine('outetts', { name: 'OuteTTS 0.3', sizeMB: 527, downloaded: false, voiceCloning: true }),
+  getActiveVoice: () => null,
 };
-
 jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: {
-    getRegisteredIds: () => ['kokoro', 'outetts'],
-    getEngine: (id: string) => mockEngines[id],
-  },
+  ttsRegistry: { getActiveEngine: () => mockEngine },
 }));
 
-const mockStoreActions = {
-  setEngine: jest.fn(async () => {}),
+const actions = {
+  setVoice: jest.fn(async () => {}),
   downloadModels: jest.fn(async () => {}),
   deleteModels: jest.fn(async () => {}),
   checkDownloadStatus: jest.fn(async () => {}),
-  initializeEngine: jest.fn(async () => {}),
   clearError: jest.fn(),
 };
-
 let mockStoreState: any;
-jest.mock('../../../pro/audio/ttsStore', () => ({
-  useTTSStore: () => mockStoreState,
-}));
+jest.mock('../../../pro/audio/ttsStore', () => ({ useTTSStore: () => mockStoreState }));
 
 import { VoiceModelsPanel } from '../../../pro/audio/ui/VoiceModelsPanel';
 
+const VOICES = [
+  { id: 'af_heart', label: 'Warm', metadata: { accent: 'US', gender: 'Female', persona: 'Friendly' } },
+  { id: 'bf_emma', label: 'Gentle', metadata: { accent: 'British', gender: 'Female', persona: 'Soft' } },
+];
+
 const renderPanel = async () => {
   const utils = render(<VoiceModelsPanel />);
-  // Let the mount effect (per-engine disk probe) settle.
   await act(async () => { await Promise.resolve(); });
   return utils;
 };
@@ -97,56 +72,40 @@ const renderPanel = async () => {
 describe('VoiceModelsPanel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDownloaded = true;
     mockStoreState = {
       isReady: true,
       isDownloading: false,
       overallDownloadProgress: 0,
       error: null,
-      settings: { engineId: 'kokoro' },
-      ...mockStoreActions,
+      voices: VOICES,
+      activeVoiceId: 'af_heart',
+      ...actions,
     };
   });
 
-  it('renders one card per engine plus the RAM privacy banner', async () => {
-    const { getByTestId, getByText } = await renderPanel();
-
-    expect(getByTestId('voice-model-card-0-name')).toHaveTextContent('Kokoro TTS');
-    expect(getByTestId('voice-model-card-1-name')).toHaveTextContent('OuteTTS 0.3');
+  it('shows the RAM privacy banner', async () => {
+    const { getByText } = await renderPanel();
     expect(getByText(/nothing is sent anywhere/)).toBeTruthy();
   });
 
-  it('shows a downloaded engine as downloaded', async () => {
+  it('lists voices when the model is downloaded and selects one on tap', async () => {
     const { getByTestId } = await renderPanel();
-    expect(getByTestId('voice-model-card-0-downloaded')).toBeTruthy();
+    expect(getByTestId('voice-af_heart')).toBeTruthy();
+    expect(getByTestId('voice-bf_emma')).toBeTruthy();
+
+    await act(async () => { fireEvent.press(getByTestId('voice-bf_emma')); });
+    expect(actions.setVoice).toHaveBeenCalledWith('bf_emma');
   });
 
-  it('downloads a not-downloaded engine by selecting it then downloading', async () => {
-    const { getByTestId } = await renderPanel();
+  it('shows an opt-in download when the model is not downloaded', async () => {
+    mockDownloaded = false;
+    mockStoreState.isReady = false;
+    const { getByText } = await renderPanel();
 
-    await act(async () => {
-      fireEvent.press(getByTestId('voice-model-card-1-download'));
-    });
-
-    await waitFor(() => {
-      expect(mockStoreActions.setEngine).toHaveBeenCalledWith('outetts');
-      expect(mockStoreActions.downloadModels).toHaveBeenCalled();
-    });
-  });
-
-  it('activates a downloaded, non-active engine when its card is tapped', async () => {
-    // Make outetts downloaded but kokoro active.
-    mockEngines.outetts.isFullyDownloaded = () => true;
-    const { getByTestId } = await renderPanel();
-
-    await act(async () => {
-      fireEvent.press(getByTestId('voice-model-card-1'));
-    });
-
-    await waitFor(() => {
-      expect(mockStoreActions.setEngine).toHaveBeenCalledWith('outetts');
-      expect(mockStoreActions.initializeEngine).toHaveBeenCalled();
-    });
-    // restore
-    mockEngines.outetts.isFullyDownloaded = () => false;
+    const cta = getByText('Download voice');
+    expect(cta).toBeTruthy();
+    await act(async () => { fireEvent.press(cta); });
+    await waitFor(() => expect(actions.downloadModels).toHaveBeenCalled());
   });
 });

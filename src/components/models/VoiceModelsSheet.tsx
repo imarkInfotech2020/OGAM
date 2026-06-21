@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, Dimensions } from 'react-native';
-import { AppSheet } from '../../../components/AppSheet';
-import { getSlot, SLOTS } from '../../../bootstrap/slotRegistry';
-import { useThemedStyles } from '../../../theme';
-import type { ThemeColors } from '../../../theme';
-import { TYPOGRAPHY, SPACING } from '../../../constants';
+import { AppSheet } from '../../components/AppSheet';
+import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useThemedStyles } from '../../theme';
+import type { ThemeColors } from '../../theme';
+import { TYPOGRAPHY, SPACING } from '../../constants';
 
 type Props = {
   visible: boolean;
