@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,26 +13,42 @@ import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { activateProByEmail, getWebPurchaseUrl } from '../../services/proLicenseService';
 
-type Props = {
-  visible: boolean;
-  onClose: () => void;
-  onUnlocked: () => void;
-};
-
 // Two modes: pay (default) or verify (already paid).
 // One primary button, one text toggle. No competing button rows.
 type Mode = 'pay' | 'verify';
 type ErrorMsg = string | null;
 
-export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }) => {
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+  onUnlocked: () => void;
+  // Which step to open on. "Get Pro" opens 'pay'; "Already paid?" opens 'verify'
+  // so the user lands straight on email entry instead of having to toggle again.
+  initialMode?: Mode;
+};
+
+export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, initialMode = 'pay' }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const [email, setEmail] = useState('');
-  const [mode, setMode] = useState<Mode>('pay');
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorMsg>(null);
   const [success, setSuccess] = useState(false);
+
+  // The modal stays mounted across opens, so the initial useState won't pick up a
+  // new initialMode. Re-apply it (and clear transient state) each time it opens, so
+  // launching from "Already paid?" always starts in verify mode.
+  useEffect(() => {
+    if (visible) {
+      setMode(initialMode);
+      setEmail('');
+      setError(null);
+      setSuccess(false);
+      setLoading(false);
+    }
+  }, [visible, initialMode]);
 
   const reset = () => {
     setEmail('');

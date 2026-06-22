@@ -22,8 +22,14 @@ export const ProDetailScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const hasRegisteredPro = useAppStore((s) => s.hasRegisteredPro);
   const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [unlockMode, setUnlockMode] = useState<'pay' | 'verify'>('pay');
 
-  const openEmailModal = () => setEmailModalVisible(true);
+  // "Get Pro" opens the checkout step; "Already paid?" opens the verify-email step
+  // directly, so the user doesn't have to toggle "Already paid?" again inside the modal.
+  const openEmailModal = (mode: 'pay' | 'verify' = 'pay') => {
+    setUnlockMode(mode);
+    setEmailModalVisible(true);
+  };
 
   // Purchase verified: the modal shows its own success card and the keychain is
   // already written. Pro features load on the next app launch (checkProStatus
@@ -60,7 +66,7 @@ export const ProDetailScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.getProButton}
-              onPress={openEmailModal}
+              onPress={() => openEmailModal('pay')}
             >
               <Text style={styles.getProButtonText}>Get Pro</Text>
             </TouchableOpacity>
@@ -170,14 +176,14 @@ export const ProDetailScreen: React.FC = () => {
           <>
             <TouchableOpacity
               style={styles.ctaButton}
-              onPress={openEmailModal}
+              onPress={() => openEmailModal('pay')}
             >
               <Text style={styles.ctaText}>Get Pro</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.restoreButton}
-              onPress={openEmailModal}
+              onPress={() => openEmailModal('verify')}
             >
               <Text style={styles.restoreText}>Already paid? Unlock with email</Text>
             </TouchableOpacity>
@@ -188,6 +194,7 @@ export const ProDetailScreen: React.FC = () => {
 
       <ProUnlockModal
         visible={emailModalVisible}
+        initialMode={unlockMode}
         onClose={() => setEmailModalVisible(false)}
         onUnlocked={handleUnlocked}
       />

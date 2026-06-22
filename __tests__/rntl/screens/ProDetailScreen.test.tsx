@@ -40,6 +40,22 @@ describe('ProDetailScreen', () => {
     expect(queryAllByText('Get Pro').length).toBeGreaterThan(0);
   });
 
+  it('"Already paid? Unlock with email" opens the modal directly in verify mode', () => {
+    const { getByText, queryByText } = render(<ProDetailScreen />);
+    fireEvent.press(getByText('Already paid? Unlock with email'));
+    // Lands straight on email verification — no second "Already paid?" toggle needed.
+    expect(getByText('Verify and unlock')).toBeTruthy();
+    expect(getByText('Enter the email you used when you paid.')).toBeTruthy();
+    expect(queryByText('Continue to payment')).toBeNull();
+  });
+
+  it('the Get Pro CTA opens the modal in pay mode', () => {
+    const { getAllByText, getByText, queryByText } = render(<ProDetailScreen />);
+    fireEvent.press(getAllByText('Get Pro')[0]);
+    expect(getByText('Continue to payment')).toBeTruthy();
+    expect(queryByText('Verify and unlock')).toBeNull();
+  });
+
   it('opens web checkout with the entered email', async () => {
     const { getAllByText, getByText, getByPlaceholderText } = render(<ProDetailScreen />);
     fireEvent.press(getAllByText('Get Pro')[0]);
