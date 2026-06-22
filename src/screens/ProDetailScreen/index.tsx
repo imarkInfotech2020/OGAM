@@ -154,15 +154,17 @@ export const ProDetailScreen: React.FC = () => {
               <Icon name="check-circle" size={20} color={colors.primary} />
               <Text style={styles.proActiveText}>Pro is active on this account.</Text>
             </View>
-            <TouchableOpacity
-              style={styles.restoreButton}
-              onPress={async () => {
-                await resetProIdentityForTesting();
-                Alert.alert('Reset done', 'RC identity cleared. Restart the app to test the purchase flow again.');
-              }}
-            >
-              <Text style={styles.restoreText}>Reset Pro identity</Text>
-            </TouchableOpacity>
+            {__DEV__ && (
+              <TouchableOpacity
+                style={styles.restoreButton}
+                onPress={async () => {
+                  await resetProIdentityForTesting();
+                  Alert.alert('Reset done', 'RC identity cleared. Restart the app to test the purchase flow again.');
+                }}
+              >
+                <Text style={styles.restoreText}>Reset Pro identity</Text>
+              </TouchableOpacity>
+            )}
           </>
         ) : (
           <>

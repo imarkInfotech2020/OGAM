@@ -294,16 +294,14 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // llama.cpp uses text hint only when it lacks native Jinja tool calling support.
   const useTextHint = !isRemote && !isLiteRT && activeTools.length > 0 && !llmService.supportsToolCalling();
 
-  // Collect extension hints (MCP tools etc.) and append when using text-hint mode
-  const extensions = getToolExtensions();
-  const extHints = extensions.map(e => e.getSystemPromptHint()).filter(Boolean);
-
-  const extHintBlock = extHints.join('');
-
+  // MCP/extension hints are injected once, centrally, by augmentSystemPromptForTools
+  // in the tool loop (covers every engine + tool path). Do NOT add them here too, or
+  // the hint lands in the system prompt twice. Only the built-in-tools text hint is
+  // added here, and only when the model lacks native Jinja tool calling.
   const systemPrompt = applyGemma4ThinkToken(
     useTextHint
-      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}${extHintBlock}`
-      : `${basePrompt}${extHintBlock}`,
+      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
+      : basePrompt,
     isRemote,
     { isLiteRT, thinkingEnabled: deps.settings.thinkingEnabled },
   );
@@ -449,11 +447,12 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
   const useTextHint = !isRemote && !isLiteRTRegen && activeTools.length > 0 && !llmService.supportsToolCalling();
-  const regenExtHints = getToolExtensions().map(e => e.getSystemPromptHint()).filter(Boolean).join('');
+  // MCP/extension hints come solely from augmentSystemPromptForTools in the tool loop
+  // (see the send path above) — adding them here too would double-inject.
   const systemPrompt = applyGemma4ThinkToken(
     useTextHint
-      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}${regenExtHints}`
-      : `${basePrompt}${regenExtHints}`,
+      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
+      : basePrompt,
     isRemote,
     { isLiteRT: isLiteRTRegen, thinkingEnabled: deps.settings.thinkingEnabled },
   );

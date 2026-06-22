@@ -2133,6 +2133,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - react-native-get-random-values (1.11.0):
+    - React-Core
   - react-native-image-picker (8.2.1):
     - boost
     - DoubleConversion
@@ -3556,6 +3558,7 @@ DEPENDENCIES:
   - "react-native-document-picker (from `../node_modules/@react-native-documents/picker`)"
   - "react-native-document-viewer (from `../node_modules/@react-native-documents/viewer`)"
   - react-native-executorch (from `../node_modules/react-native-executorch`)
+  - react-native-get-random-values (from `../node_modules/react-native-get-random-values`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - "react-native-slider (from `../node_modules/@react-native-community/slider`)"
@@ -3734,6 +3737,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-documents/viewer"
   react-native-executorch:
     :path: "../node_modules/react-native-executorch"
+  react-native-get-random-values:
+    :path: "../node_modules/react-native-get-random-values"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
   react-native-safe-area-context:
@@ -3908,6 +3913,7 @@ SPEC CHECKSUMS:
   react-native-document-picker: dc2d83366e47e89e7c51e8a41eab99c1d54e941c
   react-native-document-viewer: 8c6ed07e7e27352743fa98e8dd6d288ad925b884
   react-native-executorch: 9a44ee2b18773cbe5ad2e6d7376eb76f347e2935
+  react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-image-picker: 0314366753615115fa55c3cc937ac44cb7e75702
   react-native-safe-area-context: c00143b4823773bba23f2f19f85663ae89ceb460
   react-native-slider: 34064ca1a6864d7b263e44dd76a2d794e8d26744

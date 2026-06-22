@@ -33,7 +33,7 @@ import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { GITHUB_URL, SHARE_ON_X_URL } from '../utils/sharePrompt';
 import packageJson from '../../package.json';
 
-const FEEDBACK_EMAIL = 'support@offgridmobile.co';
+const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -52,7 +52,10 @@ export const SettingsScreen: React.FC = () => {
   const resetChecklist = useAppStore((s) => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const deviceInfo = useAppStore((s) => s.deviceInfo);
-  const showProBanner = useAppStore((s) => !s.proBannerDismissed);
+  // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
+  // sense to a paid user). hasRegisteredPro only flips true after RC verification
+  // (activateProByEmail / revalidatePro), so this also covers "paid and verified".
+  const showProBanner = useAppStore((s) => !s.proBannerDismissed && !s.hasRegisteredPro);
   const setProBannerDismissed = useAppStore((s) => s.setProBannerDismissed);
 
   useEffect(() => {
@@ -321,7 +324,8 @@ export const SettingsScreen: React.FC = () => {
         {/* Pro feature sections registered at runtime by @offgrid/pro */}
         {getSettingsSections().map((Section, i) => <Section key={Section.displayName ?? String(i)} />)}
 
-        {/* Reset Onboarding */}
+        {/* Dev-only tooling — stripped from release builds */}
+        {__DEV__ && (
         <AnimatedEntry index={10} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={handleResetOnboarding}>
@@ -332,12 +336,20 @@ export const SettingsScreen: React.FC = () => {
               <Icon name="list" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Reset Onboarding Checklist</Text>
             </TouchableOpacity>
+          </View>
+        </AnimatedEntry>
+        )}
+
+        {/* Debug logs — available in release builds so issues can be captured and shared */}
+        <AnimatedEntry index={11} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.devButtonGroup}>
             <TouchableOpacity style={styles.devButton} onPress={() => setShowDebugLogs(true)}>
               <Icon name="terminal" size={14} color={colors.textMuted} />
               <Text style={styles.devButtonText}>Debug Logs</Text>
             </TouchableOpacity>
           </View>
         </AnimatedEntry>
+
         <MadeWithLove />
         <DebugLogsScreen visible={showDebugLogs} onClose={() => setShowDebugLogs(false)} />
       </ScrollView>

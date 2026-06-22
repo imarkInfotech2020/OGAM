@@ -455,12 +455,23 @@ function buildDateTimeContext(precise: boolean): string {
   return `\n\nThe current date is ${dateStr} (device local date, format YYYY-MM-DD).${dayPart}${tzPart} When the user refers to relative dates such as "today", "tomorrow", or "next Friday", resolve them against this current date.`;
 }
 
-function augmentSystemPromptForTools(messages: Message[], enabledToolIds: string[] = []): Message[] {
+function augmentSystemPromptForTools(
+  messages: Message[],
+  enabledToolIds: string[] = [],
+  nativeToolCalling = false,
+): Message[] {
   const sysIdx = messages.findIndex(m => m.role === 'system');
   if (sysIdx === -1) return messages;
   const sys = messages[sysIdx];
   const existing = typeof sys.content === 'string' ? sys.content : '';
-  const extHints = getToolExtensions().map(e => e.getSystemPromptHint()).filter(Boolean).join('');
+  // Extension text hints (e.g. MCP's "call tools using <mcp_tool_call>{…}") only make
+  // sense when the model has NO native tool calling. With native tool calling the model
+  // is already given the tools structurally; adding the text hint makes it emit a hybrid
+  // format that neither llama.cpp nor our parsers recognise — breaking BOTH MCP and
+  // built-in tool calls. So skip the hint whenever native tool calling is available.
+  const extHints = nativeToolCalling
+    ? ''
+    : getToolExtensions().map(e => e.getSystemPromptHint()).filter(Boolean).join('');
   const precise = enabledToolIds.some(id => TIME_SENSITIVE_TOOL_IDS.includes(id));
   const updated = { ...sys, content: existing + TOOL_BEHAVIOR_GUIDANCE + buildDateTimeContext(precise) + extHints };
   return [...messages.slice(0, sysIdx), updated, ...messages.slice(sysIdx + 1)];
@@ -480,13 +491,18 @@ async function callLLMWithRetry(
   // We shallow-copy messages to avoid mutating the caller's array.
   const exts = getToolExtensions();
   const extCount = exts.reduce((n, e) => n + e.enabledToolCount(), 0);
-  const augmentedMessages = (tools.length > 0 || extCount > 0) ? augmentSystemPromptForTools(messages, ctx?.enabledToolIds) : messages;
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  const useRemote = forceRemote || (!!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded());
+  // LiteRT (OpenApiTool), remote providers, and llama with a Jinja tool template all do
+  // native tool calling — the text hint must be suppressed for them (see augmentSystemPromptForTools).
+  const nativeToolCalling = (isLiteRTActive() && !!conversationId) || useRemote || llmService.supportsToolCalling();
+  const augmentedMessages = (tools.length > 0 || extCount > 0)
+    ? augmentSystemPromptForTools(messages, ctx?.enabledToolIds, nativeToolCalling)
+    : messages;
 
   if (isLiteRTActive() && conversationId) {
     return callLiteRTForLoop(conversationId, augmentedMessages, { tools, onStream, ctx });
   }
-  const activeServerId = useRemoteServerStore.getState().activeServerId;
-  const useRemote = forceRemote || (!!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded());
   if (useRemote) {
     try { return await callRemoteLLMWithTools(augmentedMessages, tools, { onStream, disableThinking }); }
     catch (e: any) { throw new Error(e?.message || String(e) || 'Remote LLM error'); }
@@ -588,10 +604,16 @@ async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState
  */
 export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const chatStore = useChatStore.getState();
-  const toolSchemas = [
-    ...getToolsAsOpenAISchema(ctx.enabledToolIds),
-    ...getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []),
-  ];
+  const builtInSchemas = getToolsAsOpenAISchema(ctx.enabledToolIds);
+  const extSchemas = getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []);
+  const toolSchemas = [...builtInSchemas, ...extSchemas];
+  // Diagnostic: schema size is the usual culprit when a local model goes silent
+  // with tools enabled — large MCP servers (e.g. Notion) ship huge schemas that
+  // can overwhelm a small context window.
+  logger.log(
+    `[ToolLoop] tools=${toolSchemas.length} (builtin=${builtInSchemas.length}, ext=${extSchemas.length}), ` +
+    `schemaChars=${JSON.stringify(toolSchemas).length}, builtinIds=[${ctx.enabledToolIds.join(', ')}]`,
+  );
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
   const state: ToolLoopState = { firstTokenFired: false, thinkingDoneFired: false, streamedContent: '', reasoningContent: '' };

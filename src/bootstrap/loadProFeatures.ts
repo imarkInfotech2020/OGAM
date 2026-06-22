@@ -30,4 +30,18 @@ export async function loadProFeatures(isPro?: boolean): Promise<void> {
   }
 
   pro.activate({ registerToolExtension, registerScreen, registerSettingsSection, registerSlot, registerHook });
+
+  // Inject native OAuth adapters so MCP servers can use OAuth (browser sign-in +
+  // Keychain token storage + PKCE crypto). Required before any OAuth connect;
+  // until this runs the OAuth option stays hidden in the UI. Loaded lazily so
+  // free builds never pull in the native crypto/browser libs.
+  if (typeof pro.configureOAuthAdapters === 'function') {
+    try {
+      const { mcpOAuthNativeAdapters } = require('../services/mcpOAuthNativeAdapters');
+      pro.configureOAuthAdapters(mcpOAuthNativeAdapters);
+    } catch (err) {
+      // Non-fatal: header/none MCP auth still works; OAuth simply stays unavailable.
+      console.warn('[pro] MCP OAuth adapters not configured:', err);
+    }
+  }
 }
