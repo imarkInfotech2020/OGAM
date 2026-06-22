@@ -12,9 +12,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
-import logger, { setLogListener } from './src/utils/logger';
+import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
-import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -24,9 +23,6 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
-
-// Wire logger → in-app debug viewer (runs before any component mounts)
-setLogListener((entry) => useDebugLogsStore.getState().addLog(entry));
 
 const ensureRemoteServerStoreHydrated = async () => {
   const persistApi = useRemoteServerStore.persist;
