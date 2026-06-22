@@ -14,6 +14,7 @@ import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
+import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -23,6 +24,26 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
+
+// Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
+// is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).
+if (__DEV__) {
+  const fmt = (a: unknown): string => {
+    if (a instanceof Error) return `${a.name}: ${a.message}`;
+    if (typeof a === 'string') return a;
+    try { return JSON.stringify(a); } catch { return String(a); }
+  };
+  const base = { log: logger.log, warn: logger.warn, error: logger.error };
+  const tap = (level: 'log' | 'warn' | 'error') => (...args: unknown[]) => {
+    base[level](...args);
+    try {
+      useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message: args.map(fmt).join(' ') });
+    } catch { /* never break logging */ }
+  };
+  logger.log = tap('log');
+  logger.warn = tap('warn');
+  logger.error = tap('error');
+}
 
 const ensureRemoteServerStoreHydrated = async () => {
   const persistApi = useRemoteServerStore.persist;
