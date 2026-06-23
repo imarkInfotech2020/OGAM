@@ -84,7 +84,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
       try {
         await Linking.openURL(getWebPurchaseUrl(trimmed));
       } catch {
-        setError('Could not open checkout. Please try again.');
+        setError('Could not open the Pro page. Please try again.');
       }
       return;
     }
@@ -98,7 +98,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
         setSuccess(true);
         onUnlocked();
       } else {
-        setError('No Pro purchase found for that email. Check the address and try again.');
+        setError('No Pro membership found for that email. Check the address and try again.');
       }
     } catch {
       setError('Verification failed. Check your connection and try again.');
@@ -145,8 +145,8 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
           <Text style={styles.title}>Unlock Off Grid Pro</Text>
           <Text style={styles.subtitle}>
             {isPay
-              ? 'Enter your email to pay. One-time $50, no subscription.'
-              : 'Enter the email you used when you paid.'}
+              ? 'Enter your email to get Pro. One-time $50, no subscription.'
+              : 'Enter the email tied to your Pro membership.'}
           </Text>
 
           {/* Email input */}
@@ -169,6 +169,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
 
           {/* Primary CTA */}
           <TouchableOpacity
+            testID="unlock-cta"
             style={[styles.primaryBtn, (loading || !hasInput) && styles.disabled]}
             onPress={handlePrimary}
             disabled={loading || !hasInput}
@@ -176,14 +177,14 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
           >
             {isPay ? (
               <>
-                <Text style={styles.primaryBtnText}>Continue to payment</Text>
+                <Text style={styles.primaryBtnText}>Get Pro</Text>
                 <View style={styles.pricePill}>
                   <Text style={styles.priceText}>$50</Text>
                 </View>
               </>
             ) : (
               <Text style={styles.primaryBtnText}>
-                {loading ? 'Verifying...' : 'Verify and unlock'}
+                {loading ? 'Verifying...' : 'Verify membership'}
               </Text>
             )}
           </TouchableOpacity>
@@ -195,7 +196,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked, 
             disabled={loading}
           >
             <Text style={styles.toggleText}>
-              {isPay ? 'Already paid? Verify email instead' : 'Not paid yet? Back to checkout'}
+              {isPay ? 'Already a member? Verify email instead' : 'Not a member yet? Get Pro'}
             </Text>
             <Icon name={isPay ? 'arrow-right' : 'arrow-left'} size={13} color={colors.textSecondary} />
           </TouchableOpacity>

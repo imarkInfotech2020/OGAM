@@ -185,7 +185,7 @@ export const ProDetailScreen: React.FC = () => {
               style={styles.restoreButton}
               onPress={() => openEmailModal('verify')}
             >
-              <Text style={styles.restoreText}>Already paid? Unlock with email</Text>
+              <Text style={styles.restoreText}>Already a member? Verify with email</Text>
             </TouchableOpacity>
           </>
         )}
