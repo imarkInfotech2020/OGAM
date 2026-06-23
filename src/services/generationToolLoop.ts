@@ -374,17 +374,25 @@ async function callLiteRTForLoop(
   }
   await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools, history });
   const onToolCall = ctx ? buildLiteRTToolCallHandler(ctx, conversationId) : undefined;
-  const fullResponse = await liteRTService.generateRaw(
-    text,
-    imageUris,
-    {
-      onToken: token => onStream?.({ content: token }),
-      onToolCall,
-      onReasoning: token => onStream?.({ reasoningContent: token }),
-    },
-  );
-  // Native SDK handles all tool→model cycles internally; toolCalls always empty here
-  return { fullResponse, toolCalls: [] };
+  const handlers = {
+    onToken: (token: string) => onStream?.({ content: token }),
+    onReasoning: (token: string) => onStream?.({ reasoningContent: token }),
+  };
+  try {
+    const fullResponse = await liteRTService.generateRaw(text, imageUris, { ...handlers, onToolCall });
+    // Native SDK handles all tool→model cycles internally; toolCalls always empty here
+    return { fullResponse, toolCalls: [] };
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    // The litertlm native FC parser hard-fails (Status Code 3) when a small model emits
+    // a malformed tool call. Rather than surface a raw "Generation Error", retry once
+    // WITHOUT tools so the user still gets a text answer instead of a crashed turn.
+    if (!/parse (tool|FC) calls|Status Code: 3/i.test(msg)) throw e;
+    logger.warn(`[ToolLoop] LiteRT tool-call parse failed; retrying without tools: ${msg.slice(0, 140)}`);
+    await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools: [], history });
+    const fullResponse = await liteRTService.generateRaw(text, imageUris, handlers);
+    return { fullResponse, toolCalls: [] };
+  }
 }
 
 const TOOL_BEHAVIOR_GUIDANCE = '\n\nMake good use of the tools available to you. If you are uncertain or lack current information, use the appropriate tool rather than guessing. Never refuse or say you cannot help when a tool is available. For multiple distinct items, make a separate tool call for each. Call tools silently — do not announce them first.';
