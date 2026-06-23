@@ -252,10 +252,10 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
             disabled={disabled}
             activeOpacity={0.7}
           >
-            <View style={buttonStyle}>
+            <View style={[styles.button, styles.buttonAudio, isRecording && styles.buttonRecording, disabled && styles.buttonDisabled]}>
               {isRecording
-                ? <Icon name="square" size={16} color="#fff" />
-                : <ButtonIcon asSendButton={false} isRecording={false} />}
+                ? <Icon name="square" size={24} color="#fff" />
+                : <ButtonIcon asSendButton={false} isRecording={false} size={30} />}
             </View>
           </TouchableOpacity>
         </Animated.View>

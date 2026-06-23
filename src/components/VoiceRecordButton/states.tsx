@@ -93,10 +93,11 @@ export const UnavailableButton: React.FC<UnavailableButtonProps> = ({ asSendButt
 interface ButtonIconProps {
   asSendButton: boolean;
   isRecording: boolean;
+  size?: number;
 }
 
-export const ButtonIcon: React.FC<ButtonIconProps> = ({ asSendButton: _asSendButton, isRecording }) => {
+export const ButtonIcon: React.FC<ButtonIconProps> = ({ asSendButton: _asSendButton, isRecording, size = 18 }) => {
   const { colors } = useTheme();
   const iconColor = isRecording ? colors.surface : colors.primary;
-  return <Icon name="mic" size={18} color={iconColor} />;
+  return <Icon name="mic" size={size} color={iconColor} />;
 };

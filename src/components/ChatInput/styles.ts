@@ -115,10 +115,10 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden' as const,
-    paddingLeft: 14,
+    paddingLeft: 16,
     paddingRight: 4,
-    paddingVertical: 4,
-    minHeight: 48,
+    paddingVertical: 6,
+    minHeight: 56,
   },
   pillInput: {
     flex: 1,
