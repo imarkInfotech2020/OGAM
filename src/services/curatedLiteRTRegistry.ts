@@ -1,3 +1,10 @@
+import { ModelFile } from '../types';
+
+// Synthetic parent id for the curated LiteRT models. Used both as the model id
+// in the ModelsScreen browser and as the download id in onboarding so a model
+// downloaded in either place resolves to the same `${LITERT_PARENT_ID}/${file}`.
+export const LITERT_PARENT_ID = 'offgrid/litert-recommended';
+
 export interface CuratedLiteRTEntry {
   fileName: string;
   hfRepoId: string;
@@ -46,4 +53,21 @@ export function getCuratedLiteRTEntry(fileName: string | undefined): CuratedLite
 
 export function buildCuratedLiteRTUrl(entry: CuratedLiteRTEntry): string {
   return `https://huggingface.co/${entry.hfRepoId}/resolve/${entry.commitHash}/${entry.fileName}?download=true`;
+}
+
+// ModelFile-shaped view of the curated registry, ready to feed the download
+// pipeline. The registry is the single source of truth — both the ModelsScreen
+// browser and the onboarding download screen build their cards from this.
+export function buildCuratedLiteRTFiles(): ModelFile[] {
+  return CURATED_LITERT_ENTRIES.map(e => ({
+    name: e.fileName,
+    size: e.sizeBytes,
+    // Repurpose the quant chip slot as an engine label for curated LiteRT
+    // entries. Llama files keep their real quant strings (Q4_K_M etc.); this
+    // value never appears on a .gguf card. Mixed-precision is what the actual
+    // weights use, but "LiteRT" is what's useful to the reader.
+    quantization: 'LiteRT',
+    downloadUrl: buildCuratedLiteRTUrl(e),
+    liteRTVision: e.liteRTVision,
+  }));
 }
