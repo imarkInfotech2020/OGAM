@@ -52,7 +52,6 @@
     "react-native-device-info": "^15.0.1",
     "react-native-executorch": "^0.8.1",
     "react-native-executorch-bare-resource-fetcher": "^0.8.0",
-    "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.30.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-haptic-feedback": "^2.3.3",

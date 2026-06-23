@@ -2,9 +2,9 @@
   "extends": "@react-native/typescript-config",
   "compilerOptions": {
     "types": ["jest", "node"],
-    "baseUrl": ".",
     "paths": {
-      "@offgrid/core/*": ["src/*"]
+      "@offgrid/core/*": ["./src/*"],
+      "react-native-fs": ["./src/shims/react-native-fs.ts"]
     },
   },
   "include": ["**/*.ts", "**/*.tsx"],

@@ -23,7 +23,7 @@ function isMMProjFile(fileName: string): boolean {
   );
 }
 
-async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirItem | undefined> {
+async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
   const files = await RNFS.readDir(modelDir);
   return files.find((f: { name: string; isFile: () => boolean }) =>
