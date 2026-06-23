@@ -1,5 +1,6 @@
 // ActiveModelService — THE ONLY PLACE models should be loaded/unloaded from.
 import { llmService } from '../llm';
+import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
@@ -48,7 +49,10 @@ class ActiveModelService {
     return {
       text: {
         model: textModel,
-        isLoaded: llmService.isModelLoaded(),
+        // Engine-aware: a text model lives in llmService (GGUF) or liteRTService
+        // (LiteRT). Checking only llmService reported a loaded LiteRT model as
+        // not-loaded, which made the preloader and UI treat it as absent.
+        isLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
         isLoading: this.loadingState.text,
       },
       image: {
@@ -74,12 +78,27 @@ class ActiveModelService {
   getPerformanceStats() {
     return llmService.getPerformanceStats();
   }
+  /**
+   * Whether `modelId` is the currently-loaded text model. Engine-aware: LiteRT
+   * models live in liteRTService, llama/GGUF models in llmService. Checking only
+   * llmService reported a loaded LiteRT model as not-loaded, so the fast path
+   * below missed and re-loaded it (unload+load) every time the chat called
+   * loadTextModel — the "second loader" seen only for LiteRT models.
+   */
+  private isTextModelCurrent(modelId: string): boolean {
+    if (this.loadedTextModelId !== modelId) return false;
+    const model = useAppStore.getState().downloadedModels.find(m => m.id === modelId);
+    return model?.engine === 'litert'
+      ? liteRTService.isModelLoaded()
+      : llmService.isModelLoaded();
+  }
+
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
   ): Promise<void> {
     // Fast path — model already loaded (no lock; just sync the store).
-    if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
+    if (this.isTextModelCurrent(modelId)) {
       const store = useAppStore.getState();
       if (store.activeModelId !== modelId) {
         store.setActiveModelId(modelId);
@@ -97,7 +116,7 @@ class ActiveModelService {
     timeoutMs: number,
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
-    if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
+    if (this.isTextModelCurrent(modelId)) {
       const store = useAppStore.getState();
       if (store.activeModelId !== modelId) {
         store.setActiveModelId(modelId);
