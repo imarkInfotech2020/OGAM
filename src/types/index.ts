@@ -44,6 +44,9 @@ export interface ModelFile {
   // Unset for non-LiteRT files and for LiteRT files imported locally where the
   // capability is unknown.
   liteRTVision?: boolean;
+  // LiteRT-specific: whether this .litertlm file accepts audio input directly
+  // (e.g. Gemma 4 E2B/E4B). Same plumbing as liteRTVision.
+  liteRTAudio?: boolean;
 }
 
 export type ModelEngine = 'llama' | 'litert';
@@ -71,6 +74,9 @@ export interface LlamaDownloadedModel extends DownloadedModelBase {
 export interface LiteRTDownloadedModel extends DownloadedModelBase {
   engine: 'litert';
   liteRTVision: boolean;
+  // Whether this model accepts audio input directly (no Whisper STT needed).
+  // Optional: absent for locally-imported models where capability is unknown.
+  liteRTAudio?: boolean;
 }
 
 export type DownloadedModel = LlamaDownloadedModel | LiteRTDownloadedModel;

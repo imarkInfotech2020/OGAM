@@ -60,6 +60,7 @@ export interface LiteRTGenerationCallbacks {
 
 class LiteRTService {
   private loaded = false;
+  private modelSupportsAudio = false;
   private activeBackend: LiteRTBackend | null = null;
   private readonly emitter: NativeEventEmitter | null = null;
   private subscriptions: EmitterSubscription[] = [];
@@ -92,23 +93,30 @@ class LiteRTService {
   // loadModel
   // ---------------------------------------------------------------------------
 
-  async loadModel(modelPath: string, preferredBackend: LiteRTBackend, opts: { supportsVision?: boolean; maxNumTokens?: number } = {}): Promise<void> {
+  async loadModel(modelPath: string, preferredBackend: LiteRTBackend, opts: { supportsVision?: boolean; supportsAudio?: boolean; maxNumTokens?: number } = {}): Promise<void> {
     if (!this.isAvailable()) throw new Error('LiteRT is not available on this platform');
-    const { supportsVision = false, maxNumTokens = 4096 } = opts;
+    const { supportsVision = false, supportsAudio = false, maxNumTokens = 4096 } = opts;
     this.configuredMaxTokens = maxNumTokens;
-    logger.log(TAG, `loadModel — path=${modelPath} backend=${preferredBackend} supportsVision=${supportsVision} maxNumTokens=${maxNumTokens}`);
+    logger.log(TAG, `loadModel — path=${modelPath} backend=${preferredBackend} supportsVision=${supportsVision} supportsAudio=${supportsAudio} maxNumTokens=${maxNumTokens}`);
 
     try {
-      const actualBackend: string = await LiteRTModule.loadModel(modelPath, preferredBackend, supportsVision, maxNumTokens);
+      const actualBackend: string = await LiteRTModule.loadModel(modelPath, preferredBackend, supportsVision, supportsAudio, maxNumTokens);
       this.activeBackend = actualBackend as LiteRTBackend;
       this.loaded = true;
+      this.modelSupportsAudio = supportsAudio;
       logger.log(TAG, `loadModel — loaded on ${this.activeBackend}`);
     } catch (e) {
       this.loaded = false;
       this.activeBackend = null;
+      this.modelSupportsAudio = false;
       logger.log(TAG, `loadModel — failed: ${String(e)}`);
       throw e;
     }
+  }
+
+  /** Whether the currently loaded model accepts audio input directly. */
+  supportsAudio(): boolean {
+    return this.loaded && this.modelSupportsAudio;
   }
 
   // ---------------------------------------------------------------------------
@@ -196,10 +204,15 @@ class LiteRTService {
       return;
     }
 
-    const needsReset =
-      this.activeConversationId !== conversationId ||
-      this.activeSystemPrompt !== systemPrompt ||
-      this.activeToolsJson !== toolsJson;
+    const idChanged = this.activeConversationId !== conversationId;
+    const sysChanged = this.activeSystemPrompt !== systemPrompt;
+    const toolsChanged = this.activeToolsJson !== toolsJson;
+    const needsReset = idChanged || sysChanged || toolsChanged;
+    // KV-reset diagnostic: a reset means a full re-prefill (high TTFT). This shows WHY —
+    // sysChanged=true would implicate the date/time line in the system prompt; toolsChanged
+    // implicates per-query tool filtering. (Date-only context is stable within a day.)
+    logger.log(`${TAG} prepare conv=${conversationId} needsReset=${needsReset} (idΔ=${idChanged}, sysΔ=${sysChanged}, toolsΔ=${toolsChanged}) sysLen=${systemPrompt.length} toolsLen=${toolsJson.length}`);
+    logger.log(`${TAG} systemPrompt="${systemPrompt.slice(0, 600)}"`);
     if (needsReset) {
       await this.resetConversation(systemPrompt, { samplerConfig: opts?.samplerConfig, tools: opts?.tools, history: opts?.history });
       this.activeConversationId = conversationId;
@@ -255,7 +268,7 @@ class LiteRTService {
   async sendMessage(
     text: string,
     callbacks: LiteRTGenerationCallbacks,
-    imageUris?: string[],
+    media?: { imageUris?: string[]; audioUris?: string[] },
   ): Promise<void> {
     if (!this.isAvailable() || !this.loaded) { callbacks.onError(new Error('No LiteRT model loaded')); return; }
 
@@ -356,8 +369,11 @@ class LiteRTService {
     ];
 
     try {
-      const normalizedImageUris = imageUris?.filter(Boolean) ?? [];
-      if (normalizedImageUris.length > 0) {
+      const normalizedImageUris = media?.imageUris?.filter(Boolean) ?? [];
+      const normalizedAudioUris = media?.audioUris?.filter(Boolean) ?? [];
+      if (normalizedAudioUris.length > 0) {
+        await LiteRTModule.sendMessageWithAudio(text, normalizedAudioUris);
+      } else if (normalizedImageUris.length > 0) {
         await LiteRTModule.sendMessageWithImages(text, normalizedImageUris);
       } else {
         await LiteRTModule.sendMessage(text, null);
@@ -377,11 +393,12 @@ class LiteRTService {
 
   async generateRaw(
     text: string,
-    imageUris?: string[],
+    media?: { imageUris?: string[]; audioUris?: string[] },
     handlers?: GenerateRawHandlers,
   ): Promise<string> {
+    const { imageUris, audioUris } = media ?? {};
     const { onToken, onToolCall, onReasoning } = handlers ?? {};
-    logger.log(TAG, `generateRaw — text=${text.length}ch, hasToolHandler=${!!onToolCall}, imageCount=${imageUris?.length ?? 0}, first100="${text.substring(0, 100)}"`);
+    logger.log(TAG, `generateRaw — text=${text.length}ch, hasToolHandler=${!!onToolCall}, imageCount=${imageUris?.length ?? 0}, audioCount=${audioUris?.length ?? 0}, first100="${text.substring(0, 100)}"`);
     this.currentToolCallHandler = onToolCall ?? null;
     return new Promise((resolve, reject) => {
       this.sendMessage(text, {
@@ -397,7 +414,7 @@ class LiteRTService {
           this.currentToolCallHandler = null;
           reject(err);
         },
-      }, imageUris).catch(reject);
+      }, { imageUris, audioUris }).catch(reject);
     });
   }
 
@@ -460,6 +477,7 @@ class LiteRTService {
       logger.log(TAG, `unloadModel — error (ignored): ${String(e)}`);
     } finally {
       this.loaded = false;
+      this.modelSupportsAudio = false;
       this.activeBackend = null;
     }
   }

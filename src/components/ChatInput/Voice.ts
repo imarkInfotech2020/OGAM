@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore, useChatStore, useUiModeStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { llmService } from '../../services/llm';
+import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import logger from '../../utils/logger';
@@ -41,10 +41,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     clearResult,
   } = useWhisperTranscription();
 
-  const supportsDirectAudio = (): boolean => {
-    const support = llmService.getMultimodalSupport();
-    return Boolean(support?.audio) && audioRecorderService.supportsDirectAudioInput();
-  };
+  const supportsDirectAudio = (): boolean =>
+    activeModelService.supportsAudioInput() && audioRecorderService.supportsDirectAudioInput();
 
   const isInAudioInterfaceMode = (): boolean =>
     useUiModeStore.getState().interfaceMode === 'audio';
@@ -97,6 +95,12 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const stopRecording = async () => {
+    // [AUDIODBG] temporary diagnostic — flows to logcat + in-app Debug Logs store
+    logger.log('[AUDIODBG] stopRecording — isDirectRecording=' + isDirectRecording +
+      ' isAudioModeRecording=' + isAudioModeRecording +
+      ' supportsDirectAudio=' + supportsDirectAudio() +
+      ' isInAudioInterfaceMode=' + isInAudioInterfaceMode() +
+      ' hasWhisper=' + !!downloadedModelId + ' hasAutoSend=' + !!onAutoSendRef.current);
     if (isDirectRecording) {
       try {
         const { path, durationSeconds } = await audioRecorderService.stopRecording();

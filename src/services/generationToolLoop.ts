@@ -395,13 +395,17 @@ async function callLiteRTForLoop(
   const imageUris = lastUser?.attachments
     ?.filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
     .map((a: any) => a.uri);
+  const audioUris = lastUser?.attachments
+    ?.filter((a: any) => a.type === 'audio' && typeof a.uri === 'string' && a.uri.trim().length > 0)
+    .map((a: any) => a.uri);
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.liteRTTemperature,
     topK: 40,
     topP: liteRTSettings.liteRTTopP,
   };
-  if (!text) {
+  // An audio- or image-only turn carries no text — generate from the media alone.
+  if (!text && !imageUris?.length && !audioUris?.length) {
     return { fullResponse: '', toolCalls: [] };
   }
   await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools, history });
@@ -411,7 +415,7 @@ async function callLiteRTForLoop(
     onReasoning: (token: string) => onStream?.({ reasoningContent: token }),
   };
   try {
-    const fullResponse = await liteRTService.generateRaw(text, imageUris, { ...handlers, onToolCall });
+    const fullResponse = await liteRTService.generateRaw(text, { imageUris, audioUris }, { ...handlers, onToolCall });
     // Native SDK handles all tool→model cycles internally; toolCalls always empty here
     return { fullResponse, toolCalls: [] };
   } catch (e: any) {
@@ -422,7 +426,7 @@ async function callLiteRTForLoop(
     if (!/parse (tool|FC) calls|Status Code: 3/i.test(msg)) throw e;
     logger.warn(`[ToolLoop] LiteRT tool-call parse failed; retrying without tools: ${msg.slice(0, 140)}`);
     await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools: [], history });
-    const fullResponse = await liteRTService.generateRaw(text, imageUris, handlers);
+    const fullResponse = await liteRTService.generateRaw(text, { imageUris, audioUris }, handlers);
     return { fullResponse, toolCalls: [] };
   }
 }

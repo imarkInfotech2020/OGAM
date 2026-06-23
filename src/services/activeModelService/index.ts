@@ -66,6 +66,21 @@ class ActiveModelService {
     const info = this.getActiveModels();
     return info.text.isLoaded || info.image.isLoaded;
   }
+  /**
+   * Whether the currently-active text model accepts audio input directly (no
+   * Whisper STT needed). Engine-aware dispatch lives here so UI/hooks never
+   * branch on engine type: LiteRT reports via its loaded model's audio flag,
+   * llama.cpp via the multimodal projector's reported audio support.
+   */
+  supportsAudioInput(): boolean {
+    const store = useAppStore.getState();
+    const model = store.downloadedModels.find(m => m.id === store.activeModelId);
+    if (!model) return false;
+    if (model.engine === 'litert') {
+      return liteRTService.supportsAudio();
+    }
+    return llmService.isModelLoaded() && !!llmService.getMultimodalSupport()?.audio;
+  }
   getLoadedModelIds(): {
     textModelId: string | null;
     imageModelId: string | null;
