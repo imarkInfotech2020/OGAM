@@ -86,6 +86,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
   // ── Collapsed Models control ──────────────────────────────────────────────
   const [modelsManagerOpen, setModelsManagerOpen] = React.useState(false);
+  // Action queued by the manager (open a picker, or eject) — run only after the
+  // manager sheet has fully closed, so we never present a second modal while
+  // this one is mid-dismiss (that wedges iOS's modal system). Run from onClosed.
+  const pendingAfterCloseRef = React.useRef<(() => void) | null>(null);
   const [whisperOpen, setWhisperOpen] = React.useState(false);
   const [voiceOpen, setVoiceOpen] = React.useState(false);
   const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
@@ -98,12 +102,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
   };
 
-  const openModelRow = (type: ModelRowType) => {
+  // Stash an action and close the manager; the action runs from the manager's
+  // onClosed once it has fully dismissed — so opening a picker or the eject
+  // confirmation never collides with the manager's own dismissal.
+  const closeManagerThen = (action: () => void) => {
+    pendingAfterCloseRef.current = action;
     setModelsManagerOpen(false);
-    if (type === 'text') setPickerType('text');
-    else if (type === 'image') setPickerType('image');
-    else if (type === 'speech') setWhisperOpen(true);
-    else setVoiceOpen(true);
+  };
+
+  const openModelRow = (type: ModelRowType) => {
+    closeManagerThen(() => {
+      if (type === 'text') setPickerType('text');
+      else if (type === 'image') setPickerType('image');
+      else if (type === 'speech') setWhisperOpen(true);
+      else setVoiceOpen(true);
+    });
+  };
+
+  const runPendingAfterClose = () => {
+    const action = pendingAfterCloseRef.current;
+    pendingAfterCloseRef.current = null;
+    action?.();
   };
 
   return (
@@ -128,7 +147,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 <ModelsSummaryRow
                   labels={modelLabels}
                   isLoading={loadingState.isLoading}
-                  onPress={() => setModelsManagerOpen(true)}
+                  onPress={() => { console.log('[SheetDbg] ModelsSummaryRow onPress fired → setModelsManagerOpen(true)'); setModelsManagerOpen(true); }}
                 />
               </AttachStep>
             </AttachStep>
@@ -256,12 +275,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       <ModelsManagerSheet
         visible={modelsManagerOpen}
         onClose={() => setModelsManagerOpen(false)}
+        onClosed={runPendingAfterClose}
         labels={modelLabels}
         loadingState={loadingState}
         isEjecting={isEjecting}
         hasActiveModel={!!(activeModelId || activeImageModelId || activeRemoteTextModelId || activeRemoteImageModelId)}
         onOpenRow={openModelRow}
-        onEject={handleEjectAll}
+        onEject={() => closeManagerThen(handleEjectAll)}
       />
       <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
       <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
