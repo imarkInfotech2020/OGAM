@@ -430,6 +430,22 @@ describe('whisperStore', () => {
       expect(getState().presentModelIds).toEqual(['tiny']);
     });
 
+    it('refreshPresentModels clears the active model when its file is gone (e.g. deleted via Download Manager)', async () => {
+      useWhisperStore.setState({ downloadedModelId: 'base', isModelLoaded: true });
+      mockWhisperService.isModelDownloaded.mockResolvedValue(false); // nothing on disk anymore
+      await getState().refreshPresentModels();
+      expect(getState().downloadedModelId).toBeNull();
+      expect(getState().isModelLoaded).toBe(false);
+    });
+
+    it('refreshPresentModels keeps the active model when its file is still present', async () => {
+      useWhisperStore.setState({ downloadedModelId: 'base', isModelLoaded: true });
+      mockWhisperService.isModelDownloaded.mockImplementation(async (id: string) => id === 'base');
+      await getState().refreshPresentModels();
+      expect(getState().downloadedModelId).toBe('base');
+      expect(getState().isModelLoaded).toBe(true);
+    });
+
     it('selectModel activates an on-disk model without downloading', async () => {
       mockWhisperService.loadModel.mockResolvedValue(undefined);
       await getState().selectModel('base');
