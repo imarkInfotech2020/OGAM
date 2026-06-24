@@ -216,7 +216,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         <View style={[openCLBannerStyles.row, { backgroundColor: `${colors.warning}15` }]}>
           <Icon name="info" size={13} color={colors.warning} />
           <Text style={[openCLBannerStyles.text, { color: colors.warning }]}>
-            OpenCL is not recommended. Consider switching to CPU in Settings.
+            OpenCL is not recommended. Switch to CPU in Settings, or use a LiteRT model for GPU support.
           </Text>
         </View>
       )}
