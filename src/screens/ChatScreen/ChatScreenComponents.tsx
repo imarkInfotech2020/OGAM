@@ -109,7 +109,7 @@ export const ChatHeader: React.FC<{
           </TouchableOpacity>
           {/* Pro-only: Chat/Voice mode dropdown, on the same line as Models ·
               project, pushed to the right. Empty slot in free builds. */}
-          {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <View style={{ marginLeft: 'auto' }}><ModeToggle /></View> : null; })()}
+          {(() => { const ModeToggle = getSlot(SLOTS.chatInputModeToggle); return ModeToggle ? <View style={styles.modeToggleWrap}><ModeToggle /></View> : null; })()}
         </View>
       </View>
       <View style={styles.headerActions}>
