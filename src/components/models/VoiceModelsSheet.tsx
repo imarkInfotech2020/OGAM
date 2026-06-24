@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, Dimensions } from 'react-native';
+import { View, Dimensions } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { AppSheet } from '../../components/AppSheet';
+import { VoiceModelsUpsell } from '../../screens/ModelsScreen/VoiceModelsUpsell';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
-import { TYPOGRAPHY, SPACING } from '../../constants';
 
 type Props = {
   visible: boolean;
@@ -22,18 +23,26 @@ const PANEL_HEIGHT = Math.round(Dimensions.get('window').height * 0.6);
  */
 export const VoiceModelsSheet: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(createStyles);
+  const navigation = useNavigation();
   const VoicePanel = getSlot(SLOTS.modelsScreenVoiceTab);
+
+  // Free build: show the same Pro upsell the Models → Voice tab uses, instead of
+  // a dead-end "not available" line. Close the sheet first so the Pro screen
+  // isn't presented while this bottom sheet is still dismissing (iOS).
+  const handleGetPro = () => {
+    onClose();
+    (navigation as unknown as { navigate: (name: string) => void }).navigate('ProDetail');
+  };
 
   return (
     <AppSheet visible={visible} onClose={onClose} title="VOICE MODEL" enableDynamicSizing>
       <View style={styles.content}>
-        {VoicePanel ? <VoicePanel /> : <Text style={styles.empty}>Voice models aren&apos;t available in this build.</Text>}
+        {VoicePanel ? <VoicePanel /> : <VoiceModelsUpsell onGetPro={handleGetPro} />}
       </View>
     </AppSheet>
   );
 };
 
-const createStyles = (colors: ThemeColors) => ({
+const createStyles = (_colors: ThemeColors) => ({
   content: { height: PANEL_HEIGHT },
-  empty: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, padding: SPACING.lg, textAlign: 'center' as const },
 });
