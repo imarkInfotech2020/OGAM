@@ -95,12 +95,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const stopRecording = async () => {
-    // [AUDIODBG] temporary diagnostic — flows to logcat + in-app Debug Logs store
-    logger.log('[AUDIODBG] stopRecording — isDirectRecording=' + isDirectRecording +
-      ' isAudioModeRecording=' + isAudioModeRecording +
-      ' supportsDirectAudio=' + supportsDirectAudio() +
-      ' isInAudioInterfaceMode=' + isInAudioInterfaceMode() +
-      ' hasWhisper=' + !!downloadedModelId + ' hasAutoSend=' + !!onAutoSendRef.current);
     if (isDirectRecording) {
       try {
         const { path, durationSeconds } = await audioRecorderService.stopRecording();

@@ -147,7 +147,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 <ModelsSummaryRow
                   labels={modelLabels}
                   isLoading={loadingState.isLoading}
-                  onPress={() => { console.log('[SheetDbg] ModelsSummaryRow onPress fired → setModelsManagerOpen(true)'); setModelsManagerOpen(true); }}
+                  onPress={() => setModelsManagerOpen(true)}
                 />
               </AttachStep>
             </AttachStep>

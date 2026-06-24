@@ -193,7 +193,6 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const pendingAnimateIn = useRef(false);
 
   useEffect(() => {
-    console.log(`[SheetDbg] AppSheet "${title}" visible=${visible} modalVisible=${modalVisible}`);
     if (visible) {
       pendingAnimateIn.current = true;
       // Dismiss keyboard first, then open — prevents animation conflict
@@ -241,7 +240,6 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Called by Modal when the Dialog is fully rendered and ready for touch
   const handleModalShow = useCallback(() => {
-    console.log(`[SheetDbg] AppSheet "${title}" Modal onShow → animateIn (pending=${pendingAnimateIn.current})`);
     if (pendingAnimateIn.current) {
       pendingAnimateIn.current = false;
       animateIn();

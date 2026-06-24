@@ -238,12 +238,6 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
     .filter((a: any) => a.type === 'audio' && typeof a.uri === 'string' && a.uri.trim().length > 0)
     .map((a: any) => a.uri);
 
-  // [AUDIODBG] temporary diagnostic — flows to logcat + in-app Debug Logs store
-  logger.log('[AUDIODBG] runLiteRTResponseImpl — lastUser.contentLen=' +
-    (typeof lastUser.content === 'string' ? lastUser.content.length : -1) +
-    ' attachments=' + JSON.stringify(allAttachments.map((a: any) => ({ type: a.type, uriLen: a.uri?.length ?? 0 }))) +
-    ' imageUris=' + imageUris.length + ' audioUris=' + audioUris.length);
-
   assertLiteRTImageSupport(imageUris, svc, chatStore);
   assertLiteRTAudioSupport(audioUris, svc, chatStore);
 
