@@ -24,6 +24,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const downloadedModelId = useWhisperStore((s) => s.downloadedModelId);
   const presentModelIds = useWhisperStore((s) => s.presentModelIds);
   const isDownloading = useWhisperStore((s) => s.isDownloading);
+  const downloadingId = useWhisperStore((s) => s.downloadingId);
   const downloadProgress = useWhisperStore((s) => s.downloadProgress);
   const downloadModel = useWhisperStore((s) => s.downloadModel);
   const selectModel = useWhisperStore((s) => s.selectModel);
@@ -41,7 +42,9 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
         {WHISPER_MODELS.map((m) => {
           const active = downloadedModelId === m.id;
           const present = presentModelIds.includes(m.id);
-          const busy = isDownloading && !present;
+          // Spin ONLY the model actually downloading — not every not-yet-present
+          // row (the old `isDownloading && !present` lit them all up at once).
+          const busy = downloadingId === m.id;
           return (
             <AnimatedPressable
               key={m.id}

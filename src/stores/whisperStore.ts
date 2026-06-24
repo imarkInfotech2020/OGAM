@@ -10,6 +10,9 @@ interface WhisperState {
   // All models present on disk (multiple can be downloaded; one is active).
   presentModelIds: string[];
   isDownloading: boolean;
+  /** Which model id is currently downloading (null when idle). Per-model so the
+   *  UI spins only that row, not every not-yet-downloaded model. */
+  downloadingId: string | null;
   downloadProgress: number;
   isModelLoading: boolean;
   isModelLoaded: boolean;
@@ -36,13 +39,14 @@ export const useWhisperStore = create<WhisperState>()(
       downloadedModelId: null,
       presentModelIds: [],
       isDownloading: false,
+      downloadingId: null,
       downloadProgress: 0,
       isModelLoading: false,
       isModelLoaded: false,
       error: null,
 
       downloadModel: async (modelId: string) => {
-        set({ isDownloading: true, downloadProgress: 0, error: null });
+        set({ isDownloading: true, downloadingId: modelId, downloadProgress: 0, error: null });
 
         try {
           await whisperService.downloadModel(modelId, (progress) => {
@@ -64,16 +68,25 @@ export const useWhisperStore = create<WhisperState>()(
             downloadProgress: 0,
             error: error instanceof Error ? error.message : 'Download failed',
           });
+        } finally {
+          // Always clear the per-model spinner, even if auto-load hangs/fails —
+          // the file is already on disk by this point.
+          set({ downloadingId: null });
         }
       },
 
       downloadFromUrl: async (url: string, modelId: string) => {
-        set({ isDownloading: true, downloadProgress: 0, error: null });
+        set({ isDownloading: true, downloadingId: modelId, downloadProgress: 0, error: null });
         try {
           await whisperService.downloadFromUrl(url, modelId, (progress) => {
             set({ downloadProgress: progress });
           });
-          set({ downloadedModelId: modelId, isDownloading: false, downloadProgress: 1 });
+          set((s) => ({
+            downloadedModelId: modelId,
+            presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
+            isDownloading: false,
+            downloadProgress: 1,
+          }));
           await get().loadModel();
         } catch (error) {
           set({
@@ -81,6 +94,8 @@ export const useWhisperStore = create<WhisperState>()(
             downloadProgress: 0,
             error: error instanceof Error ? error.message : 'Download failed',
           });
+        } finally {
+          set({ downloadingId: null });
         }
       },
 
@@ -184,7 +199,17 @@ export const useWhisperStore = create<WhisperState>()(
         for (const m of WHISPER_MODELS) {
           if (await whisperService.isModelDownloaded(m.id)) present.push(m.id);
         }
-        set({ presentModelIds: present });
+        // Reconcile the active pointer against disk too. Deleting from the
+        // Download Manager goes through whisperService directly (bypassing this
+        // store), so downloadedModelId can point at a model whose file is gone —
+        // which left the Home banner showing a deleted model. Check the active
+        // model's own file (works for custom HF ids, not just the catalogue).
+        const activeId = get().downloadedModelId;
+        const activeOnDisk = activeId ? await whisperService.isModelDownloaded(activeId) : true;
+        set({
+          presentModelIds: present,
+          ...(activeId && !activeOnDisk ? { downloadedModelId: null, isModelLoaded: false } : {}),
+        });
       },
 
       clearError: () => {
