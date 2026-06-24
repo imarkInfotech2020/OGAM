@@ -817,7 +817,7 @@ describe('GenerationSettingsModal', () => {
     // Find slider elements (mocked as View with testID='slider')
     const { View } = require('react-native');
     const sliders = UNSAFE_getAllByType(View).filter(
-      (v: any) => v.props.testID === 'slider',
+      (v: any) => v.props.testID?.endsWith('-slider'),
     );
     // First slider in image section is imageSteps
     if (sliders.length > 0 && sliders[0].props.onSlidingComplete) {
@@ -1037,14 +1037,14 @@ describe('GenerationSettingsModal', () => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: 'opencl' });
       });
 
-      it('calls updateSettings with gpuLayers value from GPU layers stepper', () => {
+      it('calls updateSettings with gpuLayers value from GPU layers slider', () => {
         mockStoreValues.settings = { ...defaultSettings, inferenceBackend: 'opencl' as const, gpuLayers: 6, flashAttn: false };
         const { getByText, getByTestId } = render(<GenerationSettingsModal {...defaultProps} />);
         fireEvent.press(getByText('TEXT GENERATION'));
         fireEvent.press(getByTestId('modal-text-advanced-toggle'));
         mockUpdateSettings.mockClear();
 
-        fireEvent.press(getByTestId('gpu-layers-stepper-increment'));
+        fireEvent(getByTestId('gpu-layers-stepper-slider'), 'slidingComplete', 7);
 
         expect(mockUpdateSettings).toHaveBeenCalledWith({ gpuLayers: 7 });
       });
