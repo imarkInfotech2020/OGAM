@@ -714,6 +714,68 @@ describe('startGenerationFn', () => {
   });
 });
 
+// ─────────────────────────────────────────────
+// UI tool gate ("N/A" badge) is honoured by generation
+// Regression: web search fired even when the Tools control read "N/A" and the
+// picker was unreachable, so the user could not turn it off. Generation must
+// respect the same supportsToolCalling gate the UI shows.
+// ─────────────────────────────────────────────
+
+describe('UI tool gate (supportsToolCalling) gates generation', () => {
+  it('does NOT inject tools when the UI gate is off, even if the engine supports tools and web_search is enabled', async () => {
+    // Badge shows "N/A" → deps.supportsToolCalling === false. The engine itself
+    // reports tool support and web_search is in settings, but the user has no way
+    // to disable it, so generation must not pull any tools.
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      supportsToolCalling: false,
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search', 'read_url'] },
+    });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what is the weather?' });
+
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+    expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+
+  it('injects tools when the UI gate is on (control)', async () => {
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      supportsToolCalling: true,
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search'] },
+    });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what is the weather?' });
+
+    expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), expect.objectContaining({ enabledToolIds: ['web_search'] }));
+    expect(mockGenerateResponse).not.toHaveBeenCalled();
+  });
+
+  it('treats an unset gate as allowed (backward compatible)', async () => {
+    // deps without supportsToolCalling (undefined) must behave as before.
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const deps = makeGenerationDeps({
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search'] },
+    });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hi' });
+
+    expect(mockGenerateWithTools).toHaveBeenCalled();
+  });
+
+  it('regenerate also honours the UI tool gate', async () => {
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(true);
+    const userMsg = { id: 'm1', role: 'user' as const, content: 'what is the weather?', timestamp: 0 };
+    const conv = { id: 'conv-1', messages: [userMsg] };
+    mockChatStoreGetState.mockReturnValue({ conversations: [conv], updateCompactionState: jest.fn() });
+    const deps = makeGenerationDeps({
+      supportsToolCalling: false,
+      activeConversation: conv,
+      settings: { ...makeGenerationDeps().settings, enabledTools: ['web_search'] },
+    });
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg });
+
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+    expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+});
 
 // ─────────────────────────────────────────────
 // RAG context injection
