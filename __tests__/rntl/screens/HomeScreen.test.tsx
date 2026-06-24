@@ -109,9 +109,9 @@ jest.mock('../../../src/services/hardware', () => ({
 // eject alert — actually run in tests.
 jest.mock('../../../src/components/AppSheet', () => ({
   AppSheet: ({ visible, onClose, onClosed, title, children }: any) => {
-    const React = require('react');
+    const { useEffect } = require('react');
     const { View, Text, TouchableOpacity } = require('react-native');
-    React.useEffect(() => {
+    useEffect(() => {
       if (!visible) { onClosed?.(); }
     }, [visible, onClosed]);
     if (!visible) return null;
