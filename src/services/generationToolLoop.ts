@@ -552,7 +552,6 @@ function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
     } else if (containsToolCallMarkup(fullResponse)) {
       const parsed = parseToolCallsFromText(fullResponse);
       if (parsed.toolCalls.length > 0) {
-        logger.log(`[ToolLoop] Parsed ${parsed.toolCalls.length} tool call(s) from text output`);
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }
@@ -634,8 +633,6 @@ async function selectEffectiveSchemas(ctx: ToolLoopContext, builtInSchemas: any[
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   const usingRemote = !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded();
   const shouldRoute = !usingRemote && (litertActive || llamaIosNative) && extSchemas.length > 0 && all.length > TOOL_SELECTION_THRESHOLD;
-  const engine = litertActive ? 'litert' : (usingRemote ? 'remote' : (Platform.OS === 'ios' ? 'llama-ios' : 'llama-android'));
-  logger.log(`[ToolSelect] gate — engine=${engine}, tools=${all.length} (ext=${extSchemas.length}), threshold=${TOOL_SELECTION_THRESHOLD}, willRoute=${shouldRoute}`);
   if (!shouldRoute) return all;
 
   // LiteRT routes on a throwaway native session (default); llama via a capped completion.
@@ -645,11 +642,9 @@ async function selectEffectiveSchemas(ctx: ToolLoopContext, builtInSchemas: any[
     const selected = await selectRelevantTools(getLastUserQuery(ctx.messages), extSchemas, generate);
     if (!selected || selected.length === 0) {
       // No MCP tool named (router said "none" OR just didn't name one) → built-in only.
-      logger.log(`[ToolLoop] pass-1: no MCP tool needed; keeping ${builtInSchemas.length} built-in only (${engine})`);
       return builtInSchemas;
     }
     const filteredExt = extSchemas.filter(s => selected.includes(s.function.name));
-    logger.log(`[ToolLoop] pass-1 narrowed ${all.length}→${builtInSchemas.length + filteredExt.length} tools (${engine})`);
     return [...builtInSchemas, ...filteredExt];
   } catch (e) {
     logger.warn(`[ToolLoop] tool selection failed; using all tools: ${String(e)}`);
@@ -665,14 +660,6 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const chatStore = useChatStore.getState();
   const builtInSchemas = getToolsAsOpenAISchema(ctx.enabledToolIds);
   const extSchemas = getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []);
-  const toolSchemas = [...builtInSchemas, ...extSchemas];
-  // Diagnostic: schema size is the usual culprit when a local model goes silent
-  // with tools enabled — large MCP servers (e.g. Notion) ship huge schemas that
-  // can overwhelm a small context window.
-  logger.log(
-    `[ToolLoop] tools=${toolSchemas.length} (builtin=${builtInSchemas.length}, ext=${extSchemas.length}), ` +
-    `schemaChars=${JSON.stringify(toolSchemas).length}, builtinIds=[${ctx.enabledToolIds.join(', ')}]`,
-  );
 
   const effectiveSchemas = await selectEffectiveSchemas(ctx, builtInSchemas, extSchemas);
 

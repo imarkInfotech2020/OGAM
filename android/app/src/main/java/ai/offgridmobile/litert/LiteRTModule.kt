@@ -278,9 +278,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     private fun buildSendContents(imageUris: List<String>, audioUris: List<String>, text: String, safe: SafePromise): Contents? {
         val usableImages = if (supportsVision) imageUris else emptyList()
         val usableAudio = if (supportsAudio) audioUris else emptyList()
-        Log.i(TAG, "buildSendContents — supportsAudio=$supportsAudio supportsVision=$supportsVision " +
-            "audioUrisIn=${audioUris.size} usableAudio=${usableAudio.size} " +
-            "imageUrisIn=${imageUris.size} usableImages=${usableImages.size} textLen=${text.length}")
         if (usableImages.isEmpty() && usableAudio.isEmpty()) {
             if (audioUris.isNotEmpty() && !supportsAudio) {
                 Log.w(TAG, "buildSendContents — audio was provided but supportsAudio=false; " +
@@ -301,7 +298,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 // decode + resample it. Stripping to raw PCM fails native init with
                 // "miniaudio decoder, error code: -10" (MA_INVALID_FILE).
                 val audioBytes = File(stripFileScheme(audioUri)).readBytes()
-                Log.i(TAG, "buildSendContents — audio uri=$audioUri fileBytes=${audioBytes.size}")
                 contents += Content.AudioBytes(audioBytes)
             }
             // Text goes after media, and only when present — an empty text turn
@@ -309,8 +305,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             if (text.isNotEmpty()) {
                 contents += Content.Text(text)
             }
-            Log.i(TAG, "buildSendContents — built ${contents.size} content part(s) " +
-                "(audio=${usableAudio.size} image=${usableImages.size} text=${if (text.isNotEmpty()) 1 else 0})")
             Contents.of(*contents.toTypedArray())
         } catch (e: Exception) {
             Log.e(TAG, "sendMessage — failed to read media: ${e.message}", e)
@@ -346,7 +340,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     fun sendMessageWithAudio(text: String, audioUris: ReadableArray?, promise: Promise) {
         val safe = SafePromise(promise, TAG)
         val uris = readableArrayToStringList(audioUris)
-        Log.i(TAG, "sendMessageWithAudio — text length=${text.length} audioCount=${uris.size}")
         sendMessageInternal(text, emptyList(), uris, safe)
     }
 
@@ -355,7 +348,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         val safe = SafePromise(promise, TAG)
         val imgs = readableArrayToStringList(imageUris)
         val auds = readableArrayToStringList(audioUris)
-        Log.i(TAG, "sendMessageWithMedia — text length=${text.length} imageCount=${imgs.size} audioCount=${auds.size}")
         sendMessageInternal(text, imgs, auds, safe)
     }
 
@@ -382,7 +374,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                             dispatchStreamToken(message)
                         }
 
-                    Log.i(TAG, "sendMessage — stream complete, totalMessages=$tokenCount")
                     sendEvent(EVENT_COMPLETE, buildBenchmarkJson(conv))
                     safe.resolve(null)
                 } catch (e: CancellationException) {

@@ -18,7 +18,6 @@ import { modelResidencyManager } from './modelResidency';
 import { generationService } from './generationService';
 import { imageGenerationService } from './imageGenerationService';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
-import logger from '../utils/logger';
 
 let started = false;
 let aborted = false;
@@ -83,17 +82,15 @@ export async function preloadSelectedModels(): Promise<void> {
     // Yield to the user: stop warming the moment they send a message (abort) or a
     // generation is running — they must never wait behind background warming.
     if (aborted) {
-      logger.log(`[Preload] user active — aborting before ${name} and remaining warms`);
       break;
     }
     if (isGenerationActive()) {
-      logger.log(`[Preload] generation active — skipping ${name} and remaining warms`);
       break;
     }
     try {
       await step();
-    } catch (err) {
-      logger.log(`[Preload] ${name} failed:`, err);
+    } catch {
+      // ignore — a failed warm is non-fatal; continue with remaining steps
     }
   }
 }

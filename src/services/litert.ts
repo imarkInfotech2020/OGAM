@@ -208,11 +208,6 @@ class LiteRTService {
     const sysChanged = this.activeSystemPrompt !== systemPrompt;
     const toolsChanged = this.activeToolsJson !== toolsJson;
     const needsReset = idChanged || sysChanged || toolsChanged;
-    // KV-reset diagnostic: a reset means a full re-prefill (high TTFT). This shows WHY —
-    // sysChanged=true would implicate the date/time line in the system prompt; toolsChanged
-    // implicates per-query tool filtering. (Date-only context is stable within a day.)
-    logger.log(`${TAG} prepare conv=${conversationId} needsReset=${needsReset} (idΔ=${idChanged}, sysΔ=${sysChanged}, toolsΔ=${toolsChanged}) sysLen=${systemPrompt.length} toolsLen=${toolsJson.length}`);
-    logger.log(`${TAG} systemPrompt="${systemPrompt.slice(0, 600)}"`);
     if (needsReset) {
       await this.resetConversation(systemPrompt, { samplerConfig: opts?.samplerConfig, tools: opts?.tools, history: opts?.history });
       this.activeConversationId = conversationId;

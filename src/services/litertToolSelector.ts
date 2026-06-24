@@ -11,9 +11,6 @@
  * capped ephemeral completion. Either way routing never enters chat/context.
  */
 import { liteRTService } from './litert';
-import logger from '../utils/logger';
-
-const TAG = '[ToolSelect]';
 
 /** Engine-specific routing generation: (systemPrompt, userText) -> raw reply text. */
 export type ToolSelectGenerate = (systemPrompt: string, userText: string) => Promise<string>;
@@ -59,13 +56,10 @@ export async function selectRelevantTools(
     .filter(name => raw.includes(name.toLowerCase()));
 
   if (selected.length > 0) {
-    logger.log(`${TAG} selected ${selected.length}/${tools.length}: [${selected.join(', ')}]`);
     return selected;
   }
   if (raw.includes('none')) {
-    logger.log(`${TAG} router: no tool needed`);
     return [];
   }
-  logger.log(`${TAG} router reply unusable; caller falls back to all tools`);
   return null;
 }

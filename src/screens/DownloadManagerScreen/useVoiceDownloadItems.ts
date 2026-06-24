@@ -9,7 +9,6 @@ import { AlertState, showAlert } from '../../components/CustomAlert';
 import { whisperService } from '../../services';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { DownloadItem, formatBytes } from './items';
-import logger from '../../utils/logger';
 
 async function loadItems(): Promise<DownloadItem[]> {
   const items: DownloadItem[] = [];
@@ -24,8 +23,8 @@ async function loadItems(): Promise<DownloadItem[]> {
         filePath: m.filePath, name: m.modelId,
       });
     }
-  } catch (err) {
-    logger.log('[DownloadManager] failed to list transcription models:', err);
+  } catch {
+    // ignore — listing failures leave items empty
   }
 
   try {
@@ -38,8 +37,8 @@ async function loadItems(): Promise<DownloadItem[]> {
         bytesDownloaded: v.sizeBytes, progress: 1, status: 'completed', name: v.name,
       });
     }
-  } catch (err) {
-    logger.log('[DownloadManager] failed to list voice models:', err);
+  } catch {
+    // ignore — listing failures leave items empty
   }
 
   return items;
@@ -47,10 +46,10 @@ async function loadItems(): Promise<DownloadItem[]> {
 
 async function deleteItem(item: DownloadItem): Promise<void> {
   if (item.modelType === 'stt') {
-    await whisperService.deleteModel(item.modelId).catch(err => logger.log('[DownloadManager] stt delete failed:', err));
+    await whisperService.deleteModel(item.modelId).catch(() => {});
   } else {
     const pending = callHook<Promise<void>>(HOOKS.downloadsDeleteVoiceModel, item.modelId);
-    if (pending) await pending.catch(err => logger.log('[DownloadManager] voice delete failed:', err));
+    if (pending) await pending.catch(() => {});
   }
 }
 
