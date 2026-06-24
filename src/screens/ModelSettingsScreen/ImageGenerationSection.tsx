@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Switch, Platform, TouchableOpacity } from 'react-native';
 import { AdvancedToggle, Card } from '../../components';
-import { NumericStepper } from '../../components/NumericStepper';
+import { SliderSetting } from '../../components/SliderSetting';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -123,30 +123,27 @@ const DetectionMethodRow: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
 
   return (
     <>
-      <View style={styles.sliderSection}>
-        <Text style={styles.sliderLabel}>Guidance Scale</Text>
-        <Text style={styles.sliderDesc}>Higher = follows prompt more strictly</Text>
-        <NumericStepper
-          value={settings?.imageGuidanceScale || 7.5}
-          min={1} max={20} step={0.5} decimals={1}
-          onChange={(value) => updateSettings({ imageGuidanceScale: value })}
-        />
-      </View>
+      <SliderSetting
+        testID="image-guidance-scale"
+        label="Guidance Scale"
+        description="Higher = follows prompt more strictly"
+        value={settings?.imageGuidanceScale || 7.5}
+        min={1} max={20} step={0.5} decimals={1}
+        onChange={(value) => updateSettings({ imageGuidanceScale: value })}
+      />
 
-      <View style={styles.sliderSection}>
-        <Text style={styles.sliderLabel}>Image Threads</Text>
-        <Text style={styles.sliderDesc}>CPU threads used for image generation (applies on next image model load)</Text>
-        <NumericStepper
-          value={settings?.imageThreads ?? 4}
-          min={1} max={8} step={1}
-          onChange={(value) => updateSettings({ imageThreads: value })}
-        />
-      </View>
+      <SliderSetting
+        testID="image-threads"
+        label="Image Threads"
+        description="CPU threads used for image generation (applies on next image model load)"
+        value={settings?.imageThreads ?? 4}
+        min={1} max={8} step={1}
+        onChange={(value) => updateSettings({ imageThreads: value })}
+      />
 
       <DetectionMethodRow />
       <EnhanceImageToggle />
@@ -199,26 +196,24 @@ export const ImageGenerationSection: React.FC = () => {
           : 'In Manual mode, you must tap the IMG button in chat to generate images.'}
       </Text>
 
-      <View style={styles.sliderSection}>
-        <Text style={styles.sliderLabel}>Image Steps</Text>
-        <Text style={styles.sliderDesc}>More steps = better quality but slower (4-8 fast, 20-50 high quality)</Text>
-        <NumericStepper
-          value={settings?.imageSteps || 8}
-          min={4} max={50} step={1}
-          onChange={(value) => updateSettings({ imageSteps: value })}
-        />
-      </View>
+      <SliderSetting
+        testID="image-steps"
+        label="Image Steps"
+        description="More steps = better quality but slower (4-8 fast, 20-50 high quality)"
+        value={settings?.imageSteps || 8}
+        min={4} max={50} step={1}
+        onChange={(value) => updateSettings({ imageSteps: value })}
+      />
 
-      <View style={styles.sliderSection}>
-        <Text style={styles.sliderLabel}>Image Size</Text>
-        <Text style={styles.sliderDesc}>Output resolution (smaller = faster, larger = more detail)</Text>
-        <NumericStepper
-          value={settings?.imageWidth ?? 256}
-          min={128} max={512} step={64}
-          formatValue={(v) => `${v}x${v}`}
-          onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
-        />
-      </View>
+      <SliderSetting
+        testID="image-size"
+        label="Image Size"
+        description="Output resolution (smaller = faster, larger = more detail)"
+        value={settings?.imageWidth ?? 256}
+        min={128} max={512} step={64}
+        formatValue={(v) => `${v}x${v}`}
+        onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
+      />
 
       <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="image-advanced-toggle" />
 

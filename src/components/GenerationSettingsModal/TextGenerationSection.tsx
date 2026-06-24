@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { NumericStepper } from '../NumericStepper';
+import { SliderSetting } from '../SliderSetting';
 import { AdvancedToggle } from '../AdvancedToggle';
-import { useTheme, useThemedStyles } from '../../theme';
+import { useThemedStyles } from '../../theme';
 import { useAppStore, selectIsLiteRT } from '../../stores';
 import { hardwareService } from '../../services';
 import { createStyles } from './styles';
@@ -118,31 +118,24 @@ function buildLiteRTConfig(modelMaxContext: number | null = null): SettingConfig
 // ─── Shared slider component ──────────────────────────────────────────────────
 
 const SettingSlider: React.FC<{ config: SettingConfig }> = ({ config }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const { settings, updateSettings } = useAppStore();
   const rawValue = (settings as Record<string, unknown>)[config.key];
   const value = (rawValue ?? DEFAULT_SETTINGS[config.key]) as number;
-  const warningText = config.warning?.(value) ?? null;
-  const warningColor = config.warningColor ?? colors.error;
-  const decimals = config.step < 1 ? 2 : 0;
 
   return (
-    <View style={styles.settingGroup}>
-      <Text style={styles.settingLabel}>{config.label}</Text>
-      {config.description && (
-        <Text style={styles.settingDescription}>{config.description}</Text>
-      )}
-      {warningText && (
-        <Text style={[styles.settingDescription, { color: warningColor }]}>{warningText}</Text>
-      )}
-      <NumericStepper
-        value={value}
-        min={config.min} max={config.max} step={config.step} decimals={decimals}
-        formatValue={config.format}
-        onChange={(v) => updateSettings({ [config.key]: v })}
-      />
-    </View>
+    <SliderSetting
+      testID={`setting-${config.key}`}
+      label={config.label}
+      value={value}
+      min={config.min}
+      max={config.max}
+      step={config.step}
+      formatValue={config.format}
+      description={config.description}
+      warning={config.warning?.(value) ?? null}
+      warningColor={config.warningColor}
+      onChange={(v) => updateSettings({ [config.key]: v })}
+    />
   );
 };
 

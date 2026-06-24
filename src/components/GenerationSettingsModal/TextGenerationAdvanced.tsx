@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, View, Text, TouchableOpacity } from 'react-native';
-import { NumericStepper } from '../NumericStepper';
+import { SliderSetting } from '../SliderSetting';
 import { useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { CacheType, InferenceBackend, LiteRTBackend, INFERENCE_BACKENDS } from '../../types';
@@ -81,12 +81,10 @@ export const BackendSelector: React.FC = () => {
 
       {showLayers && (
         <View style={styles.gpuLayersInline}>
-          <Text style={styles.settingLabel}>{layersLabel}</Text>
-          <Text style={styles.settingDescription}>
-            Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
-          </Text>
-          <NumericStepper
+          <SliderSetting
             testID="gpu-layers-stepper"
+            label={layersLabel}
+            description="Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload."
             value={gpuLayersEffective}
             min={1} max={GPU_LAYERS_MAX} step={1}
             onChange={(value) => updateSettings({ gpuLayers: value })}
@@ -221,9 +219,10 @@ export const CpuThreadsSlider: React.FC = () => {
 
   return (
     <View style={styles.modeToggleContainer}>
-      <Text style={styles.settingLabel}>CPU Threads</Text>
-      <Text style={styles.settingDescription}>Parallel threads for inference</Text>
-      <NumericStepper
+      <SliderSetting
+        testID="cpu-threads-stepper"
+        label="CPU Threads"
+        description="Parallel threads for inference"
         value={cpuThreadsSliderValue}
         min={1} max={12} step={1}
         onChange={(v) => updateSettings({ nThreads: v })}
@@ -238,9 +237,10 @@ export const BatchSizeSlider: React.FC = () => {
 
   return (
     <View style={styles.modeToggleContainer}>
-      <Text style={styles.settingLabel}>Batch Size</Text>
-      <Text style={styles.settingDescription}>Tokens processed per batch</Text>
-      <NumericStepper
+      <SliderSetting
+        testID="batch-size-stepper"
+        label="Batch Size"
+        description="Tokens processed per batch"
         value={settings.nBatch ?? 512}
         min={32} max={512} step={32}
         onChange={(v) => updateSettings({ nBatch: v })}
