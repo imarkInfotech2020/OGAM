@@ -42,15 +42,31 @@ describe('ChatInputModeToggle', () => {
     setDownloaded(false, 'chat');
   });
 
-  it('routes to the Models Voice tab when the voice model is not downloaded', () => {
-    setDownloaded(false);
-    const { getByTestId } = render(<ChatInputModeToggle />);
+  it('prompts to download and routes to the Models Voice tab when no voice model', () => {
+    // Force Android: the alert shows inline. On iOS the component defers it to
+    // the dropdown's onDismiss (to avoid presenting two modals at once), which
+    // jest's Modal can't fire — that sequencing is an on-device concern.
+    const { Platform } = require('react-native');
+    const prevOS = Platform.OS;
+    Platform.OS = 'android';
+    try {
+      setDownloaded(false);
+      const { getByTestId, getByText } = render(<ChatInputModeToggle />);
 
-    fireEvent.press(getByTestId('chat-mode-toggle'));
-    fireEvent.press(getByTestId('mode-option-audio'));
+      fireEvent.press(getByTestId('chat-mode-toggle'));
+      fireEvent.press(getByTestId('mode-option-audio'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('ModelsTab', { initialTab: 'voice' });
-    expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
+      // No silent switch — a prompt appears and the mode stays on chat.
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
+
+      // Tapping "Get voice model" routes to the nested Models Voice tab.
+      fireEvent.press(getByText('Get voice model'));
+      expect(mockNavigate).toHaveBeenCalledWith('Main', { screen: 'ModelsTab', params: { initialTab: 'voice' } });
+      expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
+    } finally {
+      Platform.OS = prevOS;
+    }
   });
 
   it('flips interfaceMode to audio inline when the model is downloaded', () => {
