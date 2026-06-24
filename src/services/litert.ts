@@ -371,7 +371,11 @@ class LiteRTService {
     try {
       const normalizedImageUris = media?.imageUris?.filter(Boolean) ?? [];
       const normalizedAudioUris = media?.audioUris?.filter(Boolean) ?? [];
-      if (normalizedAudioUris.length > 0) {
+      if (normalizedAudioUris.length > 0 && normalizedImageUris.length > 0) {
+        // Both modalities in one turn — a single audio branch would otherwise drop
+        // the images (native buildSendContents emits image + audio + text together).
+        await LiteRTModule.sendMessageWithMedia(text, normalizedImageUris, normalizedAudioUris);
+      } else if (normalizedAudioUris.length > 0) {
         await LiteRTModule.sendMessageWithAudio(text, normalizedAudioUris);
       } else if (normalizedImageUris.length > 0) {
         await LiteRTModule.sendMessageWithImages(text, normalizedImageUris);

@@ -350,6 +350,15 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         sendMessageInternal(text, emptyList(), uris, safe)
     }
 
+    @ReactMethod
+    fun sendMessageWithMedia(text: String, imageUris: ReadableArray?, audioUris: ReadableArray?, promise: Promise) {
+        val safe = SafePromise(promise, TAG)
+        val imgs = readableArrayToStringList(imageUris)
+        val auds = readableArrayToStringList(audioUris)
+        Log.i(TAG, "sendMessageWithMedia — text length=${text.length} imageCount=${imgs.size} audioCount=${auds.size}")
+        sendMessageInternal(text, imgs, auds, safe)
+    }
+
     private fun sendMessageInternal(text: String, imageUris: List<String>, audioUris: List<String>, safe: SafePromise) {
         scope.launch {
             currentJob?.join()
