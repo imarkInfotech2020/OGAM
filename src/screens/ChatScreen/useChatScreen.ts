@@ -183,7 +183,7 @@ export const useChatScreen = () => {
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
 
   const genDeps = {
-    activeModelId: activeModelInfo.modelId, activeModel, activeModelInfo, hasActiveModel, hasTextModel, activeConversationId, activeConversation, activeProject,
+    activeModelId: activeModelInfo.modelId, activeModel, activeModelInfo, hasActiveModel, hasTextModel, supportsToolCalling, activeConversationId, activeConversation, activeProject,
     activeImageModel, imageModelLoaded, isStreaming, isGeneratingImage, imageGenState, settings,
     downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
