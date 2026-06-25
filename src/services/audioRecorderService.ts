@@ -80,7 +80,7 @@ class AudioRecorderService {
     if (startResult && startResult.status && startResult.status !== 'success') {
       this.isRecording = false;
       this.recorder = null;
-      throw new Error('Recording failed to start: ' + (startResult.errorMessage ?? startResult.error ?? startResult.status));
+      throw new Error(`Recording failed to start: ${startResult.errorMessage ?? startResult.error ?? startResult.status}`);
     }
   }
 
