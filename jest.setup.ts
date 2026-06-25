@@ -15,6 +15,12 @@ try {
 
 const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
 
+// react-native-keyboard-controller ships a jest mock; without it, any test that
+// renders App or ChatScreen pulls in its native module and crashes.
+jest.mock('react-native-keyboard-controller', () =>
+  require('react-native-keyboard-controller/jest'),
+);
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================

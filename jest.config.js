@@ -4,6 +4,10 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   testPathIgnorePatterns: [
     '/node_modules/', '/android/', '/ios/', '/e2e/', 'App.test.tsx',
+    // The private pro/ submodule ships its own test suite and runs it in the pro
+    // repo's own CI. The public repo's CI does not (and must not) check it out, so
+    // ignore it here too — locally it's present and would otherwise be picked up.
+    '/pro/',
     // Audio/TTS suites import the private pro/ submodule, which the public repo's
     // CI does not (and must not) check out. They run in the pro repo's own CI.
     '/__tests__/unit/audio/',
@@ -13,6 +17,7 @@ module.exports = {
     '__tests__/integration/stores/tts.test.ts',
     '__tests__/rntl/components/ChatInputModeToggle.test.tsx',
     '__tests__/rntl/components/VoiceModelsPanel.test.tsx',
+    '__tests__/rntl/components/KokoroTTSBridge.test.tsx',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
