@@ -53,8 +53,15 @@ const mockActivate = require('@offgrid/pro').activate;
 const mockSetHasRegisteredPro = require('../../../src/stores/appStore').useAppStore.getState().setHasRegisteredPro;
 
 describe('Pro boot flow integration', () => {
+  let originalDev: any;
   beforeEach(() => {
     jest.clearAllMocks();
+    // Test production gating (DEV_UNLOCK_PRO = __DEV__ forces activation in jest).
+    originalDev = (global as any).__DEV__;
+    (global as any).__DEV__ = false;
+  });
+  afterEach(() => {
+    (global as any).__DEV__ = originalDev;
   });
 
   it('configures RevenueCat, reads entitlement, and skips Pro activation when not subscribed', async () => {

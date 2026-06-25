@@ -30,9 +30,10 @@ describe('screen registry', () => {
     expect(getRegisteredScreens().map(s => s.name)).toEqual(['McpServers', 'DebugLogs']);
   });
 
-  it('allows duplicate names (no dedup — navigation handles it)', () => {
+  it('dedupes by name — a repeated registration is ignored (first wins)', () => {
     registerScreen({ name: 'McpServers', component: FakeScreen });
     registerScreen({ name: 'McpServers', component: AnotherScreen });
-    expect(getRegisteredScreens()).toHaveLength(2);
+    expect(getRegisteredScreens()).toHaveLength(1);
+    expect(getRegisteredScreens()[0].component).toBe(FakeScreen);
   });
 });

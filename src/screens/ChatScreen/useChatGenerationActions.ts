@@ -1,36 +1,31 @@
  import { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import {
-  AlertState,
-  showAlert,
-  hideAlert,
-} from '../../components';
+import { AlertState, showAlert, hideAlert } from '../../components';
 import { APP_CONFIG } from '../../constants';
 import {
-  llmService,
-  intentClassifier,
-  generationService,
-  imageGenerationService,
-  onnxImageGeneratorService,
-  ImageGenerationState,
-  buildToolSystemPromptHint,
-  contextCompactionService,
-  ragService,
-  retrievalService,
+  llmService, intentClassifier, generationService, imageGenerationService,
+  onnxImageGeneratorService, ImageGenerationState, buildToolSystemPromptHint,
+  contextCompactionService, ragService, retrievalService,
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
 import { liteRTService } from '../../services/litert';
+import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
+import { abortPreload } from '../../services/modelPreloader';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
-import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, ModelLoadingStrategy, CacheType } from '../../types';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
+
 export type GenerationDeps = {
   activeModelId: string | null;
   activeModel: DownloadedModel | null | undefined;
   activeModelInfo?: { isRemote: boolean; model: DownloadedModel | RemoteModel | null; modelId: string | null; modelName: string };
   hasActiveModel?: boolean;
   hasTextModel?: boolean;
+  /** Same tool gate the UI shows; when false the Tools badge reads "N/A" and the picker is locked, so generation must not inject tools either. */
+  supportsToolCalling?: boolean;
   activeConversationId: string | null | undefined;
   activeConversation: any;
   activeProject: any;
@@ -44,7 +39,6 @@ export type GenerationDeps = {
     imageGenerationMode: string;
     autoDetectMethod: string;
     classifierModelId?: string | null;
-    modelLoadingStrategy: ModelLoadingStrategy;
     systemPrompt?: string;
     imageSteps?: number;
     imageGuidanceScale?: number;
@@ -66,6 +60,11 @@ export type GenerationDeps = {
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<void>;
+  /** Loads the last-selected text model for a chat request that has none; opens
+   *  the model selector and returns false when no text model was ever chosen. */
+  ensureTextModelForChat: () => Promise<boolean>;
+  /** Stash a message to replay after the user picks a text model. */
+  setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
 };
@@ -101,8 +100,32 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
   if (!deps.imageModelLoaded) return false;
-  // In image-only mode (no text model loaded), always route to image generation
-  if (deps.hasTextModel === false) return true;
+  // No text model loaded (e.g. image-only): use the SMOL classifier model to
+  // decide text vs image when available; fall back to fast heuristics when no
+  // classifier is downloaded. A chat request returns false so the caller loads text.
+  if (deps.hasTextModel === false) {
+    const classifierModel = deps.settings.classifierModelId
+      ? deps.downloadedModels.find(m => m.id === deps.settings.classifierModelId)
+      : null;
+    if (!classifierModel) {
+      // No classifier yet: provision SmolLM2 in the background for next time,
+      // and use fast heuristics for this turn.
+      ensureDefaultClassifier().catch(() => {});
+      const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
+      return intent === 'image';
+    }
+    deps.setIsClassifying(true);
+    try {
+      const intent = await intentClassifier.classifyIntent(text, {
+        useLLM: true,
+        classifierModel,
+        currentModelPath: llmService.getLoadedModelPath(),
+      });
+      return intent === 'image';
+    } finally {
+      deps.setIsClassifying(false);
+    }
+  }
   try {
     const useLLM = deps.settings.autoDetectMethod === 'llm';
     const classifierModel = deps.settings.classifierModelId
@@ -114,7 +137,6 @@ export async function shouldRouteToImageGenerationFn(
       classifierModel,
       currentModelPath: llmService.getLoadedModelPath(),
       onStatusChange: useLLM ? deps.setAppImageGenerationStatus : undefined,
-      modelLoadingStrategy: deps.settings.modelLoadingStrategy,
     });
     deps.setIsClassifying(false);
     if (intent !== 'image' && useLLM) {
@@ -150,6 +172,8 @@ export async function handleImageGenerationFn(
   if (!result && deps.imageGenState.error && !deps.imageGenState.error.includes('cancelled')) {
     deps.setAlertState(showAlert('Error', `Image generation failed: ${deps.imageGenState.error}`));
   }
+  // Image gen finishes outside generationService — release any queued messages.
+  generationService.drainQueue();
 }
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
 async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
@@ -229,10 +253,9 @@ const applyGemma4ThinkToken = (prompt: string, isRemote: boolean, opts?: { isLit
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; isLiteRT: boolean } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
-  const localToolCalling = llmService.supportsToolCalling();
-  const isRemoteActive = !!(activeServerId && activeRemoteTextModelId);
   const isLiteRT = deps.activeModel?.engine === 'litert' && liteRTService.isModelLoaded();
-  const canUseTools = localToolCalling || isRemoteActive || isLiteRT;
+  // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
+  const canUseTools = deps.supportsToolCalling !== false && (llmService.supportsToolCalling() || !!(activeServerId && activeRemoteTextModelId) || isLiteRT);
 
   let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
 
@@ -247,13 +270,8 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
   if (!deps.hasActiveModel) return;
-  // In image-only mode (no text model), route directly to image generation
-  if (deps.imageModelLoaded && deps.hasTextModel === false) {
-    deps.generatingForConversationRef.current = targetConversationId;
-    await handleImageGenerationFn(deps, { prompt: messageText, conversationId: targetConversationId });
-    deps.generatingForConversationRef.current = null;
-    return;
-  }
+  // Pure text executor. Image-vs-text routing happens upstream in
+  // dispatchGenerationFn — this function only ever generates text.
   deps.generatingForConversationRef.current = targetConversationId;
   // For remote models, skip local model loading
   if (!deps.activeModelInfo?.isRemote && deps.activeModel) {
@@ -265,7 +283,12 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt, isLiteRT } = resolveToolsAndPrompt(deps, conversation, messageText);
-  const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+  let basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
+
+  // In voice/audio mode the pro audio feature augments the prompt for spoken
+  // output. No-op (returns undefined) in free builds.
+  basePrompt = callHook<string>(HOOKS.audioAugmentPrompt, basePrompt) ?? basePrompt;
+
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
   // LiteRT passes tools natively via ConversationConfig — text hint would double-inject.
@@ -325,9 +348,41 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   deps.generatingForConversationRef.current = null;
 }
 let _msgIdSeq = 0; const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
+export type DispatchCall = { text: string; attachments?: MediaAttachment[]; conversationId: string; imageMode?: 'auto' | 'force' | 'disabled' };
+/**
+ * THE routing layer: the single place a message is classified and dispatched to
+ * image or text generation. Every entry point (new send, queued-message drain)
+ * funnels through here, so the decision is made once and never duplicated in an
+ * executor. `startTextGeneration` is the pure text executor (it does not route).
+ */
+export async function dispatchGenerationFn(
+  deps: GenerationDeps,
+  call: DispatchCall,
+  startTextGeneration: (convId: string, messageText: string) => Promise<void>,
+): Promise<void> {
+  const { text, attachments, conversationId, imageMode = 'auto' } = call;
+  let messageText = appendAttachmentText(text, attachments);
+  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
+  if (shouldGenerateImage && deps.activeImageModel) {
+    await handleImageGenerationFn(deps, { prompt: text, conversationId }); // adds user msg
+    return;
+  }
+  // Text route, no text model selected (image-only device): load one / open selector.
+  if (!shouldGenerateImage && deps.hasTextModel === false && !deps.activeModelInfo?.isRemote) {
+    const ready = await deps.ensureTextModelForChat();
+    if (!ready) {
+      deps.setPendingMessage?.(text, attachments);
+      return;
+    }
+  }
+  if (shouldGenerateImage && !deps.activeImageModel) messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
+  deps.addMessage(conversationId, { role: 'user', content: text, attachments });
+  await startTextGeneration(conversationId, messageText);
+}
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
   const { text, attachments, imageMode, startGeneration } = call;
+  abortPreload(); // user acted — stop background warming so it can't block them
   if (!deps.hasActiveModel) {
     deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
     return;
@@ -338,19 +393,13 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
     targetConversationId = deps.createConversation(fallbackModelId!, undefined, deps.pendingProjectId);
     deps.setActiveConversation(targetConversationId);
   }
-  let messageText = appendAttachmentText(text, attachments);
-  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
-  if (shouldGenerateImage && deps.activeImageModel) {
-    await handleImageGenerationFn(deps, { prompt: text, conversationId: targetConversationId });
-    return;
-  }
-  if (shouldGenerateImage && !deps.activeImageModel) messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
-  if (generationService.getState().isGenerating) {
+  // Cross-modality serialization: queue if any generation is running (routed later).
+  if (generationService.getState().isGenerating || imageGenerationService.getState().isGenerating) {
+    const messageText = appendAttachmentText(text, attachments);
     generationService.enqueueMessage({ id: nextMsgId(), conversationId: targetConversationId, text, attachments, messageText });
     return;
   }
-  deps.addMessage(targetConversationId, { role: 'user', content: text, attachments });
-  await startGeneration(targetConversationId, messageText);
+  await dispatchGenerationFn(deps, { text, attachments, conversationId: targetConversationId, imageMode }, startGeneration);
 }
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'generatingForConversationRef'>): Promise<void> {
   deps.generatingForConversationRef.current = null;

@@ -144,5 +144,3 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
     </Modal>
   );
 };
-
-export default DebugLogsScreen;

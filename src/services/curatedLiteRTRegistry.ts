@@ -13,6 +13,7 @@ export interface CuratedLiteRTEntry {
   displayName: string;
   highlight: string;
   liteRTVision: boolean;
+  liteRTAudio: boolean;
   confirmDownload?: { title: string; message: string };
 }
 
@@ -25,6 +26,7 @@ export const CURATED_LITERT_ENTRIES: readonly CuratedLiteRTEntry[] = [
     displayName: 'Gemma 4 E2B',
     highlight: 'Up to 2x faster than CPU via GPU',
     liteRTVision: true,
+    liteRTAudio: true,
   },
   {
     fileName: 'gemma-4-E4B-it.litertlm',
@@ -34,6 +36,7 @@ export const CURATED_LITERT_ENTRIES: readonly CuratedLiteRTEntry[] = [
     displayName: 'Gemma 4 E4B',
     highlight: 'Higher quality, same hardware efficiency as E2B',
     liteRTVision: true,
+    liteRTAudio: true,
     confirmDownload: {
       title: 'Warning',
       message:
@@ -69,5 +72,6 @@ export function buildCuratedLiteRTFiles(): ModelFile[] {
     quantization: 'LiteRT',
     downloadUrl: buildCuratedLiteRTUrl(e),
     liteRTVision: e.liteRTVision,
+    liteRTAudio: e.liteRTAudio,
   }));
 }

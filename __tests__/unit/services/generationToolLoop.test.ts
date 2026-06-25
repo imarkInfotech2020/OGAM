@@ -242,7 +242,41 @@ describe('runToolLoop', () => {
 
       expect(mockedLiteRTService.generateRaw).toHaveBeenCalledWith(
         'Compare these images',
-        ['file:///one.png', 'file:///two.png'],
+        expect.objectContaining({ imageUris: ['file:///one.png', 'file:///two.png'] }),
+        expect.objectContaining({
+          onToken: expect.any(Function),
+          onReasoning: expect.any(Function),
+        }),
+      );
+    });
+
+    it('forwards an audio attachment even when the turn has no text', async () => {
+      mockAppState = {
+        ...mockAppState,
+        downloadedModels: [{ id: 'litert-1', engine: 'litert' }],
+        activeModelId: 'litert-1',
+      };
+      mockedLiteRTService.isModelLoaded.mockReturnValue(true);
+
+      const ctx = createContext({
+        messages: [
+          makeMessage({ role: 'system', content: 'You are helpful.' }),
+          makeMessage({
+            role: 'user',
+            content: '',
+            attachments: [
+              { id: 'aud-1', type: 'audio', uri: 'file:///clip.wav' },
+            ],
+          }),
+        ],
+      });
+
+      await runToolLoop(ctx);
+
+      // The empty-text guard must NOT short-circuit an audio-only turn.
+      expect(mockedLiteRTService.generateRaw).toHaveBeenCalledWith(
+        '',
+        expect.objectContaining({ audioUris: ['file:///clip.wav'] }),
         expect.objectContaining({
           onToken: expect.any(Function),
           onReasoning: expect.any(Function),

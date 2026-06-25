@@ -1,13 +1,24 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../theme';
 import { ImageModeState } from '../../types';
 import { useAppStore } from '../../stores';
 import { triggerHaptic } from '../../utils/haptics';
 import { FONTS } from '../../constants';
+import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 const TOOL_WARNING_COLOR = '#F59E0B';
+
+// Popovers are anchored from the screen's right edge (`right: anchorX`) and
+// extend leftward. When the trigger is far left (e.g. the audio-mode "+"), a
+// large anchorX would push the popover off the left edge — clamp so its left
+// edge stays ~8px inside the screen.
+const POPOVER_WIDTH = 220;
+const clampPopoverRight = (anchorX: number): number => {
+  const screenW = Dimensions.get('window').width;
+  return Math.max(8, Math.min(anchorX, screenW - POPOVER_WIDTH - 8));
+};
 
 // ─── Shared Styles ──────────────────────────────────────────────────────────
 
@@ -110,6 +121,9 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 
   const imgBadge = getImageModeBadge(imageMode, colors);
   const tools = getToolsStyle(supportsToolCalling, enabledToolCount, colors);
+  // The "Voice" row is provided by the pro audio feature via a slot. Free
+  // builds render nothing here.
+  const AudioRow = getSlot(SLOTS.quickSettingsAudioRow);
 
   // Tools and MCP warnings are independent — each turns amber at 3+
   const showToolsWarning = supportsToolCalling && enabledToolCount >= 3 && !toolCountHintDismissed;
@@ -129,7 +143,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
               backgroundColor: colors.surface,
               borderColor: colors.border,
               bottom: anchorY + 8,
-              right: anchorX,
+              right: clampPopoverRight(anchorX),
             }]}>
               <TouchableOpacity
                 testID="quick-image-mode"
@@ -163,6 +177,8 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   </View>
                 </TouchableOpacity>
               )}
+
+              {AudioRow && <AudioRow styles={popoverStyles} onClose={onClose} />}
 
               <TouchableOpacity
                 testID="quick-tools"
@@ -232,7 +248,7 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
               backgroundColor: colors.surface,
               borderColor: colors.border,
               bottom: anchorY + 8,
-              right: anchorX,
+              right: clampPopoverRight(anchorX),
             }]}>
               <TouchableOpacity
                 testID="attach-photo"

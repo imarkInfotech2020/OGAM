@@ -8,15 +8,16 @@ import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
 import { getToolExtensions } from './tools/extensions';
-import { selectLiteRTTools } from './litertToolSelector';
+import { Platform } from 'react-native';
+import { selectRelevantTools } from './litertToolSelector';
 import { providerRegistry } from './providers';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
-// LiteRT only: above this many tools, run a fast routing pass to pick the relevant
-// ones before generating (small models can't fit many schemas in context). Tunable.
-const LITERT_TOOL_SELECTION_THRESHOLD = 5;
+// On-device: above this many tools, run a fast routing pass to pick the relevant ones
+// before generating (small models can't fit many schemas in context). Tunable.
+const TOOL_SELECTION_THRESHOLD = 5;
 // LiteRT runs the tool loop natively (automaticToolCalling), so the JS caps above don't
 // apply to it. Bound the native loop here instead: once a single response exceeds this many
 // tool calls we stop executing them and tell the model to answer, which prevents the KV cache
@@ -137,18 +138,35 @@ function parseGemmaNativeToolCalls(text: string): { cleanText: string; toolCalls
   return { cleanText: cleanText.trim(), toolCalls };
 }
 
-/** Parse tool calls from text output (fallback for small models). Supports JSON and XML-like formats. */
+/** Parse <invoke name="fn"><parameter name="k">v</parameter></invoke> blocks (minimax, Anthropic-style). */
+function parseInvokeBlocks(text: string, toolCalls: ToolCall[], matchedRanges: [number, number][]): void {
+  const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g;
+  let match;
+  while ((match = invokePattern.exec(text)) !== null) {
+    const name = match[1];
+    const args: Record<string, any> = {};
+    const paramPattern = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+    let pm;
+    while ((pm = paramPattern.exec(match[2])) !== null) { args[pm[1]] = pm[2].trim(); }
+    toolCalls.push({ id: `text-tc-${Date.now()}-${toolCalls.length}`, name, arguments: args });
+    matchedRanges.push([match.index, match.index + match[0].length]);
+  }
+}
+
+/** Parse tool calls from text output (fallback for small models). Supports JSON, XML, and invoke formats. */
 export function parseToolCallsFromText(text: string): { cleanText: string; toolCalls: ToolCall[] } {
   const toolCalls: ToolCall[] = [];
+  const matchedRanges: [number, number][] = [];
+
+  // 1. Standard <tool_call>...</tool_call> blocks (JSON or XML body)
   const closedPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
   let match;
-  const matchedRanges: [number, number][] = [];
   while ((match = closedPattern.exec(text)) !== null) {
     matchedRanges.push([match.index, match.index + match[0].length]);
     const call = parseToolCallBody(match[1].trim(), toolCalls.length);
     if (call) { toolCalls.push(call); }
   }
-  // Also match unclosed <tool_call> at end of text (model hit EOS without closing tag)
+  // Unclosed <tool_call> at end of text (model hit EOS without closing tag)
   const unclosedMatch = /<tool_call>([\s\S]+)$/.exec(text);
   if (unclosedMatch) {
     const unclosedStart = text.lastIndexOf(unclosedMatch[0]);
@@ -159,6 +177,21 @@ export function parseToolCallsFromText(text: string): { cleanText: string; toolC
       matchedRanges.push([unclosedStart, text.length]);
     }
   }
+
+  // 2. <invoke name="...">...</invoke> blocks (minimax, Anthropic-style)
+  parseInvokeBlocks(text, toolCalls, matchedRanges);
+
+  // 3. Namespaced wrapper blocks: namespace:tool_call ... </namespace:tool_call>
+  const nsPattern = /[\w]+:tool_call[\s\S]*?<\/[\w]+:tool_call>/g;
+  while ((match = nsPattern.exec(text)) !== null) {
+    const alreadyMatched = matchedRanges.some(([s, e]) => match!.index >= s && match!.index < e);
+    if (!alreadyMatched) {
+      // Parse invoke blocks within this namespace wrapper
+      parseInvokeBlocks(match[0], toolCalls, []);
+      matchedRanges.push([match.index, match.index + match[0].length]);
+    }
+  }
+
   // Remove all matched ranges from text (reverse order to preserve indices)
   matchedRanges.sort((a, b) => b[0] - a[0]);
   let cleanText = text;
@@ -363,13 +396,17 @@ async function callLiteRTForLoop(
   const imageUris = lastUser?.attachments
     ?.filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
     .map((a: any) => a.uri);
+  const audioUris = lastUser?.attachments
+    ?.filter((a: any) => a.type === 'audio' && typeof a.uri === 'string' && a.uri.trim().length > 0)
+    .map((a: any) => a.uri);
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.liteRTTemperature,
     topK: 40,
     topP: liteRTSettings.liteRTTopP,
   };
-  if (!text) {
+  // An audio- or image-only turn carries no text — generate from the media alone.
+  if (!text && !imageUris?.length && !audioUris?.length) {
     return { fullResponse: '', toolCalls: [] };
   }
   await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools, history });
@@ -379,7 +416,7 @@ async function callLiteRTForLoop(
     onReasoning: (token: string) => onStream?.({ reasoningContent: token }),
   };
   try {
-    const fullResponse = await liteRTService.generateRaw(text, imageUris, { ...handlers, onToolCall });
+    const fullResponse = await liteRTService.generateRaw(text, { imageUris, audioUris }, { ...handlers, onToolCall });
     // Native SDK handles all tool→model cycles internally; toolCalls always empty here
     return { fullResponse, toolCalls: [] };
   } catch (e: any) {
@@ -390,7 +427,7 @@ async function callLiteRTForLoop(
     if (!/parse (tool|FC) calls|Status Code: 3/i.test(msg)) throw e;
     logger.warn(`[ToolLoop] LiteRT tool-call parse failed; retrying without tools: ${msg.slice(0, 140)}`);
     await liteRTService.prepareConversation(conversationId, systemPrompt, { samplerConfig, tools: [], history });
-    const fullResponse = await liteRTService.generateRaw(text, imageUris, handlers);
+    const fullResponse = await liteRTService.generateRaw(text, { imageUris, audioUris }, handlers);
     return { fullResponse, toolCalls: [] };
   }
 }
@@ -490,21 +527,30 @@ async function callLLMWithRetry(
   return callLocalWithRetry(augmentedMessages, tools, onStream);
 }
 
-/** If no structured tool calls, try parsing <tool_call> tags or Gemma's native format from text.
- *  Also collects tool calls from any registered extensions and strips their syntax from display text. */
+/** Detect if text contains any tool call pattern (various model formats). */
+function containsToolCallMarkup(text: string): boolean {
+  return text.includes('<tool_call>') ||
+    text.includes('<invoke') ||
+    /\w+:tool_call/.test(text) ||
+    text.includes('<function_call>');
+}
+
+/** If no structured tool calls, try parsing tool-call markup (<tool_call>, <invoke>, namespaced
+ *  wrappers, <function_call>) or Gemma's native format from text. Also collects tool calls from
+ *  any registered extensions and strips their syntax from display text. */
 function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
   let effectiveToolCalls: ToolCall[] = toolCalls.length > 0 ? [...toolCalls] : [];
   let displayResponse = fullResponse;
 
   if (effectiveToolCalls.length === 0) {
-    if (fullResponse.includes('<tool_call>')) {
-      const parsed = parseToolCallsFromText(fullResponse);
+    if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
+      const parsed = parseGemmaNativeToolCalls(fullResponse);
       if (parsed.toolCalls.length > 0) {
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
       }
-    } else if (fullResponse.includes('<|tool_call>') || fullResponse.includes('<tool_call:')) {
-      const parsed = parseGemmaNativeToolCalls(fullResponse);
+    } else if (containsToolCallMarkup(fullResponse)) {
+      const parsed = parseToolCallsFromText(fullResponse);
       if (parsed.toolCalls.length > 0) {
         effectiveToolCalls = parsed.toolCalls;
         displayResponse = parsed.cleanText;
@@ -569,6 +615,44 @@ async function forceFinalTextResponse(ctx: ToolLoopContext, state: ToolLoopState
 }
 
 /**
+ * On-device two-pass tool routing. Built-in tools (few, tiny) are ALWAYS kept; the
+ * routing pass only decides which of the many MCP/ext tools to include, so a small
+ * model isn't handed every schema. The small model rarely emits the literal "none",
+ * so the rule is simply: router names MCP tools → include those; names nothing
+ * usable → keep built-in only (do NOT dump all MCP tools). A thrown error (genuine
+ * failure) still falls back to everything so a real request is never stranded.
+ *
+ * LiteRT (Android) routes via its native session; llama routes ONLY on iOS (Metal
+ * makes the extra prefill cheap — on Android llama it caused high TTFT). Remote
+ * models keep the full set. Routing never enters chat/context.
+ */
+async function selectEffectiveSchemas(ctx: ToolLoopContext, builtInSchemas: any[], extSchemas: any[]): Promise<any[]> {
+  const all = [...builtInSchemas, ...extSchemas];
+  const litertActive = isLiteRTActive();
+  const llamaIosNative = !litertActive && Platform.OS === 'ios' && llmService.supportsToolCalling();
+  const activeServerId = useRemoteServerStore.getState().activeServerId;
+  const usingRemote = !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded();
+  const shouldRoute = !usingRemote && (litertActive || llamaIosNative) && extSchemas.length > 0 && all.length > TOOL_SELECTION_THRESHOLD;
+  if (!shouldRoute) return all;
+
+  // LiteRT routes on a throwaway native session (default); llama via a capped completion.
+  const generate = litertActive ? undefined : (s: string, u: string) => llmService.generateToolSelection(s, u);
+  try {
+    // Route over the MCP/ext tools only — built-in tools are always kept.
+    const selected = await selectRelevantTools(getLastUserQuery(ctx.messages), extSchemas, generate);
+    if (!selected || selected.length === 0) {
+      // No MCP tool named (router said "none" OR just didn't name one) → built-in only.
+      return builtInSchemas;
+    }
+    const filteredExt = extSchemas.filter(s => selected.includes(s.function.name));
+    return [...builtInSchemas, ...filteredExt];
+  } catch (e) {
+    logger.warn(`[ToolLoop] tool selection failed; using all tools: ${String(e)}`);
+    return all;
+  }
+}
+
+/**
  * Run the tool-calling loop: call LLM → execute tools → re-inject results → repeat.
  * Returns when the model produces a final response with no tool calls.
  */
@@ -576,31 +660,8 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
   const chatStore = useChatStore.getState();
   const builtInSchemas = getToolsAsOpenAISchema(ctx.enabledToolIds);
   const extSchemas = getToolExtensions().flatMap(e => e.getOpenAISchemas?.() ?? []);
-  const toolSchemas = [...builtInSchemas, ...extSchemas];
-  // Diagnostic: schema size is the usual culprit when a local model goes silent
-  // with tools enabled — large MCP servers (e.g. Notion) ship huge schemas that
-  // can overwhelm a small context window.
-  logger.log(
-    `[ToolLoop] tools=${toolSchemas.length} (builtin=${builtInSchemas.length}, ext=${extSchemas.length}), ` +
-    `schemaChars=${JSON.stringify(toolSchemas).length}, builtinIds=[${ctx.enabledToolIds.join(', ')}]`,
-  );
 
-  // LiteRT only: when many tools are enabled, run a fast tools-free routing pass to
-  // pick the relevant ones, then carry only those into the loop — a small on-device
-  // model can't fit every schema in context. Runs on a throwaway session (never
-  // enters chat/context); falls back to all tools on any miss or failure.
-  let effectiveSchemas = toolSchemas;
-  if (isLiteRTActive() && toolSchemas.length > LITERT_TOOL_SELECTION_THRESHOLD) {
-    try {
-      const selected = await selectLiteRTTools(getLastUserQuery(ctx.messages), toolSchemas);
-      if (selected.length > 0 && selected.length < toolSchemas.length) {
-        effectiveSchemas = toolSchemas.filter(s => selected.includes(s.function.name));
-        logger.log(`[ToolLoop] LiteRT pass-1 narrowed ${toolSchemas.length}→${effectiveSchemas.length} tools`);
-      }
-    } catch (e) {
-      logger.warn(`[ToolLoop] LiteRT tool selection failed; using all tools: ${String(e)}`);
-    }
-  }
+  const effectiveSchemas = await selectEffectiveSchemas(ctx, builtInSchemas, extSchemas);
 
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;

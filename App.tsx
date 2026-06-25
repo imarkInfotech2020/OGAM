@@ -16,9 +16,11 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
+import { preloadSelectedModels } from './src/services/modelPreloader';
 import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
+import { getSlot, SLOTS } from './src/bootstrap/slotRegistry';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
@@ -196,22 +198,39 @@ function App() {
       // Pro is optional: a failure here (missing native module, keychain locked,
       // bad RC config) must never abort app init or hang the splash screen, so the
       // whole block is isolated and only logs on error.
+      // RevenueCat is isolated in its own try: a failure here (no billing on a
+      // simulator, bad RC config, no network) must NOT prevent pro features from
+      // loading — otherwise the dev unlock below would never run.
+      let isPro = false;
       try {
         configureRevenueCat();
-        const isPro = await checkProStatus();
+        isPro = await checkProStatus();
+      } catch (rcError) {
+        logger.error('[App] RevenueCat init failed, continuing without entitlement:', rcError);
+      }
 
-        // Load pro features — only activates if the keychain entitlement is set.
-        // Reuse the entitlement read above to avoid a second keychain round-trip.
+      try {
+        // Load pro features — only activates if the keychain entitlement is set
+        // (or in dev, where loadProFeatures force-unlocks).
         await loadProFeatures(isPro);
+
+        // DEV ONLY: treat dev builds as Pro so the upsell banner hides and pro
+        // UI is unlocked for local testing. Never runs in release (__DEV__ false).
+        if (__DEV__) {
+          useAppStore.getState().setHasRegisteredPro(true);
+        }
       } catch (proError) {
-        logger.error('[App] Pro initialization failed, continuing without Pro:', proError);
+        logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
       }
 
       // Show the UI immediately
       setIsInitializing(false);
 
-      // Models are loaded on-demand when the user opens a chat,
-      // not eagerly on startup, to avoid freezing the UI.
+      // Warm the selected models in the background (text → image → TTS → STT,
+      // budget-gated, sequential) so the common paths have no cold-start wait.
+      // Fire-and-forget after the UI is up; loads run one at a time off the JS
+      // thread so they don't freeze the screen.
+      preloadSelectedModels();
     } catch (error) {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
@@ -264,6 +283,7 @@ function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        {(() => { const AppRoot = getSlot(SLOTS.appRoot); return AppRoot ? <AppRoot /> : null; })()}
         <NavigationContainer
           theme={{
             dark: isDark,
