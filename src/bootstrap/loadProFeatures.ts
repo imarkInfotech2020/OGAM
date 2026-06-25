@@ -16,11 +16,13 @@ export async function loadProFeatures(isPro?: boolean): Promise<void> {
     return; // proStub.js returns null — free build via metro extraNodeModules
   }
 
-  // DEV ONLY: unlock pro features locally (audio mode, MCP) without a RevenueCat
-  // purchase so they can be tested on simulators/dev builds. __DEV__ is false in
-  // release builds, so this can never unlock pro in production. Set to false to
-  // exercise the free-build path in dev.
-  const DEV_UNLOCK_PRO = __DEV__;
+  // DEV ONLY: unlock pro features locally (audio mode, MCP) without a purchase so
+  // they can be tested on simulators/dev builds. __DEV__ is false in release
+  // builds, so this can never unlock pro in production. The Settings "Turn off
+  // Pro (DEV)" toggle sets devProDisabled to exercise the free → Pro flow in a
+  // debug build.
+  const { useAppStore } = require('../stores/appStore');
+  const DEV_UNLOCK_PRO = __DEV__ && !useAppStore.getState().devProDisabled;
 
   // The boot path already read the entitlement in checkProStatus(); reuse it to
   // avoid a second keychain round-trip. Fall back to a read for standalone callers.

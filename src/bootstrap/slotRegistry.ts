@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import { useSyncExternalStore, type ComponentType } from 'react';
 
 /**
  * Component-slot seam. Pro features register UI components against named slots
@@ -10,21 +10,45 @@ import type { ComponentType } from 'react';
  * Slot names are plain strings (see SLOTS below for the known set). Props are
  * passed through untyped on purpose: each slot documents its own prop shape and
  * the registering component declares it.
+ *
+ * Registration is reactive: `useSlot` subscribes, so a slot registered AFTER a
+ * consumer has mounted (e.g. Pro activated at runtime via a license key, which
+ * re-runs loadProFeatures) makes that consumer re-render and pick the component
+ * up live — no app restart. `getSlot` stays for non-component / one-shot reads.
  */
 const slots: Record<string, ComponentType<any>> = {};
+const listeners = new Set<() => void>();
+
+function emitChange(): void {
+  for (const l of listeners) l();
+}
 
 export function registerSlot(name: string, component: ComponentType<any>): void {
+  if (slots[name] === component) return; // no-op re-register (dev Fast Refresh)
   slots[name] = component;
+  emitChange();
 }
 
 export function getSlot(name: string): ComponentType<any> | undefined {
   return slots[name];
 }
 
+/** Reactive read of a slot — re-renders when the slot is (de)registered. */
+export function useSlot(name: string): ComponentType<any> | undefined {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      listeners.add(onStoreChange);
+      return () => listeners.delete(onStoreChange);
+    },
+    () => slots[name],
+  );
+}
+
 export function _clearSlotsForTesting(): void {
   for (const key of Object.keys(slots)) {
     delete slots[key];
   }
+  emitChange();
 }
 
 /** Known slot names, centralised so core and pro stay in sync. */

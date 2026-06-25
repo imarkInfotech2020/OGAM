@@ -110,6 +110,11 @@ interface AppState {
   // PRO pre-order state
   hasRegisteredPro: boolean;
   setHasRegisteredPro: (v: boolean) => void;
+  /** DEV-only: when true, suppresses the __DEV__ Pro auto-unlock so the
+   *  free → Pro activation flow can be exercised in a debug build. No effect in
+   *  release (__DEV__ is false there). */
+  devProDisabled: boolean;
+  setDevProDisabled: (v: boolean) => void;
   proBannerDismissed: boolean;
   setProBannerDismissed: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
@@ -310,6 +315,8 @@ export const useAppStore = create<AppState>()(
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
       hasRegisteredPro: false,
       setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
+      devProDisabled: false,
+      setDevProDisabled: (v) => set({ devProDisabled: v }),
       proBannerDismissed: false,
       setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
       proAhaTriggeredBy: null,
@@ -337,6 +344,7 @@ export const useAppStore = create<AppState>()(
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         hasRegisteredPro: state.hasRegisteredPro,
+        devProDisabled: state.devProDisabled,
         proBannerDismissed: state.proBannerDismissed,
         proAhaTriggeredBy: state.proAhaTriggeredBy,
         loadedSettings: state.loadedSettings,

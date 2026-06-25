@@ -17,10 +17,11 @@ import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { preloadSelectedModels } from './src/services/modelPreloader';
-import { configureRevenueCat, checkProStatus } from './src/services/proLicenseService';
+import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
-import { getSlot, SLOTS } from './src/bootstrap/slotRegistry';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { useSlot, SLOTS } from './src/bootstrap/slotRegistry';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
@@ -57,6 +58,10 @@ const ensureRemoteServerStoreHydrated = async () => {
 
 function App() {
   useDownloadListeners();
+  // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
+  // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
+  // it live — no restart needed.
+  const AppRoot = useSlot(SLOTS.appRoot);
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
@@ -191,22 +196,17 @@ function App() {
       // Initialize RAG database tables
       ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
 
-      // Configure RevenueCat and read the cached entitlement before Pro features load.
-      // configureRevenueCat is sync; checkProStatus reads the keychain cache immediately
-      // and fires a background RC network sync so the next launch stays fresh.
+      // Read the cached Pro entitlement before Pro features load. checkProStatus
+      // returns the Keychain cache immediately and fires a background Keygen
+      // revalidation so the next launch stays fresh.
       //
-      // Pro is optional: a failure here (missing native module, keychain locked,
-      // bad RC config) must never abort app init or hang the splash screen, so the
-      // whole block is isolated and only logs on error.
-      // RevenueCat is isolated in its own try: a failure here (no billing on a
-      // simulator, bad RC config, no network) must NOT prevent pro features from
-      // loading — otherwise the dev unlock below would never run.
+      // Pro is optional: a failure here (keychain locked, no network) must never
+      // abort app init or hang the splash screen, so it is isolated and only logs.
       let isPro = false;
       try {
-        configureRevenueCat();
         isPro = await checkProStatus();
-      } catch (rcError) {
-        logger.error('[App] RevenueCat init failed, continuing without entitlement:', rcError);
+      } catch (proError) {
+        logger.error('[App] Pro check failed, continuing without entitlement:', proError);
       }
 
       try {
@@ -214,11 +214,14 @@ function App() {
         // (or in dev, where loadProFeatures force-unlocks).
         await loadProFeatures(isPro);
 
-        // DEV ONLY: treat dev builds as Pro so the upsell banner hides and pro
-        // UI is unlocked for local testing. Never runs in release (__DEV__ false).
-        if (__DEV__) {
-          useAppStore.getState().setHasRegisteredPro(true);
-        }
+        // Reconcile the persisted Pro flag with the actual entitlement on every
+        // boot. Setting it to the resolved value (not only ever true) means a
+        // cleared/expired license also flips it back to false — previously it
+        // only ever went true, so a stale persisted true stuck forever.
+        // DEV builds force-unlock for local testing, unless the Settings
+        // "Turn off Pro (DEV)" toggle is set. Never force-unlocks in release.
+        const devUnlock = __DEV__ && !useAppStore.getState().devProDisabled;
+        useAppStore.getState().setHasRegisteredPro(isPro || devUnlock);
       } catch (proError) {
         logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
       }
@@ -256,7 +259,7 @@ function App() {
 
   if (isInitializing) {
     return (
-      <GestureHandlerRootView style={styles.flex}>
+      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]}>
         <SafeAreaProvider>
           <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
@@ -270,7 +273,7 @@ function App() {
   // Show lock screen if auth is enabled and app is locked
   if (authEnabled && isLocked) {
     return (
-      <GestureHandlerRootView style={styles.flex} testID="app-locked">
+      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]} testID="app-locked">
         <SafeAreaProvider>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
           <LockScreen onUnlock={handleUnlock} />
@@ -283,7 +286,7 @@ function App() {
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-        {(() => { const AppRoot = getSlot(SLOTS.appRoot); return AppRoot ? <AppRoot /> : null; })()}
+        {AppRoot ? <AppRoot /> : null}
         <NavigationContainer
           theme={{
             dark: isDark,
@@ -333,4 +336,15 @@ const styles = StyleSheet.create({
   },
 });
 
-export default App;
+// KeyboardProvider drives react-native-keyboard-controller's edge-to-edge-aware
+// keyboard avoidance (used by ChatScreen). It must sit above every screen, so
+// wrap the whole app once here rather than per return-branch in App().
+function AppWithProviders() {
+  return (
+    <KeyboardProvider>
+      <App />
+    </KeyboardProvider>
+  );
+}
+
+export default AppWithProviders;
