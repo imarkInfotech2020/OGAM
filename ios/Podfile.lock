@@ -70,9 +70,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - MMKV (2.4.0):
-    - MMKVCore (~> 2.4.0)
-  - MMKVCore (2.4.0)
   - op-sqlite (15.2.5):
     - boost
     - DoubleConversion
@@ -1991,35 +1988,6 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-background-downloader (4.5.4):
-    - boost
-    - DoubleConversion
-    - fast_float
-    - fmt
-    - glog
-    - hermes-engine
-    - MMKV
-    - RCT-Folly
-    - RCT-Folly/Fabric
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - SocketRocket
-    - Yoga
   - react-native-blur (4.4.1):
     - boost
     - DoubleConversion
@@ -3461,11 +3429,11 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - RNZipArchive (7.1.1):
+  - RNZipArchive (7.1.0):
     - React-Core
-    - RNZipArchive/Core (= 7.1.1)
+    - RNZipArchive/Core (= 7.1.0)
     - SSZipArchive (~> 2.5.5)
-  - RNZipArchive/Core (7.1.1):
+  - RNZipArchive/Core (7.1.0):
     - React-Core
     - SSZipArchive (~> 2.5.5)
   - SocketRocket (0.7.1)
@@ -3551,7 +3519,6 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
-  - "react-native-background-downloader (from `../node_modules/@kesha-antonov/react-native-background-downloader`)"
   - "react-native-blur (from `../node_modules/@react-native-community/blur`)"
   - "react-native-document-picker (from `../node_modules/@react-native-documents/picker`)"
   - "react-native-document-viewer (from `../node_modules/@react-native-documents/viewer`)"
@@ -3618,8 +3585,6 @@ DEPENDENCIES:
 SPEC REPOS:
   trunk:
     - lottie-ios
-    - MMKV
-    - MMKVCore
     - opencv-rne
     - PurchasesHybridCommon
     - PurchasesHybridCommonUI
@@ -3724,8 +3689,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
-  react-native-background-downloader:
-    :path: "../node_modules/@kesha-antonov/react-native-background-downloader"
   react-native-blur:
     :path: "../node_modules/@react-native-community/blur"
   react-native-document-picker:
@@ -3857,12 +3820,10 @@ SPEC CHECKSUMS:
   FBLazyVector: 309703e71d3f2f1ed7dc7889d58309c9d77a95a4
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  hermes-engine: 8c6be38f94b3bf8b864981980e64e55f08e467ec
+  hermes-engine: 3de70ea2100f1780402cf146bb8110a0cdb2f34e
   llama-rn: 7c9b9610cc259118508bd1264bbd9be47e17ffd0
   lottie-ios: a881093fab623c467d3bce374367755c272bdd59
   lottie-react-native: 691b8363e8c591fb78a78254ff2517258891456b
-  MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
-  MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
   op-sqlite: bafff369cecaee4fe65c89eec47deaba26f2db95
   opencv-rne: 2305807573b6e29c8c87e3416ab096d09047a7a0
   PurchasesHybridCommon: eed735a411c1aee8c05d62933fa7c4a40ede4009
@@ -3903,11 +3864,10 @@ SPEC CHECKSUMS:
   React-logger: b8483fa08e0d62e430c76d864309d90576ca2f68
   React-Mapbuffer: 7b72a669e94662359dad4f42b5af005eb24b4e83
   React-microtasksnativemodule: cdc02da075f2857803ed63f24f5f72fc40e094c0
-  react-native-background-downloader: 104ec76df9e2cfd83445df83ae9f661893a285e7
   react-native-blur: 6af83e7e3c4c1446a188d9b2c493600fc4beb173
   react-native-document-picker: dc2d83366e47e89e7c51e8a41eab99c1d54e941c
   react-native-document-viewer: 8c6ed07e7e27352743fa98e8dd6d288ad925b884
-  react-native-executorch: 65df20362342afff0040d227d270a1b9a59f0c54
+  react-native-executorch: 9a44ee2b18773cbe5ad2e6d7376eb76f347e2935
   react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-image-picker: 0314366753615115fa55c3cc937ac44cb7e75702
   react-native-safe-area-context: c00143b4823773bba23f2f19f85663ae89ceb460
@@ -3964,12 +3924,12 @@ SPEC CHECKSUMS:
   RNSVG: 595abfa0f9ac26d56afcaaedf4e37a00f54cab71
   RNVectorIcons: 791f13226ec4a3fd13062eda9e892159f0981fae
   RNWorklets: 944dddd0eef13006b658e653abbb3ee8365c3809
-  RNZipArchive: 0f7498c241e20d276d9cfa50ab35df4c572497d0
+  RNZipArchive: f2806ba80e24cf1984d6a7cb361d8a07d734997d
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
   whisper-rn: 7566faf9b7d78e39ab9fc634cb90fdee81177793
   Yoga: 5456bb010373068fc92221140921b09d126b116e
 
-PODFILE CHECKSUM: 30f084aba7ca9595d2440626582f30bcd67c6464
+PODFILE CHECKSUM: f66f810a788ead15881075527443239e49b50db1
 
 COCOAPODS: 1.16.2
