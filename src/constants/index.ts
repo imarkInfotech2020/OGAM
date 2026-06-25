@@ -1,13 +1,17 @@
 export { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS, TRENDING_FAMILIES, TRENDING_MODEL_IDS, MODEL_ORGS, QUANTIZATION_INFO } from './models';
 
 // External URLs
-export const WEDNESDAY_URL = 'https://mobile.wednesday.is/hire-ai-native-mobile-squad?utm_source=off-grid-mobile-app&utm_medium=made-with-love&utm_campaign=in-app';
+export const WEDNESDAY_URL = 'https://wednesday.is/hire-ai-native-mobile-squad?utm_source=off-grid-mobile-app&utm_medium=made-with-love&utm_campaign=in-app';
+
+// RevenueCat Web Billing customer portal (where monthly subscribers cancel /
+// manage billing). TODO: set to your project's RC customer-portal URL.
+export const PRO_MANAGE_SUBSCRIPTION_URL = 'https://offgridmobileai.co/manage';
 
 export const PRO_AHA_FEATURES = [
-  'Voice-native conversation',
-  'Custom MCP servers',
-  'Calendar and WhatsApp integration',
-  'More, shipping monthly',
+  'Ambient across your devices',
+  'Proactive, not reactive',
+  'Private by architecture',
+  'It acts, you approve',
 ];
 
 // Hugging Face API configuration

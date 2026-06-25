@@ -93,13 +93,13 @@ describe('SettingsScreen', () => {
 
   it('shows the Pro upsell banner when Pro is not active and not dismissed', () => {
     const { getByText } = render(<SettingsScreen />);
-    expect(getByText(/Unlock advanced features/)).toBeTruthy();
+    expect(getByText(/democratized/i)).toBeTruthy();
   });
 
   it('hides the Pro upsell banner once Pro is active', () => {
     mockProState.hasRegisteredPro = true;
     const { queryByText } = render(<SettingsScreen />);
-    expect(queryByText(/Unlock advanced features/)).toBeNull();
+    expect(queryByText(/democratized/i)).toBeNull();
   });
 
   it('renders "Settings" title', () => {
