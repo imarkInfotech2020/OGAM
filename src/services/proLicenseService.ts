@@ -1,214 +1,240 @@
-import { Platform } from 'react-native';
-import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+/**
+ * Pro entitlement, backed by Keygen license keys.
+ *
+ * Identity model: no login, no RevenueCat in the app. The buyer pays on the web
+ * (RevenueCat checkout), an issuance Worker emails them a license key, and they
+ * paste it into the app. We validate the key against Keygen (which enforces the
+ * 5-device cap), cache { isPro, key, expiry } in the Keychain, and re-validate
+ * when online so a revoked or expired key locks the app. Offline, the cached
+ * state stands until a monthly key's expiry passes (lifetime keys never expire);
+ * revocation is caught at the next online check.
+ */
 import * as Keychain from 'react-native-keychain';
 import logger from '../utils/logger';
 import {
-  RC_API_KEY_IOS,
-  RC_API_KEY_ANDROID,
-  RC_API_KEY_TEST_STORE,
-  RC_WEB_PURCHASE_URL,
-  USE_RC_TEST_STORE,
-} from '../config/revenueCatKeys';
+  validateKey,
+  activateMachine,
+  listMachines,
+  deactivateMachine,
+  KeygenNetworkError,
+  type KeygenMachine,
+} from './keygenClient';
+import { getDeviceFingerprint, getPlatformTag } from './deviceFingerprint';
 
 const KEYCHAIN_SERVICE = 'off-grid-pro-license';
-const ENTITLEMENT_ID = 'pro';
 
-// react-native-purchases only ships native modules for iOS and Android. On any
-// other platform configure is skipped and this stays false, so the RC-backed
-// entry points below no-op or fail loudly instead of throwing native errors.
-let isConfigured = false;
+// Public web pay page (RevenueCat checkout). "Get Pro" opens this; the buyer is
+// emailed a license key by the issuance Worker and enters it via activateProByKey.
+export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
 
-// Identity model: there is no login. The user's email is used as the RevenueCat
-// App User ID. They pay on the web (RC Web Billing) with that email, then enter
-// the same email in the app to unlock Pro. We cache { isPro, email } locally and
-// re-validate against RC when online so a revoked entitlement locks the app.
-type ProLicense = { isPro: boolean; email: string | null; verifiedAt: number };
+export type ActivateResult = { ok: true } | { ok: false; reason: 'invalid' | 'limit' | 'network' };
+
+type ProLicense = {
+  isPro: boolean;
+  key: string | null;
+  licenseId: string | null;
+  expiry: string | null; // ISO timestamp, or null for a perpetual (lifetime) key
+  verifiedAt: number;
+};
+
+const EMPTY: ProLicense = { isPro: false, key: null, licenseId: null, expiry: null, verifiedAt: 0 };
+
+const REVOKED_CODES = ['EXPIRED', 'SUSPENDED', 'BANNED', 'OVERDUE', 'NOT_FOUND'];
+const NEEDS_ACTIVATION = ['NO_MACHINE', 'NO_MACHINES', 'FINGERPRINT_SCOPE_MISMATCH'];
+
+export type KeygenLicenseKind = ProLicense;
 
 function setProInStore(isPro: boolean): void {
   const { useAppStore } = require('../stores/appStore');
   useAppStore.getState().setHasRegisteredPro(isPro);
 }
 
-export function configureRevenueCat(): void {
-  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    return;
-  }
-  try {
-    Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
-    const useTestStore = __DEV__ && USE_RC_TEST_STORE;
-    const apiKey = useTestStore
-      ? RC_API_KEY_TEST_STORE
-      : Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID;
-    // Trusted Entitlements (informational): RC cryptographically signs the
-    // entitlement payload and the SDK verifies it on-device. We treat a FAILED
-    // signature as not-Pro (forgery/MITM defense, see hasVerifiedPro). It has no
-    // performance or behaviour cost otherwise.
-    Purchases.configure({
-      apiKey,
-      entitlementVerificationMode: Purchases.ENTITLEMENT_VERIFICATION_MODE.INFORMATIONAL,
-    });
-    isConfigured = true;
-  } catch (e: any) {
-    logger.error(`[RC] configure FAILED: ${e?.message ?? e}`);
-    throw e;
-  }
-}
-
-// An entitlement counts as Pro only when it is active AND its Trusted-Entitlements
-// signature did not fail. We allow NOT_REQUESTED / VERIFIED / VERIFIED_ON_DEVICE
-// (legitimate cached or unverified states) and reject only FAILED, so we never
-// false-lock a paying user while still blocking forged entitlement payloads.
-function hasVerifiedPro(customerInfo: any): boolean {
-  const ent = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
-  if (!ent) return false;
-  if (ent.verification === Purchases.VERIFICATION_RESULT.FAILED) {
-    logger.error('[RC] entitlement present but verification FAILED — treating as not Pro');
-    return false;
-  }
+/** Whether the cached license grants Pro right now (offline-safe). */
+function isProActive(lic: ProLicense): boolean {
+  if (!lic.isPro) return false;
+  // Monthly keys carry an expiry — once it passes, no Pro even offline. Lifetime
+  // keys have null expiry. Revocation propagates at the next online revalidate.
+  if (lic.expiry && Date.parse(lic.expiry) <= Date.now()) return false;
   return true;
 }
 
-async function writeLicense(isPro: boolean, email: string | null): Promise<void> {
-  const license: ProLicense = { isPro, email, verifiedAt: Date.now() };
+async function writeLicense(lic: ProLicense): Promise<void> {
   try {
-    await Keychain.setGenericPassword('license', JSON.stringify(license), {
+    await Keychain.setGenericPassword('license', JSON.stringify(lic), {
       service: KEYCHAIN_SERVICE,
       accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
     });
   } catch (e) {
-    // A keychain write failure (locked keychain, unsupported platform) must not
-    // surface as a failure to the user. RC still holds the entitlement and the
-    // next re-validate re-writes the cache, so log and continue.
-    const message = e instanceof Error ? e.message : String(e);
-    logger.error(`[RC] writeLicense failed to persist to keychain: ${message}`);
+    logger.error(`[Pro] writeLicense failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-async function readProLicense(): Promise<ProLicense> {
+async function readLicense(): Promise<ProLicense> {
   try {
-    const result = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
-    if (!result) {
-      return { isPro: false, email: null, verifiedAt: 0 };
-    }
-    const license: ProLicense = JSON.parse(result.password);
+    const res = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
+    if (!res) return EMPTY;
+    const p = JSON.parse(res.password);
     return {
-      isPro: license.isPro ?? false,
-      email: license.email ?? null,
-      verifiedAt: license.verifiedAt ?? 0,
+      isPro: p.isPro ?? false,
+      key: p.key ?? null,
+      licenseId: p.licenseId ?? null,
+      expiry: p.expiry ?? null,
+      verifiedAt: p.verifiedAt ?? 0,
     };
-  } catch (e: any) {
-    logger.error(`[RC] readProLicense error: ${e?.message ?? e}`);
-    return { isPro: false, email: null, verifiedAt: 0 };
+  } catch (e) {
+    logger.error(`[Pro] readLicense failed: ${e instanceof Error ? e.message : String(e)}`);
+    return EMPTY;
   }
 }
 
 export async function readProFromKeychain(): Promise<boolean> {
-  const { isPro } = await readProLicense();
-  return isPro;
+  return isProActive(await readLicense());
 }
 
+export type ProTier = 'lifetime' | 'monthly';
+export interface ProLicenseInfo {
+  isPro: boolean;
+  tier: ProTier | null; // lifetime (no expiry) vs monthly (has expiry); null when not Pro
+  expiry: string | null;
+  verifiedAt: number;
+}
+
+/** Cached license details for the Settings/Pro status UI (offline-safe). */
+export async function getProLicenseInfo(): Promise<ProLicenseInfo> {
+  const lic = await readLicense();
+  const isPro = isProActive(lic);
+  return {
+    isPro,
+    tier: !isPro ? null : lic.expiry ? 'monthly' : 'lifetime',
+    expiry: lic.expiry,
+    verifiedAt: lic.verifiedAt,
+  };
+}
+
+/** Returns the cached entitlement immediately and revalidates in the background. */
 export async function checkProStatus(): Promise<boolean> {
-  const { isPro } = await readProLicense();
+  const lic = await readLicense();
   revalidatePro().catch(() => {});
-  return isPro;
+  return isProActive(lic);
 }
 
-// Re-checks the stored email's entitlement with RevenueCat when online. This is
-// the revocation path: if Pro is revoked in the RC dashboard, the next online
-// launch flips the cached flag to false and locks the app. Network errors are
-// swallowed so offline users keep their cached access (grace period).
+/**
+ * Re-check the stored key with Keygen when online. The revocation/expiry path:
+ * a revoked or expired key flips the cached flag to false and locks the app.
+ * Network errors are swallowed so offline users keep cached access.
+ */
 export async function revalidatePro(): Promise<void> {
-  if (!isConfigured) {
+  const lic = await readLicense();
+  if (!lic.key) return; // nothing to revalidate (legacy/empty cache)
+  let fp: string;
+  try {
+    fp = await getDeviceFingerprint();
+  } catch {
     return;
   }
-  const { email } = await readProLicense();
   try {
-    if (email) {
-      await Purchases.logIn(email);
+    const r = await validateKey(lic.key, fp);
+    if (r.valid && r.code === 'VALID') {
+      await writeLicense({
+        isPro: true,
+        key: lic.key,
+        licenseId: r.license?.id ?? lic.licenseId,
+        expiry: r.license?.expiry ?? null,
+        verifiedAt: Date.now(),
+      });
+      setProInStore(true);
+    } else if (REVOKED_CODES.includes(r.code)) {
+      await writeLicense({ ...lic, isPro: false, expiry: r.license?.expiry ?? lic.expiry, verifiedAt: Date.now() });
+      setProInStore(false);
+    } else if (NEEDS_ACTIVATION.includes(r.code) && r.license) {
+      // Valid key but this device lost its slot — try to reclaim it.
+      const act = await activateMachine(lic.key, r.license.id, { fingerprint: fp, platform: getPlatformTag() });
+      await writeLicense({
+        isPro: act.ok,
+        key: lic.key,
+        licenseId: r.license.id,
+        expiry: r.license.expiry,
+        verifiedAt: Date.now(),
+      });
+      setProInStore(act.ok);
     }
-    await Purchases.invalidateCustomerInfoCache();
-    const info = await Purchases.getCustomerInfo();
-    const isPro = hasVerifiedPro(info);
-    await writeLicense(isPro, email);
-    setProInStore(isPro);
-  } catch (e: any) {
-    // Offline / transient failure — keep the cached state, do NOT lock the user.
-    logger.error(`[RC] revalidatePro error (keeping cached state): ${e?.message ?? e} (code=${e?.code ?? 'none'} underlying=${e?.underlyingErrorMessage ?? 'none'})`);
+    // TOO_MANY_MACHINES / UNKNOWN: leave the cached state untouched.
+  } catch (e) {
+    if (e instanceof KeygenNetworkError) return; // offline — keep cached access
+    logger.error(`[Pro] revalidate error: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-// Public web pay page. "Get Pro" opens this directly (no in-app email): the page
-// collects the buyer's email and runs checkout, and that email becomes the
-// membership the user later verifies in-app via activateProByEmail.
-export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
-
-// Builds the RevenueCat Web Purchase Link URL. RC identifies the customer by
-// the App User ID, which is a path segment (not a query parameter). We use the
-// email as the App User ID so the Stripe purchase ties to the same identity the
-// app uses when calling logIn(email). The ?email= param prefills the email
-// field on the checkout page.
-//   https://pay.rev.cat/<token>/<urlEncodedEmail>?email=<urlEncodedEmail>
-export function getWebPurchaseUrl(email: string): string {
-  const normalized = email.trim().toLowerCase();
-  const encoded = encodeURIComponent(normalized);
-  const base = RC_WEB_PURCHASE_URL.endsWith('/') ? RC_WEB_PURCHASE_URL : `${RC_WEB_PURCHASE_URL}/`;
-  return `${base}${encoded}?email=${encoded}`;
-}
-
-// Unlocks Pro by logging in as the email (the RC App User ID) and checking the
-// entitlement. Used both after a web purchase and to "restore" on a new device.
-export async function activateProByEmail(email: string): Promise<boolean> {
-  if (!isConfigured) {
-    logger.error('[RC] activateProByEmail ABORT: SDK not configured');
-    throw new Error('RevenueCat is not configured');
-  }
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) {
-    throw new Error('Email is required');
-  }
-  let customerInfo: any;
+/**
+ * Activate a license key on this device: validate, claim a device slot if
+ * needed (Keygen enforces the 5-device cap), and cache the entitlement.
+ */
+export async function activateProByKey(rawKey: string): Promise<ActivateResult> {
+  const key = rawKey.trim();
+  if (!key) return { ok: false, reason: 'invalid' };
+  let fp: string;
   try {
-    const result = await Purchases.logIn(normalized);
-    customerInfo = result.customerInfo;
-  } catch (e: any) {
-    logger.error(`[RC] activateProByEmail: logIn FAILED — ${e?.message ?? e} (code=${e?.code ?? 'none'} underlying=${e?.underlyingErrorMessage ?? 'none'})`);
-    throw e;
+    fp = await getDeviceFingerprint();
+  } catch {
+    return { ok: false, reason: 'network' };
   }
-  const isPro = hasVerifiedPro(customerInfo);
-  if (isPro) {
-    await writeLicense(true, normalized);
+
+  let r;
+  try {
+    r = await validateKey(key, fp);
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+
+  // Already activated on this device.
+  if (r.valid && r.code === 'VALID' && r.license) {
+    await writeLicense({ isPro: true, key, licenseId: r.license.id, expiry: r.license.expiry, verifiedAt: Date.now() });
     setProInStore(true);
-    return true;
+    return { ok: true };
   }
-  // No entitlement for that email (wrong email, typo, or no purchase). Log back
-  // out so the device is not stranded on an empty identity, and don't cache it.
+  if (r.code === 'TOO_MANY_MACHINES') return { ok: false, reason: 'limit' };
+  if (REVOKED_CODES.includes(r.code) || !r.license) return { ok: false, reason: 'invalid' };
+
+  // Valid key, this device not yet activated — claim a slot.
+  if (NEEDS_ACTIVATION.includes(r.code)) {
+    let act;
+    try {
+      act = await activateMachine(key, r.license.id, { fingerprint: fp, platform: getPlatformTag() });
+    } catch {
+      return { ok: false, reason: 'network' };
+    }
+    if (act.limitReached) return { ok: false, reason: 'limit' };
+    if (!act.ok) return { ok: false, reason: 'invalid' };
+    await writeLicense({ isPro: true, key, licenseId: r.license.id, expiry: r.license.expiry, verifiedAt: Date.now() });
+    setProInStore(true);
+    return { ok: true };
+  }
+  return { ok: false, reason: 'invalid' };
+}
+
+/** Devices registered on the active license (for the device-management screen). */
+export async function listProDevices(): Promise<KeygenMachine[]> {
+  const lic = await readLicense();
+  if (!lic.key || !lic.licenseId) return [];
   try {
-    await Purchases.logOut();
-  } catch (e: any) {
-    logger.error(`[RC] activateProByEmail: logOut after miss failed: ${e?.message ?? e}`);
+    return await listMachines(lic.key, lic.licenseId);
+  } catch {
+    return [];
   }
-  return false;
+}
+
+/** Free a device slot. */
+export async function deactivateProDevice(machineId: string): Promise<boolean> {
+  const lic = await readLicense();
+  if (!lic.key) return false;
+  try {
+    return await deactivateMachine(lic.key, machineId);
+  } catch {
+    return false;
+  }
 }
 
 export async function clearProForTesting(): Promise<void> {
-  await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
-  setProInStore(false);
-}
-
-export async function resetProIdentityForTesting(): Promise<void> {
-  if (!isConfigured) {
-    return;
-  }
-  await Purchases.invalidateCustomerInfoCache();
-  try {
-    const before = await Purchases.getCustomerInfo();
-    const isAnonymous = before.originalAppUserId.startsWith('$RCAnonymousID:');
-    if (!isAnonymous) {
-      await Purchases.logOut();
-    }
-  } catch (e: any) {
-    logger.error(`[RC] resetProIdentityForTesting: ${e?.message ?? e} — continuing`);
-  }
   await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
   setProInStore(false);
 }

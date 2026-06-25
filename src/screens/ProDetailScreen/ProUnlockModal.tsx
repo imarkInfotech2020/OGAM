@@ -11,7 +11,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
-import { activateProByEmail, PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
+import { activateProByKey, PRO_PAY_PAGE_URL, type ActivateResult } from '../../services/proLicenseService';
 
 type ErrorMsg = string | null;
 
@@ -21,24 +21,34 @@ type Props = {
   onUnlocked: () => void;
 };
 
-// Verify-only modal: the user enters the email tied to their Pro membership and
-// we re-check the entitlement. Paying is a separate path — "Get Pro" opens the
-// web pay page directly (no email collected in-app), so this modal never asks
-// for payment, only verification of an existing membership.
+function messageFor(reason: Extract<ActivateResult, { ok: false }>['reason']): string {
+  switch (reason) {
+    case 'limit':
+      return 'This key is already on its 5 devices. Remove one on a device where Pro is active, then try again.';
+    case 'network':
+      return 'Could not reach the licensing server. Check your connection and try again.';
+    default:
+      return "That license key isn't valid or active. Check it and try again.";
+  }
+}
+
+// Activation modal: the user pastes the license key from their email and we
+// activate it on this device. Paying is a separate path — "Get Pro" opens the
+// web pay page; the buyer is then emailed a key to paste here.
 export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const [email, setEmail] = useState('');
+  const [licenseKey, setLicenseKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorMsg>(null);
   const [success, setSuccess] = useState(false);
 
   // The modal stays mounted across opens, so clear transient state each time it
-  // opens so a previous attempt's email/error never leaks into a fresh open.
+  // opens so a previous attempt's key/error never leaks into a fresh open.
   useEffect(() => {
     if (visible) {
-      setEmail('');
+      setLicenseKey('');
       setError(null);
       setSuccess(false);
       setLoading(false);
@@ -47,7 +57,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
   const close = () => {
     if (loading || success) return;
-    setEmail('');
+    setLicenseKey('');
     setError(null);
     onClose();
   };
@@ -55,7 +65,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
   // Dismiss the success card once the user has read it. The keychain write is
   // already done at this point; Pro features load on the next app launch.
   const finishSuccess = () => {
-    setEmail('');
+    setLicenseKey('');
     setError(null);
     setSuccess(false);
     onClose();
@@ -63,31 +73,29 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
   const clearError = () => { if (error) setError(null); };
 
-  const handleVerify = async () => {
-    // Strip whitespace so stray spaces never reach the RevenueCat identity. The
-    // button is disabled when empty, so this is a defensive guard.
-    const trimmed = email.trim();
+  const handleActivate = async () => {
+    const trimmed = licenseKey.trim();
     if (!trimmed) return;
 
     setLoading(true);
     setError(null);
     try {
-      const unlocked = await activateProByEmail(trimmed);
-      if (unlocked) {
+      const res = await activateProByKey(trimmed);
+      if (res.ok) {
         setSuccess(true);
         onUnlocked();
       } else {
-        setError('No Pro membership found for that email. Check the address and try again.');
+        setError(messageFor(res.reason));
       }
     } catch {
-      setError('Verification failed. Check your connection and try again.');
+      setError('Activation failed. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Not a member yet — send them to the web pay page. No email is collected here;
-  // the page handles checkout and the buyer's email becomes their membership.
+  // Not a member yet — send them to the web pay page. The buyer's key is emailed
+  // to them after checkout, then pasted here.
   const handleGetPro = () => {
     Linking.openURL(PRO_PAY_PAGE_URL).catch(() => {
       setError('Could not open the Pro page. Please try again.');
@@ -103,7 +111,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
               <Icon name="check" size={26} color={colors.primary} />
             </View>
             <Text style={styles.successTitle}>Pro activated</Text>
-            <Text style={styles.successSub}>Close and reopen the app to load your Pro features.</Text>
+            <Text style={styles.successSub}>You're all set. Pro is active on this device.</Text>
             <TouchableOpacity style={styles.successBtn} onPress={finishSuccess} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>Got it</Text>
             </TouchableOpacity>
@@ -113,7 +121,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
     );
   }
 
-  const hasInput = email.trim().length > 0;
+  const hasInput = licenseKey.trim().length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -126,22 +134,23 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
           </TouchableOpacity>
 
           {/* Header */}
-          <Text style={styles.title}>Verify your membership</Text>
+          <Text style={styles.title}>Enter your license key</Text>
           <Text style={styles.subtitle}>
-            Enter the email tied to your Pro membership.
+            Paste the license key from your email. It works on up to 5 devices.
           </Text>
 
-          {/* Email input */}
+          {/* License key input */}
           <TextInput
             style={styles.input}
-            placeholder="you@example.com"
+            placeholder="key/..."
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
-            keyboardType="email-address"
-            value={email}
-            onChangeText={(t) => { setEmail(t); clearError(); }}
+            multiline
+            value={licenseKey}
+            onChangeText={(t) => { setLicenseKey(t); clearError(); }}
             editable={!loading}
+            testID="license-key-input"
           />
 
           {/* Inline error */}
@@ -153,12 +162,12 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
           <TouchableOpacity
             testID="unlock-cta"
             style={[styles.primaryBtn, (loading || !hasInput) && styles.disabled]}
-            onPress={handleVerify}
+            onPress={handleActivate}
             disabled={loading || !hasInput}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>
-              {loading ? 'Verifying...' : 'Verify membership'}
+              {loading ? 'Activating...' : 'Activate'}
             </Text>
           </TouchableOpacity>
 
@@ -222,6 +231,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
     marginBottom: SPACING.xs,
+    minHeight: 48,
   },
 
   errorText: {

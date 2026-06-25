@@ -1,33 +1,30 @@
 import {
   readProFromKeychain,
   checkProStatus,
-  activateProByEmail,
-  getWebPurchaseUrl,
+  activateProByKey,
   revalidatePro,
+  listProDevices,
+  deactivateProDevice,
   clearProForTesting,
-  configureRevenueCat,
-  resetProIdentityForTesting,
 } from '../../../src/services/proLicenseService';
 
-jest.mock('react-native-purchases', () => ({
-  __esModule: true,
-  default: {
-    setLogLevel: jest.fn(),
-    configure: jest.fn(),
-    getCustomerInfo: jest.fn(),
-    logIn: jest.fn(),
-    logOut: jest.fn(() => Promise.resolve()),
-    invalidateCustomerInfoCache: jest.fn(() => Promise.resolve()),
-    ENTITLEMENT_VERIFICATION_MODE: { DISABLED: 'DISABLED', INFORMATIONAL: 'INFORMATIONAL' },
-    VERIFICATION_RESULT: { NOT_REQUESTED: 'NOT_REQUESTED', VERIFIED: 'VERIFIED', FAILED: 'FAILED', VERIFIED_ON_DEVICE: 'VERIFIED_ON_DEVICE' },
-  },
-  LOG_LEVEL: { DEBUG: 'debug', ERROR: 'error' },
+jest.mock('../../../src/services/keygenClient', () => ({
+  validateKey: jest.fn(),
+  activateMachine: jest.fn(),
+  listMachines: jest.fn(),
+  deactivateMachine: jest.fn(),
+  KeygenNetworkError: class KeygenNetworkError extends Error {},
+}));
+
+jest.mock('../../../src/services/deviceFingerprint', () => ({
+  getDeviceFingerprint: jest.fn(async () => 'fp-123'),
+  getPlatformTag: jest.fn(() => 'ios'),
 }));
 
 jest.mock('react-native-keychain', () => ({
   getGenericPassword: jest.fn(),
-  setGenericPassword: jest.fn(),
-  resetGenericPassword: jest.fn(),
+  setGenericPassword: jest.fn(() => Promise.resolve(true)),
+  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
   ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
 }));
 
@@ -36,180 +33,164 @@ jest.mock('../../../src/stores/appStore', () => ({
   useAppStore: { getState: () => ({ setHasRegisteredPro: mockSetHasRegisteredPro }) },
 }));
 
-const { getGenericPassword: mockGetGenericPassword, setGenericPassword: mockSetGenericPassword, resetGenericPassword: mockResetGenericPassword } =
-  require('react-native-keychain');
-const Purchases = require('react-native-purchases').default;
-const VERIFIED = 'VERIFIED';
-const FAILED = 'FAILED';
+const keygen = require('../../../src/services/keygenClient');
+const { validateKey, activateMachine, listMachines, deactivateMachine, KeygenNetworkError } = keygen;
+const { getGenericPassword, setGenericPassword, resetGenericPassword } = require('react-native-keychain');
 
-const proLicense = (email: string | null) => ({ password: JSON.stringify({ isPro: true, email, verifiedAt: 0 }) });
-const customerWith = (verification: string | null) => ({
-  entitlements: { active: verification ? { pro: { productIdentifier: 'off_grid_pro_lifetime', verification } } : {} },
-  originalAppUserId: 'someone@example.com',
+const license = (over: Record<string, unknown> = {}) => ({
+  password: JSON.stringify({ isPro: true, key: 'key/abc', licenseId: 'lic-1', expiry: null, verifiedAt: 0, ...over }),
+});
+const ok = (over: Record<string, unknown> = {}) => ({
+  valid: true,
+  code: 'VALID',
+  license: { id: 'lic-1', expiry: null, metadata: {}, name: null },
+  ...over,
 });
 
-describe('proLicenseService', () => {
-  beforeAll(() => {
-    // configureRevenueCat sets the module-level isConfigured flag the RC-backed
-    // entry points require. Pin Platform.OS first (its default varies in RN test env).
-    require('react-native').Platform.OS = 'ios';
-    configureRevenueCat();
-  });
-
+describe('proLicenseService (Keygen)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  describe('configureRevenueCat()', () => {
-    it('configures the SDK with Trusted Entitlements (informational)', () => {
-      configureRevenueCat();
-      expect(Purchases.configure).toHaveBeenCalledWith(
-        expect.objectContaining({ entitlementVerificationMode: 'INFORMATIONAL' }),
-      );
-    });
+    setGenericPassword.mockResolvedValue(true);
+    resetGenericPassword.mockResolvedValue(true);
+    validateKey.mockResolvedValue({ valid: false, code: 'UNKNOWN', license: null });
   });
 
   describe('readProFromKeychain()', () => {
-    it('returns false when no entry exists', async () => {
-      mockGetGenericPassword.mockResolvedValueOnce(false);
+    it('false when no entry', async () => {
+      getGenericPassword.mockResolvedValueOnce(false);
       expect(await readProFromKeychain()).toBe(false);
     });
-
-    it('returns true when the stored license is pro', async () => {
-      mockGetGenericPassword.mockResolvedValueOnce(proLicense('a@b.com'));
+    it('true when cached pro with no expiry (lifetime)', async () => {
+      getGenericPassword.mockResolvedValueOnce(license());
       expect(await readProFromKeychain()).toBe(true);
     });
-
-    it('returns false when the stored license is malformed', async () => {
-      mockGetGenericPassword.mockResolvedValueOnce({ password: 'not-json' });
+    it('false when a monthly key expiry has passed', async () => {
+      getGenericPassword.mockResolvedValueOnce(license({ expiry: '2000-01-01T00:00:00Z' }));
+      expect(await readProFromKeychain()).toBe(false);
+    });
+    it('true when a monthly key expiry is in the future', async () => {
+      getGenericPassword.mockResolvedValueOnce(license({ expiry: '2999-01-01T00:00:00Z' }));
+      expect(await readProFromKeychain()).toBe(true);
+    });
+    it('false when malformed', async () => {
+      getGenericPassword.mockResolvedValueOnce({ password: 'not-json' });
       expect(await readProFromKeychain()).toBe(false);
     });
   });
 
   describe('checkProStatus()', () => {
     it('returns the cached value immediately', async () => {
-      mockGetGenericPassword.mockResolvedValue(proLicense('a@b.com'));
-      Purchases.logIn.mockResolvedValue({ customerInfo: customerWith(VERIFIED) });
-      Purchases.getCustomerInfo.mockResolvedValue(customerWith(VERIFIED));
+      getGenericPassword.mockResolvedValue(license());
       expect(await checkProStatus()).toBe(true);
     });
   });
 
-  describe('getWebPurchaseUrl()', () => {
-    it('puts the normalized email as a path segment and prefills the email param', () => {
-      const url = getWebPurchaseUrl('  Test@Example.com  ');
-      expect(url).toContain('/test%40example.com');
-      expect(url).toContain('?email=test%40example.com');
-      expect(url).not.toContain('app_user_id');
+  describe('activateProByKey()', () => {
+    it('unlocks when the key is already VALID on this device', async () => {
+      validateKey.mockResolvedValueOnce(ok());
+      const res = await activateProByKey('key/abc');
+      expect(res).toEqual({ ok: true });
+      expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(true);
+      const written = JSON.parse(setGenericPassword.mock.calls[0][1]);
+      expect(written.isPro).toBe(true);
+      expect(written.key).toBe('key/abc');
     });
-  });
 
-  describe('activateProByEmail()', () => {
-    it('unlocks Pro when the email has a verified active entitlement', async () => {
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(VERIFIED) });
-      mockSetGenericPassword.mockResolvedValueOnce(true);
-      expect(await activateProByEmail('Buyer@Example.com')).toBe(true);
-      expect(Purchases.logIn).toHaveBeenCalledWith('buyer@example.com');
+    it('activates a new device when the key is valid but unactivated', async () => {
+      validateKey.mockResolvedValueOnce(ok({ valid: false, code: 'NO_MACHINES' }));
+      activateMachine.mockResolvedValueOnce({ ok: true, limitReached: false });
+      const res = await activateProByKey('key/abc');
+      expect(res).toEqual({ ok: true });
+      expect(activateMachine).toHaveBeenCalledWith('key/abc', 'lic-1', { fingerprint: 'fp-123', platform: 'ios' });
       expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(true);
     });
 
-    it('returns false and logs out when the email has no entitlement', async () => {
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(null) });
-      expect(await activateProByEmail('nope@example.com')).toBe(false);
-      expect(Purchases.logOut).toHaveBeenCalledTimes(1);
-      expect(mockSetHasRegisteredPro).not.toHaveBeenCalledWith(true);
+    it('reports limit when activation hits the device cap', async () => {
+      validateKey.mockResolvedValueOnce(ok({ valid: false, code: 'NO_MACHINES' }));
+      activateMachine.mockResolvedValueOnce({ ok: false, limitReached: true });
+      expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'limit' });
     });
 
-    it('treats a FAILED verification signature as not Pro (forgery defense)', async () => {
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(FAILED) });
-      expect(await activateProByEmail('forged@example.com')).toBe(false);
-      expect(Purchases.logOut).toHaveBeenCalledTimes(1);
+    it('reports limit when validate already says TOO_MANY_MACHINES', async () => {
+      validateKey.mockResolvedValueOnce({ valid: false, code: 'TOO_MANY_MACHINES', license: { id: 'lic-1', expiry: null, metadata: {}, name: null } });
+      expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'limit' });
     });
 
-    it('throws when email is empty', async () => {
-      await expect(activateProByEmail('   ')).rejects.toThrow('Email is required');
+    it('reports invalid for an unknown / not-found key', async () => {
+      validateKey.mockResolvedValueOnce({ valid: false, code: 'NOT_FOUND', license: null });
+      expect(await activateProByKey('key/nope')).toEqual({ ok: false, reason: 'invalid' });
+    });
+
+    it('reports invalid for an expired key', async () => {
+      validateKey.mockResolvedValueOnce({ valid: false, code: 'EXPIRED', license: { id: 'lic-1', expiry: '2000-01-01T00:00:00Z', metadata: {}, name: null } });
+      expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'invalid' });
+    });
+
+    it('reports network when the request throws', async () => {
+      validateKey.mockRejectedValueOnce(new KeygenNetworkError('offline'));
+      expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'network' });
+    });
+
+    it('reports invalid for an empty key', async () => {
+      expect(await activateProByKey('   ')).toEqual({ ok: false, reason: 'invalid' });
     });
   });
 
-  describe('revalidatePro() — revocation', () => {
-    it('locks Pro when the entitlement was revoked (no longer active)', async () => {
-      mockGetGenericPassword.mockResolvedValue(proLicense('a@b.com'));
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(null) });
-      Purchases.getCustomerInfo.mockResolvedValueOnce(customerWith(null));
-      mockSetGenericPassword.mockResolvedValueOnce(true);
+  describe('revalidatePro() — revocation + offline', () => {
+    it('no-ops when there is no cached key', async () => {
+      getGenericPassword.mockResolvedValue(false);
+      await revalidatePro();
+      expect(validateKey).not.toHaveBeenCalled();
+      expect(setGenericPassword).not.toHaveBeenCalled();
+    });
+
+    it('locks Pro when the key was revoked (SUSPENDED)', async () => {
+      getGenericPassword.mockResolvedValue(license());
+      validateKey.mockResolvedValueOnce({ valid: false, code: 'SUSPENDED', license: { id: 'lic-1', expiry: null, metadata: {}, name: null } });
       await revalidatePro();
       expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(false);
-      // wrote isPro=false back to the keychain
-      const written = JSON.parse(mockSetGenericPassword.mock.calls[0][1]);
+      const written = JSON.parse(setGenericPassword.mock.calls[0][1]);
       expect(written.isPro).toBe(false);
     });
 
     it('keeps cached state when offline (network error)', async () => {
-      mockGetGenericPassword.mockResolvedValue(proLicense('a@b.com'));
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(VERIFIED) });
-      Purchases.getCustomerInfo.mockRejectedValueOnce(new Error('network'));
+      getGenericPassword.mockResolvedValue(license());
+      validateKey.mockRejectedValueOnce(new KeygenNetworkError('offline'));
       await revalidatePro();
-      expect(mockSetGenericPassword).not.toHaveBeenCalled();
+      expect(setGenericPassword).not.toHaveBeenCalled();
       expect(mockSetHasRegisteredPro).not.toHaveBeenCalled();
     });
 
-    it('keeps Pro active when the entitlement is still valid', async () => {
-      mockGetGenericPassword.mockResolvedValue(proLicense('a@b.com'));
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(VERIFIED) });
-      Purchases.getCustomerInfo.mockResolvedValueOnce(customerWith(VERIFIED));
-      mockSetGenericPassword.mockResolvedValueOnce(true);
+    it('keeps Pro active when still VALID', async () => {
+      getGenericPassword.mockResolvedValue(license());
+      validateKey.mockResolvedValueOnce(ok());
       await revalidatePro();
       expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('device management', () => {
+    it('lists devices for the active license', async () => {
+      getGenericPassword.mockResolvedValue(license());
+      listMachines.mockResolvedValueOnce([{ id: 'm1', fingerprint: 'fp-123', platform: 'ios', name: null, lastSeen: null }]);
+      const devices = await listProDevices();
+      expect(devices).toHaveLength(1);
+      expect(listMachines).toHaveBeenCalledWith('key/abc', 'lic-1');
+    });
+
+    it('deactivates a device', async () => {
+      getGenericPassword.mockResolvedValue(license());
+      deactivateMachine.mockResolvedValueOnce(true);
+      expect(await deactivateProDevice('m1')).toBe(true);
+      expect(deactivateMachine).toHaveBeenCalledWith('key/abc', 'm1');
     });
   });
 
   describe('clearProForTesting()', () => {
     it('resets the keychain and clears the store flag', async () => {
-      mockResetGenericPassword.mockResolvedValueOnce(true);
       await clearProForTesting();
-      expect(mockResetGenericPassword).toHaveBeenCalledTimes(1);
+      expect(resetGenericPassword).toHaveBeenCalledTimes(1);
       expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(false);
-    });
-  });
-
-  describe('resetProIdentityForTesting()', () => {
-    it('logs out a non-anonymous user, clears the keychain, and resets the flag', async () => {
-      Purchases.getCustomerInfo.mockResolvedValueOnce({ originalAppUserId: 'someone@example.com' });
-      mockResetGenericPassword.mockResolvedValueOnce(true);
-      await resetProIdentityForTesting();
-      expect(Purchases.logOut).toHaveBeenCalledTimes(1);
-      expect(mockResetGenericPassword).toHaveBeenCalledTimes(1);
-      expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(false);
-    });
-
-    it('skips logOut for an anonymous user but still clears the keychain', async () => {
-      Purchases.getCustomerInfo.mockResolvedValueOnce({ originalAppUserId: '$RCAnonymousID:abc123' });
-      mockResetGenericPassword.mockResolvedValueOnce(true);
-      await resetProIdentityForTesting();
-      expect(Purchases.logOut).not.toHaveBeenCalled();
-      expect(mockResetGenericPassword).toHaveBeenCalledTimes(1);
-      expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(false);
-    });
-
-    it('still clears local state when getCustomerInfo throws', async () => {
-      Purchases.getCustomerInfo.mockRejectedValueOnce(new Error('offline'));
-      mockResetGenericPassword.mockResolvedValueOnce(true);
-      await resetProIdentityForTesting();
-      expect(mockResetGenericPassword).toHaveBeenCalledTimes(1);
-      expect(mockSetHasRegisteredPro).toHaveBeenCalledWith(false);
-    });
-  });
-
-  describe('activateProByEmail() error paths', () => {
-    it('rethrows when logIn fails', async () => {
-      Purchases.logIn.mockRejectedValueOnce(new Error('network'));
-      await expect(activateProByEmail('x@example.com')).rejects.toThrow('network');
-    });
-
-    it('returns false on a miss and tolerates a logOut failure', async () => {
-      Purchases.logIn.mockResolvedValueOnce({ customerInfo: customerWith(null) });
-      Purchases.logOut.mockRejectedValueOnce(new Error('logout fail'));
-      await expect(activateProByEmail('x@example.com')).resolves.toBe(false);
     });
   });
 });
