@@ -10,7 +10,6 @@
 import { useAppStore } from '../stores';
 import { modelManager } from './modelManager';
 import { huggingFaceService } from './huggingface';
-import logger from '../utils/logger';
 
 /** SmolLM2-135M-Instruct GGUF — ~100-145MB, runs on llama.rn. */
 const CLASSIFIER_REPO = 'bartowski/SmolLM2-135M-Instruct-GGUF';
@@ -49,26 +48,21 @@ export async function ensureDefaultClassifier(): Promise<void> {
     // Prefer Q8_0 (best quality at this tiny size), else the smallest GGUF.
     const file = ggufs.find(f => /q8_0/i.test(f.name)) ?? ggufs[0];
     if (!file) {
-      logger.log('[Classifier] no GGUF found in', CLASSIFIER_REPO);
       provisioning = false;
       return;
     }
-    logger.log('[Classifier] auto-provisioning', file.name);
     const info = await modelManager.downloadModelBackground(CLASSIFIER_REPO, file);
     modelManager.watchDownload(
       info.downloadId,
       () => {
         useAppStore.getState().updateSettings({ classifierModelId: `${CLASSIFIER_REPO}/${file.name}` });
         provisioning = false;
-        logger.log('[Classifier] ready:', file.name);
       },
-      (err) => {
+      () => {
         provisioning = false;
-        logger.log('[Classifier] download failed:', err);
       },
     );
-  } catch (err) {
+  } catch {
     provisioning = false;
-    logger.log('[Classifier] auto-provision error:', err);
   }
 }

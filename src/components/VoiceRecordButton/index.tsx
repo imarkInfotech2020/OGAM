@@ -91,6 +91,20 @@ function buildPanResponder({
   });
 }
 
+type VoiceButtonStyles = ReturnType<typeof createStyles>;
+
+/** Chat-mode (hold-to-record) button style stack. Extracted to module scope to
+ *  keep the component's cyclomatic complexity under the lint limit. */
+const buildChatButtonStyle = (
+  styles: VoiceButtonStyles,
+  opts: { asSendButton: boolean; isRecording: boolean; disabled?: boolean },
+) => [
+  styles.button,
+  opts.asSendButton && styles.buttonAsSend,
+  opts.isRecording && styles.buttonRecording,
+  opts.disabled && styles.buttonDisabled,
+];
+
 export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   isRecording,
   isAvailable,
@@ -222,12 +236,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     );
   }
 
-  const buttonStyle = [
-    styles.button,
-    asSendButton && styles.buttonAsSend,
-    isRecording && styles.buttonRecording,
-    disabled && styles.buttonDisabled,
-  ];
+  const buttonStyle = buildChatButtonStyle(styles, { asSendButton, isRecording, disabled });
 
   // ── Audio mode: tap-to-toggle (tap to start, tap to stop & send) ───────────
   if (!asSendButton) {

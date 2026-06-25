@@ -24,6 +24,8 @@ const ROWS: RowDef[] = [
 type Props = {
   visible: boolean;
   onClose: () => void;
+  /** Fired once the sheet has fully closed — used to open a picker safely after. */
+  onClosed?: () => void;
   labels: Record<ModelRowType, string>;
   loadingState: LoadingState;
   isEjecting: boolean;
@@ -38,13 +40,13 @@ type Props = {
  * type's picker.
  */
 export const ModelsManagerSheet: React.FC<Props> = ({
-  visible, onClose, labels, loadingState, isEjecting, hasActiveModel, onOpenRow, onEject,
+  visible, onClose, onClosed, labels, loadingState, isEjecting, hasActiveModel, onOpenRow, onEject,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
-    <AppSheet visible={visible} onClose={onClose} title="MODELS" enableDynamicSizing>
+    <AppSheet visible={visible} onClose={onClose} onClosed={onClosed} title="MODELS" enableDynamicSizing>
       <View style={styles.content}>
         {ROWS.map((row) => {
           const isLoading = loadingState.isLoading && loadingState.type === row.type;

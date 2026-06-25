@@ -93,7 +93,6 @@ class WhisperService {
     await this.ensureModelsDirExists();
     const destPath = this.getModelPath(modelId);
     if (await RNFS.exists(destPath)) return destPath;
-    logger.log(`[Whisper] Downloading from URL: ${url}`);
     const download = RNFS.downloadFile({
       fromUrl: url, toFile: destPath, progressDivider: 1,
       progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
@@ -109,7 +108,6 @@ class WhisperService {
       await RNFS.unlink(destPath).catch(() => {});
       throw validationError;
     }
-    logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
 

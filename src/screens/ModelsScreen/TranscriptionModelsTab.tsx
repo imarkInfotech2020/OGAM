@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ModelCard } from '../../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
@@ -95,6 +96,16 @@ export const TranscriptionModelsTab: React.FC = () => {
     if (!downloadingId) refreshPresentModels();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadingId]);
+
+  // Re-derive from disk whenever the Models screen regains focus (e.g. returning
+  // from the Download Manager after a download or delete). Disk is the source of
+  // truth, so this keeps the list in sync without any cross-screen wiring.
+  useFocusEffect(
+    useCallback(() => {
+      if (!downloadingId) refreshPresentModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [downloadingId]),
+  );
 
   const handleDownload = useCallback((id: string) => {
     setDownloadingId(id);

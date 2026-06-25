@@ -72,6 +72,7 @@ jest.mock('../../../src/components/CustomAlert', () => {
   };
 });
 
+import { useFocusEffect } from '@react-navigation/native';
 import { TranscriptionModelsTab } from '../../../src/screens/ModelsScreen/TranscriptionModelsTab';
 
 describe('TranscriptionModelsTab', () => {
@@ -143,6 +144,17 @@ describe('TranscriptionModelsTab', () => {
     );
     act(() => remove.onPress());
     expect(mockWhisperActions.deleteModelById).toHaveBeenCalledWith('tiny.en');
+  });
+
+  it('re-derives present models from disk when the screen regains focus', () => {
+    // Disk is the source of truth: returning from the Download Manager (where a
+    // model may have been downloaded or deleted) must re-probe, not show stale state.
+    let focusCb: (() => void) | undefined;
+    (useFocusEffect as jest.Mock).mockImplementation((cb: () => void) => { focusCb = cb; });
+    render(<TranscriptionModelsTab />);
+    mockWhisperActions.refreshPresentModels.mockClear(); // drop the mount-effect call
+    act(() => { focusCb?.(); });
+    expect(mockWhisperActions.refreshPresentModels).toHaveBeenCalledTimes(1);
   });
 
   it('searches HuggingFace for other-language models', async () => {

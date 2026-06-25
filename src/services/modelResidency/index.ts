@@ -62,11 +62,9 @@ class ModelResidencyManager {
       release = resolve;
     });
     await prev.catch(() => {});
-    logger.log(`[ModelResidency] ▶ ${label}`);
     try {
       return await fn();
     } finally {
-      logger.log(`[ModelResidency] ✓ ${label}`);
       release();
     }
   }
@@ -142,13 +140,11 @@ class ModelResidencyManager {
       // The model won't fit even after the planned evictions — so DON'T evict.
       // Otherwise we'd strand the device with nothing (e.g. evict text to load
       // image, then fail to load image → both gone). The caller blocks the load.
-      logger.log(`[ModelResidency] ${spec.key} (${spec.sizeMB}MB) does not fit budget ${this.getBudgetMB()}MB even after eviction — not evicting`);
       return { evicted: [], fits: false };
     }
     for (const victim of plan.evict) {
       const reg = this.residents.get(victim.key);
       if (!reg) continue;
-      logger.log(`[ModelResidency] evicting ${victim.key} (${victim.sizeMB}MB, ${victim.type})`);
       await reg.unload().catch(err => logger.log(`[ModelResidency] unload ${victim.key} failed:`, err));
       this.residents.delete(victim.key);
     }

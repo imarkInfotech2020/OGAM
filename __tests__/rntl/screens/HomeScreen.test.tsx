@@ -102,10 +102,18 @@ jest.mock('../../../src/services/hardware', () => ({
   },
 }));
 
-// Mock AppSheet to render children directly when visible
+// Mock AppSheet to render children directly when visible. The real AppSheet
+// fires onClosed after its slide-out animation completes; mirror that here (via
+// an effect when it goes invisible) so deferred actions wired through onClosed
+// — closeManagerThen -> runPendingAfterClose, which opens the pickers and the
+// eject alert — actually run in tests.
 jest.mock('../../../src/components/AppSheet', () => ({
-  AppSheet: ({ visible, onClose, title, children }: any) => {
+  AppSheet: ({ visible, onClose, onClosed, title, children }: any) => {
+    const { useEffect } = require('react');
     const { View, Text, TouchableOpacity } = require('react-native');
+    useEffect(() => {
+      if (!visible) { onClosed?.(); }
+    }, [visible, onClosed]);
     if (!visible) return null;
     return (
       <View testID="app-sheet">
@@ -1331,9 +1339,9 @@ describe('HomeScreen', () => {
   // ============================================================================
   // Loading Overlay
   // ============================================================================
-  // Loading no longer uses a full-screen overlay. The collapsed summary row shows
-  // an inline ActivityIndicator while loading, and the ModelsManagerSheet rows
-  // show "Loading…" for the type that is loading.
+  // While a model loads, the collapsed summary row shows an inline
+  // ActivityIndicator and the ModelsManagerSheet rows show "Loading…" for the
+  // type that is loading. The full-screen LoadingOverlay is also shown.
   describe('loading indicator', () => {
     it('shows "Loading…" in the manager text row while a text model loads', async () => {
       const model = createDownloadedModel({ name: 'Loading Model' });
@@ -1361,8 +1369,8 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(result.queryByText('Loading…')).toBeTruthy();
       });
-      // No full-screen overlay text.
-      expect(result.queryByText('Loading Text Model')).toBeNull();
+      // The full-screen LoadingOverlay is shown during the load.
+      expect(result.queryByText('Loading Text Model')).toBeTruthy();
       await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
     });
 
@@ -1389,7 +1397,7 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(result.queryByText('Loading…')).toBeTruthy();
       });
-      expect(result.queryByText('Loading Image Model')).toBeNull();
+      expect(result.queryByText('Loading Image Model')).toBeTruthy();
       await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
     });
 

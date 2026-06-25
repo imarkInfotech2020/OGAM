@@ -24,6 +24,8 @@ export type GenerationDeps = {
   activeModelInfo?: { isRemote: boolean; model: DownloadedModel | RemoteModel | null; modelId: string | null; modelName: string };
   hasActiveModel?: boolean;
   hasTextModel?: boolean;
+  /** Same tool gate the UI shows; when false the Tools badge reads "N/A" and the picker is locked, so generation must not inject tools either. */
+  supportsToolCalling?: boolean;
   activeConversationId: string | null | undefined;
   activeConversation: any;
   activeProject: any;
@@ -251,10 +253,9 @@ const applyGemma4ThinkToken = (prompt: string, isRemote: boolean, opts?: { isLit
 function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; isLiteRT: boolean } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
-  const localToolCalling = llmService.supportsToolCalling();
-  const isRemoteActive = !!(activeServerId && activeRemoteTextModelId);
   const isLiteRT = deps.activeModel?.engine === 'litert' && liteRTService.isModelLoaded();
-  const canUseTools = localToolCalling || isRemoteActive || isLiteRT;
+  // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
+  const canUseTools = deps.supportsToolCalling !== false && (llmService.supportsToolCalling() || !!(activeServerId && activeRemoteTextModelId) || isLiteRT);
 
   let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
 

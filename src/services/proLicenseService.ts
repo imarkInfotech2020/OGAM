@@ -31,7 +31,6 @@ function setProInStore(isPro: boolean): void {
 
 export function configureRevenueCat(): void {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    logger.log(`[RC] configure skipped: unsupported platform ${Platform.OS}`);
     return;
   }
   try {
@@ -40,7 +39,6 @@ export function configureRevenueCat(): void {
     const apiKey = useTestStore
       ? RC_API_KEY_TEST_STORE
       : Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID;
-    logger.log(`[RC] configure platform=${Platform.OS} store=${useTestStore ? 'TEST' : Platform.OS} key=${apiKey.slice(0, 12)}...`);
     // Trusted Entitlements (informational): RC cryptographically signs the
     // entitlement payload and the SDK verifies it on-device. We treat a FAILED
     // signature as not-Pro (forgery/MITM defense, see hasVerifiedPro). It has no
@@ -50,7 +48,6 @@ export function configureRevenueCat(): void {
       entitlementVerificationMode: Purchases.ENTITLEMENT_VERIFICATION_MODE.INFORMATIONAL,
     });
     isConfigured = true;
-    logger.log('[RC] configure: SDK configured OK');
   } catch (e: any) {
     logger.error(`[RC] configure FAILED: ${e?.message ?? e}`);
     throw e;
@@ -73,7 +70,6 @@ function hasVerifiedPro(customerInfo: any): boolean {
 
 async function writeLicense(isPro: boolean, email: string | null): Promise<void> {
   const license: ProLicense = { isPro, email, verifiedAt: Date.now() };
-  logger.log(`[RC] writeLicense isPro=${isPro} email=${email ?? 'none'}`);
   try {
     await Keychain.setGenericPassword('license', JSON.stringify(license), {
       service: KEYCHAIN_SERVICE,
@@ -113,7 +109,6 @@ export async function readProFromKeychain(): Promise<boolean> {
 
 export async function checkProStatus(): Promise<boolean> {
   const { isPro } = await readProLicense();
-  logger.log(`[RC] checkProStatus: cached=${isPro}, firing background revalidate`);
   revalidatePro().catch(() => {});
   return isPro;
 }
@@ -124,7 +119,6 @@ export async function checkProStatus(): Promise<boolean> {
 // swallowed so offline users keep their cached access (grace period).
 export async function revalidatePro(): Promise<void> {
   if (!isConfigured) {
-    logger.log('[RC] revalidatePro skipped: SDK not configured');
     return;
   }
   const { email } = await readProLicense();
@@ -135,7 +129,6 @@ export async function revalidatePro(): Promise<void> {
     await Purchases.invalidateCustomerInfoCache();
     const info = await Purchases.getCustomerInfo();
     const isPro = hasVerifiedPro(info);
-    logger.log(`[RC] revalidatePro: email=${email ?? 'none'} isPro=${isPro} active=[${Object.keys(info.entitlements.active).join(', ') || 'none'}]`);
     await writeLicense(isPro, email);
     setProInStore(isPro);
   } catch (e: any) {
@@ -173,18 +166,15 @@ export async function activateProByEmail(email: string): Promise<boolean> {
   if (!normalized) {
     throw new Error('Email is required');
   }
-  logger.log(`[RC] activateProByEmail: calling logIn for ${normalized}`);
   let customerInfo: any;
   try {
     const result = await Purchases.logIn(normalized);
     customerInfo = result.customerInfo;
-    logger.log(`[RC] activateProByEmail: logIn OK — appUserId=${customerInfo?.originalAppUserId}`);
   } catch (e: any) {
     logger.error(`[RC] activateProByEmail: logIn FAILED — ${e?.message ?? e} (code=${e?.code ?? 'none'} underlying=${e?.underlyingErrorMessage ?? 'none'})`);
     throw e;
   }
   const isPro = hasVerifiedPro(customerInfo);
-  logger.log(`[RC] activateProByEmail: isPro=${isPro} active=[${Object.keys(customerInfo.entitlements.active).join(', ') || 'none'}] verification=${customerInfo?.entitlements?.active?.[ENTITLEMENT_ID]?.verification ?? 'n/a'}`);
   if (isPro) {
     await writeLicense(true, normalized);
     setProInStore(true);
@@ -207,24 +197,18 @@ export async function clearProForTesting(): Promise<void> {
 
 export async function resetProIdentityForTesting(): Promise<void> {
   if (!isConfigured) {
-    logger.log('[RC] resetProIdentityForTesting skipped: SDK not configured');
     return;
   }
-  logger.log('[RC] resetProIdentityForTesting: start');
   await Purchases.invalidateCustomerInfoCache();
   try {
     const before = await Purchases.getCustomerInfo();
     const isAnonymous = before.originalAppUserId.startsWith('$RCAnonymousID:');
-    logger.log(`[RC] resetProIdentityForTesting: customerID before=${before.originalAppUserId} anonymous=${isAnonymous}`);
     if (!isAnonymous) {
       await Purchases.logOut();
-    } else {
-      logger.log('[RC] resetProIdentityForTesting: anonymous user — skipping logOut');
     }
   } catch (e: any) {
     logger.error(`[RC] resetProIdentityForTesting: ${e?.message ?? e} — continuing`);
   }
   await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
   setProInStore(false);
-  logger.log('[RC] resetProIdentityForTesting: done');
 }

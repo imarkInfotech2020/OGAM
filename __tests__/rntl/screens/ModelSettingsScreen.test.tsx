@@ -468,7 +468,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const tempSlider = sliders.find((s: any) => s.props.value === 0.7);
       if (tempSlider) {
@@ -481,7 +481,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const maxTokensSlider = sliders.find((s: any) => s.props.value === 1024);
       if (maxTokensSlider) {
@@ -494,7 +494,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const stepsSlider = sliders.find((s: any) => s.props.value === 8 && s.props.maximumValue === 50);
       if (stepsSlider) {
@@ -507,7 +507,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const threadsSlider = sliders.find((s: any) => s.props.value === 1 && s.props.maximumValue === 12);
       if (threadsSlider) {
@@ -520,7 +520,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const ctxSlider = sliders.find((s: any) => s.props.value === 4096 && s.props.maximumValue === 32768);
       if (ctxSlider) {
@@ -619,11 +619,11 @@ describe('ModelSettingsScreen', () => {
         expect(useAppStore.getState().settings.inferenceBackend).toBe('opencl');
       });
 
-      it('updates gpuLayers when GPU Layers stepper is incremented', () => {
+      it('updates gpuLayers when GPU Layers slider completes', () => {
         useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 6 });
         const { getByTestId } = renderWithSections('text');
 
-        fireEvent.press(getByTestId('gpu-layers-stepper-increment'));
+        fireEvent(getByTestId('gpu-layers-stepper-slider'), 'slidingComplete', 7);
 
         expect(useAppStore.getState().settings.gpuLayers).toBe(7);
       });
@@ -638,7 +638,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const topPSlider = sliders.find((s: any) => s.props.value === 0.9 && s.props.maximumValue === 1.0);
       if (topPSlider) {
@@ -651,7 +651,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const rpSlider = sliders.find((s: any) => s.props.value === 1.1 && s.props.maximumValue === 2.0);
       if (rpSlider) {
@@ -664,7 +664,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const batchSlider = sliders.find((s: any) => s.props.value === 256 && s.props.maximumValue === 512);
       if (batchSlider) {
@@ -677,7 +677,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const gsSlider = sliders.find((s: any) => s.props.value === 7.5 && s.props.maximumValue === 20);
       if (gsSlider) {
@@ -690,7 +690,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const itSlider = sliders.find((s: any) => s.props.value === 4 && s.props.maximumValue === 8);
       if (itSlider) {
@@ -703,7 +703,7 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.startsWith('slider-'));
+      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
       const sizeSlider = sliders.find((s: any) => s.props.value === 512 && s.props.maximumValue === 512 && s.props.minimumValue === 128);
       if (sizeSlider) {
