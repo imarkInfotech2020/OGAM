@@ -1,4 +1,4 @@
-import { AudioRecorder, FileFormat, FileDirectory, BitDepth, IOSAudioQuality, FlacCompressionLevel } from 'react-native-audio-api';
+import { AudioRecorder, AudioManager, FileFormat, FileDirectory, BitDepth, IOSAudioQuality, FlacCompressionLevel } from 'react-native-audio-api';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 /** Supported formats for llama.rn audio input */
@@ -44,6 +44,19 @@ class AudioRecorderService {
     if (!hasPermission) {
       throw new Error('Microphone permission denied');
     }
+    // iOS: the recorder requires an active AVAudioSession in a record-capable
+    // category. Nothing else configures it, so native start() returns
+    // "Audio session is not active" and the file never gets written (stop errors).
+    // playAndRecord (not record) so TTS playback can also use the session;
+    // defaultToSpeaker keeps replies on the loudspeaker, not the earpiece.
+    if (Platform.OS === 'ios') {
+      AudioManager.setAudioSessionOptions({
+        iosCategory: 'playAndRecord',
+        iosMode: 'default',
+        iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
+      });
+      await AudioManager.setAudioSessionActivity(true);
+    }
     const rec = new AudioRecorder();
     // Whisper requires 16 kHz mono int16 PCM.
     // Set sampleRate via preset so the WAV header and data match what whisper.rn expects.
@@ -63,7 +76,12 @@ class AudioRecorderService {
     });
     this.recorder = rec;
     this.isRecording = true;
-    rec.start();
+    const startResult: any = rec.start();
+    if (startResult && startResult.status && startResult.status !== 'success') {
+      this.isRecording = false;
+      this.recorder = null;
+      throw new Error('Recording failed to start: ' + (startResult.errorMessage ?? startResult.error ?? startResult.status));
+    }
   }
 
   async stopRecording(): Promise<{ path: string; durationSeconds: number }> {
