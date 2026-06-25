@@ -42,7 +42,18 @@ const mockUseAppStore = jest.fn();
 jest.mock('../../../src/stores', () => {
   const store = (...args: any[]) => mockUseAppStore(...args);
   store.getState = () => mockUseAppStore();
-  return { useAppStore: store };
+  // useVoiceDownloadItems subscribes to presentModelIds and routes STT deletes
+  // through deleteModelById, so the Download Manager screen needs this store too.
+  // presentModelIds MUST be a stable reference (like the real zustand store) —
+  // a fresh array per call would change the effect dep every render and loop.
+  const whisperPresentModelIds: string[] = [];
+  const whisperState = {
+    presentModelIds: whisperPresentModelIds,
+    deleteModelById: jest.fn(() => Promise.resolve()),
+  };
+  const whisperStore = (selector?: any) => (selector ? selector(whisperState) : whisperState);
+  whisperStore.getState = () => whisperState;
+  return { useAppStore: store, useWhisperStore: whisperStore };
 });
 
 let mockDownloadStoreDownloads: Record<string, any> = {};

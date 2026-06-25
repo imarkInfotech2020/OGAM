@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AlertState, showAlert } from '../../components/CustomAlert';
 import { whisperService } from '../../services';
+import { useWhisperStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { DownloadItem, formatBytes } from './items';
 
@@ -46,7 +47,10 @@ async function loadItems(): Promise<DownloadItem[]> {
 
 async function deleteItem(item: DownloadItem): Promise<void> {
   if (item.modelType === 'stt') {
-    await whisperService.deleteModel(item.modelId).catch(() => {});
+    // Route through whisperStore (not whisperService directly) so the deletion
+    // updates presentModelIds/downloadedModelId — otherwise the Home banner and
+    // Models screen keep showing the deleted model as present/active.
+    await useWhisperStore.getState().deleteModelById(item.modelId);
   } else {
     const pending = callHook<Promise<void>>(HOOKS.downloadsDeleteVoiceModel, item.modelId);
     if (pending) await pending.catch(() => {});
@@ -62,12 +66,17 @@ export interface VoiceDownloadItems {
 
 export function useVoiceDownloadItems(onAlertClose: () => void): VoiceDownloadItems {
   const [voiceItems, setVoiceItems] = useState<DownloadItem[]>([]);
+  // Re-derives a new array reference whenever a Whisper model finishes
+  // downloading or is deleted (downloadModel/deleteModelById/refreshPresentModels
+  // all replace it). Subscribing here keeps the Download Manager in sync within
+  // the same session — without it, the list only refreshed on mount.
+  const presentModelIds = useWhisperStore((s) => s.presentModelIds);
 
   const refreshVoiceItems = useCallback(async () => {
     setVoiceItems(await loadItems());
   }, []);
 
-  useEffect(() => { refreshVoiceItems(); }, [refreshVoiceItems]);
+  useEffect(() => { refreshVoiceItems(); }, [refreshVoiceItems, presentModelIds]);
 
   const buildDeleteAlert = useCallback((item: DownloadItem): AlertState => {
     const kind = item.modelType === 'tts' ? 'Voice' : 'Transcription';
