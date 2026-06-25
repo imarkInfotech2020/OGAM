@@ -1,4 +1,5 @@
-import { shouldShowSharePrompt, subscribeSharePrompt, emitSharePrompt } from '../../../src/utils/sharePrompt';
+import { Linking } from 'react-native';
+import { shouldShowSharePrompt, subscribeSharePrompt, emitSharePrompt, shareOnX } from '../../../src/utils/sharePrompt';
 
 describe('shouldShowSharePrompt', () => {
   it('returns false for count 1 (first generation is skipped)', () => {
@@ -31,6 +32,37 @@ describe('shouldShowSharePrompt', () => {
 
   it('returns false for count 0', () => {
     expect(shouldShowSharePrompt(0)).toBe(false);
+  });
+});
+
+describe('shareOnX', () => {
+  const canOpenURL = Linking.canOpenURL as jest.Mock;
+  const openURL = Linking.openURL as jest.Mock;
+
+  beforeEach(() => {
+    canOpenURL.mockReset();
+    openURL.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('opens the native X app via the twitter:// deep link when available', async () => {
+    canOpenURL.mockResolvedValue(true);
+    await shareOnX();
+    expect(openURL).toHaveBeenCalledTimes(1);
+    expect(openURL.mock.calls[0][0]).toMatch(/^twitter:\/\/post\?message=/);
+  });
+
+  it('falls back to the x.com web intent when the app is not installed', async () => {
+    canOpenURL.mockResolvedValue(false);
+    await shareOnX();
+    expect(openURL).toHaveBeenCalledTimes(1);
+    expect(openURL.mock.calls[0][0]).toMatch(/^https:\/\/x\.com\/intent\/tweet\?text=/);
+  });
+
+  it('falls back to the web intent when canOpenURL rejects (scheme not whitelisted)', async () => {
+    canOpenURL.mockRejectedValue(new Error('not whitelisted'));
+    await shareOnX();
+    expect(openURL).toHaveBeenCalledTimes(1);
+    expect(openURL.mock.calls[0][0]).toMatch(/^https:\/\/x\.com\/intent\/tweet/);
   });
 });
 

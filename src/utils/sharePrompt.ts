@@ -1,3 +1,5 @@
+import { Linking } from 'react-native';
+
 const GITHUB_URL = 'https://github.com/alichherawalla/off-grid-mobile-ai';
 
 const SHARE_TEXT = `Just tried Off Grid - a completely free, open-source AI that runs 100% on your phone. No cloud, no subscriptions, no data leaving your device.
@@ -6,9 +8,30 @@ If you believe everyone should have access to private AI, check it out
 
 ${GITHUB_URL}`;
 
-export const SHARE_ON_X_URL = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
-  SHARE_TEXT,
-)}`;
+// The X app's compose deep link, with the x.com web intent as the fallback.
+// Opening the legacy twitter.com/intent link foregrounded the X app without
+// composing; the native scheme opens the composer directly, and the web URL
+// covers devices without the app (and routes to the app via universal links).
+const X_APP_URL = `twitter://post?message=${encodeURIComponent(SHARE_TEXT)}`;
+const X_WEB_URL = `https://x.com/intent/tweet?text=${encodeURIComponent(SHARE_TEXT)}`;
+
+/**
+ * Open a pre-filled X (Twitter) compose screen: the native app if it's
+ * installed (requires `twitter`/`x` in Info.plist LSApplicationQueriesSchemes
+ * for canOpenURL to work), otherwise the web intent.
+ */
+export async function shareOnX(): Promise<void> {
+  try {
+    if (await Linking.canOpenURL(X_APP_URL)) {
+      await Linking.openURL(X_APP_URL);
+      return;
+    }
+  } catch {
+    // canOpenURL/openURL can reject (e.g. scheme not whitelisted) — fall back.
+  }
+  await Linking.openURL(X_WEB_URL);
+}
+
 export { GITHUB_URL };
 
 export function shouldShowSharePrompt(count: number): boolean {
