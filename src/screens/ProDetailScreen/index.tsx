@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import LinearGradient from 'react-native-linear-gradient';
@@ -7,7 +7,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { useAppStore } from '../../stores';
-import { resetProIdentityForTesting, PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
+import { PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
 import { ProUnlockModal } from './ProUnlockModal';
 
 const INTEGRATIONS = [
@@ -152,22 +152,10 @@ export const ProDetailScreen: React.FC = () => {
 
         {/* CTA / Pro active */}
         {hasRegisteredPro ? (
-          <>
-            <View style={styles.proActiveCard}>
-              <Icon name="check-circle" size={20} color={colors.primary} />
-              <Text style={styles.proActiveText}>Pro is active on this account.</Text>
-            </View>
-            {/* TEMPORARY: ungated in release for testing the purchase/restore flow. Re-gate behind __DEV__ before shipping. */}
-            <TouchableOpacity
-              style={styles.restoreButton}
-              onPress={async () => {
-                await resetProIdentityForTesting();
-                Alert.alert('Reset done', 'RC identity cleared. Restart the app to test the purchase flow again.');
-              }}
-            >
-              <Text style={styles.restoreText}>Reset Pro identity</Text>
-            </TouchableOpacity>
-          </>
+          <View style={styles.proActiveCard}>
+            <Icon name="check-circle" size={20} color={colors.primary} />
+            <Text style={styles.proActiveText}>Pro is active on this account.</Text>
+          </View>
         ) : (
           <>
             <TouchableOpacity
@@ -424,16 +412,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  restoreButton: {
-    marginHorizontal: SPACING.xl,
-    marginBottom: SPACING.xl,
-    paddingVertical: SPACING.md,
-    alignItems: 'center' as const,
-  },
-  restoreText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textSecondary,
-  },
   buttonDisabled: {
     opacity: 0.5,
   },
@@ -454,5 +432,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   proActiveText: {
     ...TYPOGRAPHY.body,
     color: colors.primary,
+  },
+  restoreButton: {
+    marginHorizontal: SPACING.xl,
+    marginBottom: SPACING.xl,
+    paddingVertical: SPACING.md,
+    alignItems: 'center' as const,
+  },
+  restoreText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
   },
 });

@@ -128,12 +128,4 @@ describe('ProDetailScreen', () => {
     expect(getByText('Pro is active on this account.')).toBeTruthy();
   });
 
-  it('runs the reset and confirms when the Pro user taps Reset Pro identity', async () => {
-    useAppStore.setState({ hasRegisteredPro: true });
-    mockResetProIdentityForTesting.mockResolvedValueOnce(undefined);
-    const { getByText } = render(<ProDetailScreen />);
-    fireEvent.press(getByText('Reset Pro identity'));
-    await waitFor(() => expect(mockResetProIdentityForTesting).toHaveBeenCalledTimes(1));
-    expect(alertSpy).toHaveBeenCalledWith('Reset done', expect.any(String));
-  });
 });
