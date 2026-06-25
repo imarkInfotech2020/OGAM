@@ -56,6 +56,23 @@ function extractChannelThinking(rawContent: string): { reasoningContent: string 
   const thinkTags = sliceThinkingBlock(rawContent, '<think>', '</think>');
   if (thinkTags) return thinkTags;
 
+  // Qwen3-style: the chat template injects the opening <think> into the prompt,
+  // so the model emits only the closing </think> (reasoning, then </think>, then
+  // answer, with no opener). The live renderer (parseThinkingContent) already
+  // treats this as a thinking block; finalize must use the same rule, or the
+  // block the user just watched appear gets dropped on completion.
+  const closeTag = '</think>';
+  const closeIdx = rawContent.toLowerCase().indexOf(closeTag);
+  if (closeIdx !== -1) {
+    const reasoning = rawContent.slice(0, closeIdx).trim();
+    if (reasoning) {
+      return {
+        reasoningContent: reasoning,
+        responseContent: rawContent.slice(closeIdx + closeTag.length),
+      };
+    }
+  }
+
   return { reasoningContent: undefined, responseContent: rawContent };
 }
 

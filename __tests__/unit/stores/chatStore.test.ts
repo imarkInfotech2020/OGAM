@@ -556,6 +556,25 @@ describe('chatStore', () => {
       expect(message.content).toBe('This is the final response.');
     });
 
+    it('retains Qwen3 reasoning when only the closing </think> tag is emitted', () => {
+      // Qwen3's chat template injects the opening <think>, so the model emits
+      // only the closing tag. The finalizer must still capture the reasoning,
+      // matching the live renderer, or the thinking block vanishes on completion.
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      useChatStore.setState({
+        streamingMessage: 'The user is asking what is happening.</think>Hello! How can I help?',
+        streamingForConversationId: convId,
+      });
+      store.finalizeStreamingMessage(convId);
+
+      const message = getChatState().conversations[0].messages[0];
+      expect(message.reasoningContent).toBe('The user is asking what is happening.');
+      expect(message.content).toBe('Hello! How can I help?');
+    });
+
     it('does not extract thinking when streamingReasoningContent is already populated', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
