@@ -15,7 +15,7 @@ import { TextModelsTab } from './TextModelsTab';
 import { ImageModelsTab } from './ImageModelsTab';
 import { VoiceModelsUpsell } from './VoiceModelsUpsell';
 import { TranscriptionModelsTab } from './TranscriptionModelsTab';
-import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 
 export const ModelsScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -24,7 +24,7 @@ export const ModelsScreen: React.FC = () => {
   // Pro fills this slot with the real voice-models panel (engine + downloads).
   // The Voice tab always renders; when the slot is empty (free / non-pro) we
   // show an upsell so users can see what Pro adds.
-  const VoiceModelsPanel = getSlot(SLOTS.modelsScreenVoiceTab);
+  const VoiceModelsPanel = useSlot(SLOTS.modelsScreenVoiceTab);
   const route = useRoute<RouteProp<MainTabParamList, 'ModelsTab'>>();
 
   // Reset to model list view when tab loses focus (e.g. user switches away)

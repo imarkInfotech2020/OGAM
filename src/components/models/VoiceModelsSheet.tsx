@@ -3,7 +3,7 @@ import { View, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppSheet } from '../../components/AppSheet';
 import { VoiceModelsUpsell } from '../../screens/ModelsScreen/VoiceModelsUpsell';
-import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 
@@ -24,7 +24,9 @@ const PANEL_HEIGHT = Math.round(Dimensions.get('window').height * 0.6);
 export const VoiceModelsSheet: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(createStyles);
   const navigation = useNavigation();
-  const VoicePanel = getSlot(SLOTS.modelsScreenVoiceTab);
+  // Reactive: picks up the pro Voice panel live when Pro is activated at runtime
+  // (loadProFeatures registers the slot), without needing an app restart.
+  const VoicePanel = useSlot(SLOTS.modelsScreenVoiceTab);
 
   // Free build: show the same Pro upsell the Models → Voice tab uses, instead of
   // a dead-end "not available" line. Close the sheet first so the Pro screen
