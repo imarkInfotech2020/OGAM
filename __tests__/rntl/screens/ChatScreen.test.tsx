@@ -2959,7 +2959,7 @@ describe('ChatScreen', () => {
   // Model loading screen — line 1101+ (vision hint, model size)
   // ============================================================================
   describe('model loading screen', () => {
-    it('shows loading screen with model info', async () => {
+    it('does not show the loading bar on chat open (load deferred to send)', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         activeModelId: model.id,
@@ -2987,12 +2987,12 @@ describe('ChatScreen', () => {
       mockLoadModel.mockImplementation(() => new Promise(() => {}));
       (activeModelService as any).loadTextModel = mockLoadModel;
 
-      const { getByText } = renderChatScreen();
+      const { queryByText } = renderChatScreen();
       await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 500)); });
 
-      // The inline loading bar shows the model name as "Loading <name>..."
-      // (the header no longer renders the model name on its own).
-      expect(getByText(`Loading ${model.name}...`)).toBeTruthy();
+      // Model loading is deferred to send, so opening the chat must NOT show the
+      // "Loading <model>…" bar — nothing loads until the user sends a message.
+      expect(queryByText(`Loading ${model.name}...`)).toBeNull();
     });
   });
 
@@ -3000,7 +3000,7 @@ describe('ChatScreen', () => {
   // ensureModelLoaded — memory check branch (lines 362-378)
   // ============================================================================
   describe('ensureModelLoaded memory check', () => {
-    it('shows memory alert when model cannot be loaded', async () => {
+    it('does not run the memory check or alert on chat open (load deferred to send)', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         activeModelId: model.id,
@@ -3021,12 +3021,13 @@ describe('ChatScreen', () => {
         message: 'Insufficient RAM for this model',
       });
 
-      const { getByTestId } = renderChatScreen();
+      const { queryByTestId } = renderChatScreen();
       await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 300)); });
 
-      // Should show insufficient memory alert
-      expect(getByTestId('custom-alert')).toBeTruthy();
-      expect(getByTestId('alert-title').props.children).toBe('Insufficient Memory');
+      // The model load (and its memory check) is deferred to send, so opening the
+      // chat must NOT run the memory check or surface the alert on mount.
+      expect(activeModelService.checkMemoryForModel).not.toHaveBeenCalled();
+      expect(queryByTestId('custom-alert')).toBeNull();
     });
   });
 
@@ -3266,10 +3267,10 @@ describe('ChatScreen', () => {
 
       renderChatScreen();
 
-      // The preload/ensureModelLoaded flow exercises lines 280-292.
-      // checkMemoryForModel is called from ensureModelLoaded (before loadTextModel).
+      // The image-classifier preload (a separate effect from the now-deferred chat
+      // model load) still warms the classifier on mount when auto-LLM routing is on.
       await waitFor(() => {
-        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith('classifier-model', 'text');
+        expect(activeModelService.loadTextModel).toHaveBeenCalledWith('classifier-model');
       });
     });
 
@@ -3347,7 +3348,7 @@ describe('ChatScreen', () => {
   // addSystemMessage path after ensureModelLoaded — lines 400-406
   // ============================================================================
   describe('addSystemMessage after model load with showGenerationDetails', () => {
-    it('adds system message after model loads when showGenerationDetails is true', async () => {
+    it('does not load the model on chat open when showGenerationDetails is true (load deferred to send)', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         activeModelId: model.id,
@@ -3373,12 +3374,11 @@ describe('ChatScreen', () => {
       mockLoadModel.mockResolvedValue(undefined);
 
       renderChatScreen();
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 100)); });
 
-      // Verify ensureModelLoaded ran and triggered the memory check (step before RAF chain + load)
-      // The memory check is the reliable observable signal that the showGenerationDetails code path ran
-      await waitFor(() => {
-        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith(model.id, 'text');
-      });
+      // Load is deferred to send: opening the chat must NOT load the model or run its
+      // memory check on mount (so no post-load system message is added on open).
+      expect(activeModelService.checkMemoryForModel).not.toHaveBeenCalled();
     });
   });
 
@@ -3979,7 +3979,7 @@ describe('ChatScreen', () => {
   // Model loading screen with vision model hint — line 1125 area
   // ============================================================================
   describe('model loading screen vision hint', () => {
-    it('shows vision hint when loading a vision model', async () => {
+    it('does not load a vision model on chat open (load deferred to send)', async () => {
       // Use a unique filePath so it doesn't match any loaded path
       const visionModel = createVisionModel({ name: 'LLaVA-Vision', filePath: '/unique/llava.gguf' });
       useAppStore.setState({
@@ -4008,12 +4008,10 @@ describe('ChatScreen', () => {
       mockLoadModel.mockImplementation(() => new Promise(() => {}));
 
       renderChatScreen();
+      await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 100)); });
 
-      // Verify the vision model loading path was triggered — memory check confirms
-      // the code reached the load flow (activeModel found, needsReload=true, memory checked)
-      await waitFor(() => {
-        expect(activeModelService.checkMemoryForModel).toHaveBeenCalledWith(visionModel.id, 'text');
-      });
+      // Vision model load is deferred to send too — not triggered on chat open.
+      expect(activeModelService.checkMemoryForModel).not.toHaveBeenCalled();
     });
   });
 
