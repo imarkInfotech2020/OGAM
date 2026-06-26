@@ -992,8 +992,12 @@ describe('HomeScreen', () => {
   // ============================================================================
   // Model Selection (from picker)
   // ============================================================================
+  // Selecting a model on the home screen is now MARK-ONLY. It marks the model
+  // active in the store and closes the picker. The actual load is deferred to
+  // the first chat message, so selection must NOT call loadTextModel/
+  // loadImageModel/checkMemoryForModel and must NOT show memory dialogs.
   describe('model selection from picker', () => {
-    it('calls checkMemoryForModel when text model selected', async () => {
+    it('marks text model active without loading or checking memory', async () => {
       const model = createDownloadedModel({ name: 'Pick Me' });
       useAppStore.setState({ downloadedModels: [model] });
 
@@ -1005,128 +1009,16 @@ describe('HomeScreen', () => {
       });
 
       await waitFor(() => {
-        expect(mockCheckMemoryForModel).toHaveBeenCalledWith(model.id, 'text');
+        expect(useAppStore.getState().activeModelId).toBe(model.id);
       });
-    });
-
-    it('loads text model when memory check passes', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const model = createDownloadedModel({ name: 'Safe Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(mockLoadTextModel).toHaveBeenCalledWith(model.id);
-      });
-    });
-
-    it('shows critical alert when memory insufficient', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: false,
-        severity: 'critical',
-        message: 'Not enough memory',
-      });
-
-      const model = createDownloadedModel({ name: 'Big Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText('Insufficient Memory')).toBeTruthy();
-      });
-      // Should not load the model
+      // Remembers the explicit choice for lazy reload.
+      expect(useAppStore.getState().lastTextModelId).toBe(model.id);
+      // Mark-only: no eager load and no memory check on selection.
       expect(mockLoadTextModel).not.toHaveBeenCalled();
-    });
-
-    it('shows warning alert when memory is low', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'warning',
-        message: 'Low memory warning',
-      });
-
-      const model = createDownloadedModel({ name: 'Warning Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText('Low Memory Warning')).toBeTruthy();
-        expect(result.queryByText('Load Anyway')).toBeTruthy();
-      });
-    });
-
-    it('loads model when "Load Anyway" pressed after warning', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'warning',
-        message: 'Low memory warning',
-      });
-
-      const model = createDownloadedModel({ name: 'Warning Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      // Wait for sheet-close delay before alert appears
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 400)); });
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Load Anyway'));
-      });
-
-      await waitFor(() => {
-        expect(mockLoadTextModel).toHaveBeenCalledWith(model.id);
-      });
-    });
-
-    it('does not reload already active text model', async () => {
-      const model = createDownloadedModel({ name: 'Already Active' });
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
-      });
-      (activeModelService.getLoadedModelIds as jest.Mock).mockReturnValue({ textModelId: model.id, imageModelId: null });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      // checkMemoryForModel should not be called for already active model
       expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
     });
 
-    it('calls checkMemoryForModel when image model selected', async () => {
+    it('marks image model active without loading or checking memory', async () => {
       const imageModel = createONNXImageModel({ name: 'Pick Image' });
       useAppStore.setState({ downloadedImageModels: [imageModel] });
 
@@ -1138,23 +1030,43 @@ describe('HomeScreen', () => {
       });
 
       await waitFor(() => {
-        expect(mockCheckMemoryForModel).toHaveBeenCalledWith(imageModel.id, 'image');
+        expect(useAppStore.getState().activeImageModelId).toBe(imageModel.id);
       });
+      expect(mockLoadImageModel).not.toHaveBeenCalled();
+      expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
     });
 
-    it('loads image model when memory check passes', async () => {
-      const imageModel = createONNXImageModel({ name: 'Safe Image' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
+    it('does not show a memory dialog when selecting a text model', async () => {
+      const model = createDownloadedModel({ name: 'Big Model' });
+      useAppStore.setState({ downloadedModels: [model] });
 
       const result = renderHomeScreen();
-      openImagePicker(result);
+      openTextPicker(result);
+
+      await act(async () => {
+        fireEvent.press(result.getByTestId('model-item'));
+      });
+      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
+
+      expect(result.queryByText('Insufficient Memory')).toBeNull();
+      expect(result.queryByText('Low Memory Warning')).toBeNull();
+      expect(result.queryByText('Load Anyway')).toBeNull();
+    });
+
+    it('closes the picker after selecting a text model', async () => {
+      const model = createDownloadedModel({ name: 'Close After' });
+      useAppStore.setState({ downloadedModels: [model] });
+
+      const result = renderHomeScreen();
+      openTextPicker(result);
+      expect(result.getByText('Browse more models')).toBeTruthy();
 
       await act(async () => {
         fireEvent.press(result.getByTestId('model-item'));
       });
 
       await waitFor(() => {
-        expect(mockLoadImageModel).toHaveBeenCalledWith(imageModel.id);
+        expect(result.queryByText('Browse more models')).toBeNull();
       });
     });
   });
@@ -1248,52 +1160,6 @@ describe('HomeScreen', () => {
   // Model Load Error Handling
   // ============================================================================
   describe('model load error handling', () => {
-    it('shows error alert when text model load fails', async () => {
-      mockLoadTextModel.mockRejectedValue(new Error('Load crashed'));
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const model = createDownloadedModel({ name: 'Crash Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText(/Failed to load model/)).toBeTruthy();
-      });
-    });
-
-    it('shows error alert when image model load fails', async () => {
-      mockLoadImageModel.mockRejectedValue(new Error('Image load failed'));
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const imageModel = createONNXImageModel({ name: 'Crash Image' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText(/Failed to load model/)).toBeTruthy();
-      });
-    });
-
     it('shows error when eject all fails', async () => {
       mockUnloadAllModels.mockRejectedValue(new Error('Eject failed'));
 
@@ -1343,64 +1209,6 @@ describe('HomeScreen', () => {
   // ActivityIndicator and the ModelsManagerSheet rows show "Loading…" for the
   // type that is loading. The full-screen LoadingOverlay is also shown.
   describe('loading indicator', () => {
-    it('shows "Loading…" in the manager text row while a text model loads', async () => {
-      const model = createDownloadedModel({ name: 'Loading Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      // Make loadTextModel hang to keep loading state
-      mockLoadTextModel.mockImplementation(() => new Promise(() => {}));
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-      // Let the picker close and the load begin.
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
-
-      // Re-open the manager sheet; the text row reflects the loading state.
-      fireEvent.press(result.getByTestId('models-summary'));
-      await waitFor(() => {
-        expect(result.queryByText('Loading…')).toBeTruthy();
-      });
-      // The full-screen LoadingOverlay is shown during the load.
-      expect(result.queryByText('Loading Text Model')).toBeTruthy();
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
-    });
-
-    it('shows "Loading…" in the manager image row while an image model loads', async () => {
-      const imageModel = createONNXImageModel({ name: 'Loading Image' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      mockLoadImageModel.mockImplementation(() => new Promise(() => {}));
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
-
-      fireEvent.press(result.getByTestId('models-summary'));
-      await waitFor(() => {
-        expect(result.queryByText('Loading…')).toBeTruthy();
-      });
-      expect(result.queryByText('Loading Image Model')).toBeTruthy();
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
-    });
-
     it('shows "Loading…" in the manager text row while unloading a text model', async () => {
       const model = createDownloadedModel({ name: 'To Unload' });
       useAppStore.setState({
@@ -1489,135 +1297,6 @@ describe('HomeScreen', () => {
   // ============================================================================
   // Loading Card States
   // ============================================================================
-  describe('loading card states', () => {
-    it('shows loading state in the manager text row during load', async () => {
-      const model = createDownloadedModel({ name: 'Model X' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      mockLoadTextModel.mockImplementation(() => new Promise(() => {}));
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'safe',
-        message: '',
-      });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
-
-      // The manager text row should show the loading state.
-      fireEvent.press(result.getByTestId('models-summary'));
-      await waitFor(() => {
-        expect(result.queryByText('Loading…')).toBeTruthy();
-      });
-      // Drain pending RAF-chain timers to prevent leaking into the image model memory check tests
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 300)); });
-    });
-  });
-
-  // ============================================================================
-  // Image Model Memory Check (canLoad=false and warning paths)
-  // ============================================================================
-  describe('image model memory checks', () => {
-    it('shows critical alert when image model memory insufficient', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: false,
-        severity: 'critical',
-        message: 'Not enough memory for image model',
-      });
-
-      const imageModel = createONNXImageModel({ name: 'Big Image Model' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText('Insufficient Memory')).toBeTruthy();
-        expect(result.queryByText('Not enough memory for image model')).toBeTruthy();
-      });
-      expect(mockLoadImageModel).not.toHaveBeenCalled();
-    });
-
-    it('shows warning alert when image model memory is low', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'warning',
-        message: 'Low memory for image model',
-      });
-
-      const imageModel = createONNXImageModel({ name: 'Warn Image Model' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText('Low Memory')).toBeTruthy();
-        expect(result.queryByText('Load Anyway')).toBeTruthy();
-      });
-    });
-
-    it('loads image model when "Load Anyway" pressed after warning', async () => {
-      mockCheckMemoryForModel.mockResolvedValue({
-        canLoad: true,
-        severity: 'warning',
-        message: 'Low memory for image model',
-      });
-
-      const imageModel = createONNXImageModel({ name: 'Warn Image' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      // Wait for sheet-close delay before alert appears
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 400)); });
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Load Anyway'));
-      });
-
-      await waitFor(() => {
-        expect(mockLoadImageModel).toHaveBeenCalledWith(imageModel.id);
-      });
-    });
-
-    it('does not reload already active image model', async () => {
-      const imageModel = createONNXImageModel({ name: 'Already Active Image' });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
-      });
-      (activeModelService.getLoadedModelIds as jest.Mock).mockReturnValue({ textModelId: null, imageModelId: imageModel.id });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId('model-item'));
-      });
-
-      expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
-    });
-  });
-
   // ============================================================================
   // Delete Conversation (full flow with swipe actions)
   // ============================================================================
