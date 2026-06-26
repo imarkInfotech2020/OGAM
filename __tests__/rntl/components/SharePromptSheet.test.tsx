@@ -46,11 +46,11 @@ describe('SharePromptSheet', () => {
     const { getByText, onClose } = renderSheet();
     fireEvent.press(getByText('Share on X'));
     // Engagement + close are synchronous; the X open resolves on the next tick
-    // (canOpenURL is mocked false, so it uses the x.com web intent fallback).
+    // (uses the x.com/intent/post web intent).
     expect(onClose).toHaveBeenCalled();
     expect(useAppStore.getState().hasEngagedSharePrompt).toBe(true);
     await waitFor(() => {
-      expect(Linking.openURL).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/x\.com\/intent\/tweet/));
+      expect(Linking.openURL).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/x\.com\/intent\/post/));
     });
   });
 
