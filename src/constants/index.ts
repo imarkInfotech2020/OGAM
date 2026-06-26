@@ -3,10 +3,6 @@ export { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS, TRENDING_FAMILIES, TRENDING_
 // External URLs
 export const WEDNESDAY_URL = 'https://wednesday.is/hire-ai-native-mobile-squad?utm_source=off-grid-mobile-app&utm_medium=made-with-love&utm_campaign=in-app';
 
-// RevenueCat Web Billing customer portal (where monthly subscribers cancel /
-// manage billing). TODO: set to your project's RC customer-portal URL.
-export const PRO_MANAGE_SUBSCRIPTION_URL = 'https://offgridmobileai.co/manage';
-
 export const PRO_AHA_FEATURES = [
   'Ambient across your devices',
   'Proactive, not reactive',

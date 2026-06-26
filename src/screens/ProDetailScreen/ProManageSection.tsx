@@ -6,14 +6,16 @@
  * devices (N of 5). The device list is read-only on purpose: the 5-device cap is
  * a hard limit and there is no self-service removal — letting users free slots
  * would let a single key cycle through unlimited devices and defeat the cap.
- * For monthly licenses it also links to the RevenueCat customer portal to cancel.
+ * For monthly licenses it explains how to cancel or update payment: via the
+ * link RevenueCat emails with every purchase and renewal. There is no in-app
+ * portal because RevenueCat authenticates Web Billing customers by email.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
-import { SPACING, TYPOGRAPHY, PRO_MANAGE_SUBSCRIPTION_URL } from '../../constants';
+import { SPACING, TYPOGRAPHY } from '../../constants';
 import {
   getProLicenseInfo,
   listProDevices,
@@ -103,13 +105,16 @@ export const ProManageSection: React.FC = () => {
       })}
 
       {info?.tier === 'monthly' ? (
-        <TouchableOpacity
-          style={styles.manageButton}
-          onPress={() => Linking.openURL(PRO_MANAGE_SUBSCRIPTION_URL).catch(() => {})}
-        >
-          <Icon name="external-link" size={14} color={colors.primary} />
-          <Text style={styles.manageText}>Manage subscription</Text>
-        </TouchableOpacity>
+        <View style={styles.manageBlock}>
+          <Text style={styles.sectionLabel}>Manage subscription</Text>
+          <View style={styles.manageRow}>
+            <Icon name="mail" size={14} color={colors.textMuted} />
+            <Text style={styles.manageHint}>
+              To cancel or update your payment method, use the link in your Off Grid purchase or
+              renewal email. RevenueCat sends one with every payment.
+            </Text>
+          </View>
+        </View>
       ) : null}
     </View>
   );
@@ -151,16 +156,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
     deviceInfo: { flex: 1, gap: 2 as number },
     deviceName: { ...TYPOGRAPHY.bodySmall, color: colors.text },
     deviceMeta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-    manageButton: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      gap: SPACING.sm,
-      paddingVertical: SPACING.md,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
+    manageBlock: {
       marginTop: SPACING.sm,
+      gap: SPACING.sm as number,
     },
-    manageText: { ...TYPOGRAPHY.label, color: colors.primary },
+    manageRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'flex-start' as const,
+      gap: SPACING.md,
+    },
+    manageHint: { ...TYPOGRAPHY.meta, color: colors.textMuted, flex: 1 },
   });
