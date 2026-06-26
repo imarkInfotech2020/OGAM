@@ -19,6 +19,15 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
   },
 }));
 
+// Names prefixed with `mock` so jest.mock's hoisting allows referencing them.
+const mockDownloadStoreAdd = jest.fn();
+const mockDownloadStoreRemove = jest.fn();
+jest.mock('../../../src/stores/downloadStore', () => ({
+  useDownloadStore: {
+    getState: () => ({ add: mockDownloadStoreAdd, remove: mockDownloadStoreRemove }),
+  },
+}));
+
 const mockedBDS = backgroundDownloadService as jest.Mocked<typeof backgroundDownloadService>;
 const mockedAudioSessionIos = AudioSessionIos as jest.Mocked<typeof AudioSessionIos>;
 
@@ -171,6 +180,52 @@ describe('WhisperService', () => {
 
       await expect(whisperService.downloadModel('tiny.en')).rejects.toThrow('network_lost');
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/whisper-models/ggml-tiny.en.bin');
+    });
+
+    it('registers the in-flight download in the download store so it shows live, then clears it on completion', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)  // dir exists
+        .mockResolvedValueOnce(false) // model not yet downloaded
+        .mockResolvedValueOnce(true); // validateModelFile: file exists
+      mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
+      mockedBDS.downloadFileTo.mockReturnValue({
+        downloadId: 7,
+        downloadIdPromise: Promise.resolve(7),
+        promise: Promise.resolve(),
+      } as any);
+
+      await whisperService.downloadModel('tiny.en');
+
+      // Registered as an STT entry keyed by whisper-<id>/<fileName> so the
+      // Download Manager renders it under Voice while in flight (issue: STT
+      // downloads were invisible until a screen switch re-scanned disk).
+      expect(mockDownloadStoreAdd).toHaveBeenCalledWith(expect.objectContaining({
+        modelKey: 'whisper-tiny.en/ggml-tiny.en.bin',
+        downloadId: 7,
+        modelId: 'whisper-tiny.en',
+        fileName: 'ggml-tiny.en.bin',
+        modelType: 'stt',
+        status: 'pending',
+      }));
+      // Cleared on success — completed STT models are listed from disk instead.
+      expect(mockDownloadStoreRemove).toHaveBeenCalledWith('whisper-tiny.en/ggml-tiny.en.bin');
+    });
+
+    it('clears the download store entry even when the download fails', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)  // dir exists
+        .mockResolvedValueOnce(false); // model not yet downloaded
+      mockedRNFS.unlink.mockResolvedValue(undefined as any);
+      mockedBDS.downloadFileTo.mockReturnValue({
+        downloadId: 8,
+        downloadIdPromise: Promise.resolve(8),
+        promise: Promise.reject(new Error('network_lost')),
+      } as any);
+
+      await expect(whisperService.downloadModel('tiny.en')).rejects.toThrow('network_lost');
+
+      expect(mockDownloadStoreAdd).toHaveBeenCalled();
+      expect(mockDownloadStoreRemove).toHaveBeenCalledWith('whisper-tiny.en/ggml-tiny.en.bin');
     });
   });
 

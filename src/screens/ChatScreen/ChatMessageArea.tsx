@@ -19,6 +19,7 @@ import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
+import { useIsProActive } from '../../hooks/useIsProActive';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -76,6 +77,13 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
+  // Subscribe to Pro activation so this re-renders the moment a license is
+  // activated. loadProFeatures() registers the tool extensions + the Pro Tools
+  // screen in one pass; without this subscription the getToolExtensions() reads
+  // below are non-reactive and the Pro Tools badge stayed stale until an app
+  // restart. Return is intentionally unused — the count is naturally 0 when Pro
+  // is inactive (no extensions registered); we only need the re-render.
+  useIsProActive();
   // extToolCount is the live MCP tool count (the email/calendar extension reports 0
   // here because those live in settings.enabledTools — see EmailCalendarExtension).
   const extToolCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);

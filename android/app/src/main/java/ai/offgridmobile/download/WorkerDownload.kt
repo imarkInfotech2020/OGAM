@@ -154,14 +154,6 @@ class WorkerDownload(
         }
     }
 
-    private fun calculateTotalBytes(code: Int, currentFileBytes: Long, contentLength: Long, existingTotal: Long): Long {
-        return when (code) {
-            206 -> currentFileBytes + contentLength
-            200 -> contentLength
-            else -> maxOf(existingTotal, contentLength)
-        }.coerceAtLeast(existingTotal)
-    }
-
     private suspend fun streamToFile(params: StreamParams): Result {
         val (input, targetFile, code, download, downloadId, currentFileBytes, totalBytes, progressInterval) = params
         val appendMode = targetFile.exists() && code == 206
@@ -283,6 +275,27 @@ class WorkerDownload(
         const val KEY_PROGRESS = "progress"
         const val KEY_TOTAL = "total"
         const val KEY_PROGRESS_INTERVAL = "progress_interval"
+
+        /**
+         * The authoritative total size for the download. A successful response's
+         * Content-Length is the source of truth and MUST win over the caller's
+         * seeded estimate.
+         *
+         * Callers seed `existingTotal` only so progress can render before the first
+         * byte arrives — and some (e.g. Whisper) seed it from a rounded MB figure
+         * (`sizeMB * 1024 * 1024`) that never equals the exact byte count. Clamping
+         * the real Content-Length UP to that rounded estimate made the completion
+         * size check (which tolerates only a 0.1% delta) reject every such file as
+         * FILE_CORRUPTED when no SHA-256 was available to vouch for it. Fall back to
+         * the seeded estimate only when the server reports no length (<= 0).
+         */
+        internal fun calculateTotalBytes(code: Int, currentFileBytes: Long, contentLength: Long, existingTotal: Long): Long {
+            return when (code) {
+                206 -> if (contentLength > 0L) currentFileBytes + contentLength else existingTotal
+                200 -> if (contentLength > 0L) contentLength else existingTotal
+                else -> maxOf(existingTotal, contentLength)
+            }
+        }
 
         internal fun computeFileSha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
