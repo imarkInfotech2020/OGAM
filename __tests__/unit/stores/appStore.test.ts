@@ -113,6 +113,25 @@ describe('appStore', () => {
       expect(models[0].name).toBe('Updated');
     });
 
+    it('setDownloadedModels excludes Whisper STT models (they belong to Voice, not Text)', () => {
+      const { setDownloadedModels } = useAppStore.getState();
+      const text = createDownloadedModel({ id: 'qwen', fileName: 'qwen.gguf' });
+      const whisperById = createDownloadedModel({ id: 'whisper-small.en', fileName: 'ggml-small.en.bin' });
+      const whisperByFile = createDownloadedModel({ id: 'recovered_x', fileName: 'ggml-base.en.bin' });
+
+      setDownloadedModels([text, whisperById, whisperByFile]);
+
+      const models = getAppState().downloadedModels;
+      expect(models).toHaveLength(1);
+      expect(models[0].id).toBe('qwen');
+    });
+
+    it('addDownloadedModel ignores Whisper STT models', () => {
+      const { addDownloadedModel } = useAppStore.getState();
+      addDownloadedModel(createDownloadedModel({ id: 'whisper-small.en', fileName: 'ggml-small.en.bin' }));
+      expect(getAppState().downloadedModels).toHaveLength(0);
+    });
+
     it('removeDownloadedModel removes model by ID', () => {
       const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });

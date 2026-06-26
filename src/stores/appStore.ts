@@ -23,6 +23,23 @@ function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean {
   return model.id.startsWith('recovered_');
 }
 
+// Whisper STT models are managed by whisperService (modelId 'whisper-<id>',
+// file 'ggml-<id>.bin') and belong to the Voice/Speech surfaces. They were being
+// recovered into the text model store, so they appeared under Text in the model
+// selector and as text-icon entries in the Download Manager. Exclude them here so
+// the single downloadedModels source never carries them — which also clears the
+// phantom entries already persisted on devices on the next setDownloadedModels.
+function isWhisperTextModel(model: DownloadedModel): boolean {
+  return (
+    model.id.startsWith('whisper-') ||
+    (model.fileName?.startsWith('ggml-') === true && model.fileName.endsWith('.bin'))
+  );
+}
+
+function isExcludedTextModel(model: DownloadedModel): boolean {
+  return isSuspiciousRecoveredTextModel(model) || isWhisperTextModel(model);
+}
+
 type OnboardingChecklist = {
   downloadedModel: boolean; loadedModel: boolean; sentMessage: boolean;
   triedImageGen: boolean; exploredSettings: boolean; createdProject: boolean;
@@ -224,10 +241,10 @@ export const useAppStore = create<AppState>()(
       setDeviceInfo: (info) => set({ deviceInfo: info }),
       setModelRecommendation: (rec) => set({ modelRecommendation: rec }),
       downloadedModels: [],
-      setDownloadedModels: (models) => set({ downloadedModels: models.filter(m => !isSuspiciousRecoveredTextModel(m)) }),
+      setDownloadedModels: (models) => set({ downloadedModels: models.filter(m => !isExcludedTextModel(m)) }),
       addDownloadedModel: (model) =>
         set((state) => {
-          if (isSuspiciousRecoveredTextModel(model)) return state;
+          if (isExcludedTextModel(model)) return state;
           return {
             downloadedModels: [...state.downloadedModels.filter(m => m.id !== model.id), model],
           };
