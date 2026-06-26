@@ -100,9 +100,7 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
   if (!deps.imageModelLoaded) return false;
-  // No text model loaded (e.g. image-only): use the SMOL classifier model to
-  // decide text vs image when available; fall back to fast heuristics when no
-  // classifier is downloaded. A chat request returns false so the caller loads text.
+  // No text model (image-only): SMOL classifier decides text vs image, else heuristics; chat returns false.
   if (deps.hasTextModel === false) {
     const classifierModel = deps.settings.classifierModelId
       ? deps.downloadedModels.find(m => m.id === deps.settings.classifierModelId)
@@ -155,8 +153,7 @@ export type ImageGenCall = {
   prompt: string;
   conversationId: string;
   skipUserMessage?: boolean;
-  /** Attachments to keep on the user message (e.g. a voice note in audio mode). */
-  attachments?: MediaAttachment[];
+  attachments?: MediaAttachment[]; // kept on the user message (e.g. a voice note)
 };
 export async function handleImageGenerationFn(
   deps: Pick<GenerationDeps, 'activeImageModel' | 'settings' | 'imageGenState' | 'setAlertState' | 'addMessage'>,
@@ -164,8 +161,7 @@ export async function handleImageGenerationFn(
 ): Promise<void> {
   const { prompt, conversationId, skipUserMessage = false, attachments } = call;
   if (!deps.activeImageModel) { deps.setAlertState(showAlert('Error', 'No image model loaded.')); return; }
-  // Keep attachments (e.g. a voice note recorded in audio mode) on the user
-  // message so it renders as a voice note, not plain text.
+  // Keep attachments (e.g. a voice note) so the user message renders as a voice note.
   if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt, attachments }); }
   const result = await imageGenerationService.generateImage({
     prompt, conversationId,

@@ -18,6 +18,7 @@ const originalAddListener = Keyboard.addListener;
 const originalRAF = global.requestAnimationFrame;
 
 beforeEach(() => {
+  jest.useFakeTimers();
   keyboardShowHandler = null;
   keyboardHideHandler = null;
   mockKeyboardDismiss.mockClear();
@@ -47,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   global.requestAnimationFrame = originalRAF;
+  jest.useRealTimers();
 });
 
 afterAll(() => {
@@ -62,6 +64,8 @@ function showPopoverWithKeyboard() {
   act(() => { result.current.show(); });
   expect(result.current.visible).toBe(false);
   act(() => { keyboardHideHandler?.(); });
+  // The popover measures+shows after a settle delay (input bar finishes animating).
+  act(() => { jest.advanceTimersByTime(300); });
   expect(result.current.visible).toBe(true);
   return result;
 }
@@ -237,6 +241,7 @@ describe('useKeyboardAwarePopover', () => {
       act(() => {
         keyboardHideHandler?.();
       });
+      act(() => { jest.advanceTimersByTime(300); });
 
       expect(result.current.visible).toBe(true);
 

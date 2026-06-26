@@ -184,7 +184,7 @@ describe('VoiceRecordButton', () => {
 
       expect(mockShowAlert).toHaveBeenCalledWith(
         'Download Voice Model',
-        expect.stringContaining('Download Whisper Small'),
+        expect.stringContaining('Download Whisper Base'),
         expect.any(Array)
       );
     });
@@ -203,7 +203,7 @@ describe('VoiceRecordButton', () => {
 
       expect(mockShowAlert).toHaveBeenCalledWith(
         'Download Voice Model',
-        expect.stringContaining('466 MB'),
+        expect.stringContaining('142 MB'),
         expect.any(Array)
       );
     });
