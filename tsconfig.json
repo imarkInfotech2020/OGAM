@@ -17,6 +17,9 @@
     "__tests__/integration/stores/tts.test.ts",
     "__tests__/rntl/components/ChatInputModeToggle.test.tsx",
     "__tests__/rntl/components/VoiceModelsPanel.test.tsx",
-    "__tests__/rntl/components/KokoroTTSBridge.test.tsx"
+    "__tests__/rntl/components/KokoroTTSBridge.test.tsx",
+    "__tests__/rntl/components/McpAddServerSheet.test.tsx",
+    "__tests__/rntl/components/McpServersScreen.test.tsx",
+    "__tests__/unit/tools/mcpPresets.test.ts"
   ]
 }

@@ -18,6 +18,10 @@ module.exports = {
     '__tests__/rntl/components/ChatInputModeToggle.test.tsx',
     '__tests__/rntl/components/VoiceModelsPanel.test.tsx',
     '__tests__/rntl/components/KokoroTTSBridge.test.tsx',
+    // MCP server/preset suites import the private pro/ submodule — run in pro's CI.
+    '__tests__/rntl/components/McpAddServerSheet.test.tsx',
+    '__tests__/rntl/components/McpServersScreen.test.tsx',
+    '__tests__/unit/tools/mcpPresets.test.ts',
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
