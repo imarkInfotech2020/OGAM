@@ -6,7 +6,7 @@ import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
-import { ChatInput, ToolPickerSheet, ThinkingIndicator } from '../../components';
+import { ChatInput, ThinkingIndicator } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { INFERENCE_BACKENDS } from '../../types';
@@ -17,7 +17,8 @@ import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { getRegisteredScreens } from '../../navigation/screenRegistry';
+import { AVAILABLE_TOOLS } from '../../services/tools';
+import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -75,16 +76,20 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
+  // extToolCount is the live MCP tool count (the email/calendar extension reports 0
+  // here because those live in settings.enabledTools — see EmailCalendarExtension).
   const extToolCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
-  const totalToolCount = chat.enabledTools.length + extToolCount;
-  const handleMcpPress = () => {
-    const hasMcpScreen = getRegisteredScreens().some(s => s.name === 'McpServers');
-    if (hasMcpScreen) {
-      tabNav.navigate('McpServers' as any);
-    } else {
-      tabNav.navigate('ProDetail');
-    }
-  };
+  // Pro tools (email/calendar) are toggled through settings.enabledTools, so count
+  // how many of them are on and fold MCP in — this is the "Pro Tools" badge.
+  const proToolIds = getToolExtensions().flatMap(e => (e.getToolDefinitions?.() ?? []).map(t => t.id));
+  const proToolsActiveCount = proToolIds.filter(id => chat.enabledTools.includes(id)).length;
+  const proToolsCount = proToolsActiveCount + extToolCount;
+  // The free Tools page lists only AVAILABLE_TOOLS, so its badge counts just those
+  // (pro email/calendar ids are surfaced under Pro Tools instead, not double-counted).
+  const freeToolIds = new Set(AVAILABLE_TOOLS.map(t => t.id));
+  const freeToolsCount = chat.enabledTools.filter(id => freeToolIds.has(id)).length;
+  const totalToolCount = freeToolsCount + proToolsCount;
+  const handleProToolsPress = useOpenProTools();
   const showSettingsDot = totalToolCount > 3 && !toolCountHintDismissed;
   const [inputHeight, setInputHeight] = useState(84);
   const flatListHeightRef = useRef(0);
@@ -245,11 +250,11 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
               supportsVision: chat.supportsVision,
               imageOnly: chat.imageModelLoaded && !chat.hasTextModel,
             })}
-            onToolsPress={() => chat.setShowToolPicker(true)}
-            enabledToolCount={chat.enabledTools.length}
+            onToolsPress={() => tabNav.navigate('Tools')}
+            enabledToolCount={freeToolsCount}
             showSettingsDot={showSettingsDot}
-            mcpToolCount={extToolCount}
-            onMcpPress={handleMcpPress}
+            mcpToolCount={proToolsCount}
+            onMcpPress={handleProToolsPress}
             supportsToolCalling={chat.supportsToolCalling}
             supportsThinking={chat.supportsThinking}
             onRepairVision={handleRepairVision}
@@ -257,12 +262,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           />
         </AttachStep>
       </View>
-      <ToolPickerSheet
-        visible={chat.showToolPicker}
-        onClose={() => chat.setShowToolPicker(false)}
-        enabledTools={chat.enabledTools}
-        onToggleTool={chat.handleToggleTool}
-      />
     </>
   );
 };

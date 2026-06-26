@@ -410,19 +410,6 @@ jest.mock('../../../src/components', () => ({
       </View>
     );
   },
-  ToolPickerSheet: ({ visible, onClose, enabledTools, onToggleTool }: any) => {
-    const { View, Text, TouchableOpacity } = require('react-native');
-    if (!visible) return null;
-    return (
-      <View testID="tool-picker-sheet">
-        <Text>Tools ({enabledTools?.length ?? 0} enabled)</Text>
-        <TouchableOpacity testID="close-tool-picker" onPress={onClose}>
-          <Text>Close</Text>
-        </TouchableOpacity>
-        {onToggleTool && <Text testID="toggle-tool-available">toggle</Text>}
-      </View>
-    );
-  },
   SharePromptSheet: () => null,
   ProAhaSheet: () => null,
 }));

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Modal, TouchableWithoutFeedback, Dimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../../theme';
 import { ImageModeState } from '../../types';
 import { useAppStore } from '../../stores';
@@ -98,9 +99,10 @@ function getToolsStyle(supported: boolean, count: number, colors: any) {
   let badgeLabel = 'N/A';
 
   if (supported) {
-    const hasEnabledTools = count > 0;
-    iconColor = hasEnabledTools ? colors.primary : colors.text;
-    badgeBg = hasEnabledTools ? colors.primary : colors.textMuted;
+    // The icon and badge stay neutral - this row is a utility count, not an
+    // on/off state, so it should not read as "active/highlighted" in green.
+    iconColor = colors.text;
+    badgeBg = colors.textMuted;
     labelColor = colors.text;
     badgeLabel = String(count);
   }
@@ -197,7 +199,7 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
-                testID="quick-mcp"
+                testID="quick-pro-tools"
                 style={popoverStyles.row}
                 onPress={() => {
                   triggerHaptic('impactLight');
@@ -205,11 +207,13 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
                   onMcpPress?.();
                 }}
               >
-                <Icon name="cpu" size={16} color={mcpBadgeBg} />
-                <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>MCP</Text>
-                <View style={[popoverStyles.badge, { backgroundColor: mcpBadgeBg }]}>
-                  <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{mcpToolCount}</Text>
-                </View>
+                <IconMC name="crown" size={16} color={showMcpWarning ? TOOL_WARNING_COLOR : colors.primary} />
+                <Text style={[popoverStyles.rowLabel, { color: colors.text }]}>Pro Tools</Text>
+                {mcpToolCount > 0 && (
+                  <View style={[popoverStyles.badge, { backgroundColor: mcpBadgeBg }]}>
+                    <Text style={[popoverStyles.badgeText, { color: colors.background }]}>{mcpToolCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </View>
           </TouchableWithoutFeedback>

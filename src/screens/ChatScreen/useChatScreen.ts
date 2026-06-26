@@ -54,7 +54,6 @@ export const useChatScreen = () => {
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
   const [imageGenState, setImageGenState] = useState<ImageGenerationState>(imageGenerationService.getState());
-  const [showToolPicker, setShowToolPicker] = useState(false);
   const [supportsToolCalling, setSupportsToolCalling] = useState(false);
   const [supportsThinking, setSupportsThinking] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
@@ -346,7 +345,7 @@ export const useChatScreen = () => {
     showDebugPanel, setShowDebugPanel,
     showModelSelector, setShowModelSelector,
     showSettingsPanel, setShowSettingsPanel,
-    showToolPicker, setShowToolPicker, supportsToolCalling, supportsThinking,
+    supportsToolCalling, supportsThinking,
     debugInfo, alertState, setAlertState,
     showScrollToBottom, setShowScrollToBottom,
     isClassifying, animateLastN, queueCount, queuedTexts,

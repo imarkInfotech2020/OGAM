@@ -22,3 +22,4 @@ export { SecuritySettingsScreen } from './SecuritySettingsScreen';
 export { RemoteServersScreen } from './RemoteServersScreen';
 export { ProDetailScreen } from './ProDetailScreen';
 export { AboutScreen } from './AboutScreen';
+export { ToolsScreen } from './ToolsScreen';
