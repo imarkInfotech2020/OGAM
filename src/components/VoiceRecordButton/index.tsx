@@ -24,8 +24,8 @@ import { LoadingState, TranscribingState, UnavailableButton, ButtonIcon } from '
 import { useWhisperStore } from '../../stores';
 import logger from '../../utils/logger';
 
-const DOWNLOAD_MODEL_ID = 'small.en';
-const DOWNLOAD_MODEL_SIZE_MB = 466;
+const DOWNLOAD_MODEL_ID = 'base.en';
+const DOWNLOAD_MODEL_SIZE_MB = 142;
 
 interface VoiceRecordButtonProps {
   isRecording: boolean;
@@ -181,7 +181,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     if (isDownloading) { return; }
     setAlertState(showAlert(
       'Download Voice Model',
-      `Download Whisper Small to enable voice input? (${DOWNLOAD_MODEL_SIZE_MB} MB)`,
+      `Download Whisper Base to enable voice input? (${DOWNLOAD_MODEL_SIZE_MB} MB)`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
