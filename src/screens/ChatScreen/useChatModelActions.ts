@@ -338,13 +338,12 @@ type ModelStateSyncDeps = {
   setSupportsThinking: (v: boolean) => void;
 };
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
-  const { activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
+  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
   const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
-  useEffect(() => {
-    if (activeModelInfo.isRemote) return;
-    if (activeModelId && activeModel) { ensureModelLoadedFn(modelDeps); }
-
-  }, [activeModelId, activeModelMmProjPath]);
+  // The active text model is NOT loaded here (on chat mount / model select). It loads
+  // lazily on send, when the generation path recognizes a local text model is needed
+  // (ensureModelReady → ensureModelLoaded). Loading eagerly here is what made opening a
+  // chat — and switching models — spin up the model before the user sent anything.
   useEffect(() => {
     if (activeModelInfo.isRemote) {
       setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);

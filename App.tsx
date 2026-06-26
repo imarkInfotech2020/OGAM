@@ -17,7 +17,6 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
-import { preloadSelectedModels } from './src/services/modelPreloader';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { useDownloadListeners } from './src/hooks/useDownloads';
@@ -237,11 +236,11 @@ function App() {
       // forget; the Models screen also refreshes on focus.
       useWhisperStore.getState().refreshPresentModels();
 
-      // Warm the selected models in the background (text → image → TTS → STT,
-      // budget-gated, sequential) so the common paths have no cold-start wait.
-      // Fire-and-forget after the UI is up; loads run one at a time off the JS
-      // thread so they don't freeze the screen.
-      preloadSelectedModels();
+      // Models are intentionally NOT warmed at boot — a native model load is heavy
+      // and contends with startup, leaving the whole app sluggish in that window.
+      // They load lazily instead: the text model on chat entry / before the first
+      // generation (useChatScreen + ensureModelLoaded), TTS/STT when those features
+      // are first used. This keeps app launch responsive.
     } catch (error) {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);

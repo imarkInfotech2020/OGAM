@@ -63,19 +63,11 @@ export const useChatScreen = () => {
   // Stashed when the model selector opens with no text model; replayed on pick.
   const pendingMessageRef = useRef<{ text: string; attachments?: MediaAttachment[] } | null>(null);
 
-  // Preload the last text model in the background on chat open (skip if a
-  // generation model is already loaded); shows the "Loading model" bar.
-  useEffect(() => {
-    const { lastTextModelId, downloadedModels } = useAppStore.getState();
-    if (!lastTextModelId) return;
-    const { text, image } = activeModelService.getActiveModels();
-    if (text.isLoaded || text.isLoading || image.isLoaded) return;
-    setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
-    setIsModelLoading(true);
-    activeModelService.loadTextModel(lastTextModelId)
-      .catch(() => {})
-      .finally(() => { setIsModelLoading(false); setLoadingModel(null); });
-  }, []);
+  // The text model is intentionally NOT loaded on chat open. It loads lazily on
+  // send, when the generation path recognizes a local text model is needed
+  // (ensureModelReady → ensureModelLoaded, which shows the "Loading model" bar).
+  // Remote models never trigger a local load. Keeps both app launch and chat open
+  // snappy — nothing heavy runs until the user actually sends a message.
 
   // Stop TTS when navigating away, app backgrounded, or screen locked.
   // No-op without the pro audio feature.
