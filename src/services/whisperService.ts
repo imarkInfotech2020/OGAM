@@ -68,6 +68,15 @@ class WhisperService {
         // before the first byte arrives. The native layer refines this from the
         // server's Content-Length once the download starts.
         totalBytes: model.size * 1024 * 1024,
+        // Skip strict final-size validation. The seeded size is a rounded-MB
+        // approximation (e.g. base.en = 142 MB = 148,897,792 B vs the real
+        // 147,964,211 B), and the Android worker's calculateTotalBytes coerces
+        // the expected total up to that inflated seed — so a fully-downloaded
+        // whisper model fails the 0.1% size check as "FILE_CORRUPTED" because
+        // these models ship no SHA to verify against. The URL is pinned to
+        // ggerganov/whisper.cpp; integrity is covered by HTTPS + the host
+        // allowlist. (Matches how curated offgrid/* models opt out.)
+        metadataJson: JSON.stringify({ skipSizeValidation: true }),
       },
       destPath,
       onProgress: onProgress

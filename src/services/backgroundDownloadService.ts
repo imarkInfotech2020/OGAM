@@ -186,7 +186,7 @@ class BackgroundDownloadService {
   }
 
   downloadFileTo(opts: {
-    params: Pick<DownloadParams, 'url' | 'fileName' | 'modelId' | 'totalBytes' | 'modelType'>;
+    params: Pick<DownloadParams, 'url' | 'fileName' | 'modelId' | 'totalBytes' | 'modelType' | 'metadataJson'>;
     destPath: string;
     onProgress?: (bytesDownloaded: number, totalBytes: number) => void;
     silent?: boolean;
