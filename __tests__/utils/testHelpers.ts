@@ -126,8 +126,7 @@ export const resetStores = (): void => {
   // Reset whisper store
   useWhisperStore.setState({
     downloadedModelId: null,
-    isDownloading: false,
-    downloadProgress: 0,
+    downloadProgressById: {},
     isModelLoading: false,
     isModelLoaded: false,
     error: null,
@@ -537,8 +536,7 @@ export const resetWhisperStore = (): void => {
   useWhisperStore.setState({
     downloadedModelId: null,
     presentModelIds: [],
-    isDownloading: false,
-    downloadProgress: 0,
+    downloadProgressById: {},
     isModelLoading: false,
     isModelLoaded: false,
     error: null,

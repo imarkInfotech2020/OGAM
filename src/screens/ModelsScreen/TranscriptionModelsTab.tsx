@@ -34,7 +34,7 @@ interface WhisperCardProps {
   index: number;
   downloadedModelId: string | null;
   presentModelIds: string[];
-  downloadingId: string | null;
+  downloading: boolean;
   downloadProgress: number;
   onDownload: (id: string) => void;
   onSelect: (id: string) => void;
@@ -42,11 +42,10 @@ interface WhisperCardProps {
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
-  model, index, downloadedModelId, presentModelIds, downloadingId, downloadProgress, onDownload, onSelect, onDelete,
+  model, index, downloadedModelId, presentModelIds, downloading, downloadProgress, onDownload, onSelect, onDelete,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
-  const downloading = downloadingId === model.id;
   return (
     <ModelCard
       compact
@@ -72,25 +71,29 @@ export const TranscriptionModelsTab: React.FC = () => {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
-    downloadedModelId, presentModelIds, downloadProgress, downloadingId, downloadModel,
+    downloadedModelId, presentModelIds, downloadProgressById, downloadModel,
     selectModel, deleteModelById, refreshPresentModels, error: whisperError, clearError,
   } = useWhisperStore();
 
-  // Probe disk on mount and whenever a download finishes, so every on-disk model
+  // True while any transcription model is downloading. Disk probes are deferred
+  // until everything settles so an in-flight file isn't mistaken for absent.
+  const anyDownloading = Object.keys(downloadProgressById).length > 0;
+
+  // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
   useEffect(() => {
-    if (!downloadingId) refreshPresentModels();
+    if (!anyDownloading) refreshPresentModels();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [downloadingId]);
+  }, [anyDownloading]);
 
   // Re-derive from disk whenever the Models screen regains focus (e.g. returning
   // from the Download Manager after a download or delete). Disk is the source of
   // truth, so this keeps the list in sync without any cross-screen wiring.
   useFocusEffect(
     useCallback(() => {
-      if (!downloadingId) refreshPresentModels();
+      if (!anyDownloading) refreshPresentModels();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [downloadingId]),
+    }, [anyDownloading]),
   );
 
   const handleDownload = useCallback((id: string) => {
@@ -110,20 +113,23 @@ export const TranscriptionModelsTab: React.FC = () => {
     ]));
   }, [deleteModelById]);
 
-  const renderWhisperCard = (model: typeof WHISPER_MODELS[number], index: number) => (
-    <WhisperCard
-      key={model.id}
-      model={model}
-      index={index}
-      downloadedModelId={downloadedModelId}
-      presentModelIds={presentModelIds}
-      downloadingId={downloadingId}
-      downloadProgress={downloadProgress}
-      onDownload={handleDownload}
-      onSelect={handleSelect}
-      onDelete={handleDelete}
-    />
-  );
+  const renderWhisperCard = (model: typeof WHISPER_MODELS[number], index: number) => {
+    const progress = downloadProgressById[model.id];
+    return (
+      <WhisperCard
+        key={model.id}
+        model={model}
+        index={index}
+        downloadedModelId={downloadedModelId}
+        presentModelIds={presentModelIds}
+        downloading={progress !== undefined}
+        downloadProgress={progress ?? 0}
+        onDownload={handleDownload}
+        onSelect={handleSelect}
+        onDelete={handleDelete}
+      />
+    );
+  };
 
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

@@ -9,11 +9,15 @@ interface WhisperState {
   downloadedModelId: string | null;
   // All models present on disk (multiple can be downloaded; one is active).
   presentModelIds: string[];
-  isDownloading: boolean;
-  /** Which model id is currently downloading (null when idle). Per-model so the
-   *  UI spins only that row, not every not-yet-downloaded model. */
-  downloadingId: string | null;
-  downloadProgress: number;
+  /**
+   * Per-model download progress (0..1). A model id is a key here only while it is
+   * downloading; the key is removed on completion or failure. Tracking progress
+   * per id (instead of a single downloadingId + downloadProgress) lets several
+   * models download at once, each driving its own bar. The single-slot version
+   * shared one progress value, so concurrent downloads made the bar jump between
+   * them. Read with downloadProgressById[id] and "downloading" = id in the map.
+   */
+  downloadProgressById: Record<string, number>;
   isModelLoading: boolean;
   isModelLoaded: boolean;
   error: string | null;
@@ -33,69 +37,81 @@ interface WhisperState {
   clearError: () => void;
 }
 
+type SetState = (partial: Partial<WhisperState> | ((s: WhisperState) => Partial<WhisperState>)) => void;
+
+/** Set one model's in-flight progress without disturbing other concurrent downloads. */
+function setProgress(set: SetState, modelId: string, progress: number): void {
+  set((s) => ({ downloadProgressById: { ...s.downloadProgressById, [modelId]: progress } }));
+}
+
+/** Remove one model's progress entry (download finished or failed). */
+function clearProgress(set: SetState, modelId: string): void {
+  set((s) => {
+    if (!(modelId in s.downloadProgressById)) return {};
+    const next = { ...s.downloadProgressById };
+    delete next[modelId];
+    return { downloadProgressById: next };
+  });
+}
+
 export const useWhisperStore = create<WhisperState>()(
   persist(
     (set, get) => ({
       downloadedModelId: null,
       presentModelIds: [],
-      isDownloading: false,
-      downloadingId: null,
-      downloadProgress: 0,
+      downloadProgressById: {},
       isModelLoading: false,
       isModelLoaded: false,
       error: null,
 
       downloadModel: async (modelId: string) => {
-        set({ isDownloading: true, downloadingId: modelId, downloadProgress: 0, error: null });
+        setProgress(set, modelId, 0);
+        set({ error: null });
 
         try {
           await whisperService.downloadModel(modelId, (progress) => {
-            set({ downloadProgress: progress });
+            setProgress(set, modelId, progress);
           });
 
           set((s) => ({
             downloadedModelId: modelId,
             presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
-            isDownloading: false,
-            downloadProgress: 1,
           }));
 
           // Auto-load after download
           await get().loadModel();
         } catch (error) {
-          set({
-            isDownloading: false,
-            downloadProgress: 0,
-            error: error instanceof Error ? error.message : 'Download failed',
-          });
+          // A user-initiated cancel rejects with a marked error — don't show it as
+          // a failure on the model row, just let the finally clear its progress.
+          if (!(error as { cancelled?: boolean })?.cancelled) {
+            set({ error: error instanceof Error ? error.message : 'Download failed' });
+          }
         } finally {
-          // Always clear the per-model spinner, even if auto-load hangs/fails —
-          // the file is already on disk by this point.
-          set({ downloadingId: null });
+          // Clear this model's progress entry, even if auto-load hangs/fails —
+          // the file is already on disk by this point. Other in-flight downloads
+          // keep their own entries.
+          clearProgress(set, modelId);
         }
       },
 
       downloadFromUrl: async (url: string, modelId: string) => {
-        set({ isDownloading: true, downloadingId: modelId, downloadProgress: 0, error: null });
+        setProgress(set, modelId, 0);
+        set({ error: null });
         try {
           await whisperService.downloadFromUrl(url, modelId, (progress) => {
-            set({ downloadProgress: progress });
+            setProgress(set, modelId, progress);
           });
           set((s) => ({
             downloadedModelId: modelId,
             presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
-            isDownloading: false,
-            downloadProgress: 1,
           }));
           await get().loadModel();
         } catch (error) {
-          set({
-            isDownloading: false,
-            downloadProgress: 0,
-            error: error instanceof Error ? error.message : 'Download failed',
-          });
+          if (!(error as { cancelled?: boolean })?.cancelled) {
+            set({ error: error instanceof Error ? error.message : 'Download failed' });
+          }
         } finally {
-          set({ downloadingId: null });
+          clearProgress(set, modelId);
         }
       },
 
@@ -137,7 +153,6 @@ export const useWhisperStore = create<WhisperState>()(
             isModelLoaded: false,
             isModelLoading: false,
             downloadedModelId: isFileError ? null : downloadedModelId,
-            downloadProgress: isFileError ? 0 : get().downloadProgress,
             error: errorMsg,
           });
         }
@@ -166,7 +181,6 @@ export const useWhisperStore = create<WhisperState>()(
           set({
             downloadedModelId: null,
             isModelLoaded: false,
-            downloadProgress: 0,
           });
         } catch (error) {
           set({

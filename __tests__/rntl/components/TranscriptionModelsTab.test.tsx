@@ -71,7 +71,7 @@ describe('TranscriptionModelsTab', () => {
     mockWhisperState = {
       downloadedModelId: null,
       presentModelIds: [],
-      downloadProgress: 0,
+      downloadProgressById: {},
       error: null,
       ...mockWhisperActions,
     };

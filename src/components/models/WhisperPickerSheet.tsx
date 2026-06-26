@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
@@ -23,18 +23,18 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(createStyles);
   const downloadedModelId = useWhisperStore((s) => s.downloadedModelId);
   const presentModelIds = useWhisperStore((s) => s.presentModelIds);
-  const isDownloading = useWhisperStore((s) => s.isDownloading);
-  const downloadingId = useWhisperStore((s) => s.downloadingId);
-  const downloadProgress = useWhisperStore((s) => s.downloadProgress);
+  const downloadProgressById = useWhisperStore((s) => s.downloadProgressById);
   const downloadModel = useWhisperStore((s) => s.downloadModel);
   const selectModel = useWhisperStore((s) => s.selectModel);
   const deleteModelById = useWhisperStore((s) => s.deleteModelById);
   const refreshPresentModels = useWhisperStore((s) => s.refreshPresentModels);
 
+  const anyDownloading = Object.keys(downloadProgressById).length > 0;
+
   useEffect(() => {
-    if (visible && !isDownloading) refreshPresentModels();
+    if (visible && !anyDownloading) refreshPresentModels();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, isDownloading]);
+  }, [visible, anyDownloading]);
 
   return (
     <AppSheet visible={visible} onClose={onClose} title="TRANSCRIPTION MODEL" enableDynamicSizing>
@@ -42,15 +42,17 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
         {WHISPER_MODELS.map((m) => {
           const active = downloadedModelId === m.id;
           const present = presentModelIds.includes(m.id);
-          // Spin ONLY the model actually downloading — not every not-yet-present
-          // row (the old `isDownloading && !present` lit them all up at once).
-          const busy = downloadingId === m.id;
+          // Per-model: show this row's own progress, and disable only this row
+          // while it downloads — several models can download at once, each with
+          // its own percentage (the old single-slot value jumped between them).
+          const progress = downloadProgressById[m.id];
+          const busy = progress !== undefined;
           return (
             <AnimatedPressable
               key={m.id}
               style={[styles.row, active && styles.rowActive]}
               hapticType="selection"
-              disabled={isDownloading}
+              disabled={busy}
               onPress={() => { if (present) { if (!active) selectModel(m.id); } else downloadModel(m.id); }}
             >
               <View style={styles.rowInfo}>
@@ -61,7 +63,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
                 <Text style={styles.meta}>{m.size} MB</Text>
               </View>
               {(() => {
-                if (busy) return <ActivityIndicator size="small" color={colors.primary} />;
+                if (busy) return <Text style={styles.percent}>{Math.round(progress * 100)}%</Text>;
                 if (active) return <Icon name="check" size={16} color={colors.primary} />;
                 if (present) {
                   return (
@@ -75,9 +77,6 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
             </AnimatedPressable>
           );
         })}
-        {isDownloading && (
-          <Text style={styles.progress}>Downloading… {Math.round(downloadProgress * 100)}%</Text>
-        )}
       </View>
     </AppSheet>
   );
@@ -100,5 +99,5 @@ const createStyles = (colors: ThemeColors) => ({
   name: { ...TYPOGRAPHY.body, color: colors.text },
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-  progress: { ...TYPOGRAPHY.meta, color: colors.textMuted, textAlign: 'center' as const, marginTop: SPACING.sm },
+  percent: { ...TYPOGRAPHY.meta, color: colors.primary },
 });

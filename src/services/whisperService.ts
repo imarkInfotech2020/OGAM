@@ -72,6 +72,15 @@ class WhisperService {
         // STT models showed up under Text (and never under the Voice filter).
         modelType: 'stt',
         totalBytes,
+        // Skip the Android worker's strict final-size check. `totalBytes` above
+        // is a rounded-MB approximation (e.g. base.en 142 MB = 148,897,792 B vs
+        // the real 147,964,211 B) — the discrepancy is largest for smaller
+        // models. The worker compares the downloaded size to the expected total
+        // within 0.1%, and since whisper.cpp ships no SHA to verify against, a
+        // fully-downloaded file was deleted as FILE_CORRUPTED. The URL is pinned
+        // to ggerganov/whisper.cpp; integrity is covered by HTTPS + the host
+        // allowlist (matches how curated offgrid/* models opt out).
+        metadataJson: JSON.stringify({ skipSizeValidation: true }),
       },
       destPath,
       onProgress: onProgress
@@ -104,7 +113,13 @@ class WhisperService {
         });
         await promise;
       } catch (error) {
-        logger.error('[Whisper] Download failed:', error);
+        if ((error as { cancelled?: boolean })?.cancelled) {
+          logger.log(`[Whisper] Download cancelled: ${modelId}`);
+        } else {
+          logger.error('[Whisper] Download failed:', error);
+        }
+        // Remove any partial file (a user cancel already deletes it natively; this
+        // also covers the error case). Rethrow so the store clears its progress.
         await RNFS.unlink(destPath).catch(() => {});
         throw error;
       } finally {
