@@ -16,6 +16,7 @@
     "__tests__/unit/stores/ttsStore.test.ts",
     "__tests__/integration/stores/tts.test.ts",
     "__tests__/rntl/components/ChatInputModeToggle.test.tsx",
-    "__tests__/rntl/components/VoiceModelsPanel.test.tsx"
+    "__tests__/rntl/components/VoiceModelsPanel.test.tsx",
+    "__tests__/rntl/components/KokoroTTSBridge.test.tsx"
   ]
 }
