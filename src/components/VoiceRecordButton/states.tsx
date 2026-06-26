@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Animated } from 'react-native';
+import { View, Text, Animated, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
@@ -63,7 +63,9 @@ export const UnavailableButton: React.FC<UnavailableButtonProps> = ({ asSendButt
   if (asSendButton) {
     return (
       <View style={[styles.button, styles.buttonAsSendUnavailable]}>
-        <Icon name={isDownloading ? 'download' : 'mic-off'} size={18} color={colors.textMuted} />
+        {isDownloading
+          ? <ActivityIndicator size="small" color={colors.primary} />
+          : <Icon name="mic-off" size={18} color={colors.textMuted} />}
       </View>
     );
   }
@@ -72,7 +74,7 @@ export const UnavailableButton: React.FC<UnavailableButtonProps> = ({ asSendButt
     <View style={[styles.button, styles.buttonUnavailable]}>
       {isDownloading ? (
         <>
-          <Icon name="download" size={14} color={colors.textMuted} />
+          <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.loadingText}>{Math.round(downloadProgress * 100)}%</Text>
         </>
       ) : (

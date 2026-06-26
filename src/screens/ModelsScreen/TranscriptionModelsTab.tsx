@@ -70,10 +70,9 @@ export const TranscriptionModelsTab: React.FC = () => {
   // Reuse the Models screen's shared banner styling so it matches the other tabs.
   const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const {
-    downloadedModelId, presentModelIds, downloadProgress, downloadModel,
+    downloadedModelId, presentModelIds, downloadProgress, downloadingId, downloadModel,
     selectModel, deleteModelById, refreshPresentModels, error: whisperError, clearError,
   } = useWhisperStore();
 
@@ -95,8 +94,9 @@ export const TranscriptionModelsTab: React.FC = () => {
   );
 
   const handleDownload = useCallback((id: string) => {
-    setDownloadingId(id);
-    downloadModel(id).catch(err => logger.error('[Transcription] download failed:', err)).finally(() => setDownloadingId(null));
+    // The store owns downloadingId (set/cleared in downloadModel), so a download
+    // started here — or from the chat voice button — shows progress on this tab.
+    downloadModel(id).catch(err => logger.error('[Transcription] download failed:', err));
   }, [downloadModel]);
 
   const handleSelect = useCallback((id: string) => {
