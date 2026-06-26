@@ -200,6 +200,8 @@ export interface GenerationMeta {
   /** Image resolution */
   resolution?: string;
   cacheType?: string; // KV cache quantization type
+  /** Tool names sent to the model for this turn (built-in + routed MCP/ext tools). */
+  routedToolNames?: string[];
 }
 
 // Chat-related types

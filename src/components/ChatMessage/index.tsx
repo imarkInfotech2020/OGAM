@@ -12,6 +12,7 @@ import { createStyles } from './styles';
 import { MessageAttachments } from './components/MessageAttachments';
 import { MessageContent } from './components/MessageContent';
 import { GenerationMeta } from './components/GenerationMeta';
+import { ToolsSentCollapsible } from './components/ToolsSentCollapsible';
 import { ActionMenuSheet, EditSheet, SelectTextSheet } from './components/ActionMenuSheet';
 import { MarkdownText } from '../MarkdownText';
 import { parseThinkingContent, formatTime, formatDuration, buildMessageData } from './utils';
@@ -86,6 +87,13 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
       )}
     </View>
   );
+};
+
+/** Renders the routed-tools collapsible for a finished assistant message, or nothing. */
+const RoutedToolsRow: React.FC<{ message: Message; isUser: boolean; isStreaming?: boolean; styles: any; colors: any }> = ({ message, isUser, isStreaming, styles, colors }) => {
+  const names = message.generationMeta?.routedToolNames;
+  if (isUser || isStreaming || !names?.length) return null;
+  return <ToolsSentCollapsible names={names} styles={styles} colors={colors} />;
 };
 
 const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => {
@@ -313,6 +321,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           styles={styles}
         />
       </View>
+
+      <RoutedToolsRow message={message} isUser={isUser} isStreaming={isStreaming} styles={styles} colors={colors} />
 
       <MessageMetaRow
         message={message}

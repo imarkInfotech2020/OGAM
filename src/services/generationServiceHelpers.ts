@@ -66,6 +66,12 @@ function buildLiteRTMeta(svc: any, modelName: string | undefined): GenerationMet
 }
 
 export function buildGenerationMetaImpl(svc: any): GenerationMeta {
+  const meta = buildBaseGenerationMeta(svc);
+  const routed = svc.state?.routedToolNames;
+  if (Array.isArray(routed) && routed.length > 0) meta.routedToolNames = routed;
+  return meta;
+}
+function buildBaseGenerationMeta(svc: any): GenerationMeta {
   if (svc.isUsingRemoteProvider()) {
     const remoteStore = useRemoteServerStore.getState();
     const activeServer = remoteStore.getActiveServer();
@@ -140,6 +146,7 @@ export function buildToolLoopHandlersImpl(svc: any) {
       svc.state.streamingContent = content;
       useChatStore.getState().appendToStreamingMessage(content);
     },
+    onToolsRouted: (names: string[]) => { svc.state.routedToolNames = names; },
   };
 }
 
@@ -164,6 +171,7 @@ export async function prepareGenerationImpl(svc: any, conversationId: string): P
     isGenerating: true, isThinking: true, conversationId,
     streamingContent: '', startTime: Date.now(),
   });
+  svc.state.routedToolNames = undefined; // reset so a prior turn's tools don't leak
   useChatStore.getState().startStreaming(conversationId);
   // Drain pending native stop so LLM is idle before we start.
   if (svc.pendingStop !== null) await svc.pendingStop;
