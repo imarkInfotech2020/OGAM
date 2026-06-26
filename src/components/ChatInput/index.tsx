@@ -157,7 +157,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleImageModeToggle = () => {
-    if (!imageModelLoaded) { setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }])); quickSettings.hide(); return; }
+    // Gate on whether an image model is DOWNLOADED, not whether it was selected
+    // on the Home screen. If one is downloaded but not yet selected, select it
+    // here (it loads lazily on the next send). Only warn when none exist.
+    if (!imageModelLoaded) {
+      const { downloadedImageModels, setActiveImageModelId } = useAppStore.getState();
+      if (downloadedImageModels.length === 0) {
+        setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }]));
+        quickSettings.hide();
+        return;
+      }
+      setActiveImageModelId(downloadedImageModels[0].id);
+    }
     const newMode = IMAGE_MODE_CYCLE[(IMAGE_MODE_CYCLE.indexOf(imageMode) + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);
     onImageModeChange?.(newMode);

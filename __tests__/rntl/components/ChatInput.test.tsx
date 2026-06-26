@@ -125,6 +125,10 @@ describe('ChatInput', () => {
       updateSettings: jest.fn(),
       downloadedModels: [],
       activeModelId: null,
+      // handleImageModeToggle now gates on whether an image model is DOWNLOADED.
+      // With no downloaded image models, toggling shows the 'No Image Model' alert.
+      downloadedImageModels: [],
+      setActiveImageModelId: jest.fn(),
     });
 
     mockUseWhisperTranscription.mockReturnValue({
@@ -1139,6 +1143,35 @@ describe('ChatInput', () => {
       pressImageModeToggle(result);
 
       expect(result.getByText('No Image Model')).toBeTruthy();
+    });
+
+    it('selects the first downloaded image model and cycles mode when one is available', () => {
+      // Gating is now on DOWNLOADED (not loaded) image models. With a downloaded
+      // model present, toggling selects it and proceeds without the alert.
+      const setActiveImageModelId = jest.fn();
+      mockUseAppStore.mockReturnValue({
+        settings: { thinkingEnabled: false },
+        updateSettings: jest.fn(),
+        downloadedModels: [],
+        activeModelId: null,
+        downloadedImageModels: [{ id: 'img-1' }],
+        setActiveImageModelId,
+      });
+
+      const onImageModeChange = jest.fn();
+      const result = render(
+        <ChatInput
+          {...defaultProps}
+          imageModelLoaded={false}
+          onImageModeChange={onImageModeChange}
+        />
+      );
+
+      pressImageModeToggle(result);
+
+      expect(setActiveImageModelId).toHaveBeenCalledWith('img-1');
+      expect(result.queryByText('No Image Model')).toBeNull();
+      expect(onImageModeChange).toHaveBeenCalledWith('force');
     });
   });
 
