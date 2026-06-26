@@ -3,6 +3,8 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
 import { backgroundDownloadService } from './backgroundDownloadService';
+import { useDownloadStore } from '../stores/downloadStore';
+import { makeModelKey } from '../utils/modelKey';
 
 export interface TranscriptionResult {
   text: string;
@@ -55,6 +57,11 @@ class WhisperService {
     if (await RNFS.exists(destPath)) return destPath;
     logger.log(`[Whisper] Downloading ${model.name} via background download service...`);
     const fileName = `ggml-${modelId}.bin`;
+    // WHISPER_MODELS sizes are in MB; seed totalBytes so progress renders before
+    // the first byte arrives. The native layer refines this from the server's
+    // Content-Length once the download starts.
+    const totalBytes = model.size * 1024 * 1024;
+    const modelKey = makeModelKey(`whisper-${modelId}`, fileName);
     const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
       params: {
         url: model.url,
@@ -64,34 +71,57 @@ class WhisperService {
         // download under Voice. Without it the entry defaulted to 'text' and
         // STT models showed up under Text (and never under the Voice filter).
         modelType: 'stt',
-        // WHISPER_MODELS sizes are in MB; seed totalBytes so progress renders
-        // before the first byte arrives. The native layer refines this from the
-        // server's Content-Length once the download starts.
-        totalBytes: model.size * 1024 * 1024,
+        totalBytes,
       },
       destPath,
       onProgress: onProgress
-        ? (bytesDownloaded, totalBytes) => {
-            onProgress(totalBytes > 0 ? bytesDownloaded / totalBytes : 0);
+        ? (bytesDownloaded, total) => {
+            onProgress(total > 0 ? bytesDownloaded / total : 0);
           }
         : undefined,
       silent: true,
     });
     try {
-      this.activeDownloadId = await downloadIdPromise;
-      await promise;
-    } catch (error) {
-      logger.error('[Whisper] Download failed:', error);
-      await RNFS.unlink(destPath).catch(() => {});
-      throw error;
+      try {
+        this.activeDownloadId = await downloadIdPromise;
+        // Register the in-flight download so the Download Manager shows it live
+        // (filed under Voice via modelType 'stt'). Progress is then driven by the
+        // global onAnyProgress listener in useDownloadListeners. Without this the
+        // row only appeared after switching screens re-scanned disk.
+        useDownloadStore.getState().add({
+          modelKey,
+          downloadId: this.activeDownloadId,
+          modelId: `whisper-${modelId}`,
+          fileName,
+          quantization: '',
+          modelType: 'stt',
+          status: 'pending',
+          bytesDownloaded: 0,
+          totalBytes,
+          combinedTotalBytes: totalBytes,
+          progress: 0,
+          createdAt: Date.now(),
+        });
+        await promise;
+      } catch (error) {
+        logger.error('[Whisper] Download failed:', error);
+        await RNFS.unlink(destPath).catch(() => {});
+        throw error;
+      } finally {
+        this.activeDownloadId = null;
+      }
+      try {
+        await this.validateModelFile(destPath);
+      } catch (validationError) {
+        await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
+        throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
+      }
     } finally {
-      this.activeDownloadId = null;
-    }
-    try {
-      await this.validateModelFile(destPath);
-    } catch (validationError) {
-      await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
-      throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
+      // Completed STT models are listed from disk by useVoiceDownloadItems, so
+      // the in-flight store entry must be dropped on success AND failure: leaving
+      // it would show a stale/duplicate active row and block a re-download (add()
+      // refuses when an entry already exists for this modelKey).
+      useDownloadStore.getState().remove(modelKey);
     }
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
