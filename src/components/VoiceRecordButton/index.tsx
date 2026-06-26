@@ -119,7 +119,11 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   asSendButton = false,
 }) => {
   const styles = useThemedStyles(createStyles);
-  const { downloadModel, isDownloading, downloadProgress } = useWhisperStore();
+  const downloadModel = useWhisperStore((s) => s.downloadModel);
+  // Scope to the model this button downloads, so a concurrent download of a
+  // different transcription model doesn't drive this button's progress.
+  const downloadProgress = useWhisperStore((s) => s.downloadProgressById[DOWNLOAD_MODEL_ID]);
+  const isDownloading = downloadProgress !== undefined;
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const loadingAnim = useRef(new Animated.Value(0)).current;

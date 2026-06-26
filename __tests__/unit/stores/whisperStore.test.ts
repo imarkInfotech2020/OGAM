@@ -52,11 +52,11 @@ describe('whisperStore', () => {
     });
 
     it('is not downloading', () => {
-      expect(getState().isDownloading).toBe(false);
+      expect(getState().downloadProgressById).toEqual({});
     });
 
-    it('has zero download progress', () => {
-      expect(getState().downloadProgress).toBe(0);
+    it('has no per-model download progress', () => {
+      expect(getState().downloadProgressById['ggml-tiny']).toBeUndefined();
     });
 
     it('is not loading a model', () => {
@@ -76,7 +76,7 @@ describe('whisperStore', () => {
   // downloadModel
   // ============================================================================
   describe('downloadModel', () => {
-    it('sets isDownloading to true and clears error at start', async () => {
+    it('records the model in downloadProgressById and clears error at start', async () => {
       // Set a pre-existing error
       useWhisperStore.setState({ error: 'old error' });
 
@@ -95,9 +95,8 @@ describe('whisperStore', () => {
       // Allow microtask for the set() inside downloadModel to run
       await Promise.resolve();
 
-      // While downloading, state should reflect in-progress
-      expect(getState().isDownloading).toBe(true);
-      expect(getState().downloadProgress).toBe(0);
+      // While downloading, this model has a progress entry (starting at 0)
+      expect(getState().downloadProgressById['ggml-tiny']).toBe(0);
       expect(getState().error).toBeNull();
 
       resolveDownload();
@@ -129,9 +128,9 @@ describe('whisperStore', () => {
       mockWhisperService.downloadModel.mockImplementation(
         async (_id: string, onProgress?: (p: number) => void) => {
           onProgress?.(0.25);
-          progressValues.push(getState().downloadProgress);
+          progressValues.push(getState().downloadProgressById['ggml-tiny']);
           onProgress?.(0.75);
-          progressValues.push(getState().downloadProgress);
+          progressValues.push(getState().downloadProgressById['ggml-tiny']);
           return '/path/to/model';
         },
       );
@@ -143,7 +142,7 @@ describe('whisperStore', () => {
       expect(progressValues).toEqual([0.25, 0.75]);
     });
 
-    it('sets downloadedModelId and progress to 1 on success', async () => {
+    it('sets downloadedModelId and clears the progress entry on success', async () => {
       mockWhisperService.downloadModel.mockResolvedValue('/path/to/model');
       mockWhisperService.getModelPath.mockReturnValue('/path/to/model');
       mockWhisperService.loadModel.mockResolvedValue(undefined);
@@ -151,8 +150,8 @@ describe('whisperStore', () => {
       await getState().downloadModel('ggml-base');
 
       expect(getState().downloadedModelId).toBe('ggml-base');
-      expect(getState().isDownloading).toBe(false);
-      expect(getState().downloadProgress).toBe(1);
+      // Entry removed once the download settles — the model now shows as present.
+      expect(getState().downloadProgressById['ggml-base']).toBeUndefined();
     });
 
     it('auto-loads the model after successful download', async () => {
@@ -169,15 +168,14 @@ describe('whisperStore', () => {
       expect(getState().isModelLoaded).toBe(true);
     });
 
-    it('sets error and resets progress on download failure', async () => {
+    it('sets error and clears the progress entry on download failure', async () => {
       mockWhisperService.downloadModel.mockRejectedValue(
         new Error('Network error'),
       );
 
       await getState().downloadModel('ggml-tiny');
 
-      expect(getState().isDownloading).toBe(false);
-      expect(getState().downloadProgress).toBe(0);
+      expect(getState().downloadProgressById['ggml-tiny']).toBeUndefined();
       expect(getState().error).toBe('Network error');
       expect(getState().downloadedModelId).toBeNull();
     });
@@ -188,6 +186,43 @@ describe('whisperStore', () => {
       await getState().downloadModel('ggml-tiny');
 
       expect(getState().error).toBe('Download failed');
+    });
+
+    it('tracks concurrent downloads independently with no cross-talk', async () => {
+      // Reproduces issue #3: two models downloading at once. The old single
+      // downloadingId/downloadProgress made one bar jump between them; per-model
+      // progress keeps each model's value separate.
+      const resolvers: Record<string, () => void> = {};
+      const progressCbs: Record<string, (p: number) => void> = {};
+      mockWhisperService.downloadModel.mockImplementation(
+        (id: string, onProgress?: (p: number) => void) =>
+          new Promise<string>((resolve) => {
+            if (onProgress) progressCbs[id] = onProgress;
+            resolvers[id] = () => resolve(`/models/${id}`);
+          }),
+      );
+      mockWhisperService.getModelPath.mockImplementation((id: string) => `/models/${id}`);
+      mockWhisperService.loadModel.mockResolvedValue(undefined);
+
+      const p1 = getState().downloadModel('ggml-tiny');
+      const p2 = getState().downloadModel('ggml-base');
+      await Promise.resolve();
+
+      // Each download drives only its own entry.
+      progressCbs['ggml-tiny'](0.3);
+      progressCbs['ggml-base'](0.7);
+      expect(getState().downloadProgressById['ggml-tiny']).toBe(0.3);
+      expect(getState().downloadProgressById['ggml-base']).toBe(0.7);
+
+      // Finishing one leaves the other's progress intact.
+      resolvers['ggml-tiny']();
+      await p1;
+      expect(getState().downloadProgressById['ggml-tiny']).toBeUndefined();
+      expect(getState().downloadProgressById['ggml-base']).toBe(0.7);
+
+      resolvers['ggml-base']();
+      await p2;
+      expect(getState().downloadProgressById).toEqual({});
     });
   });
 
@@ -336,7 +371,6 @@ describe('whisperStore', () => {
       useWhisperStore.setState({
         downloadedModelId: 'ggml-tiny',
         isModelLoaded: true,
-        downloadProgress: 1,
       });
       mockWhisperService.unloadModel.mockResolvedValue(undefined);
       mockWhisperService.deleteModel.mockResolvedValue(undefined);
@@ -347,7 +381,6 @@ describe('whisperStore', () => {
       expect(mockWhisperService.deleteModel).toHaveBeenCalledWith('ggml-tiny');
       expect(getState().downloadedModelId).toBeNull();
       expect(getState().isModelLoaded).toBe(false);
-      expect(getState().downloadProgress).toBe(0);
     });
 
     it('calls unloadModel before deleteModel', async () => {
