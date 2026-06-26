@@ -6,6 +6,10 @@ import {
   Modal,
   TextInput,
   Linking,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -125,7 +129,14 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Tap the dimmed area to dismiss the keyboard */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.dismissArea} />
+        </TouchableWithoutFeedback>
         <View style={styles.card}>
 
           {/* Close X */}
@@ -182,7 +193,7 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
           </TouchableOpacity>
 
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -193,6 +204,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center' as const,
     paddingHorizontal: SPACING.xl,
+  },
+  dismissArea: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   card: {
     backgroundColor: colors.surface,
