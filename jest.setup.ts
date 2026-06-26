@@ -21,6 +21,14 @@ jest.mock('react-native-keyboard-controller', () =>
   require('react-native-keyboard-controller/jest'),
 );
 
+// react-native-edge-to-edge drives the system bars natively; stub its components
+// so tests rendering App don't reach the native module.
+jest.mock('react-native-edge-to-edge', () => ({
+  SystemBars: () => null,
+  StatusBar: () => null,
+  NavigationBar: () => null,
+}));
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================

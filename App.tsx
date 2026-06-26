@@ -5,7 +5,8 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback } from 'react';
-import { StatusBar, ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -262,7 +263,7 @@ function App() {
       <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]}>
         <SafeAreaProvider>
           <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+            <SystemBars style={isDark ? 'light' : 'dark'} />
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         </SafeAreaProvider>
@@ -275,7 +276,7 @@ function App() {
     return (
       <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]} testID="app-locked">
         <SafeAreaProvider>
-          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+          <SystemBars style={isDark ? 'light' : 'dark'} />
           <LockScreen onUnlock={handleUnlock} />
         </SafeAreaProvider>
       </GestureHandlerRootView>
@@ -285,7 +286,7 @@ function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+        <SystemBars style={isDark ? 'light' : 'dark'} />
         {AppRoot ? <AppRoot /> : null}
         <NavigationContainer
           theme={{
