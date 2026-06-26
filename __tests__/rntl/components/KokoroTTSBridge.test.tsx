@@ -14,6 +14,7 @@
  */
 import React from 'react';
 import { render, act, waitFor } from '@testing-library/react-native';
+import { AudioContext, AudioManager } from 'react-native-audio-api';
 import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
 import { KokoroEngine } from '../../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
@@ -70,5 +71,28 @@ describe('KokoroTTSBridge mount gating', () => {
     // shouldLoad resolves false → inner unmounts → bridge detaches → idle.
     await waitFor(() => expect(engine.getPhase()).toBe('idle'));
     expect(engine.isFullyDownloaded()).toBe(false);
+  });
+
+  // Regression for the iOS-silent bug: react-native-audio-api does not
+  // auto-activate an AVAudioSession, and a fresh AudioContext starts suspended.
+  // Without activating a playback session AND resuming the context, scheduled
+  // buffers never play (silent, no progress, button stuck on pause).
+  it('speak() activates an iOS playback session and resumes a suspended context', async () => {
+    listDownloadedModels.mockResolvedValue(onDisk());
+    setDownloadedFlag(true);
+    const engine = new KokoroEngine();
+    const Bridge = engine.getBridgeComponent() as React.FC;
+    render(<Bridge />);
+    await waitFor(() => expect(engine.getPhase()).toBe('ready'));
+
+    await act(async () => { await engine.speak('hello'); });
+
+    expect(AudioManager.setAudioSessionOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ iosCategory: 'playback' }),
+    );
+    expect(AudioManager.setAudioSessionActivity).toHaveBeenCalledWith(true);
+    // The context created for playback starts 'suspended' and must be resumed.
+    const ctx = (AudioContext as jest.Mock).mock.results.at(-1)?.value;
+    expect(ctx.resume).toHaveBeenCalled();
   });
 });

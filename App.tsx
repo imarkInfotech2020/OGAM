@@ -14,7 +14,7 @@ import { AppNavigator } from './src/navigation';
 import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
-import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
+import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { preloadSelectedModels } from './src/services/modelPreloader';
@@ -229,6 +229,13 @@ function App() {
 
       // Show the UI immediately
       setIsInitializing(false);
+
+      // Reconcile downloaded Whisper models against disk at startup. presentModelIds
+      // isn't persisted (the filesystem is the source of truth), so it rehydrates
+      // empty — without this scan a freshly launched app shows an already-installed
+      // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
+      // forget; the Models screen also refreshes on focus.
+      useWhisperStore.getState().refreshPresentModels();
 
       // Warm the selected models in the background (text → image → TTS → STT,
       // budget-gated, sequential) so the common paths have no cold-start wait.

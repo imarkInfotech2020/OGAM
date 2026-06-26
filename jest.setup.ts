@@ -176,8 +176,15 @@ jest.mock('react-native-audio-api', () => ({
       buffer: null,
     }),
     destination: {},
-    close: jest.fn(),
+    state: 'suspended',
+    resume: jest.fn().mockResolvedValue(undefined),
+    suspend: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
   })),
+  AudioManager: {
+    setAudioSessionOptions: jest.fn(),
+    setAudioSessionActivity: jest.fn().mockResolvedValue(true),
+  },
   AudioRecorder: jest.fn().mockImplementation(() => ({
     enableFileOutput: jest.fn().mockReturnValue({ status: 'success', path: '/mock/audio/input.wav' }),
     start: jest.fn().mockReturnValue({ status: 'success', path: '/mock/audio/input.wav' }),
