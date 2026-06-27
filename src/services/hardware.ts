@@ -216,13 +216,34 @@ class HardwareService {
     return this.getModelTotalSize(model) * multiplier;
   }
   /**
-   * Image diffusion models hold a far larger runtime working set than their file
-   * size — UNet activations, VAE decode buffers, and (on QNN/NPU) reserved
-   * accelerator memory — so the file-size×1.5 used for LLM weights badly
-   * under-counts them. Budget ~2.5× so residency doesn't co-load them into swap.
+   * Whether iOS Core ML image generation should run on the GPU (vs the Neural
+   * Engine). On iOS 26 the ANE is degraded for these palettized diffusion models:
+   * on devices with enough RAM (e.g. iPhone 15 Pro, 8GB) the ANE load fails
+   * outright, so GPU is the only working path; on smaller devices (e.g. iPhone
+   * 15, 6GB) the GPU's system-RAM buffers OOM, so the ANE — slower, but a far
+   * smaller system-RAM footprint — is the only path that fits. Pre-26 iOS keeps
+   * the ANE (fast + low memory there). Android uses a different backend entirely.
+   */
+  preferGpuForImageGen(): boolean {
+    if (Platform.OS !== 'ios') return false;
+    const iosMajor = parseInt(String(Platform.Version), 10);
+    if (Number.isNaN(iosMajor) || iosMajor < 26) return false;
+    return this.getTotalMemoryGB() >= 7; // 8GB-class devices report ~7.4GB
+  }
+
+  /**
+   * Image diffusion models hold a larger runtime working set than their file
+   * size — UNet activations and VAE decode buffers. The multiplier tracks the
+   * compute path: the GPU keeps buffers in system RAM (~2.5×), while the iOS
+   * Neural Engine holds weights off-heap so its system-RAM footprint is far
+   * smaller (~1.8×). Picking the multiplier from preferGpuForImageGen keeps the
+   * residency estimate consistent with the path the model will actually load on,
+   * so the gate doesn't refuse an ANE load that fits (nor admit a GPU load that
+   * OOMs). Android (ONNX/QNN reserves accelerator memory up front) keeps 2.5×.
    */
   estimateImageModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
-    return this.estimateModelRam(model, 2.5);
+    const multiplier = Platform.OS === 'ios' && !this.preferGpuForImageGen() ? 1.8 : 2.5;
+    return this.estimateModelRam(model, multiplier);
   }
   formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): string {
     return `~${(this.estimateModelRam(model, multiplier) / (1024 * 1024 * 1024)).toFixed(1)} GB`;
