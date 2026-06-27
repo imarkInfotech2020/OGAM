@@ -12,6 +12,8 @@ Owner: TBD. Branch: `fix/llm-stability-and-perf`.
 - [x] **F8 (R7)** — Android LiteRT hardening: RAM-aware token clamp + vision delegate follows backend tier. Verified locally (compile/lint/unit test).
 - [x] **F10** — iOS background-downloader event emission marshalled to main thread (patch-package).
 - [ ] **F9 (R8)** — crash reporting. DROPPED per product decision (privacy posture) — rely on Organizer/Play Console.
+- [x] **DEFER-1** — Deferred-load (commit d1d59f24) first-message crash. Resolved by F1+F4/F8: the on-send load no longer hits the 32k-boost OOM; it downgrades/clamps instead of crashing. Deferred loading KEPT (product decision).
+- [x] **DEFER-2** — "Can't switch models in chat" under deferred loading. The selector keyed its switcher off the loaded path (null until first send). Now reflects the SELECTED model (activeModelId); switching loads on tap (product decision). Deferred loading unchanged.
 - [ ] **F11** — Android `TextLayoutManager` JS exception / `dispatchDraw` NPE. Needs a repro.
 - [ ] **IMG** — iOS Core ML image-gen load fails instantly ("Failed to load model") on iPhone 15 Pro / iOS 26.5. NOT the residency memory gate: 7.5 GB RAM (~4.6 GB budget), image load evicts the text model first, and SD 1.5 (~3 GB est) fits — yet BOTH SD 1.5 and SDXL fail instantly. Points to the native Core ML load (`CoreMLDiffusionModule.swift` `ERR_LOAD_FAILED`): an iOS-26.5 compute-unit/ANE regression or incompatible/missing compiled `.mlmodelc` assets. Needs reproduction on iOS 26.5 to capture the real `localizedDescription`; do NOT lower the memory estimate (would risk OOM without fixing this).
 
