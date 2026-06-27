@@ -71,30 +71,16 @@ describe('HardwareService — branch coverage', () => {
     });
   });
 
-  // ── estimateImageModelRam (platform-specific multiplier) ──────────────────
+  // ── estimateImageModelRam (line 225) ──────────────────────────────────────
   describe('estimateImageModelRam', () => {
-    it('budgets 2.5x the model total size on Android (ONNX/QNN reserves NPU memory)', () => {
-      Platform.OS = 'android';
+    it('budgets 2.5x the model total size', () => {
       expect(hardwareService.estimateImageModelRam({ fileSize: 2_000_000_000 })).toBe(5_000_000_000);
     });
 
-    it('budgets 2.0x on iOS (Core ML reduceMemory loads submodels sequentially)', () => {
-      Platform.OS = 'ios';
-      expect(hardwareService.estimateImageModelRam({ fileSize: 2_000_000_000 })).toBe(4_000_000_000);
-    });
-
-    it('includes mmproj in the budget (Android 2.5x)', () => {
-      Platform.OS = 'android';
+    it('includes mmproj in the 2.5x budget', () => {
       expect(
         hardwareService.estimateImageModelRam({ fileSize: 1_000_000_000, mmProjFileSize: 1_000_000_000 }),
       ).toBe(5_000_000_000);
-    });
-
-    it('includes mmproj in the budget (iOS 2.0x)', () => {
-      Platform.OS = 'ios';
-      expect(
-        hardwareService.estimateImageModelRam({ fileSize: 1_000_000_000, mmProjFileSize: 1_000_000_000 }),
-      ).toBe(4_000_000_000);
     });
   });
 

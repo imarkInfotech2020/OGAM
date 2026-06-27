@@ -216,20 +216,13 @@ class HardwareService {
     return this.getModelTotalSize(model) * multiplier;
   }
   /**
-   * Image diffusion models hold a larger runtime working set than their file
-   * size — UNet activations and VAE decode buffers — so the file-size×1.5 used
-   * for LLM weights under-counts them. The multiplier is platform-specific:
-   *  - iOS Core ML loads with reduceMemory=true: submodels load/unload
-   *    sequentially, so peak RAM ≈ the largest submodel (UNet) + buffers, NOT
-   *    2.5× the summed on-disk size. The old flat 2.5× over-counted iOS badly —
-   *    SD 1.5 (~1.5 GB file) was estimated at ~3.7 GB and the residency gate
-   *    refused it on a 6 GB device that had 4.9 GB free. 2.0× tracks the real
-   *    sequential peak while staying under the budget cap.
-   *  - Android (ONNX/QNN) reserves accelerator memory up front and keeps more
-   *    resident at once, so it keeps the heavier 2.5×.
+   * Image diffusion models hold a far larger runtime working set than their file
+   * size — UNet activations, VAE decode buffers, and (on QNN/NPU) reserved
+   * accelerator memory — so the file-size×1.5 used for LLM weights badly
+   * under-counts them. Budget ~2.5× so residency doesn't co-load them into swap.
    */
   estimateImageModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
-    return this.estimateModelRam(model, Platform.OS === 'ios' ? 2.0 : 2.5);
+    return this.estimateModelRam(model, 2.5);
   }
   formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier = 1.5): string {
     return `~${(this.estimateModelRam(model, multiplier) / (1024 * 1024 * 1024)).toFixed(1)} GB`;
