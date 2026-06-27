@@ -1,7 +1,18 @@
 # Stability & Performance Fix Plan — iOS + Android (branch `fix/llm-stability-and-perf`)
 
-Status: investigation complete, fixes not yet started.
+Status: Phases 0–2 implemented + tested (see commits). Phase 3 (Android native), Phase 4 (crash reporting), and the tail remain.
 Owner: TBD. Branch: `fix/llm-stability-and-perf`.
+
+### Progress
+- [x] **F1 (R1)** — removed MCP context auto-boost + un-stick migration (the slowness/crash regression).
+- [x] **F2 (R2)** — embedding model registered as a budgeted sidecar resident.
+- [x] **F5 (R5)** — embedding load bounded by a timeout so it can't wedge the global load lock.
+- [x] **F3/F4 (R3,R4)** — corrected KV estimate; memory guard now downgrades context (or blocks) instead of warning-then-crashing.
+- [x] **F6 (R6)** — tool-embedding cache persisted (content-hashed) so the first-message embedding burst happens once ever.
+- [ ] **F8 (R7)** — Android LiteRT hardening (pre-create memory check, gate Mali vision delegate). Native Kotlin; needs Android build + device to verify.
+- [ ] **F9 (R8)** — crash reporting. Outward-facing (sends data off-device) — product/privacy decision required before implementing.
+- [ ] **F10** — iOS background-downloader race (patch-package). Tail, 1 device.
+- [ ] **F11** — Android `TextLayoutManager` JS exception / `dispatchDraw` NPE. Needs a repro.
 
 ## 1. Evidence
 
