@@ -287,6 +287,7 @@ class ActiveModelService {
       imageThreads,
       needsThreadReload,
       cpuOnly: false,
+      preferGpu: hardwareService.preferGpuForImageGen(),
       store,
       timeoutMs,
       loadedImageModelId: this.loadedImageModelId,
