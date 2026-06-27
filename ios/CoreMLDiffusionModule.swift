@@ -181,30 +181,28 @@ class CoreMLDiffusionModule: RCTEventEmitter {
           return built
         }
 
-        // The Neural Engine is the fast path for Stable Diffusion when it works,
-        // but on iOS 26 it's degraded for these palettized .mlmodelc: the load
-        // either fails outright (iPhone 15 Pro: instant "Failed to load model") or
-        // loads but stalls forever at step 0 (the UNet never finishes compiling
-        // for the ANE — observed on iPhone 15 / iOS 26.5). So on iOS 26+ we go
-        // straight to CPU+GPU, which is GPU-accelerated (NOT pure CPU, so
-        // palettized weights still decode correctly — no gray images) and
-        // reliable. Older iOS keeps ANE-first with a CPU+GPU fallback on failure.
-        let preferNeuralEngine: Bool
-        if #available(iOS 26.0, *) {
-          preferNeuralEngine = false
-        } else {
-          preferNeuralEngine = true
-        }
-        let primaryUnits: MLComputeUnits = (cpuOnly || !preferNeuralEngine) ? .cpuAndGPU : .cpuAndNeuralEngine
+        // The JS layer chooses the compute path by device RAM tier (see
+        // hardwareService.preferGpuForImageGen) and sizes the residency budget to
+        // match, so honor that choice here rather than guessing natively:
+        //  - GPU (preferGpu): the path for devices with enough RAM. On iOS 26 the
+        //    Neural Engine is degraded for these palettized .mlmodelc (the 8GB
+        //    iPhone 15 Pro's ANE load fails outright), so GPU is the working path.
+        //    GPU-accelerated, not pure CPU, so palettized weights decode fine.
+        //  - Neural Engine (otherwise): far smaller system-RAM footprint, the only
+        //    path that fits on low-RAM devices (6GB iPhone 15) where the GPU OOMs.
+        let preferGpu = params["preferGpu"] as? Bool ?? false
+        let primaryUnits: MLComputeUnits = (cpuOnly || preferGpu) ? .cpuAndGPU : .cpuAndNeuralEngine
         let pipe: StableDiffusionPipelineProtocol
         do {
           pipe = try buildPipeline(primaryUnits)
         } catch {
-          // ANE load failed (older iOS path) — retry once on CPU+GPU before
-          // surfacing the error; only fall back when we actually used the ANE.
-          guard primaryUnits == .cpuAndNeuralEngine else { throw error }
-          NSLog("[CoreMLDiffusion] ANE load failed (%@) — retrying on CPU+GPU", error.localizedDescription)
-          pipe = try buildPipeline(.cpuAndGPU)
+          // Fall back ONLY from GPU → Neural Engine (the ANE uses less system RAM,
+          // so it's a safe retry). Never the reverse: when JS picked the ANE for a
+          // low-RAM device, retrying on the GPU would OOM the device the ANE was
+          // chosen to protect.
+          guard preferGpu else { throw error }
+          NSLog("[CoreMLDiffusion] GPU load failed (%@) — retrying on Neural Engine", error.localizedDescription)
+          pipe = try buildPipeline(.cpuAndNeuralEngine)
         }
 
         self.pipeline = pipe
