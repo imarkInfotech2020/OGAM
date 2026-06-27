@@ -282,14 +282,24 @@ class DownloadManagerModule: RCTEventEmitter {
 
   func setupSession() {
     if DownloadManagerModule.sharedSession == nil {
-      NSLog("[DownloadManager] Creating NEW background URLSession")
-      let config = URLSessionConfiguration.background(
-        withIdentifier: "ai.offgridmobile.backgrounddownload"
-      )
-      config.isDiscretionary = false
-      config.sessionSendsLaunchEvents = true
+      NSLog("[DownloadManager] Creating NEW foreground URLSession")
+      // A foreground (.default) session is used instead of a background session:
+      // background sessions run out-of-process in nsurlsessiond and iOS throttles
+      // them for battery/reliability, which made large model downloads far slower
+      // than Android (same file, same network). A default session downloads at full
+      // line speed while the app is in the foreground. The trade-off is that
+      // in-flight downloads do not continue after the app is suspended/killed; the
+      // JS layer restarts them on next launch.
+      let config = URLSessionConfiguration.default
       config.allowsCellularAccess = true
-      config.httpMaximumConnectionsPerHost = 4
+      config.httpMaximumConnectionsPerHost = 6
+      config.waitsForConnectivity = true
+      config.timeoutIntervalForRequest = 60
+      config.timeoutIntervalForResource = 60 * 60 * 24 * 7 // 7 days for very large models
+      // Multi-GB model files are never reusable cache entries; attaching a URLCache
+      // is pure overhead, so disable it and always read from the network.
+      config.urlCache = nil
+      config.requestCachePolicy = .reloadIgnoringLocalCacheData
 
       let delegate = DownloadSessionDelegate(module: self)
       DownloadManagerModule.sessionDelegate = delegate
@@ -298,7 +308,7 @@ class DownloadManagerModule: RCTEventEmitter {
         delegate: delegate,
         delegateQueue: nil
       )
-      NSLog("[DownloadManager] Background URLSession created successfully")
+      NSLog("[DownloadManager] Foreground URLSession created successfully")
     } else {
       NSLog("[DownloadManager] Reusing existing URLSession, updating delegate.module")
       DownloadManagerModule.sessionDelegate?.module = self
@@ -313,6 +323,19 @@ class DownloadManagerModule: RCTEventEmitter {
       fatalError("URLSession not initialized — setupSession() must be called before any download operations")
     }
     return urlSession
+  }
+
+  /// Builds the request used for every download task. Disables eager HTTP/3 (QUIC):
+  /// for a single large transfer it is often slower than HTTP/2 on iOS (Android's
+  /// OkHttp downloads over HTTP/2 and is noticeably faster). Also bypasses the cache
+  /// for these large, non-reusable files.
+  private func makeDownloadRequest(_ url: URL) -> URLRequest {
+    var request = URLRequest(url: url)
+    request.cachePolicy = .reloadIgnoringLocalCacheData
+    if #available(iOS 14.5, *) {
+      request.assumesHTTP3Capable = false
+    }
+    return request
   }
 
   private func statusString(from taskState: URLSessionTask.State) -> String {
@@ -567,7 +590,7 @@ extension DownloadManagerModule {
     NSLog("[DownloadManager] Starting download #%@: url=%@, fileName=%@, modelId=%@, totalBytes=%lld, modelType=%@",
           downloadId, urlString, fileName, modelId, totalBytes, modelType)
 
-    let task = session.downloadTask(with: url)
+    let task = session.downloadTask(with: makeDownloadRequest(url))
     task.taskDescription = encodeTaskDescription(TaskDescription(
       downloadId: downloadId,
       fileName: fileName,
@@ -658,7 +681,7 @@ extension DownloadManagerModule {
       }
 
       let fileSize = (fileInfo["size"] as? NSNumber)?.int64Value ?? 0
-      let task = session.downloadTask(with: url)
+      let task = session.downloadTask(with: makeDownloadRequest(url))
       task.taskDescription = encodeTaskDescription(TaskDescription(
         downloadId: downloadId,
         fileName: fileName,

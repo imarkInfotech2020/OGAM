@@ -90,6 +90,8 @@ Always write **both** unit tests and integration tests for new features and sign
 
 Do not consider a feature complete with only unit tests. Integration tests catch wiring bugs, incorrect data flow between layers, and lifecycle issues that unit tests miss.
 
+**Test every approved behavior change in the same pass.** When iterating (a request, a fix, a tweak you just confirmed), add a test that captures that specific behavior as part of the same change — a regression test that would fail before the change and pass after. This applies to bug fixes (test the exact broken case), new branches/conditions (cover each one), and copy/contract changes that other code or tests depend on. Do not defer tests to "later" or to a separate commit. Then run `npx tsc --noEmit && npm test` and fix any failures before reporting the change done.
+
 ## Push = Create PR + Address Review
 
 When the user says "push" (or any equivalent like "ship it", "send it", "push this"), follow this full workflow:

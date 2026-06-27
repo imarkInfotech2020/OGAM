@@ -558,7 +558,13 @@ describe('ModelDownloadScreen', () => {
       await flushPromises();
     });
 
-    expect(mockShowAlert).toHaveBeenCalledWith('No Servers Found', expect.stringContaining('WiFi'));
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      'No Servers Found',
+      expect.stringContaining('WiFi'),
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'Get Off Grid AI Desktop' }),
+      ]),
+    );
   });
 
   // ===========================================================================

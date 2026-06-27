@@ -54,6 +54,8 @@ The free OSS keeps shipping, MIT, forever - that's not changing. Pro is an optio
 
 **[→ Get Pro access](https://offgridmobileai.co/pay/)**
 
+Pair this app with **[Off Grid AI Desktop](https://github.com/off-grid-ai/desktop/releases/latest)** on your Mac. It's free and open-source too, Pro or not.
+
 ---
 
 ## Not just another chat app

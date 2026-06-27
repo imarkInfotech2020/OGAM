@@ -9,6 +9,7 @@ import {
   hardwareService,
   huggingFaceService,
   backgroundDownloadService,
+  whisperService,
 } from '../../services';
 import { useVoiceDownloadItems } from './useVoiceDownloadItems';
 import { DownloadedModel, ONNXImageModel } from '../../types';
@@ -241,6 +242,32 @@ async function retryIosTextDownload(
   await reattachRetriedTextDownload({ ...item, downloadId: info.downloadId }, setDownloadedModels);
 }
 
+/**
+ * Retry a failed transcription (Whisper/STT) download on either platform.
+ *
+ * STT downloads aren't restartable via the native retry: on iOS there was no STT
+ * branch at all, and a failed STT row can linger in the store with a dead
+ * downloadId (the background promise can hang on failure, so whisperService never
+ * removes its entry). whisperService.downloadModel refuses to start while that
+ * entry exists, so we cancel the dead native task and clear the stale row, then
+ * re-invoke a fresh download.
+ */
+async function retryWhisperDownload(item: DownloadItem): Promise<void> {
+  const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
+  if (item.downloadId) {
+    await backgroundDownloadService.cancelDownload(item.downloadId).catch(() => {});
+  }
+  useDownloadStore.getState().remove(modelKey);
+  // The store keys STT models as `whisper-<id>`; downloadModel wants the bare id.
+  const whisperId = item.modelId.replace(/^whisper-/, '');
+  // Kick off a fresh download but don't block the retry tap on full completion —
+  // whisperService re-registers the store row and the global progress listeners
+  // drive the UI. Surface a failure via the logger; the row reflects it too.
+  whisperService.downloadModel(whisperId).catch((err) => {
+    logger.warn('[DownloadManager] STT retry download failed:', err);
+  });
+}
+
 /** Map the text + image model stores into completed Download Manager items. */
 function modelStoreCompletedItems(
   downloadedModels: DownloadedModel[],
@@ -339,7 +366,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   };
 
   const handleRetryDownload = async (item: DownloadItem) => {
-    if (!item.downloadId) return;
+    // STT re-downloads through whisperService and doesn't need the (possibly
+    // stale/missing) downloadId; every other path retries by id.
+    if (!item.downloadId && item.modelType !== 'stt') return;
     const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
     const entry = downloads[modelKey];
     try {
@@ -360,7 +389,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
         }
       }
 
-      if (Platform.OS === 'android') {
+      if (item.modelType === 'stt') {
+        // Transcription models re-download through whisperService on both
+        // platforms (the native retry path doesn't cover STT).
+        await retryWhisperDownload(item);
+      } else if (Platform.OS === 'android') {
         await retryAndroidDownload(item, entry, setDownloadedModels);
       } else if (Platform.OS === 'ios' && item.modelType === 'image' && entry) {
         await retryIosImageDownload(entry, setAlertState);
@@ -371,7 +404,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
       const errorMessage = error?.message || 'Retry failed. Please remove and re-download.';
-      useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
+      if (item.downloadId) useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
         message: errorMessage,
       });
     }

@@ -5,6 +5,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,7 +15,7 @@ import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING } from '../constants';
+import { RECOMMENDED_MODELS, TRENDING_FAMILIES, TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
 import { useAppStore } from '../stores';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
@@ -183,7 +184,14 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       const reachable = await refreshServerHealth();
       // Only alert if there are truly no reachable servers after the scan
       if (reachable.size === 0) {
-        setAlertState(showAlert('No Servers Found', 'Make sure you\'re on the same WiFi network as your server and that it\'s running.'));
+        setAlertState(showAlert(
+          'No Servers Found',
+          'Make sure you\'re on the same WiFi network as your server and that it\'s running. Off Grid AI Desktop serves its models to this phone over your network.',
+          [
+            { text: 'Dismiss', style: 'cancel' },
+            { text: 'Get Off Grid AI Desktop', onPress: () => Linking.openURL(OFF_GRID_DESKTOP_URL).catch(() => {}) },
+          ],
+        ));
       }
     } catch (e) {
       logger.warn('[ModelDownload] Scan failed:', (e as Error).message);
@@ -239,7 +247,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       setConnectedServerId(server.id);
       const models = discoveredModels[server.id] || result.models || [];
       if (models.length === 0) {
-        setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Ollama/LM Studio, then reconnect.`));
+        setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Off Grid AI Desktop, Ollama, or LM Studio, then reconnect.`));
         return;
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];

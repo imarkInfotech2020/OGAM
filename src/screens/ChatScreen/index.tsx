@@ -55,11 +55,18 @@ export const ChatScreen: React.FC = () => {
     voice: voiceSummary ?? '—',
     speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
   };
-  const openModelRow = (type: ModelRowType) => {
-    setModelsManagerOpen(false);
+  const pendingModelRowRef = useRef<ModelRowType | null>(null);
+  const openModelRowNow = (type: ModelRowType) => {
     if (type === 'text' || type === 'image') chat.setShowModelSelector(true);
     else if (type === 'speech') setWhisperOpen(true);
     else setVoiceOpen(true);
+  };
+  const openModelRow = (type: ModelRowType) => {
+    // Defer opening the target sheet until the manager sheet has FULLY closed.
+    // Presenting a sheet while another is still dismissing drops the present on
+    // iOS, so the row tap just closed the manager and nothing opened.
+    pendingModelRowRef.current = type;
+    setModelsManagerOpen(false);
   };
   const pendingNextRef = useRef<number | null>(null);
 
@@ -252,6 +259,11 @@ export const ChatScreen: React.FC = () => {
         <ModelsManagerSheet
           visible={modelsManagerOpen}
           onClose={() => setModelsManagerOpen(false)}
+          onClosed={() => {
+            const t = pendingModelRowRef.current;
+            pendingModelRowRef.current = null;
+            if (t) openModelRowNow(t);
+          }}
           labels={modelLabels}
           loadingState={{ isLoading: !!chat.isModelLoading, type: 'text' }}
           isEjecting={false}

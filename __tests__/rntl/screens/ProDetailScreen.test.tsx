@@ -63,6 +63,24 @@ describe('ProDetailScreen', () => {
     expect(queryByText('Enter your license key')).toBeNull();
   });
 
+  it('links to Off Grid AI Desktop from the Pro pitch', () => {
+    const { getByText } = render(<ProDetailScreen />);
+    fireEvent.press(getByText('Get Off Grid AI Desktop'));
+    expect(linkingSpy).toHaveBeenCalledWith(
+      expect.stringContaining('github.com/off-grid-ai/desktop/releases'),
+    );
+  });
+
+  it('shows the Off Grid AI Desktop link to Pro-active users too', async () => {
+    useAppStore.setState({ hasRegisteredPro: true });
+    const { getByText } = render(<ProDetailScreen />);
+    await waitFor(() => expect(getByText('Get Off Grid AI Desktop')).toBeTruthy());
+    fireEvent.press(getByText('Get Off Grid AI Desktop'));
+    expect(linkingSpy).toHaveBeenCalledWith(
+      expect.stringContaining('github.com/off-grid-ai/desktop/releases'),
+    );
+  });
+
   it('"I have a license key" opens the activation modal', () => {
     const { getByText } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));

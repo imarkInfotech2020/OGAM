@@ -137,6 +137,20 @@ describe('startRecording', () => {
     expect(audioRecorderService.isCurrentlyRecording()).toBe(true);
   });
 
+  it('switches to playAndRecord and activates the session before starting capture', async () => {
+    Platform.OS = 'ios';
+
+    await audioRecorderService.startRecording();
+
+    // The session must be switched to playAndRecord AND activated before the
+    // recorder starts.
+    const optionsOrder = mockSetAudioSessionOptions.mock.invocationCallOrder[0];
+    const activityOrder = mockSetAudioSessionActivity.mock.invocationCallOrder[0];
+    const startOrder = mockStart.mock.invocationCallOrder[0];
+    expect(optionsOrder).toBeLessThan(activityOrder);
+    expect(activityOrder).toBeLessThan(startOrder);
+  });
+
   it('does not configure the audio session on Android', async () => {
     Platform.OS = 'android';
     jest

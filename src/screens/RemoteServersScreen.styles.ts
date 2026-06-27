@@ -54,6 +54,17 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       textAlign: 'center' as const,
       paddingHorizontal: 32,
     },
+    desktopLink: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: 6,
+      marginTop: 12,
+      paddingVertical: 4,
+    },
+    desktopLinkText: {
+      fontSize: 14,
+      color: colors.primary,
+    },
     serverItem: {
       backgroundColor: colors.surface,
       borderRadius: 12,

@@ -42,6 +42,7 @@ const mockBackgroundDownloadService = {
   getActiveDownloads: jest.fn(),
   startProgressPolling: jest.fn(),
 };
+const mockWhisperService = { downloadModel: jest.fn() };
 
 const mockProceedWithDownload = jest.fn();
 const mockCancelSynthetic = jest.fn();
@@ -72,6 +73,7 @@ jest.mock('../../../../src/services', () => ({
   get hardwareService() { return mockHardwareService; },
   get huggingFaceService() { return mockHuggingFaceService; },
   get backgroundDownloadService() { return mockBackgroundDownloadService; },
+  get whisperService() { return mockWhisperService; },
 }));
 
 jest.mock('../../../../src/screens/ModelsScreen/imageDownloadActions', () => ({
@@ -164,6 +166,7 @@ beforeEach(() => {
   mockBackgroundDownloadService.retryDownload.mockResolvedValue(undefined);
   mockBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined);
   mockBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
+  mockWhisperService.downloadModel.mockResolvedValue('/path/ggml.bin');
   mockResumeImageDownload.mockResolvedValue(undefined);
   mockProceedWithDownload.mockResolvedValue(undefined);
   mockCancelSynthetic.mockResolvedValue(undefined);
@@ -184,6 +187,35 @@ describe('handleRetryDownload', () => {
     const { result } = renderHook(() => useDownloadManager());
     await act(async () => { await result.current.handleRetryDownload({ modelType: 'text' } as any); });
     expect(mockBackgroundDownloadService.retryDownload).not.toHaveBeenCalled();
+  });
+
+  it('stt retry: cancels the dead task, clears the stale row, and re-downloads via whisperService', async () => {
+    const { result } = renderHook(() => useDownloadManager());
+    await act(async () => {
+      await result.current.handleRetryDownload({
+        modelType: 'stt', downloadId: 'dl-stt', modelKey: 'whisper-base.en/ggml-base.en.bin',
+        modelId: 'whisper-base.en', fileName: 'ggml-base.en.bin', fileSize: 100, bytesDownloaded: 0,
+      } as any);
+    });
+    expect(mockBackgroundDownloadService.cancelDownload).toHaveBeenCalledWith('dl-stt');
+    expect(mockRemove).toHaveBeenCalledWith('whisper-base.en/ggml-base.en.bin');
+    // bare whisper id (without the store's `whisper-` prefix)
+    expect(mockWhisperService.downloadModel).toHaveBeenCalledWith('base.en');
+    // not routed through the native id-based retry
+    expect(mockBackgroundDownloadService.retryDownload).not.toHaveBeenCalled();
+    expect(mockBackgroundDownloadService.startProgressPolling).toHaveBeenCalled();
+  });
+
+  it('stt retry: works even when the failed row has no downloadId', async () => {
+    const { result } = renderHook(() => useDownloadManager());
+    await act(async () => {
+      await result.current.handleRetryDownload({
+        modelType: 'stt', modelKey: 'whisper-small/ggml-small.bin',
+        modelId: 'whisper-small', fileName: 'ggml-small.bin', fileSize: 100, bytesDownloaded: 0,
+      } as any);
+    });
+    expect(mockBackgroundDownloadService.cancelDownload).not.toHaveBeenCalled();
+    expect(mockWhisperService.downloadModel).toHaveBeenCalledWith('small');
   });
 
   it('android text retry: retries, reattaches finalizer, retries mmproj sidecar', async () => {
