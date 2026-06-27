@@ -1,5 +1,9 @@
 # Project Instructions
 
+## Repository Layout
+
+**All Pro feature code lives in the `pro/` submodule (its own git repo, `@offgrid/pro`) — not in core.** When changing or adding a Pro feature (e.g. TTS/audio, MCP/tools, and other paid surfaces), edit files under `pro/` and commit/PR them in that repo. Core only wires Pro in through the slot/hook registries; it never imports Pro code directly. Pro changes are a separate branch + PR from core (see `pro/CLAUDE.md`).
+
 ## Branch Policy
 
 **Never push directly to `main`.** All changes must go through a pull request:
