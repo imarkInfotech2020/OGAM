@@ -9,10 +9,11 @@ Owner: TBD. Branch: `fix/llm-stability-and-perf`.
 - [x] **F5 (R5)** — embedding load bounded by a timeout so it can't wedge the global load lock.
 - [x] **F3/F4 (R3,R4)** — corrected KV estimate; memory guard now downgrades context (or blocks) instead of warning-then-crashing.
 - [x] **F6 (R6)** — tool-embedding cache persisted (content-hashed) so the first-message embedding burst happens once ever.
-- [ ] **F8 (R7)** — Android LiteRT hardening (pre-create memory check, gate Mali vision delegate). Native Kotlin; needs Android build + device to verify.
-- [ ] **F9 (R8)** — crash reporting. Outward-facing (sends data off-device) — product/privacy decision required before implementing.
-- [ ] **F10** — iOS background-downloader race (patch-package). Tail, 1 device.
+- [x] **F8 (R7)** — Android LiteRT hardening: RAM-aware token clamp + vision delegate follows backend tier. Verified locally (compile/lint/unit test).
+- [x] **F10** — iOS background-downloader event emission marshalled to main thread (patch-package).
+- [ ] **F9 (R8)** — crash reporting. DROPPED per product decision (privacy posture) — rely on Organizer/Play Console.
 - [ ] **F11** — Android `TextLayoutManager` JS exception / `dispatchDraw` NPE. Needs a repro.
+- [ ] **IMG** — iOS Core ML image-gen load fails instantly ("Failed to load model") on iPhone 15 Pro / iOS 26.5. NOT the residency memory gate: 7.5 GB RAM (~4.6 GB budget), image load evicts the text model first, and SD 1.5 (~3 GB est) fits — yet BOTH SD 1.5 and SDXL fail instantly. Points to the native Core ML load (`CoreMLDiffusionModule.swift` `ERR_LOAD_FAILED`): an iOS-26.5 compute-unit/ANE regression or incompatible/missing compiled `.mlmodelc` assets. Needs reproduction on iOS 26.5 to capture the real `localizedDescription`; do NOT lower the memory estimate (would risk OOM without fixing this).
 
 ## 1. Evidence
 
