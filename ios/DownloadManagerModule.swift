@@ -551,8 +551,27 @@ class DownloadManagerModule: RCTEventEmitter {
         }
 
         self.nextDownloadId = max(self.nextDownloadId, maxId + 1)
+
+        // Reconcile persisted downloads whose live task is gone after relaunch.
+        // The foreground (.default) session does not survive suspension/kill, so a
+        // previously 'running'/'pending' download has no URLSessionTask now. Left
+        // as-is, getActiveDownloads() rehydrates dead work frozen at its last byte
+        // count (a download that sits at 0% forever). Mark such orphans 'failed' so
+        // the Download Manager shows a retry affordance and the retry path restarts
+        // them cleanly (e.g. STT re-downloads via whisperService).
+        let orphanedIds = self.downloads
+          .filter { (_, info) in
+            (info.status == "running" || info.status == "pending")
+              && !self.taskToDownloadId.values.contains(info.downloadId)
+          }
+          .map { $0.key }
+        for downloadId in orphanedIds {
+          self.downloads[downloadId]?.status = "failed"
+          NSLog("[DownloadManager] Orphaned download #%@ marked failed — no live task after relaunch", downloadId)
+        }
+
         self.persistStateLocked()
-        NSLog("[DownloadManager] Restored %d URLSession tasks (%d downloads)", self.taskToDownloadId.count, self.downloads.count)
+        NSLog("[DownloadManager] Restored %d URLSession tasks (%d downloads), %d orphaned → failed", self.taskToDownloadId.count, self.downloads.count, orphanedIds.count)
       }
     }
   }
