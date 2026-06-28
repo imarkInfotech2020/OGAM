@@ -2,6 +2,7 @@ import { Dispatch, SetStateAction } from 'react';
 import { showAlert, AlertState } from '../../components';
 import { Message } from '../../types';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import logger from '../../utils/logger';
 import {
   regenerateResponseFn, executeDeleteConversationFn, handleImageGenerationFn,
 } from './useChatGenerationActions';
@@ -20,17 +21,20 @@ type RetryParams = {
 export async function handleRetryMessageFn(
   message: Message, genDeps: GenerationDeps, p: RetryParams,
 ): Promise<void> {
-  if (!p.activeConversationId || !p.hasActiveModel) return;
+  const msgs = p.activeConversation?.messages || [];
+  logger.log(`[RESEND-SM] retry msg role=${message.role} id=${message.id} hasActiveModel=${p.hasActiveModel} conv=${p.activeConversationId} totalMsgs=${msgs.length}`);
+  if (!p.activeConversationId || !p.hasActiveModel) { logger.log('[RESEND-SM] retry BAIL: no conv or no active model'); return; }
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
   callHook(HOOKS.audioStop);
-  const msgs = p.activeConversation?.messages || [];
   if (message.role === 'user') {
     const idx = msgs.findIndex((m: Message) => m.id === message.id);
+    logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1}`);
     if (idx !== -1 && idx < msgs.length - 1) p.deleteMessagesAfter(p.activeConversationId, message.id);
     await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message });
   } else {
     const idx = msgs.findIndex((m: Message) => m.id === message.id);
     const prev = idx > 0 ? msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user') : null;
+    logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'}`);
     if (prev) {
       p.deleteMessagesAfter(p.activeConversationId, prev.id);
       await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev });

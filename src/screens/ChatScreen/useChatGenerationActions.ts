@@ -422,7 +422,8 @@ export async function executeDeleteConversationFn(
 export type RegenerateCall = { setDebugInfo: SetState<any>; userMessage: Message };
 export async function regenerateResponseFn(deps: GenerationDeps, call: RegenerateCall): Promise<void> {
   const { userMessage } = call;
-  if (!deps.activeConversationId || !deps.hasActiveModel) return;
+  logger.log(`[RESEND-SM] regenerate start userMsg=${userMessage.id} conv=${deps.activeConversationId} hasActiveModel=${deps.hasActiveModel} isRemote=${deps.activeModelInfo?.isRemote} hasActiveModelObj=${!!deps.activeModel}`);
+  if (!deps.activeConversationId || !deps.hasActiveModel) { logger.log('[RESEND-SM] regenerate BAIL: no conv or no active model'); return; }
   const targetConversationId = deps.activeConversationId;
   const messageText = appendAttachmentText(userMessage.content, userMessage.attachments);
   const shouldGenerateImage = await shouldRouteToImageGenerationFn(deps, messageText);
@@ -430,12 +431,10 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel) {
-    if (!(await ensureModelReady(deps))) {
-      deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
-      return;
-    }
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureModelReady(deps))) {
+    logger.log('[RESEND-SM] regenerate BAIL: ensureModelReady failed'); deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.')); return;
   }
+  logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   deps.generatingForConversationRef.current = targetConversationId;
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
   if (deps.activeModel?.engine === 'litert') liteRTService.invalidateConversation();
