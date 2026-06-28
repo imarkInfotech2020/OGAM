@@ -94,7 +94,10 @@ class LLMService {
     quantizedCache: boolean,
   ): Promise<{ ctxLen: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>> }> {
     const getMem = () => hardwareService.getAppMemoryUsage();
-    const fallbacks = [4096, 3072, 2048, 1024].filter(c => c < requestedCtx);
+    // Include steps ABOVE 4096 so a model requested at e.g. 8192 can settle at
+    // 6144 if it fits, instead of jumping straight down to 4096 and needlessly
+    // shrinking the context.
+    const fallbacks = [8192, 6144, 4096, 3072, 2048, 1024].filter(c => c < requestedCtx);
     for (const ctx of fallbacks) {
       const mc = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: ctx, getAvailableMemory: getMem, quantizedCache });
       if (mc.safe) {
