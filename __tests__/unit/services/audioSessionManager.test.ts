@@ -35,13 +35,12 @@ describe('AudioSessionManager', () => {
       expect(audioSessionManager.getMode()).toBe('playback');
     });
 
-    it('ensurePlayback is idempotent (no redundant re-activation)', async () => {
+    it('ensurePlayback re-asserts activation on every call (iOS can drop it)', async () => {
       await audioSessionManager.ensurePlayback();
-      setOptions.mockClear();
       setActivity.mockClear();
       await audioSessionManager.ensurePlayback();
-      expect(setOptions).not.toHaveBeenCalled();
-      expect(setActivity).not.toHaveBeenCalled();
+      // Must re-activate, not skip — TTS went silent when this was idempotent.
+      expect(setActivity).toHaveBeenCalledWith(true);
     });
 
     it('ensureRecording activates a playAndRecord session', async () => {

@@ -30,19 +30,22 @@ class AudioSessionManager {
 
   /**
    * Ensure a playback-capable session is active before any audio is scheduled.
-   * Idempotent. While a recording session is active it is left untouched —
-   * `playAndRecord` already permits playback, so we must not downgrade mid-record.
+   * (Re)asserts the playback session on EVERY call — iOS can deactivate the
+   * session between operations, and the audio engines relied on per-call
+   * re-activation, so this is intentionally NOT idempotent on activation. The one
+   * exception: an active recording session is left untouched (`playAndRecord`
+   * already permits playback, so we must not downgrade mid-record).
    */
   async ensurePlayback(): Promise<void> {
     if (Platform.OS !== 'ios') return;
-    if (this.mode === 'record' || this.mode === 'playback') return;
+    if (this.mode === 'record') return;
     await this.apply('playback');
   }
 
-  /** Ensure a record+playback session is active before recording starts. */
+  /** Ensure a record+playback session is active before recording starts.
+   *  (Re)asserts every call, matching the recorder's prior per-start activation. */
   async ensureRecording(): Promise<void> {
     if (Platform.OS !== 'ios') return;
-    if (this.mode === 'record') return;
     await this.apply('record');
   }
 
