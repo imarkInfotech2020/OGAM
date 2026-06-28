@@ -17,6 +17,7 @@ module.exports = {
     '__tests__/unit/stores/ttsStore.test.ts',
     '__tests__/integration/stores/tts.test.ts',
     '__tests__/rntl/components/ChatInputModeToggle.test.tsx',
+    '__tests__/rntl/components/PlaybackControls.test.tsx',
     '__tests__/rntl/components/VoiceModelsPanel.test.tsx',
     '__tests__/rntl/components/KokoroTTSBridge.test.tsx',
     // MCP server/preset suites import the private pro/ submodule — run in pro's CI.
