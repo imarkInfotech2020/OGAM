@@ -61,6 +61,9 @@ class AudioSessionManager {
   }
 
   private async apply(mode: AudioSessionMode): Promise<void> {
+    // Part of the [TTS-SM] trace: a silent/wrong AVAudioSession is a top cause of
+    // "audio plays but nothing comes out" on iOS, so every (re)assert is logged.
+    logger.log(`[TTS-SM] iOS session apply → ${mode} (was ${this.mode ?? 'none'})`);
     try {
       if (mode === 'playback') {
         AudioManager.setAudioSessionOptions({ iosCategory: 'playback', iosMode: 'default' });
