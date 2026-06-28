@@ -19,6 +19,7 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 // Controllable engine: each test sets how speak() behaves (resolve / hang / throw).
 type SpeakMode = 'resolve' | 'hang' | 'throw';
 let speakMode: SpeakMode = 'resolve';
+let enginePhase = 'ready';
 const releasers: Array<() => void> = [];
 const mockEngine = {
   speak: jest.fn(() => {
@@ -27,13 +28,20 @@ const mockEngine = {
     return Promise.resolve();
   }),
   getActiveVoice: jest.fn(() => null),
-  getPhase: jest.fn(() => 'ready' as const),
+  getPhase: jest.fn(() => enginePhase),
   release: jest.fn().mockResolvedValue(undefined),
+  isFullyDownloaded: jest.fn(() => true),
+  getRequiredAssets: jest.fn(() => [{ sizeBytes: 320 * 1024 * 1024 }]),
+  capabilities: { peakRamMB: 320 },
   displayName: 'Mock',
 };
 
 jest.mock('../../../pro/audio/engine', () => ({
   ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+}));
+const mockCanLoad = jest.fn((..._a: unknown[]) => false);
+jest.mock('@offgrid/core/services/modelResidency', () => ({
+  modelResidencyManager: { canLoadWithoutEviction: (...a: unknown[]) => mockCanLoad(...a) },
 }));
 jest.mock('../../../pro/audio/ttsStore', () => ({
   useTTSStore: { getState: jest.fn(), setState: jest.fn() },
@@ -57,6 +65,8 @@ const names = () => events.map((e) => e.event);
 beforeEach(async () => {
   jest.clearAllMocks();
   speakMode = 'resolve';
+  enginePhase = 'ready';
+  mockCanLoad.mockReturnValue(false);
   releasers.length = 0;
   // clearAllMocks resets call history but NOT implementations — restore the
   // speakMode-driven impl so a prior test's mockImplementation can't leak in.
@@ -69,6 +79,7 @@ beforeEach(async () => {
   state = {
     settings: { interfaceMode: 'audio', enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
     isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
+    initializeEngine: jest.fn().mockResolvedValue(undefined),
   };
   store.getState.mockImplementation(() => state);
   store.setState.mockImplementation((partial: any) => {
@@ -140,6 +151,40 @@ describe('streaming state machine — engine errors never wedge', () => {
     feedStreamingText('Recovered.');
     await flush();
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Recovered.');
+  });
+});
+
+describe('streaming state machine — budget-aware warm-up (the intelligent path)', () => {
+  it('warms TTS to stream alongside the LLM when residency reports budget', async () => {
+    state.isReady = false; // engine cold at stream start
+    enginePhase = 'idle';
+    mockCanLoad.mockReturnValue(true); // headroom to coexist with the LLM
+    feedStreamingText('Streaming this. ');
+    await flush();
+    expect(mockCanLoad).toHaveBeenCalledWith(expect.objectContaining({ key: 'tts' }));
+    expect(state.initializeEngine).toHaveBeenCalled(); // warmed → will stream
+    expect(names()).toContain('stream warm: budget OK → warming TTS to stream alongside the LLM');
+  });
+
+  it('does NOT warm (stays speak-after) when there is no budget', async () => {
+    state.isReady = false;
+    enginePhase = 'idle';
+    mockCanLoad.mockReturnValue(false); // memory-tight
+    feedStreamingText('No budget here. ');
+    await flush();
+    expect(state.initializeEngine).not.toHaveBeenCalled();
+    expect(names()).toContain('stream warm SKIP: no budget to run TTS alongside the LLM → speak-after');
+  });
+
+  it('only attempts the warm once per turn', async () => {
+    state.isReady = false;
+    enginePhase = 'idle';
+    mockCanLoad.mockReturnValue(true);
+    feedStreamingText('One. ');
+    feedStreamingText('One. Two. ');
+    feedStreamingText('One. Two. Three. ');
+    await flush();
+    expect(state.initializeEngine).toHaveBeenCalledTimes(1);
   });
 });
 
