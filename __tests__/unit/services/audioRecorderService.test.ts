@@ -39,6 +39,10 @@ jest.mock(
 );
 
 const { audioRecorderService } = require('../../../src/services/audioRecorderService');
+// The recorder now routes the AVAudioSession through audioSessionManager (single
+// owner). Reset its mode between tests so a prior test's session state doesn't make
+// a later ensureRecording() a no-op.
+const { audioSessionManager } = require('../../../src/services/audioSessionManager');
 
 const originalPlatformOS = Platform.OS;
 
@@ -48,6 +52,7 @@ beforeEach(() => {
   // Reset singleton internal state between tests.
   (audioRecorderService as any).isRecording = false;
   (audioRecorderService as any).recorder = null;
+  audioSessionManager._reset();
   // Default happy-path native results.
   mockStart.mockReturnValue({ status: 'success' });
   mockStop.mockReturnValue({ status: 'success', path: '/mock/input.wav', duration: 2.5 });
