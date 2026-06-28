@@ -254,13 +254,12 @@ export const useChatScreen = () => {
   useEffect(() => { lastMessageCountRef.current = 0; setAnimateLastN(0); }, [activeConversationId]);
   const prevStreamingRef = useRef(false);
 
-  // Stop any in-flight TTS when a new streaming response begins.
-  // No-op without the pro audio feature.
-  useEffect(() => {
-    if (isStreamingForThisConversation) {
-      callHook(HOOKS.audioStop);
-    }
-  }, [isStreamingForThisConversation]);
+  // NOTE: stopping stale TTS on a new turn is done in handleSendFn (and retry/
+  // voice/navigation), NOT here. A previous effect fired audio.stop whenever
+  // `isStreamingForThisConversation` became true — but that flag bounces
+  // false→true on every tool-call round within a single turn, so it re-fired
+  // audio.stop mid-answer and aborted the current answer's streaming-TTS queue
+  // (the "streams, then stops speaking once the answer is prepared" bug).
 
   // When streaming ends, the pro audio feature speaks the final assistant
   // message (only if voice mode is active + TTS ready). No-op in free builds.

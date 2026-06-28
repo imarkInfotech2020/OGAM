@@ -383,10 +383,10 @@ export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMod
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
   const { text, attachments, imageMode, startGeneration } = call;
   abortPreload(); // user acted — stop background warming so it can't block them
-  if (!deps.hasActiveModel) {
-    deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
-    return;
-  }
+  if (!deps.hasActiveModel) { deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
+  // Stop stale TTS on the genuine new-turn send (NOT in a streaming-flag effect —
+  // that bounced per tool-call round and aborted the live answer). See useChatScreen.
+  callHook(HOOKS.audioStop);
   let targetConversationId = deps.activeConversationId;
   if (!targetConversationId) {
     const fallbackModelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;

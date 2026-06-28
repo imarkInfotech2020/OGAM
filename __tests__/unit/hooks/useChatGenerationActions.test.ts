@@ -21,6 +21,7 @@ import {
   handleSelectProjectFn,
   dispatchGenerationFn,
 } from '../../../src/screens/ChatScreen/useChatGenerationActions';
+import * as hookRegistry from '../../../src/bootstrap/hookRegistry';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { createDownloadedModel } from '../../utils/factories';
 
@@ -474,6 +475,33 @@ describe('regenerateResponseFn', () => {
 // ─────────────────────────────────────────────
 
 describe('handleSendFn', () => {
+  it('stops stale TTS on the new-turn send action (fires audio.stop)', async () => {
+    // Regression: the stop used to live in a useChatScreen effect keyed on the
+    // streaming flag, which bounced on every tool-call round and aborted the
+    // CURRENT answer's streaming TTS. It now fires once, on the user send.
+    const spy = jest.spyOn(hookRegistry, 'callHook').mockReturnValue(undefined as never);
+    try {
+      const deps = makeGenerationDeps();
+      await handleSendFn(deps, {
+        text: 'hello', imageMode: 'disabled', startGeneration: jest.fn(() => Promise.resolve()), setDebugInfo: jest.fn(),
+      });
+      expect(spy).toHaveBeenCalledWith(hookRegistry.HOOKS.audioStop);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('does NOT stop TTS when there is no active model (early return before send)', async () => {
+    const spy = jest.spyOn(hookRegistry, 'callHook').mockReturnValue(undefined as never);
+    try {
+      const deps = makeGenerationDeps({ activeModel: undefined, hasActiveModel: false });
+      await handleSendFn(deps, { text: 'hello', imageMode: 'auto', startGeneration: jest.fn(), setDebugInfo: jest.fn() });
+      expect(spy).not.toHaveBeenCalledWith(hookRegistry.HOOKS.audioStop);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('lazily creates conversation and sends when no activeConversationId', async () => {
     const startGeneration = jest.fn(() => Promise.resolve());
     const deps = makeGenerationDeps({ activeConversationId: null });
