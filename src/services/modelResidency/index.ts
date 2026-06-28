@@ -9,6 +9,7 @@
  *
  * See docs/design/MODEL_ROUTING.md §5.1–5.2.
  */
+import { AppState } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import { planEviction, computeBudgetMB, Resident, ResidentType } from './policy';
@@ -19,9 +20,14 @@ type UnloadFn = () => Promise<void>;
 const AVAILABILITY_HEADROOM_MB = 1024;
 /** Hard floor so a small model can always load, even under memory pressure. */
 const MIN_BUDGET_MB = 1024;
+/** Small, cheaply-reloadable models reclaimed first under memory pressure. */
+const SIDECAR_TYPES = new Set<ResidentType>(['whisper', 'tts', 'embedding']);
 
 interface RegisteredResident extends Resident {
   unload: UnloadFn;
+  /** Owner's veto: returns false when the model is in use right now (e.g. TTS is
+   *  playing) so residency never evicts it mid-use. Absent → always evictable. */
+  canEvict?: () => boolean;
 }
 
 export interface ResidentSpec {
@@ -29,6 +35,9 @@ export interface ResidentSpec {
   type: ResidentType;
   sizeMB: number;
   pinned?: boolean;
+  /** Owner's veto: returns false while the model is in use (e.g. TTS playing) so
+   *  residency never evicts it mid-use. Absent → always evictable. */
+  canEvict?: () => boolean;
 }
 
 export interface EnsureResult {
@@ -41,6 +50,41 @@ const stripUnload = ({ unload: _unload, ...rest }: RegisteredResident): Resident
 class ModelResidencyManager {
   private readonly residents = new Map<string, RegisteredResident>();
   private budgetOverrideMB: number | null = null;
+
+  constructor() {
+    // Residency owns the memory-pressure response (single owner of model memory).
+    // It used to be scattered — e.g. the Kokoro bridge had its own memoryWarning
+    // listener freeing itself. Now one place reclaims idle models on a warning.
+    try {
+      AppState.addEventListener('memoryWarning', () => { this.handleMemoryWarning().catch(() => {}); });
+    } catch { /* non-RN env (some tests) — no AppState */ }
+  }
+
+  /** Residents as the pure policy sees them, with a live `canEvict()===false`
+   *  treated as pinned so capacity eviction never unloads a model that's in use. */
+  private planningResidents(): Resident[] {
+    return [...this.residents.values()].map(r => ({
+      ...stripUnload(r),
+      pinned: r.pinned || (r.canEvict ? !r.canEvict() : false),
+    }));
+  }
+
+  /**
+   * Memory-warning response: reclaim idle SIDECAR models (TTS/STT/embedding) —
+   * small and cheap to reload — but never one whose owner vetoes via canEvict()
+   * (e.g. TTS is actively playing). Generation models and pinned residents are
+   * left alone. This is what the Kokoro bridge's own listener used to do, now
+   * centralized so the eviction decision lives in one place.
+   */
+  async handleMemoryWarning(): Promise<void> {
+    for (const [key, r] of [...this.residents.entries()]) {
+      if (r.pinned || !SIDECAR_TYPES.has(r.type)) continue;
+      if (r.canEvict && !r.canEvict()) continue; // in use — owner vetoes
+      logger.log(`[ModelResidency] memory warning → reclaiming idle ${r.type} (${key})`);
+      await r.unload().catch(err => logger.log(`[ModelResidency] memory-warning unload ${key} failed:`, err));
+      this.residents.delete(key);
+    }
+  }
 
   /**
    * Global FIFO lock. Every model load/unload (text, image, whisper, tts,
@@ -135,7 +179,9 @@ class ModelResidencyManager {
     // Re-read real free RAM so the budget reflects current pressure, not a stale
     // boot-time snapshot (other apps may have grabbed memory since).
     await hardwareService.refreshMemoryInfo().catch(() => {});
-    const plan = planEviction(this.getResidents(), spec, this.getBudgetMB());
+    // planningResidents() pins anything whose owner vetoes eviction right now
+    // (canEvict()===false), so a capacity load never unloads an in-use model.
+    const plan = planEviction(this.planningResidents(), spec, this.getBudgetMB());
     if (!plan.fits) {
       // The model won't fit even after the planned evictions — so DON'T evict.
       // Otherwise we'd strand the device with nothing (e.g. evict text to load

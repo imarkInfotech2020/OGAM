@@ -223,4 +223,41 @@ describe('ModelResidencyManager', () => {
       await expect(modelResidencyManager.reclaimSttForGeneration()).resolves.toBeUndefined();
     });
   });
+
+  describe('canEvict veto (residency ↔ audio seam)', () => {
+    beforeEach(() => modelResidencyManager._reset());
+    afterEach(() => jest.restoreAllMocks());
+
+    it('memory warning reclaims an idle sidecar but spares one vetoing via canEvict', async () => {
+      const idleUnload = jest.fn().mockResolvedValue(undefined);
+      const busyUnload = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'whisper', type: 'whisper', sizeMB: 466 }, idleUnload, 1);
+      modelResidencyManager.register({ key: 'tts', type: 'tts', sizeMB: 320, canEvict: () => false }, busyUnload, 2);
+      await modelResidencyManager.handleMemoryWarning();
+      expect(idleUnload).toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('whisper')).toBe(false);
+      expect(busyUnload).not.toHaveBeenCalled(); // TTS playing → owner vetoes
+      expect(modelResidencyManager.isResident('tts')).toBe(true);
+    });
+
+    it('memory warning leaves generation models alone (only reclaims sidecars)', async () => {
+      const textUnload = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'text', type: 'text', sizeMB: 1500 }, textUnload, 1);
+      await modelResidencyManager.handleMemoryWarning();
+      expect(textUnload).not.toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+    });
+
+    it('capacity eviction never unloads a model vetoing via canEvict', async () => {
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      const ttsUnload = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'tts', type: 'tts', sizeMB: 320, canEvict: () => false }, ttsUnload, 1);
+      // A big incoming text model needs room, but the only resident (TTS) is playing.
+      const { evicted } = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 900 });
+      expect(ttsUnload).not.toHaveBeenCalled();
+      expect(evicted).toEqual([]);
+      expect(modelResidencyManager.isResident('tts')).toBe(true);
+    });
+  });
 });

@@ -180,6 +180,19 @@ describe('KokoroEngine install status', () => {
     await expect(engine.initialize()).rejects.toThrow(/bridge not mounted/i);
   });
 
+  it('release() asks the bridge to unmount so the executorch model is actually freed', async () => {
+    // Residency calls release() to reclaim RAM; nulling the handle alone leaves the
+    // ~330MB model resident, so release() must trigger the bridge to unmount.
+    const engine = new KokoroEngine();
+    const unmount = jest.fn();
+    engine._setUnmountRequester(unmount);
+    engine._setBridge(noopHandle, 'af_heart');
+    expect(engine.getPhase()).toBe('ready');
+    await engine.release();
+    expect(unmount).toHaveBeenCalled();
+    expect(engine.getPhase()).toBe('idle');
+  });
+
   it('deleteAssets clears state and removes resources from disk', async () => {
     listDownloadedModels.mockResolvedValue([
       `/x/${KOKORO_FILES[0]}`,
