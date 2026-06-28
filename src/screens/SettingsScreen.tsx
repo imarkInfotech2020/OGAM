@@ -38,7 +38,7 @@ import packageJson from '../../package.json';
 const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
 
 type NavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
+  BottomTabNavigationProp<MainTabParamList>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
