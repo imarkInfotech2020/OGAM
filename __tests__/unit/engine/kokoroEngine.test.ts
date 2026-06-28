@@ -151,6 +151,35 @@ describe('KokoroEngine install status', () => {
     await expect(engine.speak('nope')).rejects.toThrow(/bridge not mounted/i);
   });
 
+  it('initialize() remounts the bridge after a residency eviction (manual replay fix)', async () => {
+    // REGRESSION: initialize() used to be a no-op, so speak()→initializeEngine()
+    // never reloaded an evicted engine and manual replay bailed with phase=idle.
+    const engine = new KokoroEngine();
+    engine._setMountRequester(() => engine._setBridge(noopHandle, 'af_heart'));
+    expect(engine.getPhase()).toBe('idle');
+
+    await engine.initialize();
+
+    expect(engine.getPhase()).toBe('ready');
+  });
+
+  it('initialize() is a no-op when the bridge is already attached (ready)', async () => {
+    const engine = new KokoroEngine();
+    const requester = jest.fn(() => engine._setBridge(noopHandle, 'af_heart'));
+    engine._setMountRequester(requester);
+    await engine.initialize(); // first mount
+    requester.mockClear();
+
+    await engine.initialize(); // already ready → must not re-request a mount
+    expect(requester).not.toHaveBeenCalled();
+    expect(engine.getPhase()).toBe('ready');
+  });
+
+  it('initialize() rejects when no bridge can mount (unsupported device)', async () => {
+    const engine = new KokoroEngine();
+    await expect(engine.initialize()).rejects.toThrow(/bridge not mounted/i);
+  });
+
   it('deleteAssets clears state and removes resources from disk', async () => {
     listDownloadedModels.mockResolvedValue([
       `/x/${KOKORO_FILES[0]}`,

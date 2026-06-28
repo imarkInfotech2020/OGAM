@@ -12,6 +12,7 @@ module.exports = {
     // CI does not (and must not) check out. They run in the pro repo's own CI.
     '/__tests__/unit/audio/',
     '/__tests__/unit/engine/',
+    '/__tests__/integration/audio/',
     '__tests__/unit/services/ttsService.test.ts',
     '__tests__/unit/stores/ttsStore.test.ts',
     '__tests__/integration/stores/tts.test.ts',

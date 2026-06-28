@@ -127,4 +127,24 @@ describe('streaming TTS — interruption semantics', () => {
     expect(spokenSegments()).toEqual(['Old one.', 'New answer here.']);
     expect(isStreamingSpeechActive()).toBe(true);
   });
+
+  it('REGRESSION: a hung speak() does not permanently wedge the coordinator', async () => {
+    // The on-device fault: the Kokoro bridge died mid-stream so engine.speak()
+    // never settled, the drain's await hung, draining stayed true forever, and
+    // every later stream hit "drain: already draining" (no autoplay, no end-play).
+    feedStreamingText('Stuck sentence. ');
+    await flush();
+    expect(spokenSegments()).toEqual(['Stuck sentence.']); // in flight, NEVER released (hangs)
+
+    // The recovery path core triggers (stop / new turn / mode switch) must clear
+    // the stuck drain lock, even though the prior speak never resolved.
+    resetStreamingSpeech();
+    expect(isStreamingSpeechActive()).toBe(false);
+
+    // A brand-new stream must engage and actually speak — proving the lock cleared.
+    feedStreamingText('Recovered and speaking.');
+    await flush();
+    await releaseOneSpeak();
+    expect(spokenSegments()).toContain('Recovered and speaking.');
+  });
 });
