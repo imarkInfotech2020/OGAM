@@ -173,6 +173,23 @@ class ModelResidencyManager {
     this.residents.delete(key);
   }
 
+  /**
+   * A generation turn is starting: the mic (STT/Whisper) model is idle while the
+   * LLM runs, and its RAM is better spent on the LLM's inference working set (which
+   * the file-size budget doesn't capture). On a memory-tight device, free it so the
+   * generation working set doesn't tip the app past the jetsam limit (the 4GB
+   * resend OOM). STT reloads on the next record. Roomy devices keep it warm.
+   * Centralizes the "evict idle audio sidecar for generation" decision here.
+   */
+  async reclaimSttForGeneration(): Promise<void> {
+    if (hardwareService.getTotalMemoryGB() > 6) return; // roomy: keep STT warm
+    const w = this.residents.get('whisper');
+    if (!w) return;
+    logger.log('[ModelResidency] reclaiming idle STT for generation turn (memory-tight)');
+    await w.unload().catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
+    this.residents.delete('whisper');
+  }
+
   /** Evict everything except pinned residents (e.g. on memory-warning). */
   async evictAll(includePinned = false): Promise<void> {
     for (const [key, reg] of [...this.residents.entries()]) {

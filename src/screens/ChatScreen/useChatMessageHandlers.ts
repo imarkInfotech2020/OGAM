@@ -3,6 +3,8 @@ import { showAlert, AlertState } from '../../components';
 import { Message } from '../../types';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
+import { modelResidencyManager } from '../../services/modelResidency';
+import { hardwareService } from '../../services/hardware';
 import {
   regenerateResponseFn, executeDeleteConversationFn, handleImageGenerationFn,
 } from './useChatGenerationActions';
@@ -22,6 +24,13 @@ export async function handleRetryMessageFn(
   message: Message, genDeps: GenerationDeps, p: RetryParams,
 ): Promise<void> {
   const msgs = p.activeConversation?.messages || [];
+  // Memory breakdown at the crash-prone moment: the JetsamEvent shows the app
+  // hitting the ~2GB per-process limit, but not WHAT's resident. Dump it so we see
+  // whether an un-evicted model (image?) or a leak is eating the budget.
+  try {
+    const residents = modelResidencyManager.getResidents().map(r => `${r.type}:${r.sizeMB}MB`).join(',');
+    logger.log(`[MEM-SM] resend: residents=[${residents}] availMB=${Math.round(hardwareService.getAvailableMemoryGB() * 1024)} totalMB=${Math.round(hardwareService.getTotalMemoryGB() * 1024)}`);
+  } catch { /* diagnostics only */ }
   logger.log(`[RESEND-SM] retry msg role=${message.role} id=${message.id} hasActiveModel=${p.hasActiveModel} conv=${p.activeConversationId} totalMsgs=${msgs.length}`);
   if (!p.activeConversationId || !p.hasActiveModel) { logger.log('[RESEND-SM] retry BAIL: no conv or no active model'); return; }
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
