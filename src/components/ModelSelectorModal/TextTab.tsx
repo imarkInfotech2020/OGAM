@@ -106,7 +106,9 @@ export const TextTab: React.FC<TextTabProps> = ({
             const isLoaded = currentModelPath === model.filePath;
             // The selected-but-not-loaded model is highlighted as active, but stays
             // tappable so tapping it actually loads it (load-on-tap).
-            const isSelected = !currentModelPath && selectedModelPath === model.filePath;
+            // Don't highlight a deferred-local selection while a remote model is
+            // current — otherwise both rows render active after a local→remote switch.
+            const isSelected = currentRemoteModelId === null && !currentModelPath && selectedModelPath === model.filePath;
             const isActive = isLoaded || isSelected;
             return (
               <TouchableOpacity
