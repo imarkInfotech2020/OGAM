@@ -145,7 +145,7 @@ class LLMService {
       this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
       logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
       try {
-        const { context, gpuAttemptFailed, actualLength } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers });
+        const { context, gpuAttemptFailed, actualLength } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers, fileSize });
         await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers, modelPath, mmProjPath });
       } catch (error: any) {
         this.context = null; this.currentModelPath = null; this.multimodalSupport = null;
@@ -157,9 +157,14 @@ class LLMService {
       mutex.release();
     }
   }
-  private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
+  private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
-    let safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers);
+    // Pass model size + free RAM so iOS Metal offload is capped to what fits (the
+    // uncapped 99-layer offload was overflowing Metal → SIGSEGV on memory-tight devices).
+    let safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers, {
+      modelBytes: params.fileSize,
+      availableBytes: deviceInfo.availableMemory,
+    });
     if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
     let resolvedBaseParams: object = params.baseParams;
     if (Platform.OS === 'android') {
