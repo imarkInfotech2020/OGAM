@@ -228,7 +228,11 @@ class ModelResidencyManager {
    * Centralizes the "evict idle audio sidecar for generation" decision here.
    */
   async reclaimSttForGeneration(): Promise<void> {
-    if (hardwareService.getTotalMemoryGB() > 6) return; // roomy: keep STT warm
+    // Best-effort memory optimization in the generation hot path — must NEVER throw
+    // into it (e.g. if the hardware service isn't available). Bail quietly instead.
+    let totalGB: number;
+    try { totalGB = hardwareService.getTotalMemoryGB(); } catch { return; }
+    if (totalGB > 6) return; // roomy: keep STT warm
     const w = this.residents.get('whisper');
     if (!w) return;
     logger.log('[ModelResidency] reclaiming idle STT for generation turn (memory-tight)');
