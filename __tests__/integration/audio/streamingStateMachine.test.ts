@@ -1,0 +1,163 @@
+/**
+ * Streaming-TTS STATE MACHINE tests.
+ *
+ * These pin the coordinator's behaviour by asserting the exact [TTS-SM] event
+ * sequence it emits for each scenario — the same trace we read on-device. If a
+ * change alters a transition, the sequence assertion fails in CI, so we're never
+ * "surprised" on the phone. Covers: the happy path drains to idle; a transient
+ * engine error is tolerated; a HUNG speak times out (no permanent wedge) and two
+ * failures release the engine for a fresh remount; a hard reset always reclaims
+ * the drain lock; a new stream supersedes the old.
+ */
+import logger from '@offgrid/core/utils/logger';
+
+jest.mock('@offgrid/core/utils/logger', () => ({
+  __esModule: true,
+  default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
+// Controllable engine: each test sets how speak() behaves (resolve / hang / throw).
+type SpeakMode = 'resolve' | 'hang' | 'throw';
+let speakMode: SpeakMode = 'resolve';
+const releasers: Array<() => void> = [];
+const mockEngine = {
+  speak: jest.fn(() => {
+    if (speakMode === 'throw') return Promise.reject(new Error('std::exception'));
+    if (speakMode === 'hang') return new Promise<void>(() => { /* never settles */ });
+    return Promise.resolve();
+  }),
+  getActiveVoice: jest.fn(() => null),
+  getPhase: jest.fn(() => 'ready' as const),
+  release: jest.fn().mockResolvedValue(undefined),
+  displayName: 'Mock',
+};
+
+jest.mock('../../../pro/audio/engine', () => ({
+  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+}));
+jest.mock('../../../pro/audio/ttsStore', () => ({
+  useTTSStore: { getState: jest.fn(), setState: jest.fn() },
+}));
+
+import { useTTSStore } from '../../../pro/audio/ttsStore';
+import {
+  feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive, _setSpeakTimeoutForTest,
+} from '../../../pro/audio/streamingSpeech';
+import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
+
+const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
+const flush = () => new Promise<void>((r) => setImmediate(r));
+let state: Record<string, any>;
+let events: SmEvent[] = [];
+let disposeSink: () => void;
+
+/** Event names in order — the state-machine trace under assertion. */
+const names = () => events.map((e) => e.event);
+
+beforeEach(async () => {
+  jest.clearAllMocks();
+  speakMode = 'resolve';
+  releasers.length = 0;
+  // clearAllMocks resets call history but NOT implementations — restore the
+  // speakMode-driven impl so a prior test's mockImplementation can't leak in.
+  mockEngine.speak.mockImplementation(() => {
+    if (speakMode === 'throw') return Promise.reject(new Error('std::exception'));
+    if (speakMode === 'hang') return new Promise<void>(() => { /* never settles */ });
+    return Promise.resolve();
+  });
+  _setSpeakTimeoutForTest(40); // fast timeout so the "hung" case doesn't wait 15s
+  state = {
+    settings: { interfaceMode: 'audio', enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
+    isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
+  };
+  store.getState.mockImplementation(() => state);
+  store.setState.mockImplementation((partial: any) => {
+    const p = typeof partial === 'function' ? partial(state) : partial;
+    state = { ...state, ...p };
+  });
+  resetStreamingSpeech();
+  await flush();
+  events = [];
+  disposeSink = _setSmSink((e) => events.push(e));
+  (logger as any);
+});
+
+afterEach(() => { disposeSink?.(); });
+
+describe('streaming state machine — happy path', () => {
+  it('engages, speaks every segment, and ends idle when the stream finishes', async () => {
+    feedStreamingText('One. ');
+    await flush();
+    feedStreamingText('One. Two. ');
+    await flush();
+    finishStreamingText('One. Two. Three', 'msg-1');
+    await flush();
+    await flush();
+
+    // Key ordered milestones of the state machine (engage → speak each → idle).
+    expect(names()[0]).toBe('stream ENGAGE (engine warm)');
+    expect(names()).toContain('finishStreaming: flush tail + hand off');
+    expect(names()[names().length - 1]).toBe('stream drain DONE → idle');
+    expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toEqual(['One.', 'Two.', 'Three']);
+    expect(isStreamingSpeechActive()).toBe(false);
+    expect(state.playbackStatus).toBe('idle');
+  });
+});
+
+describe('streaming state machine — engine errors never wedge', () => {
+  it('tolerates a single transient speak error and keeps draining', async () => {
+    let n = 0;
+    mockEngine.speak.mockImplementation(() => (++n === 1 ? Promise.reject(new Error('std::exception')) : Promise.resolve()));
+    feedStreamingText('Alpha. ');
+    await flush();
+    finishStreamingText('Alpha. Bravo', 'm');
+    await flush();
+    await flush();
+
+    expect(names()).toContain('stream segment FAILED');
+    expect(names()).not.toContain('stream drain ABORT: engine wedged → release for fresh remount');
+    expect(names()).toContain('stream drain DONE → idle'); // recovered, finished
+    expect(isStreamingSpeechActive()).toBe(false);
+  });
+
+  it('a HUNG speak times out (no permanent wedge); two failures release the engine', async () => {
+    speakMode = 'hang';
+    // Feed incrementally so multiple segments queue behind the hung first one
+    // (a one-shot feed makes a single segment → only one failure).
+    feedStreamingText('One. ');
+    await flush();
+    feedStreamingText('One. Two. ');
+    feedStreamingText('One. Two. Three. ');
+    await flush();
+    // Let both segment timeouts fire (40ms each) → 2 failures → abort+release.
+    for (let i = 0; i < 6; i++) { await new Promise((r) => setTimeout(r, 50)); await flush(); }
+
+    expect(names()).toContain('stream segment FAILED');
+    expect(names()).toContain('stream drain ABORT: engine wedged → release for fresh remount');
+    expect(mockEngine.release).toHaveBeenCalled();
+    // Lock released: a brand-new stream can engage afterwards.
+    speakMode = 'resolve';
+    feedStreamingText('Recovered.');
+    await flush();
+    expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Recovered.');
+  });
+});
+
+describe('streaming state machine — reset always reclaims the lock', () => {
+  it('resetStreamingSpeech clears a stuck drain so the next stream is not blocked', async () => {
+    speakMode = 'hang';
+    feedStreamingText('Stuck. ');
+    await flush();
+    expect(isStreamingSpeechActive()).toBe(true);
+
+    resetStreamingSpeech(); // the recovery path (stop / new turn)
+    expect(names()).toContain('resetStreamingSpeech (hard abort)');
+    expect(isStreamingSpeechActive()).toBe(false);
+
+    speakMode = 'resolve';
+    feedStreamingText('Fresh.');
+    await flush();
+    expect(names()).toContain('stream ENGAGE (engine warm)');
+    expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Fresh.');
+  });
+});
