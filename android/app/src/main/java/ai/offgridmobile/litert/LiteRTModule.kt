@@ -79,7 +79,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
          */
         fun clampMaxTokens(requested: Int, availMb: Long, modelMb: Long): Int {
             val kvBudgetMb = availMb - modelMb - TOKEN_BUDGET_HEADROOM_MB
-            if (kvBudgetMb <= 0) return minOf(requested, MIN_TOKEN_FLOOR)
+            if (kvBudgetMb <= 0) {
+                // No KV budget after weights + headroom. Don't force MIN_TOKEN_FLOOR —
+                // that can still overcommit and hit the native OOM this clamp exists to
+                // avoid. Spend only what sits between the weights and available RAM
+                // (eating into the headroom reserve as a last resort), capped at the
+                // floor; if even the weights don't fit, fall to 1 token and let the
+                // caller's memory guard reject the load.
+                val lastResortTokens = ((availMb - modelMb) / KV_MB_PER_TOKEN).toInt()
+                return requested.coerceAtMost(lastResortTokens.coerceIn(1, MIN_TOKEN_FLOOR))
+            }
             val affordableTokens = (kvBudgetMb / KV_MB_PER_TOKEN).toInt()
             return requested.coerceAtMost(maxOf(MIN_TOKEN_FLOOR, affordableTokens))
         }
@@ -137,9 +146,13 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     }
 
     // 3-tier fallback: NPU → GPU → CPU
+    /** GPU init crashes on Pixel 10 (open LiteRT SDK bug) — skip the GPU delegate
+     *  there, on both the main backend chain and the vision delegate. */
+    private fun shouldSkipGpu(): Boolean =
+        Build.MODEL?.lowercase()?.contains("pixel 10") == true
+
     private fun buildBackendChain(requested: Backend): List<Backend> {
-        // GPU init crashes on Pixel 10 — open LiteRT SDK bug.
-        val skipGpu = Build.MODEL?.lowercase()?.contains("pixel 10") == true
+        val skipGpu = shouldSkipGpu()
         return when (requested) {
             is Backend.NPU -> listOfNotNull(
                 Backend.NPU(nativeLibraryDir = reactContext.applicationInfo.nativeLibraryDir),
@@ -592,9 +605,11 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         else           -> "cpu"
     }
 
-    /** Vision delegate matched to the main backend tier (CPU main -> CPU vision). */
+    /** Vision delegate matched to the main backend tier (CPU main -> CPU vision).
+     *  Also honors the Pixel 10 GPU gate: never hand the GPU vision delegate to a
+     *  device where GPU init crashes, even on the NPU/GPU main path. */
     private fun visionBackendFor(mainBackend: Backend): Backend =
-        if (mainBackend is Backend.CPU) Backend.CPU() else Backend.GPU()
+        if (mainBackend is Backend.CPU || shouldSkipGpu()) Backend.CPU() else Backend.GPU()
 
     /** Current free system RAM in MB. */
     private fun availableRamMb(): Long {

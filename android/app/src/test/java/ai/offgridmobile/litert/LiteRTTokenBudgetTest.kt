@@ -27,8 +27,24 @@ class LiteRTTokenBudgetTest {
 
     @Test
     fun `falls back to the floor when weights barely fit`() {
-        // Model + headroom already exceed available RAM → KV budget negative.
+        // Model + headroom exceed available RAM → KV budget negative, but the 200 MB
+        // between weights and avail still affords more than the floor → floor.
         assertEquals(1024, LiteRTModule.clampMaxTokens(4096, 2000, 1800))
+    }
+
+    @Test
+    fun `does not force the floor when flooring would overcommit`() {
+        // KV budget negative AND only 50 MB sits between weights and avail (~333
+        // tokens, below the floor). Must NOT force 1024 (would OOM) — cap to what
+        // actually fits.
+        assertEquals(333, LiteRTModule.clampMaxTokens(4096, 1850, 1800))
+    }
+
+    @Test
+    fun `returns a single token when even the weights do not fit`() {
+        // avail < model → nothing affordable; return 1 token (not the floor) and let
+        // the caller's memory guard reject the load instead of overcommitting.
+        assertEquals(1, LiteRTModule.clampMaxTokens(4096, 1700, 1800))
     }
 
     @Test
