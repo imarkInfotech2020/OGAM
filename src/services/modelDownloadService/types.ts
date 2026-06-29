@@ -97,4 +97,17 @@ export interface DownloadProvider {
    * fetcher) may return a no-op and rely on the service's polling fallback.
    */
   subscribe(onChange: () => void): () => void;
+
+  /**
+   * Reconcile persisted download state with reality after a possible app kill.
+   * Called once on launch by ModelDownloadService.reconcile(). A download that was
+   * `downloading` when the app was killed and whose backend is NOT `resumable`
+   * (iOS URLSession dies on app-kill; the STT RNFS path dies) is stranded: the
+   * provider must move it to `error` ("interrupted — retry") so it surfaces as
+   * needing a manual retry, NEVER a phantom "downloading"/"resuming" that hangs
+   * forever. A `resumable` backend (Android WorkManager) instead reports the
+   * genuinely-continuing download. Optional: a provider with no persisted in-flight
+   * state can omit it.
+   */
+  reconcile?(): Promise<void>;
 }

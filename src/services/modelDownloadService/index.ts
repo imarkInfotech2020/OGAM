@@ -55,6 +55,27 @@ class ModelDownloadService {
     logger.log(`[DL-SM] provider registered type=${provider.modelType}`);
   }
 
+  /**
+   * Reconcile after launch: each provider re-aligns persisted state with reality
+   * (a download that was in-flight when the app was killed and can't resume becomes
+   * an 'error' the user can retry — see DownloadProvider.reconcile). Then we re-list,
+   * which logs every resulting [DL-SM] transition. Call once on app start. The
+   * iOS/Android resumability difference lives behind the provider's `resumable` flag,
+   * so this is platform-agnostic.
+   */
+  async reconcile(): Promise<void> {
+    logger.log(`[DL-SM] reconcile start providers=${[...this.providers.keys()].join(',')}`);
+    await Promise.all(
+      [...this.providers.values()].map(p =>
+        p.reconcile?.().catch(err =>
+          logger.log(`[DL-SM] reconcile failed type=${p.modelType} err=${err instanceof Error ? err.message : String(err)}`),
+        ),
+      ),
+    );
+    await this.list();
+    logger.log('[DL-SM] reconcile done');
+  }
+
   /** Merged, uniform view of every type's downloads. Detects + logs transitions. */
   async list(): Promise<ModelDownload[]> {
     const results = await Promise.all(

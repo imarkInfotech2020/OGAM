@@ -95,6 +95,28 @@ describe('ModelDownloadService', () => {
     await expect(modelDownloadService.retry('image:zzz')).resolves.toBeUndefined();
   });
 
+  it('reconcile() lets a provider strand an un-resumable in-flight download as error (app-kill), logged', async () => {
+    // iOS-style backend: was downloading when the app was killed, can't resume.
+    const p = makeProvider('stt', [dl('stt:base', 'stt', { status: 'downloading', capabilities: { ...CAPS_FULL, resumable: false } })]);
+    (p as any).reconcile = jest.fn(async () => {
+      p._set([dl('stt:base', 'stt', { status: 'error', error: 'interrupted — retry', capabilities: { ...CAPS_FULL, resumable: false } })]);
+    });
+    modelDownloadService.register(p);
+    await modelDownloadService.list();      // new → downloading
+    await modelDownloadService.reconcile(); // provider strands it → downloading → error
+
+    expect((p as any).reconcile).toHaveBeenCalled();
+    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
+    expect(lines.some((l: string) => l.includes('stt:base') && l.includes('downloading → error'))).toBe(true);
+    expect(lines.some((l: string) => l.includes('reconcile start'))).toBe(true);
+  });
+
+  it('reconcile() tolerates a provider without a reconcile hook (resumable backend)', async () => {
+    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
+    modelDownloadService.register(p); // no reconcile() defined
+    await expect(modelDownloadService.reconcile()).resolves.toBeUndefined();
+  });
+
   it('notifies subscribers when a provider reports a change', async () => {
     const p = makeProvider('text', [dl('text:a', 'text')]);
     modelDownloadService.register(p);
