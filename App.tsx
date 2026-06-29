@@ -19,7 +19,6 @@ import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
-import { modelDownloadService } from './src/services/modelDownloadService';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -142,13 +141,15 @@ function App() {
       });
       await reattachTextDownloadRecovery();
 
-      // Register the core download providers and reconcile after hydration: a
-      // download interrupted by the previous app close (and not resumable) becomes a
-      // retriable error rather than a phantom "downloading". [DL-SM] logs the result.
+      // Register the core download providers so the unified service is reactive for
+      // any screen (registration only subscribes — no writes). NOTE: do NOT call
+      // modelDownloadService.reconcile() here yet — the existing reattachTextDownload
+      // Recovery (above) + the image-resume path are still the owners of post-launch
+      // recovery, and running provider reconcile() alongside them = two writers to
+      // downloadStore (a download one restores, the other strands). reconcile()
+      // becomes the SINGLE owner only once the Download Manager consumes the service
+      // and the old recovery paths are folded into the providers.
       registerCoreDownloadProviders();
-      await modelDownloadService.reconcile().catch((error) => {
-        logger.error('[App] Download reconcile failed during startup:', error);
-      });
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
