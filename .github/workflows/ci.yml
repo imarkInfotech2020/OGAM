@@ -143,3 +143,44 @@ jobs:
 
       - name: Build Android Release
         run: cd android && ./gradlew assembleRelease
+
+  fastlane-build:
+    # Verifies the fastlane release pipeline (build-only, no upload, no store secrets).
+    # Runs on the clean CI environment where JDK 17 + Android SDK are set up correctly.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Fastlane android build (no upload)
+        run: bundle exec fastlane android build
+
+      - name: Upload AAB artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastlane-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
