@@ -120,7 +120,14 @@ class ImageGenerationService {
   private updateState(partial: Partial<ImageGenerationState>): void {
     // Strip any derived field a caller might pass — phase is the only stored truth.
     const { isGenerating: _ignored, ...rest } = partial;
+    const prevPhase = this.state.phase;
     this.state = { ...this.state, ...rest };
+    // [IMG-SM] state-machine trace (kept forever, like [TTS-SM]): every phase
+    // transition logs one line so one repro reads as a linear state machine and a
+    // silent stall/flash is never undiagnosable again.
+    if ('phase' in partial && this.state.phase !== prevPhase) {
+      logger.log(`[IMG-SM] phase ${prevPhase} → ${this.state.phase}${this.state.status ? ` (${this.state.status})` : ''}${this.state.error ? ` error=${this.state.error}` : ''}`);
+    }
     this.notifyListeners();
     // appStore mirror is a one-way PROJECTION of phase (the UI reads it). Computed
     // from phase, never a second stored source.

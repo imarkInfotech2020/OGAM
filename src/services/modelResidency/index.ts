@@ -181,7 +181,13 @@ class ModelResidencyManager {
     await hardwareService.refreshMemoryInfo().catch(() => {});
     // planningResidents() pins anything whose owner vetoes eviction right now
     // (canEvict()===false), so a capacity load never unloads an in-use model.
-    const plan = planEviction(this.planningResidents(), spec, this.getBudgetMB());
+    const budgetMB = this.getBudgetMB();
+    const residents = this.planningResidents();
+    const plan = planEviction(residents, spec, budgetMB);
+    // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision —
+    // so "not enough memory" is never a mystery (real per-process budget vs the
+    // model estimate vs what's resident/evictable).
+    logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} budgetMB=${budgetMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
     if (!plan.fits) {
       // The model won't fit even after the planned evictions — so DON'T evict.
       // Otherwise we'd strand the device with nothing (e.g. evict text to load
