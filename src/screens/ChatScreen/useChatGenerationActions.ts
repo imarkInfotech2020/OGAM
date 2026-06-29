@@ -98,16 +98,15 @@ export async function shouldRouteToImageGenerationFn(
   text: string,
   forceImageMode?: boolean,
 ): Promise<boolean> {
-  if (deps.isGeneratingImage) return false;
-  if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
-  if (forceImageMode) return true;
+  // [ROUTE-SM] permanent trace: every branch of the image-vs-text decision is logged
+  // so "why didn't 'draw a dog' make an image?" is answerable from the logs (esp. the
+  // voice path), never a guess.
+  logger.log(`[ROUTE-SM] route? text="${text.slice(0, 60)}" force=${forceImageMode ?? false} mode=${deps.settings.imageGenerationMode} hasImageModel=${!!deps.activeImageModel} hasTextModel=${deps.hasTextModel} autoDetect=${deps.settings.autoDetectMethod}`);
+  if (deps.isGeneratingImage) { logger.log('[ROUTE-SM] → false: already generating an image'); return false; }
+  if (deps.settings.imageGenerationMode === 'manual') { logger.log(`[ROUTE-SM] → ${forceImageMode === true}: manual mode (only on force)`); return forceImageMode === true; }
+  if (forceImageMode) { logger.log('[ROUTE-SM] → true: forced'); return true; }
   // Route on whether an image model is SELECTED (downloaded), not whether it's
-  // currently resident. The pipeline loads it on demand (residency evicts the text
-  // model to fit — reliable now that eviction measures real freed RAM). Gating on
-  // "already loaded" is what made voice "draw a horse" fall through to the text
-  // model: in audio mode the text+TTS models are resident and the image model has
-  // been evicted, so it was never loaded. This is one router for both modes.
-  if (!deps.activeImageModel) return false;
+  // currently resident — the pipeline loads it on demand. (Checked + logged above.)
   // No text model (image-only): SMOL classifier decides text vs image, else heuristics; chat returns false.
   if (deps.hasTextModel === false) {
     const classifierModel = deps.settings.classifierModelId
@@ -118,6 +117,7 @@ export async function shouldRouteToImageGenerationFn(
       // and use fast heuristics for this turn.
       ensureDefaultClassifier().catch(() => {});
       const intent = await intentClassifier.classifyIntent(text, { useLLM: false });
+      logger.log(`[ROUTE-SM] → ${intent === 'image'}: no-text-model heuristic intent=${intent}`);
       return intent === 'image';
     }
     deps.setIsClassifying(true);
@@ -127,6 +127,7 @@ export async function shouldRouteToImageGenerationFn(
         classifierModel,
         currentModelPath: llmService.getLoadedModelPath(),
       });
+      logger.log(`[ROUTE-SM] → ${intent === 'image'}: no-text-model SMOL classifier intent=${intent}`);
       return intent === 'image';
     } finally {
       deps.setIsClassifying(false);
@@ -145,6 +146,7 @@ export async function shouldRouteToImageGenerationFn(
       onStatusChange: useLLM ? deps.setAppImageGenerationStatus : undefined,
     });
     deps.setIsClassifying(false);
+    logger.log(`[ROUTE-SM] → ${intent === 'image'}: classifier intent=${intent} (useLLM=${useLLM})`);
     if (intent !== 'image' && useLLM) {
       deps.setAppImageGenerationStatus(null);
       deps.setAppIsGeneratingImage(false);
@@ -154,6 +156,7 @@ export async function shouldRouteToImageGenerationFn(
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);
+    logger.log('[ROUTE-SM] → false: classifier threw');
     return false;
   }
 }
@@ -356,11 +359,16 @@ export async function dispatchGenerationFn(
 ): Promise<void> {
   const { text, attachments, conversationId, imageMode = 'auto' } = call;
   let messageText = appendAttachmentText(text, attachments);
+  // [ROUTE-SM]: confirms the turn reached the router (esp. the voice path) + the
+  // final routed destination — so a "pipeline never triggered" is visible in logs.
+  logger.log(`[ROUTE-SM] dispatch text="${text.slice(0, 60)}" imageMode=${imageMode} hasImageModel=${!!deps.activeImageModel}`);
   const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
   if (shouldGenerateImage && deps.activeImageModel) {
+    logger.log('[ROUTE-SM] dispatch → IMAGE pipeline');
     await handleImageGenerationFn(deps, { prompt: text, conversationId, attachments }); // adds user msg (keeps voice note)
     return;
   }
+  logger.log(`[ROUTE-SM] dispatch → TEXT generation (shouldGenerateImage=${shouldGenerateImage})`);
   // Text route, no text model selected (image-only device): load one / open selector.
   if (!shouldGenerateImage && deps.hasTextModel === false && !deps.activeModelInfo?.isRemote) {
     const ready = await deps.ensureTextModelForChat();
