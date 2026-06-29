@@ -147,6 +147,40 @@ describe('planEviction', () => {
     const plan = planEviction(current, { key: 'huge', type: 'text', sizeMB: 5000 }, 1000);
     expect(plan.fits).toBe(false);
   });
+
+  // The litmus test: image-gen with prompt-enhance IN AUDIO MODE — text (LLM) +
+  // Whisper (STT) + Kokoro (TTS) all resident, then a heavy image model arrives.
+  describe('image-gen-in-audio scenario (STT/TTS resident)', () => {
+    const audioResidents = () => [
+      R('txt', 'text', 1500, 4),     // LLM (highest priority — evicted last)
+      R('stt', 'whisper', 1500, 1),  // Whisper — sidecar, least-recently-used
+      R('tts', 'tts', 320, 2),       // Kokoro — sidecar
+    ];
+
+    it('frees ONLY the sidecars (STT then TTS) when that fits the image, keeping the LLM', () => {
+      // used = 1500+1500+320 = 3320; image 1200 → after freeing both sidecars:
+      // 1500 (txt) + 1200 = 2700 ≤ 3000 budget → text survives.
+      const plan = planEviction(audioResidents(), { key: 'img', type: 'image', sizeMB: 1200 }, 3000);
+      expect(plan.evict.map(e => e.key)).toEqual(['stt', 'tts']); // sidecars first, LRU order
+      expect(plan.evict.some(e => e.key === 'txt')).toBe(false);  // LLM kept
+      expect(plan.fits).toBe(true);                               // no OOM
+    });
+
+    it('evicts sidecars THEN the LLM (last resort) for a heavy image, and still fits', () => {
+      const plan = planEviction(audioResidents(), { key: 'img', type: 'image', sizeMB: 2500 }, 3000);
+      expect(plan.evict.map(e => e.key)).toEqual(['stt', 'tts', 'txt']); // sidecars first, text last
+      expect(plan.fits).toBe(true);                                      // swapped to fit, not OOM
+    });
+
+    it('an incoming sidecar (TTS) never evicts the LLM or image — only peer sidecars', () => {
+      const current = [R('txt', 'text', 1500, 4), R('img', 'image', 1200, 3), R('stt', 'whisper', 1500, 1)];
+      // Loading TTS over budget may only reclaim from the peer sidecar (STT), never
+      // the generation models — so an in-flight answer/image is never killed for a speaker.
+      const plan = planEviction(current, { key: 'tts', type: 'tts', sizeMB: 320 }, 3200);
+      expect(plan.evict.map(e => e.key)).toEqual(['stt']);
+      expect(plan.evict.some(e => e.key === 'txt' || e.key === 'img')).toBe(false);
+    });
+  });
 });
 
 describe('ModelResidencyManager', () => {
