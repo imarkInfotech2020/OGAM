@@ -452,9 +452,12 @@ describe('runToolLoop', () => {
       const ctx = createContext();
       await runToolLoop(ctx);
 
-      // Tool result message should contain the error
+      // Tool result message states the failure explicitly (never empty, never
+      // mistakable for success) and carries the underlying error + category.
       const toolMsg = mockAddMessage.mock.calls[1][1];
-      expect(toolMsg.content).toBe('Error: Network timeout');
+      expect(toolMsg.content).toContain('Network timeout');
+      expect(toolMsg.content).toContain('failed');
+      expect(toolMsg.content).toContain('do not assume it succeeded');
     });
 
     it('executes multiple tool calls in a single iteration', async () => {
@@ -666,7 +669,10 @@ describe('runToolLoop', () => {
       await runToolLoop(ctx);
 
       expect(onToolCallComplete).toHaveBeenCalledTimes(1);
-      expect(onToolCallComplete).toHaveBeenCalledWith('web_search', result);
+      // The loop normalizes the result (adds status), so match the original fields.
+      expect(onToolCallComplete).toHaveBeenCalledWith('web_search', expect.objectContaining({
+        name: result.name, content: result.content, status: 'ok',
+      }));
     });
 
     it('calls onToolCallStart and onToolCallComplete for multiple tool calls', async () => {

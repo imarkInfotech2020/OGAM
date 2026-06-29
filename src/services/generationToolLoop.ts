@@ -7,6 +7,7 @@ import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
 import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
+import { normalizeToolResult, toolErrorResult, toolResultModelContent } from './tools/toolResult';
 import { getToolExtensions } from './tools/extensions';
 import { Platform } from 'react-native';
 import { selectRelevantTools } from './litertToolSelector';
@@ -246,11 +247,23 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
     if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
     const ext = exts.find(e => e.canHandle(tc.name));
-    const result = ext ? await ext.execute(tc) : await executeToolCall(tc);
+    // Single defensive seam: a tool that THROWS (e.g. an MCP server that's down or
+    // disconnected) must NOT crash the turn. Normalize every outcome to a typed
+    // result, and feed the model an explicit string — so a failure/empty is never
+    // mistaken for a successful answer.
+    const start = Date.now();
+    let result: ToolResult;
+    try {
+      const raw = ext ? await ext.execute(tc) : await executeToolCall(tc);
+      result = normalizeToolResult(tc, raw);
+    } catch (err) {
+      logger.error(`[ToolLoop] tool "${tc.name}" threw — surfacing as a typed error result`, err);
+      result = toolErrorResult(tc, err, start);
+    }
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`, role: 'tool',
-      content: result.error ? `Error: ${result.error}` : result.content, timestamp: Date.now(),
+      content: toolResultModelContent(result), timestamp: Date.now(),
       toolCallId: tc.id, toolName: tc.name, generationTimeMs: result.durationMs,
     };
     loopMessages.push(toolResultMsg);
