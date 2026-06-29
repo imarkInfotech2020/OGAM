@@ -253,22 +253,30 @@ describe('shouldRouteToImageGenerationFn', () => {
     expect(await shouldRouteToImageGenerationFn(deps, 'text', false)).toBe(false);
   });
 
-  it('returns true immediately when forceImageMode and imageModelLoaded', async () => {
-    const deps = makeGenerationDeps({ imageModelLoaded: true });
+  it('returns true immediately when forceImageMode', async () => {
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw', true);
     expect(result).toBe(true);
     expect(mockClassifyIntent).not.toHaveBeenCalled();
   });
 
-  it('returns false when imageModelLoaded is false', async () => {
-    const deps = makeGenerationDeps({ imageModelLoaded: false });
+  it('returns false when no image model is selected (nothing to load on demand)', async () => {
+    const deps = makeGenerationDeps({ activeImageModel: null });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw a cat');
     expect(result).toBe(false);
   });
 
+  it('routes an image request even when the image model is NOT resident (loads on demand — the voice-mode fix)', async () => {
+    mockClassifyIntent.mockResolvedValueOnce('image');
+    // Audio mode: text+TTS resident, image model evicted. Gating on "selected", not
+    // "loaded", lets "draw a horse" route to the pipeline (which loads it on demand).
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel, imageModelLoaded: false });
+    expect(await shouldRouteToImageGenerationFn(deps, 'draw a horse')).toBe(true);
+  });
+
   it('with no text model, routes a chat request to text (heuristics)', async () => {
     mockClassifyIntent.mockResolvedValueOnce('text');
-    const deps = makeGenerationDeps({ imageModelLoaded: true, hasTextModel: false });
+    const deps = makeGenerationDeps({ hasTextModel: false, activeImageModel: baseImageModel });
     const result = await shouldRouteToImageGenerationFn(deps, 'tell me a joke');
     expect(result).toBe(false);
     expect(mockClassifyIntent).toHaveBeenCalledWith('tell me a joke', { useLLM: false });
@@ -276,7 +284,7 @@ describe('shouldRouteToImageGenerationFn', () => {
 
   it('with no text model, routes an image request to image (heuristics)', async () => {
     mockClassifyIntent.mockResolvedValueOnce('image');
-    const deps = makeGenerationDeps({ imageModelLoaded: true, hasTextModel: false });
+    const deps = makeGenerationDeps({ hasTextModel: false, activeImageModel: baseImageModel });
     expect(await shouldRouteToImageGenerationFn(deps, 'draw a dog')).toBe(true);
   });
 
@@ -284,7 +292,7 @@ describe('shouldRouteToImageGenerationFn', () => {
     mockClassifyIntent.mockResolvedValueOnce('text');
     const classifier = { ...baseModel, id: 'smol-1' };
     const deps = makeGenerationDeps({
-      imageModelLoaded: true, hasTextModel: false,
+      hasTextModel: false, activeImageModel: baseImageModel,
       downloadedModels: [baseModel, classifier],
       settings: { ...makeGenerationDeps().settings, classifierModelId: 'smol-1' },
     });
@@ -298,7 +306,7 @@ describe('shouldRouteToImageGenerationFn', () => {
   it('classifies intent via LLM when autoDetectMethod=llm', async () => {
     mockClassifyIntent.mockResolvedValueOnce('image');
     const deps = makeGenerationDeps({
-      imageModelLoaded: true,
+      activeImageModel: baseImageModel,
       settings: { ...makeGenerationDeps().settings, autoDetectMethod: 'llm' },
     });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw a cat');
@@ -310,7 +318,7 @@ describe('shouldRouteToImageGenerationFn', () => {
   it('resets image status when LLM returns non-image intent', async () => {
     mockClassifyIntent.mockResolvedValueOnce('text');
     const deps = makeGenerationDeps({
-      imageModelLoaded: true,
+      activeImageModel: baseImageModel,
       settings: { ...makeGenerationDeps().settings, autoDetectMethod: 'llm' },
     });
     const result = await shouldRouteToImageGenerationFn(deps, 'hello');
@@ -321,7 +329,7 @@ describe('shouldRouteToImageGenerationFn', () => {
 
   it('returns false and resets state when classification throws', async () => {
     mockClassifyIntent.mockRejectedValueOnce(new Error('network error'));
-    const deps = makeGenerationDeps({ imageModelLoaded: true });
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
     const result = await shouldRouteToImageGenerationFn(deps, 'draw');
     expect(result).toBe(false);
     expect(deps.setIsClassifying).toHaveBeenCalledWith(false);
@@ -1085,16 +1093,14 @@ describe('handleSendFn — additional branches', () => {
     expect(startGeneration).not.toHaveBeenCalled();
   });
 
-  it('prefixes message when shouldGenerateImage=true but no image model loaded', async () => {
-    mockClassifyIntent.mockResolvedValue('image');
+  it('prefixes message when the user forces image mode but no image model is selected', async () => {
     const startGeneration = jest.fn(() => Promise.resolve());
     const deps = makeGenerationDeps({
-      imageModelLoaded: true,
-      activeImageModel: null, // no image model
+      activeImageModel: null, // no image model to load
     });
     await handleSendFn(deps, {
       text: 'draw a cat',
-      imageMode: 'auto',
+      imageMode: 'force', // force routes to image even without a selected model → prefix the text
       startGeneration,
       setDebugInfo: jest.fn(),
     });

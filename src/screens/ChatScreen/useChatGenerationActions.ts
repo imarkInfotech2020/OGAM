@@ -94,14 +94,20 @@ function buildMessagesForContext(conversationId: string, messageText: string, sy
   return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
 }
 export async function shouldRouteToImageGenerationFn(
-  deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'imageModelLoaded' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage' | 'hasTextModel'>,
+  deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'activeImageModel' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage' | 'hasTextModel'>,
   text: string,
   forceImageMode?: boolean,
 ): Promise<boolean> {
   if (deps.isGeneratingImage) return false;
   if (deps.settings.imageGenerationMode === 'manual') return forceImageMode === true;
   if (forceImageMode) return true;
-  if (!deps.imageModelLoaded) return false;
+  // Route on whether an image model is SELECTED (downloaded), not whether it's
+  // currently resident. The pipeline loads it on demand (residency evicts the text
+  // model to fit — reliable now that eviction measures real freed RAM). Gating on
+  // "already loaded" is what made voice "draw a horse" fall through to the text
+  // model: in audio mode the text+TTS models are resident and the image model has
+  // been evicted, so it was never loaded. This is one router for both modes.
+  if (!deps.activeImageModel) return false;
   // No text model (image-only): SMOL classifier decides text vs image, else heuristics; chat returns false.
   if (deps.hasTextModel === false) {
     const classifierModel = deps.settings.classifierModelId
