@@ -138,6 +138,24 @@ class ImageGenerationService {
     if ('previewPath' in partial) appStore.setImagePreviewPath(this.state.previewPath);
   }
 
+  /**
+   * The SINGLE owner of generation failure (SRP): move to the error phase AND
+   * surface the reason to the user as a chat message — so a failure is NEVER
+   * silent and the handling is defined once, not duplicated per call site. Every
+   * error path routes through here. Returns null for `return this._fail(...)`.
+   */
+  private _fail(error: string, conversationId: string | null = this.state.conversationId): null {
+    this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error });
+    if (conversationId) {
+      useChatStore.getState().addMessage(conversationId, {
+        role: 'assistant',
+        content: `Image generation failed: ${error}`,
+        isSystemInfo: true,
+      });
+    }
+    return null;
+  }
+
   private _checkSharePrompt(): void {
     const s = useAppStore.getState();
     const count = s.incrementImageGenerationCount();
@@ -249,7 +267,7 @@ class ImageGenerationService {
     const needsThreadReload = loadedThreads == null || loadedThreads !== desiredThreads;
     if (isImageModelLoaded && loadedPath === activeImageModel.modelPath && !needsThreadReload) return true;
     if (!activeImageModelId) {
-      this.updateState({ phase: 'error', error: 'No image model selected' });
+      this._fail('No image model selected');
       return false;
     }
     try {
@@ -257,7 +275,7 @@ class ImageGenerationService {
       await activeModelService.loadImageModel(activeImageModelId);
       return true;
     } catch (error: any) {
-      this.updateState({ phase: 'error', progress: null, status: null, error: `Failed to load image model: ${error?.message || 'Unknown error'}` });
+      this._fail(`Failed to load image model: ${error?.message || 'Unknown error'}`);
       return false;
     }
   }
@@ -347,7 +365,7 @@ class ImageGenerationService {
           ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
           : errorMsg;
 
-        this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error: userMessage });
+        this._fail(userMessage);
       }
       return null;
     }
@@ -364,7 +382,7 @@ class ImageGenerationService {
     }
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
-    if (!activeImageModel) { this.updateState({ phase: 'error', error: 'No image model selected' }); return null; }
+    if (!activeImageModel) return this._fail('No image model selected', params.conversationId || null);
 
     const steps = params.steps || settings.imageSteps || 8;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
