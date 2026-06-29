@@ -24,6 +24,7 @@ const STT_CAPABILITIES = {
   determinateProgress: true,
 } as const;
 
+const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** The store keys STT models as `whisper-<id>`; the uniform id uses the bare id. */
 const bareId = (storeModelId: string): string => storeModelId.replace(/^whisper-/, '');
 const downloadId = (id: string): string => id.replace(/^stt:/, '');
@@ -67,7 +68,8 @@ export const sttProvider: DownloadProvider = {
   async cancel(id: string): Promise<void> {
     const entry = findEntry(downloadId(id));
     if (!entry) return;
-    await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+    await backgroundDownloadService.cancelDownload(entry.downloadId)
+      .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
     useDownloadStore.getState().remove(entry.modelKey);
   },
 
@@ -76,21 +78,25 @@ export const sttProvider: DownloadProvider = {
     // Clear the dead native task + stale store row, then re-download (whisperService
     // refuses to start while an entry exists) — the same recovery the manager uses.
     const entry = findEntry(modelId);
-    if (entry?.downloadId) await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+    if (entry?.downloadId) await backgroundDownloadService.cancelDownload(entry.downloadId)
+      .catch(err => logger.log(`[DL-SM] ${id} retry: native cancel failed err=${msg(err)}`));
     if (entry) useDownloadStore.getState().remove(entry.modelKey);
+    // Fire-and-forget re-download — log its failure as a [DL-SM] line so a retry
+    // that silently fails to restart is never a mystery.
     whisperService.downloadModel(modelId).catch(err =>
-      logger.warn('[sttProvider] retry download failed:', err));
+      logger.log(`[DL-SM] ${id} retry: re-download failed err=${msg(err)}`));
   },
 
   async remove(id: string): Promise<void> {
     const modelId = downloadId(id);
     const entry = findEntry(modelId);
     if (entry) {
-      await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+      await backgroundDownloadService.cancelDownload(entry.downloadId)
+        .catch(err => logger.log(`[DL-SM] ${id} remove: native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await whisperService.deleteModel(modelId).catch(err =>
-      logger.warn('[sttProvider] delete failed:', err));
+    await whisperService.deleteModel(modelId)
+      .catch(err => logger.log(`[DL-SM] ${id} remove: delete failed err=${msg(err)}`));
   },
 
   subscribe(onChange: () => void): () => void {

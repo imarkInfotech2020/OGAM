@@ -30,6 +30,9 @@ import {
 type Listener = () => void;
 type Op = 'retry' | 'cancel' | 'remove';
 
+/** Coalesce a burst of provider changes into one self-list (transition logging). */
+const SELF_REFRESH_MS = 300;
+
 /** Which capability flag gates each control op. */
 const OP_CAPABILITY: Record<Op, keyof ModelDownload['capabilities']> = {
   retry: 'retry',
@@ -45,14 +48,37 @@ class ModelDownloadService {
   private readonly lastStatus = new Map<string, ModelDownloadStatus>();
   /** Cache of the most recent merged list, for id→provider routing + capability checks. */
   private lastList: ModelDownload[] = [];
+  private selfRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Register a domain's provider. Re-registering replaces (and re-subscribes). */
   register(provider: DownloadProvider): void {
     this.providerUnsubs.get(provider.modelType)?.();
+    // Re-registering: forget this type's last-seen statuses so the next list logs
+    // its downloads as 'new' rather than churning gone/new against stale ids.
+    for (const id of [...this.lastStatus.keys()]) {
+      if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
+    }
     this.providers.set(provider.modelType, provider);
-    const unsub = provider.subscribe(() => { this.notify(); });
+    const unsub = provider.subscribe(() => { this.onProviderChange(); });
     this.providerUnsubs.set(provider.modelType, unsub);
     logger.log(`[DL-SM] provider registered type=${provider.modelType}`);
+    this.onProviderChange(); // capture/log this provider's initial state
+  }
+
+  /**
+   * A provider reported a change. Notify external subscribers AND self-drive a
+   * (coalesced) list() so transitions are detected + [DL-SM]-logged even when NO UI
+   * is subscribed — closing the "stuck with no transition logged" gap. The provider
+   * subscriptions (downloadStore / ttsStore) fire on every progress/status change,
+   * so this is event-driven, not interval polling.
+   */
+  private onProviderChange(): void {
+    this.notify();
+    if (this.selfRefreshTimer) return; // coalesce a burst
+    this.selfRefreshTimer = setTimeout(() => {
+      this.selfRefreshTimer = null;
+      this.list().catch(() => {});
+    }, SELF_REFRESH_MS);
   }
 
   /**
@@ -165,6 +191,7 @@ class ModelDownloadService {
   /** Test helper. */
   _reset(): void {
     for (const unsub of this.providerUnsubs.values()) unsub();
+    if (this.selfRefreshTimer) { clearTimeout(this.selfRefreshTimer); this.selfRefreshTimer = null; }
     this.providers.clear();
     this.providerUnsubs.clear();
     this.listeners.clear();

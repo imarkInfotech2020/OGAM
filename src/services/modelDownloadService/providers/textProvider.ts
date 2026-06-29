@@ -80,8 +80,10 @@ export const textProvider: DownloadProvider = {
   async cancel(id: string): Promise<void> {
     const entry = findEntry(modelIdOf(id));
     if (!entry) return;
-    await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
-    if (entry.mmProjDownloadId) await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
+    await modelManager.cancelBackgroundDownload(entry.downloadId)
+      .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
+    if (entry.mmProjDownloadId) await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId)
+      .catch(err => logger.log(`[DL-SM] ${id} cancel: mmproj native cancel failed err=${msg(err)}`));
     useDownloadStore.getState().remove(entry.modelKey);
   },
 
@@ -119,10 +121,12 @@ export const textProvider: DownloadProvider = {
     const modelId = modelIdOf(id);
     const entry = findEntry(modelId);
     if (entry) {
-      await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
+      await modelManager.cancelBackgroundDownload(entry.downloadId)
+        .catch(err => logger.log(`[DL-SM] ${id} remove: native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await modelManager.deleteModel(modelId).catch(err => logger.warn('[textProvider] delete failed:', err));
+    await modelManager.deleteModel(modelId)
+      .catch(err => logger.log(`[DL-SM] ${id} remove: delete failed err=${msg(err)}`));
     useAppStore.getState().removeDownloadedModel(modelId);
   },
 
@@ -145,3 +149,4 @@ export const textProvider: DownloadProvider = {
 function safeJson(s: string): any {
   try { return JSON.parse(s); } catch { return null; }
 }
+const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));

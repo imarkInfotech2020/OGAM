@@ -125,6 +125,15 @@ describe('ModelDownloadService', () => {
     await expect(modelDownloadService.reconcile()).resolves.toBeUndefined();
   });
 
+  it('self-drives transition logging on a provider change — no external list() needed', async () => {
+    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
+    modelDownloadService.register(p); // schedules a coalesced self-list
+    // No one calls list(); the service must self-list and log the transition.
+    await new Promise(r => setTimeout(r, 360));
+    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
+    expect(lines.some((l: string) => l.includes('text:a') && l.includes('new → downloading'))).toBe(true);
+  });
+
   it('notifies subscribers when a provider reports a change', async () => {
     const p = makeProvider('text', [dl('text:a', 'text')]);
     modelDownloadService.register(p);

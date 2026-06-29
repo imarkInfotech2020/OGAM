@@ -29,6 +29,7 @@ export interface ImageDownloadOps {
 let imageOps: ImageDownloadOps = {};
 export function setImageDownloadOps(ops: ImageDownloadOps): void { imageOps = ops; }
 
+const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const bareId = (storeModelId: string): string => storeModelId.replace(/^image:/, '');
 const modelIdOf = (id: string): string => id.replace(/^image:/, '');
 const isMultifile = (e: DownloadEntry): boolean => e.downloadId.startsWith('image-multi:');
@@ -78,7 +79,8 @@ export const imageProvider: DownloadProvider = {
     if (!entry) return;
     if (imageOps.cancel) { await imageOps.cancel(modelId, entry); return; } // UI-coupled (multi-file)
     // Fallback: plain native cancel for a zip/native row.
-    await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+    await backgroundDownloadService.cancelDownload(entry.downloadId)
+      .catch(err => logger.log(`[DL-SM] image:${modelId} cancel: native cancel failed err=${msg(err)}`));
     useDownloadStore.getState().remove(entry.modelKey);
   },
 
@@ -94,11 +96,14 @@ export const imageProvider: DownloadProvider = {
     const modelId = modelIdOf(id);
     const entry = findEntry(modelId);
     if (entry) {
-      await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+      await backgroundDownloadService.cancelDownload(entry.downloadId)
+        .catch(err => logger.log(`[DL-SM] image:${modelId} remove: native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await activeModelService.unloadImageModel().catch(() => {});
-    await modelManager.deleteImageModel(modelId).catch(err => logger.warn('[imageProvider] delete failed:', err));
+    await activeModelService.unloadImageModel()
+      .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
+    await modelManager.deleteImageModel(modelId)
+      .catch(err => logger.log(`[DL-SM] image:${modelId} remove: delete failed err=${msg(err)}`));
     useAppStore.getState().removeDownloadedImageModel(modelId);
   },
 
