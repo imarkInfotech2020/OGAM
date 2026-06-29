@@ -228,7 +228,7 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
     removeImagesByConversationId: jest.fn(() => []),
     generatingForConversationRef: makeRef<string | null>(null),
     navigation: { goBack: jest.fn(), navigate: jest.fn() },
-    ensureModelLoaded: jest.fn(() => Promise.resolve()),
+    ensureModelLoaded: jest.fn(() => Promise.resolve({ ok: true })),
     ensureTextModelForChat: jest.fn(() => Promise.resolve(true)),
     createConversation: jest.fn(() => 'new-conv-id'),
     pendingProjectId: undefined,
@@ -706,12 +706,13 @@ describe('startGenerationFn', () => {
     expect(mockClearKVCache).toHaveBeenCalledWith(false);
   });
 
-  it('shows alert when model is not loaded after ensureModelLoaded', async () => {
+  it('shows a reason-specific alert when the model is not loaded after ensureModelLoaded', async () => {
     mockGetLoadedModelPath.mockReturnValueOnce(null); // triggers needsModelLoad
-    mockIsModelLoaded.mockReturnValueOnce(false); // model still not loaded after ensureModelLoaded
+    mockIsModelLoaded.mockReturnValueOnce(false); // model still not loaded after ensureModelLoaded → post-verify fails
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hi' });
-    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Error' }));
+    // No longer a generic "Error" — the typed outcome drives a specific title.
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Failed to Load Model' }));
     expect(mockGenerateResponse).not.toHaveBeenCalled();
   });
 

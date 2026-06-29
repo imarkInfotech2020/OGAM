@@ -16,6 +16,7 @@ import { useChatStore, useProjectStore, useRemoteServerStore } from '../../store
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
+import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
@@ -60,7 +61,7 @@ export type GenerationDeps = {
   generatingForConversationRef: MutableRefObject<string | null>;
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
-  ensureModelLoaded: () => Promise<void>;
+  ensureModelLoaded: () => Promise<ModelReadyOutcome>;
   /** Loads the last-selected text model for a chat request that has none; opens
    *  the model selector and returns false when no text model was ever chosen. */
   ensureTextModelForChat: () => Promise<boolean>;
@@ -177,18 +178,6 @@ export async function handleImageGenerationFn(
   generationService.drainQueue();
 }
 export type StartGenerationCall = { setDebugInfo: SetState<any>; targetConversationId: string; messageText: string };
-async function ensureModelReady(deps: GenerationDeps): Promise<boolean> {
-  if (deps.activeModelInfo?.isRemote) return true;
-  if (deps.activeModel?.engine === 'litert') {
-    if (liteRTService.isModelLoaded()) return true;
-    await deps.ensureModelLoaded();
-    return liteRTService.isModelLoaded();
-  }
-  const loadedPath = llmService.getLoadedModelPath();
-  if (loadedPath && loadedPath === deps.activeModel!.filePath) return true;
-  await deps.ensureModelLoaded();
-  return llmService.isModelLoaded() && llmService.getLoadedModelPath() === deps.activeModel!.filePath;
-}
 async function prepareContext(setDebugInfo: SetState<any>, systemPrompt: string, messages: Message[]): Promise<void> {
   try {
     const contextDebug = await llmService.getContextDebugInfo(messages);
@@ -275,12 +264,9 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // dispatchGenerationFn — this function only ever generates text.
   deps.generatingForConversationRef.current = targetConversationId;
   // For remote models, skip local model loading
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel) {
-    if (!(await ensureModelReady(deps))) {
-      deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.'));
-      deps.generatingForConversationRef.current = null;
-      return;
-    }
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureReadyOrAlert(deps, 'startGeneration'))) {
+    deps.generatingForConversationRef.current = null;
+    return;
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
   const { enabledTools, rawPrompt, isLiteRT } = resolveToolsAndPrompt(deps, conversation, messageText);
@@ -432,9 +418,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureModelReady(deps))) {
-    logger.log('[RESEND-SM] regenerate BAIL: ensureModelReady failed'); deps.setAlertState(showAlert('Error', 'Failed to load model. Please try again.')); return;
-  }
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureReadyOrAlert(deps, 'regenerate'))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   deps.generatingForConversationRef.current = targetConversationId;
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
