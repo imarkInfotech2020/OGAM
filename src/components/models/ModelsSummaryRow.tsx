@@ -46,13 +46,15 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
           const count = counts?.[type];
           return (
             <View key={type} style={[styles.iconCol, !active && styles.inactive]}>
-              <Icon name={icon} size={18} color={active ? colors.primary : colors.textMuted} />
-              <View style={styles.captionRow}>
+              <View style={styles.typeStack}>
+                <Icon name={icon} size={18} color={active ? colors.primary : colors.textMuted} />
                 <Text style={[styles.caption, active && styles.captionActive]}>{caption}</Text>
-                {typeof count === 'number' && (
-                  <Text style={[styles.count, count > 0 && styles.countActive]}>{count}</Text>
-                )}
               </View>
+              {typeof count === 'number' && (
+                // Big numeral to the RIGHT of the icon+label, tall enough to span
+                // both — fills the gap between types so the row reads at a glance.
+                <Text style={[styles.count, count > 0 && styles.countActive]}>{count}</Text>
+              )}
             </View>
           );
         })}
@@ -83,11 +85,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'space-between' as const,
     paddingHorizontal: SPACING.sm,
   },
-  iconCol: { alignItems: 'center' as const, gap: SPACING.xs },
+  iconCol: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
   inactive: { opacity: 0.35 },
-  captionRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
+  typeStack: { alignItems: 'center' as const, gap: SPACING.xs },
   caption: { ...TYPOGRAPHY.metaSmall, color: colors.textMuted },
   captionActive: { color: colors.textSecondary },
-  count: { ...TYPOGRAPHY.metaSmall, color: colors.textMuted },
+  // Large numeral spanning the icon+caption height. display weight (200) keeps it
+  // within the ≤400 rule; lineHeight matches the stack so it sits vertically centered.
+  count: { ...TYPOGRAPHY.display, fontSize: 26, lineHeight: 30, color: colors.textMuted },
   countActive: { color: colors.primary },
 });
