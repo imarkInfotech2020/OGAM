@@ -120,21 +120,30 @@ class ModelDownloadService {
   cancel(id: string): Promise<void> { return this.dispatch('cancel', id); }
   remove(id: string): Promise<void> { return this.dispatch('remove', id); }
 
-  /** Route a control op to the owning provider, gated by the download's capability. */
+  /**
+   * Route a control op to the owning provider, AUTHORITATIVELY: look the download up
+   * (refreshing the list if the cache is cold) and route by its own modelType — the
+   * service never parses/encodes the id scheme. The capability gate then refuses
+   * (log, no-op) an unsupported op, and a not-found id is refused, never a silent
+   * fall-through that dispatches.
+   */
   private async dispatch(op: Op, id: string): Promise<void> {
-    const type = this.typeOf(id);
-    const provider = type ? this.providers.get(type) : undefined;
-    if (!provider) {
-      logger.log(`[DL-SM] ${op} ${id} REFUSED: no provider`);
+    let download = this.lastList.find(d => d.id === id);
+    if (!download) { await this.list(); download = this.lastList.find(d => d.id === id); }
+    if (!download) {
+      logger.log(`[DL-SM] ${op} ${id} REFUSED: not found`);
       return;
     }
-    // Capability gate: refuse (log, no-op) rather than calling an unsupported op.
-    const download = this.lastList.find(d => d.id === id);
-    if (download && !download.capabilities[OP_CAPABILITY[op]]) {
+    const provider = this.providers.get(download.modelType);
+    if (!provider) {
+      logger.log(`[DL-SM] ${op} ${id} REFUSED: no provider for type=${download.modelType}`);
+      return;
+    }
+    if (!download.capabilities[OP_CAPABILITY[op]]) {
       logger.log(`[DL-SM] ${op} ${id} REFUSED: capability ${OP_CAPABILITY[op]}=false`);
       return;
     }
-    logger.log(`[DL-SM] ${op} ${id} → dispatch type=${type}`);
+    logger.log(`[DL-SM] ${op} ${id} → dispatch type=${download.modelType}`);
     try {
       await provider[op](id);
     } catch (err) {
@@ -142,12 +151,6 @@ class ModelDownloadService {
       throw err;
     }
     this.notify();
-  }
-
-  /** id is provider-scoped `${modelType}:${modelId}` — the prefix is the owner. */
-  private typeOf(id: string): ModelDownloadType | undefined {
-    const prefix = id.split(':', 1)[0] as ModelDownloadType;
-    return this.providers.has(prefix) ? prefix : undefined;
   }
 
   subscribe(listener: Listener): () => void {

@@ -81,6 +81,14 @@ describe('ModelDownloadService', () => {
     expect(text.remove).not.toHaveBeenCalled();
   });
 
+  it('dispatches even with a cold cache (refreshes list, routes by the download modelType)', async () => {
+    const text = makeProvider('text', [dl('text:a', 'text')]);
+    modelDownloadService.register(text);
+    // No list() called first — dispatch must refresh authoritatively, then route.
+    await modelDownloadService.retry('text:a');
+    expect(text.retry).toHaveBeenCalledWith('text:a');
+  });
+
   it('REFUSES an op when the capability is false (no dead op), and logs it', async () => {
     const tts = makeProvider('tts', [dl('tts:k', 'tts', { capabilities: { ...CAPS_FULL, cancel: false } })]);
     modelDownloadService.register(tts);

@@ -42,6 +42,10 @@ export const imageProvider: DownloadProvider = {
 
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
+    // retry is only honest when the UI has injected the (alert-coupled) image retry;
+    // cancel always works (native fallback). Declaring retry from the real op keeps
+    // the capability truthful instead of advertising a retry that silently refuses.
+    const canRetry = !!imageOps.retry;
     for (const e of imageEntries()) {
       const id = bareId(e.modelId);
       // multi-file (no native row) is never resumable; zip resumes on Android.
@@ -50,7 +54,7 @@ export const imageProvider: DownloadProvider = {
         id: `image:${id}`, modelType: 'image', name: e.fileName || id,
         sizeBytes: e.combinedTotalBytes || e.totalBytes, bytesDownloaded: e.bytesDownloaded,
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: { cancel: true, retry: true, remove: true, resumable, determinateProgress: true },
+        capabilities: { cancel: true, retry: canRetry, remove: true, resumable, determinateProgress: true },
         error: e.errorMessage,
       });
     }
