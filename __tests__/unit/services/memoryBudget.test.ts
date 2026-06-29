@@ -13,9 +13,9 @@ import {
 const GB = 1024;
 
 describe('modelBudgetFraction', () => {
-  it('keeps low-RAM devices conservative (unchanged behavior)', () => {
-    expect(modelBudgetFraction(4, 'ios')).toBe(0.40);
-    expect(modelBudgetFraction(4, 'android')).toBe(0.40);
+  it('keeps low-RAM devices conservative (≈2GB on 4GB)', () => {
+    expect(modelBudgetFraction(4, 'ios')).toBe(0.50);
+    expect(modelBudgetFraction(4, 'android')).toBe(0.50);
   });
 
   it('keeps 6-8GB devices at the prior 0.60 (unchanged)', () => {
@@ -35,9 +35,9 @@ describe('modelMemoryBudgetMB', () => {
     expect(budget).toBeGreaterThan(7 * GB); // 7GB model now fits
   });
 
-  it('does NOT inflate the 4GB budget (jetsam safety preserved)', () => {
-    // 0.40 * 4096 = 1638; reserve cap (4096-1500=2596) is looser, so fraction binds.
-    expect(modelMemoryBudgetMB(4 * GB, 'ios')).toBeCloseTo(0.40 * 4 * GB, 0);
+  it('caps the 4GB budget at ~2GB (0.50; jetsam-safe, dynamic guard tightens further)', () => {
+    // 0.50 * 4096 = 2048; reserve cap (4096-1500=2596) is looser, so fraction binds.
+    expect(modelMemoryBudgetMB(4 * GB, 'ios')).toBeCloseTo(0.50 * 4 * GB, 0);
   });
 
   it('never commits past the reserve floor', () => {

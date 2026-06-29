@@ -2,23 +2,26 @@
  * Memory budget — the SINGLE source of truth for "how much RAM this process may
  * safely commit to on-device models" on THIS device + platform.
  *
- * Both consumers read it so they can never disagree (one saying a model fits
- * while the other rejects it):
+ * Both consumers read it so they can never disagree (one saying a model fits while
+ * the other rejects it):
  *  - the residency manager (capacity planning + eviction), and
  *  - the pre-load memory check (checkMemoryForModel).
  *
- * Why a fraction of RAM at all: iOS jetsam / Android's low-memory killer terminate
- * a process that commits too much. The safe fraction is NOT flat:
- *  - low-RAM devices must stay well under the kill line (the fixed ~1.5GB OS+app
- *    baseline is a big slice of 4GB), so the fraction is small;
- *  - high-RAM devices can use a larger fraction (that fixed baseline is a small
- *    slice of 12GB), and on iOS we hold com.apple.developer.kernel.increased-
- *    memory-limit, which raises the per-process cap well above the default — so a
- *    12GB iPhone can safely run a 7GB model that a flat 60% cap wrongly rejected.
+ * The safe fraction is device + platform aware (NOT flat) because the fixed OS+app
+ * baseline is a big slice of 4GB but a small slice of 12GB, and on iOS we hold
+ * com.apple.developer.kernel.increased-memory-limit which raises the per-process
+ * cap well above the default:
+ *  - ≤4GB: 0.50 (≈2GB on a 4GB device — safe in practice; the dynamic real-free-RAM
+ *    guard tightens further under real pressure),
+ *  - 6-8GB: 0.60,
+ *  - 12GB+: 0.78 iOS / 0.70 Android (so a 12GB iPhone runs a 7GB model a flat 60%
+ *    wrongly rejected).
+ * This fraction is the absolute PHYSICAL ceiling; the residency manager's dynamic
+ * budget (real free RAM right now) is the actual protection against loading into swap.
  *
- * Previously two places computed this independently (a 0.6 fraction in the
- * residency policy AND a separate 0.6 in the model-load check) and a flat 60% was
- * applied to every device above 4GB — treating a 12GB iPhone like a 6GB one.
+ * Previously two places computed this independently (a 0.6 in the residency policy
+ * AND a separate device-tiered fraction in the model-load check); unifying it here
+ * is the fix.
  */
 import { Platform } from 'react-native';
 
@@ -27,18 +30,16 @@ export const MEMORY_RESERVE_MB = 1500;
 
 type Plat = 'ios' | 'android' | string;
 
-/** Safe fraction of total RAM this process may commit to models, by device tier.
- *  ≤8GB tiers are unchanged from the prior flat behavior; only high-RAM devices
- *  (the new 12GB+ flagships) get a larger, platform-aware fraction. */
+/** Safe fraction of total RAM this process may commit to models, by device tier. */
 export function modelBudgetFraction(totalRamGB: number, platform: Plat = Platform.OS): number {
-  if (totalRamGB <= 4) return 0.40; // 4GB: must stay well under jetsam
-  if (totalRamGB <= 8) return 0.60; // 6-8GB: unchanged
+  if (totalRamGB <= 4) return 0.50; // ~2GB on 4GB — safe; dynamic guard tightens under pressure
+  if (totalRamGB <= 8) return 0.60; // 6-8GB
   return platform === 'ios' ? 0.78 : 0.70; // 12GB+: iOS holds the increased-memory entitlement
 }
 
 /** Fraction at which we WARN (load allowed, perf may suffer). Below the budget. */
 export function modelWarningFraction(totalRamGB: number, platform: Plat = Platform.OS): number {
-  if (totalRamGB <= 4) return 0.30;
+  if (totalRamGB <= 4) return 0.40;
   if (totalRamGB <= 8) return 0.50;
   return platform === 'ios' ? 0.66 : 0.60;
 }

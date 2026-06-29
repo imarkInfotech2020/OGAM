@@ -14,10 +14,11 @@ const R = (key: string, type: any, sizeMB: number, lastUsedAt: number, pinned = 
 
 describe('computeBudgetMB', () => {
   it('takes the smaller of fraction-of-RAM and RAM-minus-reserve', () => {
-    // 8GB: 0.6*8192=4915 vs 8192-1500=6692 → 4915
+    // 8GB tier (0.60): 0.6*8192=4915 vs 8192-1500=6692 → 4915
     expect(Math.round(computeBudgetMB(8192))).toBe(4915);
-    // 3GB: 0.6*3072=1843 vs 3072-1500=1572 → 1572 (reserve dominates on low RAM)
-    expect(Math.round(computeBudgetMB(3072))).toBe(1572);
+    // 3GB tier (≤4GB → 0.50, unified with the pre-load check, not a flat 0.6):
+    // 0.50*3072=1536 vs 3072-1500=1572 → 1536 (fraction dominates on low RAM)
+    expect(Math.round(computeBudgetMB(3072))).toBe(1536);
   });
 
   it('never returns negative', () => {
@@ -26,10 +27,46 @@ describe('computeBudgetMB', () => {
 });
 
 describe('planEviction', () => {
-  it('evicts the image model when loading text, even if both fit the budget (mutual exclusion)', () => {
+  it('keeps text and image co-resident when both fit (no forced mutual exclusion)', () => {
+    // Smart routing: if there is budget, keep fitting models — image-gen with
+    // prompt enhancement keeps BOTH the image model and the text model warm.
     const current = [R('img', 'image', 400, 1)];
     const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 4000);
-    expect(plan.evict.map(e => e.key)).toEqual(['img']); // text & image never co-reside
+    expect(plan.evict).toEqual([]); // 400 + 800 = 1200 ≤ 4000 → keep both
+    expect(plan.fits).toBe(true);
+  });
+
+  it('evicts by priority (sidecar < image < text), lowest first, one at a time', () => {
+    // Over budget: free the lowest-priority resident first. text is highest and
+    // must survive; the sidecar goes before the image model.
+    const current = [
+      R('txt', 'text', 800, 3),
+      R('img', 'image', 800, 2),
+      R('stt', 'whisper', 300, 1),
+    ];
+    // Incoming text (already-style heavy) needs 800; budget 1900.
+    // used = img800 + stt300 = 1100 (txt is the incoming key, excluded). +800 = 1900 ≤ 1900? evict nothing.
+    // Tighten budget to force exactly one eviction of the lowest-priority victim.
+    const plan = planEviction(current, { key: 'txt2', type: 'text', sizeMB: 800 }, 1800);
+    // used initially = 800+800+300 = 1900; +800 = 2700 > 1800. Evict lowest first:
+    // stt(300)→1600+800=2400>1800; img(800)→ used 800, +800=1600 ≤1800. Stop.
+    expect(plan.evict.map(e => e.key)).toEqual(['stt', 'img']); // sidecar then image; text kept
+    expect(plan.evict.some(e => e.key === 'txt')).toBe(false);
+    expect(plan.fits).toBe(true);
+  });
+
+  it('swaps out a single LRU victim for a 4th model rather than clearing all', () => {
+    const current = [
+      R('txt', 'text', 600, 5),
+      R('sttA', 'whisper', 300, 1), // least-recently-used sidecar
+      R('ttsB', 'tts', 300, 4),
+    ];
+    // Incoming sidecar (embedding) 300; budget 1300. used=1200, +300=1500>1300.
+    // Sidecar may only reclaim peer sidecars; evict the LRU one (sttA): used drops
+    // to 900, +300=1200 ≤ 1300 → stop. One victim, not a clear.
+    const plan = planEviction(current, { key: 'emb', type: 'embedding', sizeMB: 300 }, 1300);
+    expect(plan.evict.map(e => e.key)).toEqual(['sttA']); // one victim, LRU peer; text untouched
+    expect(plan.evict.some(e => e.key === 'txt')).toBe(false);
     expect(plan.fits).toBe(true);
   });
 

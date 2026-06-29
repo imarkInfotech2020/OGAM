@@ -150,7 +150,17 @@ class ActiveModelService {
     // extras) to fit the RAM budget before loading this text model. The evicted
     // models' unload fns are the non-locking internal variants (we already hold
     // the lock here), so this never deadlocks.
-    await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB });
+    const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB });
+    // makeRoomFor evicts nothing when the model won't fit even after freeing
+    // others (it refuses to strand the device). Honor that signal here: loading
+    // anyway is a guaranteed OOM crash. Throwing a memory error lets the caller
+    // surface a clean 'insufficient-memory' outcome (reasonFromLoadError maps it)
+    // instead of jetsam killing the app. makeRoomFor uses REAL free RAM, so this
+    // is the physical limit — looser than the conservative pre-load check, so a
+    // "Load Anyway" still succeeds whenever the model can actually fit.
+    if (!room.fits) {
+      throw new Error('Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.');
+    }
     this.loadingState.text = true;
     this.notifyListeners();
     this.textLoadPromise = doLoadTextModel({

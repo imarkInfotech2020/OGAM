@@ -86,63 +86,41 @@ export function planEviction(
       .reduce((sum, r) => sum + r.sizeMB, 0);
   const incomingCostMB = alreadyResident ? 0 : incoming.sizeMB;
 
-  // Speech (whisper), TTS, and the RAG/MCP embedding model are small always-resident
-  // sidecars: never evicted for capacity, and they never trigger eviction of the
-  // active generation model. Only text and image are heavy enough to swap.
+  // Speech (whisper), TTS, and the RAG/MCP embedding model are small sidecars.
   const SIDECAR_TYPES = new Set<ResidentType>(['whisper', 'tts', 'embedding']);
 
-  // 1. Mutual exclusion for generation models: text and image never co-reside.
-  // Each one (plus its runtime working set) is too heavy to keep both warm, so
-  // loading one always evicts the other. Sidecars/classifier are small and
-  // unaffected. Pinned residents are still never evicted.
-  const GENERATION_TYPES = new Set<ResidentType>(['text', 'image']);
-  if (GENERATION_TYPES.has(incoming.type)) {
-    for (const r of current) {
-      if (r.pinned || r.key === incoming.key || isEvicted(r)) continue;
-      if (GENERATION_TYPES.has(r.type) && r.type !== incoming.type) {
-        evict.push(r);
-      }
-    }
-  }
+  // Smart routing: KEEP as many models co-resident as the budget allows; only
+  // when the incoming model doesn't fit do we evict — ONE AT A TIME, lowest
+  // priority (then least-recently-used) first. Priority (what to keep): text is
+  // highest, then image, then the STT/TTS/embedding sidecars (equal, lowest).
+  //   - Text + image co-reside when they fit (e.g. image-gen with prompt
+  //     enhancement keeps both warm) — no forced mutual exclusion.
+  //   - A 4th model that needs room swaps out a single lowest-priority/LRU victim,
+  //     never a blanket clear.
+  //   - A sidecar load (mic/speaker) never evicts a heavier generation model —
+  //     that would break an in-flight answer — so it may only reclaim from peer
+  //     sidecars; if that's not enough it reports fits=false and the caller bails.
+  const PRIORITY: Record<ResidentType, number> = {
+    text: 3, image: 2, whisper: 1, tts: 1, embedding: 1, classifier: 0,
+  };
+  const incomingIsSidecar = SIDECAR_TYPES.has(incoming.type);
 
-  // 2. Fit a heavy (generation) incoming model within budget. Evict
-  // least-recently-used non-pinned residents, but prefer non-sidecars and treat
-  // the STT/TTS sidecars as a LAST RESORT: on a roomy device they stay warm
-  // alongside the generation model, yet a big model can still reclaim their RAM
-  // (they're cheap to reload) instead of overshooting the budget and risking an
-  // OOM. Loading a sidecar itself never evicts the active generation model — it
-  // just coexists. Pinned residents are never evicted.
-  if (GENERATION_TYPES.has(incoming.type)) {
-    while (usedMB() + incomingCostMB > budgetMB) {
-      const candidate = current
-        .filter(r => !r.pinned && r.key !== incoming.key && !isEvicted(r))
-        .sort((a, b) => {
-          const aSidecar = SIDECAR_TYPES.has(a.type) ? 1 : 0;
-          const bSidecar = SIDECAR_TYPES.has(b.type) ? 1 : 0;
-          if (aSidecar !== bSidecar) return aSidecar - bSidecar; // non-sidecars first
-          return a.lastUsedAt - b.lastUsedAt;                    // then least-recently-used
-        })[0];
-      if (!candidate) break; // nothing left to evict
-      evict.push(candidate);
-    }
-  }
-
-  // 3. A SIDECAR must also fit the budget — but it may only reclaim RAM from PEER
-  // sidecars, never from the active generation model. On a memory-tight device
-  // (e.g. 4 GB) loading TTS evicts the now-idle Whisper (STT) model — "if there's
-  // no budget, remove STT, then load TTS" — so the mic and speaker models don't
-  // coexist and tip the app past the jetsam limit. If it still doesn't fit after
-  // evicting peers, `fits` is false and the caller bails gracefully (no TTS)
-  // instead of loading into an OOM kill. Evicting the LLM here would break an
-  // in-flight streaming answer, so generation models are deliberately untouched.
-  if (SIDECAR_TYPES.has(incoming.type)) {
-    while (usedMB() + incomingCostMB > budgetMB) {
-      const peer = current
-        .filter(r => !r.pinned && r.key !== incoming.key && !isEvicted(r) && SIDECAR_TYPES.has(r.type))
-        .sort((a, b) => a.lastUsedAt - b.lastUsedAt)[0]; // least-recently-used peer sidecar
-      if (!peer) break; // only the LLM (or nothing) left — don't evict it
-      evict.push(peer);
-    }
+  while (usedMB() + incomingCostMB > budgetMB) {
+    const victim = current
+      .filter(r =>
+        !r.pinned && r.key !== incoming.key && !isEvicted(r) &&
+        // A sidecar incoming may only reclaim from peer sidecars (never a
+        // generation model); a generation incoming may evict anything non-pinned.
+        (!incomingIsSidecar || SIDECAR_TYPES.has(r.type)),
+      )
+      .sort((a, b) => {
+        const pa = PRIORITY[a.type] ?? 0;
+        const pb = PRIORITY[b.type] ?? 0;
+        if (pa !== pb) return pa - pb;        // lowest priority evicted first
+        return a.lastUsedAt - b.lastUsedAt;   // then least-recently-used
+      })[0];
+    if (!victim) break; // nothing evictable left → fits stays false, caller bails
+    evict.push(victim);
   }
 
   return {
