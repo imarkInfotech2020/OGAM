@@ -37,4 +37,15 @@ describe('modelNotReadyAlert', () => {
   it('uses a safe fallback message when no detail is given', () => {
     expect(modelNotReadyAlert('load-threw').message).toBe('The model failed to load. Please try again.');
   });
+
+  it('insufficient-memory prompts the user to close other apps (the kill-apps prompt)', () => {
+    const a = modelNotReadyAlert('insufficient-memory');
+    expect(a.message).toMatch(/close other apps/i);
+  });
+
+  it('insufficient-memory keeps the underlying detail above the close-apps guidance', () => {
+    const a = modelNotReadyAlert('insufficient-memory', 'needs ~7GB');
+    expect(a.message).toContain('needs ~7GB');
+    expect(a.message).toMatch(/close other apps/i);
+  });
 });

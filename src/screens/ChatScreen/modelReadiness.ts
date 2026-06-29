@@ -64,8 +64,8 @@ export function modelNotReadyAlert(
       return {
         title: 'Not Enough Memory',
         message:
-          detail ||
-          'There is not enough free memory to load this model. Try unloading other models from the Home screen.',
+          `${detail ? `${detail}\n\n` : ''}` +
+          'Close other apps to free up memory, then tap Retry. You can also unload other models from the Home screen.',
       };
     case 'load-in-progress':
       return {
@@ -128,13 +128,24 @@ export async function ensureModelReady(deps: ReadinessDeps): Promise<ModelReadyO
  * alert (unless a lower layer already alerted). The ONE place generation callers
  * turn a not-ready outcome into UI — no duplicated alert logic per call site.
  */
-export async function ensureReadyOrAlert(deps: ReadinessDeps, tag: string): Promise<boolean> {
+export async function ensureReadyOrAlert(
+  deps: ReadinessDeps,
+  tag: string,
+  /** Re-attempt the turn after the user frees memory. When given, an
+   *  insufficient-memory outcome shows a "Retry" button — eviction already ran and
+   *  still couldn't fit, so the user closes other apps then retries, and the load
+   *  re-reads the now-higher REAL per-process budget. */
+  onRetry?: () => void,
+): Promise<boolean> {
   const outcome = await ensureModelReady(deps);
   if (outcome.ok) return true;
   logger.log(`[GEN-SM] ${tag} BAIL reason=${outcome.reason} detail=${outcome.detail ?? ''} alerted=${!!outcome.alerted}`);
   if (!outcome.alerted) {
     const a = modelNotReadyAlert(outcome.reason, outcome.detail);
-    deps.setAlertState(showAlert(a.title, a.message));
+    const buttons = outcome.reason === 'insufficient-memory' && onRetry
+      ? [{ text: 'Cancel', style: 'cancel' as const }, { text: 'Retry', onPress: onRetry }]
+      : undefined;
+    deps.setAlertState(showAlert(a.title, a.message, buttons));
   }
   return false;
 }

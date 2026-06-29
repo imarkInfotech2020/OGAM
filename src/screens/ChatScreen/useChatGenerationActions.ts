@@ -264,7 +264,8 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   // dispatchGenerationFn — this function only ever generates text.
   deps.generatingForConversationRef.current = targetConversationId;
   // For remote models, skip local model loading
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureReadyOrAlert(deps, 'startGeneration'))) {
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
+      !(await ensureReadyOrAlert(deps, 'startGeneration', () => { startGenerationFn(deps, call); }))) {
     deps.generatingForConversationRef.current = null;
     return;
   }
@@ -418,7 +419,8 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel && !(await ensureReadyOrAlert(deps, 'regenerate'))) return;
+  if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
+      !(await ensureReadyOrAlert(deps, 'regenerate', () => { regenerateResponseFn(deps, call); }))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   deps.generatingForConversationRef.current = targetConversationId;
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
