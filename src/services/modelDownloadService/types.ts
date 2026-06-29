@@ -25,6 +25,29 @@ export type ModelDownloadStatus =
   | 'completed'     // on disk + registered in its domain store
   | 'error';        // failed; retryable
 
+/**
+ * What a given download supports RIGHT NOW. This is how the abstraction handles
+ * capability gaps gracefully instead of letting them become bugs (Liskov +
+ * interface segregation): a backend that can't do something declares it here, the
+ * UI renders controls from these flags (a non-cancellable download simply shows no
+ * Cancel affordance — never a dead button), and the service refuses to dispatch an
+ * op a download doesn't support. No caller ever branches on the concrete type.
+ *
+ * Examples of gaps modeled, not stubbed:
+ *  - Kokoro (executorch fetcher) → `cancel: false` (no abort API).
+ *  - Kokoro → `determinateProgress: false` (only a 0..1 fraction, no byte counts) →
+ *    UI shows a percentage/spinner, not "X MB / Y MB".
+ *  - the STT RNFS path → `resumable: false` (dies with the app) → a 'paused' such
+ *    download surfaces as needing a manual retry, not a phantom "resuming".
+ */
+export interface DownloadCapabilities {
+  cancel: boolean;     // can an in-progress transfer be aborted + cleaned up?
+  retry: boolean;      // can a failed/stuck download be restarted?
+  remove: boolean;     // can the on-disk model be deleted?
+  resumable: boolean;  // does it survive an app kill and continue on its own?
+  determinateProgress: boolean; // are byteDownloaded/sizeBytes real (vs fraction-only)?
+}
+
 /** One uniform view of a model's download, independent of type or backend. */
 export interface ModelDownload {
   /** Stable unique key for this download (provider-scoped, e.g. `${modelType}:${modelId}`). */
@@ -32,12 +55,14 @@ export interface ModelDownload {
   modelType: ModelDownloadType;
   /** Human label shown in the UI. */
   name: string;
-  /** Total expected bytes (0 if a provider genuinely can't report it, e.g. Kokoro). */
+  /** Total expected bytes (0 only when `capabilities.determinateProgress` is false). */
   sizeBytes: number;
   bytesDownloaded: number;
-  /** 0..1. Providers that only know a fraction (Kokoro) set bytes from progress*size. */
+  /** 0..1. Fraction-only backends (Kokoro) set bytesDownloaded from progress*sizeBytes. */
   progress: number;
   status: ModelDownloadStatus;
+  /** What this download supports — the UI reads this; it never branches on modelType. */
+  capabilities: DownloadCapabilities;
   /** Final on-disk path once completed (when the provider can give one). */
   filePath?: string;
   /** Human-readable failure reason when status === 'error'. */
