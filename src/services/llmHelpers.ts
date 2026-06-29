@@ -5,6 +5,7 @@ import { APP_CONFIG } from '../constants';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
+import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
 
 /** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
 const HTP_ENABLED = false;
@@ -124,6 +125,11 @@ export async function initContextWithFallback(
 ): Promise<ContextInitResult> {
   const modelPath = (params as any).model || 'unknown';
   const isHtp = HTP_ENABLED && Array.isArray((params as any).devices) && (params as any).devices.some((d: string) => d.startsWith('HTP'));
+  // Capture llama.cpp's own log so a load failure surfaces its REAL reason
+  // (missing tensor / unknown architecture / wrong size) instead of rnllama's
+  // opaque "Failed to load model". Reset the buffer for this attempt.
+  ensureNativeLogCapture();
+  resetNativeLogCapture();
   logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}${isHtp ? ', backend=HTP' : ''}`);
   let gpuAttemptFailed = false;
   try {
@@ -168,7 +174,12 @@ export async function initContextWithFallback(
           cpuMsg && cpuMsg !== finalMsg ? `CPU: ${cpuMsg}` : null,
           `min-ctx: ${finalMsg}`,
         ].filter(Boolean).join(' | ');
-        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}`);
+        // Surface llama.cpp's actual reason (rnllama only gives "Failed to load
+        // model"); the native log says e.g. "missing tensor" / "unknown arch".
+        const nativeReason = recentNativeLog();
+        logger.error(`[LLM] llama.cpp native log tail:\n${nativeReason}`);
+        const nativeSuffix = nativeReason ? `\n\nllama.cpp: ${nativeReason}` : '';
+        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}${nativeSuffix}`);
       }
     }
   }
