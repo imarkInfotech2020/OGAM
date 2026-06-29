@@ -6,7 +6,7 @@ import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
-import { ChatInput, ThinkingIndicator } from '../../components';
+import { ChatInput, ThinkingIndicator, ModelFailureCard } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { INFERENCE_BACKENDS } from '../../types';
@@ -233,6 +233,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </Text>
         </View>
       )}
+      {/* Single dismissible surface for every model failure (text/image/tts/stt/
+          embedding). Reads modelFailureStore itself — no props. */}
+      <ModelFailureCard />
       {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
          Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
       <View
