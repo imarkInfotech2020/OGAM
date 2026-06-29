@@ -79,7 +79,12 @@ export function buildModelParams(
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
       use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn_type,
-      kv_unified: true, no_extra_bufts: false,
+      // Do NOT force kv_unified — let llama.cpp pick it per architecture. Forcing
+      // `true` (a marginal single-seq perf tweak) hung gemma3n (gemma-4 E2B/E4B):
+      // its interleaved sliding-window + heterogeneous KV layers froze building the
+      // unified KV-cache reuse map ("kv_cache: reusing layers"). The engine's
+      // per-arch default (false) handles SWA models correctly and keeps GPU/Metal.
+      no_extra_bufts: false,
       ...(backend === INFERENCE_BACKENDS.OPENCL ? {} : { cache_type_k: cacheType, cache_type_v: cacheType }),
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
