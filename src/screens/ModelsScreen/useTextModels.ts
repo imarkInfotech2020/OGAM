@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
+import { modelBudgetFraction } from '../../services/memoryBudget';
 import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
@@ -85,7 +86,7 @@ function computeFilteredResults(
       }
     }
     const filesWithSize = (model.files || []).filter(f => f.size > 0);
-    if (filesWithSize.length > 0 && !filesWithSize.some(f => f.size / (1024 ** 3) < ramGB * 0.6)) return false;
+    if (filesWithSize.length > 0 && !filesWithSize.some(f => f.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB))) return false;
     return true;
   });
   return filtered.map(model => {

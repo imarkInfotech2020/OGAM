@@ -20,6 +20,7 @@ import { useAppStore } from '../stores';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { hardwareService, modelManager, remoteServerManager } from '../services';
+import { modelBudgetFraction } from '../services/memoryBudget';
 import { discoverLANServers } from '../services/networkDiscovery';
 import { ModelFile, DownloadedModel, RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
@@ -91,7 +92,7 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     isDownloaded={!!downloaded}
     isDownloading={!!progress}
     downloadProgress={progress?.progress}
-    isCompatible={file.size / (1024 ** 3) < totalRamGB * 0.6}
+    isCompatible={file.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB)}
     recommended={{ pillLabel: 'Recommended', highlightText: curatedEntry?.highlight }}
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
@@ -270,7 +271,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   // come straight from the curated registry with their download URLs baked in.
   const liteRTFiles = React.useMemo(
     () => (Platform.OS === 'android'
-      ? buildCuratedLiteRTFiles().filter((f) => f.size / (1024 ** 3) < totalRamGB * 0.6)
+      ? buildCuratedLiteRTFiles().filter((f) => f.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB))
       : []),
     [totalRamGB],
   );
