@@ -18,7 +18,7 @@ import {
   reasonFromLoadError,
   modelNotReadyAlert,
   type ModelNotReadyReason,
-} from '../screens/ChatScreen/modelReadiness';
+} from './modelFailureReasons';
 import {
   useModelFailureStore,
   type ModelFailure,
