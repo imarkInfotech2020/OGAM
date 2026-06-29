@@ -4,7 +4,6 @@ import { useAppStore } from '../../stores';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import {
   modelManager,
-  activeModelService,
   hardwareService,
   huggingFaceService,
   backgroundDownloadService,
@@ -14,7 +13,10 @@ import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
 import logger from '../../utils/logger';
 import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
-import { parseEntryMetadata, runRetryDownload } from './retryHandlers';
+import { parseEntryMetadata, retryImageDownload } from './retryHandlers';
+import { modelDownloadService } from '../../services/modelDownloadService';
+import { setImageDownloadOps } from '../../services/modelDownloadService/providers/imageProvider';
+import { useEffect } from 'react';
 
 export interface UseDownloadManagerResult {
   activeItems: DownloadItem[];
@@ -127,9 +129,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const {
     downloadedModels,
     setDownloadedModels,
-    removeDownloadedModel,
     downloadedImageModels,
-    removeDownloadedImageModel,
   } = useAppStore();
 
   const downloads = useDownloadStore(state => state.downloads);
@@ -137,6 +137,32 @@ export function useDownloadManager(): UseDownloadManagerResult {
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } = useVoiceDownloadItems(() => setAlertState(hideAlert()));
+
+  // Inject the UI-coupled image cancel/retry into the image provider so control ops
+  // route through the single download service (which logs every [DL-SM] action).
+  // These are the exact paths the manager used inline; they need alerts/resume, so
+  // they can't live in the (UI-free) provider — they're injected here.
+  useEffect(() => {
+    setImageDownloadOps({
+      cancel: async (modelId, entry) => {
+        removeDownloadEntry(entry.modelKey);
+        if (entry.downloadId.startsWith('image-multi:')) {
+          await cancelSyntheticImageDownload(modelId).catch(() => {});
+          const rows = await backgroundDownloadService.getActiveDownloads().catch(() => [] as any[]);
+          await Promise.all(rows.filter(r => r.modelId === `image:${modelId}`)
+            .map(r => backgroundDownloadService.cancelDownload(r.downloadId).catch(() => {})));
+        } else {
+          await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
+        }
+      },
+      retry: async (_modelId, entry) => {
+        await retryImageDownload(entryToActiveItem(entry), entry, setAlertState);
+      },
+    });
+  }, [removeDownloadEntry]);
+
+  /** Uniform download id the service routes on. */
+  const idOf = (item: DownloadItem): string => `${item.modelType}:${item.modelId}`;
 
   const activeItems: DownloadItem[] = Object.values(downloads)
     .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
@@ -152,38 +178,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
-      const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
-      const entry = downloads[modelKey];
-      logger.log('[DownloadDebug] Removing download entry', {
-        modelKey,
-        modelId: item.modelId,
-        fileName: item.fileName,
-        mainDownloadId: entry?.downloadId,
-        mmProjDownloadId: entry?.mmProjDownloadId,
-      });
-      removeDownloadEntry(modelKey);
-      if (entry) {
-        if (entry.downloadId.startsWith('image-multi:')) {
-          await cancelSyntheticImageDownload(item.modelId).catch(() => {});
-          // After app kill the runtime is gone — cancel native rows so they aren't re-hydrated.
-          try {
-            const activeRows = await backgroundDownloadService.getActiveDownloads();
-            const imageModelId = `image:${item.modelId}`;
-            await Promise.all(
-              activeRows
-                .filter(r => r.modelId === imageModelId)
-                .map(r => backgroundDownloadService.cancelDownload(r.downloadId).catch(() => {})),
-            );
-          } catch {
-            // Best-effort — store entry already removed above.
-          }
-          return;
-        }
-        await modelManager.cancelBackgroundDownload(entry.downloadId).catch(() => {});
-        if (entry.mmProjDownloadId) {
-          await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
-        }
-      }
+      // Single owner: the service cancels the in-flight download (routing to the
+      // owning provider — image uses the injected ops above) and logs [DL-SM].
+      await modelDownloadService.cancel(idOf(item));
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
@@ -194,9 +191,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
     // STT re-downloads through whisperService and doesn't need the (possibly
     // stale/missing) downloadId; every other path retries by id.
     if (!item.downloadId && item.modelType !== 'stt') return;
-    const modelKey = item.modelKey ?? `${item.modelId}/${item.fileName}`;
     try {
-      await runRetryDownload(item, downloads[modelKey], { setDownloadedModels, setAlertState });
+      // Single owner: the service routes retry to the owning provider (image uses
+      // the injected retry above; text/stt are service-level) and logs [DL-SM].
+      await modelDownloadService.retry(idOf(item));
     } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
       const errorMessage = error?.message || 'Retry failed. Please remove and re-download.';
@@ -220,8 +218,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeDeleteModel = async (model: DownloadedModel) => {
     setAlertState(hideAlert());
     try {
-      await modelManager.deleteModel(model.id);
-      removeDownloadedModel(model.id);
+      // Single owner: provider.remove unloads (n/a for text) + deletes + drops it
+      // from the store, and logs [DL-SM].
+      await modelDownloadService.remove(`text:${model.id}`);
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete model:', error);
       setAlertState(showAlert('Error', 'Failed to delete model'));
@@ -231,9 +230,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeDeleteImageModel = async (model: ONNXImageModel) => {
     setAlertState(hideAlert());
     try {
-      await activeModelService.unloadImageModel();
-      await modelManager.deleteImageModel(model.id);
-      removeDownloadedImageModel(model.id);
+      // Single owner: provider.remove unloads the image model + deletes + drops it
+      // from the store, and logs [DL-SM].
+      await modelDownloadService.remove(`image:${model.id}`);
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete image model:', error);
       setAlertState(showAlert('Error', 'Failed to delete image model'));
