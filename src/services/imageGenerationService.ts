@@ -11,7 +11,31 @@ import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, 
 
 const SHARE_PROMPT_DELAY_MS = 2000;
 
+/**
+ * Explicit lifecycle phase — the single source of truth for "what is image
+ * generation doing right now". The UI projects this (it never assembles the
+ * in-progress view from scattered flags), so the progress indicator can't flash
+ * or desync: it's shown for exactly `enhancing | loading | generating | saving`
+ * and hidden otherwise.
+ */
+export type ImageGenPhase =
+  | 'idle'
+  | 'enhancing'  // running the text model to enrich the prompt
+  | 'loading'    // loading the image model into memory
+  | 'generating' // diffusion steps running
+  | 'saving'     // writing the result + adding the chat message
+  | 'done'
+  | 'error'
+  | 'cancelled';
+
+/** True while a generation is actively in flight (drives the progress indicator). */
+export function isInFlight(phase: ImageGenPhase): boolean {
+  return phase === 'enhancing' || phase === 'loading' || phase === 'generating' || phase === 'saving';
+}
+
 export interface ImageGenerationState {
+  phase: ImageGenPhase;
+  /** Derived from phase (isInFlight) — kept for back-compat with existing readers. */
   isGenerating: boolean;
   progress: { step: number; totalSteps: number } | null;
   status: string | null;
@@ -64,18 +88,22 @@ interface UpdateEnhancementOptions {
 // ---------------------------------------------------------------------------
 
 class ImageGenerationService {
-  private state: ImageGenerationState = {
-    isGenerating: false, progress: null, status: null, previewPath: null,
+  // The ONLY stored state is `phase` (+ the data fields). `isGenerating` is NOT
+  // stored — there's no second source to desync. It's computed from phase in
+  // getState() (see below) for back-compat readers.
+  private state: Omit<ImageGenerationState, 'isGenerating'> = {
+    phase: 'idle', progress: null, status: null, previewPath: null,
     prompt: null, conversationId: null, error: null, result: null,
   };
 
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
 
-  getState(): ImageGenerationState { return { ...this.state }; }
+  /** Public snapshot: isGenerating is computed from phase, never stored. */
+  getState(): ImageGenerationState { return { ...this.state, isGenerating: isInFlight(this.state.phase) }; }
 
   isGeneratingFor(conversationId: string): boolean {
-    return this.state.isGenerating && this.state.conversationId === conversationId;
+    return isInFlight(this.state.phase) && this.state.conversationId === conversationId;
   }
 
   subscribe(listener: ImageGenerationListener): () => void {
@@ -90,10 +118,14 @@ class ImageGenerationService {
   }
 
   private updateState(partial: Partial<ImageGenerationState>): void {
-    this.state = { ...this.state, ...partial };
+    // Strip any derived field a caller might pass — phase is the only stored truth.
+    const { isGenerating: _ignored, ...rest } = partial;
+    this.state = { ...this.state, ...rest };
     this.notifyListeners();
+    // appStore mirror is a one-way PROJECTION of phase (the UI reads it). Computed
+    // from phase, never a second stored source.
     const appStore = useAppStore.getState();
-    if ('isGenerating' in partial) appStore.setIsGeneratingImage(this.state.isGenerating);
+    if ('phase' in partial) appStore.setIsGeneratingImage(isInFlight(this.state.phase));
     if ('progress' in partial) appStore.setImageGenerationProgress(this.state.progress);
     if ('status' in partial) appStore.setImageGenerationStatus(this.state.status);
     if ('previewPath' in partial) appStore.setImagePreviewPath(this.state.previewPath);
@@ -152,7 +184,7 @@ class ImageGenerationService {
         return params.prompt;
       }
       this.updateState({
-        isGenerating: true, prompt: params.prompt, conversationId: params.conversationId || null,
+        phase: 'enhancing', prompt: params.prompt, conversationId: params.conversationId || null,
         status: 'Loading text model to enhance prompt...', previewPath: null,
         progress: { step: 0, totalSteps: steps }, error: null, result: null,
       });
@@ -168,7 +200,7 @@ class ImageGenerationService {
       }
     }
     this.updateState({
-      isGenerating: true, prompt: params.prompt, conversationId: params.conversationId || null,
+      phase: 'enhancing', prompt: params.prompt, conversationId: params.conversationId || null,
       status: 'Enhancing prompt with AI...', previewPath: null,
       progress: { step: 0, totalSteps: steps }, error: null, result: null,
     });
@@ -210,15 +242,15 @@ class ImageGenerationService {
     const needsThreadReload = loadedThreads == null || loadedThreads !== desiredThreads;
     if (isImageModelLoaded && loadedPath === activeImageModel.modelPath && !needsThreadReload) return true;
     if (!activeImageModelId) {
-      this.updateState({ error: 'No image model selected', isGenerating: false });
+      this.updateState({ phase: 'error', error: 'No image model selected' });
       return false;
     }
     try {
-      this.updateState({ status: `Loading ${activeImageModel.name}...` });
+      this.updateState({ phase: 'loading', status: `Loading ${activeImageModel.name}...` });
       await activeModelService.loadImageModel(activeImageModelId);
       return true;
     } catch (error: any) {
-      this.updateState({ isGenerating: false, progress: null, status: null, error: `Failed to load image model: ${error?.message || 'Unknown error'}` });
+      this.updateState({ phase: 'error', progress: null, status: null, error: `Failed to load image model: ${error?.message || 'Unknown error'}` });
       return false;
     }
   }
@@ -240,7 +272,7 @@ class ImageGenerationService {
         generationMeta: buildImageGenMeta(activeImageModel, { steps: meta.steps, guidanceScale: meta.guidanceScale, result, useOpenCL: meta.useOpenCL }),
       });
     }
-    this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, result, error: null });
+    this.updateState({ phase: 'done', progress: null, status: null, previewPath: null, result, error: null });
     return result;
   }
 
@@ -260,6 +292,7 @@ class ImageGenerationService {
     }
 
     this.updateState({
+      phase: 'generating',
       status: isFirstGpuRun
         ? 'Optimizing GPU for your device (~120s, one-time)...'
         : 'Starting image generation...',
@@ -307,7 +340,7 @@ class ImageGenerationService {
           ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
           : errorMsg;
 
-        this.updateState({ isGenerating: false, progress: null, status: null, previewPath: null, error: userMessage });
+        this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error: userMessage });
       }
       return null;
     }
@@ -318,13 +351,13 @@ class ImageGenerationService {
    * If conversationId is provided, the result will be added as a chat message.
    */
   async generateImage(params: GenerateImageParams): Promise<GeneratedImage | null> {
-    if (this.state.isGenerating) {
+    if (isInFlight(this.state.phase)) {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
-    if (!activeImageModel) { this.updateState({ error: 'No image model selected' }); return null; }
+    if (!activeImageModel) { this.updateState({ phase: 'error', error: 'No image model selected' }); return null; }
 
     const steps = params.steps || settings.imageSteps || 8;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
@@ -342,7 +375,7 @@ class ImageGenerationService {
     // enhancement-ran path this just swaps the 'Enhancing…' status for 'Preparing…'
     // before the image model loads.
     this.updateState({
-      isGenerating: true, prompt: params.prompt, conversationId: params.conversationId || null,
+      phase: 'loading', prompt: params.prompt, conversationId: params.conversationId || null,
       status: 'Preparing image generation...', previewPath: null,
       progress: { step: 0, totalSteps: steps }, error: null, result: null,
     });
@@ -355,7 +388,7 @@ class ImageGenerationService {
   }
 
   async cancelGeneration(): Promise<void> {
-    if (!this.state.isGenerating) return;
+    if (!isInFlight(this.state.phase)) return;
     this.cancelRequested = true;
     try { await onnxImageGeneratorService.cancelGeneration(); } catch { /* Ignore */ }
     this.resetState();
@@ -363,7 +396,7 @@ class ImageGenerationService {
 
   private resetState(): void {
     this.updateState({
-      isGenerating: false, progress: null, status: null, previewPath: null,
+      phase: 'idle', progress: null, status: null, previewPath: null,
       prompt: null, conversationId: null, error: null,
       // Keep result so the last generated image is still accessible
     });
