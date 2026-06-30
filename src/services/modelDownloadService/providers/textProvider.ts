@@ -5,8 +5,10 @@
  * cleanly (text retry never needed an alert; only image does).
  *
  * resumable: Android only (WorkManager persists across app-kill; iOS foreground
- * URLSession dies) → reconcile() strands an interrupted iOS download as a retriable
- * error. The gap is the `resumable` flag, not a Platform.OS branch in callers.
+ * URLSession dies). The native bytes can't resume on iOS, so reconcile() re-queues an
+ * interrupted download (re-issues it through the same concurrency cap) rather than
+ * leaving it failed for the user to retry by hand. The gap is the `resumable` flag,
+ * not a Platform.OS branch in callers.
  */
 import { Platform } from 'react-native';
 import { modelManager } from '../../modelManager';
@@ -33,6 +35,23 @@ const textEntries = (): DownloadEntry[] =>
   Object.values(useDownloadStore.getState().downloads).filter(e => e.modelType === 'text');
 const findEntry = (modelId: string): DownloadEntry | undefined =>
   textEntries().find(e => e.modelId === modelId);
+
+/** iOS re-start: foreground URLSession can't resume, so re-issue the download from
+ *  scratch. It flows through startDownload's 3-slot cap (queued if full). Shared by
+ *  retry (one model) and reconcile (every interrupted model on relaunch). */
+async function restartIosTextDownload(entry: DownloadEntry): Promise<void> {
+  const meta = entry.metadataJson ? safeJson(entry.metadataJson) : null;
+  const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
+    ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
+    : undefined;
+  const file = {
+    name: entry.fileName, size: entry.totalBytes, quantization: entry.quantization,
+    downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
+    ...(mmProjFile ? { mmProjFile } : {}),
+  };
+  const info = await modelManager.downloadModelBackground(entry.modelId, file);
+  reattach(info.downloadId);
+}
 
 /** Re-attach the finalizer to a retried text download (move+register+persist on
  *  complete, mark failed on error) — the same recovery the manager used. */
@@ -102,18 +121,7 @@ export const textProvider: DownloadProvider = {
       }
       reattach(entry.downloadId);
     } else {
-      // iOS: re-start the download (foreground URLSession can't be resumed).
-      const meta = entry.metadataJson ? safeJson(entry.metadataJson) : null;
-      const mmProjFile = entry.mmProjFileName && entry.mmProjFileSize && meta?.mmProjDownloadUrl
-        ? { name: entry.mmProjFileName, size: entry.mmProjFileSize, downloadUrl: meta.mmProjDownloadUrl }
-        : undefined;
-      const file = {
-        name: entry.fileName, size: entry.totalBytes, quantization: entry.quantization,
-        downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
-        ...(mmProjFile ? { mmProjFile } : {}),
-      };
-      const info = await modelManager.downloadModelBackground(entry.modelId, file);
-      reattach(info.downloadId);
+      await restartIosTextDownload(entry); // foreground URLSession can't resume → re-issue
     }
     backgroundDownloadService.startProgressPolling();
   },
@@ -139,10 +147,17 @@ export const textProvider: DownloadProvider = {
     if (Platform.OS === 'android') return; // WorkManager resumes — nothing to strand
     const store = useDownloadStore.getState();
     for (const e of textEntries()) {
-      if (isActiveStatus(e.status)) {
-        logger.log(`[DL-SM] text:${e.modelId} reconcile: iOS foreground download interrupted → failed`);
-        store.setStatus(e.downloadId, 'failed', { message: 'Interrupted — app closed. Tap retry.' });
-      }
+      if (!isActiveStatus(e.status)) continue;
+      // iOS foreground downloads die on app-kill and can't resume — but the user
+      // shouldn't have to tap retry on each. Re-queue: mark 'pending' (→ 'queued'
+      // in the service vocabulary) and re-issue through the SAME 3-slot cap a normal
+      // start uses, so they auto-resume up to 3 and the rest wait their turn.
+      logger.log(`[DL-SM] text:${e.modelId} reconcile: interrupted → re-queued`);
+      store.setStatus(e.downloadId, 'pending');
+      // Fire-and-forget: awaiting would block launch behind the cap; the queue drains
+      // them. A failure to re-issue is logged, not silently dropped.
+      restartIosTextDownload(e).catch(err =>
+        logger.log(`[DL-SM] text:${e.modelId} reconcile: re-queue failed err=${msg(err)}`));
     }
   },
 };

@@ -1,8 +1,9 @@
 /**
  * Text download provider — wraps modelManager + downloadStore + appStore under the
  * uniform contract. Verifies list (in-flight + completed), cancel/remove delegate to
- * the working calls, and reconcile strands an interrupted iOS download (resumable
- * false) as a retriable error. (Jest's RN preset reports Platform.OS='ios'.)
+ * the working calls, and reconcile RE-QUEUES an interrupted iOS download (resumable
+ * false) through the normal start path instead of leaving it failed. (Jest's RN
+ * preset reports Platform.OS='ios'.)
  */
 jest.mock('../../../src/services/modelManager', () => ({
   modelManager: {
@@ -74,9 +75,17 @@ describe('textProvider', () => {
     expect(removeSpy).toHaveBeenCalledWith('author/m');
   });
 
-  it('reconcile strands an interrupted iOS download as failed (resumable false)', async () => {
+  it('reconcile re-queues an interrupted iOS download (pending, re-issued) instead of failing it', async () => {
     await textProvider.reconcile!();
-    expect(useDownloadStore.getState().downloads['author/m.gguf'].status).toBe('failed');
+    // Marked 'pending' (→ 'queued' in service vocabulary), NOT 'failed'.
+    expect(useDownloadStore.getState().downloads['author/m.gguf'].status).toBe('pending');
+    // Re-issued through the normal start path (modelManager → backgroundDownloadService
+    // → the 3-slot cap), fire-and-forget so launch isn't blocked behind the cap.
+    await new Promise((r) => setImmediate(r));
+    expect(mockMM.downloadModelBackground).toHaveBeenCalledWith(
+      'author/m',
+      expect.objectContaining({ name: 'm.gguf' }),
+    );
   });
 
   // The Android retry MECHANISM that used to live in the Download Manager screen test.
