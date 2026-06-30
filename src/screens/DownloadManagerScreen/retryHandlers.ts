@@ -1,15 +1,16 @@
 /**
- * Image-download retry — the ONE retry path that is genuinely UI-coupled (it pops
+ * iOS image-download retry — the ONE retry path that is genuinely UI-coupled (it pops
  * alerts and resumes finalization), so the image DownloadProvider delegates it back
- * here through ModelDownloadService's injected image ops. Text / STT / image-android
- * retry that used to live here is now owned by the providers (textProvider,
- * sttProvider) — per CLAUDE.md, retry logic does not belong in the presentation
- * layer. `parseEntryMetadata` stays because the Download Manager's item mapping uses it.
+ * here through ModelDownloadService's injected image ops. This module is
+ * platform-AGNOSTIC: the Android-vs-iOS retry decision now lives inside
+ * imageProvider.retry() (Android resumes the native row directly; iOS routes here).
+ * Text / STT retry are owned by their providers too — per CLAUDE.md, retry mechanism
+ * selection does not belong in the presentation layer. `parseEntryMetadata` stays
+ * because the Download Manager's item mapping uses it.
  */
-import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
+import { DownloadEntry } from '../../stores/downloadStore';
 import { backgroundDownloadService } from '../../services';
 import { DownloadItem } from './items';
 import logger from '../../utils/logger';
@@ -102,8 +103,10 @@ async function tryResumeImageFinalization(
 }
 
 /**
- * Retry an image download. The only retry that stays in the presentation layer
- * because it needs alerts + finalization-resume; the image provider delegates here.
+ * The iOS image retry path: re-run finalization when the bytes are present, else
+ * re-start the download (foreground URLSession can't be resumed). Stays in the
+ * presentation layer only because it needs alerts + finalization-resume; the image
+ * provider delegates here (iOS only — Android resumes natively in the provider).
  * Throws on failure so the caller can mark the row failed.
  */
 export async function retryImageDownload(
@@ -113,13 +116,6 @@ export async function retryImageDownload(
 ): Promise<void> {
   logger.log('[DownloadDebug] Image retry requested', { modelKey: item.modelKey, modelId: item.modelId, status: item.status });
   if (await tryResumeImageFinalization(item, entry, setAlertState)) return;
-  if (Platform.OS === 'android') {
-    if (item.downloadId) {
-      useDownloadStore.getState().setStatus(item.downloadId, 'pending');
-      await backgroundDownloadService.retryDownload(item.downloadId);
-    }
-  } else if (entry) {
-    await retryIosImageDownload(entry, setAlertState);
-  }
+  if (entry) await retryIosImageDownload(entry, setAlertState);
   backgroundDownloadService.startProgressPolling();
 }

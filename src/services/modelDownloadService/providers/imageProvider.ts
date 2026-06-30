@@ -1,12 +1,16 @@
 /**
  * Image (ONNX/CoreML) download provider. list/remove/reconcile are service-level.
  *
- * cancel + retry for image are UI-COUPLED (the working paths live in
- * imageDownloadActions/imageDownloadResume, which import CustomAlert → can't be
- * imported into a service without dragging UI/native into tests). So they're
- * INJECTED by the Download Manager via setImageDownloadOps — a clean dependency
- * seam: the provider stays UI-free, the UI supplies the alert-coupled image ops.
- * Falls back to a plain native cancel when no ops are registered.
+ * RETRY platform split lives HERE (mirrors textProvider): Android resumes the native
+ * row in-place (setStatus + retryDownload — UI-free, so the provider does it
+ * directly); iOS must re-run the alert-coupled finalization/re-download, which pulls
+ * CustomAlert and can't be imported into a service, so that one path is INJECTED by
+ * the Download Manager via setImageDownloadOps. The UI never branches on Platform.OS
+ * for retry — the provider owns the decision.
+ *
+ * CANCEL is UI-coupled for multi-file (synthetic `image-multi:` rows need the alert
+ * path), also injected via setImageDownloadOps; it falls back to a plain native
+ * cancel when no ops are registered.
  *
  * resumable: zip on Android only; multi-file (synthetic `image-multi:` id, no native
  * row) is never resumable → reconcile strands stranded in-flight as retriable error.
@@ -21,7 +25,12 @@ import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import type { DownloadProvider, ModelDownload } from '../types';
 
-/** UI-coupled image ops the Download Manager injects (cancel/retry that need alerts). */
+/**
+ * Alert-coupled image ops the Download Manager injects:
+ *  - cancel: multi-file (synthetic row) cancel that needs the alert path.
+ *  - retry:  the iOS re-download/finalization path (pulls CustomAlert). Android retry
+ *            is handled natively inside this provider and does NOT use this op.
+ */
 export interface ImageDownloadOps {
   cancel?: (modelId: string, entry: DownloadEntry) => Promise<void>;
   retry?: (modelId: string, entry: DownloadEntry) => Promise<void>;
@@ -43,10 +52,11 @@ export const imageProvider: DownloadProvider = {
 
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
-    // retry is only honest when the UI has injected the (alert-coupled) image retry;
-    // cancel always works (native fallback). Declaring retry from the real op keeps
-    // the capability truthful instead of advertising a retry that silently refuses.
-    const canRetry = !!imageOps.retry;
+    // Retry is structurally available for image on BOTH platforms (Android resumes
+    // the native row here; iOS re-runs the injected re-download/finalization), so the
+    // flag is a STABLE constant — it must not depend on imageOps, which are injected
+    // by a component effect after the first list (that flip made the affordance flap
+    // from dead→live). Matches textProvider's unconditional retry: true.
     for (const e of imageEntries()) {
       const id = bareId(e.modelId);
       // multi-file (no native row) is never resumable; zip resumes on Android.
@@ -55,7 +65,7 @@ export const imageProvider: DownloadProvider = {
         id: `image:${id}`, modelType: 'image', name: e.fileName || id,
         sizeBytes: e.combinedTotalBytes || e.totalBytes, bytesDownloaded: e.bytesDownloaded,
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: { cancel: true, retry: canRetry, remove: true, resumable, determinateProgress: true },
+        capabilities: { cancel: true, retry: true, remove: true, resumable, determinateProgress: true },
         error: e.errorMessage,
       });
     }
@@ -88,7 +98,17 @@ export const imageProvider: DownloadProvider = {
     const modelId = modelIdOf(id);
     const entry = findEntry(modelId);
     if (!entry) return;
-    if (imageOps.retry) { await imageOps.retry(modelId, entry); return; } // UI-coupled (alerts, resume)
+    // Platform split owned by the provider (the UI never decides this). Android can
+    // resume the native row in place — UI-free, so do it here directly. iOS must
+    // re-run the alert-coupled finalization/re-download, which is the injected op.
+    if (Platform.OS === 'android') {
+      if (!entry.downloadId) return;
+      useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+      await backgroundDownloadService.retryDownload(entry.downloadId);
+      backgroundDownloadService.startProgressPolling();
+      return;
+    }
+    if (imageOps.retry) { await imageOps.retry(modelId, entry); return; } // iOS (alerts, resume)
     logger.log(`[DL-SM] image:${modelId} retry: no image ops registered — refused`);
   },
 

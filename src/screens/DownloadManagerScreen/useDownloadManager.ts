@@ -188,9 +188,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   };
 
   const handleRetryDownload = async (item: DownloadItem) => {
-    // STT re-downloads through whisperService and doesn't need the (possibly
-    // stale/missing) downloadId; every other path retries by id.
-    if (!item.downloadId && item.modelType !== 'stt') return;
+    // Route purely by id — the service looks up the download and refuses a not-found
+    // id uniformly, so the UI does not gate on downloadId (which leaked the per-type
+    // id scheme: stt re-downloads via whisperService and never has a downloadId).
     try {
       // Single owner: the service routes retry to the owning provider (image uses
       // the injected retry above; text/stt are service-level) and logs [DL-SM].

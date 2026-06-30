@@ -137,10 +137,12 @@ describe('control ops delegate to ModelDownloadService', () => {
     expect(mockMDS.retry).toHaveBeenCalledWith('stt:base.en');
   });
 
-  it('handleRetryDownload returns early for a non-stt item with no downloadId', async () => {
+  it('handleRetryDownload routes by id even without a downloadId (no leaked id-scheme guard)', async () => {
+    // The old STT-specific `if (!downloadId && type !== 'stt') return` guard is gone:
+    // the service refuses a not-found id uniformly, so the UI always routes by id.
     const { result } = renderHook(() => useDownloadManager());
-    await act(async () => { await result.current.handleRetryDownload({ modelType: 'text', modelId: 'x' } as any); });
-    expect(mockMDS.retry).not.toHaveBeenCalled();
+    await act(async () => { await result.current.handleRetryDownload({ modelType: 'image', modelId: 'x' } as any); });
+    expect(mockMDS.retry).toHaveBeenCalledWith('image:x');
   });
 
   it('handleRemoveDownload (confirm Yes) → service.cancel(id)', async () => {
