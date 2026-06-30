@@ -140,6 +140,8 @@ interface AppState {
   setDevProDisabled: (v: boolean) => void;
   proBannerDismissed: boolean;
   setProBannerDismissed: (v: boolean) => void;
+  desktopPromoDismissed: boolean;
+  setDesktopPromoDismissed: (v: boolean) => void;
   proAhaTriggeredBy: 'image' | 'text' | null;
   setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
   toolCountHintDismissed: boolean;
@@ -372,6 +374,8 @@ export const useAppStore = create<AppState>()(
       setDevProDisabled: (v) => set({ devProDisabled: v }),
       proBannerDismissed: false,
       setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
+      desktopPromoDismissed: false,
+      setDesktopPromoDismissed: (v) => set({ desktopPromoDismissed: v }),
       proAhaTriggeredBy: null,
       setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
       toolCountHintDismissed: false,
@@ -400,6 +404,7 @@ export const useAppStore = create<AppState>()(
         hasRegisteredPro: state.hasRegisteredPro,
         devProDisabled: state.devProDisabled,
         proBannerDismissed: state.proBannerDismissed,
+        desktopPromoDismissed: state.desktopPromoDismissed,
         proAhaTriggeredBy: state.proAhaTriggeredBy,
         loadedSettings: state.loadedSettings,
       }),

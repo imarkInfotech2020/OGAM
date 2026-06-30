@@ -30,6 +30,8 @@ import {
   createVisionModel,
   createMessage,
 } from '../../utils/factories';
+import { Linking } from 'react-native';
+import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 
 // Mock requestAnimationFrame
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
@@ -58,6 +60,13 @@ const mockLoadImageModel = jest.fn(() => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockUnloadImageModel = jest.fn(() => Promise.resolve());
 const mockUnloadAllModels = jest.fn(() => Promise.resolve({ textUnloaded: true, imageUnloaded: true }));
+// The screen ejects via activeModelService.ejectAll(), which (in the real service)
+// delegates to unloadAllModels(true) and returns the number unloaded. Mirror that
+// here so the eject tests drive the current flow and surface unloadAllModels failures.
+const mockEjectAll = jest.fn(async () => {
+  const { textUnloaded, imageUnloaded } = await mockUnloadAllModels();
+  return { count: (textUnloaded ? 1 : 0) + (imageUnloaded ? 1 : 0) };
+});
 const mockCheckMemoryForModel = jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' }));
 
 jest.mock('../../../src/services/activeModelService', () => ({
@@ -67,6 +76,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
     unloadTextModel: mockUnloadTextModel,
     unloadImageModel: mockUnloadImageModel,
     unloadAllModels: mockUnloadAllModels,
+    ejectAll: mockEjectAll,
     getActiveModels: jest.fn(() => ({ text: null, image: null })),
     checkMemoryForModel: mockCheckMemoryForModel,
     checkMemoryForDualModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' })),
@@ -270,6 +280,12 @@ describe('HomeScreen', () => {
     mockUnloadTextModel.mockResolvedValue(undefined);
     mockUnloadImageModel.mockResolvedValue(undefined);
     mockUnloadAllModels.mockResolvedValue({ textUnloaded: true, imageUnloaded: true });
+    // ejectAll delegates to unloadAllModels and returns the unloaded count, mirroring
+    // the real service. clearAllMocks() wiped the implementation, so restore it here.
+    mockEjectAll.mockImplementation(async () => {
+      const { textUnloaded, imageUnloaded } = await mockUnloadAllModels();
+      return { count: (textUnloaded ? 1 : 0) + (imageUnloaded ? 1 : 0) };
+    });
     // Re-assign functions that may be undefined after mock hoisting/clearing
     if (!activeModelService.checkMemoryForModel) {
       (activeModelService as any).checkMemoryForModel = mockCheckMemoryForModel;
@@ -289,6 +305,43 @@ describe('HomeScreen', () => {
     if (!activeModelService.unloadAllModels) {
       (activeModelService as any).unloadAllModels = mockUnloadAllModels;
     }
+    if (!activeModelService.ejectAll) {
+      (activeModelService as any).ejectAll = mockEjectAll;
+    }
+  });
+
+  // ============================================================================
+  // Off Grid AI Desktop promo card
+  // ============================================================================
+  describe('Off Grid AI Desktop promo card', () => {
+    it('shows the card by default (not dismissed)', () => {
+      const { getByTestId, getByText } = renderHomeScreen();
+      expect(getByTestId('desktop-promo-card')).toBeTruthy();
+      expect(getByText('Off Grid AI Desktop')).toBeTruthy();
+    });
+
+    it('hides the card when previously dismissed', () => {
+      useAppStore.setState({ desktopPromoDismissed: true });
+      const { queryByTestId } = renderHomeScreen();
+      expect(queryByTestId('desktop-promo-card')).toBeNull();
+    });
+
+    it('tapping dismiss hides the card and persists the flag', () => {
+      useAppStore.setState({ desktopPromoDismissed: false });
+      const { getByTestId, queryByTestId } = renderHomeScreen();
+      fireEvent.press(getByTestId('desktop-promo-dismiss'));
+      expect(queryByTestId('desktop-promo-card')).toBeNull();
+      expect(useAppStore.getState().desktopPromoDismissed).toBe(true);
+    });
+
+    it('tapping the card opens the Off Grid AI Desktop download URL', () => {
+      useAppStore.setState({ desktopPromoDismissed: false });
+      const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+      const { getByTestId } = renderHomeScreen();
+      fireEvent.press(getByTestId('desktop-promo-card'));
+      expect(spy).toHaveBeenCalledWith(OFF_GRID_DESKTOP_URL);
+      spy.mockRestore();
+    });
   });
 
   // ============================================================================

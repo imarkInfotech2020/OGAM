@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -25,6 +25,8 @@ import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
+import { useAppStore } from '../../stores';
+import { OFF_GRID_DESKTOP_URL } from '../../constants';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -95,6 +97,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
   const whisperPresentCount = useWhisperStore((s) => s.presentModelIds?.length ?? 0);
   const voiceSummary = useUiModeStore((s) => s.voiceSummary);
+  const desktopPromoDismissed = useAppStore((s) => s.desktopPromoDismissed);
+  const setDesktopPromoDismissed = useAppStore((s) => s.setDesktopPromoDismissed);
 
   const modelLabels: Record<ModelRowType, string> = {
     text: activeTextModel?.name ?? '—',
@@ -230,6 +234,39 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </View>
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
+
+          {/* Off Grid AI Desktop — announce it's live; tap opens the download page.
+              Dismissable; the dismissal persists in appStore. */}
+          {!desktopPromoDismissed && (
+            <AnimatedPressable
+              style={styles.desktopCard}
+              onPress={() => Linking.openURL(OFF_GRID_DESKTOP_URL)}
+              hapticType="selection"
+              testID="desktop-promo-card"
+            >
+              <View style={styles.desktopCardHeader}>
+                <Icon name="monitor" size={18} color={colors.primary} />
+                <Text style={styles.desktopCardTitle}>Off Grid AI Desktop</Text>
+                <View style={styles.desktopBadge}>
+                  <Text style={styles.desktopBadgeText}>Live</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setDesktopPromoDismissed(true)}
+                  hitSlop={10}
+                  testID="desktop-promo-dismiss"
+                >
+                  <Icon name="x" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.desktopCardBody}>
+                The same on-device AI, now on your Mac. Run text, vision, image, and voice models locally, behind one gateway this phone can connect to - no cloud, no accounts, no API keys.
+              </Text>
+              <View style={styles.desktopCardCta}>
+                <Text style={styles.desktopCardCtaText}>Get it for macOS</Text>
+                <Icon name="arrow-up-right" size={14} color={colors.primary} />
+              </View>
+            </AnimatedPressable>
+          )}
 
           {/* Model Stats row removed — the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}

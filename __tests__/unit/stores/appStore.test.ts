@@ -49,6 +49,17 @@ describe('appStore', () => {
   // ============================================================================
   // Device Info
   // ============================================================================
+  describe('desktopPromoDismissed', () => {
+    it('starts not dismissed (the Home promo card shows by default)', () => {
+      expect(getAppState().desktopPromoDismissed).toBe(false);
+    });
+
+    it('setDesktopPromoDismissed marks it dismissed (persisted flag)', () => {
+      getAppState().setDesktopPromoDismissed(true);
+      expect(getAppState().desktopPromoDismissed).toBe(true);
+    });
+  });
+
   describe('deviceInfo', () => {
     it('starts with null deviceInfo', () => {
       expect(getAppState().deviceInfo).toBeNull();
