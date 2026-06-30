@@ -133,6 +133,15 @@ interface AppState {
   // PRO pre-order state
   hasRegisteredPro: boolean;
   setHasRegisteredPro: (v: boolean) => void;
+  /**
+   * Authoritative "Pro is unlocked right now" — the same signal loadProFeatures uses
+   * to activate paid features (keychain entitlement OR a __DEV__ unlock), set at boot.
+   * This is the ONE flag every upsell gate must read: hasRegisteredPro alone misses a
+   * keychain/dev-unlocked Pro user, so the upsell wrongly fired for them. Not persisted
+   * — recomputed authoritatively each launch.
+   */
+  isProActive: boolean;
+  setProActive: (v: boolean) => void;
   /** DEV-only: when true, suppresses the __DEV__ Pro auto-unlock so the
    *  free → Pro activation flow can be exercised in a debug build. No effect in
    *  release (__DEV__ is false there). */
@@ -370,6 +379,8 @@ export const useAppStore = create<AppState>()(
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
       hasRegisteredPro: false,
       setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
+      isProActive: false,
+      setProActive: (v) => set({ isProActive: v }),
       devProDisabled: false,
       setDevProDisabled: (v) => set({ devProDisabled: v }),
       proBannerDismissed: false,

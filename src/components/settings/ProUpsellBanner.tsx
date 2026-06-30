@@ -28,7 +28,9 @@ interface Props {
 export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const show = useAppStore((s) => !s.proBannerDismissed && !s.hasRegisteredPro);
+  // Never upsell a Pro user — isProActive covers keychain/dev-unlocked Pro too, which
+  // hasRegisteredPro alone misses.
+  const show = useAppStore((s) => !s.proBannerDismissed && !s.hasRegisteredPro && !s.isProActive);
   const dismiss = useAppStore((s) => s.setProBannerDismissed);
   const pricing = getPricingCopy();
 
