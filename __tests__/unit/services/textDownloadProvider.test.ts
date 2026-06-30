@@ -21,12 +21,15 @@ jest.mock('../../../src/services/huggingFace', () => ({ huggingFaceService: { ge
 jest.mock('../../../src/services/hardware', () => ({ hardwareService: { getModelTotalSize: jest.fn(() => 4000) } }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
+import { Platform } from 'react-native';
 import { textProvider } from '../../../src/services/modelDownloadService/providers/textProvider';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { useAppStore } from '../../../src/stores';
 import { modelManager } from '../../../src/services/modelManager';
+import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
 
-const mockMM = modelManager as unknown as { deleteModel: jest.Mock; cancelBackgroundDownload: jest.Mock };
+const mockMM = modelManager as unknown as { deleteModel: jest.Mock; cancelBackgroundDownload: jest.Mock; resetMmProjForRetry: jest.Mock; watchDownload: jest.Mock; downloadModelBackground: jest.Mock };
+const mockBG = backgroundDownloadService as unknown as { retryDownload: jest.Mock };
 
 const entry = (over: any = {}) => ({
   modelKey: 'author/m.gguf', downloadId: 'dl-1', modelId: 'author/m', fileName: 'm.gguf',
@@ -74,5 +77,31 @@ describe('textProvider', () => {
   it('reconcile strands an interrupted iOS download as failed (resumable false)', async () => {
     await textProvider.reconcile!();
     expect(useDownloadStore.getState().downloads['author/m.gguf'].status).toBe('failed');
+  });
+
+  // The Android retry MECHANISM that used to live in the Download Manager screen test.
+  // It now belongs to the provider (the View only dispatches retry(id)); this guards it.
+  describe('retry on Android (in-place WorkManager resume + mmproj reset + reattach)', () => {
+    const originalOs = Platform.OS;
+    beforeEach(() => {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+      useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
+      useDownloadStore.getState().add(entry({
+        status: 'failed', mmProjDownloadId: 'dl-mmproj', mmProjStatus: 'failed',
+      }));
+    });
+    afterEach(() => Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs }));
+
+    it('resets both rows to pending, retries native main + mmproj, resets mmproj, reattaches', async () => {
+      await textProvider.retry('text:author/m');
+      // main + mmproj native retried (Android resumes the existing rows in place)
+      expect(mockBG.retryDownload).toHaveBeenNthCalledWith(1, 'dl-1');
+      expect(mockBG.retryDownload).toHaveBeenNthCalledWith(2, 'dl-mmproj');
+      expect(mockMM.resetMmProjForRetry).toHaveBeenCalledWith('dl-1');
+      // reattaches the watcher on the main download
+      expect(mockMM.watchDownload).toHaveBeenCalledWith('dl-1', expect.any(Function), expect.any(Function));
+      // does NOT take the iOS fresh-download path
+      expect(mockMM.downloadModelBackground).not.toHaveBeenCalled();
+    });
   });
 });
