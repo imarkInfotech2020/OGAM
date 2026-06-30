@@ -111,6 +111,12 @@ describe('updateProgress', () => {
     useDownloadStore.getState().updateProgress('unknown', 100, 1000);
     expect(useDownloadStore.getState().downloads).toBe(before);
   });
+
+  it('clamps combined progress to <= 1 (no combinedTotal → main-only denominator + mmproj bytes)', () => {
+    useDownloadStore.getState().add(makeEntry({ combinedTotalBytes: undefined, mmProjBytesDownloaded: 400 }));
+    useDownloadStore.getState().updateProgress('dl-1', 1000, 1000); // (1000+400)/1000 = 1.4 → clamp
+    expect(useDownloadStore.getState().downloads['author/model/model.gguf'].progress).toBe(1);
+  });
 });
 
 describe('updateMmProjProgress', () => {
@@ -127,6 +133,12 @@ describe('updateMmProjProgress', () => {
     const before = useDownloadStore.getState().downloads;
     useDownloadStore.getState().updateMmProjProgress('unknown', 100);
     expect(useDownloadStore.getState().downloads).toBe(before);
+  });
+
+  it('clamps mmproj combined progress to <= 1', () => {
+    useDownloadStore.getState().add(makeEntry({ combinedTotalBytes: undefined, bytesDownloaded: 900, mmProjDownloadId: 'dl-mm' }));
+    useDownloadStore.getState().updateMmProjProgress('dl-mm', 500); // (900+500)/1000 = 1.4 → clamp
+    expect(useDownloadStore.getState().downloads['author/model/model.gguf'].progress).toBe(1);
   });
 });
 
