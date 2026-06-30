@@ -51,7 +51,7 @@ export const DesktopPromoCard: React.FC = () => {
         </TouchableOpacity>
       </View>
       <Text style={styles.desktopCardBody}>
-        The same on-device AI, now on your Mac. Run text, vision, image, and voice models locally, behind one gateway this phone can connect to - no cloud, no accounts, no API keys.
+        The way you already work on your Mac - chat, on-device image and voice, live artifacts, and projects that answer from your own docs with citations - running on your machine. Plus a private layer that remembers everything you see, rewinds your screen second by second, runs one search across your whole day, connects your tools, dictates anywhere with a keypress, keeps a searchable clipboard, and turns your activity into to-dos and actions you approve. Nothing leaves the device.
       </Text>
       <View style={styles.desktopCardCtaRow}>
         <View style={styles.desktopCardCta}>
