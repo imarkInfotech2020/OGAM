@@ -228,6 +228,19 @@ describe('ensureModelLoadedFn typed outcome', () => {
 // ─────────────────────────────────────────────
 
 describe('proceedWithModelLoadFn', () => {
+  it('closes the picker BEFORE the load runs (sheet dismisses up front, not after load)', async () => {
+    mockLoadTextModel.mockResolvedValueOnce(undefined);
+    const deps = makeDeps();
+    const model = createDownloadedModel({ id: 'm', name: 'M' });
+    const p = proceedWithModelLoadFn(deps, model); // don't await yet — check the sync prefix
+    // The close + loading flag run synchronously, before the load (which is behind
+    // waitForRenderFrame) has even been called.
+    expect(deps.setShowModelSelector).toHaveBeenCalledWith(false);
+    expect(deps.setIsModelLoading).toHaveBeenCalledWith(true);
+    expect(mockLoadTextModel).not.toHaveBeenCalled();
+    await p; // let it finish so nothing leaks
+  });
+
   it('loads model and posts system message when showGenerationDetails=true', async () => {
     mockLoadTextModel.mockResolvedValueOnce(undefined);
     mockGetMultimodalSupport.mockReturnValueOnce(null);

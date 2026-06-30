@@ -204,6 +204,9 @@ export async function proceedWithModelLoadFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
+  // Close the picker FIRST so the load runs behind the dismissed sheet and the
+  // minimal in-chat loading card shows — not a load running with the sheet still open.
+  deps.setShowModelSelector(false);
   deps.setIsModelLoading(true);
   deps.setLoadingModel(model);
   deps.modelLoadStartTimeRef.current = Date.now();
@@ -225,7 +228,6 @@ export async function proceedWithModelLoadFn(
   } finally {
     deps.setIsModelLoading(false);
     deps.setLoadingModel(null);
-    deps.setShowModelSelector(false);
     deps.modelLoadStartTimeRef.current = null;
   }
 }
