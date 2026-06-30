@@ -413,5 +413,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   warningCard: { backgroundColor: `${colors.warning}20`, borderWidth: 1, borderColor: colors.warning },
   warningTitle: { ...TYPOGRAPHY.h3, color: colors.warning, marginBottom: 8 },
   warningText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, lineHeight: 20 },
-  footer: { position: 'absolute' as const, bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border },
+  // Vertical padding is intentionally small: the ghost Button carries its own
+  // paddingVertical and the SafeAreaView already insets the home-indicator area, so a
+  // full 16 here stacked into an oversized gap below "Skip for Now".
+  footer: { position: 'absolute' as const, bottom: 0, left: 0, right: 0, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.xs, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border },
 });
