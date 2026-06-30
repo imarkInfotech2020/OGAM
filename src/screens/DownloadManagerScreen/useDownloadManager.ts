@@ -171,14 +171,22 @@ export function useDownloadManager(): UseDownloadManagerResult {
    */
   const idOf = (item: DownloadItem): string => uniformDownloadId(item.modelType, item.modelId);
 
-  const activeItems: DownloadItem[] = Object.values(downloads)
-    .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
-    .map(entryToActiveItem);
-
   const completedItems: DownloadItem[] = [
     ...modelStoreCompletedItems(downloadedModels, downloadedImageModels),
     ...voiceItems,
   ];
+
+  // One entry per model. A downloaded (registered, on-disk) model is authoritative, so
+  // a leftover in-flight/failed row for the SAME model is stale — drop it. Otherwise a
+  // model that completed and was then re-started (a stale restore, a re-download)
+  // shows as both a failed "Active" download and a "Downloaded" model — two guys doing
+  // the same thing (e.g. SDXL Core ML appearing in both sections). Keyed by the shared
+  // uniformDownloadId so text/image/stt all dedup the same way.
+  const completedIds = new Set(completedItems.map(idOf));
+  const activeItems: DownloadItem[] = Object.values(downloads)
+    .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
+    .map(entryToActiveItem)
+    .filter(item => !completedIds.has(idOf(item)));
 
   const totalStorageUsed = completedItems.reduce((sum, item) => sum + item.fileSize, 0);
 

@@ -146,8 +146,17 @@ export const textProvider: DownloadProvider = {
   async reconcile(): Promise<void> {
     if (Platform.OS === 'android') return; // WorkManager resumes — nothing to strand
     const store = useDownloadStore.getState();
+    const registered = new Set(useAppStore.getState().downloadedModels.map(m => m.id));
     for (const e of textEntries()) {
       if (!isActiveStatus(e.status)) continue;
+      if (registered.has(e.modelId)) {
+        // Already on disk — this in-flight row is stale (a re-start of a completed
+        // model). Drop it so there's never both a "Downloaded" and an "Active" entry
+        // for the same model; never re-download something we already have.
+        logger.log(`[DL-SM] text:${e.modelId} reconcile: already downloaded → dropping stale row`);
+        store.remove(e.modelKey);
+        continue;
+      }
       // iOS foreground downloads die on app-kill and can't resume — but the user
       // shouldn't have to tap retry on each. Re-queue: mark 'pending' (→ 'queued'
       // in the service vocabulary) and re-issue through the SAME 3-slot cap a normal

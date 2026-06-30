@@ -88,6 +88,16 @@ describe('textProvider', () => {
     );
   });
 
+  it('reconcile drops a stale in-flight row when the model is already downloaded (never 2 guys)', async () => {
+    // Model is registered as completed AND has a leftover interrupted row.
+    useAppStore.setState({ downloadedModels: [{ id: 'author/m', fileName: 'm.gguf', filePath: '/p' }] } as any);
+    await textProvider.reconcile!();
+    await new Promise((r) => setImmediate(r));
+    // Stale row removed; no re-download of an already-downloaded model.
+    expect(useDownloadStore.getState().downloads['author/m.gguf']).toBeUndefined();
+    expect(mockMM.downloadModelBackground).not.toHaveBeenCalled();
+  });
+
   // The Android retry MECHANISM that used to live in the Download Manager screen test.
   // It now belongs to the provider (the View only dispatches retry(id)); this guards it.
   describe('retry on Android (in-place WorkManager resume + mmproj reset + reattach)', () => {
