@@ -4,8 +4,10 @@ import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
-import { useAppStore } from '../../stores';
+import { remoteServerManager } from '../remoteServerManager';
+import { useAppStore, useRemoteServerStore } from '../../stores';
 import { ONNXImageModel } from '../../types';
+import logger from '../../utils/logger';
 import type {
   ActiveModelInfo,
   ResourceUsage,
@@ -390,6 +392,26 @@ class ActiveModelService {
       }
     }
     return results;
+  }
+  /**
+   * Free ALL model memory: unload local text+image AND disconnect any remote model.
+   * THE single owning side-effect for "Eject All" — every screen dispatches this
+   * instead of re-implementing the unload sequence (which is how one screen wired it
+   * and another stubbed it). Returns how many models were unloaded. Logged for the
+   * [MODEL-SM] trace.
+   */
+  async ejectAll(): Promise<{ count: number }> {
+    const remote = useRemoteServerStore.getState();
+    const hasRemote = !!(remote.activeRemoteTextModelId || remote.activeRemoteImageModelId);
+    logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
+    const results = await this.unloadAllModels();
+    let count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+    if (hasRemote) {
+      remoteServerManager.clearActiveRemoteModel();
+      count += 1;
+    }
+    logger.log(`[MODEL-SM] ejectAll → done count=${count}`);
+    return { count };
   }
   async getResourceUsage(): Promise<ResourceUsage> {
     return _getResourceUsage();
