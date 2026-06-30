@@ -232,9 +232,29 @@ function getLastUserQuery(messages: Message[]): string {
     if (messages[i].role === 'user' && messages[i].content.trim()) return messages[i].content.trim();
   return '';
 }
+/**
+ * The single defensive seam every tool execution funnels through. A tool that THROWS
+ * (e.g. an MCP server that's down or disconnected) must NOT crash the turn; an empty
+ * result must NOT be mistaken for success. We normalize EVERY outcome to a typed
+ * ToolResult via the toolResult contract, so both the JS loop and the LiteRT native
+ * handler behave identically: success/empty/error all become a typed result whose
+ * model-facing string (toolResultModelContent) explicitly states failure/empty.
+ */
+async function executeToolCallSafely(tc: ToolCall): Promise<ToolResult> {
+  const exts = getToolExtensions();
+  const ext = exts.find(e => e.canHandle(tc.name));
+  const start = Date.now();
+  try {
+    const raw = ext ? await ext.execute(tc) : await executeToolCall(tc);
+    return normalizeToolResult(tc, raw);
+  } catch (err) {
+    logger.error(`[ToolLoop] tool "${tc.name}" threw — surfacing as a typed error result`, err);
+    return toolErrorResult(tc, err, start);
+  }
+}
+
 async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools/types').ToolCall[], loopMessages: Message[]): Promise<void> {
   const chatStore = useChatStore.getState();
-  const exts = getToolExtensions();
   for (const tc of toolCalls) {
     if (ctx.isAborted()) break;
     // Small models often call web_search with empty args — use user's message as fallback
@@ -246,20 +266,7 @@ async function executeToolCalls(ctx: ToolLoopContext, toolCalls: import('./tools
     }
     if (ctx.projectId) tc.context = { projectId: ctx.projectId };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const ext = exts.find(e => e.canHandle(tc.name));
-    // Single defensive seam: a tool that THROWS (e.g. an MCP server that's down or
-    // disconnected) must NOT crash the turn. Normalize every outcome to a typed
-    // result, and feed the model an explicit string — so a failure/empty is never
-    // mistaken for a successful answer.
-    const start = Date.now();
-    let result: ToolResult;
-    try {
-      const raw = ext ? await ext.execute(tc) : await executeToolCall(tc);
-      result = normalizeToolResult(tc, raw);
-    } catch (err) {
-      logger.error(`[ToolLoop] tool "${tc.name}" threw — surfacing as a typed error result`, err);
-      result = toolErrorResult(tc, err, start);
-    }
+    const result = await executeToolCallSafely(tc);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const toolResultMsg: Message = {
       id: `tool-result-${Date.now()}-${tc.id || tc.name}`, role: 'tool',
@@ -394,11 +401,14 @@ function buildLiteRTToolCallHandler(ctx: ToolLoopContext, conversationId: string
     ctx.callbacks?.onToolCallStart?.(name, args as Record<string, any>);
     const toolCall: ToolCall = { id: `native-tc-${Date.now()}`, name, arguments: args as Record<string, any> };
     if (ctx.projectId) (toolCall as any).context = { projectId: ctx.projectId };
-    const exts = getToolExtensions();
-    const ext = exts.find(e => e.canHandle(name));
-    const result = ext ? await ext.execute(toolCall) : await executeToolCall(toolCall);
+    // Route EVERY outcome through the same contract as the JS loop: a throw becomes a
+    // typed error result (it never crashes the native turn), and the string handed to
+    // the model (toolResultModelContent) is never empty — a failure/empty is stated
+    // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
+    // mistake it for a successful answer.
+    const result = await executeToolCallSafely(toolCall);
     ctx.callbacks?.onToolCallComplete?.(name, result);
-    const resultContent = result.error ? `Error: ${result.error}` : result.content;
+    const resultContent = toolResultModelContent(result);
     const toolCallMsg: Message = { id: `tc-${Date.now()}-${name}`, role: 'assistant', content: '',
       toolCalls: [{ id: toolCall.id, name, arguments: JSON.stringify(toolCall.arguments) }], timestamp: Date.now() };
     const toolResultMsg: Message = { id: `tr-${Date.now()}-${name}`, role: 'tool', content: resultContent,
