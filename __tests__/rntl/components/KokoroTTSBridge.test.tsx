@@ -20,9 +20,9 @@ import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetch
 import { KokoroEngine } from '../../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 
-const listDownloadedModels = BareResourceFetcher.listDownloadedModels as jest.Mock;
-const KOKORO_FILES = ['duration_predictor.pte', 'synthesizer.pte'];
-const onDisk = () => [`/x/${KOKORO_FILES[0]}`, `/x/${KOKORO_FILES[1]}`];
+const listDownloadedFiles = BareResourceFetcher.listDownloadedFiles as jest.Mock;
+const KOKORO_FILES = ['duration_predictor.pte', 'synthesizer.pte', 'af_heart.bin', 'tagger.pt', 'lexicon.json'];
+const onDisk = () => KOKORO_FILES.map((f) => `/x/${f}`);
 
 const setDownloadedFlag = (v: boolean) =>
   useTTSStore.setState((s) => ({
@@ -31,7 +31,7 @@ const setDownloadedFlag = (v: boolean) =>
 
 describe('KokoroTTSBridge mount gating', () => {
   beforeEach(() => {
-    listDownloadedModels.mockReset().mockResolvedValue([]);
+    listDownloadedFiles.mockReset().mockResolvedValue([]);
     setDownloadedFlag(false);
   });
 
@@ -45,7 +45,7 @@ describe('KokoroTTSBridge mount gating', () => {
   });
 
   it('mounts the hook and becomes ready when the model is downloaded', async () => {
-    listDownloadedModels.mockResolvedValue(onDisk());
+    listDownloadedFiles.mockResolvedValue(onDisk());
     setDownloadedFlag(true);
     const engine = new KokoroEngine();
     const Bridge = engine.getBridgeComponent() as React.FC;
@@ -54,7 +54,7 @@ describe('KokoroTTSBridge mount gating', () => {
   });
 
   it('REGRESSION: deleting unmounts the hook (no auto re-download)', async () => {
-    listDownloadedModels.mockResolvedValue(onDisk());
+    listDownloadedFiles.mockResolvedValue(onDisk());
     setDownloadedFlag(true);
     const engine = new KokoroEngine();
     const Bridge = engine.getBridgeComponent() as React.FC;
@@ -65,7 +65,7 @@ describe('KokoroTTSBridge mount gating', () => {
     // flips false. Before the fix, shouldLoad stayed true and the hook re-fetched.
     await act(async () => {
       await engine.deleteAssets();
-      listDownloadedModels.mockResolvedValue([]);
+      listDownloadedFiles.mockResolvedValue([]);
       setDownloadedFlag(false);
     });
 
@@ -79,7 +79,7 @@ describe('KokoroTTSBridge mount gating', () => {
   // Without activating a playback session AND resuming the context, scheduled
   // buffers never play (silent, no progress, button stuck on pause).
   it('speak() activates an iOS playback session and resumes a suspended context', async () => {
-    listDownloadedModels.mockResolvedValue(onDisk());
+    listDownloadedFiles.mockResolvedValue(onDisk());
     setDownloadedFlag(true);
     const engine = new KokoroEngine();
     const Bridge = engine.getBridgeComponent() as React.FC;
@@ -103,7 +103,7 @@ describe('KokoroTTSBridge mount gating', () => {
   // last buffer's onEnded), not at synthesis end — otherwise the engine reports
   // 'ready' and the playback machine goes idle while audio is still draining.
   it('REGRESSION: speak() resolves at audio end (last buffer onEnded), not at synthesis end', async () => {
-    listDownloadedModels.mockResolvedValue(onDisk());
+    listDownloadedFiles.mockResolvedValue(onDisk());
     setDownloadedFlag(true);
     // Simulate executorch: synthesize a chunk, SCHEDULE it (do NOT await playback),
     // then end synthesis while the buffer is still "playing".
@@ -142,7 +142,7 @@ describe('KokoroTTSBridge mount gating', () => {
   // streaming). _setBridge used to force phase 'ready' unconditionally, resetting an
   // active playback (processing → ready) → the machine ended it early.
   it('REGRESSION: a bridge re-register mid-playback does not reset processing → ready', async () => {
-    listDownloadedModels.mockResolvedValue(onDisk());
+    listDownloadedFiles.mockResolvedValue(onDisk());
     setDownloadedFlag(true);
     const stream = jest.fn(async ({ onNext, onEnd }: any) => {
       onNext(new Float32Array(8)); // schedule a buffer; keep it "playing"
