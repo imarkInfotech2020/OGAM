@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import {
   downloadHuggingFaceModel,
@@ -16,6 +17,8 @@ jest.mock('react-native-fs', () => ({
   mkdir: jest.fn(() => Promise.resolve()),
   unlink: jest.fn(() => Promise.resolve()),
   writeFile: jest.fn(() => Promise.resolve()),
+  // Default: every part is present + non-empty (validateMultifileComplete passes).
+  stat: jest.fn(() => Promise.resolve({ size: 500000 })),
 }));
 
 jest.mock('react-native-zip-archive', () => ({
@@ -167,6 +170,21 @@ describe('imageDownloadActions', () => {
       'image-multi:test-hf-model',
       'failed',
       expect.objectContaining({ message: 'Network failed' }),
+    );
+  });
+
+  it('downloadHuggingFaceModel fails (does NOT register) when a downloaded part is missing/empty', async () => {
+    // A part resolves "successfully" but wrote a 0-byte file → validateMultifileComplete rejects.
+    (RNFS.stat as jest.Mock).mockResolvedValueOnce({ size: 0 });
+    const deps = makeDeps();
+
+    await downloadHuggingFaceModel(makeHFModelInfo(), deps);
+
+    expect(mockAddDownloadedImageModel).not.toHaveBeenCalled();
+    expect(mockStoreApi.setStatus).toHaveBeenCalledWith(
+      'image-multi:test-hf-model',
+      'failed',
+      expect.objectContaining({ message: expect.stringContaining('missing or empty') }),
     );
   });
 

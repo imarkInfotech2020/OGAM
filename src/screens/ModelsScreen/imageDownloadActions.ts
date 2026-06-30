@@ -156,6 +156,22 @@ async function downloadSequentialFiles(opts: {
   }
 }
 
+/** Verify every multi-file part is present and non-empty before registering. A
+ *  download can resolve "successfully" yet have written a missing/0-byte file (e.g. a
+ *  200 with no body), which would otherwise register a broken model that fails to
+ *  load later with a cryptic error. We check existence + non-empty (NOT an exact size
+ *  match — descriptor sizes are metadata that can drift from the real bytes, and a
+ *  strict match would wrongly fail valid downloads). Throws so the caller's catch
+ *  fails the download (retry-able) instead of registering garbage. */
+async function validateMultifileComplete(modelDir: string, files: MultifileDownloadSpec[]): Promise<void> {
+  for (const file of files) {
+    const filePath = `${modelDir}/${file.relativePath}`;
+    const stat = await RNFS.stat(filePath).catch(() => null);
+    const size = stat ? (typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size) : -1;
+    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
+  }
+}
+
 /** Remove the entry from the store. Use after register-and-notify or on error. */
 function removeStoreEntry(modelId: string) {
   useDownloadStore.getState().remove(makeImageModelKey(modelId));
@@ -274,6 +290,7 @@ export async function downloadHuggingFaceModel(
     }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
+    await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
@@ -332,6 +349,7 @@ export async function downloadCoreMLMultiFile(
     const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
+    await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
