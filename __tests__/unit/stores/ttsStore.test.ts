@@ -186,6 +186,12 @@ describe('ttsStore', () => {
       expect(getState().isSwitchingVoice).toBe(false);
       expect(getState().error).toBe('fetch failed');
     });
+
+    it('deleteModels clears a stuck isSwitchingVoice (delete mid-switch must not lock the picker)', async () => {
+      useTTSStore.setState({ isSwitchingVoice: true });
+      await getState().deleteModels();
+      expect(getState().isSwitchingVoice).toBe(false);
+    });
   });
 
   // ── Generate and Save ─────────────────────────────────────────────────
