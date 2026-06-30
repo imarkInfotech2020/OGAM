@@ -1,5 +1,6 @@
- import { Dispatch, MutableRefObject, SetStateAction } from 'react';
+ import { Dispatch, SetStateAction } from 'react';
 import { AlertState, showAlert, hideAlert } from '../../components';
+import { generationSession } from '../../services/generationSession';
 import { APP_CONFIG } from '../../constants';
 import {
   llmService, intentClassifier, generationService, imageGenerationService,
@@ -58,7 +59,6 @@ export type GenerationDeps = {
   deleteConversation: (convId: string) => void;
   setActiveConversation: (convId: string | null) => void;
   removeImagesByConversationId: (convId: string) => string[];
-  generatingForConversationRef: MutableRefObject<string | null>;
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<ModelReadyOutcome>;
@@ -271,11 +271,11 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   if (!deps.hasActiveModel) return;
   // Pure text executor. Image-vs-text routing happens upstream in
   // dispatchGenerationFn — this function only ever generates text.
-  deps.generatingForConversationRef.current = targetConversationId;
+  generationSession.begin(targetConversationId);
   // For remote models, skip local model loading
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
       !(await ensureReadyOrAlert(deps, 'startGeneration', () => { startGenerationFn(deps, call); }))) {
-    deps.generatingForConversationRef.current = null;
+    generationSession.end('not-ready');
     return;
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
@@ -339,10 +339,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     } else {
       deps.setAlertState(showAlert('Generation Error', msg));
     }
-    deps.generatingForConversationRef.current = null;
+    generationSession.end('error');
     return;
   }
-  deps.generatingForConversationRef.current = null;
+  generationSession.end();
 }
 let _msgIdSeq = 0; const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
 export type DispatchCall = { text: string; attachments?: MediaAttachment[]; conversationId: string; imageMode?: 'auto' | 'force' | 'disabled' };
@@ -402,8 +402,8 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   }
   await dispatchGenerationFn(deps, { text, attachments, conversationId: targetConversationId, imageMode }, startGeneration);
 }
-export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'generatingForConversationRef'>): Promise<void> {
-  deps.generatingForConversationRef.current = null;
+export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage'>): Promise<void> {
+  generationSession.end('stopped');
   try { await generationService.stopGeneration().catch(() => { }); }
   catch (e) { logger.error('Error stopping generation:', e); }
   if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => { });
@@ -436,7 +436,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
       !(await ensureReadyOrAlert(deps, 'regenerate', () => { regenerateResponseFn(deps, call); }))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
-  deps.generatingForConversationRef.current = targetConversationId;
+  generationSession.begin(targetConversationId);
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
   if (deps.activeModel?.engine === 'litert') liteRTService.invalidateConversation();
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
@@ -492,7 +492,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
       deps.setAlertState(showAlert('Generation Error', msg));
     }
   }
-  deps.generatingForConversationRef.current = null;
+  generationSession.end();
 }
 export type SelectProjectDeps = { activeConversationId: string | null | undefined; setConversationProject: (convId: string, projectId: string | null) => void; setShowProjectSelector: SetState<boolean> };
 export function handleSelectProjectFn(deps: SelectProjectDeps, project: Project | null): void {

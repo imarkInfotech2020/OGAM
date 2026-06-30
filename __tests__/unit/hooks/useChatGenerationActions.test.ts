@@ -23,6 +23,7 @@ import {
 } from '../../../src/screens/ChatScreen/useChatGenerationActions';
 import * as hookRegistry from '../../../src/bootstrap/hookRegistry';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { generationSession } from '../../../src/services/generationSession';
 import { createDownloadedModel } from '../../utils/factories';
 
 // ─────────────────────────────────────────────
@@ -157,6 +158,7 @@ jest.mock('../../../src/constants', () => ({
 beforeEach(() => {
   // Reset remote server store to default (no active server)
   useRemoteServerStore.setState({ activeServerId: null, activeRemoteTextModelId: null });
+  generationSession._reset(); // single owner of 'which conversation is generating'
   mockClassifyIntent.mockResolvedValue('text');
   mockGenerateResponse.mockResolvedValue(undefined);
   mockGenerateWithTools.mockResolvedValue(undefined);
@@ -186,9 +188,6 @@ beforeEach(() => {
 // Helpers
 // ─────────────────────────────────────────────
 
-function makeRef<T>(value: T): React.MutableRefObject<T> {
-  return { current: value } as React.MutableRefObject<T>;
-}
 
 const baseModel = createDownloadedModel({ id: 'model-1', filePath: '/path/model.gguf' });
 const baseImageModel = { id: 'img-1', name: 'SD Model' };
@@ -226,7 +225,6 @@ function makeGenerationDeps(overrides: Record<string, unknown> = {}): any {
     deleteConversation: jest.fn(),
     setActiveConversation: jest.fn(),
     removeImagesByConversationId: jest.fn(() => []),
-    generatingForConversationRef: makeRef<string | null>(null),
     navigation: { goBack: jest.fn(), navigate: jest.fn() },
     ensureModelLoaded: jest.fn(() => Promise.resolve({ ok: true })),
     ensureTextModelForChat: jest.fn(() => Promise.resolve(true)),
@@ -464,7 +462,7 @@ describe('regenerateResponseFn', () => {
     });
     await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg });
     expect(mockGenerateResponse).toHaveBeenCalledWith('conv-1', expect.any(Array));
-    expect(deps.generatingForConversationRef.current).toBeNull();
+    expect(generationSession.getConversationId()).toBeNull();
   });
 
   it('shows alert when generateResponse throws', async () => {
@@ -611,7 +609,7 @@ describe('handleStopFn', () => {
     await handleStopFn(deps);
     expect(mockStopGenerationService).toHaveBeenCalled();
     expect(mockCancelGeneration).toHaveBeenCalled();
-    expect(deps.generatingForConversationRef.current).toBeNull();
+    expect(generationSession.getConversationId()).toBeNull();
   });
 
   it('stops generation without cancelling image when not generating image', async () => {
@@ -703,7 +701,7 @@ describe('startGenerationFn', () => {
     const setDebugInfo = jest.fn();
     await startGenerationFn(deps, { setDebugInfo, targetConversationId: 'conv-1', messageText: 'hello' });
     expect(mockGenerateResponse).toHaveBeenCalled();
-    expect(deps.generatingForConversationRef.current).toBeNull();
+    expect(generationSession.getConversationId()).toBeNull();
   });
 
   it('clears cache when context usage is high', async () => {

@@ -11,6 +11,8 @@ import {
   contextCompactionService,
 } from '../../services';
 import { liteRTService } from '../../services/litert';
+import { generationSession } from '../../services/generationSession';
+import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
@@ -59,7 +61,8 @@ export const useChatScreen = () => {
   const [isCompacting, setIsCompacting] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(route.params?.projectId);
   const lastMessageCountRef = useRef(0);
-  const generatingForConversationRef = useRef<string | null>(null);
+  // Owned by the generationSession service (single owner); observed reactively here.
+  const generatingConversationId = useGeneratingConversationId();
   // Stashed when the model selector opens with no text model; replayed on pick.
   const pendingMessageRef = useRef<{ text: string; attachments?: MediaAttachment[] } | null>(null);
 
@@ -178,7 +181,7 @@ export const useChatScreen = () => {
     activeImageModel, imageModelLoaded, isStreaming, isGeneratingImage, imageGenState, settings,
     downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
     setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
-    setActiveConversation, removeImagesByConversationId, generatingForConversationRef, navigation, setShowSettingsPanel,
+    setActiveConversation, removeImagesByConversationId, navigation, setShowSettingsPanel,
     ensureModelLoaded: async () => ensureModelLoadedFn(modelDeps),
     ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
@@ -230,8 +233,9 @@ export const useChatScreen = () => {
   }, [route.params?.projectId]);
 
   useEffect(() => {
-    if (generatingForConversationRef.current && generatingForConversationRef.current !== activeConversationId) {
-      generatingForConversationRef.current = null;
+    // Switched away from the conversation that was generating → end its session.
+    if (generationSession.getConversationId() && !generationSession.isGeneratingFor(activeConversationId)) {
+      generationSession.end('conversation-switch');
     }
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -243,7 +247,7 @@ export const useChatScreen = () => {
   useChatImageModelEffects({ setDownloadedImageModels, settings, activeImageModelId, downloadedModels });
   useChatModelStateSync({ activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking });
 
-  const isGeneratingForThisConversation = !!generatingForConversationRef.current && generatingForConversationRef.current === activeConversationId;
+  const isGeneratingForThisConversation = generatingConversationId != null && generatingConversationId === activeConversationId;
   const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation });
 
   useEffect(() => {
