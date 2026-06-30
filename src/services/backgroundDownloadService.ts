@@ -149,6 +149,21 @@ class BackgroundDownloadService {
     return this.startQueue.length;
   }
 
+  /**
+   * Starts waiting for a slot, projected for the UI so the Download Manager can show
+   * them as "Queued". These have no native downloadId yet (they haven't started), so
+   * they live only here — the queue's owner is the single source of truth for them.
+   */
+  getQueuedItems(): Array<{ modelKey: string; modelId: string; fileName: string; modelType: string; totalBytes: number }> {
+    return this.startQueue.map((q) => ({
+      modelKey: q.key,
+      modelId: q.params.modelId,
+      fileName: q.params.fileName,
+      modelType: q.params.modelType ?? 'text',
+      totalBytes: q.params.totalBytes ?? 0,
+    }));
+  }
+
   async retryDownload(downloadId: string): Promise<void> {
     if (!this.isAvailable() || Platform.OS !== 'android') {
       throw new Error('retryDownload is only available on Android');

@@ -112,6 +112,7 @@ jest.mock('../../../src/services', () => ({
     cancelDownload: jest.fn(() => Promise.resolve()),
     retryDownload: jest.fn(() => Promise.resolve()),
     startProgressPolling: jest.fn(),
+    getQueuedItems: jest.fn(() => []),
   },
   activeModelService: {
     unloadTextModel: jest.fn(),
@@ -325,6 +326,15 @@ describe('DownloadManagerScreen', () => {
     expect(getByText('model.gguf')).toBeTruthy();
     expect(getByText('The server could not resume this download. Please retry it.')).toBeTruthy();
     expect(queryByText('No active downloads')).toBeNull();
+  });
+
+  it('surfaces queued (capped) downloads as "Queued" in Active Downloads', () => {
+    mockBackgroundDownloadService.getQueuedItems.mockReturnValueOnce([
+      { modelKey: 'q/waiting.gguf', modelId: 'q/waiting', fileName: 'waiting.gguf', modelType: 'text', totalBytes: 5000 },
+    ]);
+    const { getByText } = render(<DownloadManagerScreen />);
+    expect(getByText('waiting.gguf')).toBeTruthy();
+    expect(getByText('Queued')).toBeTruthy();
   });
 
   it('shows section headers for active and completed', () => {

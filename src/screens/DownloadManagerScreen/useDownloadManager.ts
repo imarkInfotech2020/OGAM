@@ -74,6 +74,24 @@ function getActiveItemQuantization(
   return metadata?.imageModelBackend === 'coreml' ? 'Core ML' : '';
 }
 
+/** A start waiting for a concurrency slot (no native downloadId yet) → a "Queued"
+ *  active item. status 'pending' renders as "Queued" in the item row. */
+function queuedToActiveItem(q: { modelKey: string; modelId: string; fileName: string; modelType: string; totalBytes: number }): DownloadItem {
+  return {
+    type: 'active',
+    modelType: q.modelType as DownloadItem['modelType'],
+    modelKey: q.modelKey,
+    modelId: q.modelId,
+    fileName: q.fileName,
+    author: '',
+    quantization: '',
+    fileSize: q.totalBytes,
+    bytesDownloaded: 0,
+    progress: 0,
+    status: 'pending',
+  };
+}
+
 function entryToActiveItem(entry: DownloadEntry): DownloadItem {
   const metadata = parseEntryMetadata(entry);
   const isImage = entry.modelType === 'image';
@@ -136,6 +154,17 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const downloads = useDownloadStore(state => state.downloads);
   const removeDownloadEntry = useDownloadStore(state => state.remove);
 
+  // Downloads waiting for a concurrency slot live only in the service's queue (no
+  // store row yet), so read them from their owner and show them as "Queued". Refresh
+  // on store changes (a completing download drains the queue) and on a light poll.
+  const [queuedItems, setQueuedItems] = useState<DownloadItem[]>([]);
+  useEffect(() => {
+    const refresh = () => setQueuedItems(backgroundDownloadService.getQueuedItems().map(queuedToActiveItem));
+    refresh();
+    const t = setInterval(refresh, 1000);
+    return () => clearInterval(t);
+  }, [downloads]);
+
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } = useVoiceDownloadItems(() => setAlertState(hideAlert()));
 
@@ -183,10 +212,17 @@ export function useDownloadManager(): UseDownloadManagerResult {
   // the same thing (e.g. SDXL Core ML appearing in both sections). Keyed by the shared
   // uniformDownloadId so text/image/stt all dedup the same way.
   const completedIds = new Set(completedItems.map(idOf));
-  const activeItems: DownloadItem[] = Object.values(downloads)
+  const startedItems = Object.values(downloads)
     .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
     .map(entryToActiveItem)
     .filter(item => !completedIds.has(idOf(item)));
+  // Append queued (not-yet-started) downloads, skipping any already started or already
+  // downloaded — one entry per model, no duplicates across started/queued/completed.
+  const startedKeys = new Set(startedItems.map(i => i.modelKey));
+  const queuedActive = queuedItems.filter(
+    q => !startedKeys.has(q.modelKey) && !completedIds.has(idOf(q)),
+  );
+  const activeItems: DownloadItem[] = [...startedItems, ...queuedActive];
 
   const totalStorageUsed = completedItems.reduce((sum, item) => sum + item.fileSize, 0);
 
