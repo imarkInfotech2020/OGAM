@@ -275,5 +275,9 @@ export async function restoreInProgressDownloads(opts: RestoreDownloadsOpts): Pr
     }
   }
 
+  // Count the resumed downloads against the concurrency cap so a fresh batch isn't
+  // admitted on top of them; their terminal events later free the slots.
+  backgroundDownloadService.adoptActive(restoredDownloadIds);
+
   return restoredDownloadIds;
 }
