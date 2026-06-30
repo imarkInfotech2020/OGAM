@@ -13,6 +13,8 @@ module.exports = {
     '/__tests__/unit/audio/',
     '/__tests__/unit/engine/',
     '/__tests__/integration/audio/',
+    '__tests__/unit/audioProgressCaption.test.ts',
+    '__tests__/unit/mcp/McpToolExtension.test.ts',
     '__tests__/unit/services/ttsService.test.ts',
     '__tests__/unit/stores/ttsStore.test.ts',
     '__tests__/integration/stores/tts.test.ts',
