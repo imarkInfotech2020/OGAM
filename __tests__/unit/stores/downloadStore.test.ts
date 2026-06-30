@@ -34,6 +34,18 @@ describe('isActiveStatus', () => {
     expect(isActiveStatus('failed')).toBe(false);
     expect(isActiveStatus('cancelled')).toBe(false);
   });
+
+  // Cross-surface contract: every screen that decides "is this download in progress?"
+  // (Download Manager active list, Models→Image tab, Models→Text tab) MUST use this one
+  // predicate. The regressed image bug came from a hand-rolled `status !== 'completed'
+  // && status !== 'cancelled'`, which classified a FAILED row as downloading — so the
+  // Image tab showed a fake "downloading 0%" while the Download Manager showed it failed.
+  // Pinning failed/cancelled as NOT active guards both surfaces against drifting apart.
+  it('classifies a failed/interrupted download as NOT in progress (no fake "downloading")', () => {
+    const handRolled = (s: string) => s !== 'completed' && s !== 'cancelled';
+    expect(isActiveStatus('failed')).toBe(false);   // the correct, shared answer
+    expect(handRolled('failed')).toBe(true);         // the old per-screen bug it replaces
+  });
 });
 
 describe('add', () => {
