@@ -189,9 +189,9 @@ class ActiveModelService {
     });
     await this.textLoadPromise;
   }
-  async unloadTextModel(): Promise<void> {
+  async unloadTextModel(keepSelection = false): Promise<void> {
     await modelResidencyManager.runExclusive('unload:text', () =>
-      this.doUnloadTextModelLocked(),
+      this.doUnloadTextModelLocked(keepSelection),
     );
   }
   /**
@@ -326,9 +326,9 @@ class ActiveModelService {
     });
     await this.imageLoadPromise;
   }
-  async unloadImageModel(): Promise<void> {
+  async unloadImageModel(keepSelection = false): Promise<void> {
     await modelResidencyManager.runExclusive('unload:image', () =>
-      this.doUnloadImageModelLocked(),
+      this.doUnloadImageModelLocked(keepSelection),
     );
   }
   /**
@@ -366,7 +366,7 @@ class ActiveModelService {
       this.notifyListeners();
     }
   }
-  async unloadAllModels(): Promise<{ textUnloaded: boolean; imageUnloaded: boolean }> {
+  async unloadAllModels(keepSelection = false): Promise<{ textUnloaded: boolean; imageUnloaded: boolean }> {
     const store = useAppStore.getState();
     const results = { textUnloaded: false, imageUnloaded: false };
     const hasTextModel =
@@ -377,7 +377,7 @@ class ActiveModelService {
       !!store.activeImageModelId || !!this.loadedImageModelId;
     if (hasTextModel) {
       try {
-        await this.unloadTextModel();
+        await this.unloadTextModel(keepSelection);
         results.textUnloaded = true;
       } catch {
         /* partial */
@@ -385,7 +385,7 @@ class ActiveModelService {
     }
     if (hasImageModel) {
       try {
-        await this.unloadImageModel();
+        await this.unloadImageModel(keepSelection);
         results.imageUnloaded = true;
       } catch {
         /* partial */
@@ -404,7 +404,11 @@ class ActiveModelService {
     const remote = useRemoteServerStore.getState();
     const hasRemote = !!(remote.activeRemoteTextModelId || remote.activeRemoteImageModelId);
     logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
-    const results = await this.unloadAllModels();
+    // Eject = EVICT from RAM, KEEP the selection. The user's chosen models stay
+    // selected (the rows still show them) and reload on demand — ejecting frees
+    // memory, it does not un-choose the model. (Clearing selection here is what
+    // turned the rows into "Unknown"/"—" after an eject.)
+    const results = await this.unloadAllModels(true);
     let count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
     if (hasRemote) {
       remoteServerManager.clearActiveRemoteModel();
