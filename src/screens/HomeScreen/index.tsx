@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Linking, Clipboard } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -18,6 +18,7 @@ import { useHomeScreenSpotlight } from './hooks/useHomeScreenSpotlight';
 import { RecentConversations } from './components/RecentConversations';
 import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
+import { DesktopPromoCard } from './components/DesktopPromoCard';
 import { ModelsSummaryRow } from '../../components/models/ModelsSummaryRow';
 import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
@@ -25,8 +26,6 @@ import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
-import { useAppStore } from '../../stores';
-import { OFF_GRID_DESKTOP_URL } from '../../constants';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -97,16 +96,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
   const whisperPresentCount = useWhisperStore((s) => s.presentModelIds?.length ?? 0);
   const voiceSummary = useUiModeStore((s) => s.voiceSummary);
-  const desktopPromoDismissed = useAppStore((s) => s.desktopPromoDismissed);
-  const setDesktopPromoDismissed = useAppStore((s) => s.setDesktopPromoDismissed);
-  // Copy-link affordance: most people see this on their phone but install on a
-  // Mac, so let them copy the URL and paste it into WhatsApp/Slack for later.
-  const [desktopLinkCopied, setDesktopLinkCopied] = React.useState(false);
-  const copyDesktopLink = React.useCallback(() => {
-    Clipboard.setString(OFF_GRID_DESKTOP_URL);
-    setDesktopLinkCopied(true);
-    setTimeout(() => setDesktopLinkCopied(false), 2000);
-  }, []);
 
   const modelLabels: Record<ModelRowType, string> = {
     text: activeTextModel?.name ?? '—',
@@ -243,51 +232,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
 
-          {/* Off Grid AI Desktop — announce it's live; tap opens the download page.
-              Dismissable; the dismissal persists in appStore. */}
-          {!desktopPromoDismissed && (
-            <AnimatedPressable
-              style={styles.desktopCard}
-              onPress={() => Linking.openURL(OFF_GRID_DESKTOP_URL)}
-              hapticType="selection"
-              testID="desktop-promo-card"
-            >
-              <View style={styles.desktopCardHeader}>
-                <Icon name="monitor" size={18} color={colors.primary} />
-                <Text style={styles.desktopCardTitle}>Off Grid AI Desktop</Text>
-                <View style={styles.desktopBadge}>
-                  <Text style={styles.desktopBadgeText}>Live</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setDesktopPromoDismissed(true)}
-                  hitSlop={10}
-                  testID="desktop-promo-dismiss"
-                >
-                  <Icon name="x" size={16} color={colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.desktopCardBody}>
-                The same on-device AI, now on your Mac. Run text, vision, image, and voice models locally, behind one gateway this phone can connect to - no cloud, no accounts, no API keys.
-              </Text>
-              <View style={styles.desktopCardCtaRow}>
-                <View style={styles.desktopCardCta}>
-                  <Text style={styles.desktopCardCtaText}>Get it for macOS</Text>
-                  <Icon name="arrow-up-right" size={14} color={colors.primary} />
-                </View>
-                <TouchableOpacity
-                  style={styles.desktopCardCopy}
-                  onPress={copyDesktopLink}
-                  hitSlop={10}
-                  testID="desktop-promo-copy"
-                >
-                  <Icon name={desktopLinkCopied ? 'check' : 'copy'} size={14} color={colors.textSecondary} />
-                  <Text style={styles.desktopCardCopyText}>
-                    {desktopLinkCopied ? 'Link copied' : 'Copy link'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </AnimatedPressable>
-          )}
+          {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
+          <DesktopPromoCard />
 
           {/* Model Stats row removed — the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}
