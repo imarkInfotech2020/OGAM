@@ -50,7 +50,13 @@ async function hydrateCache(): Promise<void> {
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<string, CacheEntry>;
     for (const [name, entry] of Object.entries(parsed)) {
-      if (entry && typeof entry.h === 'string' && Array.isArray(entry.v)) toolEmbeddingCache.set(name, entry);
+      // Validate the vector CONTENTS, not just that it's an array: a corrupt/stale
+      // entry with a non-numeric or NaN element would silently poison cosine similarity
+      // (NaN scores) and destabilize tool routing. Drop anything that isn't a non-empty
+      // vector of finite numbers.
+      const validVector = Array.isArray(entry?.v) && entry.v.length > 0
+        && entry.v.every(n => typeof n === 'number' && Number.isFinite(n));
+      if (entry && typeof entry.h === 'string' && validVector) toolEmbeddingCache.set(name, entry);
     }
     logger.log(`[ToolRouter] hydrated ${toolEmbeddingCache.size} cached tool embeddings`);
   } catch (e) {
