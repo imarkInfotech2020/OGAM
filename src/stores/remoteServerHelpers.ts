@@ -34,6 +34,17 @@ function isTextModel(model: { id?: string; name?: string; kind?: unknown }): boo
   return isGenerativeModel(model.id ?? model.name ?? '');
 }
 
+/**
+ * Human-readable label for a remote model. Some gateways report the model id as a
+ * full file path (e.g. "/Users/admin/.offgrid/models/Qwen3.5-9B-Q4_K_M.gguf"),
+ * which is unreadable in the picker. Show the basename without the extension while
+ * keeping the raw id for loading. A plain id (no path/extension) is returned as-is.
+ */
+export function displayModelName(id: string): string {
+  const base = id.split(/[\\/]/).pop() || id;
+  return base.replace(/\.(gguf|bin|safetensors|task|litertlm|pte)$/i, '');
+}
+
 export async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
   try {
     const testResult = await testEndpoint(server.endpoint, 10000, server.apiKey);
@@ -153,7 +164,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         );
         return generativeModels.map((model: { id: string; owned_by?: string; max_context_length?: number }, i: number) => ({
           id: model.id,
-          name: model.id,
+          name: displayModelName(model.id),
           serverId: server.id,
           capabilities: {
             supportsVision: modelInfos[i].supportsVision,
@@ -178,7 +189,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         return generativeModels.map(
           (model: { name: string; details?: Record<string, unknown> }, i: number) => ({
             id: model.name,
-            name: model.name,
+            name: displayModelName(model.name),
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
@@ -226,7 +237,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
         return generativeModels.map(
           (model: { name: string; details?: Record<string, unknown> }, i: number) => ({
             id: model.name,
-            name: model.name,
+            name: displayModelName(model.name),
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
