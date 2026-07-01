@@ -69,6 +69,17 @@ describe('sttProvider', () => {
     expect(mockWhisper.downloadModel).toHaveBeenCalledWith('base.en');
   });
 
+  it('retry restores a failed row if the re-download fails before re-registering (no vanished model)', async () => {
+    mockWhisper.downloadModel.mockRejectedValueOnce(new Error('network down'));
+    await sttProvider.retry('stt:base.en');
+    // A moment for the fire-and-forget re-download rejection to settle.
+    await new Promise(r => setImmediate(r));
+    const restored = useDownloadStore.getState().downloads['whisper-base.en/ggml-base.en.bin'];
+    expect(restored).toBeDefined();
+    expect(restored.status).toBe('failed');
+    expect(restored.errorMessage).toBe('network down');
+  });
+
   it('remove deletes the model from disk', async () => {
     await sttProvider.remove('stt:base.en');
     expect(mockWhisper.deleteModel).toHaveBeenCalledWith('base.en');

@@ -83,9 +83,20 @@ export const sttProvider: DownloadProvider = {
       .catch(err => logger.log(`[DL-SM] ${id} retry: native cancel failed err=${msg(err)}`));
     if (entry) useDownloadStore.getState().remove(entry.modelKey);
     // Fire-and-forget re-download — log its failure as a [DL-SM] line so a retry
-    // that silently fails to restart is never a mystery.
-    whisperService.downloadModel(modelId).catch(err =>
-      logger.log(`[DL-SM] ${id} retry: re-download failed err=${msg(err)}`));
+    // that silently fails to restart is never a mystery. whisperService only recreates
+    // the row once it has a new downloadId, so if startup fails BEFORE that we would
+    // lose the row entirely; restore the old entry as failed so it stays visible +
+    // removable (guarded so we don't clobber a row the re-download already registered).
+    whisperService.downloadModel(modelId).catch(err => {
+      logger.log(`[DL-SM] ${id} retry: re-download failed err=${msg(err)}`);
+      if (entry && !useDownloadStore.getState().downloads[entry.modelKey]) {
+        useDownloadStore.getState().add({
+          ...entry,
+          status: 'failed',
+          errorMessage: err instanceof Error ? err.message : 'Retry failed',
+        });
+      }
+    });
   },
 
   async remove(id: string): Promise<void> {
