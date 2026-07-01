@@ -191,7 +191,10 @@ class CoreMLDiffusionModule: RCTEventEmitter {
         //  - Neural Engine (otherwise): far smaller system-RAM footprint, the only
         //    path that fits on low-RAM devices (6GB iPhone 15) where the GPU OOMs.
         let preferGpu = params["preferGpu"] as? Bool ?? false
-        let primaryUnits: MLComputeUnits = (cpuOnly || preferGpu) ? .cpuAndGPU : .cpuAndNeuralEngine
+        // Honor the parameter contract in three distinct cases: a CPU-only request must
+        // NOT quietly enable the GPU (that was the bug), a preferGpu load uses CPU+GPU,
+        // and everything else uses the Neural Engine.
+        let primaryUnits: MLComputeUnits = cpuOnly ? .cpuOnly : (preferGpu ? .cpuAndGPU : .cpuAndNeuralEngine)
         let pipe: StableDiffusionPipelineProtocol
         do {
           pipe = try buildPipeline(primaryUnits)
