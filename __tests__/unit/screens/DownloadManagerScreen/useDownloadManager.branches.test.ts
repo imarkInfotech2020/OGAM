@@ -27,7 +27,7 @@ const mockModelManager = {
 };
 const mockHardwareService = { getModelTotalSize: jest.fn(() => 1000) };
 const mockHuggingFaceService = { getModelFiles: jest.fn() };
-const mockBackgroundDownloadService = { cancelDownload: jest.fn(), getActiveDownloads: jest.fn() };
+const mockBackgroundDownloadService = { cancelDownload: jest.fn(), getActiveDownloads: jest.fn(), getQueuedItems: jest.fn(() => []) };
 
 const mockMDS = {
   retry: jest.fn(async (_id: string) => {}),
