@@ -151,10 +151,21 @@ class ImageGenerationService {
    */
   private _fail(error: string, _conversationId: string | null = this.state.conversationId): null {
     this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error });
-    reportModelFailure('image', error, {
-      message: error,
-      onRetry: this._lastParams ? () => { void this.generateImage(this._lastParams as GenerateImageParams); } : undefined,
-    });
+    // On a memory-pressure failure the card offers "Free memory & Retry" — so the retry
+    // must ACTUALLY free memory (eject resident models + their native contexts) before
+    // re-running, not just re-run the same request into the same wall.
+    const memoryPressure = /not enough memory|insufficient memory|free up|free memory/i.test(error);
+    const onRetry = this._lastParams
+      ? async () => {
+          if (memoryPressure) {
+            // Lazy require: activeModelService imports this service (cycle) — defer.
+            const { activeModelService } = require('./activeModelService');
+            await activeModelService.ejectAll().catch(() => {});
+          }
+          void this.generateImage(this._lastParams as GenerateImageParams);
+        }
+      : undefined;
+    reportModelFailure('image', error, { message: error, onRetry });
     return null;
   }
 
