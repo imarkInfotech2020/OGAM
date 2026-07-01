@@ -130,6 +130,34 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   if (skipSizeValidation) metadataObj.skipSizeValidation = true;
   const metadataJson = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : undefined;
 
+  // Start the mmproj sidecar BEFORE the main, so the MAIN is the last download started
+  // before we return and the caller attaches watchDownload. Otherwise, under the 3-cap,
+  // the main starts, then this function blocks awaiting the sidecar's *queued* start —
+  // during that (possibly minutes-long) wait the main can complete and fire its one
+  // DownloadComplete with no listener attached yet (lost → finalize hangs at 100%). With
+  // the sidecar first, nothing long is awaited after the main starts, so the watcher is
+  // live before the main can complete (the reconcile then covers the microtask gap).
+  let mmProjDownloadId: string | undefined;
+  if (needsMmProj) {
+    const mmProjFile = file.mmProjFile!;
+    logger.log('[DownloadDebug] Starting mmproj sidecar download', {
+      modelKey, modelId, fileName: file.name,
+      mmProjFileName: mmProjLocalName(file.name), mmProjBytes: mmProjFile.size,
+    });
+    const mmProjInfo = await backgroundDownloadService.startDownload({
+      url: mmProjFile.downloadUrl,
+      fileName: mmProjLocalName(file.name),
+      modelId,
+      modelType: 'text',
+      totalBytes: mmProjFile.size,
+      sha256: mmProjFile.sha256,
+    });
+    mmProjDownloadId = mmProjInfo.downloadId;
+    logger.log('[DownloadDebug] mmproj sidecar download started', {
+      modelKey, modelId, fileName: file.name, mmProjDownloadId,
+    });
+  }
+
   const downloadInfo = await backgroundDownloadService.startDownload({
     url: downloadUrl,
     fileName: file.name,
@@ -147,6 +175,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
     modelId,
     fileName: file.name,
     mainDownloadId: downloadInfo.downloadId,
+    mmProjDownloadId,
     totalBytes: file.size,
     combinedTotalBytes,
     needsMmProj,
@@ -180,37 +209,8 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
       }),
     });
   }
-
-  // Start mmproj download in parallel if needed
-  let mmProjDownloadId: string | undefined;
-  if (needsMmProj) {
-    const mmProjFile = file.mmProjFile!;
-    logger.log('[DownloadDebug] Starting mmproj sidecar download', {
-      modelKey,
-      modelId,
-      fileName: file.name,
-      mainDownloadId: downloadInfo.downloadId,
-      mmProjFileName: mmProjLocalName(file.name),
-      mmProjBytes: mmProjFile.size,
-    });
-    const mmProjInfo = await backgroundDownloadService.startDownload({
-      url: mmProjFile.downloadUrl,
-      fileName: mmProjLocalName(file.name),
-      modelId,
-      modelType: 'text',
-      totalBytes: mmProjFile.size,
-      sha256: mmProjFile.sha256,
-    });
-    mmProjDownloadId = mmProjInfo.downloadId;
-    logger.log('[DownloadDebug] mmproj sidecar download started', {
-      modelKey,
-      modelId,
-      fileName: file.name,
-      mainDownloadId: downloadInfo.downloadId,
-      mmProjDownloadId,
-    });
-    useDownloadStore.getState().setMmProjDownloadId(modelKey, mmProjDownloadId);
-  }
+  // Record the sidecar id on the (now-present) store row for restore + cancel.
+  if (mmProjDownloadId) useDownloadStore.getState().setMmProjDownloadId(modelKey, mmProjDownloadId);
 
   backgroundDownloadMetadataCallback?.(downloadInfo.downloadId as any, {
     modelId, fileName: file.name, quantization: file.quantization, author,

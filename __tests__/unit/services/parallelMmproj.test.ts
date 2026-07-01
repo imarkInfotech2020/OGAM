@@ -66,18 +66,28 @@ function visionFile(mainSize = 4_000_000_000, mmProjSize = 500_000_000) {
   });
 }
 
-// Helper: stub startDownload to return sequential download IDs
+// Helper: stub startDownload to return download IDs BY ROLE, not call order. The
+// sidecar (fileName contains 'mmproj') always gets ids[1]; the main file gets ids[0].
+// Keeping the id tied to the role — not the start sequence — makes these tests agnostic
+// to whether the main or the sidecar is started first (the sidecar-first ordering that
+// closes the finalize-hang window must not require rewriting every assertion).
 function stubStartDownload(ids: string[]) {
   let idx = 0;
-  mockService.startDownload.mockImplementation(async (params: any) => ({
-    downloadId: ids[idx++] ?? ids[ids.length - 1],
-    fileName: params.fileName,
-    modelId: params.modelId,
-    status: 'pending',
-    bytesDownloaded: 0,
-    totalBytes: params.totalBytes || 0,
-    startedAt: Date.now(),
-  }));
+  mockService.startDownload.mockImplementation(async (params: any) => {
+    const isMmProj = /mmproj/i.test(params.fileName ?? '');
+    const downloadId = ids.length > 1
+      ? (isMmProj ? ids[1] : ids[0])
+      : (ids[idx++] ?? ids[ids.length - 1]);
+    return {
+      downloadId,
+      fileName: params.fileName,
+      modelId: params.modelId,
+      status: 'pending',
+      bytesDownloaded: 0,
+      totalBytes: params.totalBytes || 0,
+      startedAt: Date.now(),
+    };
+  });
 }
 
 // Helper: capture onComplete callbacks keyed by downloadId
@@ -148,6 +158,23 @@ describe('Parallel mmproj download', () => {
       expect(mockService.startDownload).toHaveBeenCalledWith(
         expect.objectContaining({ fileName: 'vision-mmproj.gguf' }),
       );
+    });
+
+    it('starts the mmproj sidecar BEFORE the main (so the main is last-started → watcher attaches before it can complete)', async () => {
+      // Regression: the main used to be started first, then this function blocked
+      // awaiting the sidecar's queued start; during that wait the main could complete
+      // with no listener yet (lost event → finalize hang at 100%). Sidecar-first means
+      // nothing long is awaited after the main starts.
+      stubStartDownload(['42', '43']);
+      await performBackgroundDownload({
+        modelId: 'test/model',
+        file: visionFile(),
+        modelsDir: MODELS_DIR,
+        backgroundDownloadContext: bgContext,
+        backgroundDownloadMetadataCallback: metadataCallback,
+      });
+      const order = mockService.startDownload.mock.calls.map((c: any[]) => c[0].fileName);
+      expect(order).toEqual(['vision-mmproj.gguf', 'vision.gguf']);
     });
 
     it('persists mmProjDownloadId in metadata callback', async () => {
