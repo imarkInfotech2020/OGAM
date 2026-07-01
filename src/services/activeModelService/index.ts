@@ -310,7 +310,12 @@ class ActiveModelService {
         this.loadedImageModelId = id;
         this.loadedImageModelThreads = threads;
         modelResidencyManager.register(
-          { key: 'image', type: 'image', sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)) },
+          // dirtyMemory: a resident CoreML/ONNX image model's working set can't be paged
+          // out like clean mmap weights — its presence must gate other loads on live
+          // os_proc RAM (budgetForSpec dirty-pressure), or a sidecar stacks onto its
+          // generation spike and jetsams the app. Without this flag the resident-dirty
+          // arm of the gate is a no-op.
+          { key: 'image', type: 'image', dirtyMemory: true, sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)) },
           () => this.doUnloadImageModelLocked(true), // eviction keeps the selection
         );
       },
