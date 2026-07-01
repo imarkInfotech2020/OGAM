@@ -9,6 +9,7 @@ import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from '../utils/proPrompt';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
+import { reasonFromLoadError } from './modelFailureReasons';
 
 const SHARE_PROMPT_DELAY_MS = 2000;
 
@@ -152,16 +153,14 @@ class ImageGenerationService {
   private _fail(error: string, _conversationId: string | null = this.state.conversationId): null {
     this.updateState({ phase: 'error', progress: null, status: null, previewPath: null, error });
     // On a memory-pressure failure the card offers "Free memory & Retry" — so the retry
-    // must ACTUALLY free memory (eject resident models + their native contexts) before
-    // re-running, not just re-run the same request into the same wall.
-    const memoryPressure = /not enough memory|insufficient memory|free up|free memory/i.test(error);
+    // must ACTUALLY free memory (eject resident models) before re-running, not just
+    // re-run into the same wall. Derive memory-pressure from the SAME single source the
+    // card's label uses (reasonFromLoadError) so the label and the eject can never
+    // disagree — no second regex to drift.
+    const memoryPressure = reasonFromLoadError(error) === 'insufficient-memory';
     const onRetry = this._lastParams
       ? async () => {
-          if (memoryPressure) {
-            // Lazy require: activeModelService imports this service (cycle) — defer.
-            const { activeModelService } = require('./activeModelService');
-            await activeModelService.ejectAll().catch(() => {});
-          }
+          if (memoryPressure) await activeModelService.ejectAll().catch(() => {});
           void this.generateImage(this._lastParams as GenerateImageParams);
         }
       : undefined;
