@@ -27,6 +27,18 @@ describe('displayModelName', () => {
     expect(displayModelName('gpt-4o-mini')).toBe('gpt-4o-mini');
   });
 
+  it('keeps a namespace-style slug intact (does NOT treat / as a path separator)', () => {
+    // Regression (qodo #438): "org/model" slugs must not be basename-stripped —
+    // that would drop the namespace and collapse distinct models to the same label.
+    expect(displayModelName('meta-llama/Llama-3.1-8B')).toBe('meta-llama/Llama-3.1-8B');
+    expect(displayModelName('qwen/qwen3')).toBe('qwen/qwen3');
+    expect(displayModelName('org/model')).toBe('org/model');
+  });
+
+  it('still strips a namespaced id that ends in a model extension (a real path)', () => {
+    expect(displayModelName('models/Qwen3.5-9B-Q4_K_M.gguf')).toBe('Qwen3.5-9B-Q4_K_M');
+  });
+
   it('keeps a dotted name that is not a known model extension', () => {
     expect(displayModelName('Qwen3.5-9B')).toBe('Qwen3.5-9B');
   });
