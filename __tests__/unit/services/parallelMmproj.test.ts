@@ -1076,5 +1076,47 @@ describe('Parallel mmproj download', () => {
         mmProjFileName: 'mmproj.gguf',
       }));
     });
+
+    it('finalizes a non-vision main that completed before listener registration (main catch-up, no live event)', async () => {
+      // Under the 3-concurrent cap, the main GGUF can finish in native before
+      // watchBackgroundDownload subscribes (listener setup delayed behind an
+      // awaited-queued start). The DownloadComplete event fires once with no
+      // subscriber and is lost. The reconcile must query native and drive
+      // handleMainComplete itself — WITHOUT any manually-fired complete event.
+      stubStartDownload(['42']);
+      captureCompleteCallbacks();
+      const onComplete = jest.fn();
+
+      // exists=false during the start so it actually queues a download (ctx under '42'),
+      // not the already-on-disk path.
+      await performBackgroundDownload({
+        modelId: 'test/model',
+        file: createModelFile({ name: 'model.gguf', size: 4_000_000_000 }),
+        modelsDir: MODELS_DIR,
+        backgroundDownloadContext: bgContext,
+        backgroundDownloadMetadataCallback: metadataCallback,
+      });
+
+      // Native already reports the main as completed before we subscribe.
+      mockService.getActiveDownloads.mockResolvedValue([
+        { downloadId: '42', status: 'completed' } as any,
+      ]);
+      mockService.moveCompletedDownload.mockResolvedValue(`${MODELS_DIR}/model.gguf`);
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      watchBackgroundDownload({
+        downloadId: '42',
+        modelsDir: MODELS_DIR,
+        backgroundDownloadContext: bgContext,
+        backgroundDownloadMetadataCallback: metadataCallback,
+        onComplete,
+      });
+
+      // No completeCbs['42'] call — the reconcile alone must finalize.
+      // The reconcile is fire-and-forget; drain the microtask/macrotask chain.
+      for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
+
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    });
   });
 });

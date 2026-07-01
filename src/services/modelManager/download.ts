@@ -503,7 +503,10 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
     }
   };
 
-  const removeMainComplete = backgroundDownloadService.onComplete(downloadId, async () => {
+  // One completion handler per download, invoked by EITHER the live onComplete event
+  // OR the reconcile below — so a completion that fired before we subscribed is never
+  // lost (was previously true only for the mmproj; the main could hang at 100%).
+  const handleMainComplete = async () => {
     if (ctx.mainCompleteHandled) return;
     ctx.mainCompleteHandled = true;
     ctx.mainCompleted = true;
@@ -514,34 +517,37 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       mmProjDownloadId: ctx.mmProjDownloadId,
     });
     await tryFinalize();
-  });
+  };
+  const handleMmProjComplete = async () => {
+    if (ctx.mmProjCompleteHandled) return;
+    ctx.mmProjCompleteHandled = true;
+    logger.log('[DownloadDebug] mmproj complete, moving sidecar file', {
+      downloadId,
+      modelId: ctx.modelId,
+      fileName: ctx.file.name,
+      mmProjDownloadId: ctx.mmProjDownloadId,
+      mmProjLocalPath: ctx.mmProjLocalPath,
+    });
+    try {
+      await backgroundDownloadService.moveCompletedDownload(ctx.mmProjDownloadId!, ctx.mmProjLocalPath!);
+    } catch (moveErr) {
+      const targetExists = ctx.mmProjLocalPath ? await RNFS.exists(ctx.mmProjLocalPath) : false;
+      if (!targetExists) {
+        logger.warn('[ModelManager] mmproj move failed and target not found, continuing without vision:', moveErr);
+        ctx.mmProjLocalPath = null;
+      }
+    }
+    ctx.mmProjCompleted = true;
+    await tryFinalize();
+  };
+
+  const removeMainComplete = backgroundDownloadService.onComplete(downloadId, handleMainComplete);
   const removeMainError = backgroundDownloadService.onError(downloadId, (event) => {
     handleError(new Error(event.reason || 'Download failed'));
   });
 
   if (ctx.mmProjDownloadId && !ctx.mmProjCompleted) {
-    removeMmProjComplete = backgroundDownloadService.onComplete(ctx.mmProjDownloadId, async (event) => {
-      if (ctx.mmProjCompleteHandled) return;
-      ctx.mmProjCompleteHandled = true;
-      logger.log('[DownloadDebug] mmproj complete, moving sidecar file', {
-        downloadId,
-        modelId: ctx.modelId,
-        fileName: ctx.file.name,
-        mmProjDownloadId: event.downloadId,
-        mmProjLocalPath: ctx.mmProjLocalPath,
-      });
-      try {
-        await backgroundDownloadService.moveCompletedDownload(event.downloadId, ctx.mmProjLocalPath!);
-      } catch (moveErr) {
-        const targetExists = ctx.mmProjLocalPath ? await RNFS.exists(ctx.mmProjLocalPath) : false;
-        if (!targetExists) {
-          logger.warn('[ModelManager] mmproj move failed and target not found, continuing without vision:', moveErr);
-          ctx.mmProjLocalPath = null;
-        }
-      }
-      ctx.mmProjCompleted = true;
-      await tryFinalize();
-    });
+    removeMmProjComplete = backgroundDownloadService.onComplete(ctx.mmProjDownloadId, handleMmProjComplete);
     removeMmProjError = backgroundDownloadService.onError(ctx.mmProjDownloadId, (event) => {
       // mmproj failure must NOT fail the parent download. Treat as
       // text-only-with-repair-needed: clear the mmproj path, mark sidecar
@@ -574,40 +580,25 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
     });
   }
 
-  // Catch-up guard: the mmproj sidecar is small and may complete in native
-  // before the onComplete listener above was registered. The native service
-  // fires the event exactly once — if there is no subscriber at that moment
-  // the event is permanently lost, ctx.mmProjCompleted stays false, and
-  // tryFinalize waits forever (progress bar stuck at 100%).
-  // Fix: query native downloads immediately after registering the listener.
-  // If the mmproj row is already 'completed', simulate the onComplete ourselves.
-  // mmProjCompleteHandled guards against a double-execution if the listener
-  // also fires concurrently.
-  if (ctx.mmProjDownloadId && !ctx.mmProjCompleted) {
-    backgroundDownloadService.getActiveDownloads().then(async (downloads) => {
-      const mmProjRow = (downloads as Array<{ downloadId: string; status: string }>)
-        .find(d => d.downloadId === ctx.mmProjDownloadId);
-      if (mmProjRow?.status === 'completed' && !ctx.mmProjCompleteHandled) {
-        ctx.mmProjCompleteHandled = true;
-        logger.log('[DownloadDebug] mmproj catch-up: completed before onComplete listener registered', {
-          downloadId,
-          mmProjDownloadId: ctx.mmProjDownloadId,
-          mmProjLocalPath: ctx.mmProjLocalPath,
-        });
-        try {
-          await backgroundDownloadService.moveCompletedDownload(ctx.mmProjDownloadId!, ctx.mmProjLocalPath!);
-        } catch (moveErr) {
-          const targetExists = ctx.mmProjLocalPath ? await RNFS.exists(ctx.mmProjLocalPath) : false;
-          if (!targetExists) {
-            logger.warn('[ModelManager] mmproj catch-up move failed, continuing without vision:', moveErr);
-            ctx.mmProjLocalPath = null;
-          }
-        }
-        ctx.mmProjCompleted = true;
-        await tryFinalize();
-      }
-    }).catch(() => {});
-  }
+  // Catch-up reconcile: the native service fires onComplete exactly once — if a
+  // download already completed before we subscribed (a fast/cached main, or listener
+  // setup delayed behind an awaited-queued sidecar), the event is permanently lost and
+  // tryFinalize would wait forever (progress stuck at 100%). Query native ONCE and, for
+  // whichever of main/mmproj is already 'completed', run its completion handler (the
+  // *CompleteHandled flags guard against a double-run if the live event also fires).
+  // Covers BOTH downloads via one reconcile — previously only the mmproj had a catch-up.
+  backgroundDownloadService.getActiveDownloads().then(async (downloads) => {
+    const rows = downloads as Array<{ downloadId: string; status: string }>;
+    const isDone = (id?: string) => !!id && rows.find(d => d.downloadId === id)?.status === 'completed';
+    if (isDone(downloadId) && !ctx.mainCompleteHandled) {
+      logger.log('[DownloadDebug] main catch-up: completed before onComplete listener registered', { downloadId, modelId: ctx.modelId });
+      await handleMainComplete();
+    }
+    if (ctx.mmProjDownloadId && !ctx.mmProjCompleted && isDone(ctx.mmProjDownloadId) && !ctx.mmProjCompleteHandled) {
+      logger.log('[DownloadDebug] mmproj catch-up: completed before onComplete listener registered', { downloadId, mmProjDownloadId: ctx.mmProjDownloadId });
+      await handleMmProjComplete();
+    }
+  }).catch(() => {});
 
   tryFinalize().catch(() => {});
 }
