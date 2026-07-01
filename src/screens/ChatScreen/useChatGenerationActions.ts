@@ -404,6 +404,10 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
 }
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage'>): Promise<void> {
   generationSession.end('stopped');
+  // Aborting the turn must also stop TTS — otherwise the phone keeps speaking every
+  // sentence already buffered ahead of playback. Same intent as the new-turn path (see
+  // handleSendFn); the manual-stop path had been missing it.
+  callHook(HOOKS.audioStop);
   try { await generationService.stopGeneration().catch(() => { }); }
   catch (e) { logger.error('Error stopping generation:', e); }
   if (deps.isGeneratingImage) imageGenerationService.cancelGeneration().catch(() => { });

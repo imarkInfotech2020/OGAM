@@ -618,6 +618,18 @@ describe('handleStopFn', () => {
     expect(mockStopGenerationService).toHaveBeenCalled();
     expect(mockCancelGeneration).not.toHaveBeenCalled();
   });
+
+  it('stops TTS on abort (fires audio.stop) — the phone must go quiet when the user hits Stop', async () => {
+    // Regression: handleStopFn stopped the LLM but never fired audio.stop, so streaming
+    // TTS kept speaking every sentence already buffered ahead of playback after Stop.
+    const spy = jest.spyOn(hookRegistry, 'callHook').mockReturnValue(undefined as never);
+    try {
+      await handleStopFn(makeGenerationDeps({ isGeneratingImage: false }));
+      expect(spy).toHaveBeenCalledWith(hookRegistry.HOOKS.audioStop);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 // ─────────────────────────────────────────────
