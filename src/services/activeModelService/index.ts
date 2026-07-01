@@ -272,6 +272,12 @@ class ActiveModelService {
     modelId: string,
     timeoutMs: number,
   ): Promise<void> {
+    // Hydrate real device RAM BEFORE the compute-path decision. preferGpuForImageGen()
+    // and estimateImageModelRam() read getTotalMemoryGB(), which returns a 4GB fallback
+    // until the cache is populated — on a cold start that misclassifies an 8GB iOS 26
+    // device as ANE (the path that fails outright there). Awaiting hydration first makes
+    // the GPU/ANE choice + RAM estimate use the true total.
+    await hardwareService.getDeviceInfo();
     const store = useAppStore.getState();
     const imageThreads = store.settings?.imageThreads ?? 4;
     const needsThreadReload =
