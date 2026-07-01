@@ -64,7 +64,14 @@ function clearMultifileRuntime(modelId: string) {
 }
 
 function isCancelledError(error: unknown): boolean {
-  return error instanceof Error && error.message === USER_CANCELLED_ERROR;
+  // Recognize both the local assertNotCancelled sentinel AND the cross-service
+  // cancellation convention (an Error carrying `.cancelled`, message "Download
+  // cancelled") that backgroundDownloadService raises for a user-cancelled active
+  // OR queued download. Without the `.cancelled` check a cancelled part would fall
+  // through to setMultifileFailed and show as a failure.
+  if (!(error instanceof Error)) return false;
+  return error.message === USER_CANCELLED_ERROR
+    || (error as Error & { cancelled?: boolean }).cancelled === true;
 }
 
 function assertNotCancelled(modelId: string, runtime: MultifileRuntime) {
@@ -89,6 +96,12 @@ export async function cancelSyntheticImageDownload(modelId: string): Promise<voi
   const runtime = activeMultifileDownloads.get(modelId);
   if (!runtime) return;
   runtime.cancelled = true;
+  // Drop the part still waiting for a concurrency slot RIGHT NOW. A queued part has no
+  // native downloadId (currentDownloadId is undefined), so cancelDownload can't reach
+  // it — without this it would sit in the queue, eventually promote, briefly start, and
+  // only then be cancelled by wireCurrentDownloadPromise: a held slot + wasted transfer.
+  // The queue key is the part's modelId param, which equals makeImageModelKey(modelId).
+  backgroundDownloadService.cancelQueued(makeImageModelKey(modelId));
   if (runtime.currentDownloadId) {
     await backgroundDownloadService.cancelDownload(runtime.currentDownloadId).catch(() => {});
   }
@@ -140,7 +153,7 @@ async function downloadSequentialFiles(opts: {
     const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
     const capturedDownloadedSize = downloadedSize;
     const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
-      params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, totalBytes: file.size },
+      params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, modelType: 'image', totalBytes: file.size },
       destPath: filePath,
       onProgress: (bytesDownloaded) => {
         if (runtime.cancelled) return;
