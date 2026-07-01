@@ -58,8 +58,8 @@ class EmbeddingService {
     // The init is bounded by a timeout so a stalled native load (the
     // ThreadPool::startWorkers hang) releases the lock instead of wedging a
     // concurrent chat-model load and tripping the OS watchdog.
-    this.context = await modelResidencyManager.runExclusive('load:embedding', () =>
-      withTimeout(
+    this.context = await modelResidencyManager.runExclusive('load:embedding', async () => {
+      const ctx = await withTimeout(
         initLlama({
           model: modelPath,
           embedding: true,
@@ -75,16 +75,19 @@ class EmbeddingService {
           message: 'Embedding model load timed out',
           onOrphan: (orphan) => { (orphan as LlamaContext)?.release?.().catch(() => {}); },
         },
-      ),
-    );
-    // Register with the residency manager so the embedding model's footprint counts
-    // against the RAM budget (otherwise a chat model loads believing it has more free
-    // RAM than it does) and it can be evicted as a last-resort sidecar. It loads on the
-    // tiny MiniLM context and never evicts the active generation model.
-    modelResidencyManager.register(
-      { key: EMBEDDING_RESIDENT_KEY, type: 'embedding', sizeMB: EMBEDDING_RESIDENT_MB },
-      () => this.unload(),
-    );
+      );
+      // Register WHILE still holding the global load lock, so the embedding model's
+      // footprint counts against the RAM budget atomically with the load. Registering
+      // after runExclusive returns left a window where the model was in RAM but absent
+      // from the residents set — a concurrent chat-model load could then over-admit
+      // against stale free-RAM and OOM. It loads on the tiny MiniLM context and can be
+      // evicted as a last-resort sidecar; it never evicts the active generation model.
+      modelResidencyManager.register(
+        { key: EMBEDDING_RESIDENT_KEY, type: 'embedding', sizeMB: EMBEDDING_RESIDENT_MB },
+        () => this.unload(),
+      );
+      return ctx;
+    });
     logger.log('[Embedding] Model loaded successfully');
   }
 
