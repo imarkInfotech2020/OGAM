@@ -52,8 +52,19 @@ async function loadItems(): Promise<DownloadItem[]> {
           author: 'Voice', quantization: '', fileSize: d.sizeBytes,
           bytesDownloaded: d.bytesDownloaded, progress: d.progress, status: 'downloading', name: d.name,
         });
+      } else if (d.status === 'error') {
+        // A failed Kokoro fetch. Surface it as a failed active item so the
+        // Download Manager shows it with a Retry button (executorch resumes from
+        // its cache). 'download_interrupted' is a retryable reason code; the
+        // Retry action routes back through modelDownloadService.retry() →
+        // ttsProvider.retry() → the engine's downloadAssets().
+        items.push({
+          type: 'active', modelType: 'tts', modelId: engineId, fileName: d.name,
+          author: 'Voice', quantization: '', fileSize: d.sizeBytes,
+          bytesDownloaded: d.bytesDownloaded, progress: d.progress, status: 'failed', name: d.name,
+          reason: d.error, reasonCode: 'download_interrupted',
+        });
       }
-      // status 'error' for an executorch fetch → user re-taps download; nothing to show.
     }
   } catch {
     // ignore — listing failures leave items empty

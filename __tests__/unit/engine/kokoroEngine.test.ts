@@ -237,14 +237,34 @@ describe('KokoroEngine install status', () => {
     await engine.checkAssetStatus();
     expect(engine.isFullyDownloaded()).toBe(true);
 
+    // deleteAssets re-scans disk at the end; simulate the files being gone so the
+    // post-delete scan is conclusive-empty.
+    listDownloadedFiles.mockResolvedValue([]);
     await engine.deleteAssets();
     expect(deleteResources).toHaveBeenCalled();
 
-    // After deletion, disk is empty → not-downloaded.
-    listDownloadedFiles.mockResolvedValue([]);
+    // deleteAssets re-scanned → already not-downloaded without a manual re-check.
+    expect(engine.isFullyDownloaded()).toBe(false);
     const [state] = await engine.checkAssetStatus();
     expect(state.status).toBe('not-downloaded');
-    expect(engine.isFullyDownloaded()).toBe(false);
+  });
+
+  it('REGRESSION: deleteAssets removes the FULL active-voice set, not just the core .pte', async () => {
+    // The bug: deleteAssets deleted only the two core .pte files, leaving the
+    // voice embedding/tagger/lexicon on disk. The completeness scan checks the
+    // full set, so the Download Manager kept showing Kokoro "downloaded" after a
+    // Remove. Delete must target the same set download + completeness use.
+    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    const engine = new KokoroEngine();
+    await engine.checkAssetStatus();
+
+    await engine.deleteAssets();
+
+    const deleted: string[] = deleteResources.mock.calls[0] ?? [];
+    // Every required source (core + voice/tagger/lexicon) must be in the delete set.
+    for (const f of KOKORO_FILES) {
+      expect(deleted.some((url) => url.split(/[?#]/)[0].split('/').pop() === f)).toBe(true);
+    }
   });
 
   it('a conclusive empty disk scan beats stale in-session progress', async () => {
