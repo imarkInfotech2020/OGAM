@@ -68,7 +68,10 @@ class LLMService {
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
     const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
-    const quantizedCache = settings.cacheType !== 'f16';
+    // Use the EFFECTIVE cache type, not the raw setting: OpenCL/HTP coerce the KV cache
+    // to f16 (see buildModelParams), so keying off settings.cacheType alone would let the
+    // guard use the cheaper quantized estimate and approve a context that then OOMs.
+    const quantizedCache = !params.usesF16Cache;
     const getMem = () => hardwareService.getAppMemoryUsage();
     let memCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: params.ctxLen, getAvailableMemory: getMem, quantizedCache });
     if (!memCheck.safe) {
@@ -94,10 +97,12 @@ class LLMService {
     quantizedCache: boolean,
   ): Promise<{ ctxLen: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>> }> {
     const getMem = () => hardwareService.getAppMemoryUsage();
-    // Include steps ABOVE 4096 so a model requested at e.g. 8192 can settle at
-    // 6144 if it fits, instead of jumping straight down to 4096 and needlessly
-    // shrinking the context.
-    const fallbacks = [8192, 6144, 4096, 3072, 2048, 1024].filter(c => c < requestedCtx);
+    // Step down from the requested size so the LARGEST fitting context wins — a request
+    // of 16384 tries 14336, 12288, ... rather than jumping straight to a hardcoded 8192
+    // ceiling and needlessly shrinking context on devices that could hold more.
+    const STEP = 2048;
+    const fallbacks: number[] = [];
+    for (let ctx = requestedCtx - STEP; ctx >= 1024; ctx -= STEP) fallbacks.push(ctx);
     for (const ctx of fallbacks) {
       const mc = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: ctx, getAvailableMemory: getMem, quantizedCache });
       if (mc.safe) {

@@ -49,6 +49,10 @@ export interface ModelLoadParams {
   nBatch: number;
   ctxLen: number;
   nGpuLayers: number;
+  /** Whether the EFFECTIVE KV cache is f16 (OpenCL/HTP coerce to it regardless of the
+   *  user setting). The single source for the memory guard's KV-size estimate — read
+   *  this instead of re-deriving from settings.cacheType, which misses the coercion. */
+  usesF16Cache: boolean;
 }
 
 export function buildModelParams(
@@ -88,6 +92,9 @@ export function buildModelParams(
       ...(backend === INFERENCE_BACKENDS.OPENCL ? {} : { cache_type_k: cacheType, cache_type_v: cacheType }),
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
+    // cacheType is already coerced to 'f16' above for OpenCL/HTP; OpenCL also omits the
+    // explicit cache params and llama.cpp defaults to f16 — both are captured here.
+    usesF16Cache: cacheType === 'f16',
   };
 }
 export interface ContextInitResult {
