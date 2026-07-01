@@ -499,8 +499,8 @@ function nowParts() {
  * of being re-prefilled every turn. The exact time lives elsewhere (see below) so it
  * never busts this prefix.
  */
-function buildDateContext(): string {
-  const { dateStr, dayOfWeek, tz } = nowParts();
+function buildDateContext(parts: ReturnType<typeof nowParts>): string {
+  const { dateStr, dayOfWeek, tz } = parts;
   const dayPart = dayOfWeek ? ` Today is ${dayOfWeek}.` : '';
   const tzPart = tz ? ` Timezone: ${tz}.` : '';
   return `\n\nThe current date is ${dateStr} (device local date, format YYYY-MM-DD).${dayPart}${tzPart} When the user refers to relative dates such as "today", "tomorrow", or "next Friday", resolve them against this current date.`;
@@ -513,8 +513,8 @@ function buildDateContext(): string {
  * stable for cache reuse. Lets the model resolve "now" / "in half an hour" precisely.
  * Only added when a time-sensitive (calendar) tool is enabled.
  */
-function buildExactTimeNote(): string {
-  const { dateStr, timeStr, tz } = nowParts();
+function buildExactTimeNote(parts: ReturnType<typeof nowParts>): string {
+  const { dateStr, timeStr, tz } = parts;
   const tzPart = tz ? `, ${tz}` : '';
   return `\n\n(Current local date and time: ${dateStr}T${timeStr}${tzPart}. Resolve "now", "right now", "in half an hour", and similar against this exact time.)`;
 }
@@ -539,9 +539,12 @@ function augmentSystemPromptForTools(
   const extHints = nativeToolCalling
     ? ''
     : getToolExtensions().map(e => e.getSystemPromptHint()).filter(Boolean).join('');
+  // Snapshot the current time ONCE so the system-prompt date and the exact-time note
+  // can never disagree across a midnight/second rollover (both read the same snapshot).
+  const parts = nowParts();
   // System prompt gets only the STABLE date (changes once a day) + tool guidance, so the
   // system+tools prefix stays cacheable turn-to-turn.
-  const updatedSys = { ...sys, content: existing + TOOL_BEHAVIOR_GUIDANCE + buildDateContext() + extHints };
+  const updatedSys = { ...sys, content: existing + TOOL_BEHAVIOR_GUIDANCE + buildDateContext(parts) + extHints };
   const out = [...messages.slice(0, sysIdx), updatedSys, ...messages.slice(sysIdx + 1)];
 
   // For time-sensitive (calendar) tools, append the EXACT time to the latest user
@@ -552,7 +555,7 @@ function augmentSystemPromptForTools(
   if (precise) {
     for (let i = out.length - 1; i >= 0; i--) {
       if (out[i].role === 'user' && typeof out[i].content === 'string') {
-        out[i] = { ...out[i], content: (out[i].content as string) + buildExactTimeNote() };
+        out[i] = { ...out[i], content: (out[i].content as string) + buildExactTimeNote(parts) };
         exactTimeAppended = true;
         break;
       }
