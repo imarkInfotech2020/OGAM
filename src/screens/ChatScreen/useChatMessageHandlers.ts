@@ -32,7 +32,10 @@ export async function handleRetryMessageFn(
     logger.log(`[MEM-SM] resend: residents=[${residents}] availMB=${Math.round(hardwareService.getAvailableMemoryGB() * 1024)} totalMB=${Math.round(hardwareService.getTotalMemoryGB() * 1024)}`);
   } catch { /* diagnostics only */ }
   logger.log(`[RESEND-SM] retry msg role=${message.role} id=${message.id} hasActiveModel=${p.hasActiveModel} conv=${p.activeConversationId} totalMsgs=${msgs.length}`);
-  if (!p.activeConversationId || !p.hasActiveModel) { logger.log('[RESEND-SM] retry BAIL: no conv or no active model'); return; }
+  // No model loaded (e.g. user ejected all models): tell them, don't silently
+  // no-op. Mirrors the send path's "No Model Selected" alert (handleSendFn).
+  if (!p.hasActiveModel) { logger.log('[RESEND-SM] retry BAIL: no active model'); genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
+  if (!p.activeConversationId) { logger.log('[RESEND-SM] retry BAIL: no conv'); return; }
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
   callHook(HOOKS.audioStop);
   if (message.role === 'user') {
@@ -62,7 +65,9 @@ type EditParams = {
 };
 
 export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams): Promise<void> {
-  if (!p.activeConversationId || !p.hasActiveModel) return;
+  // Same as retry: no model loaded → alert instead of a silent no-op.
+  if (!p.hasActiveModel) { genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
+  if (!p.activeConversationId) return;
   p.updateMessageContent(p.activeConversationId, p.message.id, p.newContent);
   p.deleteMessagesAfter(p.activeConversationId, p.message.id);
   await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: { ...p.message, content: p.newContent } });
