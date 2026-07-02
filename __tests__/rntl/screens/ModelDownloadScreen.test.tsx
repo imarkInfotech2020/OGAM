@@ -224,6 +224,7 @@ jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
 });
 
 import { Platform } from 'react-native';
+import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
 import { LITERT_PARENT_ID, CURATED_LITERT_ENTRIES } from '../../../src/services/curatedLiteRTRegistry';
 
@@ -251,6 +252,9 @@ async function flushPromises(count = 10) {
 describe('ModelDownloadScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // startModelDownload publishes a real queued row to the (real) downloadStore; reset it
+    // so a pending row from one test doesn't trip the next test's duplicate-start guard.
+    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} });
     mockAppState.downloadProgress = {};
     mockRemoteServerState.servers = [];
     mockRemoteServerState.discoveredModels = {};

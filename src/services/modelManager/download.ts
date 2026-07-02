@@ -184,9 +184,16 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
 
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing) {
-    await backgroundDownloadService.cancelDownload(existing.downloadId).catch(() => {});
-    if (existing.mmProjDownloadId) {
-      await backgroundDownloadService.cancelDownload(existing.mmProjDownloadId).catch(() => {});
+    // A `queued:<modelKey>` placeholder row (added by startModelDownload to show the
+    // queued state immediately) has NO native download behind it — cancelling it would
+    // wrongly free a concurrency slot. Only cancel real native ids; then reconcile the
+    // row to the real downloadId either way.
+    const isPlaceholder = String(existing.downloadId).startsWith('queued:');
+    if (!isPlaceholder) {
+      await backgroundDownloadService.cancelDownload(existing.downloadId).catch(() => {});
+      if (existing.mmProjDownloadId) {
+        await backgroundDownloadService.cancelDownload(existing.mmProjDownloadId).catch(() => {});
+      }
     }
     useDownloadStore.getState().retryEntry(modelKey, downloadInfo.downloadId);
   } else {

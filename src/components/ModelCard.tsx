@@ -33,6 +33,9 @@ interface ModelCardProps {
   downloadedModel?: DownloadedModel;
   isDownloaded?: boolean;
   isDownloading?: boolean;
+  /** Accepted but waiting for a concurrency slot — shows a "Queued" label instead of a
+   *  0% progress bar, so the user gets clear feedback the tap registered. */
+  isQueued?: boolean;
   downloadProgress?: number;
   downloadBytes?: { downloaded: number; total: number };
   isActive?: boolean;
@@ -80,7 +83,8 @@ const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number };
   tight?: boolean;
-}> = ({ progress, bytes, tight }) => {
+  queued?: boolean;
+}> = ({ progress, bytes, tight, queued }) => {
   const styles = useThemedStyles(createStyles);
   return (
   <View style={styles.progressSection}>
@@ -88,9 +92,11 @@ const DownloadProgressSection: React.FC<{
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
       </View>
-      <Text style={[styles.progressText, tight && styles.progressTextTight]}>{Math.round(progress * 100)}%</Text>
+      <Text style={[styles.progressText, tight && styles.progressTextTight]}>
+        {queued ? 'Queued' : `${Math.round(progress * 100)}%`}
+      </Text>
     </View>
-    {bytes && bytes.total > 0 && (
+    {!queued && bytes && bytes.total > 0 && (
       <Text style={styles.progressBytesText}>
         {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
       </Text>
@@ -144,6 +150,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   downloadedModel,
   isDownloaded,
   isDownloading,
+  isQueued,
   downloadProgress = 0,
   downloadBytes,
   isActive,
@@ -241,8 +248,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             </View>
           )}
 
-          {isDownloading && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} tight={!!recommended} />
+          {(isDownloading || isQueued) && (
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} tight={!!recommended} queued={isQueued} />
           )}
           {failedState && (
             <FailedSection

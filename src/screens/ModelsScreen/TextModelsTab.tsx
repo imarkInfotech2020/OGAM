@@ -197,7 +197,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        isDownloading={!!s.progress && !s.hasFailed} downloadProgress={s.progress?.progress}
+        isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'pending'}
+        isQueued={s.progress?.status === 'pending'}
+        downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
         isCompatible={item.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB)} testID={`file-card-${index}`}

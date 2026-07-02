@@ -4,6 +4,11 @@ import { useAppStore } from '../stores';
 import { makeModelKey } from '../utils/modelKey';
 import type { ModelFile, DownloadedModel } from '../types';
 
+/** Placeholder downloadId for a row that exists only to represent the QUEUED state
+ *  before a real native download has been started (which may wait for a concurrency
+ *  slot). Reconciled to the real id by download.ts's retryEntry once the start begins. */
+const queuedPlaceholderId = (modelKey: string) => `queued:${modelKey}`;
+
 export interface StartModelDownloadOpts {
   /** Screen-specific UI to run AFTER the model is registered (e.g. a success or
    *  vision-repair alert). The standard register + clear has already happened. */
@@ -35,7 +40,34 @@ export async function startModelDownload(
   const existing = useDownloadStore.getState().downloads[modelKey];
   if (existing && isActiveStatus(existing.status)) return;
 
-  let currentDownloadId: string | undefined;
+  // Publish a QUEUED row to the store IMMEDIATELY, before starting the (possibly
+  // slot-limited) native download. Without this, a queued download had no store entry
+  // at all until a concurrency slot freed up — so the Models/onboarding screens (which
+  // read the store) showed nothing, and this very guard missed a second tap while
+  // queued (letting the same model enqueue twice). The store is the single source of
+  // truth all screens read; download.ts reconciles this placeholder id to the real
+  // native downloadId via retryEntry once the start begins.
+  useDownloadStore.getState().add({
+    modelKey,
+    downloadId: queuedPlaceholderId(modelKey),
+    modelId,
+    fileName: file.name,
+    quantization: file.quantization,
+    modelType: 'text',
+    status: 'pending',
+    bytesDownloaded: 0,
+    totalBytes: file.size,
+    combinedTotalBytes: file.size + (file.mmProjFile?.size ?? 0),
+    progress: 0,
+    createdAt: Date.now(),
+    ...(file.mmProjFile && {
+      mmProjFileName: file.name,
+      mmProjFileSize: file.mmProjFile.size,
+    }),
+  });
+
+  // Until the real native start begins, the failure target is the queued placeholder row.
+  let currentDownloadId: string | undefined = queuedPlaceholderId(modelKey);
   const fail = (err: Error) => {
     if (currentDownloadId) {
       useDownloadStore.getState().setStatus(currentDownloadId, 'failed', { message: err.message });
@@ -45,7 +77,8 @@ export async function startModelDownload(
 
   try {
     // downloadModelBackground writes the row + adds the store entry synchronously
-    // after start (add for new, retryEntry for an existing failed one).
+    // after start (add for new, retryEntry for an existing failed one — including the
+    // queued placeholder row added above, whose id it reconciles to the real one).
     const info = await modelManager.downloadModelBackground(modelId, file);
     currentDownloadId = info.downloadId;
     modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
@@ -56,9 +89,12 @@ export async function startModelDownload(
       opts.onRegistered?.(model);
     }, fail);
   } catch (e) {
-    // A start cancelled while still queued (no slot yet) rejects with `.cancelled` —
-    // there is no store row to fail and it is not an error, so clean up quietly.
-    if ((e as Error & { cancelled?: boolean })?.cancelled) return;
+    // A start cancelled while still queued (no slot yet) rejects with `.cancelled` — it
+    // is not an error, so drop the queued placeholder row and clean up quietly.
+    if ((e as Error & { cancelled?: boolean })?.cancelled) {
+      useDownloadStore.getState().remove(modelKey);
+      return;
+    }
     fail(e as Error);
   }
 }
