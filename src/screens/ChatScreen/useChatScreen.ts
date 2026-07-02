@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AlertState, initialAlertState } from '../../components';
+import { AlertState, initialAlertState, showAlert } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
@@ -305,21 +305,29 @@ export const useChatScreen = () => {
   })();
 
   const handleReloadTextModel = useCallback(async () => {
-    if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
+    const modelId = activeModelInfo.modelId;
+    if (!modelId || activeModelInfo.isRemote) return;
+    // Non-destructive reload: check memory BEFORE unloading, and unload with
+    // keepSelection=true — else an OOM strands the chat (no model, no activeModelId).
+    const mem = await activeModelService.checkMemoryForModel(modelId, 'text').catch(() => null);
+    if (mem && !mem.canLoad) {
+      setAlertState(showAlert(
+        'Not Enough Memory',
+        `${activeModel?.name ?? 'This model'} can't reload with these settings. ${mem.message}\n\nReduce context length, or close other apps, then try again.`,
+      ));
+      return; // keep the current model + banner — nothing changed
+    }
     setShowModelSelector(true);
     if (activeModel?.engine === 'litert') {
-      // Unload LiteRT engine before reloading with the new backend
       if (liteRTService.isModelLoaded()) {
         await liteRTService.unloadModel().catch(() => { });
       }
-    // Must unload first — loadTextModel skips if the same model ID is already loaded,
-    // which means setLoadedSettings would never run and the banner would persist.
     } else if (llmService.isModelLoaded()) {
-      await activeModelService.unloadTextModel();
+      await activeModelService.unloadTextModel(true); // keepSelection — don't strand the chat on a failed reload
     }
     await initiateModelLoad(modelDeps, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
+  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine, activeModel?.name]);
 
   const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
     handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
