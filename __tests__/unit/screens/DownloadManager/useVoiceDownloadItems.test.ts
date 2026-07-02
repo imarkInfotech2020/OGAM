@@ -99,6 +99,38 @@ describe('useVoiceDownloadItems', () => {
     expect(tts.status).toBe('completed');
   });
 
+  it('surfaces a FAILED voice download as a retryable failed item', async () => {
+    // Regression: a failed Kokoro download used to be dropped entirely (nothing
+    // shown, no way to retry). A service status of 'error' must render as a
+    // failed ACTIVE item with a retryable reason code so the Download Manager
+    // shows the Retry button.
+    mockServiceList = [ttsEntry({
+      status: 'error', progress: 0.3, bytesDownloaded: 24_000_000,
+      error: 'Download interrupted or missing resource',
+    })];
+    const { result } = renderHook(() => useVoiceDownloadItems(jest.fn()));
+    await waitFor(() => expect(result.current.voiceItems.some(i => i.modelType === 'tts')).toBe(true));
+
+    const tts = result.current.voiceItems.find(i => i.modelType === 'tts')!;
+    expect(tts.type).toBe('active');
+    expect(tts.status).toBe('failed');
+    // Engine message present → prefer it verbatim; leave reasonCode undefined so
+    // the label helper shows the engine text, not a canned code message. Retry
+    // still renders because isRetryable(undefined) === true.
+    expect(tts.reason).toBe('Download interrupted or missing resource');
+    expect(tts.reasonCode).toBeUndefined();
+  });
+
+  it('falls back to the retryable code when the engine gives no failure message', async () => {
+    mockServiceList = [ttsEntry({ status: 'error', progress: 0, bytesDownloaded: 0 })];
+    const { result } = renderHook(() => useVoiceDownloadItems(jest.fn()));
+    await waitFor(() => expect(result.current.voiceItems.some(i => i.modelType === 'tts')).toBe(true));
+
+    const tts = result.current.voiceItems.find(i => i.modelType === 'tts')!;
+    expect(tts.status).toBe('failed');
+    expect(tts.reasonCode).toBe('download_interrupted');
+  });
+
   it('omits voice models when the service reports no tts entries', async () => {
     mockServiceList = [];
     const { result } = renderHook(() => useVoiceDownloadItems(jest.fn()));
