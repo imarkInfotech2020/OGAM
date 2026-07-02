@@ -37,6 +37,41 @@ type ActiveModelInfo = {
   modelName: string;
 };
 
+/**
+ * Whether live settings differ from what the loaded model was loaded with — drives the
+ * "settings changed, tap to reload" banner. A field only counts as changed when the
+ * snapshot actually CAPTURED it: comparing a live value against an `undefined` snapshot
+ * field is a false positive, not a change. This happens across engines — the llama loader
+ * snapshots only the llama fields (so liteRTBackend/liteRTMaxTokens are undefined), and
+ * loadedSettings is persisted, so a relaunch or a llama→LiteRT switch would otherwise pop
+ * the banner with nothing changed.
+ */
+function computePendingSettings(
+  engine: string | undefined,
+  settings: Record<string, unknown>,
+  loadedSettings: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!loadedSettings) return false;
+  // Pending only if BOTH sides are defined AND differ.
+  const changed = (live: unknown, loaded: unknown) => loaded !== undefined && live !== loaded;
+  if (engine === 'litert') {
+    return changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
+           changed(settings.liteRTMaxTokens, loadedSettings.liteRTMaxTokens);
+  }
+  const effCache = settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType;
+  return (
+    changed(settings.nThreads, loadedSettings.nThreads) ||
+    changed(settings.nBatch, loadedSettings.nBatch) ||
+    changed(settings.contextLength, loadedSettings.contextLength) ||
+    changed(settings.enableGpu, loadedSettings.enableGpu) ||
+    changed(settings.inferenceBackend, loadedSettings.inferenceBackend) ||
+    changed(settings.gpuLayers, loadedSettings.gpuLayers) ||
+    changed(settings.flashAttn, loadedSettings.flashAttn) ||
+    // Compare effective cache type — OpenCL forces f16 regardless of user setting
+    changed(effCache, loadedSettings.cacheType)
+  );
+}
+
 export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
@@ -283,26 +318,8 @@ export const useChatScreen = () => {
     const cur = settings.enabledTools || [];
     useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
-  // Check if there are pending settings that require model reload
-  const hasPendingSettings = (() => {
-    if (!loadedSettings) return false;
-    // LiteRT reloads when backend or context length changes — both are baked into the engine at load time
-    if (activeModel?.engine === 'litert') {
-      return settings.liteRTBackend !== loadedSettings.liteRTBackend ||
-             settings.liteRTMaxTokens !== loadedSettings.liteRTMaxTokens;
-    }
-    return (
-      settings.nThreads !== loadedSettings.nThreads ||
-      settings.nBatch !== loadedSettings.nBatch ||
-      settings.contextLength !== loadedSettings.contextLength ||
-      settings.enableGpu !== loadedSettings.enableGpu ||
-      settings.inferenceBackend !== loadedSettings.inferenceBackend ||
-      settings.gpuLayers !== loadedSettings.gpuLayers ||
-      settings.flashAttn !== loadedSettings.flashAttn ||
-      // Compare effective cache type — OpenCL forces f16 regardless of user setting
-      (settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType) !== loadedSettings.cacheType
-    );
-  })();
+  // Whether settings changed since the model was loaded (drives the reload banner).
+  const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
