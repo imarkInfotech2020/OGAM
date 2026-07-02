@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AlertState, initialAlertState, showAlert } from '../../components';
+import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
@@ -305,29 +305,24 @@ export const useChatScreen = () => {
   })();
 
   const handleReloadTextModel = useCallback(async () => {
-    const modelId = activeModelInfo.modelId;
-    if (!modelId || activeModelInfo.isRemote) return;
-    // Non-destructive reload: check memory BEFORE unloading, and unload with
-    // keepSelection=true — else an OOM strands the chat (no model, no activeModelId).
-    const mem = await activeModelService.checkMemoryForModel(modelId, 'text').catch(() => null);
-    if (mem && !mem.canLoad) {
-      setAlertState(showAlert(
-        'Not Enough Memory',
-        `${activeModel?.name ?? 'This model'} can't reload with these settings. ${mem.message}\n\nReduce context length, or close other apps, then try again.`,
-      ));
-      return; // keep the current model + banner — nothing changed
-    }
+    if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
     setShowModelSelector(true);
+    // Unload with keepSelection=true so a failed reload never clears activeModelId
+    // (the default unload cleared it, so an OOM stranded the chat: stuck banner +
+    // wedged send). The unload still nulls loadedTextModelId, so loadTextModel
+    // won't fast-path-skip. The memory gate — including the "Load Anyway" override
+    // — is owned by initiateModelLoad, so reload matches normal load exactly (no
+    // duplicated/stricter check in the view).
     if (activeModel?.engine === 'litert') {
       if (liteRTService.isModelLoaded()) {
         await liteRTService.unloadModel().catch(() => { });
       }
     } else if (llmService.isModelLoaded()) {
-      await activeModelService.unloadTextModel(true); // keepSelection — don't strand the chat on a failed reload
+      await activeModelService.unloadTextModel(true);
     }
     await initiateModelLoad(modelDeps, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine, activeModel?.name]);
+  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
 
   const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
     handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
