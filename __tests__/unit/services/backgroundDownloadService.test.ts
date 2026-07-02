@@ -203,6 +203,28 @@ describe('BackgroundDownloadService', () => {
       expect(mockDownloadManagerModule.cancelDownload).toHaveBeenCalledWith(42);
     });
 
+    it('routes a queued:<modelKey> placeholder id to cancelQueued, NOT native cancel', async () => {
+      // A queued placeholder has no native download — it lives only in startQueue.
+      // Cancelling it must remove the queued start, or the download starts later anyway.
+      // Distinct native ids so 3 unique slots actually fill (activeIds tracks by id).
+      let nextId = 100;
+      mockDownloadManagerModule.startDownload.mockImplementation(() =>
+        Promise.resolve({ downloadId: nextId++, fileName: 'a.gguf', modelId: 'm', status: 'running', bytesDownloaded: 0, totalBytes: 1, startedAt: 0 }));
+      // Fill the 3 concurrency slots so the next start is queued.
+      await service.startDownload({ url: 'u1', fileName: 'f1', modelId: 'a', modelType: 'text' });
+      await service.startDownload({ url: 'u2', fileName: 'f2', modelId: 'b', modelType: 'text' });
+      await service.startDownload({ url: 'u3', fileName: 'f3', modelId: 'c', modelType: 'text' });
+      const queuedPromise = service.startDownload({ url: 'u4', fileName: 'f4', modelId: 'd', modelKey: 'org/repo/f4.gguf', modelType: 'text' });
+      // Swallow the expected rejection so it isn't an unhandled rejection.
+      queuedPromise.catch(() => {});
+      mockDownloadManagerModule.cancelDownload.mockClear();
+
+      await service.cancelDownload('queued:org/repo/f4.gguf');
+
+      expect(mockDownloadManagerModule.cancelDownload).not.toHaveBeenCalled();
+      await expect(queuedPromise).rejects.toMatchObject({ cancelled: true });
+    });
+
     it('throws when not available', async () => {
       const savedModule = NativeModules.DownloadManagerModule;
       NativeModules.DownloadManagerModule = null;

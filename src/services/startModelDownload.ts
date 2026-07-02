@@ -1,4 +1,5 @@
 import { modelManager } from './modelManager';
+import { mmProjLocalName } from './modelManager/download';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useAppStore } from '../stores';
 import { makeModelKey } from '../utils/modelKey';
@@ -61,7 +62,7 @@ export async function startModelDownload(
     progress: 0,
     createdAt: Date.now(),
     ...(file.mmProjFile && {
-      mmProjFileName: file.name,
+      mmProjFileName: mmProjLocalName(file.name),
       mmProjFileSize: file.mmProjFile.size,
     }),
   });

@@ -99,6 +99,14 @@ describe('startModelDownload', () => {
     await p;
   });
 
+  it('stores the mmproj FILENAME (not the main gguf name) on a vision queued row', async () => {
+    mockDownloadModelBackground.mockReturnValue(new Promise(() => {}));
+    startModelDownload(MODEL_ID, { name: 'model.gguf', mmProjFile: { size: 500 } } as any, {});
+    expect(mockStore.add).toHaveBeenCalledWith(expect.objectContaining({
+      mmProjFileName: 'model-mmproj.gguf', mmProjFileSize: 500,
+    }));
+  });
+
   it('is a no-op on a second tap while the first is still QUEUED (dedup)', async () => {
     // Simulate the first tap having published the queued row (status pending).
     mockStore.downloads = { [KEY]: { status: 'pending' } };
