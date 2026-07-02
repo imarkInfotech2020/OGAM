@@ -42,7 +42,7 @@ interface RecommendedCardProps {
   model: typeof RECOMMENDED_MODELS[number];
   recFile: ModelFile;
   index: number;
-  progress: { progress: number } | null | undefined;
+  progress: { progress: number; queued?: boolean } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   isTrending: boolean;
@@ -59,7 +59,8 @@ const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, 
     file={recFile}
     downloadedModel={downloaded}
     isDownloaded={!!downloaded}
-    isDownloading={!!progress}
+    isDownloading={!!progress && !progress.queued}
+    isQueued={!!progress?.queued}
     downloadProgress={progress?.progress}
     isCompatible={model.minRam <= totalRamGB && (!model.maxRam || totalRamGB <= model.maxRam)}
     isTrending={isTrending}
@@ -73,7 +74,7 @@ interface LiteRTCardProps {
   file: ModelFile;
   index: number;
   curatedEntry: CuratedLiteRTEntry | undefined;
-  progress: { progress: number } | null | undefined;
+  progress: { progress: number; queued?: boolean } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   onDownload: () => void;
@@ -92,7 +93,8 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     file={file}
     downloadedModel={downloaded}
     isDownloaded={!!downloaded}
-    isDownloading={!!progress}
+    isDownloading={!!progress && !progress.queued}
+    isQueued={!!progress?.queued}
     downloadProgress={progress?.progress}
     isCompatible={file.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB)}
     recommended={{ pillLabel: 'Recommended', highlightText: curatedEntry?.highlight }}
@@ -101,6 +103,13 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     onCancel={progress ? onCancel : undefined}
   />
 );
+
+/** Active-download progress for a card, or null when the model isn't downloading.
+ *  `queued` (store status 'pending') drives the "Queued" label vs a live progress bar. */
+function downloadProgressFor(entry: { status: string; progress: number } | undefined): { progress: number; queued: boolean } | null {
+  if (!entry || !isActiveStatus(entry.status as any)) return null;
+  return { progress: entry.progress, queued: entry.status === 'pending' };
+}
 
 export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -335,10 +344,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
 
           {liteRTFiles.map((file, index) => {
             const modelKey = makeModelKey(LITERT_PARENT_ID, file.name);
-            const dlEntry = storeDownloads[modelKey];
-            const progress = dlEntry && isActiveStatus(dlEntry.status)
-              ? { progress: dlEntry.progress }
-              : null;
+            const progress = downloadProgressFor(storeDownloads[modelKey]);
             return (
               <LiteRTModelCard
                 key={file.name}
@@ -357,10 +363,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
           {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
             const recFile = modelFiles[model.id][0];
             const modelKey = makeModelKey(model.id, recFile.name);
-            const entry = storeDownloads[modelKey];
-            const progress = entry && isActiveStatus(entry.status)
-              ? { progress: entry.progress }
-              : null;
+            const progress = downloadProgressFor(storeDownloads[modelKey]);
             return (
               <RecommendedModelCard
                 key={model.id}

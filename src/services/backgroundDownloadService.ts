@@ -193,6 +193,14 @@ class BackgroundDownloadService {
     if (!this.isAvailable()) {
       throw new Error('Background downloads not available on this platform');
     }
+    // A `queued:<modelKey>` id is a placeholder for a start that is still waiting for a
+    // concurrency slot — it has NO native download, and lives only in startQueue. Route it
+    // to cancelQueued (keyed by modelKey) so cancelling a *queued* item actually removes it;
+    // otherwise the native cancel is a no-op and the download would start later anyway.
+    if (String(downloadId).startsWith('queued:')) {
+      this.cancelQueued(String(downloadId).slice('queued:'.length));
+      return;
+    }
     try {
       await DownloadManagerModule.cancelDownload(downloadId);
     } catch (e) {

@@ -197,7 +197,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        isDownloading={!!s.progress && !s.hasFailed} downloadProgress={s.progress?.progress}
+        isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'pending'}
+        isQueued={s.progress?.status === 'pending'}
+        downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
         isCompatible={item.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB)} testID={`file-card-${index}`}
@@ -329,11 +331,16 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
+  // Reflect an in-flight download in the compact list card too (queued/downloading),
+  // matching by the `<modelId>/<file>` row-key prefix (covers the LiteRT parent's files).
+  const activeEntry = useDownloadStore(s =>
+    Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)),
+  );
   // Strip files for the LiteRT parent so ModelCard doesn't render the size-range
   // and "N files" badges — the curated chips already convey the relevant info.
   // The original item (with files) still flows through onPress → handleSelectModel.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={!!activeEntry && activeEntry.status !== 'pending'} isQueued={activeEntry?.status === 'pending'} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

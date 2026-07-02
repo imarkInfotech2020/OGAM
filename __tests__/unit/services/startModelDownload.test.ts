@@ -13,8 +13,8 @@ jest.mock('../../../src/services/modelManager', () => ({
   },
 }));
 
-const mockStore: { downloads: Record<string, { status: string }>; remove: jest.Mock; setStatus: jest.Mock } = {
-  downloads: {}, remove: jest.fn(), setStatus: jest.fn(),
+const mockStore: { downloads: Record<string, { status: string }>; add: jest.Mock; remove: jest.Mock; setStatus: jest.Mock } = {
+  downloads: {}, add: jest.fn(), remove: jest.fn(), setStatus: jest.fn(),
 };
 jest.mock('../../../src/stores/downloadStore', () => ({
   useDownloadStore: { getState: () => mockStore },
@@ -63,23 +63,56 @@ describe('startModelDownload', () => {
     expect(mockDownloadModelBackground).not.toHaveBeenCalled();
   });
 
-  it('surfaces a start failure via onError without a downloadId (no setStatus)', async () => {
+  it('surfaces a start failure via onError and fails the queued placeholder row', async () => {
     mockDownloadModelBackground.mockRejectedValue(new Error('boom'));
     const onError = jest.fn();
     await startModelDownload(MODEL_ID, FILE, { onError });
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'boom' }));
-    expect(mockStore.setStatus).not.toHaveBeenCalled();
+    // The failure target before a real native id exists is the queued placeholder row.
+    expect(mockStore.setStatus).toHaveBeenCalledWith(`queued:${KEY}`, 'failed', { message: 'boom' });
   });
 
-  it('swallows a cancellation of a still-queued start (no onError, no setStatus)', async () => {
-    // Cancelling a "Queued" row rejects the awaited start with `.cancelled` — there is
-    // no store row to fail and it is not an error, so it must NOT surface onError.
+  it('swallows a cancellation of a still-queued start and removes the placeholder row', async () => {
+    // Cancelling a "Queued" row rejects the awaited start with `.cancelled` — it is not
+    // an error, so it must NOT surface onError, and the placeholder row must be removed.
     const cancelled = Object.assign(new Error('Download cancelled'), { cancelled: true });
     mockDownloadModelBackground.mockRejectedValue(cancelled);
     const onError = jest.fn();
     await startModelDownload(MODEL_ID, FILE, { onError });
     expect(onError).not.toHaveBeenCalled();
     expect(mockStore.setStatus).not.toHaveBeenCalled();
+    expect(mockStore.remove).toHaveBeenCalledWith(KEY);
+  });
+
+  it('publishes a QUEUED (pending) store row up-front, before the native start', async () => {
+    // The row must exist immediately so the Models/onboarding screens (which read the
+    // store) can show "Queued" while the download waits for a concurrency slot.
+    let resolveStart: (v: any) => void;
+    mockDownloadModelBackground.mockReturnValue(new Promise(res => { resolveStart = res; }));
+
+    const p = startModelDownload(MODEL_ID, FILE, {});
+    // add() was called synchronously, before downloadModelBackground resolved.
+    expect(mockStore.add).toHaveBeenCalledWith(expect.objectContaining({
+      modelKey: KEY, downloadId: `queued:${KEY}`, status: 'pending', modelType: 'text',
+    }));
+    resolveStart!({ downloadId: 'dl-1' });
+    await p;
+  });
+
+  it('stores the mmproj FILENAME (not the main gguf name) on a vision queued row', async () => {
+    mockDownloadModelBackground.mockReturnValue(new Promise(() => {}));
+    startModelDownload(MODEL_ID, { name: 'model.gguf', mmProjFile: { size: 500 } } as any, {});
+    expect(mockStore.add).toHaveBeenCalledWith(expect.objectContaining({
+      mmProjFileName: 'model-mmproj.gguf', mmProjFileSize: 500,
+    }));
+  });
+
+  it('is a no-op on a second tap while the first is still QUEUED (dedup)', async () => {
+    // Simulate the first tap having published the queued row (status pending).
+    mockStore.downloads = { [KEY]: { status: 'pending' } };
+    await startModelDownload(MODEL_ID, FILE, {});
+    expect(mockDownloadModelBackground).not.toHaveBeenCalled();
+    expect(mockStore.add).not.toHaveBeenCalled();
   });
 
   it('marks the entry failed + calls onError when watchDownload reports an error', async () => {

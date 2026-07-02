@@ -45,8 +45,9 @@ describe('startModelDownload flow (real stores)', () => {
   it('completion registers the model in appStore and clears the in-flight entry', async () => {
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 'dl-1' });
     await startModelDownload('author/model', FILE);
-    // downloadModelBackground populates the entry AFTER the guard check — simulate it.
-    useDownloadStore.getState().add(inflightEntry());
+    // startModelDownload already published a queued placeholder row; download.ts (mocked
+    // here) reconciles it to the real downloadId via retryEntry — simulate that.
+    useDownloadStore.getState().retryEntry(KEY, 'dl-1');
 
     mockOnComplete!(createDownloadedModel({ id: 'author/model/model.gguf' }));
 
@@ -60,10 +61,30 @@ describe('startModelDownload flow (real stores)', () => {
     expect(mockDownloadModelBackground).not.toHaveBeenCalled();
   });
 
+  it('publishes a real queued (pending) row up-front so screens can show it', async () => {
+    // Never resolve the start → the download stays "queued"; the row must still exist.
+    mockDownloadModelBackground.mockReturnValue(new Promise(() => {}));
+    startModelDownload('author/model', FILE);
+    const entry = useDownloadStore.getState().downloads[KEY];
+    expect(entry).toBeDefined();
+    expect(entry.status).toBe('pending');
+    expect(entry.downloadId).toBe(`queued:${KEY}`);
+  });
+
+  it('dedups a rapid second tap while the first is still queued (real store)', async () => {
+    mockDownloadModelBackground.mockReturnValue(new Promise(() => {}));
+    startModelDownload('author/model', FILE); // queues, publishes pending row
+    await startModelDownload('author/model', FILE); // second tap
+    expect(mockDownloadModelBackground).toHaveBeenCalledTimes(1);
+  });
+
   it('flips the real entry to failed when the watch reports an error', async () => {
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 'dl-1' });
     await startModelDownload('author/model', FILE);
-    useDownloadStore.getState().add(inflightEntry({ status: 'running' }));
+    // Reconcile the queued placeholder to the real id (download.ts does this), then let
+    // native progress mark it running — the state the watch error fires against.
+    useDownloadStore.getState().retryEntry(KEY, 'dl-1');
+    useDownloadStore.getState().setStatus('dl-1', 'running');
 
     mockOnError!(new Error('net'));
 
