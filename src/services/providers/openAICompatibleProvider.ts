@@ -35,6 +35,21 @@ function isLMStudioEndpoint(endpoint: string): boolean {
   return endpoint.includes(':1234');
 }
 
+/** Returns true if the endpoint looks like an Off Grid AI Gateway (llama.cpp, port 7878) */
+function isGatewayEndpoint(endpoint: string): boolean {
+  return endpoint.includes(':7878');
+}
+
+/**
+ * Servers that honor `chat_template_kwargs.enable_thinking` to toggle Qwen3-style
+ * reasoning per request. Both LM Studio and the llama.cpp-based Gateway support it
+ * (verified: the Gateway returns reasoning_content only when enable_thinking:true is
+ * sent). Other servers may reject unknown fields, so the switch stays gated.
+ */
+function supportsThinkingKwarg(endpoint: string): boolean {
+  return isLMStudioEndpoint(endpoint) || isGatewayEndpoint(endpoint);
+}
+
 /**
  * OpenAI-Compatible Provider Implementation
  */
@@ -104,9 +119,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // need a larger budget for <think> blocks (Qwen3, DeepSeek-R1, etc).
       ...(options.topP !== undefined && { top_p: options.topP }),
       ...(options.tools && options.tools.length > 0 && { tools: options.tools, tool_choice: 'auto' }),
-      // LM Studio only: control Qwen3 thinking per-request via chat_template_kwargs.
-      // Sent only to LM Studio endpoints (port 1234) — other servers may reject unknown fields.
-      ...(isLMStudioEndpoint(this.config.endpoint) && { chat_template_kwargs: { enable_thinking: thinkingEnabled } }),
+      // Control Qwen3 thinking per-request via chat_template_kwargs, for servers
+      // that honor it (LM Studio + the llama.cpp Gateway). Without this the toggle
+      // was a no-op on the Gateway — it defaulted to no thinking regardless.
+      ...(supportsThinkingKwarg(this.config.endpoint) && { chat_template_kwargs: { enable_thinking: thinkingEnabled } }),
     };
   }
 

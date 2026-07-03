@@ -338,6 +338,55 @@ describe('OpenAICompatibleProvider', () => {
     });
   });
 
+  describe('generate — enable_thinking kwarg gating', () => {
+    const runGenerate = async (endpoint: string, enableThinking: boolean | undefined) => {
+      const p = new OpenAICompatibleProvider('s', { endpoint, modelId: 'qwen3' });
+      await p.loadModel('qwen3');
+      const mock = httpClient.createStreamingRequest as jest.Mock;
+      mock.mockImplementation((_url, _req, onEvent) => {
+        onEvent({ data: '{"choices":[{"finish_reason":"stop"}]}' });
+        return Promise.resolve();
+      });
+      await p.generate(
+        [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
+        { enableThinking },
+        { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() },
+      );
+      return (mock.mock.calls[0][1].body as Record<string, unknown>);
+    };
+
+    it('sends enable_thinking:true to the Gateway (port 7878)', async () => {
+      const body = await runGenerate('http://192.168.1.58:7878', true);
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: true });
+    });
+
+    it('sends enable_thinking:false to the Gateway when thinking is disabled', async () => {
+      const body = await runGenerate('http://192.168.1.58:7878', false);
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    });
+
+    it('still sends enable_thinking to LM Studio (port 1234)', async () => {
+      const body = await runGenerate('http://192.168.1.50:1234', true);
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: true });
+    });
+
+    it('does NOT take the OpenAI chat_template_kwargs path for a plain Ollama endpoint (port 11434)', async () => {
+      // Ollama routes through its native /api/chat (think: flag) via a different
+      // NDJSON transport, so the OpenAI createStreamingRequest path — the only one
+      // that can carry chat_template_kwargs — is never invoked for it.
+      const p = new OpenAICompatibleProvider('s', { endpoint: 'http://192.168.1.50:11434', modelId: 'qwen3' });
+      await p.loadModel('qwen3');
+      const mock = httpClient.createStreamingRequest as jest.Mock;
+      mock.mockClear();
+      await p.generate(
+        [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
+        { enableThinking: true },
+        { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() },
+      );
+      expect(mock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('stopGeneration', () => {
     it('should abort ongoing generation', async () => {
       await provider.loadModel('test-model');
