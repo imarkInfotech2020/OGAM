@@ -151,6 +151,23 @@ describe('KokoroEngine — live download lifecycle is the source of truth', () =
     expect(state.status).toBe('not-downloaded');
   });
 
+  it('cold start: a hydrated (downloaded) engine whose bridge then mounts goes ready and STAYS downloaded', async () => {
+    // Guards that the _setBridge fix (excluding 'downloading' from the →ready clobber)
+    // is behavior-neutral for the normal path: on a cold start the model is already on
+    // disk (genuineCompletion hydrated true), the bridge mounts from 'idle', so phase
+    // must still advance to 'ready' AND completeness must remain true.
+    const engine = new KokoroEngine();
+    engine.hydrateDownloaded(true);
+    expect(engine.getPhase()).toBe('idle');
+
+    engine._setBridge({} as any, 'af_heart' as any); // bridge attaches from idle
+
+    expect(engine.getPhase()).toBe('ready');       // idle→ready still allowed
+    expect(engine.isFullyDownloaded()).toBe(true); // genuine completion persists
+    const [state] = await engine.checkAssetStatus();
+    expect(state.status).toBe('downloaded');
+  });
+
   it('delete flips it back to not-downloaded even if leftover files linger on disk', async () => {
     const engine = new KokoroEngine();
     engine.hydrateDownloaded(true);

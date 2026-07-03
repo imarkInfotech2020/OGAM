@@ -329,6 +329,37 @@ describe('activeItems mapping', () => {
     expect(result.current.activeItems.some(i => i.modelType === 'tts' && i.modelId === 'kokoro')).toBe(false);
   });
 
+  it('routes a FAILED voice item to activeItems (so ActiveDownloadCard shows Retry), NOT completedItems', () => {
+    // useVoiceDownloadItems marks a failed Kokoro fetch type:'active' status:'failed'
+    // (retryable). The type-split must send it to Active — a failed download in the
+    // "Downloaded Models" section would be a lie (it isn't downloaded) and would hide
+    // the Retry affordance.
+    mockVoiceItems = [
+      { type: 'active', modelType: 'tts', modelId: 'kokoro', fileName: 'Kokoro TTS', author: 'Voice',
+        quantization: '', fileSize: 85983232, bytesDownloaded: 24000000, progress: 0.28, status: 'failed',
+        name: 'Kokoro TTS', reason: 'Download interrupted' },
+    ];
+    const { result } = renderHook(() => useDownloadManager());
+    expect(result.current.activeItems.some(i => i.modelType === 'tts' && i.status === 'failed')).toBe(true);
+    expect(result.current.completedItems.some(i => i.modelType === 'tts')).toBe(false);
+  });
+
+  it('mixed real device state: STT downloaded + TTS downloading → STT in completed, TTS in active', () => {
+    // The exact screen we saw on-device: whisper models finished, Kokoro mid-download.
+    // The two must land in different sections, not be lumped together.
+    mockVoiceItems = [
+      { type: 'completed', modelType: 'stt', modelId: 'base.en', fileName: 'ggml-base.en.bin', author: 'Transcription',
+        quantization: '', fileSize: 142000000, bytesDownloaded: 142000000, progress: 1, status: 'completed', name: 'base.en' },
+      { type: 'active', modelType: 'tts', modelId: 'kokoro', fileName: 'Kokoro TTS', author: 'Voice',
+        quantization: '', fileSize: 85983232, bytesDownloaded: 25794690, progress: 0.3, status: 'downloading', name: 'Kokoro TTS' },
+    ];
+    const { result } = renderHook(() => useDownloadManager());
+    expect(result.current.completedItems.some(i => i.modelType === 'stt' && i.modelId === 'base.en')).toBe(true);
+    expect(result.current.completedItems.some(i => i.modelType === 'tts')).toBe(false);
+    expect(result.current.activeItems.some(i => i.modelType === 'tts' && i.status === 'downloading')).toBe(true);
+    expect(result.current.activeItems.some(i => i.modelType === 'stt')).toBe(false);
+  });
+
   it('isRepairingVision reflects the store flag', () => {
     mockUseDownloadStore.mockImplementation((selector?: any) => {
       const s = { downloads, repairingVisionIds: { 'org/repo/m.gguf': true }, setRepairingVision: mockSetRepairingVision, remove: mockRemove };
