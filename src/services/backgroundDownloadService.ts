@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- cohesive download admission-control service: the concurrency cap, FIFO queue, slot accounting, native-bridge calls, and event fan-out are one tightly-coupled unit; splitting it would scatter the shared activeIds/startQueue state. */
 import { NativeModules, NativeEventEmitter, Platform, Alert } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 import logger from '../utils/logger';
@@ -40,6 +41,10 @@ class BackgroundDownloadService {
   private startQueue: QueuedStart[] = [];
   /** Monotonic counter for unique in-flight reservation tokens. */
   private startSeq = 0;
+  /** Set once cleanup() runs, so a beginDownload() still awaiting the native start can't
+   *  re-add its id to the just-cleared activeIds (its release listeners are gone → the
+   *  slot would leak permanently). */
+  private shutDown = false;
 
   constructor() {
     if (this.isAvailable()) {
@@ -104,8 +109,11 @@ class BackgroundDownloadService {
         sha256: params.sha256,
         hideNotification: params.hideNotification ?? false,
       });
-      // Swap the reservation for the real download id (still one slot).
+      // Swap the reservation for the real download id (still one slot). If cleanup() ran
+      // while we awaited the native start, don't re-add — the release listeners are gone,
+      // so this id could never be freed and would leak a slot for the service's life.
       this.activeIds.delete(token);
+      if (this.shutDown) { DownloadManagerModule.cancelDownload(result.downloadId).catch(() => {}); return { downloadId: result.downloadId, fileName: result.fileName, modelId: result.modelId, status: 'failed', bytesDownloaded: 0, totalBytes: params.totalBytes ?? 0, startedAt: Date.now() }; }
       this.activeIds.add(result.downloadId);
       return {
         downloadId: result.downloadId,
@@ -454,6 +462,7 @@ class BackgroundDownloadService {
   }
 
   cleanup(): void {
+    this.shutDown = true;
     this.stopProgressPolling();
     this.subscriptions.forEach(sub => sub.remove());
     this.subscriptions = [];
