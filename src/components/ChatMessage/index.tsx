@@ -59,7 +59,7 @@ type ToolResultBubbleProps = {
   colors: any;
 };
 
-const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
+const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
   stableKey, toolIcon, toolLabel, toolName, durationLabel, content, hasDetails, styles, colors,
 }) => {
   const [expanded, toggle] = useAccordionExpanded(`tool-result:${stableKey}`);
@@ -91,6 +91,15 @@ const ToolResultBubble: React.FC<ToolResultBubbleProps> = ({
     </View>
   );
 };
+
+/**
+ * Memoized so token churn on a streaming sibling (which re-renders the chat subtree
+ * every token) does not re-render this row and reset its TouchableOpacity press target
+ * mid-gesture — the tap-during-streaming drop in bug #37. Props are stable for a
+ * finalized tool-result message; the expanded flag lives in accordionStore so a real
+ * toggle still re-renders it.
+ */
+const ToolResultBubble = React.memo(ToolResultBubbleInner);
 
 /** Renders the routed-tools collapsible for a finished assistant message, or nothing. */
 const RoutedToolsRow: React.FC<{ message: Message; isUser: boolean; isStreaming?: boolean; styles: any; colors: any }> = ({ message, isUser, isStreaming, styles, colors }) => {

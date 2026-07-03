@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { create } from 'zustand';
 
 /**
@@ -34,11 +35,20 @@ export const useAccordionStore = create<AccordionState>((set) => ({
 
 /**
  * Thin hook the accordion views use to read/write their expanded flag from the
- * owning store. Returns the current value (default collapsed) and a stable
- * toggle. A remount with the SAME `key` reads the same persisted value.
+ * owning store. Returns the current value (default collapsed) and a STABLE
+ * toggle (identity fixed across re-renders for a given `key`). A remount with the
+ * SAME `key` reads the same persisted value.
+ *
+ * The toggle MUST be stable: while a sibling message streams, the chat subtree
+ * re-renders every token. A fresh `() => toggle(key)` closure per render swaps the
+ * TouchableOpacity's onPress mid-gesture, so a tap landing during the churn is
+ * dropped and the accordion won't open (bug #37). A stable handler + a memoized
+ * row keeps the press target intact across the per-token re-renders.
  */
 export function useAccordionExpanded(key: string): [boolean, () => void] {
   const expanded = useAccordionStore((s) => s.expanded[key] ?? false);
-  const toggle = useAccordionStore((s) => s.toggle);
-  return [expanded, () => toggle(key)];
+  // Read `toggle` off the store lazily inside the callback (getState) so the handler
+  // depends only on `key` — its identity never changes across re-renders.
+  const onToggle = useCallback(() => useAccordionStore.getState().toggle(key), [key]);
+  return [expanded, onToggle];
 }

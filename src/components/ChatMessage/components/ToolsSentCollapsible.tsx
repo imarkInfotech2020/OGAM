@@ -24,7 +24,7 @@ interface ToolsSentCollapsibleProps {
  * set), shown below the response so it's clear what the model could choose from.
  * Shared by the text chat bubble and the audio-mode bubble.
  */
-export const ToolsSentCollapsible: React.FC<ToolsSentCollapsibleProps> = ({ names, stableKey, styles, colors }) => {
+const ToolsSentCollapsibleInner: React.FC<ToolsSentCollapsibleProps> = ({ names, stableKey, styles, colors }) => {
   const key = `tools-sent:${stableKey ?? names.join(',')}`;
   const [expanded, toggle] = useAccordionExpanded(key);
   if (!names?.length) return null;
@@ -47,3 +47,12 @@ export const ToolsSentCollapsible: React.FC<ToolsSentCollapsibleProps> = ({ name
     </View>
   );
 };
+
+/**
+ * Memoized: while a sibling message streams, the chat subtree re-renders every token.
+ * The `names` array + styles/colors are stable for a finalized message, so the row
+ * skips those churn renders — keeping the TouchableOpacity press target intact so a tap
+ * during streaming registers (bug #37). Its expanded flag lives in accordionStore, so a
+ * legitimate toggle still re-renders it.
+ */
+export const ToolsSentCollapsible = React.memo(ToolsSentCollapsibleInner);
