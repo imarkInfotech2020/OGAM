@@ -224,6 +224,12 @@ class BackgroundDownloadService {
       throw new Error('retryDownload is only available on Android');
     }
     await DownloadManagerModule.retryDownload(downloadId);
+    // The failure that preceded this retry already released the slot (DownloadError ->
+    // release). Re-reserve it so the retried transfer counts against the cap and its
+    // eventual terminal event pumps the queue; without this, retry runs uncounted
+    // (concurrency can exceed the cap) and its completion can't promote a queued start.
+    // Set.add is idempotent, so re-reserving an id still present is a no-op.
+    this.activeIds.add(downloadId);
   }
 
   async cancelDownload(downloadId: string): Promise<void> {

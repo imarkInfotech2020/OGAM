@@ -17,6 +17,7 @@ const originalOS = Platform.OS;
 const mockDownloadManagerModule = {
   startDownload: jest.fn(),
   cancelDownload: jest.fn(),
+  retryDownload: jest.fn(),
   getActiveDownloads: jest.fn(),
   getDownloadProgress: jest.fn(),
   moveCompletedDownload: jest.fn(),
@@ -1413,6 +1414,28 @@ describe('BackgroundDownloadService', () => {
 
       // The two phantom slots are reclaimed, so the queued 'd' starts.
       expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(4);
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
+    it('retryDownload re-reserves the slot so a retried download counts against the cap', async () => {
+      mockDownloadManagerModule.retryDownload.mockResolvedValue(undefined);
+      ['a', 'b', 'c'].forEach((id) => service.startDownload(params(id))); // ids 1,2,3
+      await flush();
+      // 'a' (id '1') fails -> its slot is released.
+      eventHandlers.DownloadError({ downloadId: '1', reason: 'boom' });
+      await flush();
+
+      // Retry it. Before the fix this restarted the native transfer without re-reserving,
+      // so the cap was silently bypassed and its completion couldn't pump the queue.
+      await service.retryDownload('1');
+
+      // At the cap again -> a fresh start must queue.
+      service.startDownload(params('d'));
+      expect(service.getQueuedCount()).toBe(1);
+
+      // The retried '1' completing frees its slot and promotes the queued 'd'.
+      eventHandlers.DownloadComplete({ downloadId: '1' });
+      await flush();
       expect(service.getQueuedCount()).toBe(0);
     });
 
