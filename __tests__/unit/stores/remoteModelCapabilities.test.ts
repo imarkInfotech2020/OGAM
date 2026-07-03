@@ -530,6 +530,20 @@ describe('fetchLmStudioModelInfo — probeLmStudioThinking SSE branches', () => 
     expect(result.supportsThinking).toBe(false);
   });
 
+  it('marks acceptsThinkingKwarg=true even for a non-thinking model (server capability, not probe)', async () => {
+    // LM Studio always honors enable_thinking; the probe only tells us whether THIS
+    // model reasons. A false probe (or a flaky one) must not strip the kwarg.
+    globalThis.fetch = jest.fn()
+      .mockResolvedValueOnce(modelResponse('m7'))
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => 'data: {"choices":[{"delta":{"content":"plain"}}]}\ndata: [DONE]\n',
+      } as any);
+    const result = await fetchLmStudioModelInfo('http://localhost:1234', 'm7');
+    expect(result.supportsThinking).toBe(false);
+    expect(result.acceptsThinkingKwarg).toBe(true);
+  });
+
   it('skips malformed JSON lines in SSE and returns false', async () => {
     globalThis.fetch = jest.fn()
       .mockResolvedValueOnce(modelResponse('m6'))

@@ -163,9 +163,7 @@ export async function fetchLmStudioModelInfo(
         : 4096;
 
     // LM Studio doesn't expose thinking capability in /api/v1/models.
-    // Probe via a 1-token streaming request that SENDS enable_thinking — a thinking
-    // response confirms both that the model thinks AND that LM Studio honors the
-    // kwarg, so acceptsThinkingKwarg mirrors the probe result.
+    // Probe via a 1-token streaming request to learn whether THIS model thinks.
     const supportsThinking = await probeLmStudioThinking(endpoint, modelId);
 
     return {
@@ -173,7 +171,13 @@ export async function fetchLmStudioModelInfo(
       supportsVision: caps.vision === true,
       supportsToolCalling: caps.trained_for_tool_use === true,
       supportsThinking,
-      acceptsThinkingKwarg: supportsThinking,
+      // Reaching here means the server answered /api/v1/models with this model —
+      // it IS LM Studio, which always honors chat_template_kwargs.enable_thinking.
+      // That's a property of the server (transport), independent of whether this
+      // particular model reasons — so it must not hinge on the probe. Tying it to
+      // the probe would strip the kwarg from a thinking model whenever the probe
+      // merely flaked (timeout/network) during discovery.
+      acceptsThinkingKwarg: true,
     };
   } catch {
     // Timeout, network error, parse error
