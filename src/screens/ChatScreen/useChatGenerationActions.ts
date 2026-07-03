@@ -1,4 +1,5 @@
- import { Dispatch, SetStateAction } from 'react';
+/* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
+import { Dispatch, SetStateAction } from 'react';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
 import { APP_CONFIG } from '../../constants';
