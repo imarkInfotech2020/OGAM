@@ -43,7 +43,7 @@ interface ImageModelCardProps {
   handleCancelImageDownload: Props['handleCancelImageDownload'];
 }
 
-const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
+export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
