@@ -266,24 +266,48 @@ async function probeLmStudioThinking(endpoint: string, modelId: string): Promise
 export async function fetchLlamaCppProps(
   endpoint: string,
 ): Promise<RemoteModelInfo | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
     const response = await fetch(`${endpoint}/props`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
     if (!response.ok) return null;
 
     return parsePropsCapabilities(await response.json());
-  } catch {
-    // Timeout, network error, parse error, or not a llama.cpp server
+  } catch (error) {
+    // A non-llama.cpp server simply has no /props (network error / abort) — that's
+    // expected and silent. Only an unexpected shape after a 200 is worth flagging,
+    // but that path returns null from parsePropsCapabilities, not throw. Log at warn
+    // for parity with probeLmStudioThinking so a regressing server leaves a breadcrumb.
+    logger.warn('[fetchLlamaCppProps] /props unavailable:', endpoint, error instanceof Error ? error.message : error);
+  } finally {
+    // Always clear — an early fetch rejection (e.g. DNS failure) otherwise leaves
+    // the abort timer scheduled to fire after the function has returned.
+    clearTimeout(timeoutId);
   }
   return null;
+}
+
+/**
+ * In-flight /props requests keyed by endpoint. /props is server-wide (a llama.cpp
+ * server serves one model), but capability detection runs once per model — so a
+ * multi-entry /v1/models would fire N identical /props requests. Sharing the
+ * in-flight promise collapses them to one call per server per discovery pass.
+ * Cleared when the request settles so a later refresh re-probes the live server.
+ */
+const propsInFlight = new Map<string, Promise<RemoteModelInfo | null>>();
+
+/** De-duplicated wrapper around fetchLlamaCppProps — one /props call per endpoint. */
+export function fetchLlamaCppPropsCached(endpoint: string): Promise<RemoteModelInfo | null> {
+  const existing = propsInFlight.get(endpoint);
+  if (existing) return existing;
+  const p = fetchLlamaCppProps(endpoint).finally(() => propsInFlight.delete(endpoint));
+  propsInFlight.set(endpoint, p);
+  return p;
 }
 
 /** Narrow an unknown value to a plain object, or null. */
@@ -358,7 +382,9 @@ export async function fetchModelCapabilities(
   nameBasedDetect: { vision: (id: string) => boolean; toolCalling: (id: string) => boolean },
 ): Promise<RemoteModelInfo> {
   const [propsInfo, ollamaInfo, lmInfo] = await Promise.all([
-    fetchLlamaCppProps(endpoint),
+    // Deduped per endpoint — /props is server-wide, so all models on one server
+    // share a single request instead of firing one each.
+    fetchLlamaCppPropsCached(endpoint),
     fetchRemoteModelInfo(endpoint, modelId),
     fetchLmStudioModelInfo(endpoint, modelId),
   ]);

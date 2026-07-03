@@ -11,6 +11,7 @@ import {
   fetchRemoteModelInfo,
   fetchLmStudioModelInfo,
   fetchLlamaCppProps,
+  fetchLlamaCppPropsCached,
   fetchModelCapabilities,
   isGenerativeModel,
 } from '../../../src/stores/remoteModelCapabilities';
@@ -261,6 +262,64 @@ describe('fetchLlamaCppProps', () => {
     } as any);
     const info = await fetchLlamaCppProps('http://192.168.1.58:7878');
     expect(info!.supportsThinking).toBe(true);
+  });
+
+  it('logs a warning (not silent) when /props is unavailable', async () => {
+    const logger = require('../../../src/utils/logger').default;
+    logger.warn.mockClear();
+    mockFetchError(new Error('DNS failure'));
+    const info = await fetchLlamaCppProps('http://192.168.1.58:7878');
+    expect(info).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[fetchLlamaCppProps] /props unavailable:',
+      'http://192.168.1.58:7878',
+      'DNS failure',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchLlamaCppPropsCached — de-duplication
+// ---------------------------------------------------------------------------
+
+describe('fetchLlamaCppPropsCached', () => {
+  it('shares a single in-flight /props request across concurrent calls to one endpoint', async () => {
+    let calls = 0;
+    globalThis.fetch = jest.fn().mockImplementation(() => {
+      calls += 1;
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ modalities: { vision: true }, chat_template_caps: { supports_tools: true } }),
+      } as any);
+    });
+
+    const ep = 'http://192.168.1.58:7878';
+    // Fire three concurrent calls (as N models on one server would).
+    const [a, b, c] = await Promise.all([
+      fetchLlamaCppPropsCached(ep),
+      fetchLlamaCppPropsCached(ep),
+      fetchLlamaCppPropsCached(ep),
+    ]);
+
+    expect(calls).toBe(1); // one /props request, not three
+    expect(a!.supportsVision).toBe(true);
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+  });
+
+  it('re-probes after the in-flight request settles (no stale caching)', async () => {
+    let calls = 0;
+    globalThis.fetch = jest.fn().mockImplementation(() => {
+      calls += 1;
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ modalities: { vision: false }, chat_template_caps: {} }),
+      } as any);
+    });
+    const ep = 'http://192.168.1.60:7878';
+    await fetchLlamaCppPropsCached(ep);
+    await fetchLlamaCppPropsCached(ep); // after settle → new request
+    expect(calls).toBe(2);
   });
 });
 
