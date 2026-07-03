@@ -8,7 +8,7 @@ import { consumePendingSpotlight } from '../../components/onboarding/spotlightSt
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus, isQueuedStatus, isDownloadingStatus } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
@@ -60,8 +60,12 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   // while the Download Manager (correctly) showed it failed → Retry/Remove. One rule,
   // one source of truth: a failed/interrupted row is NOT active, so the card offers a
   // fresh download (which routes through retryEntry) instead of lying about progress.
+  // Active = queued OR transferring (gates the download/cancel affordance). Split
+  // queued vs downloading via the shared classifier so a queued image renders the
+  // clock — same rule as every other tab, no per-surface re-derivation.
   const isActive = !!entry && isActiveStatus(entry.status);
-  const isDownloading = isActive;
+  const isQueued = !!entry && isQueuedStatus(entry.status);
+  const isDownloading = !!entry && isDownloadingStatus(entry.status);
   const progressValue = entry?.progress ?? 0;
   let authorLabel: string;
   if (model._coreml) authorLabel = 'Core ML';
@@ -84,6 +88,7 @@ const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
           description: `${formatBytes(model.size)}${variantSuffix}`,
         }}
         isDownloading={isDownloading}
+        isQueued={isQueued}
         downloadProgress={progressValue}
         downloadBytes={entry ? { downloaded: Math.round(progressValue * model.size), total: model.size } : undefined}
         isCompatible={isCompatible}

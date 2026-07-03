@@ -83,7 +83,13 @@ jest.mock('../../../src/stores/downloadStore', () => {
     remove: mockRemoveDownloadEntry,
     setStatus: mockSetStatus,
   });
+  // Only the store hook is mocked; the pure status classifiers (isActiveStatus /
+  // isQueuedStatus / isDownloadingStatus) come from the REAL module so the test
+  // exercises the same classification the screen ships with — never a stubbed copy
+  // that could drift (that drift is exactly what let the queued/active bugs hide).
+  const actual = jest.requireActual('../../../src/stores/downloadStore');
   return {
+    ...actual,
     useDownloadStore: store,
     STUCK_THRESHOLD_MS: 30000,
   };

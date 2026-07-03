@@ -6,7 +6,7 @@ import { modelBudgetFraction } from '../../services/memoryBudget';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
-import { CustomAlert, hideAlert, showAlert } from '../../components/CustomAlert';
+import { CustomAlert, hideAlert, showAlert, AlertState } from '../../components/CustomAlert';
 import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
 import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -15,7 +15,7 @@ import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
@@ -64,6 +64,27 @@ type DetailProps = Pick<Props,
   | 'getDownloadedModel' | 'isModelDownloaded' | 'isRepairingVisionModel'
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
+
+// Build the file card's onDownload handler (extracted to keep renderFileItem below the
+// ESLint complexity ceiling; behavior is identical to the previous inline form).
+function buildFileDownloadHandler({ s, curatedEntry, proceedDownload, setAlertState }: {
+  s: { downloaded: boolean; progress: unknown; hasFailed: boolean };
+  curatedEntry: ReturnType<typeof getCuratedLiteRTEntry>;
+  proceedDownload: () => void;
+  setAlertState: (state: AlertState) => void;
+}): (() => void) | undefined {
+  if (s.downloaded || s.progress || s.hasFailed) return undefined;
+  return () => {
+    if (curatedEntry?.confirmDownload) {
+      setAlertState(showAlert(curatedEntry.confirmDownload.title, curatedEntry.confirmDownload.message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
+        { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
+      ]));
+      return;
+    }
+    proceedDownload();
+  };
+}
 
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
@@ -160,36 +181,17 @@ const ModelDetailView: React.FC<DetailProps> = ({
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
-    const onDownload = !s.downloaded && !s.progress && !s.hasFailed
-      ? () => {
-        if (curatedEntry?.confirmDownload) {
-          setAlertState(showAlert(
-            curatedEntry.confirmDownload.title,
-            curatedEntry.confirmDownload.message,
-            [
-              { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-              { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
-            ],
-          ));
-          return;
-        }
-        proceedDownload();
-      }
-      : undefined;
+    const onDownload = buildFileDownloadHandler({ s, curatedEntry, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
-    const recommended = liteRTMeta
-      ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight }
-      : undefined;
+    const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
     const storeEntry = storeDownloads[s.downloadKey];
     const failedState = s.hasFailed && s.errorMessage && storeEntry?.downloadId
       ? {
         errorMessage: s.errorMessage,
         bytesDownloaded: storeEntry.bytesDownloaded,
         totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
-        onRetry: () => Platform.OS === 'android'
-          ? handleRetryDownload(s.downloadKey, storeEntry.downloadId)
-          : proceedDownload(),
+        onRetry: () => Platform.OS === 'android' ? handleRetryDownload(s.downloadKey, storeEntry.downloadId) : proceedDownload(),
         onRemove: () => handleCancelDownload(s.downloadKey),
       }
       : undefined;
@@ -197,8 +199,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'pending'}
-        isQueued={s.progress?.status === 'pending'}
+        isDownloading={!!s.progress && !s.hasFailed && !isQueuedStatus(s.progress.status)}
+        isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
         downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
@@ -333,14 +335,14 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
   // Reflect an in-flight download in the compact list card too (queued/downloading),
   // matching by the `<modelId>/<file>` row-key prefix (covers the LiteRT parent's files).
-  const activeEntry = useDownloadStore(s =>
-    Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)),
-  );
+  const activeEntry = useDownloadStore(s => Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)));
+  const cardIsQueued = !!activeEntry && isQueuedStatus(activeEntry.status);
+  const cardIsDownloading = !!activeEntry && !isQueuedStatus(activeEntry.status);
   // Strip files for the LiteRT parent so ModelCard doesn't render the size-range
   // and "N files" badges — the curated chips already convey the relevant info.
   // The original item (with files) still flows through onPress → handleSelectModel.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={!!activeEntry && activeEntry.status !== 'pending'} isQueued={activeEntry?.status === 'pending'} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={cardIsDownloading} isQueued={cardIsQueued} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

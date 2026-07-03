@@ -20,7 +20,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useWhisperStore } from '../../stores';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus, isQueuedStatus, isDownloadingStatus } from '../../stores/downloadStore';
 import { WHISPER_MODELS } from '../../services';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
@@ -36,6 +36,7 @@ interface WhisperCardProps {
   downloadedModelId: string | null;
   presentModelIds: string[];
   downloading: boolean;
+  queued: boolean;
   downloadProgress: number;
   onDownload: (id: string) => void;
   onSelect: (id: string) => void;
@@ -43,7 +44,7 @@ interface WhisperCardProps {
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
-  model, index, downloadedModelId, presentModelIds, downloading, downloadProgress, onDownload, onSelect, onDelete,
+  model, index, downloadedModelId, presentModelIds, downloading, queued, downloadProgress, onDownload, onSelect, onDelete,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
@@ -51,9 +52,10 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
     <ModelCard
       compact
       model={{ id: model.id, name: model.name, author: formatSize(model.size), description: model.description }}
-      isDownloaded={present && !downloading}
+      isDownloaded={present && !downloading && !queued}
       isActive={active}
       isDownloading={downloading}
+      isQueued={queued}
       downloadProgress={downloadProgress}
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
@@ -82,22 +84,31 @@ export const TranscriptionModelsTab: React.FC = () => {
   // Download Manager shows "failed" — the model just becomes downloadable again.
   const downloads = useDownloadStore((s) => s.downloads);
   const sttDownloadState = useMemo(() => {
-    const byModel: Record<string, { progress: number; active: boolean }> = {};
+    const byModel: Record<string, { progress: number; active: boolean; downloading: boolean; queued: boolean }> = {};
     for (const e of Object.values(downloads)) {
       if (e.modelType !== 'stt') continue;
       const id = e.modelId.startsWith('whisper-') ? e.modelId.slice('whisper-'.length) : e.modelId;
-      byModel[id] = { progress: e.progress ?? 0, active: isActiveStatus(e.status) };
+      // Split queued vs transferring via the shared classifier so a queued STT model
+      // shows the clock — the same rule the Text/Image tabs use.
+      byModel[id] = {
+        progress: e.progress ?? 0,
+        active: isActiveStatus(e.status),
+        downloading: isDownloadingStatus(e.status),
+        queued: isQueuedStatus(e.status),
+      };
     }
     return byModel;
   }, [downloads]);
 
   // Per-model in-flight state: prefer the canonical download tracker; fall back to the
   // whisper store for the RNFS URL-import path, which has no download-store entry.
-  const downloadStateFor = useCallback((id: string): { progress: number; active: boolean } | undefined => {
+  const downloadStateFor = useCallback((id: string): { progress: number; active: boolean; downloading: boolean; queued: boolean } | undefined => {
     const fromStore = sttDownloadState[id];
     if (fromStore) return fromStore;
     const p = downloadProgressById[id];
-    return p !== undefined ? { progress: p, active: true } : undefined;
+    // The whisper-store URL-import path has no download-store entry and no queue — it's
+    // actively transferring, so downloading=true, queued=false.
+    return p !== undefined ? { progress: p, active: true, downloading: true, queued: false } : undefined;
   }, [sttDownloadState, downloadProgressById]);
 
   // True while any transcription model is actively downloading. Disk probes are
@@ -149,7 +160,8 @@ export const TranscriptionModelsTab: React.FC = () => {
         index={index}
         downloadedModelId={downloadedModelId}
         presentModelIds={presentModelIds}
-        downloading={state?.active ?? false}
+        downloading={state?.downloading ?? false}
+        queued={state?.queued ?? false}
         downloadProgress={state?.progress ?? 0}
         onDownload={handleDownload}
         onSelect={handleSelect}
