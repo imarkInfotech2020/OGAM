@@ -13,6 +13,8 @@ export interface RemoteModelInfo {
   supportsVision: boolean;
   supportsToolCalling?: boolean;
   supportsThinking?: boolean;
+  /** Server honors chat_template_kwargs.enable_thinking to toggle reasoning per request. */
+  acceptsThinkingKwarg?: boolean;
 }
 
 function parseModelInfoKeys(modelInfo: Record<string, unknown>): { contextLength: number; supportsVision: boolean } {
@@ -161,7 +163,9 @@ export async function fetchLmStudioModelInfo(
         : 4096;
 
     // LM Studio doesn't expose thinking capability in /api/v1/models.
-    // Probe via a 1-token streaming request — thinking models emit <think> as the first chunk.
+    // Probe via a 1-token streaming request that SENDS enable_thinking — a thinking
+    // response confirms both that the model thinks AND that LM Studio honors the
+    // kwarg, so acceptsThinkingKwarg mirrors the probe result.
     const supportsThinking = await probeLmStudioThinking(endpoint, modelId);
 
     return {
@@ -169,6 +173,7 @@ export async function fetchLmStudioModelInfo(
       supportsVision: caps.vision === true,
       supportsToolCalling: caps.trained_for_tool_use === true,
       supportsThinking,
+      acceptsThinkingKwarg: supportsThinking,
     };
   } catch {
     // Timeout, network error, parse error
@@ -315,8 +320,12 @@ export function parsePropsCapabilities(data: unknown): RemoteModelInfo | null {
   // reports supports_preserve_reasoning=false). The reliable capability signal is the
   // chat template exposing an `enable_thinking` switch or `<think>` blocks.
   const template = typeof root.chat_template === 'string' ? root.chat_template : '';
+  // A template that references `enable_thinking` honors the chat_template_kwargs
+  // switch — the request builder can toggle reasoning per request on this server.
+  const acceptsThinkingKwarg = /enable_thinking/.test(template);
   const supportsThinking =
-    /enable_thinking|<think>/.test(template) ||
+    acceptsThinkingKwarg ||
+    /<think>/.test(template) ||
     templateCaps?.supports_preserve_reasoning === true ||
     (reasoningFormat !== 'none' && reasoningFormat !== '');
 
@@ -325,6 +334,7 @@ export function parsePropsCapabilities(data: unknown): RemoteModelInfo | null {
     supportsVision: modalities?.vision === true,
     supportsToolCalling: templateCaps?.supports_tools === true,
     supportsThinking,
+    acceptsThinkingKwarg,
   };
 }
 

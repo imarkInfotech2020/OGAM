@@ -214,7 +214,23 @@ describe('fetchLlamaCppProps', () => {
     expect(info!.supportsVision).toBe(true);
     expect(info!.supportsToolCalling).toBe(true);
     expect(info!.supportsThinking).toBe(false);
+    expect(info!.acceptsThinkingKwarg).toBe(false);
     expect(info!.contextLength).toBe(37888);
+  });
+
+  it('sets acceptsThinkingKwarg when the template exposes enable_thinking', async () => {
+    mockFetch({
+      ok: true,
+      json: async () => ({
+        modalities: { vision: false },
+        chat_template_caps: { supports_tools: true },
+        chat_template: "{%- if enable_thinking is defined and enable_thinking is true %}{{- '<think>' }}",
+        default_generation_settings: { n_ctx: 4096, params: { reasoning_format: 'none' } },
+      }),
+    } as any);
+    const info = await fetchLlamaCppProps('http://192.168.1.58:7878');
+    expect(info!.acceptsThinkingKwarg).toBe(true);
+    expect(info!.supportsThinking).toBe(true);
   });
 
   it('detects thinking from the chat_template even when supports_preserve_reasoning is false', async () => {
