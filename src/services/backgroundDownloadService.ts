@@ -135,6 +135,43 @@ class BackgroundDownloadService {
   }
 
   /**
+   * Reconcile the concurrency accounting against the native truth and pump the queue.
+   *
+   * A slot leaks when an id in `activeIds` no longer maps to a live native transfer but
+   * never got a terminal event to release it — most notably a vision model's mmproj
+   * sidecar, whose separate downloadId reserves a slot here but whose task the native
+   * layer folds into the main download's fileTasks (so only the main emits
+   * DownloadComplete). Left unfixed, `pump()` keeps seeing the cap as full and the
+   * effective concurrency collapses toward 1 (one leak per vision model downloaded).
+   *
+   * We drop only REAL ids the native active set no longer contains — never a `reserve:`
+   * token (a start still mid-flight, before it has a native id). A freshly-started
+   * download is already in the native active set by the time startDownload() resolves,
+   * so this cannot drop a live start; the worst case (a native poll lagging a terminal
+   * event) is at most one extra concurrent download that the next reconcile corrects —
+   * strictly better than being wedged at one.
+   */
+  async reconcileActiveIds(): Promise<void> {
+    if (!this.isAvailable() || this.activeIds.size === 0) return;
+    let nativeIds: Set<string>;
+    try {
+      const active = await DownloadManagerModule.getActiveDownloads();
+      nativeIds = new Set<string>((active ?? []).map((d: any) => String(d.downloadId ?? d.id)));
+    } catch {
+      return; // bridge unavailable — leave accounting untouched
+    }
+    let freed = false;
+    for (const id of [...this.activeIds]) {
+      if (id.startsWith('reserve:')) continue; // mid-start reservation, no native id yet
+      if (!nativeIds.has(id)) {
+        this.activeIds.delete(id);
+        freed = true;
+      }
+    }
+    if (freed) this.pump();
+  }
+
+  /**
    * Count restored downloads against the cap after a relaunch. restore re-attaches to
    * downloads the native layer resumed on its own (they did not go through
    * startDownload this session); without adopting them the cap would admit a fresh

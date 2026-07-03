@@ -1395,5 +1395,38 @@ describe('BackgroundDownloadService', () => {
       await flush();
       expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(1);
     });
+
+    it('reconcileActiveIds reclaims leaked slots (e.g. folded mmproj sidecars) and pumps the queue', async () => {
+      // 3 downloads hold the slots, a 4th is queued.
+      ['a', 'b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      await flush();
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(3);
+      expect(service.getQueuedCount()).toBe(1);
+
+      // Native truth: only '1' is still transferring — '2' and '3' leaked (their tasks
+      // were folded into a main download, so they never emitted DownloadComplete and
+      // release() was never called). Without reconcile, pump() sees the cap as full
+      // forever and 'd' is wedged — the "1 downloading, N queued" collapse.
+      mockDownloadManagerModule.getActiveDownloads.mockResolvedValue([{ downloadId: '1' }]);
+      await service.reconcileActiveIds();
+      await flush();
+
+      // The two phantom slots are reclaimed, so the queued 'd' starts.
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(4);
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
+    it('reconcileActiveIds does NOT drop slots the native layer still reports active', async () => {
+      ['a', 'b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      await flush();
+      // All three are genuinely still downloading — reconcile must not free anything.
+      mockDownloadManagerModule.getActiveDownloads.mockResolvedValue([
+        { downloadId: '1' }, { downloadId: '2' }, { downloadId: '3' },
+      ]);
+      await service.reconcileActiveIds();
+      await flush();
+      expect(mockDownloadManagerModule.startDownload).toHaveBeenCalledTimes(3);
+      expect(service.getQueuedCount()).toBe(1);
+    });
   });
 });
