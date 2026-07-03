@@ -71,18 +71,43 @@ export interface VoiceNoteHandlerDeps {
  * through the SAME send path (`sendVoiceNote`).
  */
 export function buildVoiceNoteHandlers(deps: VoiceNoteHandlerDeps) {
-  const sendVoiceNote = (text: string, audioAttachment: MediaAttachment) => {
+  // Single owning send path for every voice-note send (Audio Mode auto-send,
+  // standalone Chat-mode audio auto-send, and standalone Chat-mode dictation
+  // auto-send). `audioAttachment` is optional: the Whisper dictation path yields
+  // a transcription but no persisted audio file, so a standalone dictation sends
+  // as a plain text message (no audio attachment).
+  const sendVoiceNote = (text: string, audioAttachment?: MediaAttachment) => {
     deps.onHaptic();
-    deps.onSend(text, [...deps.getPendingAttachments(), audioAttachment], deps.imageMode);
+    const attachments = audioAttachment
+      ? [...deps.getPendingAttachments(), audioAttachment]
+      : [...deps.getPendingAttachments()];
+    deps.onSend(text, attachments, deps.imageMode);
     deps.clearAttachments();
   };
 
+  const isStandalone = (): boolean =>
+    shouldAutoSendVoiceNote({
+      composerText: deps.getComposerText(),
+      pendingAttachments: deps.getPendingAttachments(),
+    });
+
+  // Whisper dictation path (Chat mode, non-audio model): emits a transcription
+  // with NO audio file. A STANDALONE dictation (empty composer, no other pending
+  // attachment) auto-sends as a plain text message — the transcription must not
+  // sit in the composer. When the composer already has content the user is
+  // building a message, so the transcription is appended for a manual send.
+  // A blank transcription produces nothing to send and is dropped.
   const onTranscript = (text: string) => {
+    const trimmed = text.trim();
+    if (isStandalone()) {
+      if (trimmed) sendVoiceNote(trimmed);
+      return;
+    }
     deps.appendTranscript(text);
   };
 
   const onAudioAttachment = (audio: AudioInfo) => {
-    if (shouldAutoSendVoiceNote({ composerText: deps.getComposerText(), pendingAttachments: deps.getPendingAttachments() })) {
+    if (isStandalone()) {
       const audioAttachment = buildVoiceAttachment(audio);
       sendVoiceNote(audio.transcription?.trim() ?? '', audioAttachment);
     } else {
