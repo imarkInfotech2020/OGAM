@@ -21,7 +21,7 @@
  */
 import logger from '../../utils/logger';
 import { backgroundDownloadService } from '../backgroundDownloadService';
-import { uniformDownloadId, queuedUniformId } from './uniformId';
+import { queuedUniformId } from './uniformId';
 import {
   DownloadProvider,
   ModelDownload,

@@ -182,7 +182,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     // drains the queue) and the interval covers the rest. Depending on `downloads` here
     // tore down + rebuilt the subscription and interval on EVERY progress tick — pure
     // churn while a download runs — and refresh reads from the service, not `downloads`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
