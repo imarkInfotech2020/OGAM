@@ -8,7 +8,7 @@ const EARLY_ACCESS_URL = 'https://getoffgridai.co/early-access/';
 
 const SHARE_TEXT = `Off Grid AI is background intelligence for knowledge workers. It runs on your own hardware with no cloud round trips: it sees your day, remembers it, and gets ahead of you across phone and desktop. One mind across your devices, private by architecture, open source so you can check.
 
-A chief of staff for $39/month. Intelligence, democratized.
+A chief of staff for $49/year or Life time $69. Intelligence, democratized.
 
 Early access: ${EARLY_ACCESS_URL}
 Open source: ${ORG_GITHUB_URL}`;
