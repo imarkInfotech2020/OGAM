@@ -219,9 +219,18 @@ export function useDownloadManager(): UseDownloadManagerResult {
    */
   const idOf = (item: DownloadItem): string => uniformDownloadId(item.modelType, item.modelId);
 
+  // voiceItems (TTS/STT) carries BOTH finished and in-flight rows: a completed model
+  // is type:'completed', while a downloading or failed one is type:'active'. Route by
+  // that type — a downloading Kokoro must land in Active Downloads, NOT Downloaded
+  // Models. (Dumping all of voiceItems into completedItems made an in-progress voice
+  // download render as a finished 82MB model via CompletedDownloadCard, regardless of
+  // its real progress — the "shows downloaded while downloading/queued" bug.)
+  const voiceCompleted = voiceItems.filter(i => i.type === 'completed');
+  const voiceActive = voiceItems.filter(i => i.type === 'active');
+
   const completedItems: DownloadItem[] = [
     ...modelStoreCompletedItems(downloadedModels, downloadedImageModels),
-    ...voiceItems,
+    ...voiceCompleted,
   ];
 
   // One entry per model. A downloaded (registered, on-disk) model is authoritative, so
@@ -241,7 +250,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const queuedActive = queuedItems.filter(
     q => !startedKeys.has(q.modelKey) && !completedIds.has(idOf(q)),
   );
-  const activeItems: DownloadItem[] = [...startedItems, ...queuedActive];
+  // Include the in-flight/failed voice rows here so they render in Active Downloads
+  // (ActiveDownloadCard shows their live progress bar / Retry). Dedup against
+  // completedIds so a voice model that also has a completed row can't double-list.
+  const voiceActiveDeduped = voiceActive.filter(item => !completedIds.has(idOf(item)));
+  const activeItems: DownloadItem[] = [...startedItems, ...queuedActive, ...voiceActiveDeduped];
 
   const totalStorageUsed = completedItems.reduce((sum, item) => sum + item.fileSize, 0);
 

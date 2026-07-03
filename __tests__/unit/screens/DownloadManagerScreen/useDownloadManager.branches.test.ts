@@ -72,8 +72,9 @@ jest.mock('../../../../src/screens/DownloadManagerScreen/retryHandlers', () => (
 }));
 
 const mockBuildVoiceDeleteAlert = jest.fn((item: any) => ({ visible: true, title: 'voice', _item: item }));
+let mockVoiceItems: any[] = [];
 jest.mock('../../../../src/screens/DownloadManagerScreen/useVoiceDownloadItems', () => ({
-  useVoiceDownloadItems: () => ({ voiceItems: [], refreshVoiceItems: jest.fn(), buildDeleteAlert: mockBuildVoiceDeleteAlert }),
+  useVoiceDownloadItems: () => ({ voiceItems: mockVoiceItems, refreshVoiceItems: jest.fn(), buildDeleteAlert: mockBuildVoiceDeleteAlert }),
 }));
 jest.mock('../../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
@@ -108,6 +109,7 @@ function configureStores() {
 beforeEach(() => {
   jest.clearAllMocks();
   shownAlertTitles.length = 0;
+  mockVoiceItems = [];
   downloads = {};
   mockModelManager.getDownloadedModels.mockResolvedValue([]);
   mockModelManager.repairMmProj.mockResolvedValue(undefined);
@@ -300,6 +302,31 @@ describe('activeItems mapping', () => {
     downloads.b = { status: 'cancelled', modelType: 'text', downloadId: 'd', modelKey: 'b', modelId: 'org/y', fileName: 'f', quantization: '', progress: 0, bytesDownloaded: 0, totalBytes: 1 };
     const { result } = renderHook(() => useDownloadManager());
     expect(result.current.activeItems).toHaveLength(0);
+  });
+
+  it('routes a DOWNLOADING voice item to activeItems, NOT completedItems (Kokoro shows downloading, not "downloaded 82MB")', () => {
+    // Regression: useVoiceDownloadItems returns in-flight TTS rows as type:'active'.
+    // The hook used to dump ALL voiceItems into completedItems, so a downloading
+    // Kokoro rendered as a finished 82MB model under "Downloaded Models" regardless
+    // of its real progress. Split by type: active → activeItems, completed → completedItems.
+    mockVoiceItems = [
+      { type: 'active', modelType: 'tts', modelId: 'kokoro', fileName: 'Kokoro TTS', author: 'Voice',
+        quantization: '', fileSize: 85983232, bytesDownloaded: 2579469, progress: 0.03, status: 'downloading', name: 'Kokoro TTS' },
+    ];
+    const { result } = renderHook(() => useDownloadManager());
+    // FAILS before the fix (it was in completedItems, absent from activeItems).
+    expect(result.current.activeItems.some(i => i.modelType === 'tts' && i.modelId === 'kokoro')).toBe(true);
+    expect(result.current.completedItems.some(i => i.modelType === 'tts' && i.modelId === 'kokoro')).toBe(false);
+  });
+
+  it('routes a COMPLETED voice item to completedItems, NOT activeItems', () => {
+    mockVoiceItems = [
+      { type: 'completed', modelType: 'tts', modelId: 'kokoro', fileName: 'Kokoro TTS', author: 'Voice',
+        quantization: '', fileSize: 85983232, bytesDownloaded: 85983232, progress: 1, status: 'completed', name: 'Kokoro TTS' },
+    ];
+    const { result } = renderHook(() => useDownloadManager());
+    expect(result.current.completedItems.some(i => i.modelType === 'tts' && i.modelId === 'kokoro')).toBe(true);
+    expect(result.current.activeItems.some(i => i.modelType === 'tts' && i.modelId === 'kokoro')).toBe(false);
   });
 
   it('isRepairingVision reflects the store flag', () => {
