@@ -19,12 +19,32 @@
  * the Voice panel correctly showed it at 4%.
  */
 import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
+import RNFS from 'react-native-fs';
 import { KokoroEngine, type KokoroBridgeHandle } from '../../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
 
 const listDownloadedFiles =
   BareResourceFetcher.listDownloadedFiles as jest.Mock;
 const deleteResources = BareResourceFetcher.deleteResources as jest.Mock;
 const fetchResources = (BareResourceFetcher as any).fetch as jest.Mock;
+
+// The completion SENTINEL: a marker file KokoroEngine writes only after a fetch is
+// verified complete. Completeness now requires BOTH the files on disk AND this
+// marker — presence alone (which a mid-fetch/partial download also satisfies) is
+// no longer enough. We model the sentinel through RNFS in these tests.
+const rnfsExists = RNFS.exists as jest.Mock;
+const rnfsWriteFile = RNFS.writeFile as jest.Mock;
+const rnfsUnlink = RNFS.unlink as jest.Mock;
+
+/** In-memory sentinel filesystem so writeFile/exists/unlink behave for the marker. */
+let sentinelFiles: Set<string>;
+const isSentinel = (p: unknown): p is string =>
+  typeof p === 'string' && /\.kokoro-.*-complete$/.test(p);
+
+/** Mark a genuinely-complete download: all files on disk AND the sentinel present. */
+const markComplete = () => {
+  listDownloadedFiles.mockResolvedValue(allOnDisk());
+  sentinelFiles.add('.kokoro-af_heart-complete'); // any-voice: exists() below matches by suffix
+};
 
 // The two shared core .pte models.
 const KOKORO_CORE_FILES = ['duration_predictor.pte', 'synthesizer.pte'];
@@ -51,6 +71,18 @@ describe('KokoroEngine install status', () => {
     deleteResources.mockReset().mockResolvedValue(undefined);
     fetchResources?.mockReset().mockResolvedValue(undefined);
     listDownloadedFiles.mockResolvedValue([]);
+
+    // Back the sentinel by an in-memory set so exists/writeFile/unlink round-trip.
+    sentinelFiles = new Set();
+    rnfsExists.mockReset().mockImplementation(async (p: string) =>
+      isSentinel(p) ? sentinelFiles.has(p.split('/').pop() as string) : false,
+    );
+    rnfsWriteFile.mockReset().mockImplementation(async (p: string) => {
+      if (isSentinel(p)) sentinelFiles.add(p.split('/').pop() as string);
+    });
+    rnfsUnlink.mockReset().mockImplementation(async (p: string) => {
+      if (isSentinel(p)) sentinelFiles.delete(p.split('/').pop() as string);
+    });
   });
 
   it('REGRESSION: a benign "already downloading" collision does not leave the voice stuck at downloading (F23)', async () => {
@@ -59,9 +91,9 @@ describe('KokoroEngine install status', () => {
     // instance, not this one, so returning early here would strand this instance at
     // phase 'downloading' forever (the stuck Voice-row bug). We reconcile from disk.
     const engine = new KokoroEngine();
-    // The concurrent (winning) fetch has completed the files on disk by the time our
-    // benign catch runs its reconcile scan.
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    // The concurrent (winning) fetch has completed the files on disk AND written the
+    // completion sentinel by the time our benign catch runs its reconcile scan.
+    markComplete();
     fetchResources.mockRejectedValueOnce(new Error('Resource is already downloading'));
 
     await engine.downloadAssets(); // must not throw
@@ -92,7 +124,7 @@ describe('KokoroEngine install status', () => {
   });
 
   it('reports downloaded when the complete asset set exists on disk (cold start / no bridge)', async () => {
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    markComplete();
     const engine = new KokoroEngine();
 
     // Phase is still 'idle' and no download happened this session — purely disk-derived.
@@ -135,6 +167,8 @@ describe('KokoroEngine install status', () => {
     // can be present on disk. The Download Manager then showed Kokoro completed
     // (82MB) while the Voice panel correctly showed 3%. A live download (phase
     // 'downloading' / fractional progress) must win over the disk-presence guess.
+    // NB: no sentinel — the fetch hasn't finished, so even disk-presence is not
+    // completeness. The live-download guard is a belt to the sentinel's braces.
     listDownloadedFiles.mockResolvedValue(allOnDisk()); // every basename present
     const engine = new KokoroEngine();
     engine._setDownloadProgress(0.03); // → phase 'downloading', progress 3%
@@ -146,9 +180,9 @@ describe('KokoroEngine install status', () => {
   });
 
   it('REGRESSION: stays downloaded after the bridge unmounts (engine switch)', async () => {
-    // Model genuinely on disk for the whole test (a successful disk scan is the
-    // authoritative signal).
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    // Model genuinely on disk (files + sentinel) for the whole test (a successful
+    // disk scan is the authoritative signal).
+    markComplete();
     const engine = new KokoroEngine();
 
     // 1. Bridge mounts, model finishes downloading, engine becomes ready.
@@ -170,7 +204,7 @@ describe('KokoroEngine install status', () => {
   });
 
   it('stays downloaded across a voice switch that resets progress to 0', async () => {
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    markComplete();
     const engine = new KokoroEngine();
     await engine.checkAssetStatus(); // primes _diskDownloaded = true
 
@@ -263,14 +297,14 @@ describe('KokoroEngine install status', () => {
   });
 
   it('deleteAssets clears state and removes resources from disk', async () => {
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    markComplete();
     const engine = new KokoroEngine();
     engine._setDownloadProgress(1);
     await engine.checkAssetStatus();
     expect(engine.isFullyDownloaded()).toBe(true);
 
     // deleteAssets re-scans disk at the end; simulate the files being gone so the
-    // post-delete scan is conclusive-empty.
+    // post-delete scan is conclusive-empty. deleteAssets also removes the sentinel.
     listDownloadedFiles.mockResolvedValue([]);
     await engine.deleteAssets();
     expect(deleteResources).toHaveBeenCalled();
@@ -286,7 +320,7 @@ describe('KokoroEngine install status', () => {
     // voice embedding/tagger/lexicon on disk. The completeness scan checks the
     // full set, so the Download Manager kept showing Kokoro "downloaded" after a
     // Remove. Delete must target the same set download + completeness use.
-    listDownloadedFiles.mockResolvedValue(allOnDisk());
+    markComplete();
     const engine = new KokoroEngine();
     await engine.checkAssetStatus();
 
@@ -297,6 +331,68 @@ describe('KokoroEngine install status', () => {
     for (const f of KOKORO_FILES) {
       expect(deleted.some((url) => url.split(/[?#]/)[0].split('/').pop() === f)).toBe(true);
     }
+  });
+
+  it('REGRESSION: all files present but download NOT complete (no sentinel) reads NOT downloaded, then completing flips it', async () => {
+    // The device-confirmed bug: executorch creates each destination file BEFORE its
+    // bytes finish and a prior interrupted attempt leaves the whole set behind, so
+    // the full basename set is present on disk mid-download. Presence-only logic
+    // (the old code) reported the Download Manager "downloaded"/82MB while the Voice
+    // tab honestly showed 61%. Completeness now requires the sentinel — written only
+    // after a verified full fetch — so presence-without-sentinel is NOT downloaded.
+    // (This test FAILS against the old presence-only refreshDiskStatus.)
+    listDownloadedFiles.mockResolvedValue(allOnDisk()); // every basename present…
+    // …but NO completion sentinel (fetch never verified complete).
+    const engine = new KokoroEngine();
+
+    let [state] = await engine.checkAssetStatus();
+    expect(state.status).not.toBe('downloaded');
+    expect(engine.isFullyDownloaded()).toBe(false);
+
+    // Now the fetch genuinely completes → the engine commits the sentinel.
+    fetchResources.mockResolvedValueOnce(undefined);
+    await engine.downloadAssets();
+    expect(rnfsWriteFile).toHaveBeenCalled();
+    expect(engine.isFullyDownloaded()).toBe(true);
+
+    [state] = await engine.checkAssetStatus();
+    expect(state.status).toBe('downloaded');
+    expect(state.progress).toBe(1);
+  });
+
+  it('REGRESSION: downloadAssets is not short-circuited by leftover partial files (no sentinel)', async () => {
+    // Old downloadAssets early-returned "done" when _diskDownloaded was true from a
+    // presence-only scan of leftover partials, skipping the real fetch. With the
+    // sentinel, leftover files alone don't set _diskDownloaded, so a fresh intent
+    // actually fetches and only then commits completion.
+    listDownloadedFiles.mockResolvedValue(allOnDisk()); // leftover partials, no sentinel
+    const engine = new KokoroEngine();
+    await engine.checkAssetStatus(); // scan: present but no sentinel → not downloaded
+    expect(engine.isFullyDownloaded()).toBe(false);
+
+    await engine.downloadAssets();
+
+    expect(fetchResources).toHaveBeenCalled(); // did NOT skip the fetch
+    expect(engine.isFullyDownloaded()).toBe(true);
+  });
+
+  it('REGRESSION: delete removes the sentinel so a re-scan of leftover files reads not-downloaded', async () => {
+    markComplete();
+    const engine = new KokoroEngine();
+    await engine.checkAssetStatus();
+    expect(engine.isFullyDownloaded()).toBe(true);
+
+    // Simulate BareResourceFetcher.deleteResources being a no-op that leaves files
+    // behind (the executorch cache can lag) — the sentinel removal must still make
+    // the model read as not-downloaded.
+    deleteResources.mockResolvedValue(undefined);
+    listDownloadedFiles.mockResolvedValue(allOnDisk()); // files linger
+    await engine.deleteAssets();
+
+    expect(rnfsUnlink).toHaveBeenCalled(); // sentinel removed
+    expect(engine.isFullyDownloaded()).toBe(false);
+    const [state] = await engine.checkAssetStatus();
+    expect(state.status).not.toBe('downloaded');
   });
 
   it('a conclusive empty disk scan beats stale in-session progress', async () => {
