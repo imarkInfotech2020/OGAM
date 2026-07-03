@@ -116,6 +116,41 @@ describe('KokoroEngine — live download lifecycle is the source of truth', () =
     expect(engine.getOverallDownloadProgress()).toBe(1);
   });
 
+  it('an executorch bridge attaching MID-DOWNLOAD must not flip phase to ready or read as downloaded', async () => {
+    // Device-confirmed mechanism: the bridge (react-native-executorch handle) registers
+    // itself while a fetch is still running. _setBridge() used to force phase 'ready'
+    // for any phase except processing/paused — so it clobbered 'downloading' → 'ready',
+    // and isFullyDownloaded() (which read phase === 'ready') then reported the model
+    // "downloaded" in the Download Manager while the download was still in flight.
+    const engine = new KokoroEngine();
+    engine._setDownloadProgress(0.3); // live fetch in progress
+    expect(engine.getPhase()).toBe('downloading');
+
+    // Bridge attaches mid-download.
+    engine._setBridge({} as any, 'af_heart' as any);
+
+    // Phase must stay 'downloading' (not clobbered), and completeness stays false.
+    // FAILS before the fix (phase → 'ready', isFullyDownloaded → true).
+    expect(engine.getPhase()).toBe('downloading');
+    expect(engine.isFullyDownloaded()).toBe(false);
+    const [state] = await engine.checkAssetStatus();
+    expect(state.status).toBe('downloading');
+  });
+
+  it('a mounted runtime bridge is NOT proof of a completed download (runtime-ready != assets-downloaded)', async () => {
+    // The conflation the fix removes: _phase === 'ready' means the executorch runtime
+    // mounted, NOT that the asset fetch finished. Without a genuine completion (no
+    // resolved fetch, no hydrated flag), a ready bridge must read as NOT downloaded.
+    const engine = new KokoroEngine();
+    engine._setBridge({} as any, 'af_heart' as any); // bridge mounts from idle → phase 'ready'
+    expect(engine.getPhase()).toBe('ready');
+
+    // FAILS before the fix (isFullyDownloaded returned true off _phase === 'ready').
+    expect(engine.isFullyDownloaded()).toBe(false);
+    const [state] = await engine.checkAssetStatus();
+    expect(state.status).toBe('not-downloaded');
+  });
+
   it('delete flips it back to not-downloaded even if leftover files linger on disk', async () => {
     const engine = new KokoroEngine();
     engine.hydrateDownloaded(true);

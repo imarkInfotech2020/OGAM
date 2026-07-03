@@ -8,10 +8,12 @@
  * Download Manager showed Kokoro "completed" (82MB) while the Voice panel honestly
  * showed 3-61%.
  *
- * "Downloaded" is therefore true only when: a runtime is ready, a fetch genuinely
- * finished this session (downloadAssets/setVoice's fetch resolved), progress hit 1,
- * or the persisted cross-restart flag was hydrated in (hydrateDownloaded). It is
- * NEVER true while phase==='downloading' or 0<progress<1.
+ * "Downloaded" is therefore true only when the asset fetch GENUINELY finished this
+ * session (downloadAssets/setVoice's fetch resolved) or the persisted cross-restart
+ * flag was hydrated in (hydrateDownloaded) — the single _genuineCompletion signal.
+ * It is NOT inferred from a mounted runtime (phase==='ready' means the executorch
+ * bridge attached, which happens mid-download too) nor from a raw progress tick, and
+ * it is NEVER true while phase==='downloading' or 0<progress<1.
  */
 import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
 import { KokoroEngine, type KokoroBridgeHandle } from '../../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
@@ -164,8 +166,10 @@ describe('KokoroEngine install status', () => {
   it('REGRESSION: stays downloaded after the bridge unmounts (engine switch)', async () => {
     const engine = new KokoroEngine();
 
-    // 1. Bridge mounts, model finishes downloading, engine becomes ready.
-    engine._setDownloadProgress(1);
+    // 1. Model genuinely finishes downloading (fetch resolves → genuine completion),
+    //    then the bridge mounts and the engine becomes ready.
+    fetchResources.mockResolvedValueOnce(undefined);
+    await engine.downloadAssets();
     engine._setBridge(noopHandle, 'af_heart');
     expect(engine.getPhase()).toBe('ready');
     let [state] = await engine.checkAssetStatus();
@@ -175,7 +179,8 @@ describe('KokoroEngine install status', () => {
     engine._setBridge(null, 'af_heart');
     expect(engine.getPhase()).toBe('idle');
 
-    // Must remain 'downloaded' — progress reached 1 (genuine completion this session).
+    // Must remain 'downloaded' — the genuine-completion signal persists across the
+    // unmount; it is NOT tied to the transient runtime phase.
     [state] = await engine.checkAssetStatus();
     expect(state.status).toBe('downloaded');
     expect(state.progress).toBe(1);
@@ -195,11 +200,12 @@ describe('KokoroEngine install status', () => {
 
   it('does not regress to not-downloaded if the fetcher throws during a status probe', async () => {
     const engine = new KokoroEngine();
-    engine._setDownloadProgress(1); // downloaded this session
+    fetchResources.mockResolvedValueOnce(undefined);
+    await engine.downloadAssets(); // genuine completion this session
     listDownloadedFiles.mockRejectedValue(new Error('fetcher unavailable'));
 
     const [state] = await engine.checkAssetStatus();
-    // No disk dependency: in-session progress still proves it's downloaded.
+    // No disk dependency: the genuine-completion flag still proves it's downloaded.
     expect(state.status).toBe('downloaded');
   });
 
