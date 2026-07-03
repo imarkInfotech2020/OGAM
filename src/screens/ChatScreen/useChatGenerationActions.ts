@@ -105,6 +105,10 @@ export async function shouldRouteToImageGenerationFn(
   if (deps.isGeneratingImage) { logger.log('[ROUTE-SM] → false: already generating an image'); return false; }
   if (deps.settings.imageGenerationMode === 'manual') { logger.log(`[ROUTE-SM] → ${forceImageMode === true}: manual mode (only on force)`); return forceImageMode === true; }
   if (forceImageMode) { logger.log('[ROUTE-SM] → true: forced'); return true; }
+  // Auto mode with no image model selected: there is nothing to route an image to
+  // (dispatch requires activeImageModel), so skip the classifier entirely. Running it
+  // here only adds latency on the send hot path and leaves a stale "Analyzing…" status.
+  if (!deps.activeImageModel) { logger.log('[ROUTE-SM] → false: no image model selected'); return false; }
   // Route on whether an image model is SELECTED (downloaded), not whether it's
   // currently resident — the pipeline loads it on demand. (Checked + logged above.)
   // No text model (image-only): SMOL classifier decides text vs image, else heuristics; chat returns false.
