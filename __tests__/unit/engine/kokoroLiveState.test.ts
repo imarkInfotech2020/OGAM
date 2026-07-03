@@ -84,6 +84,38 @@ describe('KokoroEngine — live download lifecycle is the source of truth', () =
     expect(state.status).toBe('downloaded');
   });
 
+  it('a fresh downloadAssets() resets a stale hydrated completion and reads downloading mid-fetch', async () => {
+    // Device bug: a prior download's completion flag is hydrated true on boot, but the
+    // files were deleted while the flag stayed latched. A re-download must NOT
+    // short-circuit off that stale flag — during the fresh fetch the DM must show
+    // 'downloading', not 'completed'.
+    const engine = new KokoroEngine();
+    engine.hydrateDownloaded(true); // stale/latched prior completion
+    expect(engine.isFullyDownloaded()).toBe(true);
+
+    // fetch stays pending so we can sample the mid-fetch state.
+    let resolveFetch!: () => void;
+    fetchResources.mockImplementationOnce(
+      () => new Promise<void>((r) => { resolveFetch = r; }),
+    );
+
+    const p = engine.downloadAssets();
+
+    // MID-FETCH: the stale flag was reset, phase is 'downloading' → NOT complete.
+    // FAILS on the old early-return (stale _genuineCompletion faked progress=1 + done).
+    expect(engine.getPhase()).toBe('downloading');
+    expect(engine.isFullyDownloaded()).toBe(false);
+    expect(engine.getOverallDownloadProgress()).toBeLessThan(1);
+    const [midState] = await engine.checkAssetStatus();
+    expect(midState.status).toBe('downloading');
+
+    // Only after the fetch genuinely resolves does it read completed.
+    resolveFetch();
+    await p;
+    expect(engine.isFullyDownloaded()).toBe(true);
+    expect(engine.getOverallDownloadProgress()).toBe(1);
+  });
+
   it('delete flips it back to not-downloaded even if leftover files linger on disk', async () => {
     const engine = new KokoroEngine();
     engine.hydrateDownloaded(true);

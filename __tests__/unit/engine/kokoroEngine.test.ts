@@ -66,15 +66,36 @@ describe('KokoroEngine install status', () => {
     expect(engine.isFullyDownloaded()).toBe(false);
   });
 
-  it('REGRESSION: a benign collision after this instance already completed stays downloaded (F23)', async () => {
+  it('REGRESSION: a fresh downloadAssets() discards a stale hydrated flag; a benign collision then settles to not-downloaded (F23)', async () => {
+    // A fresh downloadAssets() is an authoritative (re)download intent, so the stale
+    // hydrated completion is reset up front — it must NOT let the fresh download
+    // short-circuit (the deleted-files-but-latched-flag bug: DM showed "downloaded" the
+    // instant a re-download began). With completion reset and no runtime ready, a benign
+    // "already downloading" collision can't confirm the concurrent fetch finished, so we
+    // settle to idle / not-downloaded rather than resurrecting the stale flag.
     const engine = new KokoroEngine();
-    engine.hydrateDownloaded(true); // genuine completion recorded (e.g. persisted)
+    engine.hydrateDownloaded(true); // stale/latched persisted completion
     fetchResources.mockRejectedValueOnce(new Error('already downloading'));
 
     await engine.downloadAssets();
 
-    expect(engine.getPhase()).toBe('idle'); // downloaded, no bridge yet
+    expect(engine.getPhase()).toBe('idle');
+    expect(engine.isFullyDownloaded()).toBe(false); // stale flag was discarded, not honored
+  });
+
+  it('REGRESSION: a live runtime that is ready short-circuits downloadAssets() and stays downloaded (F23)', async () => {
+    // The ONE legitimate short-circuit: the model is verifiably ready THIS session
+    // (bridge mounted + phase 'ready'), so the assets are present-and-usable and no
+    // fetch is needed. This is present-and-usable proof, not a stale persisted flag.
+    const engine = new KokoroEngine();
+    engine._setBridge({} as never, 'af_heart' as never); // ready + bridge mounted this session
+    expect(engine.getPhase()).toBe('ready');
+
+    await engine.downloadAssets();
+
+    expect(fetchResources).not.toHaveBeenCalled(); // short-circuited, no re-fetch
     expect(engine.isFullyDownloaded()).toBe(true);
+    expect(engine.getOverallDownloadProgress()).toBe(1);
   });
 
   it('reports not-downloaded when nothing has loaded or downloaded', async () => {
