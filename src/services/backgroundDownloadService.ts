@@ -268,6 +268,27 @@ class BackgroundDownloadService {
     });
   }
 
+  /**
+   * Drop a lingering native download record WITHOUT signalling a cancellation.
+   *
+   * Used by the idempotent finalize path: when a model is finalized from an
+   * already-on-disk file (native move skipped), the stale native record must be purged
+   * so restore can't re-adopt and re-finalize it every foreground. Unlike cancelDownload,
+   * this must NOT synthesize a DownloadError — the download SUCCEEDED, and the global
+   * onAnyError handler would otherwise briefly mark the just-finalized model as failed.
+   * It still frees the concurrency slot (native cancel emits no terminal event). Reuses
+   * the existing native cancel, so no new native method / contract change is needed.
+   */
+  async purgeNativeRecord(downloadId: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    try {
+      await DownloadManagerModule.cancelDownload(downloadId);
+    } catch (e) {
+      logger.log('[BackgroundDownload] purgeNativeRecord failed (bridge may be torn down):', e);
+    }
+    this.release(downloadId);
+  }
+
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
     if (!this.isAvailable()) {
       return [];

@@ -1439,6 +1439,24 @@ describe('BackgroundDownloadService', () => {
       expect(service.getQueuedCount()).toBe(0);
     });
 
+    it('purgeNativeRecord drops the record and frees the slot WITHOUT dispatching an error', async () => {
+      mockDownloadManagerModule.cancelDownload.mockResolvedValue(undefined);
+      const onErr = jest.fn();
+      service.onAnyError(onErr);
+      service.startDownload(params('a')); // id '1' occupies a slot
+      await flush();
+
+      await service.purgeNativeRecord('1');
+
+      // Native record dropped and slot freed, but (unlike cancelDownload) NO synthetic
+      // DownloadError — a just-finalized model must not flash "failed".
+      expect(mockDownloadManagerModule.cancelDownload).toHaveBeenCalledWith('1');
+      expect(onErr).not.toHaveBeenCalled();
+      // Slot was freed: three fresh starts all begin, none queued.
+      ['b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
+      expect(service.getQueuedCount()).toBe(0);
+    });
+
     it('reconcileActiveIds does NOT drop slots the native layer still reports active', async () => {
       ['a', 'b', 'c', 'd'].forEach((id) => service.startDownload(params(id)));
       await flush();
