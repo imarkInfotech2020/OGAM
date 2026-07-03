@@ -11,6 +11,7 @@ import { createStyles, PILL_ICON_SIZE, ANIM_DURATION_IN, ANIM_DURATION_OUT } fro
 import { QueueRow } from './Toolbar';
 import { AttachmentPreview, useAttachments } from './Attachments';
 import { useVoiceInput } from './Voice';
+import { buildVoiceNoteHandlers } from './voiceNoteSend';
 import { QuickSettingsPopover, AttachPickerPopover } from './Popovers';
 import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useAppStore } from '../../stores';
@@ -140,31 +141,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const interfaceMode = useUiModeStore((s) => s.interfaceMode);
   const isAudioMode = interfaceMode === 'audio';
 
+  // All voice-note send/attach decisions live in buildVoiceNoteHandlers (the
+  // owning logic), not in this View. The View only supplies dependencies and
+  // dispatches; a standalone Chat-mode note and Audio Mode both auto-send through
+  // the one shared path so buildOAIMessages handles text/vision/audio models.
+  const voiceHandlers = buildVoiceNoteHandlers({
+    getComposerText: () => message,
+    getPendingAttachments: () => attachmentsRef.current,
+    isAudioMode,
+    imageMode,
+    onSend,
+    addAudioAttachment,
+    clearAttachments,
+    onHaptic: () => triggerHaptic('impactMedium'),
+    appendTranscript: (text) => setMessage(prev => {
+      const prefix = prev.trim() ? `${prev.trim()} ` : '';
+      return prefix + text;
+    }),
+  });
+
   const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
-    onTranscript: (text) => {
-      setMessage(prev => {
-        const prefix = prev.trim() ? `${prev.trim()} ` : '';
-        return prefix + text;
-      });
-    },
-    onAudioAttachment: (uri, format, durationSeconds) => {
-      addAudioAttachment(uri, format, durationSeconds);
-    },
-    onAutoSend: isAudioMode ? (text, audio) => {
-      const audioAttachment: MediaAttachment = {
-        id: `audio-${Date.now()}`,
-        type: 'audio',
-        uri: audio.uri,
-        audioFormat: audio.format,
-        audioDurationSeconds: audio.durationSeconds,
-        fileName: audio.uri.split('/').pop(),
-      };
-      triggerHaptic('impactMedium');
-      const all = [...attachmentsRef.current, audioAttachment];
-      onSend(text, all, imageMode);
-      clearAttachments();
-    } : undefined,
+    onTranscript: voiceHandlers.onTranscript,
+    onAudioAttachment: voiceHandlers.onAudioAttachment,
+    onAutoSend: voiceHandlers.onAutoSend,
   });
 
   const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();

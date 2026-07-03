@@ -11,7 +11,7 @@ import logger from '../../utils/logger';
 interface UseVoiceInputParams {
   conversationId?: string | null;
   onTranscript: (text: string) => void;
-  onAudioAttachment?: (uri: string, format: 'wav' | 'mp3', durationSeconds?: number) => void;
+  onAudioAttachment?: (audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds?: number; transcription?: string }) => void;
   /** Called in Audio Mode to auto-send. Includes audio info so caller can build attachment atomically. */
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
 }
@@ -122,7 +122,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
               }).catch(err => logger.error('[Voice] Background transcription error:', err));
             }
           } else {
-            onAudioAttachmentRef.current?.(path, format, durationSeconds);
+            onAudioAttachmentRef.current?.({ uri: path, format, durationSeconds });
           }
         }
         recordingConversationIdRef.current = null;
@@ -154,7 +154,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           if (onAutoSendRef.current) {
             onAutoSendRef.current(text.trim(), { uri: path, format: 'wav', durationSeconds });
           } else {
-            onAudioAttachmentRef.current?.(path, 'wav', durationSeconds);
+            onAudioAttachmentRef.current?.({ uri: path, format: 'wav', durationSeconds, transcription: text.trim() });
             onTranscriptRef.current(text.trim());
           }
         } else {
