@@ -84,5 +84,12 @@
               <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
           </intent-filter>
       </receiver>
+
+      <!-- WorkManager's foreground-service host needs the dataSync type declared, or
+           setForeground() throws on Android 14+ (the model-download FGS, see WorkerDownload). -->
+      <service
+          android:name="androidx.work.impl.foreground.SystemForegroundService"
+          android:foregroundServiceType="dataSync"
+          tools:node="merge" />
     </application>
 </manifest>
