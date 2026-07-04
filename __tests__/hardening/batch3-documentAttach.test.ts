@@ -27,7 +27,7 @@ jest.mock('../../src/services/pdfExtractor', () => ({
   pdfExtractor: { isAvailable: jest.fn(() => false), extractText: jest.fn() },
 }));
 
-import { documentService } from '../../src/services/documentService';
+import { documentService, sanitizePathSegment } from '../../src/services/documentService';
 
 const rnfs = RNFS as jest.Mocked<typeof RNFS>;
 
@@ -127,6 +127,32 @@ describe('Batch3 · document attach validation (real documentService)', () => {
       stubReadableFile('body');
       const att = await documentService.processDocumentFromPath('/docs/100%.txt', '100%.txt');
       expect(att!.fileName).toBe('100%.txt');
+    });
+
+    it('does NOT let a percent-encoded traversal name escape the attachments dir (security)', async () => {
+      // '%2E%2E%2Fescape.txt' decodes to '../escape.txt'. The DISPLAY name may show it
+      // decoded, but the filesystem destination must be sanitized — no '/' or '..' in the
+      // path segment handed to copyFile, so the write can't leave ATTACHMENTS_DIR.
+      stubReadableFile('body');
+      const att = await documentService.processDocumentFromPath(
+        '/docs/%2E%2E%2Fescape.txt',
+        '%2E%2E%2Fescape.txt',
+      );
+      expect(att).not.toBeNull();
+      // The persistent copy destination (2nd arg to RNFS.copyFile) must contain no
+      // separator/traversal after the id_ prefix.
+      const destPaths = rnfs.copyFile.mock.calls.map(c => String(c[1]));
+      const persistent = destPaths.find(p => p.includes('attachments'));
+      expect(persistent).toBeDefined();
+      expect(persistent).not.toContain('../');
+      expect(persistent!.split('attachments/')[1]).not.toContain('/'); // basename only, no nested dirs
+    });
+
+    it('sanitizePathSegment neutralizes separators + traversal but keeps a normal name', () => {
+      expect(sanitizePathSegment('my notes.txt')).toBe('my notes.txt');
+      expect(sanitizePathSegment('a/b/c.txt')).toBe('a_b_c.txt');
+      expect(sanitizePathSegment('%2E%2E%2Fescape.txt')).not.toContain('/');
+      expect(sanitizePathSegment('%2E%2E%2Fescape.txt')).not.toContain('..');
     });
 
     it('resolves the file even when the PATH is URL-encoded (path decode works)', async () => {

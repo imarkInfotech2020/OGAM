@@ -31,17 +31,39 @@ const ATTACHMENTS_DIR = `${RNFS.DocumentDirectoryPath}/attachments`;
 function safeDecodeURIComponent(s: string): string {
   try {
     return decodeURIComponent(s);
-  } catch {
+  } catch (e) {
+    // Surface the fallback so a malformed-encoding case is diagnosable rather than silent.
+    console.warn(`[DocumentService] decodeURIComponent failed for "${s}", using raw value:`, e instanceof Error ? e.message : e);
     return s;
   }
 }
 
 /**
  * Decode a percent-encoded display filename for the chip/preview (e.g. 'my%20notes.txt'
- * → 'my notes.txt'). Only touches names that actually contain a '%'.
+ * → 'my notes.txt'). Only touches names that actually contain a '%'. FOR DISPLAY ONLY —
+ * never use the result as a filesystem path segment (see sanitizePathSegment).
  */
 export function decodeDisplayName(name: string): string {
   return name.includes('%') ? safeDecodeURIComponent(name) : name;
+}
+
+/**
+ * A filesystem-safe basename for path interpolation. The display name may decode to
+ * contain real separators or traversal (a percent-encoded '%2F' / '%2E%2E%2F' becomes
+ * '/' / '../'), which would let a copy escape the cache/attachments dir. Strip path
+ * separators, collapse '..' segments, and remove control chars — the result is only ever
+ * used to build a destination filename, never shown to the user.
+ */
+export function sanitizePathSegment(name: string): string {
+  const decoded = decodeDisplayName(name);
+  const flattened = decoded
+    .replace(/[/\\]/g, '_') // path separators -> underscore
+    // eslint-disable-next-line no-control-regex -- deliberately stripping control chars
+    .replace(/[\u0000-\u001f]/g, '') // strip control chars
+    .replace(/\.{2,}/g, '_')             // collapse any '..'(..+) traversal
+    .replace(/^\.+/, '')                 // strip leading dots (hidden/relative)
+    .trim();
+  return flattened.length > 0 ? flattened : 'document';
 }
 
 class DocumentService {
@@ -182,13 +204,20 @@ class DocumentService {
       // is URL-encoded; without this the chip shows the raw encoded string. Guarded:
       // decodeURIComponent throws on a malformed %-sequence, so fall back to the raw name.
       const rawName = fileName || filePath.split('/').pop() || 'document';
-      const name = decodeDisplayName(rawName);
-      const extension = `.${name.split('.').pop()?.toLowerCase()}`;
+      // Two distinct derivations from the raw name:
+      //  - displayName: decoded, human-readable — shown in the chip/preview + errors.
+      //  - safeFsName:  sanitized — the ONLY value interpolated into a filesystem path
+      //    (temp copy + persistent copy). Keeping these separate stops a decoded
+      //    separator/traversal ('%2F'/'%2E%2E%2F' → '/'/'..') from escaping the cache/
+      //    attachments dir.
+      const displayName = decodeDisplayName(rawName);
+      const safeFsName = sanitizePathSegment(rawName);
+      const extension = `.${displayName.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
       console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
       this.validateFileType(extension, isPdf);
 
-      const resolvedPath = await this.resolveContentUri(filePath, name);
+      const resolvedPath = await this.resolveContentUri(filePath, safeFsName);
       console.log(`[DocumentService] Resolved path: ${resolvedPath}`);
 
       // Verify the file exists and is accessible
@@ -203,7 +232,7 @@ class DocumentService {
       }
 
       if (!fileExists) {
-        throw new Error(`File not found: ${name}`);
+        throw new Error(`File not found: ${displayName}`);
       }
 
       const stat = await RNFS.stat(resolvedPath);
@@ -214,9 +243,9 @@ class DocumentService {
 
       const maxChars = maxCharsOverride ?? Math.floor((useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength) * 4 * 0.5);
       const textContent = await this.readContent(resolvedPath, isPdf, maxChars);
-      const { id, uri } = await this.savePersistentCopy(resolvedPath, filePath, name);
+      const { id, uri } = await this.savePersistentCopy(resolvedPath, filePath, safeFsName);
 
-      return { id, type: 'document', uri, fileName: name, textContent, fileSize: stat.size };
+      return { id, type: 'document', uri, fileName: displayName, textContent, fileSize: stat.size };
     } catch (error: any) {
       throw error;
     }
