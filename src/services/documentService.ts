@@ -22,6 +22,28 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 // Persistent directory for attached documents
 const ATTACHMENTS_DIR = `${RNFS.DocumentDirectoryPath}/attachments`;
 
+/**
+ * decodeURIComponent that never throws: a stray/malformed '%' (e.g. '100%.txt' or a
+ * bad %-sequence) makes the native decodeURIComponent throw 'URI malformed'. Falling
+ * back to the raw string keeps callers (path resolution AND display-name decode) from
+ * crashing on odd-but-valid filenames. Defined once; both call sites use it.
+ */
+function safeDecodeURIComponent(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+/**
+ * Decode a percent-encoded display filename for the chip/preview (e.g. 'my%20notes.txt'
+ * → 'my notes.txt'). Only touches names that actually contain a '%'.
+ */
+export function decodeDisplayName(name: string): string {
+  return name.includes('%') ? safeDecodeURIComponent(name) : name;
+}
+
 class DocumentService {
   /**
    * Ensure the persistent attachments directory exists
@@ -57,9 +79,11 @@ class DocumentService {
     // RNFS.DocumentDirectoryPath is the app's Documents directory (without file://)
     const documentsPath = RNFS.DocumentDirectoryPath;
 
-    // Decode URL-encoded characters (like %20 for spaces) and strip file:// prefix
-    // This is critical because RNFS.exists() needs decoded paths, not URL-encoded
-    const decodedUri = decodeURIComponent(uri);
+    // Decode URL-encoded characters (like %20 for spaces) and strip file:// prefix.
+    // Critical because RNFS.exists() needs decoded paths, not URL-encoded. Guarded:
+    // a raw decodeURIComponent throws 'URI malformed' on a stray '%' (e.g. '100%.txt'),
+    // which would crash the whole attach — fall back to the raw uri in that case.
+    const decodedUri = safeDecodeURIComponent(uri);
     const cleanUri = decodedUri.replace(/^file:\/\//, '');
     console.log(`[DocumentService] Decoded and cleaned path: ${cleanUri}`);
     console.log(`[DocumentService] Documents path: ${documentsPath}`);
@@ -153,7 +177,12 @@ class DocumentService {
   async processDocumentFromPath(filePath: string, fileName?: string, maxCharsOverride?: number): Promise<MediaAttachment | null> {
     try {
       console.log(`[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`);
-      const name = fileName || filePath.split('/').pop() || 'document';
+      // Decode a percent-encoded display name (e.g. 'my%20notes.txt' → 'my notes.txt').
+      // A content:// / file:// URI's last path segment (used when no fileName is given)
+      // is URL-encoded; without this the chip shows the raw encoded string. Guarded:
+      // decodeURIComponent throws on a malformed %-sequence, so fall back to the raw name.
+      const rawName = fileName || filePath.split('/').pop() || 'document';
+      const name = decodeDisplayName(rawName);
       const extension = `.${name.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
       console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
