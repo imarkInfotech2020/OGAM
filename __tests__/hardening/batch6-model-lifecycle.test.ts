@@ -195,7 +195,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
   // way the loader (doLoadTextModel) does. Fix belongs in the service (do NOT
   // patch here). Skipped until src is fixed in its own PR.
   // ==========================================================================
-  it.skip('[BUG] unloadTextModel(false) must unload a loaded LiteRT model from RAM', async () => {
+  it('unloadTextModel(false) unloads a loaded LiteRT model from RAM (engine-aware unload)', async () => {
     const lite = createDownloadedModel({
       id: 'L', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m/m.litertlm',
     });
