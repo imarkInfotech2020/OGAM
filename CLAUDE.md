@@ -178,3 +178,40 @@ The repo has three automated reviewers on every PR. After pushing, loop until al
 4. Re-run local quality gates (`npm run lint && npm test && npx tsc --noEmit`)
 5. Push fixes, comment `/gemini review` on the PR to re-trigger Gemini
 6. Repeat until all three reviewers pass with no blocking issues
+
+## Every PR: small, Provit-proven, self-audited (MANDATORY)
+
+This is the standing bar for **every** PR — no exceptions. A PR that is missing the Provit journey or the self-audit comment is not ready to merge.
+
+1. **One concern, small diff.** Extends the small-meaningful-commits rule to the PR level: one subsystem/behaviour per PR, minimal surface. If a change spans two concerns, split it into two PRs.
+2. **A Provit E2E journey.** Every PR ships (or updates) a [Provit](../ (its own repo)) journey that (a) exercises the exact user flow the change affects on a **real device** and (b) doubles as the **regression guard** — re-running it proves no regression. Reference the journey name + the run result (pass/fail + device) in the PR. If the change can't be proven on-device by a journey, say why in the self-audit.
+3. **A fails-before / passes-after jest test.** At least one unit/integration test that **fails without the change and passes with it** — the exact regression case. Mocks only at genuine boundaries (native/network/clock); never mock the thing under assertion (a green suite must mean the real thing works — deleting the impl must fail the test).
+4. **A self-audit comment on the PR** (template below), posted **as a comment alongside the Provit result**. It records the SOLID/abstraction verdict, the mock-honesty check, platform parity, and standards for that specific change — so the audit travels with the PR and the reviewer sees the reasoning, not just the diff.
+
+### Self-audit comment template (paste and fill on every PR)
+
+```markdown
+## Self-audit
+
+### SOLID / abstraction
+- Enough to abstract? [is there a real owning seam, or is a caller branching on a concrete type / `Platform.OS` mechanism?]
+- SRP / DIP: [one responsibility; callers depend on an interface, not a concrete — no `kind===` / `instanceof` / `Platform.OS`-mechanism branch in a View or store]
+- Single source of truth: [the rule/map/capability is defined ONCE, not duplicated across layers]
+- Verdict: [clean · justified exception (why) · follow-up filed]
+
+### Tests — no false green
+- Unit: [what it drives — the REAL class/store/reducer, not a mock of the thing asserted]
+- Integration: [the cross-layer path exercised end to end]
+- Mocks: [only boundaries (native module / network / clock). Deleting the implementation under test MUST fail these tests.]
+- Fails-before / passes-after: [the exact case that fails on `main` and passes here]
+
+### Provit (on-device E2E)
+- Journey: `<name>` — proves `<flow>` works on device AND guards regression
+- Run: [pass/fail · device] (or: why an on-device journey isn't applicable)
+
+### Platform parity
+- iOS + Android: [both covered — genuine gaps modelled as capability-as-data, NOT a leaked `if (ios)` branch. One contract test guards both.]
+
+### Standards (only if UI / copy touched)
+- Design tokens (no hardcoded colors/sizes, weights ≤400, no emoji — vector icons only); brand voice (no em dashes, no exclamation marks, no forbidden words, no curly quotes).
+```
