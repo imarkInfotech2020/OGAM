@@ -424,6 +424,10 @@ class ImageGenerationService {
       logger.log('[ImageGenerationService] Already generating, ignoring request');
       return null;
     }
+    // Fresh request: clear any stale cancel flag from a prior run BEFORE any await, so a
+    // leftover `true` can't abort this one — and so a cancel arriving during
+    // _enhancePrompt below is genuinely this request's, not stale.
+    this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const { settings, activeImageModelId, downloadedImageModels } = useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
@@ -436,7 +440,12 @@ class ImageGenerationService {
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
-    this.cancelRequested = false;
+    // Honor a cancel that arrived WHILE enhancing (cancelGeneration already reset the
+    // state to idle). The old code unconditionally cleared cancelRequested here, so a
+    // cancel tapped during the 'enhancing' phase was silently discarded and generation
+    // proceeded anyway. _enhancePrompt itself can't observe the flag (it awaits the LLM),
+    // so this is the checkpoint.
+    if (this.cancelRequested) { this.resetState(); return null; }
 
     // Establish the generating state unconditionally — not only when enhancement
     // is off. When enhancement is ON but _enhancePrompt bailed early (e.g. no text
