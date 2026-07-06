@@ -3,6 +3,7 @@ import {
   modelSupportsNpuGpu,
   isDownloadedModelAccelerable,
   findAccelerableModel,
+  recommendedAccelerator,
   planAcceleration,
   acceleratedBackendFor,
   acceleratedSearchQuery,
@@ -49,7 +50,7 @@ describe('modelSupportsNpuGpu', () => {
 });
 
 describe('isDownloadedModelAccelerable / findAccelerableModel', () => {
-  const m = (id: string, engine: string, quantization: string) => ({ id, name: id, engine, quantization });
+  const m = (id: string, name: string, engine: string, quantization: string) => ({ id, name, engine, quantization });
 
   it('true only for llama models in an accelerable quant', () => {
     expect(isDownloadedModelAccelerable({ engine: 'llama', quantization: 'Q4_0' })).toBe(true);
@@ -57,60 +58,81 @@ describe('isDownloadedModelAccelerable / findAccelerableModel', () => {
     expect(isDownloadedModelAccelerable({ engine: 'litert', quantization: 'Q4_0' })).toBe(false);
   });
 
-  it('finds the first accelerable model, skipping the active one', () => {
-    const models = [m('a-Q4_K_M', 'llama', 'Q4_K_M'), m('b-Q4_0', 'llama', 'Q4_0'), m('c-Q8_0', 'llama', 'Q8_0')];
-    expect(findAccelerableModel(models, 'a-Q4_K_M')?.id).toBe('b-Q4_0');
-    // excludes the active model even when it is itself accelerable
-    expect(findAccelerableModel(models, 'b-Q4_0')?.id).toBe('c-Q8_0');
-    expect(findAccelerableModel([m('a', 'llama', 'Q4_K_M')], 'x')).toBeNull();
+  it('finds an accelerable build of the SAME base model (same display name), not a different one', () => {
+    const models = [
+      m('e4b/Q4_K_M', 'gemma-4-E4B-it-GGUF', 'llama', 'Q4_K_M'),
+      m('e2b/Q4_0', 'gemma-4-E2B-it-GGUF', 'llama', 'Q4_0'),   // different model — must NOT match
+      m('e4b/Q4_0', 'gemma-4-E4B-it-GGUF', 'llama', 'Q4_0'),   // same model, accelerable — the match
+    ];
+    const active = { id: 'e4b/Q4_K_M', name: 'gemma-4-E4B-it-GGUF' };
+    expect(findAccelerableModel(models, active)?.id).toBe('e4b/Q4_0');
+  });
+
+  it('returns null when only a DIFFERENT model has an accelerable build (no cross-model downgrade)', () => {
+    const models = [m('e2b/Q4_0', 'gemma-4-E2B-it-GGUF', 'llama', 'Q4_0')];
+    expect(findAccelerableModel(models, { id: 'e4b/Q4_K_M', name: 'gemma-4-E4B-it-GGUF' })).toBeNull();
+    expect(findAccelerableModel(models, undefined)).toBeNull();
+  });
+});
+
+describe('recommendedAccelerator (GPU-first; NPU only for Llama-no-GPU)', () => {
+  it('recommends GPU whenever the device has one, regardless of model', () => {
+    expect(recommendedAccelerator({ hasNpu: true, hasGpu: true }, 'gemma-4-E4B-it-GGUF')).toBe('gpu');
+    expect(recommendedAccelerator({ hasNpu: false, hasGpu: true }, 'Llama-3-8B')).toBe('gpu');
+  });
+
+  it('recommends NPU only when there is no GPU AND the model is Llama-family', () => {
+    expect(recommendedAccelerator({ hasNpu: true, hasGpu: false }, 'Llama-3-8B-Instruct')).toBe('npu');
+    expect(recommendedAccelerator({ hasNpu: true, hasGpu: false }, 'gemma-4-E4B-it-GGUF')).toBeNull();
+    expect(recommendedAccelerator({ hasNpu: false, hasGpu: false }, 'Llama-3-8B')).toBeNull();
   });
 });
 
 describe('planAcceleration', () => {
+  // Default test device: GPU (Adreno) — so the recommended accelerator is GPU.
   const base = {
     engine: 'llama', isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU,
-    capability: { hasNpu: true, hasGpu: false }, activeQuant: 'Q4_K_M', downloadedAccelerable: null,
+    capability: { hasNpu: false, hasGpu: true }, activeQuant: 'Q4_K_M',
+    modelName: 'gemma-4-E4B-it-GGUF', downloadedAccelerable: null,
   };
 
-  it('enable: the active model is already an accelerable quant', () => {
-    expect(planAcceleration({ ...base, activeQuant: 'Q4_0' }).action).toBe('enable');
-    expect(planAcceleration({ ...base, activeQuant: 'Q8_0' }).action).toBe('enable');
+  it('enable (GPU): the active model is already an accelerable quant', () => {
+    const plan = planAcceleration({ ...base, activeQuant: 'Q4_0' });
+    expect(plan.action).toBe('enable');
+    expect(plan.backend).toBe('gpu');
   });
 
-  it('switch: K-quant active but an accelerable model is already downloaded (CPU nudge)', () => {
-    const plan = planAcceleration({ ...base, downloadedAccelerable: { id: 'x/Qwen-Q4_0', name: 'Qwen Q4_0' } });
+  it('switch: K-quant active but an accelerable build is downloaded → recommends GPU', () => {
+    const plan = planAcceleration({ ...base, downloadedAccelerable: { id: 'x/E4B-Q4_0', name: 'gemma-4-E4B-it-GGUF' } });
     expect(plan.action).toBe('switch');
-    expect(plan.fellBack).toBe(false);
-    expect(plan.targetModelId).toBe('x/Qwen-Q4_0');
-    expect(plan.targetModelName).toBe('Qwen Q4_0');
+    expect(plan.backend).toBe('gpu');
+    expect(plan.targetModelId).toBe('x/E4B-Q4_0');
   });
 
-  it('download: K-quant active and nothing accelerable downloaded (CPU nudge)', () => {
-    const plan = planAcceleration(base);
-    expect(plan.action).toBe('download');
-    expect(plan.fellBack).toBe(false);
+  it('download: K-quant active and nothing accelerable downloaded', () => {
+    expect(planAcceleration(base).action).toBe('download');
   });
 
-  it('fallback→switch: NPU selected but the K-quant fell back to CPU, accelerable downloaded', () => {
-    const plan = planAcceleration({
-      ...base, inferenceBackend: INFERENCE_BACKENDS.HTP,
-      downloadedAccelerable: { id: 'x/Qwen-Q4_0', name: 'Qwen Q4_0' },
-    });
-    expect(plan.action).toBe('switch');
-    expect(plan.fellBack).toBe(true);
-    expect(plan.targetModelId).toBe('x/Qwen-Q4_0');
-  });
-
-  it('fallback→download: OpenCL selected but the K-quant fell back to CPU, none downloaded', () => {
-    const plan = planAcceleration({
-      ...base, inferenceBackend: INFERENCE_BACKENDS.OPENCL, capability: { hasNpu: false, hasGpu: true },
-    });
+  it('fallback: GPU-capable device but an accelerator was selected and the K-quant runs on CPU', () => {
+    const plan = planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.OPENCL });
     expect(plan.action).toBe('download');
     expect(plan.fellBack).toBe(true);
+  });
+
+  it('NEVER recommends NPU for Gemma even on an NPU device with no GPU (hidden)', () => {
+    expect(planAcceleration({ ...base, capability: { hasNpu: true, hasGpu: false } }).action).toBe('hidden');
+  });
+
+  it('recommends NPU for a Llama model on an NPU-only device', () => {
+    const plan = planAcceleration({
+      ...base, capability: { hasNpu: true, hasGpu: false }, modelName: 'Llama-3-8B-Instruct', activeQuant: 'Q4_0',
+    });
+    expect(plan.action).toBe('enable');
+    expect(plan.backend).toBe('npu');
   });
 
   it('hidden when genuinely accelerated (accelerated backend + accelerable model)', () => {
-    expect(planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.HTP, activeQuant: 'Q4_0' }).action).toBe('hidden');
+    expect(planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.OPENCL, activeQuant: 'Q4_0' }).action).toBe('hidden');
   });
 
   it('hidden when the device has neither NPU nor GPU', () => {
@@ -125,9 +147,10 @@ describe('planAcceleration', () => {
 });
 
 describe('acceleratedBackendFor', () => {
-  it('prefers the NPU (HTP) when available, else the GPU (OpenCL)', () => {
-    expect(acceleratedBackendFor({ hasNpu: true, hasGpu: true })).toBe(INFERENCE_BACKENDS.HTP);
-    expect(acceleratedBackendFor({ hasNpu: false, hasGpu: true })).toBe(INFERENCE_BACKENDS.OPENCL);
+  it('maps GPU→OpenCL and NPU→HTP per the recommended accelerator', () => {
+    expect(acceleratedBackendFor({ hasNpu: true, hasGpu: true }, 'gemma')).toBe(INFERENCE_BACKENDS.OPENCL); // GPU-first
+    expect(acceleratedBackendFor({ hasNpu: true, hasGpu: false }, 'Llama-3-8B')).toBe(INFERENCE_BACKENDS.HTP);
+    expect(acceleratedBackendFor({ hasNpu: false, hasGpu: true }, 'anything')).toBe(INFERENCE_BACKENDS.OPENCL);
   });
 });
 

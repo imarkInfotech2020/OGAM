@@ -21,10 +21,10 @@ export interface AccelerationTip {
   visible: boolean;
   /** What the primary button does: enable the backend, switch model, or download one. */
   action: AccelerationAction;
-  /** NPU/GPU is selected but the active model can't use it → we're on CPU (warning copy). */
+  /** An accelerator is selected but the active model can't use it → we're on CPU (warning copy). */
   fellBack: boolean;
-  /** True when the device has an NPU (Qualcomm HTP) — labels the copy/button. */
-  hasNpu: boolean;
+  /** The recommended accelerator — labels the copy/button (GPU on Adreno; NPU only for Llama-no-GPU). */
+  backend: 'gpu' | 'npu';
   /** For `switch`: the name of the accelerable model already downloaded. */
   targetModelName?: string;
   /** Run the primary action for the current mode. */
@@ -56,9 +56,11 @@ export function useAccelerationTip(params: {
     return () => { alive = false; };
   }, []);
 
+  const activeId = activeModel?.id;
+  const activeName = activeModel?.name;
   const target = useMemo(
-    () => findAccelerableModel(downloadedModels, activeModel?.id),
-    [downloadedModels, activeModel?.id],
+    () => findAccelerableModel(downloadedModels, activeId ? { id: activeId, name: activeName ?? '' } : undefined),
+    [downloadedModels, activeId, activeName],
   );
 
   const plan = planAcceleration({
@@ -67,11 +69,12 @@ export function useAccelerationTip(params: {
     inferenceBackend: inferenceBackend as InferenceBackend | undefined,
     capability,
     activeQuant: activeModel?.quantization,
+    modelName: activeModel?.name,
     downloadedAccelerable: target ? { id: target.id, name: target.name } : null,
   });
 
   const onPrimary = useCallback(() => {
-    const backend = acceleratedBackendFor(capability);
+    const backend = acceleratedBackendFor(capability, activeName);
     if (plan.action === 'enable') {
       // Flip the backend; the existing "settings changed — reload" banner takes over.
       useAppStore.getState().updateSettings({ inferenceBackend: backend });
@@ -88,16 +91,16 @@ export function useAccelerationTip(params: {
     if (plan.action === 'download') {
       navigation.navigate('Main', {
         screen: 'ModelsTab',
-        params: { initialTab: 'text', initialSearchQuery: acceleratedSearchQuery(activeModel?.id) },
+        params: { initialTab: 'text', initialSearchQuery: acceleratedSearchQuery(activeId) },
       } as never);
     }
-  }, [plan.action, capability, target, onActivateModel, navigation, activeModel?.id]);
+  }, [plan.action, capability, target, onActivateModel, navigation, activeId, activeName]);
 
   return {
     visible: plan.action !== 'hidden',
     action: plan.action,
     fellBack: plan.fellBack,
-    hasNpu: capability.hasNpu,
+    backend: plan.backend,
     targetModelName: plan.targetModelName,
     onPrimary,
   };

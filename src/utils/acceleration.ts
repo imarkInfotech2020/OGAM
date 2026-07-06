@@ -49,35 +49,67 @@ export function isDownloadedModelAccelerable(m: { engine?: string; quantization?
   return m.engine === 'llama' && isAccelerableQuant(m.quantization);
 }
 
-/** The first accelerable downloaded llama model other than the active one, if any. */
+/**
+ * An accelerable (Q4_0/Q8_0) build of the SAME base model as `active`, if one is
+ * downloaded. Must be the same model — suggesting a different, smaller model (E2B when
+ * the user loaded E4B) is a downgrade, not "run your model on the GPU/NPU". The display
+ * name is derived from the repo id, so every quant of a repo shares it (e.g. both E4B
+ * quants are "gemma-4-E4B-it-GGUF"), which cleanly separates E4B from E2B.
+ */
 export function findAccelerableModel<T extends { id: string; name: string; engine?: string; quantization?: string }>(
   models: T[],
-  excludeId: string | undefined,
+  active: { id: string; name: string } | undefined,
 ): T | null {
-  return models.find(m => m.id !== excludeId && isDownloadedModelAccelerable(m)) ?? null;
+  if (!active) return null;
+  return models.find(
+    m => m.id !== active.id && m.name === active.name && isDownloadedModelAccelerable(m),
+  ) ?? null;
+}
+
+/** Llama-family model (name-based) — the only family we'll suggest the experimental NPU for. */
+export function isLlamaFamily(modelName: string | undefined): boolean {
+  return /llama/i.test(modelName ?? '');
+}
+
+/**
+ * The accelerator we're willing to RECOMMEND for this model, or null (don't nudge):
+ *  - GPU (OpenCL) whenever the device has it — it's the reliable backend on Adreno/Mali.
+ *  - NPU (HTP) ONLY on a device with no GPU AND only for Llama-family models — the NPU
+ *    is experimental and broken for e.g. Gemma, so we never steer those to it.
+ * Everything else → null (no recommendation), so we don't push a backend that won't help.
+ */
+export function recommendedAccelerator(
+  capability: AccelerationCapability,
+  modelName: string | undefined,
+): 'gpu' | 'npu' | null {
+  if (capability.hasGpu) return 'gpu';
+  if (capability.hasNpu && isLlamaFamily(modelName)) return 'npu';
+  return null;
 }
 
 /**
  * What the chat acceleration tip should offer, given the device, the active model, and
  * what's already downloaded:
- *  - `enable`   — on CPU with an already-accelerable model (Q4_0/Q8_0); just flip the
- *                 backend to NPU/GPU for a real speedup.
- *  - `switch`   — the active model is a K-quant (which can't use the NPU/GPU) but an
- *                 accelerable model is already downloaded; switch to it (and set the
- *                 backend so it loads on the accelerator).
- *  - `download` — a K-quant is active and no accelerable model exists locally; send the
- *                 user to grab a Q4_0 build.
- *  - `hidden`   — remote/LiteRT model, no NPU/GPU, or genuinely accelerated already.
+ *  - `enable`   — on CPU with an already-accelerable model (Q4_0/Q8_0); flip to the
+ *                 recommended backend for a real speedup.
+ *  - `switch`   — the active model is a K-quant (can't use the accelerator) but an
+ *                 accelerable build of the SAME model is downloaded; switch to it.
+ *  - `download` — a K-quant is active and no accelerable build exists locally.
+ *  - `hidden`   — remote/LiteRT model, no RECOMMENDABLE accelerator (see
+ *                 recommendedAccelerator — GPU-first, NPU only for Llama), or already
+ *                 genuinely accelerated.
  *
  * `fellBack` distinguishes the two ways `switch`/`download` arise: on CPU it's a "go
- * faster" nudge; when the user HAS selected NPU/GPU but the active K-quant can't use it
- * (so llama.cpp silently repacks to CPU), it's a "we're on CPU" warning. Same decision,
- * different copy — this is what surfaces the otherwise-silent CPU fallback.
+ * faster" nudge; when the user HAS selected an accelerator but the active K-quant can't
+ * use it, it's a "we're on CPU" warning. `backend` is the recommended accelerator so the
+ * copy names the right one (never NPU on a GPU device).
  */
 export type AccelerationAction = 'enable' | 'switch' | 'download' | 'hidden';
 
 export interface AccelerationPlan {
   action: AccelerationAction;
+  /** The accelerator being recommended — drives the copy (GPU vs NPU). */
+  backend: 'gpu' | 'npu';
   /** True when an accelerated backend is selected but the active model can't use it. */
   fellBack: boolean;
   /** For `switch`: the downloaded accelerable model to activate. */
@@ -95,33 +127,40 @@ export function planAcceleration(params: {
   inferenceBackend: InferenceBackend | undefined;
   capability: AccelerationCapability;
   activeQuant: string | undefined;
+  modelName: string | undefined;
   downloadedAccelerable: { id: string; name: string } | null;
 }): AccelerationPlan {
-  const { engine, isRemote, inferenceBackend, capability, activeQuant, downloadedAccelerable } = params;
-  const hidden: AccelerationPlan = { action: 'hidden', fellBack: false };
+  const { engine, isRemote, inferenceBackend, capability, activeQuant, modelName, downloadedAccelerable } = params;
+  const rec = recommendedAccelerator(capability, modelName);
+  const hidden: AccelerationPlan = { action: 'hidden', backend: rec ?? 'gpu', fellBack: false };
   if (isRemote || engine !== 'llama') return hidden;
-  if (!capability.hasNpu && !capability.hasGpu) return hidden;
+  if (!rec) return hidden; // no accelerator worth recommending for this model
 
   const accelerated = isAcceleratedBackend(inferenceBackend);
   const activeAccelerable = isAccelerableQuant(activeQuant);
   // Genuinely accelerated (accelerated backend + a model that can use it) → nothing to do.
   if (accelerated && activeAccelerable) return hidden;
-  // On CPU with an accelerable model → offer to turn the accelerator on.
-  if (!accelerated && activeAccelerable) return { action: 'enable', fellBack: false };
+  // On CPU with an accelerable model → offer to turn the recommended accelerator on.
+  if (!accelerated && activeAccelerable) return { action: 'enable', backend: rec, fellBack: false };
 
-  // Remaining: the active model is a K-quant. Either the user is on CPU (a nudge) or has
-  // selected NPU/GPU that silently repacked to CPU (a fallback warning). Route them to an
-  // accelerable model — switch to one they have, else download.
+  // Remaining: the active model is a K-quant. Either on CPU (nudge) or an accelerator is
+  // selected but the K-quant repacked to CPU (fallback warning). Route to an accelerable
+  // build of the SAME model — switch if downloaded, else download.
   const fellBack = accelerated;
   if (downloadedAccelerable) {
-    return { action: 'switch', fellBack, targetModelId: downloadedAccelerable.id, targetModelName: downloadedAccelerable.name };
+    return { action: 'switch', backend: rec, fellBack, targetModelId: downloadedAccelerable.id, targetModelName: downloadedAccelerable.name };
   }
-  return { action: 'download', fellBack };
+  return { action: 'download', backend: rec, fellBack };
 }
 
-/** The backend to switch to when the user accepts the tip: prefer the NPU, else the GPU. */
-export function acceleratedBackendFor(capability: AccelerationCapability): InferenceBackend {
-  return capability.hasNpu ? INFERENCE_BACKENDS.HTP : INFERENCE_BACKENDS.OPENCL;
+/** The concrete backend to switch to for the recommended accelerator (GPU → OpenCL, NPU → HTP). */
+export function acceleratedBackendFor(
+  capability: AccelerationCapability,
+  modelName: string | undefined,
+): InferenceBackend {
+  return recommendedAccelerator(capability, modelName) === 'npu'
+    ? INFERENCE_BACKENDS.HTP
+    : INFERENCE_BACKENDS.OPENCL;
 }
 
 /**

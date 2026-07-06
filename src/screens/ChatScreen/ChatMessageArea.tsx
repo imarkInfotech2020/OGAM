@@ -62,7 +62,7 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
 // only picks the words. When the user has selected NPU/GPU but the active K-quant can't
 // use it (fellBack), lead with the "running on CPU" fact instead of a "go faster" nudge.
 function accelTipCopy(tip: AccelerationTip): { message: string; button: string; icon: string } {
-  const hw = tip.hasNpu ? 'NPU' : 'GPU';
+  const hw = tip.backend === 'npu' ? 'NPU' : 'GPU';
   const cause = tip.fellBack
     ? `The ${hw} can't run this model, so it's running on CPU.`
     : `This model can't use the ${hw}.`;
