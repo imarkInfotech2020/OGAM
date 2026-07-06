@@ -138,6 +138,22 @@ Do not consider a feature complete with only unit tests. Integration tests catch
 
 **Test every approved behavior change in the same pass.** When iterating (a request, a fix, a tweak you just confirmed), add a test that captures that specific behavior as part of the same change - a regression test that would fail before the change and pass after. This applies to bug fixes (test the exact broken case), new branches/conditions (cover each one), and copy/contract changes that other code or tests depend on. Do not defer tests to "later" or to a separate commit. Then run `npx tsc --noEmit && npm test` and fix any failures before reporting the change done.
 
+### Assert the OUTCOME/INVARIANT, never "the gate was called" (learned the hard way)
+
+We shipped a bug where the voice pipeline held the STT (Whisper) model AND the text model in RAM at once → OOM / forced resend. The unit test that should have caught it did the opposite - it hid the bug behind a false green. The root cause of the *test miss* generalizes; internalize these rules:
+
+1. **A test that mocks a decision function to a fixed verdict CANNOT catch a caller that ignores the verdict.** The old test mocked `makeRoomFor` to always return `{ fits: true }` and only asserted `makeRoomFor` / `loadModel` *were called*. The bug was that the store called `makeRoomFor` but ignored its `fits` result and loaded anyway. Asserting "was called" passes over that exact defect. **Never assert `expect(gate).toHaveBeenCalled()` as the proof a rule holds.** Assert the *consequence* of the verdict: given `fits: false`, the load must NOT happen (`expect(nativeLoad).not.toHaveBeenCalled()`, resident count unchanged).
+
+2. **Test the verdict's FALSE branch, not just the happy path.** A gate/capability/permission check has (at least) two outcomes. A mock pinned to the allow value only ever exercises the allow path. For every `fits`/`canX`/`isAllowed`/`shouldY` gate, write the case where it returns the blocking value and assert the caller actually blocks. Most "we called the gate but didn't respect it" bugs live in the untested false branch.
+
+3. **For resource/residency/lifecycle invariants, drive the REAL owning service and assert the state, not the calls.** The single-model rule ("only one heavy model resident") is an invariant of `modelResidencyManager`. The catching test mocks ONLY the native boundaries (`whisperService.loadModel`/`unloadModel` as flag-flippers, `hardwareService` memory numbers) and runs the REAL residency manager + REAL store, then asserts `getResidents()` / `isResident(key)` - the outcome a user feels (how much is in RAM). Mocking the residency manager itself makes the wiring bug (store vs manager) structurally invisible: the bug lives in the seam between layers, so no single mocked-boundary unit test can see it.
+
+4. **Reproduce the device numbers deterministically.** The bug only manifests when the text model nearly fills the budget so the sidecar can't co-reside. The test pins the budget (`setBudgetOverrideMB(7908)`) and uses the real model sizes from the device log, so it reproduces the exact `fits=false, evict=[]` state - not a platform-dependent approximation (test-env `Platform.OS` picks a different RAM fraction than the Android device, which is why a naive 12GB mock let both models fit and passed).
+
+5. **When a device bug appears, ask "why did the suite stay green?" and fix the test class, not just the code.** If the answer is "a mock returned the value that hid it" or "only the happy path was asserted," that pattern exists elsewhere - grep for the same shape. The fix for the bug and the fix for the blind test ship together.
+
+The smell test before committing any test: **if I delete the implementation under test (or invert the branch), does this test fail?** If a mock would keep it green, the test is asserting the mock, not the behavior - rewrite it to drive the real thing and assert the observable outcome.
+
 ## Push = Create PR + Address Review
 
 When the user says "push" (or any equivalent like "ship it", "send it", "push this"), follow this full workflow:

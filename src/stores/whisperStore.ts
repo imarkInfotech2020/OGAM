@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { whisperService, WHISPER_MODELS } from '../services';
 import { modelResidencyManager } from '../services/modelResidency';
+import logger from '../utils/logger';
 
 interface WhisperState {
   // Active (selected) model ID
@@ -113,15 +114,28 @@ export const useWhisperStore = create<WhisperState>()(
           // Load through the residency manager's global lock so STT never loads
           // alongside another model. Make room for it first (evict to budget),
           // then register so future loads can evict it.
-          await modelResidencyManager.runExclusive('load:whisper', async () => {
-            await modelResidencyManager.makeRoomFor({ key: 'whisper', type: 'whisper', sizeMB });
+          //
+          // CRITICAL: honor the `fits` verdict. STT is a sidecar — if a heavier
+          // generation model owns memory, makeRoomFor returns fits=false without
+          // evicting it (it won't kick out the big model for a 142MB sidecar). We
+          // MUST NOT load anyway: doing so put whisper + the text model co-resident
+          // and OOM'd the app / forced the user to resend. STT stays out and loads
+          // on the next record when there's room. Skipped-for-no-room is not an
+          // error state — leave isModelLoaded false, no error surfaced.
+          const loaded = await modelResidencyManager.runExclusive('load:whisper', async () => {
+            const { fits } = await modelResidencyManager.makeRoomFor({ key: 'whisper', type: 'whisper', sizeMB });
+            if (!fits) {
+              logger.log('[Whisper] Skipping load — no room alongside the active model (single-model rule)');
+              return false;
+            }
             await whisperService.loadModel(modelPath);
             modelResidencyManager.register(
               { key: 'whisper', type: 'whisper', sizeMB },
               () => get().unloadModel(),
             );
+            return true;
           });
-          set({ isModelLoaded: true, isModelLoading: false, error: null });
+          set({ isModelLoaded: loaded, isModelLoading: false, error: null });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state

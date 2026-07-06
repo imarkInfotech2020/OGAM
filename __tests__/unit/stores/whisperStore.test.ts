@@ -30,10 +30,12 @@ jest.mock('../../../src/services/modelResidency', () => ({
 
 import { useWhisperStore } from '../../../src/stores/whisperStore';
 import { whisperService } from '../../../src/services';
+import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { resetWhisperStore } from '../../utils/testHelpers';
 
 // Cast to jest mocks for type-safe access
 const mockWhisperService = whisperService as jest.Mocked<typeof whisperService>;
+const mockResidency = modelResidencyManager as jest.Mocked<typeof modelResidencyManager>;
 
 const getState = () => useWhisperStore.getState();
 
@@ -338,6 +340,49 @@ describe('whisperStore', () => {
       await getState().loadModel();
 
       expect(getState().error).toBeNull();
+    });
+
+    // ------------------------------------------------------------------
+    // Single-model rule (regression: STT co-resident with the text model)
+    // ------------------------------------------------------------------
+    // These assert the OUTCOME the residency verdict dictates, not merely that
+    // makeRoomFor was called. The shipped bug: loadModel called makeRoomFor but
+    // ignored `fits`, so when a heavier generation model owned memory (fits=false,
+    // evict=[] because residency won't kick out a big model for a 142MB sidecar),
+    // whisper loaded ANYWAY → whisper + text co-resident → OOM / forced resend.
+    // The old suite hid this because its makeRoomFor mock always returned fits:true.
+    describe('respects the residency fit verdict (single-model rule)', () => {
+      it('does NOT load whisper when makeRoomFor reports it does not fit', async () => {
+        useWhisperStore.setState({ downloadedModelId: 'ggml-tiny' });
+        mockWhisperService.getModelPath.mockReturnValue('/models/ggml-tiny');
+        mockWhisperService.loadModel.mockResolvedValue(undefined);
+        // A heavier model is resident: residency refuses without evicting it.
+        mockResidency.makeRoomFor.mockResolvedValueOnce({ evicted: [], fits: false });
+
+        await getState().loadModel();
+
+        // The seam under test: the native load must be skipped when it won't fit.
+        // Deleting the `if (!fits) return` guard in the store fails THIS line.
+        expect(mockWhisperService.loadModel).not.toHaveBeenCalled();
+        expect(mockResidency.register).not.toHaveBeenCalled();
+        expect(getState().isModelLoaded).toBe(false);
+        // Not an error state — STT just stays out and loads on the next record.
+        expect(getState().error).toBeNull();
+        expect(getState().isModelLoading).toBe(false);
+      });
+
+      it('loads and registers whisper when makeRoomFor reports it fits', async () => {
+        useWhisperStore.setState({ downloadedModelId: 'ggml-tiny' });
+        mockWhisperService.getModelPath.mockReturnValue('/models/ggml-tiny');
+        mockWhisperService.loadModel.mockResolvedValue(undefined);
+        mockResidency.makeRoomFor.mockResolvedValueOnce({ evicted: [], fits: true });
+
+        await getState().loadModel();
+
+        expect(mockWhisperService.loadModel).toHaveBeenCalledWith('/models/ggml-tiny');
+        expect(mockResidency.register).toHaveBeenCalled();
+        expect(getState().isModelLoaded).toBe(true);
+      });
     });
   });
 
