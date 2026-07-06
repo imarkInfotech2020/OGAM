@@ -15,6 +15,7 @@ import {
   RecommendedConfig,
 } from './ModelCardContent';
 import { QUEUED_ICON } from '../utils/downloadStatusIcon';
+import { formatBytes } from '../utils/formatBytes';
 
 interface ModelCardProps {
   model: {
@@ -83,28 +84,33 @@ function resolveCredibility(
 const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number };
-  tight?: boolean;
   queued?: boolean;
-}> = ({ progress, bytes, tight, queued }) => {
+}> = ({ progress, bytes, queued }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   return (
   <View style={styles.progressSection}>
-    <View style={[styles.progressContainer, tight && styles.progressContainerTight]}>
-      <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-      </View>
-      <View style={styles.progressLabelRow}>
-        {queued
-          ? <Icon name={QUEUED_ICON} size={14} color={colors.textMuted} accessibilityLabel="Queued" />
-          : <Text style={[styles.progressText, tight && styles.progressTextTight]}>{`${Math.round(progress * 100)}%`}</Text>}
-      </View>
+    {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
+        (0 progress) so it reads as "not started yet". */}
+    <View style={styles.progressBar}>
+      <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
     </View>
-    {!queued && bytes && bytes.total > 0 && (
+    {/* Caption row under the bar: bytes on the LEFT (uses the empty left real estate),
+        status on the RIGHT. "Queued" while waiting for a slot, otherwise the percent.
+        One row instead of stacking bytes below a half-width bar → not cramped. */}
+    <View style={styles.progressCaptionRow}>
       <Text style={styles.progressBytesText}>
-        {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
+        {bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : ''}
       </Text>
-    )}
+      {queued ? (
+        <View style={styles.progressLabelRow}>
+          <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+          <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+        </View>
+      ) : (
+        <Text style={styles.progressText}>{`${Math.round(progress * 100)}%`}</Text>
+      )}
+    </View>
   </View>
   );
 };
@@ -253,7 +259,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} tight={!!recommended} queued={isQueued} />
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} />
           )}
           {failedState && (
             <FailedSection
@@ -293,9 +299,3 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
-}

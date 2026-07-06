@@ -7,6 +7,7 @@ import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
+import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -36,13 +37,9 @@ export type DownloadItem = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(i > 1 ? 2 : 0)} ${sizes[i]}`;
-}
+// Re-export the canonical byte formatter so the Download Manager modules that
+// import it from here keep working, with one shared implementation.
+export { formatBytes } from '../../utils/formatBytes';
 
 export function getStatusText(status: string): string {
   if (status === 'running') return 'Downloading...';
