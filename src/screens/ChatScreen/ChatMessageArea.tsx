@@ -11,7 +11,6 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
-import { AccelerationTip } from './useAccelerationTip';
 import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -56,62 +55,6 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
   // Thin overlay inset: keep the symmetric-with-top cap.
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
-};
-
-// Copy + button per acceleration mode. All decisions live in useAccelerationTip; this
-// only picks the words. When the user has selected NPU/GPU but the active K-quant can't
-// use it (fellBack), lead with the "running on CPU" fact instead of a "go faster" nudge.
-function accelTipCopy(tip: AccelerationTip): { message: string; button: string; icon: string } {
-  const hw = tip.backend === 'npu' ? 'NPU' : 'GPU';
-  const cause = tip.fellBack
-    ? `The ${hw} can't run this model, so it's running on CPU.`
-    : `This model can't use the ${hw}.`;
-  if (tip.action === 'switch') {
-    return {
-      message: `${cause} Switch to ${tip.targetModelName ?? 'an accelerated model'} to use it.`,
-      button: `Switch to ${tip.targetModelName ?? 'it'}`,
-      icon: 'refresh-cw',
-    };
-  }
-  if (tip.action === 'download') {
-    return {
-      message: `${cause} Get a Q4_0 build to use it.`,
-      button: 'Get Q4_0 version',
-      icon: 'download',
-    };
-  }
-  return {
-    message: `This model can use the ${hw}. Turn it on for faster replies.`,
-    button: `Enable ${hw}`,
-    icon: 'cpu',
-  };
-}
-
-// "Go faster on the GPU/NPU" nudge. Renders nothing unless the tip is visible and no
-// higher-priority bar (reload / compacting) is showing. This only projects the hook.
-const AccelerationTipBar: React.FC<{ tip: AccelerationTip; hidden: boolean; styles: any; colors: any }> = ({
-  tip, hidden, styles, colors,
-}) => {
-  if (!tip.visible || hidden) return null;
-  const { message, button, icon } = accelTipCopy(tip);
-  return (
-    <Animated.View entering={FadeIn.duration(200)} style={styles.accelTipBar}>
-      <View style={styles.accelTipHeaderRow}>
-        <Icon
-          name={tip.fellBack ? 'alert-triangle' : 'zap'}
-          size={16}
-          color={tip.fellBack ? colors.warning : colors.primary}
-        />
-        <Text style={styles.accelTipText}>{message}</Text>
-      </View>
-      <View style={styles.accelTipActionsRow}>
-        <AnimatedPressable style={[styles.accelTipButton, styles.accelTipButtonPrimary]} onPress={tip.onPrimary}>
-          <Icon name={icon} size={13} color={colors.primary} />
-          <Text style={styles.accelTipButtonTextPrimary}>{button}</Text>
-        </AnimatedPressable>
-      </View>
-    </Animated.View>
-  );
 };
 
 // Small status bar above the input: classifying takes precedence over the
@@ -291,14 +234,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
-      {/* Faster-on-GPU/NPU nudge. Hidden while the reload banner is up (enabling the
-          NPU marks settings pending, which flips this off and that on). */}
-      <AccelerationTipBar
-        tip={chat.accelerationTip}
-        hidden={chat.hasPendingSettings || chat.isCompacting}
-        styles={styles}
-        colors={colors}
-      />
       {/* Single dismissible surface for every model failure (text/image/tts/stt/
           embedding). Reads modelFailureStore itself — no props. */}
       <ModelFailureCard />
