@@ -24,6 +24,14 @@ describe('computeBudgetMB', () => {
   it('never returns negative', () => {
     expect(computeBudgetMB(1000)).toBe(0);
   });
+
+  it('passes the load policy through to the budget owner (aggressive > balanced)', () => {
+    expect(computeBudgetMB(24576, { policy: 'aggressive' })).toBeGreaterThan(
+      computeBudgetMB(24576, { policy: 'balanced' }),
+    );
+    // Omitting policy is behaviour-neutral (balanced).
+    expect(computeBudgetMB(24576)).toBe(computeBudgetMB(24576, { policy: 'balanced' }));
+  });
 });
 
 describe('planEviction', () => {
@@ -434,6 +442,97 @@ describe('ModelResidencyManager', () => {
       expect(ttsUnload).not.toHaveBeenCalled();
       expect(evicted).toEqual([]);
       expect(modelResidencyManager.isResident('tts')).toBe(true);
+    });
+  });
+
+  describe('load policy (aggressive) + override', () => {
+    beforeEach(() => {
+      modelResidencyManager._reset();
+      modelResidencyManager.setLoadPolicy('balanced');
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+      modelResidencyManager.setLoadPolicy('balanced'); // never leak policy across suites
+    });
+
+    it('defaults to balanced and round-trips setLoadPolicy/getLoadPolicy', () => {
+      expect(modelResidencyManager.getLoadPolicy()).toBe('balanced');
+      modelResidencyManager.setLoadPolicy('aggressive');
+      expect(modelResidencyManager.getLoadPolicy()).toBe('aggressive');
+    });
+
+    it('fails-before/passes-after: a 21GB GGUF is refused on a 24GB phone under balanced, fits under aggressive', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(24);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(8);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const spec = { key: 'text', type: 'text' as const, sizeMB: 21 * 1024 };
+
+      // Balanced: 24GB * 0.70 ≈ 16.8GB budget → 21GB does not fit (Nico's Qwen3 MoE).
+      const balanced = await modelResidencyManager.makeRoomFor(spec);
+      expect(balanced.fits).toBe(false);
+
+      // Aggressive: pushes near the physical ceiling → the same model now fits.
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await modelResidencyManager.makeRoomFor(spec);
+      expect(aggressive.fits).toBe(true);
+    });
+
+    it('override forces a load that still will not fit, evicting everything evictable first', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000); // tiny budget so nothing big fits
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+
+      // Without override: refuse and DON'T evict (never strand the device).
+      const blocked = await modelResidencyManager.makeRoomFor({ key: 'huge', type: 'text', sizeMB: 5000 });
+      expect(blocked.fits).toBe(false);
+      expect(unloadImg).not.toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+
+      // With override ("Load Anyway"): force fits=true AND free max room (evict image).
+      const forced = await modelResidencyManager.makeRoomFor(
+        { key: 'huge', type: 'text', sizeMB: 5000 },
+        { override: true },
+      );
+      expect(forced.fits).toBe(true);
+      expect(forced.evicted).toContain('image');
+      expect(unloadImg).toHaveBeenCalledTimes(1);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+
+    it('override is behaviour-neutral when the model already fits (no forced eviction)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(2000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 1000 },
+        { override: true },
+      );
+      expect(fits).toBe(true);
+      expect(evicted).toEqual([]); // fit without eviction — override changed nothing
+      expect(unloadImg).not.toHaveBeenCalled();
+    });
+
+    it('aggressive holds a leaner dirty headroom so a dirty load the balanced guard refuses is allowed', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      // ~3.4GB free: balanced dirty headroom (1024) → budget ≈ 2.4GB; aggressive (512) → ≈ 2.9GB.
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(3.4);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      // A resident dirty model creates dirty pressure so the live-RAM branch is used.
+      modelResidencyManager.register(
+        { key: 'image', type: 'image', sizeMB: 100, dirtyMemory: true, canEvict: () => false },
+        jest.fn().mockResolvedValue(undefined), 1);
+      const spec = { key: 'litert', type: 'text' as const, sizeMB: 2700, dirtyMemory: true };
+
+      const balanced = await modelResidencyManager.makeRoomFor(spec);
+      expect(balanced.fits).toBe(false);
+
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await modelResidencyManager.makeRoomFor(spec);
+      expect(aggressive.fits).toBe(true);
     });
   });
 });
