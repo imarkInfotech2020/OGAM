@@ -54,6 +54,11 @@ type AppSettings = {
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
+  /** Aggressive model loading: commit more RAM + a smaller reserve so large models
+   *  load (with a "Load Anyway" override when the budget still blocks). Off by
+   *  default (behaviour-neutral). Single source of truth read by both the Settings
+   *  screen and the in-chat settings; projected onto the residency manager. */
+  aggressiveModelLoading: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
@@ -187,6 +192,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
   gpuLayers: 99,
   flashAttn: true,
+  aggressiveModelLoading: false,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],

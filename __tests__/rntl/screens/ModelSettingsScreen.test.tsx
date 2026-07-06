@@ -263,6 +263,28 @@ describe('ModelSettingsScreen', () => {
   });
 
   // ============================================================================
+  describe('aggressive loading toggle', () => {
+    it('renders the Aggressive Loading label', () => {
+      const { getByText } = renderWithSections('text');
+      expect(getByText('Aggressive Loading')).toBeTruthy();
+    });
+
+    it('turns the setting on via the switch', () => {
+      useAppStore.getState().updateSettings({ aggressiveModelLoading: false });
+      const { getByTestId } = renderWithSections('text');
+      fireEvent(getByTestId('aggressive-loading-switch'), 'valueChange', true);
+      expect(useAppStore.getState().settings.aggressiveModelLoading).toBe(true);
+    });
+
+    it('turns the setting off via the switch', () => {
+      useAppStore.getState().updateSettings({ aggressiveModelLoading: true });
+      const { getByTestId } = renderWithSections('text');
+      fireEvent(getByTestId('aggressive-loading-switch'), 'valueChange', false);
+      expect(useAppStore.getState().settings.aggressiveModelLoading).toBe(false);
+    });
+  });
+
+  // ============================================================================
   // Image Generation Settings
   // ============================================================================
   describe('image generation settings', () => {
@@ -796,6 +818,7 @@ describe('ModelSettingsScreen', () => {
           inferenceBackend: undefined as any,
           gpuLayers: undefined as any,
           flashAttn: undefined as any,
+          aggressiveModelLoading: undefined as any,
           cacheType: undefined as any,
           showGenerationDetails: undefined as any,
           enhanceImagePrompts: undefined as any,
