@@ -90,7 +90,10 @@ export const ImageTab: React.FC<ImageTabProps> = ({
 
       {downloadedImageModels.length > 0 && (
         <>
-          <Text style={styles.sectionSubTitle}>📁 Local Models</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Icon name="hard-drive" size={14} color={colors.textMuted} />
+            <Text style={styles.sectionSubTitle}>Local Models</Text>
+          </View>
           {downloadedImageModels.map((model) => {
             const isCurrent = activeImageModelId === model.id;
             return (
