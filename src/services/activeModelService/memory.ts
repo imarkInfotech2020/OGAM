@@ -123,12 +123,14 @@ export interface CheckMemoryParams {
   lists: ModelLists;
   /** Active load policy. Defaults to balanced so existing callers are unchanged. */
   policy?: LoadPolicy;
+  /** User already approved a memory override for this model this session → don't re-prompt. */
+  sessionOverride?: boolean;
 }
 
 export async function checkMemoryForModel(
   params: CheckMemoryParams,
 ): Promise<MemoryCheckResult> {
-  const { modelId, modelType, ids, lists, policy } = params;
+  const { modelId, modelType, ids, lists, policy, sessionOverride } = params;
   const memoryBudgetGB = await getMemoryBudgetGB(policy);
   const warningThresholdGB = await getMemoryWarningThresholdGB();
 
@@ -156,6 +158,18 @@ export async function checkMemoryForModel(
   const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
 
   const modelName = 'name' in model ? model.name : modelId;
+
+  // Already approved for this model this session → skip the gate so the user isn't
+  // re-prompted every time it's evicted and reloaded (text↔image↔TTS swaps).
+  if (sessionOverride) {
+    return {
+      canLoad: true, severity: 'safe',
+      availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
+      requiredMemoryGB, currentlyLoadedMemoryGB, totalRequiredMemoryGB,
+      remainingAfterLoadGB: remainingBudgetGB,
+      message: `${modelName} — load override approved for this session.`,
+    };
+  }
   const requiredStr = requiredMemoryGB.toFixed(1);
   const totalStr = totalRequiredMemoryGB.toFixed(1);
   const budgetStr = memoryBudgetGB.toFixed(1);

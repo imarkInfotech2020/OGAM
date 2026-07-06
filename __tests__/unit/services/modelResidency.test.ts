@@ -440,6 +440,47 @@ describe('ModelResidencyManager', () => {
     });
   });
 
+  describe('session override memory (approve Load Anyway once per model)', () => {
+    beforeEach(() => { modelResidencyManager._reset(); });
+    afterEach(() => jest.restoreAllMocks());
+
+    const tooBig = { key: 'text', type: 'text' as const, modelId: 'org/big-model', sizeMB: 2000 };
+
+    it('remembers an explicit override so the SAME model auto-overrides next time (no re-prompt)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000); // 2000MB model can never fit the budget
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+
+      // Fails-before: without override the oversized model is refused.
+      expect((await modelResidencyManager.makeRoomFor(tooBig)).fits).toBe(false);
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(false);
+
+      // User taps "Load Anyway" once → forced load, and it's remembered for the session.
+      expect((await modelResidencyManager.makeRoomFor(tooBig, { override: true })).fits).toBe(true);
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(true);
+
+      // Passes-after: a later load of the SAME model (no override flag) auto-overrides.
+      expect((await modelResidencyManager.makeRoomFor(tooBig)).fits).toBe(true);
+    });
+
+    it('does NOT leak the override to a different model', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      await modelResidencyManager.makeRoomFor(tooBig, { override: true });
+      // A different oversized model is still gated (its own approval required).
+      const other = { key: 'text', type: 'text' as const, modelId: 'org/other-model', sizeMB: 2000 };
+      expect((await modelResidencyManager.makeRoomFor(other)).fits).toBe(false);
+    });
+
+    it('_reset clears session overrides (relaunch asks again)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      await modelResidencyManager.makeRoomFor(tooBig, { override: true });
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(true);
+      modelResidencyManager._reset();
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(false);
+    });
+  });
+
   describe('canEvict veto (residency ↔ audio seam)', () => {
     beforeEach(() => modelResidencyManager._reset());
     afterEach(() => jest.restoreAllMocks());

@@ -162,7 +162,7 @@ class ActiveModelService {
     // models' unload fns are the non-locking internal variants (we already hold
     // the lock here), so this never deadlocks.
     const room = await modelResidencyManager.makeRoomFor(
-      { key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty },
+      { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
       { override: opts?.override },
     );
     // Won't fit even after eviction. OVERRIDABLE: the typed error lets every caller
@@ -258,6 +258,7 @@ class ActiveModelService {
       {
         key: 'image',
         type: 'image',
+        modelId: model.id,
         sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
         // CoreML/ONNX image weights load into dirty (jetsam-counted) memory — gate on
         // real free RAM too, unlike mmap'd GGUF text. (See ResidentSpec.dirtyMemory.)
@@ -460,8 +461,8 @@ class ActiveModelService {
     return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
   async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {
-    // Same policy as residency so the pre-check + residency gate agree (aggressive relaxes both).
-    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists(), policy: modelResidencyManager.getLoadPolicy() });
+    // Same policy + session-override source as the residency gate so pre-check and gate agree.
+    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists(), policy: modelResidencyManager.getLoadPolicy(), sessionOverride: modelResidencyManager.hasSessionOverride(modelId) });
   }
   async checkMemoryForDualModel(textModelId: string | null, imageModelId: string | null): Promise<MemoryCheckResult> {
     return _checkMemoryForDualModel({ textModelId, imageModelId, lists: this.getLists() });

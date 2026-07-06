@@ -187,4 +187,14 @@ describe('checkMemoryForModel — severity classification (the load-dialog decis
     expect(r.severity).toBe('blocked');
     expect(r.canLoad).toBe(false);
   });
+
+  it('sessionOverride short-circuits the gate: a model that would be CRITICAL loads without a prompt', async () => {
+    // Fails-before: 4GB model → 6.0GB > 4.8 budget → critical, blocked.
+    const blocked = await checkMemoryForModel({ modelId: 'm', modelType: 'text', ids: IDS, lists: listsWith(4 * 1024 ** 3) });
+    expect(blocked.canLoad).toBe(false);
+    // Passes-after: same model with a session override → allowed, safe (no re-prompt).
+    const approved = await checkMemoryForModel({ modelId: 'm', modelType: 'text', ids: IDS, lists: listsWith(4 * 1024 ** 3), sessionOverride: true });
+    expect(approved.canLoad).toBe(true);
+    expect(approved.severity).toBe('safe');
+  });
 });

@@ -38,6 +38,9 @@ interface RegisteredResident extends Resident {
 export interface ResidentSpec {
   key: string;
   type: ResidentType;
+  /** The specific downloaded-model id — keys the per-model session override memory.
+   *  (`key` is only the slot/type, e.g. 'text', so it can't distinguish models.) */
+  modelId?: string;
   sizeMB: number;
   pinned?: boolean;
   /** Owner's veto: returns false while the model is in use (e.g. TTS playing) so
@@ -73,6 +76,23 @@ class ModelResidencyManager {
    * off a store value multiple writers can desync.
    */
   private loadPolicy: LoadPolicy = 'balanced';
+  /**
+   * Model ids the user has approved a memory-override ("Load Anyway") for THIS session.
+   * In-memory only (never persisted) so a relaunch starts fresh and asks again. Once a
+   * model is in here, its loads skip the gate — the user isn't re-prompted every time it
+   * gets evicted (e.g. text↔image↔TTS swaps) and reloaded.
+   */
+  private readonly sessionOverrides = new Set<string>();
+
+  /** Whether the user already approved a memory override for this model this session. */
+  hasSessionOverride(modelId: string | undefined): boolean {
+    return !!modelId && this.sessionOverrides.has(modelId);
+  }
+
+  /** Record a user-approved override for this model (session-scoped). */
+  rememberSessionOverride(modelId: string | undefined): void {
+    if (modelId) this.sessionOverrides.add(modelId);
+  }
 
   constructor() {
     // Residency owns the memory-pressure response (single owner of model memory).
@@ -260,12 +280,17 @@ class ModelResidencyManager {
     // Re-read real free RAM so the decision reflects current pressure, not a stale
     // boot-time snapshot (other apps may have grabbed memory since).
     await hardwareService.refreshMemoryInfo().catch(() => {});
+    // Session override: an explicit opts.override (from a fresh "Load Anyway") OR this
+    // model already approved earlier this session. Remember an explicit one so the user
+    // isn't re-prompted when it's evicted and reloaded during model swaps.
+    if (opts?.override) this.rememberSessionOverride(spec.modelId);
+    const override = !!opts?.override || this.hasSessionOverride(spec.modelId);
     const budgetMB = this.budgetForSpec(spec);
     const residents = this.planningResidents();
-    // Aggressive policy (or an explicit override) keeps ONE model at a time: evict
-    // every evictable resident instead of co-residing whatever fits, so the incoming
-    // model gets the maximum RAM. Balanced mode keeps smart co-residency.
-    const singleModel = this.loadPolicy === 'aggressive' || !!opts?.override;
+    // Aggressive policy (or an override) keeps ONE model at a time: evict every evictable
+    // resident instead of co-residing whatever fits, so the incoming model gets the
+    // maximum RAM. Balanced mode keeps smart co-residency.
+    const singleModel = this.loadPolicy === 'aggressive' || override;
     const plan = planEviction(residents, spec, budgetMB, { singleModel });
     // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision.
     // budgetForSpec already folds in the live os_proc budget under dirty pressure, so
@@ -275,17 +300,17 @@ class ModelResidencyManager {
     const availMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
     const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
     logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
-    if (!plan.fits && !opts?.override) {
+    if (!plan.fits && !override) {
       // Won't fit even after the planned evictions — DON'T evict (otherwise we'd
       // strand the device with nothing). The caller blocks the load.
       return { evicted: [], fits: false };
     }
-    // Override ("Load Anyway"): the user explicitly accepted the risk. planEviction
-    // already collected every evictable resident when !fits, so evicting plan.evict
-    // frees the MAXIMUM room, then we force fits=true. The lenient safeguards remain:
-    // we still evicted everything we could, and the native loader keeps its
-    // GPU→CPU→smaller-ctx fallback + OOM recovery if the attempt truly can't fit.
-    if (!plan.fits && opts?.override) {
+    // Override ("Load Anyway"): the user explicitly accepted the risk (this call or
+    // earlier this session). planEviction already collected every evictable resident when
+    // !fits, so evicting plan.evict frees the MAXIMUM room, then we force fits=true. The
+    // lenient safeguards remain: we still evicted everything we could, and the native
+    // loader keeps its GPU→CPU→smaller-ctx fallback + OOM recovery if it truly can't fit.
+    if (!plan.fits && override) {
       logger.log(`[MEM-SM] makeRoomFor ${spec.key} OVERRIDE — forcing load after evicting [${plan.evict.map(e => e.key).join(',')}]`);
     }
     for (const victim of plan.evict) {
@@ -352,6 +377,7 @@ class ModelResidencyManager {
     this.residents.clear();
     this.budgetOverrideMB = null;
     this.opChain = Promise.resolve();
+    this.sessionOverrides.clear();
   }
 }
 
