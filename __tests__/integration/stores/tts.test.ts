@@ -109,6 +109,26 @@ describe('TTS integration', () => {
     jest.clearAllMocks();
   });
 
+  // ── Voice sequencing ──────────────────────────────────────────────────
+  describe('voice sequencing: loading TTS evicts the resident text model', () => {
+    it('makeRoomFor for TTS uses override (single-model) so an 8GB LLM is evicted for the ~300MB voice model', async () => {
+      const { modelResidencyManager } = require('@offgrid/core/services/modelResidency');
+      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
+        .mockResolvedValue({ fits: true, evicted: ['text'] });
+      mockEngine.getPhase.mockReturnValue('idle');   // cold → initializeEngine runs makeRoomFor
+      mockEngine.isFullyDownloaded.mockReturnValue(true);
+
+      await getState().initializeEngine();
+
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'tts', type: 'tts' }),
+        { override: true },   // single-model: sequence the voice turn, evict the text model
+      );
+      spy.mockRestore();
+      mockEngine.getPhase.mockReturnValue('ready');
+    });
+  });
+
   // ── Chat Mode full flow ───────────────────────────────────────────────
 
   describe('Chat Mode: speak → stop', () => {
