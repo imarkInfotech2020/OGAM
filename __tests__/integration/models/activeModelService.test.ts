@@ -84,6 +84,40 @@ describe('ActiveModelService Integration', () => {
     await activeModelService.syncWithNativeState();
   });
 
+  describe('Text Model Loading — aggressive load override ("Load Anyway")', () => {
+    // A GGUF whose estimated RAM exceeds the budget on the current device.
+    const oversized = () => createDownloadedModel({
+      id: 'huge-1', engine: 'llama' as any, fileName: 'huge.gguf', filePath: '/huge.gguf',
+      fileSize: 21 * 1024 * 1024 * 1024,
+    });
+
+    it('throws an OverridableMemoryError when the model does not fit (no override)', async () => {
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(24);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(24);
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      useAppStore.setState({ downloadedModels: [oversized()] });
+
+      const { isOverridableMemoryError } = require('../../../src/services/modelLoadErrors');
+      let caught: unknown;
+      await activeModelService.loadTextModel('huge-1').catch((e: unknown) => { caught = e; });
+      expect(caught).toBeDefined();
+      expect(isOverridableMemoryError(caught)).toBe(true);
+      expect(mockLlmService.loadModel).not.toHaveBeenCalled();
+    });
+
+    it('loads the same model when called with { override: true } (forces past the gate)', async () => {
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(24);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(24);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      useAppStore.setState({ downloadedModels: [oversized()] });
+
+      await activeModelService.loadTextModel('huge-1', undefined, { override: true });
+
+      expect(mockLlmService.loadModel).toHaveBeenCalled();
+      expect(getAppState().activeModelId).toBe('huge-1');
+    });
+  });
+
   describe('Text Model Loading', () => {
     it('should load text model via llmService and update store', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
@@ -113,14 +147,14 @@ describe('ActiveModelService Integration', () => {
       const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
       useAppStore.setState({ downloadedModels: [litert] });
       await activeModelService.loadTextModel('litert-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }), expect.anything());
 
       // GGUF/llama is clean mmap -> physical-cap budgeting unchanged (dirtyMemory:false).
       spy.mockClear();
       const gguf = createDownloadedModel({ id: 'gguf-1', engine: 'llama' as any });
       useAppStore.setState({ downloadedModels: [gguf] });
       await activeModelService.loadTextModel('gguf-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }), expect.anything());
       spy.mockRestore();
     });
 
