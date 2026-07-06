@@ -686,7 +686,8 @@ describe('ModelSelectorModal', () => {
         fireEvent.press(getByText('SD Model'));
       });
 
-      expect(activeModelService.loadImageModel).toHaveBeenCalledWith('img1');
+      // Loaded via the shared loadModelWithOverride helper (id, timeout, override opts).
+      expect(activeModelService.loadImageModel).toHaveBeenCalledWith('img1', undefined, undefined);
     });
 
     it('does not call loadImageModel when pressing the currently active image model', async () => {
