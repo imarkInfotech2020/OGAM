@@ -82,6 +82,9 @@ export interface TextLoadContext {
   store: ReturnType<typeof useAppStore.getState>;
   timeoutMs: number;
   loadedTextModelId: string | null;
+  /** User forced this load ("Load Anyway"/continue) — skip the conservative native
+   *  memory gate so the loader's own fallbacks try instead of a hard block. */
+  override?: boolean;
   onLoaded: (modelId: string) => void;
   onError: () => void;
   onFinally: () => void;
@@ -207,7 +210,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
     try {
       await Promise.race([
-        llmService.loadModel(ctx.model.filePath, mmProjPath),
+        llmService.loadModel(ctx.model.filePath, mmProjPath, { override: ctx.override }),
         timeoutPromise,
       ]);
     } finally {

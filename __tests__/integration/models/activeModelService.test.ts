@@ -131,7 +131,8 @@ describe('ActiveModelService Integration', () => {
       // Verify llmService was called correctly
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        (model as any).mmProjPath
+        (model as any).mmProjPath,
+        { override: false }
       );
 
       // Verify store was updated
@@ -279,7 +280,8 @@ describe('ActiveModelService Integration', () => {
       // Should have loaded second model
       expect(mockLlmService.loadModel).toHaveBeenLastCalledWith(
         model2.filePath,
-        (model2 as any).mmProjPath
+        (model2 as any).mmProjPath,
+        { override: false }
       );
     });
 
@@ -1047,7 +1049,8 @@ describe('ActiveModelService Integration', () => {
 
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        expect.any(String) // mmproj path should be found
+        expect.any(String), // mmproj path should be found
+        { override: false }
       );
     });
   });
@@ -1402,7 +1405,8 @@ describe('ActiveModelService Integration', () => {
       // Should have called loadModel with undefined mmProjPath
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        undefined
+        undefined,
+        { override: false }
       );
     });
   });
@@ -1429,7 +1433,8 @@ describe('ActiveModelService Integration', () => {
 
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        undefined
+        undefined,
+        { override: false }
       );
     });
   });

@@ -151,11 +151,9 @@ class ActiveModelService {
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
-    // LiteRT weights + KV live in dirty/accelerator memory (not clean mmap'd GGUF file
-    // pages), so their footprint counts against REAL free RAM — budgeting them like
-    // mmap'd GGUF can green-light a load the native engine then OOMs (SIGABRT). Derived
-    // once here from the engine so makeRoomFor and register can't disagree. llama/GGUF
-    // stays clean (dirtyMemory undefined -> physical-cap budgeting, unchanged).
+    // LiteRT weights + KV are dirty/accelerator memory → counted against REAL free RAM
+    // (budgeting them like clean mmap GGUF green-lights a load the engine then OOMs).
+    // Derived once so makeRoomFor and register agree; llama/GGUF stays clean (physical cap).
     const textIsDirty = model.engine === 'litert';
     // Residency manager is authoritative: evict other generation models (and
     // extras) to fit the RAM budget before loading this text model. The evicted
@@ -180,6 +178,7 @@ class ActiveModelService {
       modelId,
       store,
       timeoutMs,
+      override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;
