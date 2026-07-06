@@ -14,9 +14,7 @@ import {
 import { hardwareService } from '../../services/hardware';
 import { createStyles } from './styles';
 
-/** Feature flag for HTP/Hexagon NPU in the UI. Enabled: the NPU backend ships
- *  prebuilt in llama.rn and is shown on Qualcomm devices with hasNPU. */
-const HTP_UI_ENABLED = true;
+import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
 
 // ─── Inference Backend ────────────────────────────────────────────────────────
 

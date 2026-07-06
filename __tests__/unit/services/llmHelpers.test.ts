@@ -340,7 +340,7 @@ describe('buildModelParams', () => {
   });
 
   // HTP is currently disabled via HTP_ENABLED feature flag
-  it.skip('forces f16 KV cache for HTP backend', () => {
+  it('forces f16 KV cache for HTP backend', () => {
     const params = buildModelParams('/model.gguf', {
       inferenceBackend: INFERENCE_BACKENDS.HTP,
       cacheType: 'q8_0',
@@ -473,7 +473,7 @@ describe('initContextWithFallback — HTP device stripping and timeout', () => {
   });
 
   // HTP is currently disabled via HTP_ENABLED feature flag
-  it.skip('logs backend=HTP when devices contains HTP0', async () => {
+  it('logs backend=HTP when devices contains HTP0', async () => {
     const mockCtx = { gpu: true, release: jest.fn() };
     mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
     const logger = require('../../../src/utils/logger').default;

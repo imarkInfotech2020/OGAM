@@ -912,7 +912,7 @@ describe('ModelSettingsScreen', () => {
     });
 
     // HTP is currently disabled via HTP_UI_ENABLED feature flag
-    it.skip('locks KV cache display to f16 on HTP backend', () => {
+    it('locks KV cache display to f16 on HTP backend', () => {
       useAppStore.getState().updateSettings({ inferenceBackend: 'htp', cacheType: 'q4_0' });
       const { getByText } = renderWithSections('text');
       expect(getByText(/Full precision/)).toBeTruthy();

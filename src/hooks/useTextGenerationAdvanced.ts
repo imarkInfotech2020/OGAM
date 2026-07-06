@@ -4,8 +4,7 @@ import { useAppStore } from '../stores';
 import { CacheType, INFERENCE_BACKENDS } from '../types';
 import { hardwareService } from '../services/hardware';
 
-/** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
-const HTP_ENABLED = false;
+import { HTP_ENABLED } from '../config/featureFlags';
 
 export const CACHE_TYPE_DESCRIPTIONS: Record<CacheType, string> = {
   f16: 'Full precision — best quality, highest memory usage',

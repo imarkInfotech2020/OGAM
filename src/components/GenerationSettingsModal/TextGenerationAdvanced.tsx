@@ -16,7 +16,7 @@ import { createStyles } from './styles';
 const isAndroid = Platform.OS === 'android';
 
 /** Feature flag: Set to true to enable HTP/Hexagon NPU in UI. Currently disabled. */
-const HTP_UI_ENABLED = false;
+import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
 
 // ─── Inference Backend ────────────────────────────────────────────────────────
 
@@ -29,11 +29,12 @@ const IOS_BACKENDS: BackendOption[] = [
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU', desc: 'Always available. Stable, predictable performance.' },
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
+  // Display label 'GPU' (users don't know OpenCL); id stays OPENCL.
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'GPU', desc: 'Offload layers to GPU via OpenCL. Fast decode on Adreno/Mali GPUs. Requires model reload.' },
 ];
 
 const HTP_BACKEND: BackendOption = {
-  id: INFERENCE_BACKENDS.HTP, label: 'HTP', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
+  id: INFERENCE_BACKENDS.HTP, label: 'NPU', desc: 'Offload layers to Hexagon NPU on Snapdragon devices. Best for large models. Requires model reload.',
 };
 
 export const BackendSelector: React.FC = () => {
