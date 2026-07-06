@@ -165,12 +165,9 @@ class ActiveModelService {
       { key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty },
       { override: opts?.override },
     );
-    // makeRoomFor evicts nothing when the model won't fit even after freeing others
-    // (it refuses to strand the device). This is OVERRIDABLE: the user can retry with
-    // { override: true } ("Load Anyway"), which forces the load after evicting
-    // everything evictable — GGUF weights are clean mmap pages, so it often succeeds
-    // past the conservative gate. Throwing the typed error lets every caller surface a
-    // uniform "Load Anyway" instead of a dead-end "Failed to load model".
+    // Won't fit even after eviction. OVERRIDABLE: the typed error lets every caller
+    // offer "Load Anyway" (retry with { override: true }), which forces the load after
+    // evicting everything — GGUF weights mmap clean, so it often succeeds past the gate.
     if (!room.fits) {
       throw new OverridableMemoryError(
         'Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.',
@@ -463,7 +460,8 @@ class ActiveModelService {
     return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
   async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {
-    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists() });
+    // Same policy as residency so the pre-check + residency gate agree (aggressive relaxes both).
+    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists(), policy: modelResidencyManager.getLoadPolicy() });
   }
   async checkMemoryForDualModel(textModelId: string | null, imageModelId: string | null): Promise<MemoryCheckResult> {
     return _checkMemoryForDualModel({ textModelId, imageModelId, lists: this.getLists() });

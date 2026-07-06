@@ -58,6 +58,19 @@ describe('startLoadPolicySync', () => {
     expect(modelResidencyManager.getLoadPolicy()).toBe('balanced');
   });
 
+  it('is a singleton — calling twice does NOT stack subscriptions (leak guard)', () => {
+    const first = startLoadPolicySync();
+    const second = startLoadPolicySync();
+    expect(second).toBe(first); // same live unsubscribe returned, not a new subscription
+    unsubscribe = first;
+
+    const spy = jest.spyOn(modelResidencyManager, 'setLoadPolicy');
+    // One flag flip → setLoadPolicy fires exactly once, not once-per-start.
+    useAppStore.getState().updateSettings({ aggressiveModelLoading: true });
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
   it('does not fire setLoadPolicy for unrelated setting changes (only on flag flip)', () => {
     unsubscribe = startLoadPolicySync();
     const spy = jest.spyOn(modelResidencyManager, 'setLoadPolicy');

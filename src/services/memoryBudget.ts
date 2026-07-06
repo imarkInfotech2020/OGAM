@@ -33,8 +33,12 @@
  *    footprint the balanced dynamic guard rejects on a 12GB phone) are allowed to
  *    load. The reserve floor is reduced but NEVER removed — that is the "lenient
  *    safeguard": we still keep the OS + app baseline alive rather than guaranteeing
- *    an instant jetsam. A hard block under aggressive can additionally be overridden
- *    by explicit user confirmation ("Load Anyway"); see `policyAllowsOverride`.
+ *    an instant jetsam.
+ *
+ * "Load Anyway" (the per-load override that forces past the fit gate) is a separate,
+ * ALWAYS-available escape hatch — not gated by this policy. Aggressive mode changes
+ * the default budget so fewer loads need forcing; the override remains the explicit,
+ * per-load, user-confirmed way to push past whatever budget is in effect.
  */
 import { Platform } from 'react-native';
 
@@ -51,11 +55,6 @@ type Plat = 'ios' | 'android' | string;
 /** OS/app reserve (MB) that is never committed to models, by policy. */
 export function memoryReserveMB(policy: LoadPolicy = 'balanced'): number {
   return policy === 'aggressive' ? AGGRESSIVE_RESERVE_MB : MEMORY_RESERVE_MB;
-}
-
-/** Whether a hard "won't fit" block may be overridden by explicit user confirmation. */
-export function policyAllowsOverride(policy: LoadPolicy = 'balanced'): boolean {
-  return policy === 'aggressive';
 }
 
 /** Safe fraction of total RAM this process may commit to models, by device tier. */

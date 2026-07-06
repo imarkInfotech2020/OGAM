@@ -555,6 +555,27 @@ describe('ActiveModelService Integration', () => {
       expect(result.severity).toBe('critical');
     });
 
+    it('aggressive load policy relaxes the PRE-CHECK too (not just residency), end-to-end', async () => {
+      // 6.5GB file → ~9.75GB required (1.5x). On a 12GB device this exceeds the
+      // balanced budget (0.70 Android / 0.78 iOS) but fits the aggressive budget
+      // (0.88 / 0.92) — proving the pre-check reads the residency manager's policy.
+      const model = createDownloadedModel({ id: 'mid-model', fileSize: 6.5 * 1024 * 1024 * 1024 });
+      useAppStore.setState({ downloadedModels: [model] });
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 12 * 1024 * 1024 * 1024 })
+      );
+
+      modelResidencyManager.setLoadPolicy('balanced');
+      const balanced = await activeModelService.checkMemoryForModel('mid-model', 'text');
+      expect(balanced.canLoad).toBe(false);
+
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await activeModelService.checkMemoryForModel('mid-model', 'text');
+      expect(aggressive.canLoad).toBe(true);
+
+      modelResidencyManager.setLoadPolicy('balanced'); // don't leak policy to other tests
+    });
+
     it('should return blocked for non-existent model', async () => {
       useAppStore.setState({ downloadedModels: [] });
 

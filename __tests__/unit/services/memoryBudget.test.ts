@@ -8,7 +8,6 @@ import {
   modelMemoryBudgetMB,
   modelWarningThresholdMB,
   memoryReserveMB,
-  policyAllowsOverride,
   MEMORY_RESERVE_MB,
   AGGRESSIVE_RESERVE_MB,
 } from '../../../src/services/memoryBudget';
@@ -86,12 +85,6 @@ describe('load policy — aggressive vs balanced', () => {
     expect(modelMemoryBudgetMB(total, 'android', 'balanced')).toBeLessThan(model);
     // Aggressive: pushes near the physical ceiling → 21GB fits (Nico's Qwen3 MoE case).
     expect(modelMemoryBudgetMB(total, 'android', 'aggressive')).toBeGreaterThanOrEqual(model);
-  });
-
-  it('only aggressive permits a user override of a hard block', () => {
-    expect(policyAllowsOverride('aggressive')).toBe(true);
-    expect(policyAllowsOverride('balanced')).toBe(false);
-    expect(policyAllowsOverride()).toBe(false);
   });
 
   it('aggressive still never commits past its own reserve floor', () => {

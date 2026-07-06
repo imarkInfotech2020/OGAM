@@ -24,10 +24,17 @@ export function loadPolicyFromSettings(settings: { aggressiveModelLoading?: bool
 
 /**
  * Push the current setting into the manager and keep it in sync on every change.
- * Idempotent per value (Zustand only notifies on change, and setLoadPolicy is a
- * plain assignment). Returns an unsubscribe fn. Call once at app boot.
+ * SINGLETON: safe to call more than once — App's boot effect can re-run (its
+ * useCallback deps change), and a naive subscribe would then stack listeners and
+ * leak for the app lifetime (one setLoadPolicy per listener per set()). Repeated
+ * calls return the SAME live unsubscribe; the underlying store subscription is
+ * created exactly once. Returns an unsubscribe fn (which also clears the singleton).
  */
+let activeUnsubscribe: (() => void) | null = null;
+
 export function startLoadPolicySync(): () => void {
+  if (activeUnsubscribe) return activeUnsubscribe; // already syncing — don't stack
+
   let last: boolean | undefined;
   const apply = (aggressive: boolean | undefined) => {
     if (aggressive === last) return; // no-op unless the flag actually flipped
@@ -38,5 +45,10 @@ export function startLoadPolicySync(): () => void {
   apply(useAppStore.getState().settings?.aggressiveModelLoading);
   // Project future changes. The base store's subscribe fires on every set(); we
   // diff the one flag so setLoadPolicy runs only when it changes.
-  return useAppStore.subscribe(state => apply(state.settings?.aggressiveModelLoading));
+  const unsub = useAppStore.subscribe(state => apply(state.settings?.aggressiveModelLoading));
+  activeUnsubscribe = () => {
+    unsub();
+    activeUnsubscribe = null;
+  };
+  return activeUnsubscribe;
 }
