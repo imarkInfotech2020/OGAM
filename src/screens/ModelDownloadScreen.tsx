@@ -14,6 +14,7 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
+import { isAccelerableQuant } from '../utils/acceleration';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { RECOMMENDED_MODELS, TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
 import { useAppStore } from '../stores';
@@ -65,6 +66,7 @@ const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, 
     downloadBytes={progress?.bytes}
     isCompatible={model.minRam <= totalRamGB && (!model.maxRam || totalRamGB <= model.maxRam)}
     isTrending={isTrending}
+    supportsAcceleration={isAccelerableQuant(recFile.quantization)}
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}
@@ -100,6 +102,7 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     downloadBytes={progress?.bytes}
     isCompatible={file.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB)}
     recommended={{ pillLabel: 'Recommended' }}
+    supportsAcceleration
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}
