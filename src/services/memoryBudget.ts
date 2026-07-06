@@ -22,16 +22,56 @@
  * Previously two places computed this independently (a 0.6 in the residency policy
  * AND a separate device-tiered fraction in the model-load check); unifying it here
  * is the fix.
+ *
+ * ── Load policy ────────────────────────────────────────────────────────────────
+ * The SAME functions are parameterised by a `LoadPolicy` so "aggressive mode" is a
+ * single data-driven knob, NOT an `if (aggressive)` scattered through the load path:
+ *  - 'balanced' (default): the conservative behaviour above. Every existing caller
+ *    that omits the policy gets exactly this, so the default is behaviour-neutral.
+ *  - 'aggressive': commit a larger fraction of RAM and hold a smaller OS reserve,
+ *    so big models (e.g. a 21GB MoE on a 24GB phone, a 3GB LiteRT model whose dirty
+ *    footprint the balanced dynamic guard rejects on a 12GB phone) are allowed to
+ *    load. The reserve floor is reduced but NEVER removed — that is the "lenient
+ *    safeguard": we still keep the OS + app baseline alive rather than guaranteeing
+ *    an instant jetsam. A hard block under aggressive can additionally be overridden
+ *    by explicit user confirmation ("Load Anyway"); see `policyAllowsOverride`.
  */
 import { Platform } from 'react-native';
 
+/** How hard we push RAM utilisation when loading a model. */
+export type LoadPolicy = 'balanced' | 'aggressive';
+
 /** Never commit the last ~1.5GB — OS + app baseline must always have headroom. */
 export const MEMORY_RESERVE_MB = 1500;
+/** Aggressive mode still keeps a floor alive (lenient, not absent). */
+export const AGGRESSIVE_RESERVE_MB = 800;
 
 type Plat = 'ios' | 'android' | string;
 
+/** OS/app reserve (MB) that is never committed to models, by policy. */
+export function memoryReserveMB(policy: LoadPolicy = 'balanced'): number {
+  return policy === 'aggressive' ? AGGRESSIVE_RESERVE_MB : MEMORY_RESERVE_MB;
+}
+
+/** Whether a hard "won't fit" block may be overridden by explicit user confirmation. */
+export function policyAllowsOverride(policy: LoadPolicy = 'balanced'): boolean {
+  return policy === 'aggressive';
+}
+
 /** Safe fraction of total RAM this process may commit to models, by device tier. */
-export function modelBudgetFraction(totalRamGB: number, platform: Plat = Platform.OS): number {
+export function modelBudgetFraction(
+  totalRamGB: number,
+  platform: Plat = Platform.OS,
+  policy: LoadPolicy = 'balanced',
+): number {
+  if (policy === 'aggressive') {
+    // Lenient: use more of RAM. Low-RAM tiers stay comparatively cautious (a 60%
+    // slice of 4GB is already close to what the OS will tolerate), high-RAM/entitled
+    // tiers push near the physical ceiling so a 21GB model fits a 24GB phone.
+    if (totalRamGB <= 4) return 0.60;
+    if (totalRamGB <= 8) return 0.75;
+    return platform === 'ios' ? 0.92 : 0.88;
+  }
   if (totalRamGB <= 4) return 0.50; // ~2GB on 4GB — safe; dynamic guard tightens under pressure
   if (totalRamGB <= 8) return 0.60; // 6-8GB
   return platform === 'ios' ? 0.78 : 0.70; // 12GB+: iOS holds the increased-memory entitlement
@@ -45,10 +85,14 @@ export function modelWarningFraction(totalRamGB: number, platform: Plat = Platfo
 }
 
 /** Hard budget in MB: the smaller of the fraction-of-RAM and (RAM minus reserve). */
-export function modelMemoryBudgetMB(totalRamMB: number, platform: Plat = Platform.OS): number {
+export function modelMemoryBudgetMB(
+  totalRamMB: number,
+  platform: Plat = Platform.OS,
+  policy: LoadPolicy = 'balanced',
+): number {
   const totalRamGB = totalRamMB / 1024;
-  const byFraction = totalRamMB * modelBudgetFraction(totalRamGB, platform);
-  const byReserve = totalRamMB - MEMORY_RESERVE_MB;
+  const byFraction = totalRamMB * modelBudgetFraction(totalRamGB, platform, policy);
+  const byReserve = totalRamMB - memoryReserveMB(policy);
   return Math.max(0, Math.min(byFraction, byReserve));
 }
 

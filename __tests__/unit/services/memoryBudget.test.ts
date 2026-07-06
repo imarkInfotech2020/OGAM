@@ -7,7 +7,10 @@ import {
   modelBudgetFraction,
   modelMemoryBudgetMB,
   modelWarningThresholdMB,
+  memoryReserveMB,
+  policyAllowsOverride,
   MEMORY_RESERVE_MB,
+  AGGRESSIVE_RESERVE_MB,
 } from '../../../src/services/memoryBudget';
 
 const GB = 1024;
@@ -52,5 +55,47 @@ describe('modelWarningThresholdMB', () => {
       const total = gb * GB;
       expect(modelWarningThresholdMB(total, 'ios')).toBeLessThanOrEqual(modelMemoryBudgetMB(total, 'ios'));
     }
+  });
+});
+
+describe('load policy — aggressive vs balanced', () => {
+  it("defaults to balanced (behaviour-neutral) when policy omitted", () => {
+    for (const gb of [4, 8, 12, 24]) {
+      expect(modelBudgetFraction(gb, 'android')).toBe(modelBudgetFraction(gb, 'android', 'balanced'));
+      expect(modelMemoryBudgetMB(gb * GB, 'android')).toBe(modelMemoryBudgetMB(gb * GB, 'android', 'balanced'));
+    }
+  });
+
+  it('aggressive commits a strictly larger fraction at every tier', () => {
+    for (const [gb, plat] of [[4, 'android'], [8, 'android'], [12, 'android'], [12, 'ios'], [24, 'android']] as const) {
+      expect(modelBudgetFraction(gb, plat, 'aggressive')).toBeGreaterThan(modelBudgetFraction(gb, plat, 'balanced'));
+    }
+  });
+
+  it('aggressive holds a smaller (but non-zero) OS reserve — the lenient safeguard', () => {
+    expect(memoryReserveMB('aggressive')).toBe(AGGRESSIVE_RESERVE_MB);
+    expect(memoryReserveMB('balanced')).toBe(MEMORY_RESERVE_MB);
+    expect(AGGRESSIVE_RESERVE_MB).toBeGreaterThan(0);
+    expect(AGGRESSIVE_RESERVE_MB).toBeLessThan(MEMORY_RESERVE_MB);
+  });
+
+  it('fails-before/passes-after: a 21GB model is rejected on a 24GB phone under balanced but fits under aggressive', () => {
+    const total = 24 * GB;
+    const model = 21 * GB;
+    // Balanced: 24GB * 0.70 = 16.8GB budget → 21GB does NOT fit.
+    expect(modelMemoryBudgetMB(total, 'android', 'balanced')).toBeLessThan(model);
+    // Aggressive: pushes near the physical ceiling → 21GB fits (Nico's Qwen3 MoE case).
+    expect(modelMemoryBudgetMB(total, 'android', 'aggressive')).toBeGreaterThanOrEqual(model);
+  });
+
+  it('only aggressive permits a user override of a hard block', () => {
+    expect(policyAllowsOverride('aggressive')).toBe(true);
+    expect(policyAllowsOverride('balanced')).toBe(false);
+    expect(policyAllowsOverride()).toBe(false);
+  });
+
+  it('aggressive still never commits past its own reserve floor', () => {
+    const total = 24 * GB;
+    expect(modelMemoryBudgetMB(total, 'android', 'aggressive')).toBeLessThanOrEqual(total - AGGRESSIVE_RESERVE_MB);
   });
 });

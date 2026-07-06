@@ -17,7 +17,7 @@
  * can be unit-tested without touching native model loading.
  */
 
-import { modelMemoryBudgetMB } from '../memoryBudget';
+import { modelMemoryBudgetMB, LoadPolicy } from '../memoryBudget';
 
 export type ResidentType = 'text' | 'image' | 'whisper' | 'tts' | 'classifier' | 'embedding';
 
@@ -94,18 +94,19 @@ export function selectEvictionVictim(
  */
 export function computeBudgetMB(
   totalRamMB: number,
-  opts?: { reserveMB?: number; fraction?: number },
+  opts?: { reserveMB?: number; fraction?: number; policy?: LoadPolicy },
 ): number {
   // Explicit overrides keep the old escape hatch; otherwise defer to the single
   // device + platform aware budget owner (so residency and the pre-load memory
   // check can never disagree, and high-RAM/iOS-entitled devices get their larger
-  // safe fraction instead of a flat 60%).
+  // safe fraction instead of a flat 60%). The load policy ('aggressive') tunes the
+  // fraction + reserve in that one owner — never branched on here.
   if (opts?.fraction != null || opts?.reserveMB != null) {
     const fraction = opts?.fraction ?? 0.6;
     const reserveMB = opts?.reserveMB ?? 1500;
     return Math.max(0, Math.min(totalRamMB * fraction, totalRamMB - reserveMB));
   }
-  return modelMemoryBudgetMB(totalRamMB);
+  return modelMemoryBudgetMB(totalRamMB, undefined, opts?.policy);
 }
 
 /**
