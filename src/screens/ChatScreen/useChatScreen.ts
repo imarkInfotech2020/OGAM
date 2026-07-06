@@ -11,9 +11,10 @@ import {
   contextCompactionService,
 } from '../../services';
 import { liteRTService } from '../../services/litert';
+import { effectiveCacheType } from '../../services/llmHelpers';
 import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
-import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
@@ -63,7 +64,9 @@ export function computePendingSettings(
     return changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
            (loadedSettings.liteRTBackend !== undefined && liveTokens !== loadedTokens);
   }
-  const effCache = settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType;
+  // Effective cache (OpenCL + HTP both coerce to f16) — single source in llmHelpers so
+  // the reload-diff, the loader, and the generation details never disagree.
+  const effCache = effectiveCacheType(settings.inferenceBackend as string | undefined, settings.cacheType as string | undefined);
   return (
     changed(settings.nThreads, loadedSettings.nThreads) ||
     changed(settings.nBatch, loadedSettings.nBatch) ||
