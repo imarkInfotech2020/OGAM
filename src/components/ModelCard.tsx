@@ -84,37 +84,33 @@ function resolveCredibility(
 const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number };
-  tight?: boolean;
   queued?: boolean;
-}> = ({ progress, bytes, tight, queued }) => {
+}> = ({ progress, bytes, queued }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   return (
   <View style={styles.progressSection}>
-    <View style={[styles.progressContainer, tight && styles.progressContainerTight]}>
-      {/* Queued shows an EMPTY bar (0 progress) so it reads as "not started yet". */}
-      <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
-      </View>
-      {/* End-of-bar label: "Queued" while waiting for a slot, otherwise the percent. */}
-      <View style={styles.progressLabelRow}>
-        {queued ? (
-          <>
-            <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
-            <Text style={[styles.progressText, styles.queuedText, tight && styles.progressTextTight]}>Queued</Text>
-          </>
-        ) : (
-          <Text style={[styles.progressText, tight && styles.progressTextTight]}>{`${Math.round(progress * 100)}%`}</Text>
-        )}
-      </View>
+    {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
+        (0 progress) so it reads as "not started yet". */}
+    <View style={styles.progressBar}>
+      <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
     </View>
-    {/* Bytes shown for every in-flight state (queued reads "0 B / 142 MB" — the size
-        you're about to fetch), standardized across the Text/Image/STT cards. */}
-    {bytes && bytes.total > 0 && (
+    {/* Caption row under the bar: bytes on the LEFT (uses the empty left real estate),
+        status on the RIGHT. "Queued" while waiting for a slot, otherwise the percent.
+        One row instead of stacking bytes below a half-width bar → not cramped. */}
+    <View style={styles.progressCaptionRow}>
       <Text style={styles.progressBytesText}>
-        {formatBytes(bytes.downloaded)} / {formatBytes(bytes.total)}
+        {bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : ''}
       </Text>
-    )}
+      {queued ? (
+        <View style={styles.progressLabelRow}>
+          <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+          <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+        </View>
+      ) : (
+        <Text style={styles.progressText}>{`${Math.round(progress * 100)}%`}</Text>
+      )}
+    </View>
   </View>
   );
 };
@@ -263,7 +259,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} tight={!!recommended} queued={isQueued} />
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} />
           )}
           {failedState && (
             <FailedSection

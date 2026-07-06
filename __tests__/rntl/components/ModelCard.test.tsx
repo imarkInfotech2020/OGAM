@@ -66,6 +66,33 @@ describe('ModelCard', () => {
       );
       expect(queryByLabelText('Queued')).toBeNull();
     });
+
+    it('shows bytes AND percent together (caption row) while downloading', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloading
+          downloadProgress={0.5}
+          downloadBytes={{ downloaded: 2 * 1024 * 1024 * 1024, total: 4 * 1024 * 1024 * 1024 }}
+        />
+      );
+      // Both the size caption and the percent render (full-width bar + left/right row).
+      expect(getByText('2.0 GB / 4.0 GB')).toBeTruthy();
+      expect(getByText('50%')).toBeTruthy();
+    });
+
+    it('shows bytes alongside the Queued label (queued reads "0 B / size")', () => {
+      const { getByText, getByLabelText } = render(
+        <ModelCard
+          model={baseModel}
+          isQueued
+          downloadProgress={0}
+          downloadBytes={{ downloaded: 0, total: 4 * 1024 * 1024 * 1024 }}
+        />
+      );
+      expect(getByLabelText('Queued')).toBeTruthy();
+      expect(getByText('0 B / 4.0 GB')).toBeTruthy();
+    });
   });
 
   // ============================================================================
