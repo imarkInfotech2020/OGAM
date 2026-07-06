@@ -64,9 +64,12 @@ export function computePendingSettings(
     return changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
            (loadedSettings.liteRTBackend !== undefined && liveTokens !== loadedTokens);
   }
-  // Effective cache (OpenCL + HTP both coerce to f16) — single source in llmHelpers so
-  // the reload-diff, the loader, and the generation details never disagree.
+  // Compare the EFFECTIVE cache on BOTH sides (OpenCL + HTP coerce to f16). Comparing the
+  // effective live value against the RAW stored value falsely flagged "settings changed"
+  // right after every accelerated load (live f16 vs stored q8_0). Symmetric via the single
+  // llmHelpers source — also robust to snapshots persisted before this fix.
   const effCache = effectiveCacheType(settings.inferenceBackend as string | undefined, settings.cacheType as string | undefined);
+  const loadedEffCache = effectiveCacheType(loadedSettings.inferenceBackend as string | undefined, loadedSettings.cacheType as string | undefined);
   return (
     changed(settings.nThreads, loadedSettings.nThreads) ||
     changed(settings.nBatch, loadedSettings.nBatch) ||
@@ -75,8 +78,7 @@ export function computePendingSettings(
     changed(settings.inferenceBackend, loadedSettings.inferenceBackend) ||
     changed(settings.gpuLayers, loadedSettings.gpuLayers) ||
     changed(settings.flashAttn, loadedSettings.flashAttn) ||
-    // Compare effective cache type — OpenCL forces f16 regardless of user setting
-    changed(effCache, loadedSettings.cacheType)
+    (loadedSettings.cacheType !== undefined && effCache !== loadedEffCache)
   );
 }
 
