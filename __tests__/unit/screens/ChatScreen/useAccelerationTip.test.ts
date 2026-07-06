@@ -12,53 +12,63 @@ jest.mock('@react-navigation/native', () => ({
 const mockUpdateSettings = jest.fn();
 jest.spyOn(useAppStore, 'getState').mockReturnValue({ updateSettings: mockUpdateSettings } as any);
 
-const llama = { id: 'unsloth/Qwen3-4B-Instruct-Q4_K_M', engine: 'llama' } as any;
+const kQuant = { id: 'unsloth/Qwen3-4B-Instruct-Q4_K_M', name: 'Qwen3 4B', engine: 'llama', quantization: 'Q4_K_M' } as any;
+const q4_0 = { id: 'unsloth/Qwen3-4B-Instruct-Q4_0', name: 'Qwen3 4B Q4_0', engine: 'llama', quantization: 'Q4_0' } as any;
+
+const setup = (over: Partial<Parameters<typeof useAccelerationTip>[0]> = {}) =>
+  renderHook(() => useAccelerationTip({
+    activeModel: kQuant, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU,
+    downloadedModels: [kQuant], onActivateModel: jest.fn(), ...over,
+  }));
 
 describe('useAccelerationTip', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('becomes visible for a local llama model on CPU once an NPU is detected', async () => {
+  it('enable: active model is already accelerable → flip the backend to HTP', async () => {
     jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: false });
-    const { result } = renderHook(() =>
-      useAccelerationTip({ activeModel: llama, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU }));
+    const { result } = setup({ activeModel: q4_0, downloadedModels: [q4_0] });
     await waitFor(() => expect(result.current.visible).toBe(true));
-    expect(result.current.hasNpu).toBe(true);
-  });
-
-  it('stays hidden when the device cannot accelerate', async () => {
-    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: false });
-    const { result } = renderHook(() =>
-      useAccelerationTip({ activeModel: llama, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU }));
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.visible).toBe(false);
-  });
-
-  it('enableAcceleration switches to HTP when an NPU is present', async () => {
-    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: true });
-    const { result } = renderHook(() =>
-      useAccelerationTip({ activeModel: llama, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU }));
-    await waitFor(() => expect(result.current.visible).toBe(true));
-    act(() => result.current.enableAcceleration());
+    expect(result.current.action).toBe('enable');
+    act(() => result.current.onPrimary());
     expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: INFERENCE_BACKENDS.HTP });
   });
 
-  it('enableAcceleration switches to OpenCL when only a GPU is present', async () => {
-    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: true });
-    const { result } = renderHook(() =>
-      useAccelerationTip({ activeModel: llama, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU }));
+  it('switch: K-quant active + accelerable downloaded → enable backend AND activate it', async () => {
+    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: false });
+    const onActivateModel = jest.fn();
+    const { result } = setup({ activeModel: kQuant, downloadedModels: [kQuant, q4_0], onActivateModel });
     await waitFor(() => expect(result.current.visible).toBe(true));
-    act(() => result.current.enableAcceleration());
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: INFERENCE_BACKENDS.OPENCL });
+    expect(result.current.action).toBe('switch');
+    expect(result.current.targetModelName).toBe('Qwen3 4B Q4_0');
+    act(() => result.current.onPrimary());
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: INFERENCE_BACKENDS.HTP });
+    expect(onActivateModel).toHaveBeenCalledWith(q4_0);
   });
 
-  it('getAcceleratedModel opens the Models tab with a prefilled Q4_0 search', async () => {
+  it('download: K-quant active + none accelerable → open Models tab with prefilled search', async () => {
     jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: false });
-    const { result } = renderHook(() =>
-      useAccelerationTip({ activeModel: llama, isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU }));
-    act(() => result.current.getAcceleratedModel());
+    const { result } = setup({ activeModel: kQuant, downloadedModels: [kQuant] });
+    await waitFor(() => expect(result.current.visible).toBe(true));
+    expect(result.current.action).toBe('download');
+    act(() => result.current.onPrimary());
     expect(mockNavigate).toHaveBeenCalledWith('Main', {
       screen: 'ModelsTab',
       params: { initialTab: 'text', initialSearchQuery: 'Qwen3-4B-Instruct Q4_0' },
     });
+  });
+
+  it('enable on OpenCL when only a GPU is present', async () => {
+    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: true });
+    const { result } = setup({ activeModel: q4_0, downloadedModels: [q4_0] });
+    await waitFor(() => expect(result.current.visible).toBe(true));
+    act(() => result.current.onPrimary());
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: INFERENCE_BACKENDS.OPENCL });
+  });
+
+  it('stays hidden when the device cannot accelerate', async () => {
+    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: false });
+    const { result } = setup();
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.visible).toBe(false);
   });
 });

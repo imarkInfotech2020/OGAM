@@ -58,30 +58,49 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
 };
 
+// Copy + button per acceleration mode. The active model is already accelerable
+// (enable), a K-quant with an accelerable model already downloaded (switch), or a
+// K-quant with none downloaded (download). All decisions live in useAccelerationTip.
+function accelTipCopy(tip: AccelerationTip): { message: string; button: string; icon: string } {
+  const hw = tip.hasNpu ? 'NPU' : 'GPU';
+  if (tip.action === 'switch') {
+    return {
+      message: `This model can't use the ${hw}. Switch to ${tip.targetModelName ?? 'an accelerated model'} to run on it.`,
+      button: `Switch to ${tip.targetModelName ?? 'it'}`,
+      icon: 'refresh-cw',
+    };
+  }
+  if (tip.action === 'download') {
+    return {
+      message: `This model can't use the ${hw}. Get a Q4_0 build to run on it.`,
+      button: 'Get Q4_0 version',
+      icon: 'download',
+    };
+  }
+  return {
+    message: `This model can use the ${hw}. Turn it on for faster replies.`,
+    button: `Enable ${hw}`,
+    icon: 'cpu',
+  };
+}
+
 // "Go faster on the GPU/NPU" nudge. Renders nothing unless the tip is visible and no
-// higher-priority bar (reload / compacting) is showing. All the decisions live in the
-// useAccelerationTip hook — this only projects them.
+// higher-priority bar (reload / compacting) is showing. This only projects the hook.
 const AccelerationTipBar: React.FC<{ tip: AccelerationTip; hidden: boolean; styles: any; colors: any }> = ({
   tip, hidden, styles, colors,
 }) => {
   if (!tip.visible || hidden) return null;
-  const hardware = tip.hasNpu ? 'NPU' : 'GPU';
+  const { message, button, icon } = accelTipCopy(tip);
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.accelTipBar}>
       <View style={styles.accelTipHeaderRow}>
         <Icon name="zap" size={16} color={colors.primary} />
-        <Text style={styles.accelTipText}>
-          {`This device has a${tip.hasNpu ? 'n' : ''} ${hardware}. Turn it on, or get a Q4_0 build, for faster replies.`}
-        </Text>
+        <Text style={styles.accelTipText}>{message}</Text>
       </View>
       <View style={styles.accelTipActionsRow}>
-        <AnimatedPressable style={[styles.accelTipButton, styles.accelTipButtonPrimary]} onPress={tip.enableAcceleration}>
-          <Icon name="cpu" size={13} color={colors.primary} />
-          <Text style={styles.accelTipButtonTextPrimary}>{`Enable ${hardware}`}</Text>
-        </AnimatedPressable>
-        <AnimatedPressable style={styles.accelTipButton} onPress={tip.getAcceleratedModel}>
-          <Icon name="download" size={13} color={colors.textSecondary} />
-          <Text style={styles.accelTipButtonText}>Get Q4_0 version</Text>
+        <AnimatedPressable style={[styles.accelTipButton, styles.accelTipButtonPrimary]} onPress={tip.onPrimary}>
+          <Icon name={icon} size={13} color={colors.primary} />
+          <Text style={styles.accelTipButtonTextPrimary}>{button}</Text>
         </AnimatedPressable>
       </View>
     </Animated.View>

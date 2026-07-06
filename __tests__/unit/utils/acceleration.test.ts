@@ -1,7 +1,9 @@
 import {
   isAccelerableQuant,
   modelSupportsNpuGpu,
-  shouldSuggestAcceleration,
+  isDownloadedModelAccelerable,
+  findAccelerableModel,
+  planAcceleration,
   acceleratedBackendFor,
   acceleratedSearchQuery,
 } from '../../../src/utils/acceleration';
@@ -46,31 +48,58 @@ describe('modelSupportsNpuGpu', () => {
   });
 });
 
-describe('shouldSuggestAcceleration', () => {
-  const base = { engine: 'llama', isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU };
+describe('isDownloadedModelAccelerable / findAccelerableModel', () => {
+  const m = (id: string, engine: string, quantization: string) => ({ id, name: id, engine, quantization });
 
-  it('true for a local llama model on CPU when the device has an NPU', () => {
-    expect(shouldSuggestAcceleration({ ...base, capability: { hasNpu: true, hasGpu: false } })).toBe(true);
+  it('true only for llama models in an accelerable quant', () => {
+    expect(isDownloadedModelAccelerable({ engine: 'llama', quantization: 'Q4_0' })).toBe(true);
+    expect(isDownloadedModelAccelerable({ engine: 'llama', quantization: 'Q4_K_M' })).toBe(false);
+    expect(isDownloadedModelAccelerable({ engine: 'litert', quantization: 'Q4_0' })).toBe(false);
   });
 
-  it('true for a local llama model on CPU when the device has a GPU', () => {
-    expect(shouldSuggestAcceleration({ ...base, capability: { hasNpu: false, hasGpu: true } })).toBe(true);
+  it('finds the first accelerable model, skipping the active one', () => {
+    const models = [m('a-Q4_K_M', 'llama', 'Q4_K_M'), m('b-Q4_0', 'llama', 'Q4_0'), m('c-Q8_0', 'llama', 'Q8_0')];
+    expect(findAccelerableModel(models, 'a-Q4_K_M')?.id).toBe('b-Q4_0');
+    // excludes the active model even when it is itself accelerable
+    expect(findAccelerableModel(models, 'b-Q4_0')?.id).toBe('c-Q8_0');
+    expect(findAccelerableModel([m('a', 'llama', 'Q4_K_M')], 'x')).toBeNull();
+  });
+});
+
+describe('planAcceleration', () => {
+  const base = {
+    engine: 'llama', isRemote: false, inferenceBackend: INFERENCE_BACKENDS.CPU,
+    capability: { hasNpu: true, hasGpu: false }, activeQuant: 'Q4_K_M', downloadedAccelerable: null,
+  };
+
+  it('enable: the active model is already an accelerable quant', () => {
+    expect(planAcceleration({ ...base, activeQuant: 'Q4_0' }).action).toBe('enable');
+    expect(planAcceleration({ ...base, activeQuant: 'Q8_0' }).action).toBe('enable');
   });
 
-  it('false once already on an accelerated backend', () => {
-    expect(shouldSuggestAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.HTP, capability: { hasNpu: true, hasGpu: false } })).toBe(false);
-    expect(shouldSuggestAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.OPENCL, capability: { hasNpu: false, hasGpu: true } })).toBe(false);
+  it('switch: K-quant active but an accelerable model is already downloaded', () => {
+    const plan = planAcceleration({ ...base, downloadedAccelerable: { id: 'x/Qwen-Q4_0', name: 'Qwen Q4_0' } });
+    expect(plan.action).toBe('switch');
+    expect(plan.targetModelId).toBe('x/Qwen-Q4_0');
+    expect(plan.targetModelName).toBe('Qwen Q4_0');
   });
 
-  it('false when the device has neither NPU nor GPU', () => {
-    expect(shouldSuggestAcceleration({ ...base, capability: { hasNpu: false, hasGpu: false } })).toBe(false);
+  it('download: K-quant active and nothing accelerable downloaded', () => {
+    expect(planAcceleration(base).action).toBe('download');
   });
 
-  it('false for LiteRT and remote models (they do not use the llama.rn backend)', () => {
-    const cap = { hasNpu: true, hasGpu: true };
-    expect(shouldSuggestAcceleration({ ...base, engine: 'litert', capability: cap })).toBe(false);
-    expect(shouldSuggestAcceleration({ ...base, isRemote: true, capability: cap })).toBe(false);
-    expect(shouldSuggestAcceleration({ ...base, engine: undefined, capability: cap })).toBe(false);
+  it('hidden once already on an accelerated backend', () => {
+    expect(planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.HTP }).action).toBe('hidden');
+  });
+
+  it('hidden when the device has neither NPU nor GPU', () => {
+    expect(planAcceleration({ ...base, capability: { hasNpu: false, hasGpu: false } }).action).toBe('hidden');
+  });
+
+  it('hidden for LiteRT and remote models', () => {
+    expect(planAcceleration({ ...base, engine: 'litert' }).action).toBe('hidden');
+    expect(planAcceleration({ ...base, isRemote: true }).action).toBe('hidden');
+    expect(planAcceleration({ ...base, engine: undefined }).action).toBe('hidden');
   });
 });
 

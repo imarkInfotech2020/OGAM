@@ -325,10 +325,6 @@ export const useChatScreen = () => {
   };
   // Whether settings changed since the model was loaded (drives the reload banner).
   const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
-  // "You can go faster on the GPU/NPU" chat tip — the hook owns capability + decision.
-  const accelerationTip = useAccelerationTip({
-    activeModel, isRemote: activeModelInfo.isRemote, inferenceBackend: settings.inferenceBackend as string | undefined,
-  });
 
   const handleReloadTextModel = useCallback(async () => {
     if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
@@ -362,6 +358,14 @@ export const useChatScreen = () => {
       handleSend(pending.text, pending.attachments);
     }
   };
+
+  // "You can go faster on the GPU/NPU" chat tip — the hook owns capability + decision.
+  // The switch action reuses handleModelSelect (memory gate + Load Anyway included).
+  const accelerationTip = useAccelerationTip({
+    activeModel, isRemote: activeModelInfo.isRemote,
+    inferenceBackend: settings.inferenceBackend as string | undefined,
+    downloadedModels, onActivateModel: handleModelSelect,
+  });
 
   return {
     isModelLoading, loadingModel, supportsVision,

@@ -44,22 +44,57 @@ export interface AccelerationCapability {
   hasGpu: boolean;
 }
 
+/** A downloaded llama model that can actually use the NPU/GPU (accelerable quant). */
+export function isDownloadedModelAccelerable(m: { engine?: string; quantization?: string }): boolean {
+  return m.engine === 'llama' && isAccelerableQuant(m.quantization);
+}
+
+/** The first accelerable downloaded llama model other than the active one, if any. */
+export function findAccelerableModel<T extends { id: string; name: string; engine?: string; quantization?: string }>(
+  models: T[],
+  excludeId: string | undefined,
+): T | null {
+  return models.find(m => m.id !== excludeId && isDownloadedModelAccelerable(m)) ?? null;
+}
+
 /**
- * Whether to nudge the user toward hardware acceleration in chat: a local llama.rn
- * (GGUF) model is loaded, the device has an NPU or GPU, and generation is still on
- * CPU. LiteRT models manage their own backend and remote models run off-device, so
- * neither qualifies. Pure so a single test guards both platforms.
+ * What the chat acceleration tip should offer, given the device, the active model, and
+ * what's already downloaded:
+ *  - `enable`   — the active model is already an accelerable quant (Q4_0/Q8_0); just
+ *                 flip the backend to NPU/GPU for a real speedup.
+ *  - `switch`   — the active model is a K-quant (NPU/GPU would silently run on CPU), but
+ *                 an accelerable model is already downloaded; switch to it (and enable
+ *                 the backend so it loads on the accelerator).
+ *  - `download` — a K-quant is active and no accelerable model exists locally; send the
+ *                 user to grab a Q4_0 build.
+ *  - `hidden`   — remote/LiteRT model, no NPU/GPU on the device, or already accelerated.
  */
-export function shouldSuggestAcceleration(params: {
+export type AccelerationAction = 'enable' | 'switch' | 'download' | 'hidden';
+
+export interface AccelerationPlan {
+  action: AccelerationAction;
+  /** For `switch`: the downloaded accelerable model to activate. */
+  targetModelId?: string;
+  targetModelName?: string;
+}
+
+export function planAcceleration(params: {
   engine: string | undefined;
   isRemote: boolean;
   inferenceBackend: InferenceBackend | undefined;
   capability: AccelerationCapability;
-}): boolean {
-  const { engine, isRemote, inferenceBackend, capability } = params;
-  if (isRemote || engine !== 'llama') return false;
-  if (!capability.hasNpu && !capability.hasGpu) return false;
-  return inferenceBackend === INFERENCE_BACKENDS.CPU;
+  activeQuant: string | undefined;
+  downloadedAccelerable: { id: string; name: string } | null;
+}): AccelerationPlan {
+  const { engine, isRemote, inferenceBackend, capability, activeQuant, downloadedAccelerable } = params;
+  if (isRemote || engine !== 'llama') return { action: 'hidden' };
+  if (!capability.hasNpu && !capability.hasGpu) return { action: 'hidden' };
+  if (inferenceBackend !== INFERENCE_BACKENDS.CPU) return { action: 'hidden' };
+  if (isAccelerableQuant(activeQuant)) return { action: 'enable' };
+  if (downloadedAccelerable) {
+    return { action: 'switch', targetModelId: downloadedAccelerable.id, targetModelName: downloadedAccelerable.name };
+  }
+  return { action: 'download' };
 }
 
 /** The backend to switch to when the user accepts the tip: prefer the NPU, else the GPU. */
