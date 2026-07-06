@@ -52,6 +52,7 @@ jest.mock('../../../src/services/generationService', () => ({
     enqueueMessage: jest.fn(),
     drainQueue: jest.fn(),
     getState: jest.fn(() => ({ isGenerating: false })),
+    wasAborted: jest.fn(() => false),
   },
 }));
 jest.mock('../../../src/services/imageGenerationService', () => ({

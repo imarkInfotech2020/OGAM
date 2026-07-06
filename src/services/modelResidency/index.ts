@@ -13,7 +13,7 @@ import { AppState } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import { planEviction, computeBudgetMB, Resident, ResidentType } from './policy';
-import { LoadPolicy } from '../memoryBudget';
+import { LoadPolicy, OVERRIDE_SURVIVAL_FLOOR_MB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
 
@@ -300,6 +300,19 @@ class ModelResidencyManager {
     const availMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
     const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
     logger.log(`[MEM-SM] makeRoomFor ${spec.key} sizeMB=${spec.sizeMB} dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents.map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`).join(',')}] fits=${plan.fits} evict=[${plan.evict.map(e => e.key).join(',')}]`);
+    // Survival floor: even an override can't cross physics. If, after crediting the RAM
+    // the planned evictions free, live free RAM (minus this model's own dirty footprint)
+    // would drop below the absolute floor, refuse — the OS would jetsam-kill mid-load
+    // (uncatchable SIGKILL) anyway. Catches the "background apps ate the baseline" case.
+    if (override) {
+      const freedByEvictMB = plan.evict.reduce((s, e) => s + (e.dirtyMemory ? e.sizeMB : 0), 0);
+      const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
+      const postLoadFreeMB = availMB + freedByEvictMB - incomingDirtyMB;
+      if (postLoadFreeMB < OVERRIDE_SURVIVAL_FLOOR_MB) {
+        logger.log(`[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override — post-load free ~${postLoadFreeMB}MB < survival floor ${OVERRIDE_SURVIVAL_FLOOR_MB}MB`);
+        return { evicted: [], fits: false };
+      }
+    }
     if (!plan.fits && !override) {
       // Won't fit even after the planned evictions — DON'T evict (otherwise we'd
       // strand the device with nothing). The caller blocks the load.

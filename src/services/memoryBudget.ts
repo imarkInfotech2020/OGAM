@@ -49,6 +49,14 @@ export type LoadPolicy = 'balanced' | 'aggressive';
 export const MEMORY_RESERVE_MB = 1500;
 /** Aggressive mode still keeps a floor alive (lenient, not absent). */
 export const AGGRESSIVE_RESERVE_MB = 800;
+/**
+ * Absolute survival floor that even "Load Anyway" (override) will NOT cross: if forcing a
+ * load would leave live free RAM below this, refuse it — the OS would jetsam-kill the app
+ * mid-load anyway (an uncatchable SIGKILL), so a graceful "close some apps" beats a crash.
+ * Override still bypasses the conservative budget; this only stops the guaranteed-OOM case
+ * (e.g. many background apps have eaten the baseline).
+ */
+export const OVERRIDE_SURVIVAL_FLOOR_MB = 1200;
 
 type Plat = 'ios' | 'android' | string;
 

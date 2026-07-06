@@ -440,6 +440,32 @@ describe('ModelResidencyManager', () => {
     });
   });
 
+  describe('override survival floor (never force a load into a jetsam SIGKILL)', () => {
+    beforeEach(() => { modelResidencyManager._reset(); });
+    afterEach(() => jest.restoreAllMocks());
+
+    it('REFUSES an override load when live free RAM is below the survival floor (background apps case)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(0.8); // ~820MB free — starved
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 5000 }, { override: true });
+      expect(fits).toBe(false);   // even override won't cross the floor → graceful refuse, no crash
+      expect(evicted).toEqual([]); // and we didn't strand the device by evicting
+    });
+
+    it('ALLOWS the same override load when there is survival headroom', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4); // 4GB free — safe
+      const { fits } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 8000 }, { override: true });
+      expect(fits).toBe(true);  // clean GGUF, plenty of live headroom → override proceeds
+    });
+  });
+
   describe('session override memory (approve Load Anyway once per model)', () => {
     beforeEach(() => { modelResidencyManager._reset(); });
     afterEach(() => jest.restoreAllMocks());
