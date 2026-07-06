@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useChatStore, useUiModeStore } from '../../stores';
+import { useWhisperStore, useUiModeStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
@@ -102,25 +102,21 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         setIsDirectRecording(false);
         if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
           const format = audioRecorderService.getFormat();
-          // In Audio Mode, auto-send directly — no transcription needed for multimodal models
+          // In Audio Mode, transcribe FIRST, then auto-send with the text.
+          // Sending audio with EMPTY text made the intent router classify on "" — so a
+          // voice request like "draw a dog" always routed to the text model (image gen
+          // needs the transcribed prompt, which never reached routing). We still attach
+          // the audio so multimodal text models get the original speech; the text is what
+          // lets routing pick image vs text.
           if (onAutoSendRef.current && isInAudioInterfaceMode()) {
-            onAutoSendRef.current('', { uri: path, format, durationSeconds });
-
-            // Parallel transcription: send audio to model immediately, transcribe in background
-            // so the voice bubble gets a transcript for display/playback review
+            let text = '';
             if (downloadedModelId) {
-              const convId = conversationId;
-              whisperService.transcribeFile(path).then(text => {
-                if (!text?.trim() || !convId) return;
-                const conv = useChatStore.getState().conversations.find(c => c.id === convId);
-                const msg = conv?.messages.find(m =>
-                  m.role === 'user' && m.attachments?.some(a => a.uri === path),
-                );
-                if (msg) {
-                  useChatStore.getState().updateMessageContent(convId, msg.id, text.trim());
-                }
-              }).catch(err => logger.error('[Voice] Background transcription error:', err));
+              setIsTranscribingFile(true);
+              try { text = await whisperService.transcribeFile(path); }
+              catch (err) { logger.error('[Voice] transcription error:', err); }
+              setIsTranscribingFile(false);
             }
+            onAutoSendRef.current(text.trim(), { uri: path, format, durationSeconds });
           } else {
             onAudioAttachmentRef.current?.({ uri: path, format, durationSeconds });
           }
