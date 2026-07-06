@@ -171,7 +171,9 @@ describe('initiateModelLoad', () => {
     loadAnyway.onPress();
     await jest.advanceTimersByTimeAsync(400); // flush waitForRenderFrame -> doLoadTextModel -> resume
 
-    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1');
+    // Load Anyway must force the residency gate too (override:true), or the load
+    // re-hits the budget and fails — the exact "Load Anyway did nothing" bug.
+    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1', undefined, { override: true });
     expect(onResume).toHaveBeenCalledTimes(1); // the message is NOT dropped
     iaSpy.mockRestore();
     jest.useRealTimers();
@@ -192,7 +194,7 @@ describe('initiateModelLoad', () => {
     alert.buttons.find((b: any) => b.text === 'Load Anyway').onPress();
     await jest.advanceTimersByTimeAsync(400);
 
-    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1'); // still loads
+    expect(mockLoadTextModel).toHaveBeenCalledWith('model-1', undefined, { override: true }); // still loads (forced)
     iaSpy.mockRestore();
     jest.useRealTimers();
   });
