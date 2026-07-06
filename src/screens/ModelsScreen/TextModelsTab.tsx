@@ -18,6 +18,7 @@ import { ModelsScreenViewModel } from './useModelsScreen';
 import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { modelSupportsNpuGpu, isAccelerableQuant } from '../../utils/acceleration';
+import { aggregateActiveDownloads } from '../../utils/downloadAggregate';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
@@ -334,15 +335,14 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
-  // Reflect an in-flight download in the compact list card too (queued/downloading),
-  // matching by the `<modelId>/<file>` row-key prefix (covers the LiteRT parent's files).
-  const activeEntry = useDownloadStore(s => Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)));
-  const cardIsQueued = !!activeEntry && isQueuedStatus(activeEntry.status);
-  const cardIsDownloading = !!activeEntry && !isQueuedStatus(activeEntry.status);
+  // Aggregate ALL in-flight entries for this model (main+mmproj / grouped LiteRT) into
+  // cumulative progress/bytes + a download count, so the card shows total, not one entry.
+  const downloads = useDownloadStore(s => s.downloads);
+  const agg = React.useMemo(() => aggregateActiveDownloads(downloads, item.id), [downloads, item.id]);
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={cardIsDownloading} isQueued={cardIsQueued} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

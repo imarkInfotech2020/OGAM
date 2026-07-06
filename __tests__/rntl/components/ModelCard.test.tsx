@@ -307,6 +307,35 @@ describe('ModelCard', () => {
       expect(getByText('NPU/GPU')).toBeTruthy();
     });
 
+    it('shows cumulative bytes and "N downloads" when multiple downloads run', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          compact
+          isDownloading
+          downloadProgress={0.5}
+          downloadBytes={{ downloaded: 1.5 * 1024 * 1024 * 1024, total: 10 * 1024 * 1024 * 1024 }}
+          downloadCount={2}
+        />
+      );
+      expect(getByText('1.5 GB / 10.0 GB · 2 downloads')).toBeTruthy();
+    });
+
+    it('omits the "N downloads" note for a single download', () => {
+      const { getByText, queryByText } = render(
+        <ModelCard
+          model={baseModel}
+          compact
+          isDownloading
+          downloadProgress={0.5}
+          downloadBytes={{ downloaded: 2 * 1024 * 1024 * 1024, total: 4 * 1024 * 1024 * 1024 }}
+          downloadCount={1}
+        />
+      );
+      expect(getByText('2.0 GB / 4.0 GB')).toBeTruthy();
+      expect(queryByText(/downloads/)).toBeNull();
+    });
+
     it('shows min RAM badge in compact mode', () => {
       const { getByText } = render(
         <ModelCard

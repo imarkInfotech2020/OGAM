@@ -40,6 +40,8 @@ interface ModelCardProps {
   isQueued?: boolean;
   downloadProgress?: number;
   downloadBytes?: { downloaded: number; total: number };
+  /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
+  downloadCount?: number;
   isActive?: boolean;
   isCompatible?: boolean;
   incompatibleReason?: string;
@@ -87,9 +89,15 @@ const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number };
   queued?: boolean;
-}> = ({ progress, bytes, queued }) => {
+  /** Number of concurrent downloads behind this card (>1 → show "N downloads"). */
+  count?: number;
+}> = ({ progress, bytes, queued, count }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
+  const bytesLabel = bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : '';
+  // Cumulative download → note how many files are running so the total reads clearly.
+  const countLabel = count && count > 1 ? `${count} downloads` : '';
+  const caption = [bytesLabel, countLabel].filter(Boolean).join(' · ');
   return (
   <View style={styles.progressSection}>
     {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
@@ -97,13 +105,10 @@ const DownloadProgressSection: React.FC<{
     <View style={styles.progressBar}>
       <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
     </View>
-    {/* Caption row under the bar: bytes on the LEFT (uses the empty left real estate),
-        status on the RIGHT. "Queued" while waiting for a slot, otherwise the percent.
-        One row instead of stacking bytes below a half-width bar → not cramped. */}
+    {/* Caption row under the bar: bytes (+ "N downloads") on the LEFT, status on the
+        RIGHT. "Queued" while waiting for a slot, otherwise the percent. */}
     <View style={styles.progressCaptionRow}>
-      <Text style={styles.progressBytesText}>
-        {bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : ''}
-      </Text>
+      <Text style={styles.progressBytesText}>{caption}</Text>
       {queued ? (
         <View style={styles.progressLabelRow}>
           <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
@@ -165,6 +170,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isQueued,
   downloadProgress = 0,
   downloadBytes,
+  downloadCount,
   isActive,
   isCompatible = true,
   incompatibleReason,
@@ -264,7 +270,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
 
           {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} />
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} count={downloadCount} />
           )}
           {failedState && (
             <FailedSection
