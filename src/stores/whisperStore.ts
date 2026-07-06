@@ -24,7 +24,6 @@ interface WhisperState {
 
   // Actions
   downloadModel: (modelId: string) => Promise<void>;
-  downloadFromUrl: (url: string, modelId: string) => Promise<void>;
   /** Activate an already-downloaded model without re-downloading. */
   selectModel: (modelId: string) => Promise<void>;
   loadModel: () => Promise<void>;
@@ -90,27 +89,6 @@ export const useWhisperStore = create<WhisperState>()(
           // Clear this model's progress entry, even if auto-load hangs/fails —
           // the file is already on disk by this point. Other in-flight downloads
           // keep their own entries.
-          clearProgress(set, modelId);
-        }
-      },
-
-      downloadFromUrl: async (url: string, modelId: string) => {
-        setProgress(set, modelId, 0);
-        set({ error: null });
-        try {
-          await whisperService.downloadFromUrl(url, modelId, (progress) => {
-            setProgress(set, modelId, progress);
-          });
-          set((s) => ({
-            downloadedModelId: modelId,
-            presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
-          }));
-          await get().loadModel();
-        } catch (error) {
-          if (!(error as { cancelled?: boolean })?.cancelled) {
-            set({ error: error instanceof Error ? error.message : 'Download failed' });
-          }
-        } finally {
           clearProgress(set, modelId);
         }
       },

@@ -142,28 +142,6 @@ class WhisperService {
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
-  async downloadFromUrl(url: string, modelId: string, onProgress?: (progress: number) => void): Promise<string> {
-    await this.ensureModelsDirExists();
-    const destPath = this.getModelPath(modelId);
-    if (await RNFS.exists(destPath)) return destPath;
-    const download = RNFS.downloadFile({
-      fromUrl: url, toFile: destPath, progressDivider: 1,
-      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
-    });
-    const result = await download.promise;
-    if (result.statusCode !== 200) {
-      await RNFS.unlink(destPath).catch(() => {});
-      throw new Error(`Download failed with status ${result.statusCode}`);
-    }
-    try {
-      await this.validateModelFile(destPath);
-    } catch (validationError) {
-      await RNFS.unlink(destPath).catch(() => {});
-      throw validationError;
-    }
-    return destPath;
-  }
-
   /** List every downloaded ggml whisper model on disk (for the Download Manager). */
   async listDownloadedModels(): Promise<Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>> {
     const dir = this.getModelsDir();

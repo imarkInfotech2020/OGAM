@@ -310,14 +310,10 @@ export interface ONNXImageModel {
   attentionVariant?: 'split_einsum' | 'original';
 }
 
-// Image generation state for UI
-export interface ImageGenerationState {
-  isGenerating: boolean;
-  currentStep: number;
-  totalSteps: number;
-  progress: number;
-  prompt?: string;
-}
+// NOTE: the authoritative ImageGenerationState lives in
+// services/imageGenerationService.ts (phase-derived) and is re-exported from
+// services/index.ts. The duplicate that used to sit here was imported by nobody
+// (every consumer takes the service's version) — removed to kill the drift risk.
 
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';

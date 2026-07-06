@@ -60,6 +60,36 @@ small PRs after each is confirmed.
 | IM4 | localDreamGenerator.ts:236-238 | `hasKernelCache()` wraps `hasOpenCLCache` (name mismatch) | fix-the-guard | rename to match native call |
 | IM5 | localDreamGenerator.ts:231-239 | `clearOpenCLCache`/`hasKernelCache` silent iOS no-op | instrument-and-revisit | throw or gate at call site on iOS |
 
+### Verification pass — 2026-07-06 (before acting)
+
+Every "delete-safe" candidate was re-grepped across `src`, `__tests__`, and `pro/`
+before touching anything. The recon **over-reported**: most flagged symbols are
+actually referenced (largely by tests, some by prod). Blind deletion would have
+broken the suite. Verified outcomes:
+
+- **RESOLVED (removed):**
+  - IM1 — duplicate `ImageGenerationState` in `types/index.ts`: zero importers (every
+    consumer takes the service's version). Deleted.
+  - AU3 — `whisperService.downloadFromUrl` + the `whisperStore.downloadFromUrl` action:
+    no UI/hook/screen/pro caller (custom-URL whisper download was never wired). Removed
+    across service + store + its orphaned tests.
+- **FALSE POSITIVE — verified USED, kept:**
+  - AU1 `whisperStore.deleteModel` — called at whisperStore.ts:180/201 + store test.
+  - AU2 `audioSessionManager.ensurePlayback` — full test suite + whisperService.test call.
+  - DL4 `isMmProjFileName` export — imported by `modelManager/restore.ts` + tested directly.
+  - ML1/ML2 — exercised by integration + memory unit tests (see corrected rows above).
+- **DEFERRED (not "dead", changing risks behaviour — kept out of this PR):**
+  - Unreachable-branch removals (DL1/DL2 `retrying`, IM3/IM7 iOS backend short-circuits):
+    they never execute, but removing a value from a status/type union risks exhaustiveness
+    breakage; do it as a typed refactor with its own tests.
+  - Threaded-constant params (ML5 `cpuOnly`, IM2 `backend:'auto'`): passed to the native
+    bridge; removing the arg changes the native call. Not dead in a way that's safe to cut here.
+  - Race/stub items (AU4/AU5/AU6, DL5, DL3 deprecated-callback threading): need on-device
+    observation before change — `instrument-and-revisit`, not a blind edit.
+
+Net: the genuinely-dead, safe-to-remove set was small (IM1 + AU3). Removed here; the
+rest stay in the register with an honest verdict rather than a risky change.
+
 ### Handling policy (how we close these)
 1. **delete-safe** → each removed in a small, single-concern PR with a grep proof of zero references in the description.
 2. **fix-the-guard** → fix the condition, add a fails-before/passes-after test that exercises the now-reachable branch.

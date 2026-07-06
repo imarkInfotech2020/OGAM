@@ -22,7 +22,6 @@ jest.mock('../../../src/services', () => ({
 
 const mockWhisperActions = {
   downloadModel: jest.fn(async () => {}),
-  downloadFromUrl: jest.fn(async () => {}),
   selectModel: jest.fn(async () => {}),
   deleteModel: jest.fn(),
   deleteModelById: jest.fn(async () => {}),
