@@ -21,6 +21,8 @@ export interface AccelerationTip {
   visible: boolean;
   /** What the primary button does: enable the backend, switch model, or download one. */
   action: AccelerationAction;
+  /** NPU/GPU is selected but the active model can't use it → we're on CPU (warning copy). */
+  fellBack: boolean;
   /** True when the device has an NPU (Qualcomm HTP) — labels the copy/button. */
   hasNpu: boolean;
   /** For `switch`: the name of the accelerable model already downloaded. */
@@ -94,6 +96,7 @@ export function useAccelerationTip(params: {
   return {
     visible: plan.action !== 'hidden',
     action: plan.action,
+    fellBack: plan.fellBack,
     hasNpu: capability.hasNpu,
     targetModelName: plan.targetModelName,
     onPrimary,

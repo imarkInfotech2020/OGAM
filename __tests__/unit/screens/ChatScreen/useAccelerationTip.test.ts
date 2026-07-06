@@ -65,6 +65,27 @@ describe('useAccelerationTip', () => {
     expect(mockUpdateSettings).toHaveBeenCalledWith({ inferenceBackend: INFERENCE_BACKENDS.OPENCL });
   });
 
+  it('fallback: NPU selected but the active K-quant runs on CPU → warns + switch to Q4_0', async () => {
+    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: false });
+    const onActivateModel = jest.fn();
+    const { result } = setup({
+      activeModel: kQuant, inferenceBackend: INFERENCE_BACKENDS.HTP,
+      downloadedModels: [kQuant, q4_0], onActivateModel,
+    });
+    await waitFor(() => expect(result.current.visible).toBe(true));
+    expect(result.current.action).toBe('switch');
+    expect(result.current.fellBack).toBe(true);
+    act(() => result.current.onPrimary());
+    expect(onActivateModel).toHaveBeenCalledWith(q4_0);
+  });
+
+  it('hidden when genuinely accelerated (NPU + an accelerable model)', async () => {
+    jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: true, hasGpu: false });
+    const { result } = setup({ activeModel: q4_0, inferenceBackend: INFERENCE_BACKENDS.HTP, downloadedModels: [q4_0] });
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.visible).toBe(false);
+  });
+
   it('stays hidden when the device cannot accelerate', async () => {
     jest.spyOn(hardwareService, 'getAccelerationCapability').mockResolvedValue({ hasNpu: false, hasGpu: false });
     const { result } = setup();

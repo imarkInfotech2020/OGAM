@@ -77,19 +77,40 @@ describe('planAcceleration', () => {
     expect(planAcceleration({ ...base, activeQuant: 'Q8_0' }).action).toBe('enable');
   });
 
-  it('switch: K-quant active but an accelerable model is already downloaded', () => {
+  it('switch: K-quant active but an accelerable model is already downloaded (CPU nudge)', () => {
     const plan = planAcceleration({ ...base, downloadedAccelerable: { id: 'x/Qwen-Q4_0', name: 'Qwen Q4_0' } });
     expect(plan.action).toBe('switch');
+    expect(plan.fellBack).toBe(false);
     expect(plan.targetModelId).toBe('x/Qwen-Q4_0');
     expect(plan.targetModelName).toBe('Qwen Q4_0');
   });
 
-  it('download: K-quant active and nothing accelerable downloaded', () => {
-    expect(planAcceleration(base).action).toBe('download');
+  it('download: K-quant active and nothing accelerable downloaded (CPU nudge)', () => {
+    const plan = planAcceleration(base);
+    expect(plan.action).toBe('download');
+    expect(plan.fellBack).toBe(false);
   });
 
-  it('hidden once already on an accelerated backend', () => {
-    expect(planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.HTP }).action).toBe('hidden');
+  it('fallback→switch: NPU selected but the K-quant fell back to CPU, accelerable downloaded', () => {
+    const plan = planAcceleration({
+      ...base, inferenceBackend: INFERENCE_BACKENDS.HTP,
+      downloadedAccelerable: { id: 'x/Qwen-Q4_0', name: 'Qwen Q4_0' },
+    });
+    expect(plan.action).toBe('switch');
+    expect(plan.fellBack).toBe(true);
+    expect(plan.targetModelId).toBe('x/Qwen-Q4_0');
+  });
+
+  it('fallback→download: OpenCL selected but the K-quant fell back to CPU, none downloaded', () => {
+    const plan = planAcceleration({
+      ...base, inferenceBackend: INFERENCE_BACKENDS.OPENCL, capability: { hasNpu: false, hasGpu: true },
+    });
+    expect(plan.action).toBe('download');
+    expect(plan.fellBack).toBe(true);
+  });
+
+  it('hidden when genuinely accelerated (accelerated backend + accelerable model)', () => {
+    expect(planAcceleration({ ...base, inferenceBackend: INFERENCE_BACKENDS.HTP, activeQuant: 'Q4_0' }).action).toBe('hidden');
   });
 
   it('hidden when the device has neither NPU nor GPU', () => {

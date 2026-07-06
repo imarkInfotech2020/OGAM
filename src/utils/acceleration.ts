@@ -60,22 +60,33 @@ export function findAccelerableModel<T extends { id: string; name: string; engin
 /**
  * What the chat acceleration tip should offer, given the device, the active model, and
  * what's already downloaded:
- *  - `enable`   — the active model is already an accelerable quant (Q4_0/Q8_0); just
- *                 flip the backend to NPU/GPU for a real speedup.
- *  - `switch`   — the active model is a K-quant (NPU/GPU would silently run on CPU), but
- *                 an accelerable model is already downloaded; switch to it (and enable
- *                 the backend so it loads on the accelerator).
+ *  - `enable`   — on CPU with an already-accelerable model (Q4_0/Q8_0); just flip the
+ *                 backend to NPU/GPU for a real speedup.
+ *  - `switch`   — the active model is a K-quant (which can't use the NPU/GPU) but an
+ *                 accelerable model is already downloaded; switch to it (and set the
+ *                 backend so it loads on the accelerator).
  *  - `download` — a K-quant is active and no accelerable model exists locally; send the
  *                 user to grab a Q4_0 build.
- *  - `hidden`   — remote/LiteRT model, no NPU/GPU on the device, or already accelerated.
+ *  - `hidden`   — remote/LiteRT model, no NPU/GPU, or genuinely accelerated already.
+ *
+ * `fellBack` distinguishes the two ways `switch`/`download` arise: on CPU it's a "go
+ * faster" nudge; when the user HAS selected NPU/GPU but the active K-quant can't use it
+ * (so llama.cpp silently repacks to CPU), it's a "we're on CPU" warning. Same decision,
+ * different copy — this is what surfaces the otherwise-silent CPU fallback.
  */
 export type AccelerationAction = 'enable' | 'switch' | 'download' | 'hidden';
 
 export interface AccelerationPlan {
   action: AccelerationAction;
+  /** True when an accelerated backend is selected but the active model can't use it. */
+  fellBack: boolean;
   /** For `switch`: the downloaded accelerable model to activate. */
   targetModelId?: string;
   targetModelName?: string;
+}
+
+function isAcceleratedBackend(backend: InferenceBackend | undefined): boolean {
+  return backend === INFERENCE_BACKENDS.HTP || backend === INFERENCE_BACKENDS.OPENCL;
 }
 
 export function planAcceleration(params: {
@@ -87,14 +98,25 @@ export function planAcceleration(params: {
   downloadedAccelerable: { id: string; name: string } | null;
 }): AccelerationPlan {
   const { engine, isRemote, inferenceBackend, capability, activeQuant, downloadedAccelerable } = params;
-  if (isRemote || engine !== 'llama') return { action: 'hidden' };
-  if (!capability.hasNpu && !capability.hasGpu) return { action: 'hidden' };
-  if (inferenceBackend !== INFERENCE_BACKENDS.CPU) return { action: 'hidden' };
-  if (isAccelerableQuant(activeQuant)) return { action: 'enable' };
+  const hidden: AccelerationPlan = { action: 'hidden', fellBack: false };
+  if (isRemote || engine !== 'llama') return hidden;
+  if (!capability.hasNpu && !capability.hasGpu) return hidden;
+
+  const accelerated = isAcceleratedBackend(inferenceBackend);
+  const activeAccelerable = isAccelerableQuant(activeQuant);
+  // Genuinely accelerated (accelerated backend + a model that can use it) → nothing to do.
+  if (accelerated && activeAccelerable) return hidden;
+  // On CPU with an accelerable model → offer to turn the accelerator on.
+  if (!accelerated && activeAccelerable) return { action: 'enable', fellBack: false };
+
+  // Remaining: the active model is a K-quant. Either the user is on CPU (a nudge) or has
+  // selected NPU/GPU that silently repacked to CPU (a fallback warning). Route them to an
+  // accelerable model — switch to one they have, else download.
+  const fellBack = accelerated;
   if (downloadedAccelerable) {
-    return { action: 'switch', targetModelId: downloadedAccelerable.id, targetModelName: downloadedAccelerable.name };
+    return { action: 'switch', fellBack, targetModelId: downloadedAccelerable.id, targetModelName: downloadedAccelerable.name };
   }
-  return { action: 'download' };
+  return { action: 'download', fellBack };
 }
 
 /** The backend to switch to when the user accepts the tip: prefer the NPU, else the GPU. */

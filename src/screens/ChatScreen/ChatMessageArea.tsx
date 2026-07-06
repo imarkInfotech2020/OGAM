@@ -58,21 +58,24 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
 };
 
-// Copy + button per acceleration mode. The active model is already accelerable
-// (enable), a K-quant with an accelerable model already downloaded (switch), or a
-// K-quant with none downloaded (download). All decisions live in useAccelerationTip.
+// Copy + button per acceleration mode. All decisions live in useAccelerationTip; this
+// only picks the words. When the user has selected NPU/GPU but the active K-quant can't
+// use it (fellBack), lead with the "running on CPU" fact instead of a "go faster" nudge.
 function accelTipCopy(tip: AccelerationTip): { message: string; button: string; icon: string } {
   const hw = tip.hasNpu ? 'NPU' : 'GPU';
+  const cause = tip.fellBack
+    ? `The ${hw} can't run this model, so it's running on CPU.`
+    : `This model can't use the ${hw}.`;
   if (tip.action === 'switch') {
     return {
-      message: `This model can't use the ${hw}. Switch to ${tip.targetModelName ?? 'an accelerated model'} to run on it.`,
+      message: `${cause} Switch to ${tip.targetModelName ?? 'an accelerated model'} to use it.`,
       button: `Switch to ${tip.targetModelName ?? 'it'}`,
       icon: 'refresh-cw',
     };
   }
   if (tip.action === 'download') {
     return {
-      message: `This model can't use the ${hw}. Get a Q4_0 build to run on it.`,
+      message: `${cause} Get a Q4_0 build to use it.`,
       button: 'Get Q4_0 version',
       icon: 'download',
     };
@@ -94,7 +97,11 @@ const AccelerationTipBar: React.FC<{ tip: AccelerationTip; hidden: boolean; styl
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.accelTipBar}>
       <View style={styles.accelTipHeaderRow}>
-        <Icon name="zap" size={16} color={colors.primary} />
+        <Icon
+          name={tip.fellBack ? 'alert-triangle' : 'zap'}
+          size={16}
+          color={tip.fellBack ? colors.warning : colors.primary}
+        />
         <Text style={styles.accelTipText}>{message}</Text>
       </View>
       <View style={styles.accelTipActionsRow}>
