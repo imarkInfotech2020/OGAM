@@ -73,7 +73,11 @@ export async function ensureModelReady(deps: ReadinessDeps, onLoadedResume?: () 
   if (!deps.activeModel || !deps.activeModelId) { logger.log('[GEN-SM] ensureModelReady → no-model-selected'); return { ok: false, reason: 'no-model-selected' }; }
   const loadedPath = llmService.getLoadedModelPath();
   if (loadedPath && loadedPath === deps.activeModel.filePath) { logger.log('[GEN-SM] ensureModelReady → already loaded'); return { ok: true }; }
-  const outcome = await deps.ensureModelLoaded();
+  // Thread onLoadedResume on the llama (GGUF) path too — NOT just the litert branch
+  // above. Without it, a "Load Anyway" on a regular text model force-loaded the model
+  // but never resumed the turn (onLoadedResume was undefined), so the user's message
+  // sat there and they had to hit resend. This is the exact device symptom.
+  const outcome = await deps.ensureModelLoaded(onLoadedResume);
   if (!outcome.ok) { logger.log(`[GEN-SM] ensureModelReady NOT ready reason=${outcome.reason} detail=${outcome.detail ?? ''} alerted=${!!outcome.alerted}`); return outcome; }
   // Post-verify against the native truth. Catches the desync where the service
   // thinks a model is current (fast-path skip) but llama has a different/no model
