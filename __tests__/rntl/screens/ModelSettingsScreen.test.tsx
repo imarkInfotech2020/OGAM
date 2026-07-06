@@ -816,6 +816,7 @@ describe('ModelSettingsScreen', () => {
           imageUseOpenCL: undefined as any,
           enableGpu: undefined as any,
           inferenceBackend: undefined as any,
+          backendUserChosen: undefined as any,
           gpuLayers: undefined as any,
           flashAttn: undefined as any,
           aggressiveModelLoading: undefined as any,

@@ -62,6 +62,12 @@ type AppSettings = {
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
+  /** True once the user has explicitly picked an inference backend in Settings.
+   *  While false, the boot-time backendSync may upgrade the default to the GPU
+   *  path when the device supports it; once true, that auto-selection never
+   *  overrides the user's choice. Defaults to false (the current default was
+   *  auto-selected). */
+  backendUserChosen: boolean;
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;
   liteRTTopP: number;
@@ -190,6 +196,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
+  backendUserChosen: false,
   gpuLayers: 99,
   flashAttn: true,
   aggressiveModelLoading: false,

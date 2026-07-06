@@ -28,7 +28,8 @@ const IOS_BACKENDS: BackendOption[] = [
 
 const ANDROID_BASE_BACKENDS: BackendOption[] = [
   { id: INFERENCE_BACKENDS.CPU, label: 'CPU' },
-  { id: INFERENCE_BACKENDS.OPENCL, label: 'OpenCL' },
+  // Display label is 'GPU' (users don't know what OpenCL is); the id stays OPENCL.
+  { id: INFERENCE_BACKENDS.OPENCL, label: 'GPU' },
 ];
 
 const HTP_BACKEND: BackendOption = { id: INFERENCE_BACKENDS.HTP, label: 'HTP' };
@@ -60,7 +61,7 @@ const BackendSelectorSection: React.FC = () => {
           <Text style={styles.toggleLabel}>Inference Backend</Text>
           <Text style={styles.toggleDesc}>
             {current === INFERENCE_BACKENDS.CPU && 'Running on CPU threads only.'}
-            {current === INFERENCE_BACKENDS.OPENCL && 'Offloading layers to GPU via OpenCL.'}
+            {current === INFERENCE_BACKENDS.OPENCL && 'Offload layers to the GPU (OpenCL). Faster on most devices.'}
             {current === INFERENCE_BACKENDS.HTP && 'Offloading layers to Hexagon NPU.'}
             {current === INFERENCE_BACKENDS.METAL && 'Offloading layers to GPU via Metal.'}
           </Text>
@@ -75,7 +76,7 @@ const BackendSelectorSection: React.FC = () => {
             size="small"
             testID={`backend-${b.id}-button`}
             active={current === b.id}
-            onPress={() => updateSettings({ inferenceBackend: b.id })}
+            onPress={() => updateSettings({ inferenceBackend: b.id, backendUserChosen: true })}
             style={styles.flex1}
           />
         ))}
