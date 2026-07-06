@@ -57,11 +57,18 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
   return Math.min(insetBottom, FOOTER_SAFE_CAP);
 };
 
-// Show the "tap to continue" bar when a selected text model was evicted and nothing is
-// currently (re)loading. Kept as a helper so the conditions don't inflate the component.
-const shouldShowEvictedBar = (chat: ReturnType<typeof useChatScreen>): boolean =>
-  !!chat.textModelEvicted && !chat.isModelLoading && !chat.isCompacting
-  && !!chat.activeModelId && !chat.activeModelInfo?.isRemote;
+// Show the "tap to continue" bar only when a text reply is genuinely PENDING — the
+// selected text model was evicted AND the last message is an unanswered user turn.
+// After a completed turn (text or image), the last message is an assistant reply, so
+// the bar hides — it read as misplaced when it lingered after a finished image turn.
+// Checking the tail role is modality-agnostic: any completed turn ends with 'assistant'.
+export const shouldShowEvictedBar = (chat: ReturnType<typeof useChatScreen>): boolean => {
+  if (!chat.textModelEvicted || chat.isModelLoading || chat.isCompacting) return false;
+  if (chat.isGeneratingImage) return false;
+  if (!chat.activeModelId || chat.activeModelInfo?.isRemote) return false;
+  const last = chat.displayMessages[chat.displayMessages.length - 1];
+  return last?.role === 'user';
+};
 
 // "Model unloaded to free memory — tap to continue": the active text model was evicted
 // (e.g. an image/TTS load in voice mode) but stays selected. Tapping reloads it.
