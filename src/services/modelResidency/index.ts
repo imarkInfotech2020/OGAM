@@ -262,7 +262,11 @@ class ModelResidencyManager {
     await hardwareService.refreshMemoryInfo().catch(() => {});
     const budgetMB = this.budgetForSpec(spec);
     const residents = this.planningResidents();
-    const plan = planEviction(residents, spec, budgetMB);
+    // Aggressive policy (or an explicit override) keeps ONE model at a time: evict
+    // every evictable resident instead of co-residing whatever fits, so the incoming
+    // model gets the maximum RAM. Balanced mode keeps smart co-residency.
+    const singleModel = this.loadPolicy === 'aggressive' || !!opts?.override;
+    const plan = planEviction(residents, spec, budgetMB, { singleModel });
     // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision.
     // budgetForSpec already folds in the live os_proc budget under dirty pressure, so
     // there's one owner of the memory math — planEviction enforces it. Also log the raw

@@ -112,11 +112,17 @@ export function computeBudgetMB(
 /**
  * Plan which residents to evict so `incoming` fits within `budgetMB`.
  * Never evicts pinned residents or the incoming model itself.
+ *
+ * `opts.singleModel` (aggressive / "Load Anyway" mode): keep ONE model at a time —
+ * evict EVERY evictable resident (still honoring pinned + in-use veto) rather than
+ * co-residing whatever fits. This is the extreme-mode intent: give the one model the
+ * maximum RAM instead of sharing it, so a big model has the best chance to load/run.
  */
 export function planEviction(
   current: Resident[],
   incoming: IncomingModel,
   budgetMB: number,
+  opts?: { singleModel?: boolean },
 ): EvictionPlan {
   const evict: Resident[] = [];
   const isEvicted = (r: Resident) => evict.some(e => e.key === r.key);
@@ -128,8 +134,24 @@ export function planEviction(
       .reduce((sum, r) => sum + r.sizeMB, 0);
   const incomingCostMB = alreadyResident ? 0 : incoming.sizeMB;
 
-  // Smart routing: KEEP as many models co-resident as the budget allows; only
-  // when the incoming model doesn't fit do we evict — ONE AT A TIME, lowest
+  if (opts?.singleModel) {
+    // Extreme mode: evict everything evictable (no co-residency). selectEvictionVictim
+    // still skips pinned + in-use (canEvict veto) residents, so the classifier and a
+    // playing TTS survive; every other model is unloaded to free the most RAM.
+    for (let victim = selectEvictionVictim(current, incoming, isEvicted);
+      victim;
+      victim = selectEvictionVictim(current, incoming, isEvicted)) {
+      evict.push(victim);
+    }
+    return {
+      evict,
+      fits: usedMB() + incomingCostMB <= budgetMB,
+      freedMB: evict.reduce((sum, r) => sum + r.sizeMB, 0),
+    };
+  }
+
+  // Smart routing (balanced): KEEP as many models co-resident as the budget allows;
+  // only when the incoming model doesn't fit do we evict — ONE AT A TIME, lowest
   // priority (then least-recently-used) first (selectEvictionVictim, shared with
   // the manager's measure-after-evict loop).
   //   - Text + image co-reside when they fit (e.g. image-gen with prompt

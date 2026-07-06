@@ -44,6 +44,38 @@ describe('planEviction', () => {
     expect(plan.fits).toBe(true);
   });
 
+  describe('singleModel (aggressive / no co-residency)', () => {
+    it('evicts an already-fitting co-resident so only one model remains', () => {
+      // Same inputs as the co-residency test above (both fit in 4000), but singleModel
+      // forces eviction — keep ONE model at a time.
+      const current = [R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 4000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']);
+      expect(plan.fits).toBe(true);
+    });
+
+    it('evicts EVERY evictable resident, keeping only the incoming', () => {
+      const current = [R('img', 'image', 400, 3), R('stt', 'whisper', 300, 2), R('tts', 'tts', 200, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 500 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key).sort()).toEqual(['img', 'stt', 'tts']);
+      expect(plan.fits).toBe(true);
+    });
+
+    it('still never evicts a pinned resident (classifier survives)', () => {
+      const current = [R('smol', 'classifier', 100, 2, true), R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 500 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']); // pinned classifier kept
+      expect(plan.evict.some(e => e.key === 'smol')).toBe(false);
+    });
+
+    it('re-loading the already-resident model evicts the others (no-op cost for self)', () => {
+      const current = [R('txt', 'text', 800, 2), R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']);
+      expect(plan.fits).toBe(true);
+    });
+  });
+
   it('evicts by priority (sidecar < image < text), lowest first, one at a time', () => {
     // Over budget: free the lowest-priority resident first. text is highest and
     // must survive; the sidecar goes before the image model.
@@ -461,6 +493,47 @@ describe('ModelResidencyManager', () => {
       expect(modelResidencyManager.getLoadPolicy()).toBe('aggressive');
     });
 
+    it('aggressive keeps ONE model at a time — evicts a co-resident that would otherwise fit', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000); // roomy: both would co-reside under balanced
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+
+      // Balanced would keep both (400 + 800 ≤ 8000). Aggressive evicts the image so
+      // only the incoming text model remains.
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.fits).toBe(true);
+      expect(room.evicted).toContain('image');
+      expect(unloadImg).toHaveBeenCalledTimes(1);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+
+    it('balanced keeps co-residency for the same inputs (no forced eviction)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+      modelResidencyManager.setLoadPolicy('balanced');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.fits).toBe(true);
+      expect(room.evicted).toEqual([]); // co-resident kept
+      expect(unloadImg).not.toHaveBeenCalled();
+    });
+
+    it('aggressive single-model still spares a pinned classifier', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      modelResidencyManager.register({ key: 'smol', type: 'classifier', sizeMB: 100, pinned: true }, jest.fn().mockResolvedValue(undefined), 1);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 2);
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.evicted).toContain('image');
+      expect(room.evicted).not.toContain('smol');
+      expect(modelResidencyManager.isResident('smol')).toBe(true);
+    });
+
     it('fails-before/passes-after: a 21GB GGUF is refused on a 24GB phone under balanced, fits under aggressive', async () => {
       modelResidencyManager.setBudgetOverrideMB(null);
       jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(24);
@@ -501,7 +574,9 @@ describe('ModelResidencyManager', () => {
       expect(modelResidencyManager.isResident('image')).toBe(false);
     });
 
-    it('override is behaviour-neutral when the model already fits (no forced eviction)', async () => {
+    it('override keeps ONE model at a time — evicts a co-resident even when it would fit', async () => {
+      // Extreme mode is single-model by design: even though 500 + 1000 fits in 2000,
+      // override evicts the co-resident so the incoming model gets the whole budget.
       modelResidencyManager.setBudgetOverrideMB(2000);
       jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
       const unloadImg = jest.fn().mockResolvedValue(undefined);
@@ -511,8 +586,8 @@ describe('ModelResidencyManager', () => {
         { override: true },
       );
       expect(fits).toBe(true);
-      expect(evicted).toEqual([]); // fit without eviction — override changed nothing
-      expect(unloadImg).not.toHaveBeenCalled();
+      expect(evicted).toContain('image'); // single-model: co-resident evicted
+      expect(unloadImg).toHaveBeenCalledTimes(1);
     });
 
     it('aggressive holds a leaner dirty headroom so a dirty load the balanced guard refuses is allowed', async () => {
