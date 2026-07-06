@@ -113,7 +113,13 @@ export async function initiateModelLoad(
               // with "Failed to load model", defeating the whole "Load Anyway".
               waitForRenderFrame()
                 .then(() => doLoadTextModel(deps, { override: true }))
-                .then(() => { if (onLoadedResume && llmService.isModelLoaded()) onLoadedResume(); });
+                // Resume the turn once the forced load resolves. Do NOT gate on
+                // llmService.isModelLoaded() here — after a big multimodal load it races
+                // false and silently drops the resume, so the user had to hit resend.
+                // doLoadTextModel throws on failure (→ .catch), so .then only runs on a
+                // successful load; the resumed turn re-verifies readiness itself.
+                .then(() => onLoadedResume?.())
+                .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
             }
           },
         ],
@@ -160,7 +166,10 @@ export async function initiateModelLoad(
                 deps.modelLoadStartTimeRef.current = Date.now();
                 waitForRenderFrame()
                   .then(() => doLoadTextModel(deps, { override: true }))
-                  .then(() => { if (onLoadedResume && llmService.isModelLoaded()) onLoadedResume(); });
+                  // Resume once the load resolves — don't gate on isModelLoaded() (races
+                  // false after a multimodal load, dropping the resume). See the sibling path.
+                  .then(() => onLoadedResume?.())
+                  .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
               },
             },
           ],
