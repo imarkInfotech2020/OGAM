@@ -27,6 +27,8 @@ Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session sta
 1. Push the branch and open a PR - never `git push origin main`.
 2. If you find yourself on `main`, create a branch first: `git checkout -b <branch-name>`.
 
+**Merge strategy: ALWAYS a merge commit. NEVER squash (and never rebase-merge).** When merging a PR, use `gh pr merge --merge` (or the "Create a merge commit" button) so the full commit history is preserved on `main`. Do not squash under any circumstances - the small, meaningful per-concern commits are the record and must survive the merge. This applies to both the core repo and the `pro` submodule.
+
 ## Copy & Content Standards
 
 **Any change to website copy, essays, docs text, UI strings, or marketing content must follow the brand voice guide:**
