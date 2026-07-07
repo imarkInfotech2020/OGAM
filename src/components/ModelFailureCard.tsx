@@ -38,16 +38,31 @@ function FailureRow({ failure, onDismiss }: { failure: ModelFailure; onDismiss: 
         </AnimatedPressable>
       </View>
       <Text style={styles.message}>{failure.message}</Text>
-      {failure.onRetry && (
-        <AnimatedPressable
-          onPress={() => { onDismiss(); failure.onRetry?.(); }}
-          style={styles.retryButton}
-          accessibilityLabel="Retry"
-          testID={`model-failure-retry-${failure.modelType}`}
-        >
-          <Icon name="refresh-cw" size={12} color={colors.primary} style={styles.retryIcon} />
-          <Text style={styles.retryText}>{failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}</Text>
-        </AnimatedPressable>
+      {(failure.onRetry || (failure.overridable && failure.onLoadAnyway)) && (
+        <View style={styles.actionsRow}>
+          {failure.onRetry && (
+            <AnimatedPressable
+              onPress={() => { onDismiss(); failure.onRetry?.(); }}
+              style={styles.actionButton}
+              accessibilityLabel="Retry"
+              testID={`model-failure-retry-${failure.modelType}`}
+            >
+              <Icon name="refresh-cw" size={12} color={colors.primary} style={styles.actionIcon} />
+              <Text style={styles.actionText}>{failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}</Text>
+            </AnimatedPressable>
+          )}
+          {failure.overridable && failure.onLoadAnyway && (
+            <AnimatedPressable
+              onPress={() => { onDismiss(); failure.onLoadAnyway?.(); }}
+              style={styles.actionButton}
+              accessibilityLabel="Load Anyway"
+              testID={`model-failure-load-anyway-${failure.modelType}`}
+            >
+              <Icon name="zap" size={12} color={colors.error} style={styles.actionIcon} />
+              <Text style={[styles.actionText, { color: colors.error }]}>Load Anyway</Text>
+            </AnimatedPressable>
+          )}
+        </View>
       )}
     </View>
   );
@@ -104,17 +119,22 @@ const createStyles = (colors: ThemeColors) => ({
     color: colors.textSecondary,
     marginTop: SPACING.xs,
   },
-  retryButton: {
+  actionsRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    alignSelf: 'flex-start' as const,
+    flexWrap: 'wrap' as const,
     marginTop: SPACING.sm,
+    gap: SPACING.lg,
+  },
+  actionButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.xs,
   },
-  retryIcon: {
+  actionIcon: {
     marginRight: SPACING.xs,
   },
-  retryText: {
+  actionText: {
     ...TYPOGRAPHY.label,
     color: colors.primary,
   },
