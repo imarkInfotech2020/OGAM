@@ -10,8 +10,12 @@ import logger from '../utils/logger';
  *  - 'loaded'  — resident and ready.
  *  - 'blocked' — skipped by the single-model rule (a heavier generation model owns
  *                RAM; the sidecar can't co-reside). Retryable by freeing that model.
- *  - 'error'   — a real load failure (missing/corrupt file, native error) or nothing
- *                downloaded. Freeing other models will NOT help — do not evict.
+ *  - 'error'   — a real load failure (missing/corrupt file, native error), nothing
+ *                downloaded, OR a concurrent load is already in flight (its outcome is
+ *                unknown here). Freeing other models will NOT help — do not evict. The
+ *                conservative choice: a caller treats 'error' as "don't touch other
+ *                models", which is safe for the in-flight case too (the running load
+ *                resolves on its own).
  */
 export type WhisperLoadResult = 'loaded' | 'blocked' | 'error';
 
