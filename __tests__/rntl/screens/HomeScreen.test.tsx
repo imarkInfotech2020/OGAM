@@ -32,6 +32,7 @@ import {
 } from '../../utils/factories';
 import { Linking, Clipboard } from 'react-native';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
+import { withUtm } from '../../../src/utils/utm';
 
 // Mock requestAnimationFrame
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
@@ -339,7 +340,7 @@ describe('HomeScreen', () => {
       const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('desktop-promo-card'));
-      expect(spy).toHaveBeenCalledWith(OFF_GRID_DESKTOP_URL);
+      expect(spy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'home-promo'));
       spy.mockRestore();
     });
 
@@ -349,7 +350,7 @@ describe('HomeScreen', () => {
       const { getByTestId, getByText } = renderHomeScreen();
       expect(getByText('Copy link')).toBeTruthy();
       fireEvent.press(getByTestId('desktop-promo-copy'));
-      expect(spy).toHaveBeenCalledWith(OFF_GRID_DESKTOP_URL);
+      expect(spy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'home-promo'));
       expect(getByText('Link copied')).toBeTruthy();
       spy.mockRestore();
     });
