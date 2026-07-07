@@ -14,8 +14,10 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
+import { isAccelerableQuant } from '../utils/acceleration';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { RECOMMENDED_MODELS, TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
+import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
@@ -42,7 +44,7 @@ interface RecommendedCardProps {
   model: typeof RECOMMENDED_MODELS[number];
   recFile: ModelFile;
   index: number;
-  progress: { progress: number; queued?: boolean } | null | undefined;
+  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number } } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   isTrending: boolean;
@@ -62,8 +64,10 @@ const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, 
     isDownloading={!!progress && !progress.queued}
     isQueued={!!progress?.queued}
     downloadProgress={progress?.progress}
+    downloadBytes={progress?.bytes}
     isCompatible={model.minRam <= totalRamGB && (!model.maxRam || totalRamGB <= model.maxRam)}
     isTrending={isTrending}
+    supportsAcceleration={isAccelerableQuant(recFile.quantization)}
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}
@@ -74,7 +78,7 @@ interface LiteRTCardProps {
   file: ModelFile;
   index: number;
   curatedEntry: CuratedLiteRTEntry | undefined;
-  progress: { progress: number; queued?: boolean } | null | undefined;
+  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number } } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   onDownload: () => void;
@@ -96,8 +100,10 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
     isDownloading={!!progress && !progress.queued}
     isQueued={!!progress?.queued}
     downloadProgress={progress?.progress}
+    downloadBytes={progress?.bytes}
     isCompatible={file.size / (1024 ** 3) < totalRamGB * modelBudgetFraction(totalRamGB)}
-    recommended={{ pillLabel: 'Recommended', highlightText: curatedEntry?.highlight }}
+    recommended={{ pillLabel: 'Recommended' }}
+    supportsAcceleration
     onPress={() => {}}
     onDownload={downloaded ? undefined : onDownload}
     onCancel={progress ? onCancel : undefined}
@@ -105,10 +111,20 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
 );
 
 /** Active-download progress for a card, or null when the model isn't downloading.
- *  `queued` (store status 'pending') drives the "Queued" label vs a live progress bar. */
-function downloadProgressFor(entry: { status: string; progress: number } | undefined): { progress: number; queued: boolean } | null {
+ *  `queued` (store status 'pending') drives the "Queued" label vs a live progress bar.
+ *  `bytes` feeds the shared card's "X MB / Y MB" line so onboarding matches the
+ *  Text/Image/STT tabs (same ModelCard, same props) instead of showing % only. */
+export function downloadProgressFor(
+  entry: { status: string; progress: number; bytesDownloaded?: number; totalBytes?: number; combinedTotalBytes?: number; mmProjBytesDownloaded?: number } | undefined,
+): { progress: number; queued: boolean; bytes?: { downloaded: number; total: number } } | null {
   if (!entry || !isActiveStatus(entry.status as any)) return null;
-  return { progress: entry.progress, queued: entry.status === 'pending' };
+  const total = entry.combinedTotalBytes ?? entry.totalBytes ?? 0;
+  const downloaded = (entry.bytesDownloaded ?? 0) + (entry.mmProjBytesDownloaded ?? 0);
+  return {
+    progress: entry.progress,
+    queued: entry.status === 'pending',
+    bytes: total > 0 ? { downloaded, total } : undefined,
+  };
 }
 
 export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
@@ -202,7 +218,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
           'Make sure you\'re on the same WiFi network as your server and that it\'s running. Off Grid AI Desktop serves its models to this phone over your network.',
           [
             { text: 'Dismiss', style: 'cancel' },
-            { text: 'Get Off Grid AI Desktop', onPress: () => Linking.openURL(OFF_GRID_DESKTOP_URL).catch(() => {}) },
+            { text: 'Get Off Grid AI Desktop', onPress: () => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'model-download')).catch(() => {}) },
           ],
         ));
       }

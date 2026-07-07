@@ -166,12 +166,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.h3,
     color: colors.text,
   },
-  recommendedHighlight: {
-    ...TYPOGRAPHY.meta,
-    color: colors.primary,
-    marginTop: -4,
-    marginBottom: 12,
-  },
   recommendedChip: {
     backgroundColor: `${colors.primary}20`,
     paddingHorizontal: 10,
@@ -182,10 +176,16 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.meta,
     color: colors.primary,
   },
-  recommendedHighlightCompact: {
+  // GPU/NPU capability badge — emerald accent to signal hardware acceleration.
+  accelBadge: {
+    backgroundColor: `${colors.primary}20`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  accelBadgeText: {
     ...TYPOGRAPHY.meta,
     color: colors.primary,
-    marginTop: 6,
   },
   warningBadge: {
     backgroundColor: `${colors.warning}30`,
@@ -224,6 +224,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
   },
   progressSection: {
+    marginTop: 10,
     marginBottom: 12,
   },
   progressContainer: {
@@ -232,11 +233,19 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: 12,
   },
   progressBar: {
-    flex: 1,
+    // Full card width (own row); the caption row below carries bytes + %.
+    alignSelf: 'stretch' as const,
     height: 8,
     backgroundColor: colors.surfaceLight,
     borderRadius: 4,
     overflow: 'hidden' as const,
+  },
+  // Under-bar caption: bytes on the left, % / "Queued" on the right.
+  progressCaptionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: 7,
   },
   progressFill: {
     height: '100%' as const,
@@ -253,18 +262,13 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     textAlign: 'right' as const,
   },
-  // LiteRT card only: tighten the gap and hug the percentage to the bar so it
-  // doesn't appear to float. Other model cards keep the default spacing.
-  progressContainerTight: {
-    gap: 8,
-  },
-  progressTextTight: {
-    textAlign: 'left' as const,
+  queuedText: {
+    color: colors.textMuted,
   },
   progressBytesText: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    marginTop: 4,
+    flexShrink: 1,
   },
   iconButton: {
     padding: 4,

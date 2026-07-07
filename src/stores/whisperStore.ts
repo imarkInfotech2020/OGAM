@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { whisperService, WHISPER_MODELS } from '../services';
 import { modelResidencyManager } from '../services/modelResidency';
+import logger from '../utils/logger';
 
 interface WhisperState {
   // Active (selected) model ID
@@ -24,7 +25,6 @@ interface WhisperState {
 
   // Actions
   downloadModel: (modelId: string) => Promise<void>;
-  downloadFromUrl: (url: string, modelId: string) => Promise<void>;
   /** Activate an already-downloaded model without re-downloading. */
   selectModel: (modelId: string) => Promise<void>;
   loadModel: () => Promise<void>;
@@ -94,27 +94,6 @@ export const useWhisperStore = create<WhisperState>()(
         }
       },
 
-      downloadFromUrl: async (url: string, modelId: string) => {
-        setProgress(set, modelId, 0);
-        set({ error: null });
-        try {
-          await whisperService.downloadFromUrl(url, modelId, (progress) => {
-            setProgress(set, modelId, progress);
-          });
-          set((s) => ({
-            downloadedModelId: modelId,
-            presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
-          }));
-          await get().loadModel();
-        } catch (error) {
-          if (!(error as { cancelled?: boolean })?.cancelled) {
-            set({ error: error instanceof Error ? error.message : 'Download failed' });
-          }
-        } finally {
-          clearProgress(set, modelId);
-        }
-      },
-
       loadModel: async () => {
         const { downloadedModelId, isModelLoading } = get();
         if (!downloadedModelId) {
@@ -135,15 +114,29 @@ export const useWhisperStore = create<WhisperState>()(
           // Load through the residency manager's global lock so STT never loads
           // alongside another model. Make room for it first (evict to budget),
           // then register so future loads can evict it.
-          await modelResidencyManager.runExclusive('load:whisper', async () => {
-            await modelResidencyManager.makeRoomFor({ key: 'whisper', type: 'whisper', sizeMB });
+          //
+          // CRITICAL: honor the `fits` verdict. STT is a SIDECAR — if a heavier
+          // generation model owns memory, makeRoomFor returns fits=false WITHOUT
+          // evicting it (the sidecar rule won't kick out an 8.5GB model for a 142MB
+          // sidecar). We MUST NOT load anyway: doing so put whisper + the text model
+          // co-resident and OOM'd the app. STT stays out. When a voice turn needs to
+          // transcribe RIGHT NOW, the caller frees the generation model first (see
+          // ensureWhisperForTranscription in ChatInput/Voice) — we do not override
+          // the sidecar rule here.
+          const loaded = await modelResidencyManager.runExclusive('load:whisper', async () => {
+            const { fits } = await modelResidencyManager.makeRoomFor({ key: 'whisper', type: 'whisper', sizeMB });
+            if (!fits) {
+              logger.log('[Whisper] Skipping load — no room alongside the active model (single-model rule)');
+              return false;
+            }
             await whisperService.loadModel(modelPath);
             modelResidencyManager.register(
               { key: 'whisper', type: 'whisper', sizeMB },
               () => get().unloadModel(),
             );
+            return true;
           });
-          set({ isModelLoaded: true, isModelLoading: false, error: null });
+          set({ isModelLoaded: loaded, isModelLoading: false, error: null });
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state

@@ -82,7 +82,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     mockLlm.isModelLoaded.mockReturnValue(true); // native reports loaded after loadModel
     await activeModelService.loadTextModel('A');
 
-    expect(mockLlm.loadModel).toHaveBeenCalledWith(model.filePath, undefined);
+    expect(mockLlm.loadModel).toHaveBeenCalledWith(model.filePath, undefined, { override: false });
     expect(getAppState().activeModelId).toBe('A');
   });
 
@@ -99,7 +99,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     // Loading a DIFFERENT model must unload the previous llama context, then load B.
     await activeModelService.loadTextModel('B');
     expect(mockLlm.unloadModel).toHaveBeenCalled();
-    expect(mockLlm.loadModel).toHaveBeenLastCalledWith(B.filePath, undefined);
+    expect(mockLlm.loadModel).toHaveBeenLastCalledWith(B.filePath, undefined, { override: false });
     expect(getAppState().activeModelId).toBe('B');
   });
 

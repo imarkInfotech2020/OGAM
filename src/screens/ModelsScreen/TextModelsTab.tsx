@@ -17,6 +17,8 @@ import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
+import { modelSupportsNpuGpu, isAccelerableQuant } from '../../utils/acceleration';
+import { aggregateActiveDownloads } from '../../utils/downloadAggregate';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
@@ -210,6 +212,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
         recommended={recommended}
+        supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}
         failedState={failedState}
       />
     );
@@ -270,13 +273,12 @@ const ModelDetailView: React.FC<DetailProps> = ({
           data={modelFiles
             .filter(f => f.size > 0 && f.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB) && (filterState.quant === 'all' || f.name.includes(filterState.quant)))
             .sort((a, b) => {
-              // LiteRT files: smaller-first (E2B before E4B) — both are curated,
-              // no Q4_K_M concept, and the smaller variant fits more devices.
-              if (selectedModel.id === LITERT_PARENT_ID) return a.size - b.size;
-              const aRec = a.name.includes('Q4_K_M') ? 0 : 1;
-              const bRec = b.name.includes('Q4_K_M') ? 0 : 1;
-              if (aRec !== bRec) return aRec - bRec;
-              return b.size - a.size;
+              if (selectedModel.id === LITERT_PARENT_ID) return a.size - b.size; // curated: small-first
+              // Tier: Q4_K_M (CPU default, lowest size) → GPU/NPU Q4_0/Q8_0 → rest (CPU
+              // fallback). Accelerable tier small-first (Q4_0 before Q8_0); others size desc.
+              const tier = (f: ModelFile) => f.name.includes('Q4_K_M') ? 0 : isAccelerableQuant(f.quantization) ? 1 : 2;
+              if (tier(a) !== tier(b)) return tier(a) - tier(b);
+              return tier(a) === 1 ? a.size - b.size : b.size - a.size;
             })}
           renderItem={renderFileItem}
           keyExtractor={item => item.name}
@@ -315,7 +317,7 @@ export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
 const LITERT_PARENT_RECOMMENDED = {
   pillLabel: 'Recommended',
   chips: ['Vision', 'GPU'],
-  highlightText: 'Hardware-accelerated inference with vision support',
+  // No highlightText — the model description already carries it (rendered commonly).
 };
 
 const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; recommendedQuantization: string }; showTitle: boolean; styles: any }> = ({ ramGB, rec, showTitle, styles }) => (
@@ -333,16 +335,14 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
-  // Reflect an in-flight download in the compact list card too (queued/downloading),
-  // matching by the `<modelId>/<file>` row-key prefix (covers the LiteRT parent's files).
-  const activeEntry = useDownloadStore(s => Object.values(s.downloads).find(e => e.modelKey.startsWith(`${item.id}/`) && isActiveStatus(e.status)));
-  const cardIsQueued = !!activeEntry && isQueuedStatus(activeEntry.status);
-  const cardIsDownloading = !!activeEntry && !isQueuedStatus(activeEntry.status);
-  // Strip files for the LiteRT parent so ModelCard doesn't render the size-range
-  // and "N files" badges — the curated chips already convey the relevant info.
-  // The original item (with files) still flows through onPress → handleSelectModel.
+  // Aggregate ALL in-flight entries for this model (main+mmproj / grouped LiteRT) into
+  // cumulative progress/bytes + a download count, so the card shows total, not one entry.
+  const downloads = useDownloadStore(s => s.downloads);
+  const agg = React.useMemo(() => aggregateActiveDownloads(downloads, item.id), [downloads, item.id]);
+  // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
+  // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={cardIsDownloading} isQueued={cardIsQueued} downloadProgress={activeEntry?.progress} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} /></AnimatedEntry>);
+  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
   return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
 };
 

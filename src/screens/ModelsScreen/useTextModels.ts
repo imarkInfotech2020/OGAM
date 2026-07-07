@@ -9,6 +9,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
 import { startModelDownload } from '../../services/startModelDownload';
 import { ramFitScore } from '../../utils/recommendedModels';
+import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
@@ -256,11 +257,21 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     await modelManager.deleteModel(model.id);
     removeDownloadedModel(model.id);
   };
+  // Resolve a catalog file to its on-disk model by the FILE, not the composite id.
+  // The download path registers `${modelId}/${fileName}`, but the restart catch-up /
+  // recovery scans register the SAME file under a different id (`recovered_…` or a bare
+  // name). Matching only the composite id made a recovered quant (e.g. a Q4_0 finalized
+  // after an app kill) look "not downloaded", so its file row fell through to whichever
+  // sibling quant WAS registered under the expected id (the Q4_K_M) — loading the wrong
+  // quant. A file name is unique within the models dir, so it's the stable key.
+  const matchesFile = (m: DownloadedModel, modelId: string, fileName: string) =>
+    m.fileName === fileName || m.id === `${modelId}/${fileName}`;
+
   const isModelDownloaded = (modelId: string, fileName: string) =>
-    downloadedModels.some(m => m.id === `${modelId}/${fileName}`);
+    downloadedModels.some(m => matchesFile(m, modelId, fileName));
 
   const getDownloadedModel = (modelId: string, fileName: string): DownloadedModel | undefined =>
-    downloadedModels.find(m => m.id === `${modelId}/${fileName}`);
+    downloadedModels.find(m => matchesFile(m, modelId, fileName));
 
   // Filter actions
   const clearFilters = useCallback(() => setFilterState(initialFilterState), []);
@@ -310,7 +321,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         return true;
       })
       .map(m => mapCuratedModel(m, recommendedModelDetails));
-    return applySort(models, filterState.sort, ramGB);
+    const sorted = applySort(models, filterState.sort, ramGB);
+    // Prioritize NPU/GPU-accelerable models (LiteRT or Q4_0/Q8_0) to the top of the
+    // recommended list, keeping the existing order stable within each group. Only for
+    // the editorial 'recommended' sort — explicit sorts (size/downloads/…) are honored.
+    if (filterState.sort !== 'recommended') return sorted;
+    return [...sorted].sort((a, b) => Number(modelSupportsNpuGpu(b)) - Number(modelSupportsNpuGpu(a)));
   }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, ramGB]);
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] => {

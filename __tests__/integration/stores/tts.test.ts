@@ -109,6 +109,29 @@ describe('TTS integration', () => {
     jest.clearAllMocks();
   });
 
+  // ── Voice sequencing ──────────────────────────────────────────────────
+  // TTS must load with single-model override so the finished text model is evicted for the
+  // voice model. This asserts the CONTRACT (override:true is requested); the real eviction
+  // behavior of override is proven in modelResidency.test.ts (real makeRoomFor → evicts).
+  describe('voice sequencing: loading TTS requests single-model eviction', () => {
+    it('initializeEngine calls makeRoomFor for tts with override:true', async () => {
+      const { modelResidencyManager } = require('@offgrid/core/services/modelResidency');
+      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
+        .mockResolvedValue({ fits: true, evicted: ['text'] });
+      mockEngine.getPhase.mockReturnValue('idle');   // cold → initializeEngine runs makeRoomFor
+      mockEngine.isFullyDownloaded.mockReturnValue(true);
+
+      await getState().initializeEngine();
+
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ key: 'tts', type: 'tts' }),
+        { override: true },
+      );
+      spy.mockRestore();
+      mockEngine.getPhase.mockReturnValue('ready');
+    });
+  });
+
   // ── Chat Mode full flow ───────────────────────────────────────────────
 
   describe('Chat Mode: speak → stop', () => {

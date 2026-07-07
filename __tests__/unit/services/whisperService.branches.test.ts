@@ -2,7 +2,7 @@
  * WhisperService — additional branch coverage.
  *
  * Targets error/cleanup paths not exercised by whisperService.test.ts:
- * downloadModel validation failure, downloadFromUrl, listDownloadedModels,
+ * downloadModel validation failure, listDownloadedModels,
  * deleteModel active-download cancellation, loadModel release-wait,
  * unloadModel mid-transcription, requestPermissions non-mobile platform,
  * and startRealtimeTranscription guards / event finish / error paths.
@@ -90,68 +90,6 @@ describe('WhisperService — branch coverage', () => {
     });
   });
 
-  // ── downloadFromUrl (lines 92-112) ────────────────────────────────────────
-  describe('downloadFromUrl', () => {
-    it('returns existing path if already downloaded', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)  // dir exists (ensureModelsDirExists)
-        .mockResolvedValueOnce(true); // dest already present
-      const result = await whisperService.downloadFromUrl('http://x/m.bin', 'tiny.en');
-      expect(result).toBe('/mock/documents/whisper-models/ggml-tiny.en.bin');
-      expect(mockedRNFS.downloadFile).not.toHaveBeenCalled();
-    });
-
-    it('downloads, validates and returns dest path on success', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // dir exists
-        .mockResolvedValueOnce(false)  // not downloaded
-        .mockResolvedValueOnce(true);  // validateModelFile exists
-      mockedRNFS.stat.mockResolvedValueOnce({ size: 75 * 1024 * 1024, isFile: () => true } as any);
-      let progressCb: ((res: any) => void) | undefined;
-      mockedRNFS.downloadFile.mockImplementation((opts: any) => {
-        progressCb = opts.progress;
-        return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 1 }) } as any;
-      });
-
-      const onProgress = jest.fn();
-      const result = await whisperService.downloadFromUrl('http://x/m.bin', 'tiny.en', onProgress);
-      // exercise the progress callback branch
-      progressCb?.({ bytesWritten: 50, contentLength: 100 });
-      expect(onProgress).toHaveBeenCalledWith(0.5);
-      expect(result).toBe('/mock/documents/whisper-models/ggml-tiny.en.bin');
-    });
-
-    it('unlinks and throws when status code is not 200', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // dir exists
-        .mockResolvedValueOnce(false); // not downloaded
-      mockedRNFS.unlink.mockResolvedValue(undefined as any);
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 404, bytesWritten: 0 }),
-      } as any);
-
-      await expect(whisperService.downloadFromUrl('http://x/m.bin', 'tiny.en')).rejects.toThrow(
-        'Download failed with status 404',
-      );
-      expect(mockedRNFS.unlink).toHaveBeenCalledWith('/mock/documents/whisper-models/ggml-tiny.en.bin');
-    });
-
-    it('rethrows validation error and unlinks when downloaded file is invalid', async () => {
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // dir exists
-        .mockResolvedValueOnce(false)  // not downloaded
-        .mockResolvedValueOnce(true);  // validateModelFile exists
-      mockedRNFS.stat.mockResolvedValueOnce({ size: 500, isFile: () => true } as any); // too small
-      mockedRNFS.unlink.mockResolvedValue(undefined as any);
-      mockedRNFS.downloadFile.mockReturnValue({
-        jobId: 1,
-        promise: Promise.resolve({ statusCode: 200, bytesWritten: 1 }),
-      } as any);
-
-      await expect(whisperService.downloadFromUrl('http://x/m.bin', 'tiny.en')).rejects.toThrow(/too small/);
-    });
-  });
 
   // ── listDownloadedModels (lines 114-127) ──────────────────────────────────
   describe('listDownloadedModels', () => {

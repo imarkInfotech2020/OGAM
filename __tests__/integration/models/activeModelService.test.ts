@@ -84,6 +84,40 @@ describe('ActiveModelService Integration', () => {
     await activeModelService.syncWithNativeState();
   });
 
+  describe('Text Model Loading — aggressive load override ("Load Anyway")', () => {
+    // A GGUF whose estimated RAM exceeds the budget on the current device.
+    const oversized = () => createDownloadedModel({
+      id: 'huge-1', engine: 'llama' as any, fileName: 'huge.gguf', filePath: '/huge.gguf',
+      fileSize: 21 * 1024 * 1024 * 1024,
+    });
+
+    it('throws an OverridableMemoryError when the model does not fit (no override)', async () => {
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(24);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(24);
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      useAppStore.setState({ downloadedModels: [oversized()] });
+
+      const { isOverridableMemoryError } = require('../../../src/services/modelLoadErrors');
+      let caught: unknown;
+      await activeModelService.loadTextModel('huge-1').catch((e: unknown) => { caught = e; });
+      expect(caught).toBeDefined();
+      expect(isOverridableMemoryError(caught)).toBe(true);
+      expect(mockLlmService.loadModel).not.toHaveBeenCalled();
+    });
+
+    it('loads the same model when called with { override: true } (forces past the gate)', async () => {
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(24);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(24);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      useAppStore.setState({ downloadedModels: [oversized()] });
+
+      await activeModelService.loadTextModel('huge-1', undefined, { override: true });
+
+      expect(mockLlmService.loadModel).toHaveBeenCalled();
+      expect(getAppState().activeModelId).toBe('huge-1');
+    });
+  });
+
   describe('Text Model Loading', () => {
     it('should load text model via llmService and update store', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
@@ -97,11 +131,42 @@ describe('ActiveModelService Integration', () => {
       // Verify llmService was called correctly
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        (model as any).mmProjPath
+        (model as any).mmProjPath,
+        { override: false }
       );
 
       // Verify store was updated
       expect(getAppState().activeModelId).toBe('test-model-1');
+    });
+
+    it('flags textModelEvicted on an eviction (keepSelection) and clears it on reload', async () => {
+      const model = createDownloadedModel({ id: 'evict-me' });
+      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('evict-me');
+      expect(getAppState().textModelEvicted).toBe(false); // loaded → not evicted
+
+      // Residency evicts it to free RAM (keepSelection=true) while a native model is loaded.
+      await activeModelService.unloadTextModel(true);
+      expect(getAppState().textModelEvicted).toBe(true);   // flagged → chat shows "continue"
+      expect(getAppState().activeModelId).toBe('evict-me'); // selection kept
+
+      // Reloading (the "continue" tap) clears the flag.
+      mockLlmService.isModelLoaded.mockReturnValue(false);
+      await activeModelService.loadTextModel('evict-me');
+      expect(getAppState().textModelEvicted).toBe(false);
+    });
+
+    it('a user-initiated unload clears the selection and does NOT flag textModelEvicted', async () => {
+      const model = createDownloadedModel({ id: 'user-unload' });
+      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      await activeModelService.loadTextModel('user-unload');
+      await activeModelService.unloadTextModel(false); // user unload
+      expect(getAppState().textModelEvicted).toBe(false);
+      expect(getAppState().activeModelId).toBeNull();
     });
 
     it('budgets a LiteRT text model as dirty memory and a GGUF as clean (F9)', async () => {
@@ -113,14 +178,14 @@ describe('ActiveModelService Integration', () => {
       const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
       useAppStore.setState({ downloadedModels: [litert] });
       await activeModelService.loadTextModel('litert-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }), expect.anything());
 
       // GGUF/llama is clean mmap -> physical-cap budgeting unchanged (dirtyMemory:false).
       spy.mockClear();
       const gguf = createDownloadedModel({ id: 'gguf-1', engine: 'llama' as any });
       useAppStore.setState({ downloadedModels: [gguf] });
       await activeModelService.loadTextModel('gguf-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }), expect.anything());
       spy.mockRestore();
     });
 
@@ -215,7 +280,8 @@ describe('ActiveModelService Integration', () => {
       // Should have loaded second model
       expect(mockLlmService.loadModel).toHaveBeenLastCalledWith(
         model2.filePath,
-        (model2 as any).mmProjPath
+        (model2 as any).mmProjPath,
+        { override: false }
       );
     });
 
@@ -392,6 +458,61 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
+  describe('extreme mode (aggressive) — single-model switching text/image/STT', () => {
+    beforeEach(() => modelResidencyManager.setLoadPolicy('aggressive'));
+    afterEach(() => modelResidencyManager.setLoadPolicy('balanced'));
+
+    it('switching text -> image evicts the text model (single model, not co-resident)', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+
+      // Under aggressive single-model, loading the image evicts the resident text model.
+      await activeModelService.loadImageModel('img-1');
+      expect(mockLlmService.unloadModel).toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('text')).toBe(false);
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+      expect(getAppState().activeImageModelId).toBe('img-1');
+    });
+
+    it('switching image -> text evicts the image model', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadImageModel('img-1');
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+    });
+
+    it('a full text -> image -> text round-trip loads each and keeps exactly one generation model', async () => {
+      const textModel = createDownloadedModel({ id: 'txt-1' });
+      const imageModel = createONNXImageModel({ id: 'img-1' });
+      useAppStore.setState({ downloadedModels: [textModel], downloadedImageModels: [imageModel], settings: { imageThreads: 4 } as any });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
+
+      await activeModelService.loadTextModel('txt-1');
+      await activeModelService.loadImageModel('img-1');
+      await activeModelService.loadTextModel('txt-1');
+
+      // Ends with exactly the text model resident — never both.
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+  });
+
   describe('Image Model Unloading', () => {
     it('should unload image model and clear store', async () => {
       const imageModel = createONNXImageModel({ id: 'img-model' });
@@ -519,6 +640,27 @@ describe('ActiveModelService Integration', () => {
 
       expect(result.canLoad).toBe(false);
       expect(result.severity).toBe('critical');
+    });
+
+    it('aggressive load policy relaxes the PRE-CHECK too (not just residency), end-to-end', async () => {
+      // 6.5GB file → ~9.75GB required (1.5x). On a 12GB device this exceeds the
+      // balanced budget (0.70 Android / 0.78 iOS) but fits the aggressive budget
+      // (0.88 / 0.92) — proving the pre-check reads the residency manager's policy.
+      const model = createDownloadedModel({ id: 'mid-model', fileSize: 6.5 * 1024 * 1024 * 1024 });
+      useAppStore.setState({ downloadedModels: [model] });
+      mockHardwareService.getDeviceInfo.mockResolvedValue(
+        createDeviceInfo({ totalMemory: 12 * 1024 * 1024 * 1024 })
+      );
+
+      modelResidencyManager.setLoadPolicy('balanced');
+      const balanced = await activeModelService.checkMemoryForModel('mid-model', 'text');
+      expect(balanced.canLoad).toBe(false);
+
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await activeModelService.checkMemoryForModel('mid-model', 'text');
+      expect(aggressive.canLoad).toBe(true);
+
+      modelResidencyManager.setLoadPolicy('balanced'); // don't leak policy to other tests
     });
 
     it('should return blocked for non-existent model', async () => {
@@ -907,7 +1049,8 @@ describe('ActiveModelService Integration', () => {
 
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        expect.any(String) // mmproj path should be found
+        expect.any(String), // mmproj path should be found
+        { override: false }
       );
     });
   });
@@ -1262,7 +1405,8 @@ describe('ActiveModelService Integration', () => {
       // Should have called loadModel with undefined mmProjPath
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        undefined
+        undefined,
+        { override: false }
       );
     });
   });
@@ -1289,7 +1433,8 @@ describe('ActiveModelService Integration', () => {
 
       expect(mockLlmService.loadModel).toHaveBeenCalledWith(
         model.filePath,
-        undefined
+        undefined,
+        { override: false }
       );
     });
   });

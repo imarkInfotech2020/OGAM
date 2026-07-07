@@ -17,7 +17,7 @@
  * can be unit-tested without touching native model loading.
  */
 
-import { modelMemoryBudgetMB } from '../memoryBudget';
+import { modelMemoryBudgetMB, LoadPolicy } from '../memoryBudget';
 
 export type ResidentType = 'text' | 'image' | 'whisper' | 'tts' | 'classifier' | 'embedding';
 
@@ -94,28 +94,39 @@ export function selectEvictionVictim(
  */
 export function computeBudgetMB(
   totalRamMB: number,
-  opts?: { reserveMB?: number; fraction?: number },
+  opts?: { reserveMB?: number; fraction?: number; policy?: LoadPolicy },
 ): number {
   // Explicit overrides keep the old escape hatch; otherwise defer to the single
   // device + platform aware budget owner (so residency and the pre-load memory
   // check can never disagree, and high-RAM/iOS-entitled devices get their larger
-  // safe fraction instead of a flat 60%).
+  // safe fraction instead of a flat 60%). The load policy ('aggressive') tunes the
+  // fraction + reserve in that one owner — never branched on here.
   if (opts?.fraction != null || opts?.reserveMB != null) {
     const fraction = opts?.fraction ?? 0.6;
     const reserveMB = opts?.reserveMB ?? 1500;
     return Math.max(0, Math.min(totalRamMB * fraction, totalRamMB - reserveMB));
   }
-  return modelMemoryBudgetMB(totalRamMB);
+  return modelMemoryBudgetMB(totalRamMB, undefined, opts?.policy);
 }
 
 /**
  * Plan which residents to evict so `incoming` fits within `budgetMB`.
  * Never evicts pinned residents or the incoming model itself.
+ *
+ * `opts.singleModel` (aggressive / "Load Anyway" mode): keep ONE model at a time —
+ * evict EVERY evictable resident (still honoring pinned + in-use veto) rather than
+ * co-residing whatever fits. This is the extreme-mode intent: give the one model the
+ * maximum RAM instead of sharing it, so a big model has the best chance to load/run.
+ *
+ * (max-params disabled below: four clear positional inputs — residents, incoming,
+ * budget, options — reads clearer than an options-object wrapper on this hot pure fn.)
  */
+// eslint-disable-next-line max-params
 export function planEviction(
   current: Resident[],
   incoming: IncomingModel,
   budgetMB: number,
+  opts?: { singleModel?: boolean },
 ): EvictionPlan {
   const evict: Resident[] = [];
   const isEvicted = (r: Resident) => evict.some(e => e.key === r.key);
@@ -127,8 +138,24 @@ export function planEviction(
       .reduce((sum, r) => sum + r.sizeMB, 0);
   const incomingCostMB = alreadyResident ? 0 : incoming.sizeMB;
 
-  // Smart routing: KEEP as many models co-resident as the budget allows; only
-  // when the incoming model doesn't fit do we evict — ONE AT A TIME, lowest
+  if (opts?.singleModel) {
+    // Extreme mode: evict everything evictable (no co-residency). selectEvictionVictim
+    // still skips pinned + in-use (canEvict veto) residents, so the classifier and a
+    // playing TTS survive; every other model is unloaded to free the most RAM.
+    for (let victim = selectEvictionVictim(current, incoming, isEvicted);
+      victim;
+      victim = selectEvictionVictim(current, incoming, isEvicted)) {
+      evict.push(victim);
+    }
+    return {
+      evict,
+      fits: usedMB() + incomingCostMB <= budgetMB,
+      freedMB: evict.reduce((sum, r) => sum + r.sizeMB, 0),
+    };
+  }
+
+  // Smart routing (balanced): KEEP as many models co-resident as the budget allows;
+  // only when the incoming model doesn't fit do we evict — ONE AT A TIME, lowest
   // priority (then least-recently-used) first (selectEvictionVictim, shared with
   // the manager's measure-after-evict loop).
   //   - Text + image co-reside when they fit (e.g. image-gen with prompt

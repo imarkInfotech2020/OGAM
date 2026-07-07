@@ -24,6 +24,14 @@ describe('computeBudgetMB', () => {
   it('never returns negative', () => {
     expect(computeBudgetMB(1000)).toBe(0);
   });
+
+  it('passes the load policy through to the budget owner (aggressive > balanced)', () => {
+    expect(computeBudgetMB(24576, { policy: 'aggressive' })).toBeGreaterThan(
+      computeBudgetMB(24576, { policy: 'balanced' }),
+    );
+    // Omitting policy is behaviour-neutral (balanced).
+    expect(computeBudgetMB(24576)).toBe(computeBudgetMB(24576, { policy: 'balanced' }));
+  });
 });
 
 describe('planEviction', () => {
@@ -34,6 +42,38 @@ describe('planEviction', () => {
     const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 4000);
     expect(plan.evict).toEqual([]); // 400 + 800 = 1200 ≤ 4000 → keep both
     expect(plan.fits).toBe(true);
+  });
+
+  describe('singleModel (aggressive / no co-residency)', () => {
+    it('evicts an already-fitting co-resident so only one model remains', () => {
+      // Same inputs as the co-residency test above (both fit in 4000), but singleModel
+      // forces eviction — keep ONE model at a time.
+      const current = [R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 4000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']);
+      expect(plan.fits).toBe(true);
+    });
+
+    it('evicts EVERY evictable resident, keeping only the incoming', () => {
+      const current = [R('img', 'image', 400, 3), R('stt', 'whisper', 300, 2), R('tts', 'tts', 200, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 500 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key).sort()).toEqual(['img', 'stt', 'tts']);
+      expect(plan.fits).toBe(true);
+    });
+
+    it('still never evicts a pinned resident (classifier survives)', () => {
+      const current = [R('smol', 'classifier', 100, 2, true), R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 500 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']); // pinned classifier kept
+      expect(plan.evict.some(e => e.key === 'smol')).toBe(false);
+    });
+
+    it('re-loading the already-resident model evicts the others (no-op cost for self)', () => {
+      const current = [R('txt', 'text', 800, 2), R('img', 'image', 400, 1)];
+      const plan = planEviction(current, { key: 'txt', type: 'text', sizeMB: 800 }, 8000, { singleModel: true });
+      expect(plan.evict.map(e => e.key)).toEqual(['img']);
+      expect(plan.fits).toBe(true);
+    });
   });
 
   it('evicts by priority (sidecar < image < text), lowest first, one at a time', () => {
@@ -400,6 +440,73 @@ describe('ModelResidencyManager', () => {
     });
   });
 
+  describe('override survival floor (never force a load into a jetsam SIGKILL)', () => {
+    beforeEach(() => { modelResidencyManager._reset(); });
+    afterEach(() => jest.restoreAllMocks());
+
+    it('REFUSES an override load when live free RAM is below the survival floor (background apps case)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(0.8); // ~820MB free — starved
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 5000 }, { override: true });
+      expect(fits).toBe(false);   // even override won't cross the floor → graceful refuse, no crash
+      expect(evicted).toEqual([]); // and we didn't strand the device by evicting
+    });
+
+    it('ALLOWS the same override load when there is survival headroom', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4); // 4GB free — safe
+      const { fits } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 8000 }, { override: true });
+      expect(fits).toBe(true);  // clean GGUF, plenty of live headroom → override proceeds
+    });
+  });
+
+  describe('session override memory (approve Load Anyway once per model)', () => {
+    beforeEach(() => { modelResidencyManager._reset(); });
+    afterEach(() => jest.restoreAllMocks());
+
+    const tooBig = { key: 'text', type: 'text' as const, modelId: 'org/big-model', sizeMB: 2000 };
+
+    it('remembers an explicit override so the SAME model auto-overrides next time (no re-prompt)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000); // 2000MB model can never fit the budget
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+
+      // Fails-before: without override the oversized model is refused.
+      expect((await modelResidencyManager.makeRoomFor(tooBig)).fits).toBe(false);
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(false);
+
+      // User taps "Load Anyway" once → forced load, and it's remembered for the session.
+      expect((await modelResidencyManager.makeRoomFor(tooBig, { override: true })).fits).toBe(true);
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(true);
+
+      // Passes-after: a later load of the SAME model (no override flag) auto-overrides.
+      expect((await modelResidencyManager.makeRoomFor(tooBig)).fits).toBe(true);
+    });
+
+    it('does NOT leak the override to a different model', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      await modelResidencyManager.makeRoomFor(tooBig, { override: true });
+      // A different oversized model is still gated (its own approval required).
+      const other = { key: 'text', type: 'text' as const, modelId: 'org/other-model', sizeMB: 2000 };
+      expect((await modelResidencyManager.makeRoomFor(other)).fits).toBe(false);
+    });
+
+    it('_reset clears session overrides (relaunch asks again)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      await modelResidencyManager.makeRoomFor(tooBig, { override: true });
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(true);
+      modelResidencyManager._reset();
+      expect(modelResidencyManager.hasSessionOverride('org/big-model')).toBe(false);
+    });
+  });
+
   describe('canEvict veto (residency ↔ audio seam)', () => {
     beforeEach(() => modelResidencyManager._reset());
     afterEach(() => jest.restoreAllMocks());
@@ -434,6 +541,140 @@ describe('ModelResidencyManager', () => {
       expect(ttsUnload).not.toHaveBeenCalled();
       expect(evicted).toEqual([]);
       expect(modelResidencyManager.isResident('tts')).toBe(true);
+    });
+  });
+
+  describe('load policy (aggressive) + override', () => {
+    beforeEach(() => {
+      modelResidencyManager._reset();
+      modelResidencyManager.setLoadPolicy('balanced');
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+      modelResidencyManager.setLoadPolicy('balanced'); // never leak policy across suites
+    });
+
+    it('defaults to balanced and round-trips setLoadPolicy/getLoadPolicy', () => {
+      expect(modelResidencyManager.getLoadPolicy()).toBe('balanced');
+      modelResidencyManager.setLoadPolicy('aggressive');
+      expect(modelResidencyManager.getLoadPolicy()).toBe('aggressive');
+    });
+
+    it('aggressive keeps ONE model at a time — evicts a co-resident that would otherwise fit', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000); // roomy: both would co-reside under balanced
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+
+      // Balanced would keep both (400 + 800 ≤ 8000). Aggressive evicts the image so
+      // only the incoming text model remains.
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.fits).toBe(true);
+      expect(room.evicted).toContain('image');
+      expect(unloadImg).toHaveBeenCalledTimes(1);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+
+    it('balanced keeps co-residency for the same inputs (no forced eviction)', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+      modelResidencyManager.setLoadPolicy('balanced');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.fits).toBe(true);
+      expect(room.evicted).toEqual([]); // co-resident kept
+      expect(unloadImg).not.toHaveBeenCalled();
+    });
+
+    it('aggressive single-model still spares a pinned classifier', async () => {
+      modelResidencyManager.setBudgetOverrideMB(8000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      modelResidencyManager.register({ key: 'smol', type: 'classifier', sizeMB: 100, pinned: true }, jest.fn().mockResolvedValue(undefined), 1);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 2);
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: 800 });
+      expect(room.evicted).toContain('image');
+      expect(room.evicted).not.toContain('smol');
+      expect(modelResidencyManager.isResident('smol')).toBe(true);
+    });
+
+    it('fails-before/passes-after: a 21GB GGUF is refused on a 24GB phone under balanced, fits under aggressive', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(24);
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(8);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const spec = { key: 'text', type: 'text' as const, sizeMB: 21 * 1024 };
+
+      // Balanced: 24GB * 0.70 ≈ 16.8GB budget → 21GB does not fit (Nico's Qwen3 MoE).
+      const balanced = await modelResidencyManager.makeRoomFor(spec);
+      expect(balanced.fits).toBe(false);
+
+      // Aggressive: pushes near the physical ceiling → the same model now fits.
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await modelResidencyManager.makeRoomFor(spec);
+      expect(aggressive.fits).toBe(true);
+    });
+
+    it('override forces a load that still will not fit, evicting everything evictable first', async () => {
+      modelResidencyManager.setBudgetOverrideMB(1000); // tiny budget so nothing big fits
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 400 }, unloadImg, 1);
+
+      // Without override: refuse and DON'T evict (never strand the device).
+      const blocked = await modelResidencyManager.makeRoomFor({ key: 'huge', type: 'text', sizeMB: 5000 });
+      expect(blocked.fits).toBe(false);
+      expect(unloadImg).not.toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('image')).toBe(true);
+
+      // With override ("Load Anyway"): force fits=true AND free max room (evict image).
+      const forced = await modelResidencyManager.makeRoomFor(
+        { key: 'huge', type: 'text', sizeMB: 5000 },
+        { override: true },
+      );
+      expect(forced.fits).toBe(true);
+      expect(forced.evicted).toContain('image');
+      expect(unloadImg).toHaveBeenCalledTimes(1);
+      expect(modelResidencyManager.isResident('image')).toBe(false);
+    });
+
+    it('override keeps ONE model at a time — evicts a co-resident even when it would fit', async () => {
+      // Extreme mode is single-model by design: even though 500 + 1000 fits in 2000,
+      // override evicts the co-resident so the incoming model gets the whole budget.
+      modelResidencyManager.setBudgetOverrideMB(2000);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      const unloadImg = jest.fn().mockResolvedValue(undefined);
+      modelResidencyManager.register({ key: 'image', type: 'image', sizeMB: 500 }, unloadImg, 1);
+      const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+        { key: 'text', type: 'text', sizeMB: 1000 },
+        { override: true },
+      );
+      expect(fits).toBe(true);
+      expect(evicted).toContain('image'); // single-model: co-resident evicted
+      expect(unloadImg).toHaveBeenCalledTimes(1);
+    });
+
+    it('aggressive holds a leaner dirty headroom so a dirty load the balanced guard refuses is allowed', async () => {
+      modelResidencyManager.setBudgetOverrideMB(null);
+      jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
+      // ~3.4GB free: balanced dirty headroom (1024) → budget ≈ 2.4GB; aggressive (512) → ≈ 2.9GB.
+      jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(3.4);
+      jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      // A resident dirty model creates dirty pressure so the live-RAM branch is used.
+      modelResidencyManager.register(
+        { key: 'image', type: 'image', sizeMB: 100, dirtyMemory: true, canEvict: () => false },
+        jest.fn().mockResolvedValue(undefined), 1);
+      const spec = { key: 'litert', type: 'text' as const, sizeMB: 2700, dirtyMemory: true };
+
+      const balanced = await modelResidencyManager.makeRoomFor(spec);
+      expect(balanced.fits).toBe(false);
+
+      modelResidencyManager.setLoadPolicy('aggressive');
+      const aggressive = await modelResidencyManager.makeRoomFor(spec);
+      expect(aggressive.fits).toBe(true);
     });
   });
 });

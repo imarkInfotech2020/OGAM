@@ -8,6 +8,8 @@ import {
   fitMessagesInBudget,
   getStreamingDelta,
   buildModelParams,
+  effectiveCacheType,
+  backendForcesF16Cache,
   buildCompletionParams,
   shouldDisableMmap,
   captureGpuInfo,
@@ -340,7 +342,7 @@ describe('buildModelParams', () => {
   });
 
   // HTP is currently disabled via HTP_ENABLED feature flag
-  it.skip('forces f16 KV cache for HTP backend', () => {
+  it('forces f16 KV cache for HTP backend', () => {
     const params = buildModelParams('/model.gguf', {
       inferenceBackend: INFERENCE_BACKENDS.HTP,
       cacheType: 'q8_0',
@@ -473,7 +475,7 @@ describe('initContextWithFallback — HTP device stripping and timeout', () => {
   });
 
   // HTP is currently disabled via HTP_ENABLED feature flag
-  it.skip('logs backend=HTP when devices contains HTP0', async () => {
+  it('logs backend=HTP when devices contains HTP0', async () => {
     const mockCtx = { gpu: true, release: jest.fn() };
     mockedInitLlama.mockResolvedValueOnce(mockCtx as any);
     const logger = require('../../../src/utils/logger').default;
@@ -549,5 +551,32 @@ describe('initContextWithFallback — GPU timeout on Android', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(lateCtx.release).toHaveBeenCalled();
+  });
+});
+
+// The single source of truth for the KV-cache coercion — the loader, the settings UI,
+// the reload diff, and the generation-details recorder all read these, so they agree.
+describe('backendForcesF16Cache / effectiveCacheType (single source)', () => {
+  it('OpenCL and HTP force f16; CPU and Metal do not', () => {
+    expect(backendForcesF16Cache(INFERENCE_BACKENDS.OPENCL)).toBe(true);
+    expect(backendForcesF16Cache(INFERENCE_BACKENDS.HTP)).toBe(true);
+    expect(backendForcesF16Cache(INFERENCE_BACKENDS.CPU)).toBe(false);
+    expect(backendForcesF16Cache(INFERENCE_BACKENDS.METAL)).toBe(false);
+    expect(backendForcesF16Cache(undefined)).toBe(false);
+  });
+
+  it('coerces the requested cache to f16 on HTP/OpenCL, else passes it through', () => {
+    // The exact mismatch from the bug: settings say q8_0 but HTP runs f16.
+    expect(effectiveCacheType(INFERENCE_BACKENDS.HTP, 'q8_0')).toBe('f16');
+    expect(effectiveCacheType(INFERENCE_BACKENDS.OPENCL, 'q4_0')).toBe('f16');
+    expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, 'q8_0')).toBe('q8_0');
+    expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, 'q4_0')).toBe('q4_0');
+    expect(effectiveCacheType(INFERENCE_BACKENDS.CPU, undefined)).toBe('q8_0');
+  });
+
+  it('buildModelParams cache_type matches effectiveCacheType for the same inputs', () => {
+    // Guards against the loader and the reporter drifting apart again.
+    const params = buildModelParams('/m.gguf', { inferenceBackend: INFERENCE_BACKENDS.HTP, cacheType: 'q8_0' });
+    expect((params.baseParams as any).cache_type_k).toBe(effectiveCacheType(INFERENCE_BACKENDS.HTP, 'q8_0'));
   });
 });

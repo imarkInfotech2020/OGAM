@@ -13,6 +13,7 @@ import { liteRTService } from '../../services/litert';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
+import { reportModelFailure } from '../../services/modelFailureHandler';
 import { embeddingService } from '../../services/rag/embedding';
 import { useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -345,6 +346,19 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     }
     generationSession.end('error');
     return;
+  }
+  // The model produced NO output (0 tokens) — finalizeStreamingMessage only appends an
+  // assistant message when there's content/reasoning, so an empty turn leaves the user
+  // message last. Don't strand the user staring at their message: surface a retry (this
+  // happens when a model runs on an incompatible backend, e.g. a K-quant on NPU/GPU).
+  const finalConv = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
+  const lastMsg = finalConv?.messages[finalConv.messages.length - 1];
+  if (!generationService.wasAborted() && lastMsg?.role === 'user') {
+    reportModelFailure('text', 'The model produced no output', {
+      title: 'No response',
+      message: 'The model returned nothing. This can happen when it runs on an incompatible backend (a K-quant on NPU/GPU falls back to CPU and may emit nothing). Try again, or switch the backend/model.',
+      onRetry: () => { startGenerationFn(deps, call); },
+    });
   }
   generationSession.end();
 }

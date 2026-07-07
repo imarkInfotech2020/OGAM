@@ -4,6 +4,7 @@ import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
+import { OverridableMemoryError } from '../modelLoadErrors';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { ONNXImageModel } from '../../types';
@@ -113,6 +114,7 @@ class ActiveModelService {
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
+    opts?: { override?: boolean },
   ): Promise<void> {
     // Fast path — model already loaded (no lock; just sync the store).
     if (this.isTextModelCurrent(modelId)) {
@@ -125,12 +127,13 @@ class ActiveModelService {
     // Everything else goes through the residency manager's global lock so no two
     // model operations ever touch memory at once (the single load gateway).
     await modelResidencyManager.runExclusive(`load:text:${modelId}`, () =>
-      this.doLoadTextModelLocked(modelId, timeoutMs),
+      this.doLoadTextModelLocked(modelId, timeoutMs, opts),
     );
   }
   private async doLoadTextModelLocked(
     modelId: string,
     timeoutMs: number,
+    opts?: { override?: boolean },
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
     if (this.isTextModelCurrent(modelId)) {
@@ -148,26 +151,25 @@ class ActiveModelService {
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
-    // LiteRT weights + KV live in dirty/accelerator memory (not clean mmap'd GGUF file
-    // pages), so their footprint counts against REAL free RAM — budgeting them like
-    // mmap'd GGUF can green-light a load the native engine then OOMs (SIGABRT). Derived
-    // once here from the engine so makeRoomFor and register can't disagree. llama/GGUF
-    // stays clean (dirtyMemory undefined -> physical-cap budgeting, unchanged).
+    // LiteRT weights + KV are dirty/accelerator memory → counted against REAL free RAM
+    // (budgeting them like clean mmap GGUF green-lights a load the engine then OOMs).
+    // Derived once so makeRoomFor and register agree; llama/GGUF stays clean (physical cap).
     const textIsDirty = model.engine === 'litert';
     // Residency manager is authoritative: evict other generation models (and
     // extras) to fit the RAM budget before loading this text model. The evicted
     // models' unload fns are the non-locking internal variants (we already hold
     // the lock here), so this never deadlocks.
-    const room = await modelResidencyManager.makeRoomFor({ key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty });
-    // makeRoomFor evicts nothing when the model won't fit even after freeing
-    // others (it refuses to strand the device). Honor that signal here: loading
-    // anyway is a guaranteed OOM crash. Throwing a memory error lets the caller
-    // surface a clean 'insufficient-memory' outcome (reasonFromLoadError maps it)
-    // instead of jetsam killing the app. makeRoomFor uses REAL free RAM, so this
-    // is the physical limit — looser than the conservative pre-load check, so a
-    // "Load Anyway" still succeeds whenever the model can actually fit.
+    const room = await modelResidencyManager.makeRoomFor(
+      { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
+      { override: opts?.override },
+    );
+    // Won't fit even after eviction. OVERRIDABLE: the typed error lets every caller
+    // offer "Load Anyway" (retry with { override: true }), which forces the load after
+    // evicting everything — GGUF weights mmap clean, so it often succeeds past the gate.
     if (!room.fits) {
-      throw new Error('Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.');
+      throw new OverridableMemoryError(
+        'Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.',
+      );
     }
     this.loadingState.text = true;
     this.notifyListeners();
@@ -176,11 +178,13 @@ class ActiveModelService {
       modelId,
       store,
       timeoutMs,
+      override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;
+        useAppStore.getState().setTextModelEvicted(false); // loaded → clear any prior eviction
         modelResidencyManager.register(
-          { key: 'text', type: 'text', sizeMB: textSizeMB, dirtyMemory: textIsDirty },
+          { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
           () => this.doUnloadTextModelLocked(true), // eviction keeps the selection
         );
       },
@@ -223,9 +227,9 @@ class ActiveModelService {
         await llmService.unloadModel();
       }
       this.loadedTextModelId = null;
-      if (!keepSelection) {
-        useAppStore.getState().setActiveModelId(null);
-      }
+      // Eviction (keepSelection) keeps the selection & flags "tap to continue"; user unload clears both.
+      if (keepSelection) { if (isNativeLoaded) useAppStore.getState().setTextModelEvicted(true); }
+      else { useAppStore.getState().setActiveModelId(null); useAppStore.getState().setTextModelEvicted(false); }
       modelResidencyManager.release('text');
     } finally {
       this.loadingState.text = false;
@@ -235,33 +239,38 @@ class ActiveModelService {
   private async checkImageModelCanLoad(
     modelId: string,
     model: ONNXImageModel,
-  ): Promise<{ canLoad: boolean; error?: string }> {
+    opts?: { override?: boolean },
+  ): Promise<{ canLoad: boolean; error?: string; overridable?: boolean }> {
     if (model.backend === 'qnn') {
       const socInfo = await hardwareService.getSoCInfo();
       if (!socInfo.hasNPU) {
         return {
           canLoad: false,
+          // A missing NPU is a hardware capability gap, not a memory budget — not overridable.
           error:
             'NPU models require a Qualcomm Snapdragon processor. Your device does not have a compatible NPU. Please use a GPU model instead.',
         };
       }
     }
-    // Residency manager is authoritative for memory: evict other generation
-    // models (and extras) to fit the RAM budget before loading this image
-    // model. (Replaces the old per-load critical-memory gate.) If it can't fit
-    // even after eviction, block the load.
-    const { fits } = await modelResidencyManager.makeRoomFor({
-      key: 'image',
-      type: 'image',
-      sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
-      // CoreML/ONNX image weights load into dirty (jetsam-counted) memory — gate on
-      // real free RAM too, unlike mmap'd GGUF text. (See ResidentSpec.dirtyMemory.)
-      dirtyMemory: true,
-    });
+    // Residency manager is authoritative for memory: evict others to fit the budget
+    // before loading. If it can't fit even after eviction, block — unless "Load Anyway".
+    const { fits } = await modelResidencyManager.makeRoomFor(
+      {
+        key: 'image',
+        type: 'image',
+        modelId: model.id,
+        sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
+        // CoreML/ONNX image weights load into dirty (jetsam-counted) memory — gate on
+        // real free RAM too, unlike mmap'd GGUF text. (See ResidentSpec.dirtyMemory.)
+        dirtyMemory: true,
+      },
+      { override: opts?.override },
+    );
     if (!fits) {
       return {
         canLoad: false,
         error: `Not enough memory to load ${model.name}. Free up space or choose a smaller model.`,
+        overridable: true,
       };
     }
     return { canLoad: true };
@@ -269,14 +278,16 @@ class ActiveModelService {
   async loadImageModel(
     modelId: string,
     timeoutMs: number = 180000,
+    opts?: { override?: boolean },
   ): Promise<void> {
     await modelResidencyManager.runExclusive(`load:image:${modelId}`, () =>
-      this.doLoadImageModelLocked(modelId, timeoutMs),
+      this.doLoadImageModelLocked(modelId, timeoutMs, opts),
     );
   }
   private async doLoadImageModelLocked(
     modelId: string,
     timeoutMs: number,
+    opts?: { override?: boolean },
   ): Promise<void> {
     // Hydrate real device RAM BEFORE the compute-path decision. preferGpuForImageGen()
     // and estimateImageModelRam() read getTotalMemoryGB(), which returns a 4GB fallback
@@ -302,9 +313,11 @@ class ActiveModelService {
     if (!model) {
       throw new Error('Model not found');
     }
-    const check = await this.checkImageModelCanLoad(modelId, model);
+    const check = await this.checkImageModelCanLoad(modelId, model, opts);
     if (!check.canLoad) {
-      throw new Error(check.error);
+      throw check.overridable
+        ? new OverridableMemoryError(check.error ?? 'Not enough memory to load this model.')
+        : new Error(check.error);
     }
     this.loadingState.image = true;
     this.notifyListeners();
@@ -448,7 +461,8 @@ class ActiveModelService {
     return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
   async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {
-    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists() });
+    // Same policy + session-override source as the residency gate so pre-check and gate agree.
+    return _checkMemoryForModel({ modelId, modelType, ids: this.getIds(), lists: this.getLists(), policy: modelResidencyManager.getLoadPolicy(), sessionOverride: modelResidencyManager.hasSessionOverride(modelId) });
   }
   async checkMemoryForDualModel(textModelId: string | null, imageModelId: string | null): Promise<MemoryCheckResult> {
     return _checkMemoryForDualModel({ textModelId, imageModelId, lists: this.getLists() });

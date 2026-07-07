@@ -20,6 +20,7 @@ import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
+import { startLoadPolicySync } from './src/services/loadPolicySync';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -141,6 +142,11 @@ function App() {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       await ensureAppStoreHydrated();
+
+      // Project the persisted "aggressive model loading" setting onto the residency
+      // manager (single owner of the runtime load policy) now that settings are
+      // hydrated, and keep it in sync for the app's lifetime.
+      startLoadPolicySync();
 
       // Hydrate download store from SQLite before any screen mounts.
       await hydrateDownloadStore().catch((error) => {

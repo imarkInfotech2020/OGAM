@@ -10,6 +10,7 @@ import { Alert, Linking } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
+import { withUtm } from '../../../src/utils/utm';
 
 const PAY_URL = 'https://offgridmobileai.co/pay';
 const mockActivateProByKey = jest.fn();
@@ -62,7 +63,7 @@ describe('ProDetailScreen', () => {
   it('Get Pro opens the web pay page directly without a modal', () => {
     const { getAllByText, queryByText } = render(<ProDetailScreen />);
     fireEvent.press(getAllByText('Get Pro')[0]);
-    expect(linkingSpy).toHaveBeenCalledWith(PAY_URL);
+    expect(linkingSpy).toHaveBeenCalledWith(withUtm(PAY_URL, 'pro-detail'));
     // No in-app activation step for paying.
     expect(queryByText('Enter your license key')).toBeNull();
   });
@@ -71,7 +72,7 @@ describe('ProDetailScreen', () => {
     const { getByText } = render(<ProDetailScreen />);
     fireEvent.press(getByText('Get Off Grid AI Desktop'));
     expect(linkingSpy).toHaveBeenCalledWith(
-      OFF_GRID_DESKTOP_URL,
+      withUtm(OFF_GRID_DESKTOP_URL, 'pro-detail'),
     );
   });
 
@@ -81,7 +82,7 @@ describe('ProDetailScreen', () => {
     await waitFor(() => expect(getByText('Get Off Grid AI Desktop')).toBeTruthy());
     fireEvent.press(getByText('Get Off Grid AI Desktop'));
     expect(linkingSpy).toHaveBeenCalledWith(
-      OFF_GRID_DESKTOP_URL,
+      withUtm(OFF_GRID_DESKTOP_URL, 'pro-detail'),
     );
   });
 
@@ -165,7 +166,7 @@ describe('ProDetailScreen', () => {
     const { getByText } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));
     fireEvent.press(getByText('Not a member yet? Get Pro'));
-    expect(linkingSpy).toHaveBeenCalledWith(PAY_URL);
+    expect(linkingSpy).toHaveBeenCalledWith(withUtm(PAY_URL, 'pro-unlock'));
   });
 
   it('renders the Pro Active state with the management section when Pro is owned', async () => {

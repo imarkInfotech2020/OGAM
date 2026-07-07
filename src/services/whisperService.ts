@@ -63,11 +63,36 @@ class WhisperService {
     // Content-Length once the download starts.
     const totalBytes = model.size * 1024 * 1024;
     const modelKey = makeModelKey(`whisper-${modelId}`, fileName);
+    // Publish a QUEUED row to the CANONICAL store IMMEDIATELY, before the (possibly
+    // slot-limited) native start — the same pattern text/image use (startModelDownload).
+    // Previously the store entry was only added AFTER a concurrency slot opened, so a
+    // queued STT download had no canonical entry and the Transcription tab fell back to
+    // the whisper store's progress=0 and rendered "0%" instead of "Queued". Every card
+    // now reads this one store, so queued looks identical across Text/Image/STT.
+    const QUEUED_PLACEHOLDER_ID = `queued:${modelKey}`;
+    useDownloadStore.getState().add({
+      modelKey,
+      downloadId: QUEUED_PLACEHOLDER_ID,
+      modelId: `whisper-${modelId}`,
+      fileName,
+      quantization: '',
+      modelType: 'stt',
+      status: 'pending',
+      bytesDownloaded: 0,
+      totalBytes,
+      combinedTotalBytes: totalBytes,
+      progress: 0,
+      createdAt: Date.now(),
+    });
     const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
       params: {
         url: model.url,
         fileName,
         modelId: `whisper-${modelId}`,
+        // Pass modelKey so the background queue's double-tap coalesce keys by the SAME
+        // id as the canonical store entry (queued:<modelKey> → real), not the modelId
+        // fallback — keeps queued dedup/cancel consistent across both layers.
+        modelKey,
         // Tag as speech-to-text so the Download Manager files an in-progress
         // download under Voice. Without it the entry defaulted to 'text' and
         // STT models showed up under Text (and never under the Voice filter).
@@ -94,24 +119,11 @@ class WhisperService {
     try {
       try {
         this.activeDownloadId = await downloadIdPromise;
-        // Register the in-flight download so the Download Manager shows it live
-        // (filed under Voice via modelType 'stt'). Progress is then driven by the
-        // global onAnyProgress listener in useDownloadListeners. Without this the
-        // row only appeared after switching screens re-scanned disk.
-        useDownloadStore.getState().add({
-          modelKey,
-          downloadId: this.activeDownloadId,
-          modelId: `whisper-${modelId}`,
-          fileName,
-          quantization: '',
-          modelType: 'stt',
-          status: 'pending',
-          bytesDownloaded: 0,
-          totalBytes,
-          combinedTotalBytes: totalBytes,
-          progress: 0,
-          createdAt: Date.now(),
-        });
+        // A slot opened and the native download started: reconcile the queued
+        // placeholder row to the REAL downloadId so progress events (routed by id)
+        // land on it. Progress is then driven by the global onAnyProgress listener
+        // in useDownloadListeners.
+        useDownloadStore.getState().retryEntry(modelKey, this.activeDownloadId);
         await promise;
       } catch (error) {
         if ((error as { cancelled?: boolean })?.cancelled) {
@@ -142,28 +154,6 @@ class WhisperService {
     logger.log(`[Whisper] Downloaded to ${destPath}`);
     return destPath;
   }
-  async downloadFromUrl(url: string, modelId: string, onProgress?: (progress: number) => void): Promise<string> {
-    await this.ensureModelsDirExists();
-    const destPath = this.getModelPath(modelId);
-    if (await RNFS.exists(destPath)) return destPath;
-    const download = RNFS.downloadFile({
-      fromUrl: url, toFile: destPath, progressDivider: 1,
-      progress: (res) => { onProgress?.(res.bytesWritten / res.contentLength); },
-    });
-    const result = await download.promise;
-    if (result.statusCode !== 200) {
-      await RNFS.unlink(destPath).catch(() => {});
-      throw new Error(`Download failed with status ${result.statusCode}`);
-    }
-    try {
-      await this.validateModelFile(destPath);
-    } catch (validationError) {
-      await RNFS.unlink(destPath).catch(() => {});
-      throw validationError;
-    }
-    return destPath;
-  }
-
   /** List every downloaded ggml whisper model on disk (for the Download Manager). */
   async listDownloadedModels(): Promise<Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>> {
     const dir = this.getModelsDir();

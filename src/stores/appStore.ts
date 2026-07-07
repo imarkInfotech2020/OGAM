@@ -54,9 +54,19 @@ type AppSettings = {
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
+  /** Aggressive model loading: commit more RAM + a smaller reserve so large models
+   *  load (with a "Load Anyway" override when the budget still blocks). Off by
+   *  default (behaviour-neutral). Single source of truth read by both the Settings
+   *  screen and the in-chat settings; projected onto the residency manager. */
+  aggressiveModelLoading: boolean;
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
+  /** True once the user has explicitly picked an inference backend in Settings.
+   *  While false, the boot-time backendSync may upgrade the default to the GPU
+   *  path when the device supports it; once true, that auto-selection never
+   *  overrides the user's choice. Defaults to false (the current default was
+   *  auto-selected). */
   liteRTBackend: LiteRTBackend;
   liteRTTemperature: number;
   liteRTTopP: number;
@@ -85,6 +95,12 @@ interface AppState {
   removeDownloadedModel: (modelId: string) => void;
   activeModelId: string | null;
   setActiveModelId: (modelId: string | null) => void;
+  /** The active text model was EVICTED to free RAM (e.g. an image/TTS load in voice mode)
+   *  while still selected. Drives the chat "tap to continue" reload affordance so a big
+   *  model that got unloaded can be brought back on demand. Set by the service, cleared
+   *  when a text model loads. Not persisted (a relaunch has nothing loaded to evict). */
+  textModelEvicted: boolean;
+  setTextModelEvicted: (evicted: boolean) => void;
   /** Last text model the user explicitly selected. Persists across residency
    *  eviction so routing can reload it on demand. */
   lastTextModelId: string | null;
@@ -187,6 +203,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU,
   gpuLayers: 99,
   flashAttn: true,
+  aggressiveModelLoading: false,
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
@@ -298,6 +315,8 @@ export const useAppStore = create<AppState>()(
         })),
       activeModelId: null,
       setActiveModelId: (modelId) => set({ activeModelId: modelId }),
+      textModelEvicted: false,
+      setTextModelEvicted: (evicted) => set({ textModelEvicted: evicted }),
       lastTextModelId: null,
       setLastTextModelId: (modelId) => set({ lastTextModelId: modelId }),
       isLoadingModel: false,

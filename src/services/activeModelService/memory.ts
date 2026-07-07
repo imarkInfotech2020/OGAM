@@ -14,16 +14,19 @@ import {
   TEXT_MODEL_OVERHEAD_MULTIPLIER,
   IMAGE_MODEL_OVERHEAD_MULTIPLIER,
 } from './types';
-import { modelMemoryBudgetMB, modelWarningThresholdMB } from '../memoryBudget';
+import { modelMemoryBudgetMB, modelWarningThresholdMB, LoadPolicy } from '../memoryBudget';
 
 // ---------------------------------------------------------------------------
 // Budget helpers
 // ---------------------------------------------------------------------------
 
-export const getMemoryBudgetGB = async (): Promise<number> => {
+// The pre-load check reads the SAME budget owner as the residency manager, so it
+// must honour the SAME load policy — otherwise aggressive mode would relax the
+// residency gate while the pre-check kept blocking/warning at balanced limits.
+export const getMemoryBudgetGB = async (policy: LoadPolicy = 'balanced'): Promise<number> => {
   const deviceInfo = await hardwareService.getDeviceInfo();
   const totalMB = deviceInfo.totalMemory / (1024 * 1024);
-  return modelMemoryBudgetMB(totalMB) / 1024;
+  return modelMemoryBudgetMB(totalMB, undefined, policy) / 1024;
 };
 
 export const getMemoryWarningThresholdGB = async (): Promise<number> => {
@@ -118,13 +121,17 @@ export interface CheckMemoryParams {
   modelType: ModelType;
   ids: LoadedModelIds;
   lists: ModelLists;
+  /** Active load policy. Defaults to balanced so existing callers are unchanged. */
+  policy?: LoadPolicy;
+  /** User already approved a memory override for this model this session → don't re-prompt. */
+  sessionOverride?: boolean;
 }
 
 export async function checkMemoryForModel(
   params: CheckMemoryParams,
 ): Promise<MemoryCheckResult> {
-  const { modelId, modelType, ids, lists } = params;
-  const memoryBudgetGB = await getMemoryBudgetGB();
+  const { modelId, modelType, ids, lists, policy, sessionOverride } = params;
+  const memoryBudgetGB = await getMemoryBudgetGB(policy);
   const warningThresholdGB = await getMemoryWarningThresholdGB();
 
   const model =
@@ -151,6 +158,18 @@ export async function checkMemoryForModel(
   const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
 
   const modelName = 'name' in model ? model.name : modelId;
+
+  // Already approved for this model this session → skip the gate so the user isn't
+  // re-prompted every time it's evicted and reloaded (text↔image↔TTS swaps).
+  if (sessionOverride) {
+    return {
+      canLoad: true, severity: 'safe',
+      availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
+      requiredMemoryGB, currentlyLoadedMemoryGB, totalRequiredMemoryGB,
+      remainingAfterLoadGB: remainingBudgetGB,
+      message: `${modelName} — load override approved for this session.`,
+    };
+  }
   const requiredStr = requiredMemoryGB.toFixed(1);
   const totalStr = totalRequiredMemoryGB.toFixed(1);
   const budgetStr = memoryBudgetGB.toFixed(1);

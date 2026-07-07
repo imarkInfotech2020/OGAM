@@ -11,9 +11,10 @@ import {
   contextCompactionService,
 } from '../../services';
 import { liteRTService } from '../../services/litert';
+import { effectiveCacheType } from '../../services/llmHelpers';
 import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
-import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel, INFERENCE_BACKENDS } from '../../types';
+import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
@@ -62,7 +63,12 @@ export function computePendingSettings(
     return changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
            (loadedSettings.liteRTBackend !== undefined && liveTokens !== loadedTokens);
   }
-  const effCache = settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType;
+  // Compare the EFFECTIVE cache on BOTH sides (OpenCL + HTP coerce to f16). Comparing the
+  // effective live value against the RAW stored value falsely flagged "settings changed"
+  // right after every accelerated load (live f16 vs stored q8_0). Symmetric via the single
+  // llmHelpers source — also robust to snapshots persisted before this fix.
+  const effCache = effectiveCacheType(settings.inferenceBackend as string | undefined, settings.cacheType as string | undefined);
+  const loadedEffCache = effectiveCacheType(loadedSettings.inferenceBackend as string | undefined, loadedSettings.cacheType as string | undefined);
   return (
     changed(settings.nThreads, loadedSettings.nThreads) ||
     changed(settings.nBatch, loadedSettings.nBatch) ||
@@ -71,8 +77,7 @@ export function computePendingSettings(
     changed(settings.inferenceBackend, loadedSettings.inferenceBackend) ||
     changed(settings.gpuLayers, loadedSettings.gpuLayers) ||
     changed(settings.flashAttn, loadedSettings.flashAttn) ||
-    // Compare effective cache type — OpenCL forces f16 regardless of user setting
-    changed(effCache, loadedSettings.cacheType)
+    (loadedSettings.cacheType !== undefined && effCache !== loadedEffCache)
   );
 }
 
@@ -140,7 +145,7 @@ export const useChatScreen = () => {
     downloadedImageModels, setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
     setImageGenerationStatus: setAppImageGenerationStatus,
-    removeImagesByConversationId, loadedSettings,
+    removeImagesByConversationId, loadedSettings, textModelEvicted,
   } = useAppStore();
 
   // Remote model state - use proper selectors for reactivity
@@ -358,6 +363,7 @@ export const useChatScreen = () => {
     }
   };
 
+
   return {
     isModelLoading, loadingModel, supportsVision,
     showProjectSelector, setShowProjectSelector,
@@ -376,7 +382,7 @@ export const useChatScreen = () => {
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
+    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, textModelEvicted, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
     navigation, hardwareService,
     handleSend,
     handleStop: () => handleStopFn(genDeps),

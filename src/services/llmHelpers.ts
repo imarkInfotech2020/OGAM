@@ -7,8 +7,7 @@ import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
 
-/** Feature flag: Set to true to enable HTP/Hexagon NPU support. Currently disabled. */
-const HTP_ENABLED = false;
+import { HTP_ENABLED } from '../config/featureFlags';
 
 export const RESPONSE_RESERVE = 512;
 const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
@@ -55,6 +54,22 @@ export interface ModelLoadParams {
   usesF16Cache: boolean;
 }
 
+/**
+ * Backends whose native loader coerces the KV cache to f16 regardless of the user's
+ * chosen cacheType: OpenCL and HTP (their llama.cpp paths don't support a quantized KV
+ * cache). SINGLE source of truth — the loader, the settings display, the "settings
+ * changed" diff, and the generation-details recorder must all agree via this, so the UI
+ * never shows one cache type while the model ran another.
+ */
+export function backendForcesF16Cache(backend: string | undefined): boolean {
+  return backend === INFERENCE_BACKENDS.OPENCL || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
+}
+
+/** The KV cache type that will ACTUALLY be used, after backend coercion to f16. */
+export function effectiveCacheType(backend: string | undefined, requested: string | undefined): string {
+  return backendForcesF16Cache(backend) ? 'f16' : (requested || 'q8_0');
+}
+
 export function buildModelParams(
   modelPath: string,
   settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string; inferenceBackend?: string },
@@ -67,18 +82,15 @@ export function buildModelParams(
   // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
   // OpenCL and HTP backends crash with flash attn on — disable for those.
   // CPU (Android/iOS) and Metal both support it; use 'auto' to let llama.cpp decide.
-  const gpuBackendIncompatible = backend === INFERENCE_BACKENDS.OPENCL || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
+  const gpuBackendIncompatible = backendForcesF16Cache(backend);
   const flash_attn_type = (settings.flashAttn === false || gpuBackendIncompatible) ? 'off' : 'auto';
   const gpuEnabled = backend ? backend !== INFERENCE_BACKENDS.CPU : settings.enableGpu !== false;
   const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
   const isFlashAttnEffective = flash_attn_type !== 'off';
   const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
   // OpenCL init on affected Adreno devices can fail when cache_type_k/v are passed.
-  // Keep f16 coercion for the non-OpenCL paths that still use explicit cache params.
-  const needsF16 =
-    backend === INFERENCE_BACKENDS.OPENCL ||
-    (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
-  const cacheType = needsF16 && requestedCache !== 'f16' ? 'f16' : requestedCache;
+  // effectiveCacheType coerces OpenCL/HTP to f16 (single source shared with the UI).
+  const cacheType = effectiveCacheType(backend, requestedCache);
   return {
     baseParams: {
       model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,

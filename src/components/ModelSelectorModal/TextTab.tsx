@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { DownloadedModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
+import { ModelRow } from '../ModelRow';
 import { createAllStyles } from './styles';
 
 export interface TextTabProps {
@@ -111,41 +112,17 @@ export const TextTab: React.FC<TextTabProps> = ({
             const isSelected = currentRemoteModelId === null && !currentModelPath && selectedModelPath === model.filePath;
             const isActive = isLoaded || isSelected;
             return (
-              <TouchableOpacity
+              <ModelRow
                 key={model.id}
-                style={[styles.modelItem, isActive && styles.modelItemSelected]}
-                onPress={() => onSelectModel(model)}
+                name={model.name}
+                size={hardwareService.formatModelSize(model)}
+                quant={model.quantization}
+                isVision={model.engine === 'llama' && model.isVisionModel}
+                isActive={isActive}
+                isLoaded={isLoaded}
                 disabled={isAnyLoading || isLoaded}
-              >
-                <View style={styles.modelInfo}>
-                  <Text style={[styles.modelName, isActive && styles.modelNameSelected]} numberOfLines={1}>
-                    {model.name}
-                  </Text>
-                  <View style={styles.modelMeta}>
-                    <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
-                    {!!model.quantization && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <Text style={styles.modelQuant}>{model.quantization}</Text>
-                      </>
-                    )}
-                    {model.engine === 'llama' && model.isVisionModel && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <View style={styles.visionBadge}>
-                          <Icon name="eye" size={10} color={colors.info} />
-                          <Text style={styles.visionBadgeText}>Vision</Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                </View>
-                {isLoaded && (
-                  <View style={styles.checkmark}>
-                    <Icon name="check" size={16} color={colors.background} />
-                  </View>
-                )}
-              </TouchableOpacity>
+                onPress={() => onSelectModel(model)}
+              />
             );
           })}
         </>

@@ -53,7 +53,7 @@ class LLMService {
   private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
   private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
-  private async validateAndPrepareModel(modelPath: string): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
+  private async validateAndPrepareModel(modelPath: string, override: boolean = false): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
     logger.log(`[LLM] validateAndPrepareModel: ${modelPath}`);
     if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
     const validation = await validateModelFile(modelPath);
@@ -78,7 +78,7 @@ class LLMService {
       // Don't just warn and load into a near-certain native allocator crash (the iOS
       // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
       // to the largest size that fits; only block when the weights alone can't fit.
-      const downgrade = await this.resolveSafeContext(fileSize, params.ctxLen, quantizedCache);
+      const downgrade = await this.resolveSafeContext(fileSize, params.ctxLen, quantizedCache, override);
       params.ctxLen = downgrade.ctxLen;
       memCheck = downgrade.memCheck;
     }
@@ -91,10 +91,12 @@ class LLMService {
    * (a load that would certainly crash the allocator); otherwise proceeds at the
    * smallest context, since the estimate is intentionally conservative.
    */
+  // eslint-disable-next-line max-params -- 4 clear positional inputs; an opts bag adds noise here
   private async resolveSafeContext(
     fileSize: number,
     requestedCtx: number,
     quantizedCache: boolean,
+    override: boolean = false,
   ): Promise<{ ctxLen: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>> }> {
     const getMem = () => hardwareService.getAppMemoryUsage();
     // Step down from the requested size so the LARGEST fitting context wins — a request
@@ -113,8 +115,14 @@ class LLMService {
     const minCtx = fallbacks.length ? fallbacks[fallbacks.length - 1] : requestedCtx;
     const finalCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: minCtx, getAvailableMemory: getMem, quantizedCache });
     const modelMB = (fileSize * 1.2) / (1024 * 1024);
-    if (finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB) {
+    if (finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB && !override) {
       throw new Error(`Not enough memory to load this model: it needs ~${Math.round(modelMB)}MB but only ${Math.round(finalCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`);
+    }
+    if (override && finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB) {
+      // User forced the load ("Load Anyway" / continue). Skip the hard block and let the
+      // native loader's GPU→CPU→smaller-ctx fallback + OOM recovery try — they accepted
+      // the risk, and eviction already freed everything it could. NORMAL loads still throw.
+      logger.warn(`[LLM] OVERRIDE — proceeding despite tight memory (~${Math.round(modelMB)}MB needed, ${Math.round(finalCheck.availableMB)}MB free)`);
     }
     logger.warn(`[LLM] Memory very tight — proceeding at minimum context ${minCtx} (estimate may be conservative)`);
     return { ctxLen: minCtx, memCheck: finalCheck };
@@ -134,7 +142,7 @@ class LLMService {
     this.detectToolCallingSupport(); this.detectThinkingSupport();
     logger.log(`[LLM] Model loaded, vision: ${this.supportsVision()}, tools: ${this.toolCallingSupported}, thinking: ${this.thinkingSupported}`);
   }
-  async loadModel(modelPath: string, mmProjPath?: string): Promise<void> {
+  async loadModel(modelPath: string, mmProjPath?: string, opts?: { override?: boolean }): Promise<void> {
     const mutex = this.acquireContextMutex();
     try {
       await mutex.ready;
@@ -144,7 +152,7 @@ class LLMService {
         logger.log('[LLM] Releasing previous context before loading new model');
         await this.doUnloadModel();
       }
-      const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath);
+      const { fileSize, memCheck, params } = await this.validateAndPrepareModel(modelPath, opts?.override);
       if (mmProjPath && !await RNFS.exists(mmProjPath)) { logger.warn('[LLM] MMProj file not found, disabling vision support'); mmProjPath = undefined; }
       const { baseParams, nThreads, nBatch, ctxLen, nGpuLayers } = params;
       this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };

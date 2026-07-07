@@ -10,6 +10,7 @@ import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, reasonFromLoadError } from './modelReadiness';
+import { isOverridableMemoryError } from '../../services/modelLoadErrors';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -60,11 +61,11 @@ function addSystemMsg(
   });
 }
 
-async function doLoadTextModel(deps: ModelActionDeps): Promise<void> {
+async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolean }): Promise<void> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return;
   try {
-    await activeModelService.loadTextModel(activeModelId);
+    await activeModelService.loadTextModel(activeModelId, undefined, opts);
     const multimodalSupport = llmService.getMultimodalSupport();
     deps.setSupportsVision(activeModel.engine === 'litert' ? !!activeModel.liteRTVision : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
@@ -106,10 +107,19 @@ export async function initiateModelLoad(
               deps.setLoadingModel(activeModel);
               deps.modelLoadStartTimeRef.current = Date.now();
               // Resume the turn after the forced load so the user's message isn't
-              // silently dropped (they'd otherwise have to retype it).
+              // silently dropped (they'd otherwise have to retype it). override:true
+              // makes the residency manager force the load (evict everything, skip the
+              // fit gate) — without it the load re-hit the hard budget gate and failed
+              // with "Failed to load model", defeating the whole "Load Anyway".
               waitForRenderFrame()
-                .then(() => doLoadTextModel(deps))
-                .then(() => { if (onLoadedResume && llmService.isModelLoaded()) onLoadedResume(); });
+                .then(() => doLoadTextModel(deps, { override: true }))
+                // Resume the turn once the forced load resolves. Do NOT gate on
+                // llmService.isModelLoaded() here — after a big multimodal load it races
+                // false and silently drops the resume, so the user had to hit resend.
+                // doLoadTextModel throws on failure (→ .catch), so .then only runs on a
+                // successful load; the resumed turn re-verifies readiness itself.
+                .then(() => onLoadedResume?.())
+                .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
             }
           },
         ],
@@ -139,6 +149,33 @@ export async function initiateModelLoad(
     // return the typed reason now; only the !alreadyLoading path shows the alert
     // here (behavior-neutral), and the caller decides what to render otherwise.
     if (!alreadyLoading) {
+      // The residency gate can block a load the conservative pre-check let through.
+      // That is overridable — offer "Load Anyway" (force the load) rather than a
+      // dead-end "Failed to load model" the user can only dismiss.
+      if (isOverridableMemoryError(error)) {
+        deps.setAlertState(showAlert(
+          'Insufficient Memory',
+          `${detail}\n\nWould you like to override these safeguards and load it anyway?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Load Anyway', style: 'destructive', onPress: () => {
+                deps.setAlertState(hideAlert());
+                deps.setIsModelLoading(true);
+                deps.setLoadingModel(activeModel);
+                deps.modelLoadStartTimeRef.current = Date.now();
+                waitForRenderFrame()
+                  .then(() => doLoadTextModel(deps, { override: true }))
+                  // Resume once the load resolves — don't gate on isModelLoaded() (races
+                  // false after a multimodal load, dropping the resume). See the sibling path.
+                  .then(() => onLoadedResume?.())
+                  .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
+              },
+            },
+          ],
+        ));
+        return { ok: false, reason: 'insufficient-memory', detail, alerted: true };
+      }
       deps.setAlertState(showAlert('Error', `Failed to load model: ${detail}`));
     }
     return { ok: false, reason: reasonFromLoadError(error), detail, alerted: !alreadyLoading };
@@ -212,6 +249,7 @@ export async function ensureModelLoadedFn(
 export async function proceedWithModelLoadFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
+  opts?: { override?: boolean },
 ): Promise<void> {
   // Close the picker FIRST so the load runs behind the dismissed sheet and the
   // minimal in-chat loading card shows — not a load running with the sheet still open.
@@ -221,7 +259,7 @@ export async function proceedWithModelLoadFn(
   deps.modelLoadStartTimeRef.current = Date.now();
   await waitForRenderFrame();
   try {
-    await activeModelService.loadTextModel(model.id);
+    await activeModelService.loadTextModel(model.id, undefined, opts);
     const multimodalSupport = llmService.getMultimodalSupport();
     deps.setSupportsVision(model.engine === 'litert' ? !!model.liteRTVision : (multimodalSupport?.vision || false));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails && deps.activeConversationId) {
@@ -233,6 +271,27 @@ export async function proceedWithModelLoadFn(
       });
     }
   } catch (error) {
+    // If the residency gate blocked it and the user hasn't already overridden,
+    // offer to force the load rather than dead-ending on "Failed to load model".
+    if (!opts?.override && isOverridableMemoryError(error)) {
+      deps.setIsModelLoading(false);
+      deps.setLoadingModel(null);
+      deps.modelLoadStartTimeRef.current = null;
+      deps.setAlertState(showAlert(
+        'Insufficient Memory',
+        `${(error as Error).message}\n\nWould you like to override these safeguards and load it anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Load Anyway', style: 'destructive', onPress: () => {
+              deps.setAlertState(hideAlert());
+              proceedWithModelLoadFn(deps, model, { override: true });
+            },
+          },
+        ],
+      ));
+      return;
+    }
     deps.setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
   } finally {
     deps.setIsModelLoading(false);
@@ -256,7 +315,9 @@ export async function handleModelSelectFn(
       {
         text: 'Load Anyway', style: 'destructive', onPress: () => {
           deps.setAlertState(hideAlert());
-          proceedWithModelLoadFn(deps, model);
+          // override:true so the load also bypasses the residency hard gate, not just
+          // the conservative pre-check — otherwise "Load Anyway" fails at the budget.
+          proceedWithModelLoadFn(deps, model, { override: true });
         }
       },
     ]));
