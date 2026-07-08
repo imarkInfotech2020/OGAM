@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# uat.sh — build + ship a UAT/dev build to internal testers (TestFlight + Play internal).
+# uat.sh — ship a BETA build to internal testers (TestFlight + Play internal) and cut a
+# GitHub PRERELEASE tag. Same fundamental as scripts/release.sh (build locally, generate
+# grouped release notes, tag on GitHub) — but flavored as a beta:
 #
-# Same fundamental as scripts/release.sh: build LOCALLY (your Mac is far faster than a free
-# CI macOS runner), then hand the signed artifact to fastlane for upload. It uploads to the
-# EXISTING app (prod bundle id ai.offgridmobile) — TestFlight for iOS, the Play "internal"
-# track for Android — so internal testers get the dev build in the same app record. No
-# separate .uat app id (see docs at the bottom to switch to a standalone .uat app later).
+#   * Beta version = <current package.json version>-beta.<N> (e.g. 0.0.102-beta.1). N
+#     auto-increments from the last matching prerelease tag. The MARKETING version is NOT
+#     bumped — a beta is a pre-release OF the current version. release.sh owns the real
+#     version bump once a beta is approved.
+#   * Store build number (Android versionCode / iOS CURRENT_PROJECT_VERSION) = unix
+#     timestamp, so every TestFlight / Play upload is unique + increasing.
+#   * iOS MARKETING_VERSION stays plain numeric (App Store rejects "-beta"); the beta label
+#     lives in the git tag, the Android versionName, and the store release notes.
+#   * Release notes are generated FROM THE COMMITS by `claude -p` (falls back to a grouped
+#     commit list), and pushed to TestFlight (What to Test) + Play internal + the GH release.
 #
-# Usage:
-#   scripts/uat.sh                # both platforms
-#   scripts/uat.sh --ios          # iOS only
-#   scripts/uat.sh --android      # Android only
+# Usage: scripts/uat.sh [--ios|--android]   (no arg = both)
 #
-# Credentials (already on this machine for production) are read from fastlane/.env by
-# fastlane; this script does not handle secrets. See fastlane/.env.example. On a Mac whose
-# login keychain already holds the distribution cert, export SKIP_KEYCHAIN_IMPORT=1.
+# Build → upload → THEN commit/tag/push, so a failed build never leaves a dangling tag.
+# Credentials come from fastlane/.env (see fastlane/.env.example). On a Mac whose keychain
+# already holds the distribution cert, export SKIP_KEYCHAIN_IMPORT=1.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
@@ -26,68 +30,92 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# ── args ───────────────────────────────────────────────────────────
 DO_IOS=1; DO_ANDROID=1
 case "${1:-}" in
-  --ios)     DO_ANDROID=0 ;;
-  --android) DO_IOS=0 ;;
-  "" )       ;;
+  --ios) DO_ANDROID=0 ;; --android) DO_IOS=0 ;; "" ) ;;
   * ) error "Unknown arg '$1'. Use --ios, --android, or no arg for both." ;;
 esac
 
 # ── pre-flight ─────────────────────────────────────────────────────
-command -v node   >/dev/null || error "node is not installed"
-command -v bundle >/dev/null || error "bundler is not installed (gem install bundler; then 'bundle install')"
-[ -f fastlane/Fastfile ]     || error "fastlane/Fastfile not found (are you on a branch with the fastlane setup?)"
-if [ "$DO_ANDROID" = 1 ]; then
-  [ -f android/gradlew ]       || error "android/gradlew not found"
-  [ -n "${ANDROID_HOME:-}" ]   || error "ANDROID_HOME is not set"
-fi
-if [ "$DO_IOS" = 1 ]; then
-  command -v xcodebuild >/dev/null || error "xcodebuild not installed (need Xcode)"
-fi
+command -v node   >/dev/null || error "node not installed"
+command -v gh     >/dev/null || error "gh CLI not installed"
+command -v bundle >/dev/null || error "bundler not installed (bundle install)"
+[ -f fastlane/Fastfile ]     || error "fastlane/Fastfile not found"
+[ -z "$(git status --porcelain)" ] || error "Working tree is dirty. Commit or stash first."
+[ "$DO_ANDROID" = 0 ] || { [ -f android/gradlew ] || error "android/gradlew not found"; [ -n "${ANDROID_HOME:-}" ] || error "ANDROID_HOME not set"; }
+[ "$DO_IOS" = 0 ]     || command -v xcodebuild >/dev/null || error "xcodebuild not installed"
 
-# ── build number bump (ever-increasing; unique per TestFlight/Play upload) ──
-# UAT builds must NOT churn the public marketing version — only the build number needs to
-# increase for each internal upload. Mirror release.sh's timestamp strategy, in place, and
-# do NOT commit (a UAT build is ephemeral; commit real version bumps via scripts/release.sh).
+# ── compute the beta version ───────────────────────────────────────
+BASE_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.102
+git fetch --tags --quiet || true
+LAST_N=$(git tag -l "v${BASE_VERSION}-beta.*" | sed -E "s/.*-beta\.([0-9]+)$/\1/" | sort -n | tail -1)
+N=$(( ${LAST_N:-0} + 1 ))
+BETA_VERSION="${BASE_VERSION}-beta.${N}"
+TAG="v${BETA_VERSION}"
 BUILD_NUMBER=$(date +%s)
-MARKETING_VERSION=$(node -p "require('./package.json').version")
-info "UAT build ${BOLD}v${MARKETING_VERSION} (build ${BUILD_NUMBER})${NC} — targets prod app id ai.offgridmobile"
+info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) — pre-release of ${BASE_VERSION}"
 
+# ── apply the build-number / beta-versionName bump (working tree; committed only on success) ──
 if [ "$DO_ANDROID" = 1 ]; then
   sed -i '' "s/versionCode .*/versionCode $BUILD_NUMBER/" android/app/build.gradle
+  sed -i '' "s/versionName .*/versionName \"$BETA_VERSION\"/" android/app/build.gradle
 fi
 if [ "$DO_IOS" = 1 ]; then
+  # MARKETING_VERSION stays the plain numeric BASE (App Store rejects -beta); build number bumps.
   sed -i '' "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/" ios/OffgridMobile.xcodeproj/project.pbxproj
 fi
+restore_tree() { git checkout -- android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true; }
+trap 'restore_tree' EXIT
 
-restore_build_number() {
-  # The build-number bump is transient — leave the tree as we found it so a UAT build
-  # never dirties git or collides with a later scripts/release.sh bump.
-  git checkout -- android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true
+# ── generate release notes from commits (claude -p, else grouped fallback) ──
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+RANGE=${LAST_TAG:+${LAST_TAG}..HEAD}
+COMMITS=$(git log ${RANGE:-HEAD~30..HEAD} --pretty=format:"%s (%h)" --no-merges 2>/dev/null || git log --pretty=format:"%s (%h)" --no-merges -30)
+NOTES_FILE="$ROOT_DIR/uat-notes-${BUILD_NUMBER}.md"
+
+gen_notes_with_claude() {
+  command -v claude >/dev/null || return 1
+  printf '%s\n' "$COMMITS" | claude -p \
+"Turn these git commits into concise user-facing beta release notes for testers of Off Grid AI (a private on-device AI app). Group under short markdown headings (Features / Fixes / Improvements). One bullet per user-visible change, plain language, focus on the outcome. Follow the brand voice: no em dashes, no exclamation marks, no words like revolutionary/seamlessly/robust. Output ONLY the markdown, no preamble." \
+    2>/dev/null
 }
-trap restore_build_number EXIT
 
-# ── ship ───────────────────────────────────────────────────────────
-if [ "$DO_ANDROID" = 1 ]; then
-  info "Android: building Release AAB + uploading to Play internal track…"
-  bundle exec fastlane android beta
-  info "Android UAT build uploaded to Play internal."
+if NOTES=$(gen_notes_with_claude) && [ -n "$NOTES" ]; then
+  printf '%s\n' "$NOTES" > "$NOTES_FILE"
+  info "Release notes generated by claude -p"
+else
+  warn "claude -p unavailable/failed — falling back to a grouped commit list"
+  {
+    echo "## ${BETA_VERSION}"; echo ""
+    printf '%s\n' "$COMMITS" | grep -iE "^feat" | sed 's/^/- /' | { grep . && echo "" || true; }
+    printf '%s\n' "$COMMITS" | grep -iE "^fix"  | sed 's/^/- /' | { grep . && echo "" || true; }
+    printf '%s\n' "$COMMITS" | grep -ivE "^(feat|fix|chore|test|docs|ci|refactor)" | sed 's/^/- /'
+  } > "$NOTES_FILE"
 fi
-if [ "$DO_IOS" = 1 ]; then
-  info "iOS: building Release IPA + uploading to TestFlight…"
-  bundle exec fastlane ios beta
-  info "iOS UAT build uploaded to TestFlight."
-fi
+export UAT_CHANGELOG_PATH="$NOTES_FILE"
+info "Notes:"; sed 's/^/    /' "$NOTES_FILE"; echo ""
 
+# ── build + upload (fastlane beta lanes; they read UAT_CHANGELOG_PATH) ──
+if [ "$DO_ANDROID" = 1 ]; then info "Android → Play internal…"; bundle exec fastlane android beta; fi
+if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";        bundle exec fastlane ios beta;     fi
+
+# ── success → commit the bump, cut the PRERELEASE tag, GH prerelease ──
+trap - EXIT   # keep the bump now that the build shipped
+FILES=(); [ "$DO_ANDROID" = 1 ] && FILES+=(android/app/build.gradle)
+[ "$DO_IOS" = 1 ] && FILES+=(ios/OffgridMobile.xcodeproj/project.pbxproj)
+git add "${FILES[@]}"
+git commit -m "chore(beta): ${BETA_VERSION} (build ${BUILD_NUMBER}) [skip ci]"
+git tag -a "$TAG" -m "Off Grid ${BETA_VERSION}"
+git push && git push origin "$TAG"
+
+GH_ARGS=(); [ "$DO_ANDROID" = 1 ] && [ -f android/app/build/outputs/bundle/release/app-release.aab ] && \
+  { cp android/app/build/outputs/bundle/release/app-release.aab "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"; GH_ARGS+=("$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"); }
+gh release create "$TAG" "${GH_ARGS[@]}" --prerelease --title "Off Grid ${BETA_VERSION} (beta)" --notes-file "$NOTES_FILE"
+
+rm -f "$NOTES_FILE" "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"
 echo ""
-info "${BOLD}UAT build shipped to internal testers.${NC}"
-info "  iOS:     TestFlight (App Store Connect → TestFlight)"
-info "  Android: Play Console → Internal testing"
-echo ""
-# To ship UAT as a SEPARATE app that installs alongside prod (ai.offgridmobile.uat), you'd
-# register that bundle/app id in App Store Connect + Play Console with its own provisioning
-# profile / upload key, add an Android `.uat` build type (applicationIdSuffix ".uat") and an
-# iOS bundle-id override, then point the fastlane beta lanes at it. Deferred by choice — this
-# ships to the existing prod app's internal tracks, which works with the signing on hand.
+info "${BOLD}Beta ${BETA_VERSION} shipped.${NC}"
+[ "$DO_IOS" = 1 ]     && info "  iOS:     TestFlight (App Store Connect → TestFlight)"
+[ "$DO_ANDROID" = 1 ] && info "  Android: Play Console → Internal testing"
+info "  GitHub:  $(gh release view "$TAG" --json url -q .url 2>/dev/null)"
+info "Approve the beta, then run scripts/release.sh to cut the real version to production."

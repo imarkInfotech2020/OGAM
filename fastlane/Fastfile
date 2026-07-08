@@ -15,6 +15,7 @@
 # half-running.
 
 require "json"
+require "fileutils"
 
 # Off Grid ships no telemetry. Disable fastlane's anonymous usage analytics too.
 opt_out_usage
@@ -133,6 +134,16 @@ platform :android do
   lane :beta do
     require_env("PLAY_STORE_JSON_KEY_PATH")
     gradle(task: "bundle", build_type: "Release", project_dir: "android/")
+    # Release notes: scripts/uat.sh writes the changelog to UAT_CHANGELOG_PATH (one file per
+    # build). Supply picks up a per-versionCode changelog from the metadata dir, so drop it
+    # there keyed by the versionCode we just built.
+    has_notes = ENV["UAT_CHANGELOG_PATH"] && !ENV["UAT_CHANGELOG_PATH"].empty? && File.exist?(ENV["UAT_CHANGELOG_PATH"])
+    if has_notes
+      code = File.read(File.join(REPO_ROOT, "android/app/build.gradle"))[/versionCode\s+(\d+)/, 1]
+      dir = File.join(REPO_ROOT, "fastlane/metadata/android/en-US/changelogs")
+      FileUtils.mkdir_p(dir)
+      FileUtils.cp(ENV["UAT_CHANGELOG_PATH"], File.join(dir, "#{code}.txt"))
+    end
     upload_to_play_store(
       track: "internal",
       aab: "android/app/build/outputs/bundle/release/app-release.aab",
@@ -140,6 +151,7 @@ platform :android do
       skip_upload_metadata: true,
       skip_upload_images: true,
       skip_upload_screenshots: true,
+      skip_upload_changelogs: !has_notes,
       release_status: "draft"
     )
     UI.success("Uploaded dev build to Play internal track")
@@ -174,9 +186,27 @@ end
 # ── iOS ──────────────────────────────────────────────────────────────────
 
 platform :ios do
-  # Shared build helper: archives + exports an App Store IPA using the existing
-  # ExportOptions.plist and team ID (automatic signing, same as release-ios.yml).
+  # Shared build helper: archives + exports an App Store IPA. Uses AUTOMATIC signing with
+  # -allowProvisioningUpdates (the SAME mechanism scripts/release.sh's iOS archive uses and
+  # that works on this machine) — authenticated headlessly via the App Store Connect API key
+  # so xcodebuild can create/refresh the App Store provisioning profile during archive
+  # without a logged-in Xcode account. Falls back cleanly if the key isn't set.
   private_lane :build_ios_ipa do
+    require "shellwords"
+    require "tmpdir"
+    require "base64"
+    xcargs = "-allowProvisioningUpdates"
+    if ENV["ASC_KEY_ID"] && ENV["ASC_ISSUER_ID"] && ENV["ASC_API_KEY_P8"] &&
+       !ENV["ASC_KEY_ID"].empty? && !ENV["ASC_ISSUER_ID"].empty? && !ENV["ASC_API_KEY_P8"].empty?
+      # xcodebuild wants the key as a file on disk; write the .p8 (raw PEM or base64) there.
+      raw = ENV["ASC_API_KEY_P8"]
+      key_body = raw.include?("BEGIN PRIVATE KEY") ? raw : Base64.decode64(raw)
+      key_path = File.join(Dir.tmpdir, "AuthKey_#{ENV['ASC_KEY_ID']}.p8")
+      File.write(key_path, key_body)
+      xcargs += " -authenticationKeyPath #{key_path.shellescape}" \
+                " -authenticationKeyID #{ENV['ASC_KEY_ID']}" \
+                " -authenticationKeyIssuerID #{ENV['ASC_ISSUER_ID']}"
+    end
     build_app(
       workspace: "ios/OffgridMobile.xcworkspace",
       scheme: "OffgridMobile",
@@ -184,6 +214,7 @@ platform :ios do
       export_method: "app-store",
       export_team_id: APPLE_TEAM_ID,
       export_options: "ios/ExportOptions.plist",
+      xcargs: xcargs,
       output_directory: "build",
       output_name: "OffgridMobile.ipa"
     )
@@ -203,11 +234,19 @@ platform :ios do
     auth = asc_auth_kwargs
     setup_signing
     build_ios_ipa
-    upload_to_testflight(
+    tf = {
       **auth,
       ipa: "build/OffgridMobile.ipa",
       skip_waiting_for_build_processing: true
-    )
+    }
+    # Release notes: scripts/uat.sh writes the changelog to UAT_CHANGELOG_PATH. Attach it as
+    # the TestFlight "What to Test". (Requires processing to finish, so only set the
+    # changelog when we have notes — otherwise keep skip_waiting for a fast upload.)
+    if ENV["UAT_CHANGELOG_PATH"] && !ENV["UAT_CHANGELOG_PATH"].empty? && File.exist?(ENV["UAT_CHANGELOG_PATH"])
+      tf[:changelog] = File.read(ENV["UAT_CHANGELOG_PATH"])
+      tf[:skip_waiting_for_build_processing] = false
+    end
+    upload_to_testflight(**tf)
     UI.success("Uploaded to TestFlight")
   end
 
