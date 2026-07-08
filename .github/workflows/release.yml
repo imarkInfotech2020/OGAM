@@ -135,7 +135,9 @@ jobs:
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.PLAY_STORE_JSON_KEY != '' }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-          echo "$PLAY_STORE_JSON_KEY" | base64 --decode > "$RUNNER_TEMP/play-key.json"
+          # PLAY_STORE_JSON_KEY may be stored raw-JSON or base64 — handle both (matches uat-dev.yml).
+          echo "$PLAY_STORE_JSON_KEY" | base64 --decode > "$RUNNER_TEMP/play-key.json" \
+            || printf '%s' "$PLAY_STORE_JSON_KEY" > "$RUNNER_TEMP/play-key.json"
           echo "PLAY_UPLOAD=1" >> $GITHUB_ENV
 
       - name: Build signed AAB + upload to Play (draft)

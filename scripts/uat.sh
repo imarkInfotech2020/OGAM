@@ -52,7 +52,7 @@ command -v bundle >/dev/null || error "bundler not installed (bundle install)"
 # A beta targets the NEXT version, not the live one (the live train is closed — see header).
 CURRENT_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.102 (live)
 TARGET_VERSION=$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a+'.'+b+'.'+(c+1))")   # 0.0.103
-git fetch --tags --quiet || true
+git fetch --tags --quiet || error "Could not refresh tags. Refusing to pick a beta number from stale tag history (would risk reusing an already-published beta tag and failing the tag push after the store uploads)."
 LAST_N=$(git tag -l "v${TARGET_VERSION}-beta.*" | sed -E "s/.*-beta\.([0-9]+)$/\1/" | sort -n | tail -1)
 N=$(( ${LAST_N:-0} + 1 ))
 BETA_VERSION="${TARGET_VERSION}-beta.${N}"
@@ -101,9 +101,11 @@ else
   warn "claude -p unavailable/failed — falling back to a grouped commit list"
   {
     echo "## ${BETA_VERSION}"; echo ""
-    printf '%s\n' "$COMMITS" | grep -iE "^feat" | sed 's/^/- /' | { grep . && echo "" || true; }
-    printf '%s\n' "$COMMITS" | grep -iE "^fix"  | sed 's/^/- /' | { grep . && echo "" || true; }
-    printf '%s\n' "$COMMITS" | grep -ivE "^(feat|fix|chore|test|docs|ci|refactor)" | sed 's/^/- /'
+    # `|| true` on each: under set -euo pipefail a grep with no match returns non-zero and
+    # would abort the whole script (e.g. a beta with only chore/test commits and no feat/fix).
+    printf '%s\n' "$COMMITS" | grep -iE "^feat" | sed 's/^/- /' || true
+    printf '%s\n' "$COMMITS" | grep -iE "^fix"  | sed 's/^/- /' || true
+    printf '%s\n' "$COMMITS" | grep -ivE "^(feat|fix|chore|test|docs|ci|refactor)" | sed 's/^/- /' || true
   } > "$NOTES_FILE"
 fi
 export UAT_CHANGELOG_PATH="$NOTES_FILE"

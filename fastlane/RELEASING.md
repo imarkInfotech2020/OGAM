@@ -24,7 +24,7 @@ you must set them yourself or builds fail or hang:
 - **JDK 17 is required** (CI pins temurin 17). JDK 24 breaks the native `op-sqlite`
   CMake step ("A restricted method in java.lang.System has been called"). Set
   `JAVA_HOME` to a JDK 17 and stop any stale Gradle daemon on another JDK
-  (`cd android && ./gradlew --stop`) — a mixed-JDK daemon can deadlock the build at
+  (`cd android && ./gradlew --stop`) - a mixed-JDK daemon can deadlock the build at
   0% CPU.
 
 ### Build-only verification (no upload, no secrets)
@@ -51,7 +51,7 @@ bundle exec fastlane ios release         # build IPA -> App Store (not submitted
 bundle exec fastlane ios metadata        # push App Store listing only (no build)
 ```
 
-Release lanes upload as **draft / not-submitted** on purpose — a human confirms the
+Release lanes upload as **draft / not-submitted** on purpose - a human confirms the
 rollout in Play Console / App Store Connect. Store submission stays a deliberate step.
 
 The `bump` lane does NOT commit or tag; the release GitHub Actions workflow handles the

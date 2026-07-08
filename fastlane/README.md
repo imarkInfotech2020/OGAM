@@ -34,7 +34,7 @@ Usage: fastlane bump [type:patch|minor|major]
 [bundle exec] fastlane android build
 ```
 
-Build a signed release AAB locally — NO upload. Artifact for testing the pipeline.
+Build a signed release AAB locally - NO upload. Artifact for testing the pipeline.
 
 ### android beta
 
@@ -71,7 +71,7 @@ Push Android store listing text + images (no build)
 [bundle exec] fastlane ios build
 ```
 
-Build a signed release IPA locally — NO upload. Artifact for testing the pipeline.
+Build a signed release IPA locally - NO upload. Artifact for testing the pipeline.
 
 ### ios beta
 
