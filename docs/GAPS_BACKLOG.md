@@ -129,3 +129,22 @@ both the bad recommendation and the runtime crash (the pre-load gate would also 
 manually-selected qnn model with a clear message instead of a hard crash). Needs device
 verification on affected SoCs (SM7250 and at least one true 8gen1/8gen2) before shipping -
 hence deferred, not patched blind.
+
+---
+
+## Image-gen inline preview not shown on first run - 2026-07-08
+
+**Verdict: instrument-and-revisit (native-emission behaviour, not a JS/UI bug).**
+
+Observed on-device (OnePlus Nord, mnn/OpenCL, first run): the "Generating Image" card
+showed no inline preview thumbnail. The UI IS wired correctly — `ChatScreenComponents`
+renders `imagePreviewPath` when set, fed by imageGenerationService's onPreview →
+appStore. The preview only appears when the NATIVE localdream module includes
+`previewPath` in its progress events (`localDreamGenerator.ts:123`, optional field). No
+preview events were emitted for this run — consistent with first-run OpenCL kernel
+compilation skipping the (expensive) intermediate-latent decode while warming.
+
+Next: confirm whether previews appear on a SECOND (warmed) generation. If they do, this
+is expected first-run behaviour (optionally: show a "preview available after first run"
+hint). If they never appear on mnn, it's a native gap in the localdream preview path to
+fix on the native side — the JS/UI layer is already correct, so no JS change is warranted.

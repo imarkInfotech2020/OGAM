@@ -4,7 +4,8 @@ import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
-import { OverridableMemoryError } from '../modelLoadErrors';
+import { OverridableMemoryError, ImageModelIncompleteError } from '../modelLoadErrors';
+import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { ONNXImageModel } from '../../types';
@@ -151,20 +152,16 @@ class ActiveModelService {
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     const textSizeMB = Math.round((hardwareService.estimateModelRam(model) || 0) / (1024 * 1024));
-    // LiteRT weights + KV are dirty/accelerator memory → counted against REAL free RAM
-    // (budgeting them like clean mmap GGUF green-lights a load the engine then OOMs).
-    // Derived once so makeRoomFor and register agree; llama/GGUF stays clean (physical cap).
+    // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
+    // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
-    // Residency manager is authoritative: evict other generation models (and
-    // extras) to fit the RAM budget before loading this text model. The evicted
-    // models' unload fns are the non-locking internal variants (we already hold
-    // the lock here), so this never deadlocks.
+    // Residency manager is authoritative: evict other generation models to fit the budget.
+    // Evicted unloads are the non-locking internal variants (we hold the lock), so no deadlock.
     const room = await modelResidencyManager.makeRoomFor(
       { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
       { override: opts?.override },
     );
-    // First refusal is OVERRIDABLE (callers offer "Load Anyway"); a refusal UNDER override
-    // hit the survival floor (hard limit) → plain non-overridable Error, so no caller loops.
+    // First refusal is OVERRIDABLE ("Load Anyway"); a refusal UNDER override is a hard limit → plain Error.
     if (!room.fits) {
       throw opts?.override
         ? new Error('Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.')
@@ -259,8 +256,7 @@ class ActiveModelService {
         type: 'image',
         modelId: model.id,
         sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
-        // CoreML/ONNX image weights load into dirty (jetsam-counted) memory — gate on
-        // real free RAM too, unlike mmap'd GGUF text. (See ResidentSpec.dirtyMemory.)
+        // CoreML/ONNX image weights are dirty (jetsam-counted) memory → gate on real free RAM.
         dirtyMemory: true,
       },
       { override: opts?.override },
@@ -312,6 +308,11 @@ class ActiveModelService {
     const model = store.downloadedImageModels.find(m => m.id === modelId);
     if (!model) {
       throw new Error('Model not found');
+    }
+    // Integrity gate (B): a partial extraction crashes the native server as a misleading "backend unsupported" — throw typed error so the UI says "re-download".
+    if (model.backend === 'mnn' || model.backend === 'qnn') {
+      const integ = await validateImageModelDir(model.modelPath, model.backend);
+      if (!integ.complete) throw new ImageModelIncompleteError(integ.missing);
     }
     const check = await this.checkImageModelCanLoad(modelId, model, opts);
     if (!check.canLoad) {
