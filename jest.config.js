@@ -64,14 +64,36 @@ module.exports = {
     '!src/**/index.ts',
     '!src/types/**',
     '!src/navigation/**',
+    // Measure the pro submodule too when it's checked out (the pro-dependent suites here
+    // exercise it). Skip barrels (index.ts) + type decls; index.tsx (real components) stays.
+    ...(proExists
+      ? ['pro/**/*.{ts,tsx}', '!pro/**/index.ts', '!pro/**/*.d.ts', '!pro/**/__tests__/**']
+      : []),
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'json-summary'],
   coverageThreshold: {
+    // `global` gates src/ at 80. A glob key REMOVES matching files from `global` and gates
+    // them separately — so the pro group below carves pro out of the src gate.
     global: {
       statements: 80,
       branches: 80,
       functions: 80,
       lines: 80,
     },
+    // pro/ is MEASURED here (so it's visible in the core report + guarded against
+    // regression), but its AUTHORITATIVE coverage gate lives in the pro repo's own CI,
+    // which runs pro's full suite. From THIS repo only the pro-DEPENDENT suites run, so
+    // they exercise ~18% of pro — this floor ratchets that and stops it sliding, rather
+    // than pretending core can hit 80 on pro. New pro modules add their own per-file 100
+    // key (below), same as core. NOTE: this is a DIRECTORY key (not a glob) so jest
+    // aggregates all pro files into ONE group — a glob (`pro/**`) would apply per-file and
+    // fail on the many pro files no core suite imports.
+    './pro': { statements: 15, branches: 15, functions: 10, lines: 15 },
+    // New standalone modules in this change set are held to 100% on every axis. Changed
+    // legacy files have their NEW branches covered by the suites but aren't whole-file-100%.
+    './src/utils/imageModelIntegrity.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/utils/imageGenAdvice.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/services/modelLoadErrors.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/components/ImageGenAdviceCard.tsx': { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 };

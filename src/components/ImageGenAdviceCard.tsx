@@ -1,25 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme, useThemedStyles } from '../../theme';
-import type { ThemeColors } from '../../theme';
-import { TYPOGRAPHY, SPACING } from '../../constants';
-import { useAppStore } from '../../stores';
-import { getImageGenAdvice } from '../../utils/imageGenAdvice';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
+import { AnimatedPressable } from './AnimatedPressable';
+import { useAppStore } from '../stores';
+import { getImageGenAdvice } from '../utils/imageGenAdvice';
 
 /**
- * Advisory shown only for the GPU (mnn) image path — where the device has no compatible
- * NPU, so a full SD1.5 model is a real speed/quality trade the user must steer:
- *  - under 20 steps looks muddy,
- *  - a large size is very slow on a mid-tier GPU.
- * It reads settings live (so it appears/updates as the user moves the Steps/Size sliders)
- * and derives what to show from the single pure rule in utils/imageGenAdvice.
+ * In-chat advisory for the GPU (mnn) image path — where the device has no compatible NPU,
+ * so a full SD1.5 model is a real speed/quality trade the user must steer. It lives in the
+ * CHAT (above the composer, beside the other advisories) rather than buried in settings, so
+ * a user hitting slow or garbled generations actually sees the fix. It self-hides once the
+ * settings are good (256 / >=20 steps) and can be dismissed for the session.
  *
  * Design: tokens only (COLORS/SPACING/TYPOGRAPHY), Feather vector icons, weights <=400.
  */
 export const ImageGenAdviceCard: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
+  const [dismissed, setDismissed] = useState(false);
   const { settings, downloadedImageModels, activeImageModelId } = useAppStore();
   const backend = downloadedImageModels.find(m => m.id === activeImageModelId)?.backend;
 
@@ -28,13 +29,16 @@ export const ImageGenAdviceCard: React.FC = () => {
     steps: settings.imageSteps ?? 0,
     width: settings.imageWidth ?? 0,
   });
-  if (!advice.show) return null;
+  if (!advice.show || dismissed) return null;
 
   return (
     <View style={styles.card} testID="image-gen-advice">
       <View style={styles.headerRow}>
         <Icon name="cpu" size={14} color={colors.primary} style={styles.leadIcon} />
         <Text style={styles.title}>Tips for your device</Text>
+        <AnimatedPressable onPress={() => setDismissed(true)} hitSlop={8} accessibilityLabel="Dismiss" testID="image-gen-advice-dismiss">
+          <Icon name="x" size={16} color={colors.textSecondary} />
+        </AnimatedPressable>
       </View>
       <Text style={styles.intro}>
         This device generates on the GPU (no compatible NPU), so quality and speed depend on these settings.
@@ -67,18 +71,21 @@ const createStyles = (colors: ThemeColors) => ({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceLight,
-    padding: SPACING.md,
-    marginTop: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   headerRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: SPACING.xs,
+    gap: SPACING.sm,
   },
   leadIcon: { marginTop: 1 },
   title: {
     ...TYPOGRAPHY.label,
     color: colors.primary,
+    flex: 1,
   },
   intro: {
     ...TYPOGRAPHY.bodySmall,

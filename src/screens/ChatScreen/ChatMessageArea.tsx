@@ -6,7 +6,7 @@ import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
-import { ChatInput, ThinkingIndicator, ModelFailureCard } from '../../components';
+import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
@@ -268,6 +268,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           embedding). Reads modelFailureStore itself — no props. Rendered ABOVE the
           evicted snackbar so the rounded failure card is never capped by a flat bar. */}
       <ModelFailureCard />
+      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
+          hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
+      <ImageGenAdviceCard />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
           selected — reload it on demand, even a large model. This flat "tap to continue"
           snackbar sits directly above the composer, BELOW the rounded failure card. */}
