@@ -90,7 +90,7 @@ module.exports = {
     // modules also add their own per-file 100 key. NOTE: this is a DIRECTORY key (not a
     // glob) so jest aggregates all pro files into ONE group — a glob (`pro/**`) would apply
     // per-file and fail on the many pro files no core suite imports.
-    './pro': { statements: 55, branches: 45, functions: 45, lines: 55 },
+    './pro': { statements: 70, branches: 58, functions: 60, lines: 72 },
     // New standalone modules in this change set are held to 100% on every axis. Changed
     // legacy files have their NEW branches covered by the suites but aren't whole-file-100%.
     './src/utils/imageModelIntegrity.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
