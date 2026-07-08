@@ -28,6 +28,20 @@ import {
  */
 const ICON_FOR_SEVERITY = { error: 'alert-octagon', warning: 'alert-triangle' } as const;
 
+/** One row action (Retry / Load Anyway) — a single shape both actions share so they
+ *  never drift and a third action is a one-liner. `label` doubles as the a11y label. */
+function ActionButton({ icon, color, label, testID, onPress, styles }: {
+  icon: string; color: string; label: string; testID: string; onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}): React.ReactElement {
+  return (
+    <AnimatedPressable onPress={onPress} style={styles.actionButton} accessibilityLabel={label} testID={testID}>
+      <Icon name={icon} size={12} color={color} style={styles.actionIcon} />
+      <Text style={[styles.actionText, { color }]}>{label}</Text>
+    </AnimatedPressable>
+  );
+}
+
 function FailureRow({ failure, onDismiss }: { failure: ModelFailure; onDismiss: () => void }): React.ReactElement {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
@@ -46,26 +60,24 @@ function FailureRow({ failure, onDismiss }: { failure: ModelFailure; onDismiss: 
       {(failure.onRetry || (failure.overridable && failure.onLoadAnyway)) && (
         <View style={styles.actionsRow}>
           {failure.onRetry && (
-            <AnimatedPressable
-              onPress={() => { onDismiss(); failure.onRetry?.(); }}
-              style={styles.actionButton}
-              accessibilityLabel="Retry"
+            <ActionButton
+              icon="refresh-cw"
+              color={colors.primary}
+              label={failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}
               testID={`model-failure-retry-${failure.modelType}`}
-            >
-              <Icon name="refresh-cw" size={12} color={colors.primary} style={styles.actionIcon} />
-              <Text style={styles.actionText}>{failure.memoryPressure ? 'Free memory & Retry' : 'Retry'}</Text>
-            </AnimatedPressable>
+              onPress={() => { onDismiss(); failure.onRetry?.(); }}
+              styles={styles}
+            />
           )}
           {failure.overridable && failure.onLoadAnyway && (
-            <AnimatedPressable
-              onPress={() => { onDismiss(); failure.onLoadAnyway?.(); }}
-              style={styles.actionButton}
-              accessibilityLabel="Load Anyway"
+            <ActionButton
+              icon="zap"
+              color={colors.error}
+              label="Load Anyway"
               testID={`model-failure-load-anyway-${failure.modelType}`}
-            >
-              <Icon name="zap" size={12} color={colors.error} style={styles.actionIcon} />
-              <Text style={[styles.actionText, { color: colors.error }]}>Load Anyway</Text>
-            </AnimatedPressable>
+              onPress={() => { onDismiss(); failure.onLoadAnyway?.(); }}
+              styles={styles}
+            />
           )}
         </View>
       )}
