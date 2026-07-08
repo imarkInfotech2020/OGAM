@@ -53,6 +53,30 @@ describe('checkImageModelFiles — mnn', () => {
     expect(checkImageModelFiles(partial, 'mnn').missing).toContain('unet.mnn');
   });
 
+  it('requires the clip GRAPH itself, not just its weight (dropped clip_v2.mnn slips the pairing loop otherwise)', () => {
+    const partial = COMPLETE_MNN.filter(f => f.name !== 'clip_v2.mnn'); // weight still present
+    const res = checkImageModelFiles(partial, 'mnn');
+    expect(res.complete).toBe(false);
+    expect(res.missing).toContain('clip_v2.mnn');
+  });
+
+  it('accepts clip.mnn as the clip graph when clip_v2.mnn is absent (base vs upgraded)', () => {
+    const withBaseClip = COMPLETE_MNN
+      .filter(f => f.name !== 'clip_v2.mnn' && f.name !== 'clip_v2.mnn.weight')
+      .concat([{ name: 'clip.mnn', size: 147192, isFile: true }, { name: 'clip.mnn.weight', size: 156158976, isFile: true }]);
+    expect(checkImageModelFiles(withBaseClip, 'mnn').complete).toBe(true);
+  });
+
+  it('requires the vae_decoder.mnn graph (always loaded by the native server)', () => {
+    const partial = COMPLETE_MNN.filter(f => f.name !== 'vae_decoder.mnn');
+    expect(checkImageModelFiles(partial, 'mnn').missing).toContain('vae_decoder.mnn');
+  });
+
+  it('does NOT require vae_encoder.mnn (optional — native adds --vae_encoder only if present)', () => {
+    const noEncoder = COMPLETE_MNN.filter(f => f.name !== 'vae_encoder.mnn' && f.name !== 'vae_encoder.mnn.weight');
+    expect(checkImageModelFiles(noEncoder, 'mnn').complete).toBe(true);
+  });
+
   it('ignores directory entries (only files count)', () => {
     const withDir = [...COMPLETE_MNN, { name: 'nested', size: 0, isFile: false }];
     expect(checkImageModelFiles(withDir, 'mnn').complete).toBe(true);

@@ -13,7 +13,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { render, fireEvent, screen } from '@testing-library/react-native';
 
-const COLORS = {
+const mockColors = {
   text: '#000', textMuted: '#999', textSecondary: '#666', textDisabled: '#bbb',
   primary: '#1DB954', error: '#E00', warning: '#F90',
   background: '#FFF', surface: '#F5F5F5', surfaceLight: '#EEE', border: '#E0E0E0',
@@ -27,7 +27,7 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 jest.mock('@offgrid/core/theme', () => ({
-  useTheme: () => ({ colors: COLORS }),
+  useTheme: () => ({ colors: mockColors }),
 }));
 
 import { McpToolPickerSheet } from '@offgrid/pro/ui/McpToolPickerSheet';

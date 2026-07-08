@@ -14,7 +14,7 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
 
-const COLORS = {
+const mockColors = {
   text: '#000000', textMuted: '#999999', primary: '#00FF00',
   background: '#FFFFFF', surface: '#F5F5F5', border: '#E0E0E0',
 };
@@ -25,7 +25,7 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 jest.mock('@offgrid/core/theme', () => ({
-  useTheme: () => ({ colors: COLORS }),
+  useTheme: () => ({ colors: mockColors }),
 }));
 
 jest.mock('@offgrid/core/utils/haptics', () => ({ triggerHaptic: jest.fn() }));
@@ -101,10 +101,10 @@ describe('VoicePickerPopover', () => {
 
     // Active label uses primary; an inactive one uses the plain text color.
     expect(getByText('Puck').props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ color: COLORS.primary })]),
+      expect.arrayContaining([expect.objectContaining({ color: mockColors.primary })]),
     );
     expect(getByText('Heart').props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ color: COLORS.text })]),
+      expect.arrayContaining([expect.objectContaining({ color: mockColors.text })]),
     );
 
     // One user icon per voice row.

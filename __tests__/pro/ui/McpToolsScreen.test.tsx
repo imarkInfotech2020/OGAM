@@ -14,7 +14,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import type { McpTool } from '../../../pro/mcp/types';
 
-const COLORS = {
+const mockColors = {
   text: '#000', textMuted: '#999', textSecondary: '#666', textDisabled: '#bbb',
   primary: '#1DB954', error: '#E00', trending: '#F90',
   background: '#FFF', surface: '#F5F5F5', surfaceLight: '#EEE', border: '#E0E0E0', overlay: 'rgba(0,0,0,0.4)',
@@ -26,7 +26,7 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 jest.mock('../../../src/theme', () => ({
-  useTheme: () => ({ colors: COLORS, shadows: { small: {} } }),
+  useTheme: () => ({ colors: mockColors, shadows: { small: {} } }),
 }));
 
 const mockGoBack = jest.fn();

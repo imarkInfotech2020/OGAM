@@ -63,6 +63,18 @@ export function checkImageModelFiles(files: ImageDirEntry[], backend: ImageBacke
   BASE_REQUIRED.forEach(requirePresent);
   requirePresent(backend === 'mnn' ? 'unet.mnn' : 'unet.bin');
 
+  // Required graph files the native server always loads (beyond the primary unet): the
+  // weight-pairing loop below only fires for graphs that ARE present, so a partial extract
+  // that dropped the .mnn GRAPH itself (not just its .weight) would slip through unless we
+  // require it here. mnn always passes --clip + --vae_decoder; --vae_encoder is optional
+  // (added only when present), so it is NOT required. clip may be clip_v2.mnn (upgraded) or
+  // clip.mnn (base) — accept either.
+  if (backend === 'mnn') {
+    requirePresent('vae_decoder.mnn');
+    const hasClip = (sizeByName.get('clip_v2.mnn') ?? 0) > 0 || (sizeByName.get('clip.mnn') ?? 0) > 0;
+    if (!hasClip) missing.push('clip_v2.mnn');
+  }
+
   // MNN split-weight pairing: a `*.mnn` graph is useless without its `*.mnn.weight`.
   for (const [name, size] of sizeByName) {
     if (name.endsWith('.mnn') && size > 0) {
