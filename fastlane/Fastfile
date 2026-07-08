@@ -148,6 +148,7 @@ platform :android do
       track: "internal",
       aab: "android/app/build/outputs/bundle/release/app-release.aab",
       json_key: ENV["PLAY_STORE_JSON_KEY_PATH"],
+      skip_upload_apk: true,   # AAB only — a stale APK in the output dir must not fight the AAB
       skip_upload_metadata: true,
       skip_upload_images: true,
       skip_upload_screenshots: true,
