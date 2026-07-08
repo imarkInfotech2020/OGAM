@@ -5,18 +5,8 @@ import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import { ImageDownloadDeps, registerAndNotify } from './imageDownloadActions';
-import { validateImageModelDir } from '../../utils/imageModelIntegrity';
-import { ImageModelIncompleteError } from '../../services/modelLoadErrors';
+import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import { makeImageModelKey } from '../../utils/modelKey';
-
-/** Post-unzip completeness gate for resume (mirrors the primary download path): a
- *  partial extraction throws so the caller cleans up + the user retries, never a
- *  silently-broken `_ready` model. No-op for non-mnn/qnn backends. */
-async function assertResumeExtractionComplete(modelDir: string, backend?: string): Promise<void> {
-  if (backend !== 'mnn' && backend !== 'qnn') return;
-  const { complete, missing } = await validateImageModelDir(modelDir, backend);
-  if (!complete) throw new ImageModelIncompleteError(missing);
-}
 import logger from '../../utils/logger';
 
 type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: Record<string, any>; deps: ImageDownloadDeps };
@@ -137,7 +127,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
     try {
       await unzip(zipPath, modelDir);
-      await assertResumeExtractionComplete(modelDir, metadata.imageModelBackend);
+      await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
     } catch (error) {
       await RNFS.unlink(modelDir).catch(() => {});
       throw error;
@@ -165,7 +155,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
   try {
     await unzip(zipPath, modelDir);
-    await assertResumeExtractionComplete(modelDir, metadata.imageModelBackend);
+    await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
   } catch (error) {
     await RNFS.unlink(modelDir).catch(() => {});
     throw error;
