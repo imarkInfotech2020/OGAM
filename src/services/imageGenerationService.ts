@@ -447,8 +447,11 @@ class ImageGenerationService {
 
     const steps = params.steps || settings.imageSteps || 8;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
-    const imageWidth = settings.imageWidth || 256;
-    const imageHeight = settings.imageHeight || 256;
+    // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
+    // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
+    // this guards the persisted-value + programmatic paths so the user never sees garbage.
+    const imageWidth = Math.max(256, settings.imageWidth || 256);
+    const imageHeight = Math.max(256, settings.imageHeight || 256);
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);

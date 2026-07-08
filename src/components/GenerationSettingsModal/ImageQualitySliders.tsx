@@ -42,9 +42,9 @@ export const ImageQualityBasicSliders: React.FC = () => {
       <SliderSetting
         testID="image-size"
         label="Image Size"
-        description="Output resolution (smaller = faster, larger = more detail)"
+        description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
         value={settings.imageWidth ?? 256}
-        min={128} max={512} step={64}
+        min={256} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
       />

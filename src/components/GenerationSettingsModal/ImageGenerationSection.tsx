@@ -7,6 +7,7 @@ import { useAppStore } from '../../stores';
 import { hardwareService } from '../../services';
 import { createStyles } from './styles';
 import { ImageQualityBasicSliders, ImageQualityAdvancedSliders } from './ImageQualitySliders';
+import { ImageGenAdviceCard } from './ImageGenAdviceCard';
 
 // ─── Image Model Picker ───────────────────────────────────────────────────────
 
@@ -324,6 +325,8 @@ export const ImageGenerationSection: React.FC = () => {
       </View>
 
       <ImageQualityBasicSliders />
+
+      <ImageGenAdviceCard />
 
       <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="modal-image-advanced-toggle" />
 
