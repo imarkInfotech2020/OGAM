@@ -103,7 +103,14 @@ export UAT_CHANGELOG_PATH="$NOTES_FILE"
 info "Notes:"; sed 's/^/    /' "$NOTES_FILE"; echo ""
 
 # ── build + upload (fastlane beta lanes; they read UAT_CHANGELOG_PATH) ──
-if [ "$DO_ANDROID" = 1 ]; then info "Android → Play internal…"; bundle exec fastlane android beta; fi
+if [ "$DO_ANDROID" = 1 ]; then
+  info "Android → Play internal (AAB)…"; bundle exec fastlane android beta
+  # Also build the sideloadable APK for the GitHub prerelease (the AAB isn't installable;
+  # testers grabbing the build off GitHub need the APK — same as scripts/release.sh).
+  info "Android → building installable APK for GitHub…"; (cd android && ./gradlew assembleRelease)
+  APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+  [ -f "$APK_SRC" ] || error "APK not found at $APK_SRC"
+fi
 if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";        bundle exec fastlane ios beta;     fi
 
 # ── success → commit the bump, cut the PRERELEASE tag, GH prerelease ──
@@ -115,11 +122,20 @@ git commit -m "chore(beta): ${BETA_VERSION} (build ${BUILD_NUMBER}) [skip ci]"
 git tag -a "$TAG" -m "Off Grid ${BETA_VERSION}"
 git push && git push origin "$TAG"
 
-GH_ARGS=(); [ "$DO_ANDROID" = 1 ] && [ -f android/app/build/outputs/bundle/release/app-release.aab ] && \
-  { cp android/app/build/outputs/bundle/release/app-release.aab "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"; GH_ARGS+=("$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"); }
+# Attach both the installable APK (for sideload testers) and the AAB (Play-store artifact),
+# version-named so the release page is self-describing.
+GH_ARGS=()
+APK_DST="$ROOT_DIR/OffgridMobile-${BETA_VERSION}.apk"
+AAB_DST="$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"
+if [ "$DO_ANDROID" = 1 ]; then
+  [ -f android/app/build/outputs/apk/release/app-release.apk ] && \
+    { cp android/app/build/outputs/apk/release/app-release.apk "$APK_DST"; GH_ARGS+=("$APK_DST"); }
+  [ -f android/app/build/outputs/bundle/release/app-release.aab ] && \
+    { cp android/app/build/outputs/bundle/release/app-release.aab "$AAB_DST"; GH_ARGS+=("$AAB_DST"); }
+fi
 gh release create "$TAG" "${GH_ARGS[@]}" --prerelease --title "Off Grid ${BETA_VERSION} (beta)" --notes-file "$NOTES_FILE"
 
-rm -f "$NOTES_FILE" "${ANDROID_CHANGELOG:-}" "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"
+rm -f "$NOTES_FILE" "${ANDROID_CHANGELOG:-}" "$APK_DST" "$AAB_DST"
 echo ""
 info "${BOLD}Beta ${BETA_VERSION} shipped.${NC}"
 [ "$DO_IOS" = 1 ]     && info "  iOS:     TestFlight (App Store Connect → TestFlight)"

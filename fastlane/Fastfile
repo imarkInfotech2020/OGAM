@@ -142,7 +142,15 @@ platform :android do
       code = File.read(File.join(REPO_ROOT, "android/app/build.gradle"))[/versionCode\s+(\d+)/, 1]
       dir = File.join(REPO_ROOT, "fastlane/metadata/android/en-US/changelogs")
       FileUtils.mkdir_p(dir)
-      FileUtils.cp(ENV["UAT_CHANGELOG_PATH"], File.join(dir, "#{code}.txt"))
+      # Play caps a track changelog at 500 chars (TestFlight + the GH release get the full
+      # notes). Truncate on a line boundary so we don't cut mid-word/mid-bullet.
+      notes = File.read(ENV["UAT_CHANGELOG_PATH"])
+      if notes.length > 500
+        kept = +""
+        notes.each_line { |ln| break if (kept.length + ln.length) > 497; kept << ln }
+        notes = "#{kept.rstrip}\n…"
+      end
+      File.write(File.join(dir, "#{code}.txt"), notes)
     end
     upload_to_play_store(
       track: "internal",
