@@ -64,14 +64,21 @@ if [ "$DO_IOS" = 1 ]; then
   # MARKETING_VERSION stays the plain numeric BASE (App Store rejects -beta); build number bumps.
   sed -i '' "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/" ios/OffgridMobile.xcodeproj/project.pbxproj
 fi
-restore_tree() { git checkout -- android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true; }
-trap 'restore_tree' EXIT
+cleanup() {
+  git checkout -- android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true
+  rm -f "$NOTES_FILE" "${ANDROID_CHANGELOG:-}" 2>/dev/null || true
+}
+trap 'cleanup' EXIT
 
 # ── generate release notes from commits (claude -p, else grouped fallback) ──
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 RANGE=${LAST_TAG:+${LAST_TAG}..HEAD}
 COMMITS=$(git log ${RANGE:-HEAD~30..HEAD} --pretty=format:"%s (%h)" --no-merges 2>/dev/null || git log --pretty=format:"%s (%h)" --no-merges -30)
-NOTES_FILE="$ROOT_DIR/uat-notes-${BUILD_NUMBER}.md"
+# Notes live OUTSIDE the repo so they never dirty the tree (a failed run must not block the
+# next). The Android changelog (written under fastlane/metadata by the beta lane) IS in-repo;
+# the trap below removes it on any exit so leftovers can't fail the clean-tree pre-check.
+NOTES_FILE="$(mktemp -t uat-notes).md"
+ANDROID_CHANGELOG="$ROOT_DIR/fastlane/metadata/android/en-US/changelogs/${BUILD_NUMBER}.txt"
 
 gen_notes_with_claude() {
   command -v claude >/dev/null || return 1
@@ -112,7 +119,7 @@ GH_ARGS=(); [ "$DO_ANDROID" = 1 ] && [ -f android/app/build/outputs/bundle/relea
   { cp android/app/build/outputs/bundle/release/app-release.aab "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"; GH_ARGS+=("$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"); }
 gh release create "$TAG" "${GH_ARGS[@]}" --prerelease --title "Off Grid ${BETA_VERSION} (beta)" --notes-file "$NOTES_FILE"
 
-rm -f "$NOTES_FILE" "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"
+rm -f "$NOTES_FILE" "${ANDROID_CHANGELOG:-}" "$ROOT_DIR/OffgridMobile-${BETA_VERSION}.aab"
 echo ""
 info "${BOLD}Beta ${BETA_VERSION} shipped.${NC}"
 [ "$DO_IOS" = 1 ]     && info "  iOS:     TestFlight (App Store Connect → TestFlight)"
