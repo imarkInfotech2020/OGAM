@@ -7,6 +7,7 @@ import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from '../utils/proPrompt';
+import { SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
@@ -450,8 +451,8 @@ class ImageGenerationService {
     // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
     // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
     // this guards the persisted-value + programmatic paths so the user never sees garbage.
-    const imageWidth = Math.max(256, settings.imageWidth || 256);
-    const imageHeight = Math.max(256, settings.imageHeight || 256);
+    const imageWidth = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);
+    const imageHeight = Math.max(SWEET_SPOT_SIZE, settings.imageHeight || SWEET_SPOT_SIZE);
 
     const enhancedPrompt = await this._enhancePrompt(params, steps);
     logger.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);

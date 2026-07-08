@@ -230,9 +230,10 @@ export interface Message {
   /** True when this assistant message was generated while interfaceMode === 'audio' */
   isAudioModeMessage?: boolean;
   /** Audio-mode message payload (saved voice note / synthesized clip): the on-disk audio
-   *  file path and a precomputed waveform envelope. Read by the pro audio UI
-   *  (MessageAudioMode / AudioMessageBubble) and set by the TTS save path. Optional —
-   *  only audio-mode messages carry them. (audioDurationSeconds already declared above.) */
+   *  file path, a precomputed waveform envelope, and the clip duration. Read by the pro
+   *  audio UI (MessageAudioMode / AudioMessageBubble) and set by the TTS save path.
+   *  Optional — only audio-mode messages carry them. (Distinct from the same-named field
+   *  on MediaAttachment above, which describes an inbound audio attachment.) */
   audioPath?: string;
   waveformData?: number[];
   audioDurationSeconds?: number;
