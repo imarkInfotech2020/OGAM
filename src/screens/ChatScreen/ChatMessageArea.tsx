@@ -264,17 +264,19 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
+      {/* Single dismissible surface for every model failure (text/image/tts/stt/
+          embedding). Reads modelFailureStore itself — no props. Rendered ABOVE the
+          evicted snackbar so the rounded failure card is never capped by a flat bar. */}
+      <ModelFailureCard />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
-          selected — reload it on demand, even a large model. */}
+          selected — reload it on demand, even a large model. This flat "tap to continue"
+          snackbar sits directly above the composer, BELOW the rounded failure card. */}
       <ModelEvictedBar
         visible={shouldShowEvictedBar(chat)}
         onPress={chat.handleReloadTextModel}
         styles={styles}
         colors={colors}
       />
-      {/* Single dismissible surface for every model failure (text/image/tts/stt/
-          embedding). Reads modelFailureStore itself — no props. */}
-      <ModelFailureCard />
       {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
          Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
       <View
