@@ -130,10 +130,13 @@ platform :android do
     UI.success("Built signed release AAB (no upload): #{aab}")
   end
 
-  desc "Build a dev/beta AAB and upload to the Play Store internal track"
-  lane :beta do
+  # Upload an ALREADY-BUILT AAB to the Play internal track. Single source of truth for the
+  # Play upload — both `beta` (build+upload) and `upload_beta` (publish a pre-built artifact,
+  # used by scripts/uat.sh's atomic build-all-then-publish flow) call this. No build here.
+  private_lane :upload_android_internal do
     require_env("PLAY_STORE_JSON_KEY_PATH")
-    gradle(task: "bundle", build_type: "Release", project_dir: "android/")
+    aab = File.join(REPO_ROOT, "android/app/build/outputs/bundle/release/app-release.aab")
+    UI.user_error!("AAB not found at #{aab} — build it first (fastlane android build).") unless File.exist?(aab)
     # Release notes: scripts/uat.sh writes the changelog to UAT_CHANGELOG_PATH (one file per
     # build). Supply picks up a per-versionCode changelog from the metadata dir, so drop it
     # there keyed by the versionCode we just built.
@@ -154,7 +157,7 @@ platform :android do
     end
     upload_to_play_store(
       track: "internal",
-      aab: "android/app/build/outputs/bundle/release/app-release.aab",
+      aab: aab,
       json_key: ENV["PLAY_STORE_JSON_KEY_PATH"],
       skip_upload_apk: true,   # AAB only — a stale APK in the output dir must not fight the AAB
       skip_upload_metadata: true,
@@ -164,6 +167,17 @@ platform :android do
       release_status: "draft"
     )
     UI.success("Uploaded dev build to Play internal track")
+  end
+
+  desc "Build a dev/beta AAB and upload to the Play Store internal track"
+  lane :beta do
+    gradle(task: "bundle", build_type: "Release", project_dir: "android/")
+    upload_android_internal
+  end
+
+  desc "Upload an ALREADY-BUILT AAB to Play internal (no build — for the atomic uat.sh flow)"
+  lane :upload_beta do
+    upload_android_internal
   end
 
   desc "Build a production AAB and upload to the Play Store production track"
@@ -238,13 +252,14 @@ platform :ios do
     UI.success("Built signed release IPA (no upload): #{ipa}")
   end
 
-  desc "Build and upload to TestFlight"
-  lane :beta do
-    auth = asc_auth_kwargs
-    setup_signing
-    build_ios_ipa
+  # Upload an ALREADY-BUILT IPA to TestFlight. Single source of truth for the TestFlight
+  # upload — both `beta` (build+upload) and `upload_beta` (publish a pre-built artifact, used
+  # by scripts/uat.sh's atomic build-all-then-publish flow) call this. No build here.
+  private_lane :upload_ios_testflight do
+    ipa = File.join(REPO_ROOT, "build/OffgridMobile.ipa")
+    UI.user_error!("IPA not found at #{ipa} — build it first (fastlane ios build).") unless File.exist?(ipa)
     tf = {
-      **auth,
+      **asc_auth_kwargs,
       ipa: "build/OffgridMobile.ipa",
       skip_waiting_for_build_processing: true
     }
@@ -257,6 +272,18 @@ platform :ios do
     end
     upload_to_testflight(**tf)
     UI.success("Uploaded to TestFlight")
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    setup_signing
+    build_ios_ipa
+    upload_ios_testflight
+  end
+
+  desc "Upload an ALREADY-BUILT IPA to TestFlight (no build — for the atomic uat.sh flow)"
+  lane :upload_beta do
+    upload_ios_testflight
   end
 
   desc "Build and upload to the App Store"

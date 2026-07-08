@@ -109,16 +109,30 @@ fi
 export UAT_CHANGELOG_PATH="$NOTES_FILE"
 info "Notes:"; sed 's/^/    /' "$NOTES_FILE"; echo ""
 
-# ── build + upload (fastlane beta lanes; they read UAT_CHANGELOG_PATH) ──
+# ── BUILD everything first, publish nothing yet ────────────────────
+# Singular creation: a build/signing failure must NEVER leave a half-published beta (e.g. an
+# Android bundle already on Play with no matching TestFlight build, which then piles up on
+# every retry). So we build ALL artifacts up front — the steps that actually fail (compile,
+# signing, export) happen before a single upload — and only publish once every artifact
+# exists. The fastlane beta lanes read UAT_CHANGELOG_PATH at upload time.
 if [ "$DO_ANDROID" = 1 ]; then
-  info "Android → Play internal (AAB)…"; bundle exec fastlane android beta
+  info "Android → building signed AAB…"; bundle exec fastlane android build
   # Also build the sideloadable APK for the GitHub prerelease (the AAB isn't installable;
   # testers grabbing the build off GitHub need the APK — same as scripts/release.sh).
   info "Android → building installable APK for GitHub…"; (cd android && ./gradlew assembleRelease)
+  AAB_SRC="android/app/build/outputs/bundle/release/app-release.aab"
   APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+  [ -f "$AAB_SRC" ] || error "AAB not found at $AAB_SRC"
   [ -f "$APK_SRC" ] || error "APK not found at $APK_SRC"
 fi
-if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";        bundle exec fastlane ios beta;     fi
+if [ "$DO_IOS" = 1 ]; then
+  info "iOS → building signed IPA…"; bundle exec fastlane ios build
+  [ -f build/OffgridMobile.ipa ] || error "IPA not found at build/OffgridMobile.ipa"
+fi
+
+# ── PUBLISH — reached only if every build above succeeded ───────────
+if [ "$DO_ANDROID" = 1 ]; then info "Android → Play internal (AAB)…"; bundle exec fastlane android upload_beta; fi
+if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";              bundle exec fastlane ios upload_beta;     fi
 
 # ── success → commit the bump, cut the PRERELEASE tag, GH prerelease ──
 trap - EXIT   # keep the bump now that the build shipped
