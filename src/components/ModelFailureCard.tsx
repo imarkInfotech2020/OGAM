@@ -20,6 +20,11 @@ import {
  *
  * Severity drives the look only — 'error' (blocking) vs 'warning' (soft notice) —
  * never branches on a concrete modelType.
+ *
+ * Design system: brutalist/terminal per ../../brand/DESIGN_PHILOSOPHY.md +
+ * docs/design/DESIGN_PHILOSOPHY_SYSTEM.md + docs/design/VISUAL_HIERARCHY_STANDARD.md.
+ * All colour/spacing/type from tokens (COLORS/SPACING/TYPOGRAPHY), weights ≤400, and
+ * actions use Feather vector icons only (never emoji) — see the actions row below.
  */
 const ICON_FOR_SEVERITY = { error: 'alert-octagon', warning: 'alert-triangle' } as const;
 
