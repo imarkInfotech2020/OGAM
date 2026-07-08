@@ -66,10 +66,14 @@ jobs:
           # PLAY_STORE_JSON_KEY may be stored raw-JSON or base64 — handle both.
           echo "${{ secrets.PLAY_STORE_JSON_KEY }}" | base64 --decode > "$RUNNER_TEMP/play-key.json" \
             || printf '%s' '${{ secrets.PLAY_STORE_JSON_KEY }}' > "$RUNNER_TEMP/play-key.json"
-      - name: Configure git identity for the beta bump commit
+      - name: Configure git for the beta bump commit + push
+        # actions/checkout leaves HEAD detached; uat.sh commits the bump and `git push`es it,
+        # which needs a real branch with an upstream. Re-attach to the triggering branch.
         run: |
           git config user.name  "offgrid-ci"
           git config user.email "ci@offgridmobile.ai"
+          git checkout -B "$GITHUB_REF_NAME"
+          git branch --set-upstream-to="origin/$GITHUB_REF_NAME" "$GITHUB_REF_NAME" || true
       - name: Ship beta (scripts/uat.sh)
         env:
           # Which platform(s): push events build both; manual dispatch honors the picker.
