@@ -1,12 +1,16 @@
 # UAT / internal-tester builds on merge to `dev` (or manual dispatch).
 #
 # OPTIONAL cloud path. The FAST path is local: `scripts/uat.sh` on your Mac (minutes).
-# GitHub's free macOS runners are small — an iOS build here can take 30-90 min. Android on
-# ubuntu is quick. Both upload to the EXISTING app (prod bundle id) — Android → Play
-# "internal" track, iOS → TestFlight — via the same fastlane beta lanes scripts/uat.sh uses.
+# This runs the SAME script on a single macOS runner so CI and local are ONE pipeline
+# (one source of truth): it computes the next beta version, generates release notes,
+# builds every artifact BEFORE publishing any, uploads Android -> Play "internal" +
+# iOS -> TestFlight, then cuts the GitHub prerelease tag with the APK + AAB attached.
 #
-# Uses the credentials ALREADY stored as repo secrets (nothing new to add) — the same names
-# the working release workflows consume:
+# Cost note: iOS on GitHub's free macOS runners is slow (~30-90 min) and macOS minutes
+# bill at 10x. That's the price of a fully-consistent CI path; the local script stays the
+# fast default. Use workflow_dispatch with platform=android for a quick Play-only run.
+#
+# Uses the credentials ALREADY stored as repo secrets (nothing new to add):
 #   Android: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
 #            ANDROID_KEY_PASSWORD, PLAY_STORE_JSON_KEY
 #   iOS:     ASC_API_KEY_P8, ASC_KEY_ID, ASC_ISSUER_ID (TestFlight upload)
@@ -29,13 +33,19 @@ concurrency:
   group: uat-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write   # uat.sh pushes the beta bump commit + tag and creates the GH release
+
 jobs:
-  android:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'ios' }}
-    runs-on: ubuntu-latest
+  beta:
+    # Single macOS runner: it has Xcode AND the Android SDK, so one machine builds both and
+    # runs scripts/uat.sh end to end (bump -> build all -> publish all -> tag -> GH release).
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive }
+        with:
+          submodules: recursive
+          fetch-depth: 0            # uat.sh needs full tag history to compute the next beta N
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: npm }
       - run: npm ci
@@ -43,42 +53,45 @@ jobs:
         with: { distribution: temurin, java-version: '17' }
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: '3.3', bundler-cache: true }
+      - name: pod install
+        # Restore Podfile.lock afterward: a CI CocoaPods version can rewrite it, which would
+        # dirty the tree and trip uat.sh's clean-tree pre-check. The pods are already installed,
+        # so the lock's content doesn't affect the build.
+        run: |
+          cd ios && pod install
+          cd .. && git checkout -- ios/Podfile.lock 2>/dev/null || true
       - name: Decode signing secrets
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          # PLAY_STORE_JSON_KEY may be stored raw-JSON or base64 — handle both.
           echo "${{ secrets.PLAY_STORE_JSON_KEY }}" | base64 --decode > "$RUNNER_TEMP/play-key.json" \
             || printf '%s' '${{ secrets.PLAY_STORE_JSON_KEY }}' > "$RUNNER_TEMP/play-key.json"
-      - name: Build signed AAB + upload to Play internal
+      - name: Configure git identity for the beta bump commit
+        run: |
+          git config user.name  "offgrid-ci"
+          git config user.email "ci@offgridmobile.ai"
+      - name: Ship beta (scripts/uat.sh)
         env:
+          # Which platform(s): push events build both; manual dispatch honors the picker.
+          UAT_PLATFORM_ARG: ${{ github.event_name == 'workflow_dispatch' && inputs.platform != 'both' && format('--{0}', inputs.platform) || '' }}
+          # gh release create / git push
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Android signing — build.gradle reads these via project.hasProperty(...), so pass
+          # them as Gradle project properties (ORG_GRADLE_PROJECT_<name>), not plain env.
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_FILE: ${{ runner.temp }}/release.keystore
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Play upload
           PLAY_STORE_JSON_KEY_PATH: ${{ runner.temp }}/play-key.json
-          OFFGRID_UPLOAD_STORE_FILE: ${{ runner.temp }}/release.keystore
-          OFFGRID_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          OFFGRID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          OFFGRID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: bundle exec fastlane android beta
-
-  ios:
-    # Slow on free macOS runners — see header. Skipped for android-only manual runs.
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'android' }}
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { submodules: recursive }
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: npm }
-      - run: npm ci
-      - uses: ruby/setup-ruby@v1
-        with: { ruby-version: '3.3', bundler-cache: true }
-      - run: cd ios && pod install
-      - name: Build signed IPA + upload to TestFlight
-        env:
-          # ASC auth: raw .p8 + key id + issuer (asc_api_key in the Fastfile builds the key).
+          # iOS auth + signing (imported into a temp keychain by the Fastfile's setup_signing)
           ASC_API_KEY_P8: ${{ secrets.ASC_API_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          # Signing (imported into a temp keychain by the Fastfile's setup_signing).
           IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: bundle exec fastlane ios beta
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_CHANGELOG: '1'
+        run: bash scripts/uat.sh $UAT_PLATFORM_ARG
