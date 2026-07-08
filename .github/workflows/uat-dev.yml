@@ -1,0 +1,89 @@
+# UAT / internal-tester builds on merge to `dev` (or manual dispatch).
+#
+# This is the OPTIONAL cloud path. The FAST path is local: `scripts/uat.sh` on your Mac
+# (minutes). GitHub's free macOS runners are small — an iOS build here can take 30-90 min,
+# so this workflow exists for convenience/hands-off runs, not speed. Android on ubuntu is
+# quick; iOS is the slow one. Both upload to the EXISTING app (prod bundle id) — TestFlight
+# and the Play "internal" track — via the same fastlane lanes scripts/uat.sh uses.
+#
+# Requires these repo secrets (the prod credentials, base64 where noted):
+#   APP_STORE_CONNECT_API_KEY (base64 .p8) + _KEY_ID + _ISSUER_ID   — TestFlight upload
+#   PLAY_STORE_JSON_KEY        (Play service-account JSON)           — Play internal upload
+#   IOS_CERTIFICATE_P12 (base64) + IOS_CERTIFICATE_PASSWORD + IOS_PROVISION_PROFILE (base64)
+#     + KEYCHAIN_PASSWORD                                            — iOS signing
+name: UAT build (dev → internal testers)
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which platform(s) to build
+        type: choice
+        default: both
+        options: [both, ios, android]
+
+concurrency:
+  group: uat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    # Skip iOS-only manual runs.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'ios' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Write Play service-account key
+        run: printf '%s' '${{ secrets.PLAY_STORE_JSON_KEY }}' > "$RUNNER_TEMP/play.json"
+      - name: Build + upload to Play internal
+        env:
+          PLAY_STORE_JSON_KEY_PATH: ${{ runner.temp }}/play.json
+        run: bundle exec fastlane android beta
+
+  ios:
+    # Slow on free macOS runners — see header. Skipped for android-only manual runs.
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'android' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - run: cd ios && pod install
+      - name: Write App Store Connect API key
+        run: printf '%s' '${{ secrets.APP_STORE_CONNECT_API_KEY }}' | base64 --decode > "$RUNNER_TEMP/asc.p8"
+      - name: Build + upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_PATH: ${{ runner.temp }}/asc.p8
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: bundle exec fastlane ios beta
