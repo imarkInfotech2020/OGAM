@@ -15,7 +15,7 @@
  * preparing / stop → idle) and bail safely at the native boundary.
  */
 import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react-native';
+import { render, fireEvent, screen, act } from '@testing-library/react-native';
 
 // Render the icon as a Text carrying its Feather name + colour, so tests can assert
 // which glyph shows (volume-1 vs volume-2) and its colour without vector-icons internals.
@@ -149,8 +149,8 @@ describe('TTSButton', () => {
       seedStore({ isReady: true, currentMessageId: OTHER, playbackStatus: 'playing' });
       render(<TTSButton text={TEXT} messageId={MID} />);
 
-      fireEvent.press(screen.getByTestId(`tts-button-${MID}`));
-      await Promise.resolve(); // speak() is async
+      // speak() is async and updates the store; wrap in act so the state settles cleanly.
+      await act(async () => { fireEvent.press(screen.getByTestId(`tts-button-${MID}`)); });
 
       expect(useTTSStore.getState().currentMessageId).toBeNull();
       expect(useTTSStore.getState().playbackStatus).toBe('idle');

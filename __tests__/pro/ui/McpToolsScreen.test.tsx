@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import type { McpTool } from '../../../pro/mcp/types';
+import type { McpTool } from '@offgrid/pro/mcp/types';
 
 const mockColors = {
   text: '#000', textMuted: '#999', textSecondary: '#666', textDisabled: '#bbb',
@@ -40,8 +40,8 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-type ScreenModule = typeof import('../../../pro/ui/McpToolsScreen');
-type StoreModule = typeof import('../../../pro/mcp/mcpStore');
+type ScreenModule = typeof import('@offgrid/pro/ui/McpToolsScreen');
+type StoreModule = typeof import('@offgrid/pro/mcp/mcpStore');
 
 function load(): { screen: ScreenModule; store: StoreModule } | null {
   try {
