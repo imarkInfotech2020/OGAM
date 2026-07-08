@@ -300,11 +300,14 @@ platform :ios do
       UI.message("SKIP_KEYCHAIN_IMPORT set — using the cert already in the local keychain")
       next
     end
-    require_env("IOS_CERTIFICATE_P12", "IOS_CERTIFICATE_PASSWORD", "KEYCHAIN_PASSWORD", "IOS_PROVISION_PROFILE")
+    # NOTE: IOS_CERTIFICATE_PASSWORD is intentionally NOT required — a distribution p12 can
+    # legitimately have an EMPTY password (fastlane's `cert` action mints them that way), and
+    # require_env rejects empty strings. Default it to "" so an empty-password cert works.
+    require_env("IOS_CERTIFICATE_P12", "KEYCHAIN_PASSWORD", "IOS_PROVISION_PROFILE")
 
     import_certificate(
       certificate_path: write_tmp_b64(ENV["IOS_CERTIFICATE_P12"], "certificate.p12"),
-      certificate_password: ENV["IOS_CERTIFICATE_PASSWORD"],
+      certificate_password: ENV["IOS_CERTIFICATE_PASSWORD"] || "",
       keychain_name: "app-signing.keychain-db",
       keychain_password: ENV["KEYCHAIN_PASSWORD"],
       create_keychain: true
