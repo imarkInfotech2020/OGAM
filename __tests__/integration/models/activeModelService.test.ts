@@ -27,6 +27,12 @@ import { createDownloadedModel, createONNXImageModel, createDeviceInfo } from '.
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/localDreamGenerator');
 jest.mock('../../../src/services/hardware');
+// Integrity is a boundary for these residency/memory tests (the model files aren't laid
+// down on a real disk here). The completeness rule has its own dedicated tests.
+jest.mock('../../../src/utils/imageModelIntegrity', () => ({
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+  ensureImageExtractionComplete: jest.fn(async () => {}),
+}));
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
