@@ -125,6 +125,37 @@ export function parseThinkingContent(content: string): ParsedContent {
   };
 }
 
+export interface ParsedModelOutput {
+  /** Unified reasoning text across all formats (separate channel, <think>, Gemma/Qwen channel), or null. */
+  reasoning: string | null;
+  /** The visible answer — GUARANTEED free of reasoning, control tokens, and tool-call markup
+   *  (<tool_call>/<function=…>/<parameter=…>/<|tool_call>) BY CONSTRUCTION. No renderer that reads
+   *  this can leak raw model markup, because markup never survives this parse. */
+  answer: string;
+  isReasoningComplete: boolean;
+  reasoningLabel?: string;
+}
+
+/**
+ * THE single display parse for raw model output (SoC §A / DRY §C): split a raw assistant string
+ * (or a separate reasoning channel + content) into reasoning + a clean answer, ONCE. Every renderer
+ * consumes this instead of re-parsing message.content with its own logic. The `answer` invariant
+ * (no control/tool-call markup) is the contract that makes the tool-call-leak class structurally
+ * impossible — see the contract test in ChatMessageToolCallLeak / utils.test.
+ */
+export function parseModelOutput(content: string, reasoningContent?: string | null): ParsedModelOutput {
+  if (reasoningContent) {
+    // Separate reasoning channel: content is the answer; strip any stray control/tool markup + think tags.
+    const answer = stripControlTokens(content).replaceAll(/<\/?think>/gi, '').trim();
+    return { reasoning: reasoningContent, answer, isReasoningComplete: true };
+  }
+  const p = parseThinkingContent(content);
+  // Strip the RESPONSE SLICE only (an empty slice stays empty — never fall back to the whole
+  // message, or a reasoning-only message duplicates its reasoning into the answer).
+  const answer = p.response ? stripControlTokens(p.response) : '';
+  return { reasoning: p.thinking, answer, isReasoningComplete: p.isThinkingComplete, reasoningLabel: p.thinkingLabel };
+}
+
 export function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -144,35 +175,16 @@ export function formatDuration(ms: number): string {
 }
 
 export function buildMessageData(message: Message): { displayContent: string; parsedContent: ParsedContent } {
-  // Use reasoningContent from llama.rn if available
-  if (message.reasoningContent) {
-    const displayContent = message.role === 'assistant'
-      ? stripControlTokens(message.content).replaceAll(/<\/?think>/gi, '').trim()
-      : message.content;
-    return {
-      displayContent,
-      parsedContent: { thinking: message.reasoningContent, response: displayContent, isThinkingComplete: true },
-    };
+  // Non-assistant messages carry no model markup — pass content straight through.
+  if (message.role !== 'assistant') {
+    return { displayContent: message.content, parsedContent: { thinking: null, response: message.content, isThinkingComplete: true } };
   }
-
-  // Parse thinking content from raw message (before stripping control tokens)
-  // This handles both HLSL HLSL and <|channel|>analysis<|message|> formats
-  let parsedContent: ParsedContent;
-  if (message.role === 'assistant') {
-    parsedContent = parseThinkingContent(message.content);
-  } else {
-    parsedContent = { thinking: null, response: message.content, isThinkingComplete: true };
-  }
-
-  // Strip control tokens from the RESPONSE SLICE only, and feed the cleaned value back into
-  // parsedContent.response — callers that render parsedContent.response directly (e.g.
-  // ToolCallWithThinking's pre-text) would otherwise show raw tool-call markup
-  // (<tool_call>/<function=…>/<parameter=…>) that parseThinkingContent leaves in the slice.
-  // An empty response STAYS empty (do NOT fall back to the whole message here, or a
-  // thinking-only message duplicates its thinking text into the response). displayContent keeps
-  // the whole-message fallback for its own consumers.
-  const strippedResponse = parsedContent.response ? stripControlTokens(parsedContent.response) : '';
-  const displayContent = strippedResponse || stripControlTokens(message.content);
-
-  return { displayContent, parsedContent: { ...parsedContent, response: strippedResponse } };
+  // ONE parse (parseModelOutput) owns the reasoning-vs-clean-answer split for every render path,
+  // so the answer can never carry raw tool-call/control markup (the leak class). This maps its
+  // result onto the legacy ParsedContent shape existing renderers consume.
+  const parsed = parseModelOutput(message.content, message.reasoningContent);
+  return {
+    displayContent: parsed.answer,
+    parsedContent: { thinking: parsed.reasoning, response: parsed.answer, isThinkingComplete: parsed.isReasoningComplete, thinkingLabel: parsed.reasoningLabel },
+  };
 }
