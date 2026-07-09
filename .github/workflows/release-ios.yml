@@ -168,6 +168,23 @@ jobs:
           git commit -m "chore: update AltStore source for v${{ env.VERSION }} [skip ci]"
           git push
 
+      # Announce the iOS release in Slack: the GitHub release link + its notes. iOS doesn't
+      # generate release-notes.md itself (Android creates the shared vX.Y.Z release with notes),
+      # so pull the notes from the release body best-effort. Fail-soft: notify script always
+      # exits 0. Needs secret SLACK_BOT_TOKEN (bot with chat:write, in the channel).
+      - name: Announce release in Slack
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: C0AFARY80HJ
+          PRODUCT: Off Grid AI Mobile (iOS)
+          VERSION: ${{ env.VERSION }}
+          NOTES_FILE: release-notes.md
+        run: |
+          gh release view "v${VERSION}" --json body -q .body > release-notes.md 2>/dev/null || true
+          node scripts/notify-slack-release.mjs
+
       - name: Cleanup keychain
         if: always()
         run: |
