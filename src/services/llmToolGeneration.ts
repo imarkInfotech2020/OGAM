@@ -9,17 +9,23 @@ import type { ToolCall } from './tools/types';
 import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion } from './llmHelpers';
 import type { StreamToken } from './llm';
 import logger from '../utils/logger';
+import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS } from '../utils/messageContent';
 
 type ToolStreamCallback = (data: StreamToken) => void;
 type ToolCompleteCallback = (fullResponse: string) => void;
 
 /**
  * Suppresses Gemma 4's native tool call tokens from the visible text stream.
- * Gemma 4 wraps tool calls in <|tool_call>...<tool_call|> — llama.rn parses
- * the structured call fine, but the raw tokens still flow through data.token.
- * This filter buffers the stream and drops everything inside those tags.
+ * Gemma 4 wraps tool calls in <|tool_call>...<tool_call|> (and the colon form
+ * <tool_call:NAME…, closed by <tool_call|> or </tool_call>) — llama.rn parses the
+ * structured call fine, but the raw tokens still flow through data.token. This filter
+ * buffers the stream and drops everything inside those tags.
+ *
+ * The opener/closer set is the SHARED grammar (TOOL_CALL_OPENERS/CLOSERS in messageContent)
+ * that the stored-content stripper also uses — so the live filter and the stripper cannot
+ * disagree about which formats are tool markup (DR7). Exported for direct testing.
  */
-class ToolCallTokenFilter {
+export class ToolCallTokenFilter {
   private inBlock = false;
   private buffer = '';
 
@@ -29,26 +35,24 @@ class ToolCallTokenFilter {
   }
 
   private flush(): string {
-    const openTag = '<|tool_call>';
-    const closeTag = '<tool_call|>';
     let output = '';
 
     while (this.buffer.length > 0) {
       if (this.inBlock) {
-        const closeIdx = this.buffer.indexOf(closeTag);
+        // Inside a tool block: end it at the NEAREST closer of any form.
+        const closeIdx = this.earliestIndex(TOOL_CALL_CLOSERS);
         if (closeIdx === -1) {
-          // Partial close tag may be at the end — hold it in the buffer
-          const partial = this.partialSuffix(this.buffer, closeTag);
+          const partial = this.maxPartialSuffix(TOOL_CALL_CLOSERS);
           this.buffer = partial > 0 ? this.buffer.slice(this.buffer.length - partial) : '';
           break;
         }
-        // Drop everything up to and including the close tag
-        this.buffer = this.buffer.slice(closeIdx + closeTag.length);
+        this.buffer = this.buffer.slice(closeIdx + this.matchedLengthAt(TOOL_CALL_CLOSERS, closeIdx));
         this.inBlock = false;
       } else {
-        const openIdx = this.buffer.indexOf(openTag);
+        // Outside: enter a block at the EARLIEST opener of any form.
+        const openIdx = this.earliestIndex(TOOL_CALL_OPENERS);
         if (openIdx === -1) {
-          const partial = this.partialSuffix(this.buffer, openTag);
+          const partial = this.maxPartialSuffix(TOOL_CALL_OPENERS);
           if (partial > 0) {
             output += this.buffer.slice(0, this.buffer.length - partial);
             this.buffer = this.buffer.slice(this.buffer.length - partial);
@@ -59,7 +63,7 @@ class ToolCallTokenFilter {
           break;
         }
         output += this.buffer.slice(0, openIdx);
-        this.buffer = this.buffer.slice(openIdx + openTag.length);
+        this.buffer = this.buffer.slice(openIdx + this.matchedLengthAt(TOOL_CALL_OPENERS, openIdx));
         this.inBlock = true;
       }
     }
@@ -67,11 +71,35 @@ class ToolCallTokenFilter {
     return output;
   }
 
+  /** Earliest index at which ANY of the tags occurs in the buffer, or -1. */
+  private earliestIndex(tags: string[]): number {
+    let best = -1;
+    for (const tag of tags) {
+      const idx = this.buffer.indexOf(tag);
+      if (idx !== -1 && (best === -1 || idx < best)) best = idx;
+    }
+    return best;
+  }
+
+  /** Length of whichever tag actually matches at idx (closers/openers can overlap in prefix). */
+  private matchedLengthAt(tags: string[], idx: number): number {
+    let len = 0;
+    for (const tag of tags) {
+      if (this.buffer.startsWith(tag, idx) && tag.length > len) len = tag.length;
+    }
+    return len;
+  }
+
   private partialSuffix(text: string, tag: string): number {
     for (let len = Math.min(tag.length - 1, text.length); len > 0; len--) {
       if (text.endsWith(tag.slice(0, len))) return len;
     }
     return 0;
+  }
+
+  /** Longest suffix of the buffer that is a prefix of ANY tag — hold back a partial tag of any form. */
+  private maxPartialSuffix(tags: string[]): number {
+    return tags.reduce((max, tag) => Math.max(max, this.partialSuffix(this.buffer, tag)), 0);
   }
 }
 

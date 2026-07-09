@@ -1,16 +1,36 @@
 import type { ParsedContent } from '../components/ChatMessage/types';
 
+/**
+ * THE single source of truth for the Gemma-native tool-call delimiter grammar. Both the
+ * live streaming suppressor (ToolCallTokenFilter in llmToolGeneration) and the stored-content
+ * stripper (below) derive from THIS set, so a format the parser accepts cannot be one the
+ * stripper/filter miss. DR7 was exactly that drift: the parser accepted `<tool_call:` but the
+ * filter/stripper only knew `<|tool_call>`, so the colon form leaked as visible text. A block
+ * runs from any opener to the NEAREST closer (either closer can end any opener).
+ */
+export const TOOL_CALL_OPENERS: string[] = ['<|tool_call>', '<tool_call:', '<tool_call>'];
+export const TOOL_CALL_CLOSERS: string[] = ['<tool_call|>', '</tool_call>'];
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const CLOSERS_ALT = TOOL_CALL_CLOSERS.map(escapeRegExp).join('|');
+// One closed-block pattern per opener, built from the grammar so parser and stripper cannot drift.
+const TOOL_CALL_BLOCK_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
+  (open) => new RegExp(`${escapeRegExp(open)}[\\s\\S]*?(?:${CLOSERS_ALT})\\s*`, 'g'),
+);
+// Unclosed opener at end of text (model hit EOS mid tool-call) — strip to end for stored content.
+const TOOL_CALL_UNCLOSED_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
+  (open) => new RegExp(`${escapeRegExp(open)}[\\s\\S]*$`),
+);
+
 const CONTROL_TOKEN_PATTERNS: RegExp[] = [
   /<\|im_start\|>\s*(?:system|assistant|user|tool)?\s*\n?/gi,
   /<\|im_end\|>\s*\n?/gi,
   /<\|end\|>/gi,
   /<\|eot_id\|>/gi,
   /<\/s>/gi,
-  /<tool_call>[\s\S]*?<\/tool_call>\s*/g,
-  // Gemma 4 native tool call format: <|tool_call>...<tool_call|>
-  // The streaming filter in llmToolGeneration suppresses these live;
-  // this catches any that slip through into stored message content.
-  /<\|tool_call>[\s\S]*?<tool_call\|>\s*/g,
+  // Gemma-native tool-call blocks (all openers × all closers), from the shared grammar above.
+  // The streaming filter suppresses these live; this catches any that reach stored content.
+  ...TOOL_CALL_BLOCK_PATTERNS,
   // Gemma 4 string-delimiter token that may appear outside a tool block
   /<\|">/g,
 ];
@@ -100,6 +120,9 @@ export function stripControlTokens(content: string): string {
   result = result.replace(/<([\w:-]*(?:tool_call|invoke|function_call)[\w:-]*)[\s\S]*?<\/\1>/gi, '');
   // Strip bare lines that are just a namespace:tag_name pattern (e.g. "minimax:tool_call")
   result = result.replace(/^[\w]+:[\w_]+\s*$/gm, '');
+  // Unclosed Gemma-native tool-call opener at end (EOS mid-call) — the closed forms above are
+  // handled by CONTROL_TOKEN_PATTERNS; this catches the truncated tail in stored content.
+  result = TOOL_CALL_UNCLOSED_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ''), result);
 
   // ── Thinking blocks ─────────────────────────────────────────────────────
   // Complete <think>...</think> blocks (Qwen 3.5, DeepSeek, etc.)
