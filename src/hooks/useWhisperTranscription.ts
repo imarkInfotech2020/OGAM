@@ -39,23 +39,11 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
 
   const { downloadedModelId, isModelLoaded, isModelLoading, loadModel } = useWhisperStore();
 
-  // Auto-load model if downloaded but not loaded
-  useEffect(() => {
-    let cancelled = false;
-    const autoLoadModel = async () => {
-      if (downloadedModelId && !isModelLoaded && !whisperService.isModelLoaded()) {
-        logger.log('[Whisper] Auto-loading model...');
-        try {
-          await loadModel();
-          if (!cancelled) logger.log('[Whisper] Model auto-loaded successfully');
-        } catch (err) {
-          if (!cancelled) logger.error('[Whisper] Failed to auto-load model:', err);
-        }
-      }
-    };
-    autoLoadModel();
-    return () => { cancelled = true; };
-  }, [downloadedModelId, isModelLoaded, loadModel]);
+  // NOTE: whisper is NOT eager-loaded here. It is warmed once at launch by
+  // modelPreloader.preloadStt (fits-gated) and loaded on demand by startRecording. An eager
+  // effect keyed on isModelLoaded re-fired the instant the residency manager EVICTED whisper to
+  // make room for a text model — reloading it into the just-freed RAM and undoing the eviction
+  // (the [MEM-SM] override measured corrupted free RAM). Loading on demand lets eviction stick.
 
   // Minimum time to show transcribing state (ms)
   const MIN_TRANSCRIBING_TIME = 600;

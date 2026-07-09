@@ -264,32 +264,19 @@ describe('useWhisperTranscription', () => {
     expect(result.current.isTranscribing).toBe(false);
   });
 
-  it('auto-loads model when downloadedModelId exists and model not loaded', async () => {
+  it('does NOT eager-load whisper on mount — it loads on demand, so it never fights a residency eviction', async () => {
+    // Regression for the eviction race: an eager mount effect keyed on isModelLoaded reloaded
+    // whisper the instant the residency manager evicted it for a text model. Loading is now
+    // on-demand (startRecording) + fits-gated launch preload (modelPreloader), never here.
     mockWhisperStoreState.downloadedModelId = 'whisper-base';
     mockWhisperStoreState.isModelLoaded = false;
     mockWhisperService.isModelLoaded.mockReturnValue(false);
     mockLoadModel.mockResolvedValue(undefined);
 
     renderHook(() => useWhisperTranscription());
-
-    // The useEffect runs asynchronously
-    await act(async () => {
-      // Let the effect run
-    });
-
-    expect(mockLoadModel).toHaveBeenCalled();
-  });
-
-  it('does not auto-load model when model is already loaded', async () => {
-    mockWhisperStoreState.downloadedModelId = 'whisper-base';
-    mockWhisperStoreState.isModelLoaded = true;
-    mockWhisperService.isModelLoaded.mockReturnValue(true);
-
-    renderHook(() => useWhisperTranscription());
-
     await act(async () => {});
 
-    expect(mockLoadModel).not.toHaveBeenCalled();
+    expect(mockLoadModel).not.toHaveBeenCalled(); // no eager load — eviction sticks
   });
 
   it('returns isModelLoaded true when store or service reports loaded', () => {
@@ -534,24 +521,4 @@ describe('useWhisperTranscription', () => {
     expect(result.current.isTranscribing).toBe(false);
   });
 
-  // ========================================================================
-  // auto-load: error is swallowed gracefully (lines 41-43)
-  // ========================================================================
-  it('swallows auto-load error and does not propagate', async () => {
-    mockWhisperStoreState.downloadedModelId = 'whisper-base';
-    mockWhisperStoreState.isModelLoaded = false;
-    mockWhisperService.isModelLoaded.mockReturnValue(false);
-    mockLoadModel.mockRejectedValue(new Error('Network error'));
-
-    let thrownError: unknown;
-    try {
-      const { unmount } = renderHook(() => useWhisperTranscription());
-      await act(async () => {});
-      unmount();
-    } catch (err) {
-      thrownError = err;
-    }
-
-    expect(thrownError).toBeUndefined();
-  });
 });
