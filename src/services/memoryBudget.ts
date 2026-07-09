@@ -72,8 +72,10 @@ export const OVERRIDE_SURVIVAL_FLOOR_MB = 1200;
  *    model load and OOM. NEEDS on-device tuning/verification ([MEM-SM] logs the real numbers).
  */
 export const ANDROID_OVERRIDE_SURVIVAL_FLOOR_MB = 700;
-/** The override survival floor for the current platform (data-driven, not a scattered branch). */
-export function overrideSurvivalFloorMB(platform: Plat = Platform.OS): number {
+/** The override survival floor for the current platform (data-driven, not a scattered branch).
+ *  Param typed as the real RN platform union (not the file's `Plat`, which unions with `string`
+ *  and would erase literal narrowing on the comparison below). */
+export function overrideSurvivalFloorMB(platform: typeof Platform.OS = Platform.OS): number {
   return platform === 'android'
     ? ANDROID_OVERRIDE_SURVIVAL_FLOOR_MB
     : OVERRIDE_SURVIVAL_FLOOR_MB;
