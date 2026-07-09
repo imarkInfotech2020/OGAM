@@ -77,7 +77,9 @@ jest.mock('../../../src/components/CustomAlert', () => ({
 };
 
 beforeEach(() => {
-  mockLoadTextModel.mockResolvedValue(undefined);
+  // Reset (not just re-default) the loader so a prior test's unconsumed
+  // mockRejectedValueOnce/mockResolvedValueOnce queue can't leak into the next.
+  mockLoadTextModel.mockReset().mockResolvedValue(undefined);
   mockUnloadTextModel.mockResolvedValue(undefined);
   mockCheckMemoryForModel.mockResolvedValue({ canLoad: true, severity: 'safe', message: '' });
   mockGetActiveModels.mockReturnValue({ text: { isLoading: false } });
@@ -85,10 +87,34 @@ beforeEach(() => {
   mockGetLoadedModelPath.mockReturnValue(null);
   mockStopGeneration.mockResolvedValue(undefined);
   mockIsModelLoaded.mockReturnValue(true);
+  // waitForRenderFrame() = InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350)).
+  // The REAL InteractionManager does its own async scheduling that does NOT flush under
+  // jest fake timers, so any test that force-loads through it hangs to the 10s timeout.
+  // Stub it to invoke the callback synchronously for EVERY test → waitForRenderFrame
+  // reduces to a plain setTimeout(350): real timers resolve it in 350ms, fake-timer tests
+  // flush it with advanceTimersByTime(400). Deterministic, no interaction-queue pollution.
+  const { InteractionManager } = require('react-native');
+  jest.spyOn(InteractionManager, 'runAfterInteractions').mockImplementation((cb: any) => {
+    if (typeof cb === 'function') cb();
+    return { then: (r: any) => r && r(), done: () => {}, cancel: () => {} } as any;
+  });
+});
+
+// Each test starts from a clean timer + spy state so the fake-timer tests below can't
+// leak into the next test (the cause of the 10s-timeout cascade when run as a file).
+afterEach(() => {
+  jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 function makeRef<T>(value: T): React.MutableRefObject<T> {
   return { current: value } as React.MutableRefObject<T>;
+}
+
+/** Flush the fire-and-forget Load-Anyway chain (waitForRenderFrame's ~350ms real
+ *  setTimeout, then the awaited loadTextModel + resume microtasks). Real timers. */
+function flushRenderFrameChain(): Promise<void> {
+  return new Promise<void>(resolve => setTimeout(resolve, 450));
 }
 
 function makeDeps(overrides: Partial<any> = {}) {
@@ -163,10 +189,10 @@ describe('initiateModelLoad', () => {
   });
 
   it('resumes the pending turn after "Load Anyway" on a measured-loader refusal (F16)', async () => {
-    jest.useFakeTimers();
-    const { InteractionManager } = require('react-native');
-    const iaSpy = jest.spyOn(InteractionManager, 'runAfterInteractions')
-      .mockImplementation((cb: any) => { cb?.(); return { then: () => {}, done: () => {}, cancel: () => {} } as any; });
+    // Real timers: the OD3 refactor awaits waitForRenderFrame (a real 350ms setTimeout)
+    // on the refusal path too, so faking timers here would hang the initial load before
+    // any advance. The InteractionManager stub makes it a plain setTimeout; flush the
+    // fire-and-forget onPress chain with a real wait past 350ms.
     // The initial load refuses (overridable); the forced retry succeeds.
     mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('Not enough RAM'));
     mockLoadTextModel.mockResolvedValue(undefined);
@@ -179,21 +205,15 @@ describe('initiateModelLoad', () => {
     const loadAnyway = alert.buttons.find((b: any) => b.text === 'Load Anyway');
 
     loadAnyway.onPress();
-    await jest.advanceTimersByTimeAsync(400); // flush waitForRenderFrame -> doLoadTextModel -> resume
+    await flushRenderFrameChain(); // waitForRenderFrame -> doLoadTextModel -> resume
 
     // Load Anyway must force the residency gate too (override:true), or the load
     // re-hits the budget and fails — the exact "Load Anyway did nothing" bug.
     expect(mockLoadTextModel).toHaveBeenLastCalledWith('model-1', undefined, { override: true });
     expect(onResume).toHaveBeenCalledTimes(1); // the message is NOT dropped
-    iaSpy.mockRestore();
-    jest.useRealTimers();
   });
 
   it('does NOT resume a turn for "Load Anyway" when no resume was requested (model-select/reload)', async () => {
-    jest.useFakeTimers();
-    const { InteractionManager } = require('react-native');
-    const iaSpy = jest.spyOn(InteractionManager, 'runAfterInteractions')
-      .mockImplementation((cb: any) => { cb?.(); return { then: () => {}, done: () => {}, cancel: () => {} } as any; });
     mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('Not enough RAM'));
     mockLoadTextModel.mockResolvedValue(undefined);
     mockIsModelLoaded.mockReturnValue(true);
@@ -202,11 +222,9 @@ describe('initiateModelLoad', () => {
     await initiateModelLoad(deps, false); // no onLoadedResume
     const alert = deps.setAlertState.mock.calls.find((c: any) => c[0].title === 'Insufficient Memory')[0];
     alert.buttons.find((b: any) => b.text === 'Load Anyway').onPress();
-    await jest.advanceTimersByTimeAsync(400);
+    await flushRenderFrameChain();
 
     expect(mockLoadTextModel).toHaveBeenLastCalledWith('model-1', undefined, { override: true }); // still loads (forced)
-    iaSpy.mockRestore();
-    jest.useRealTimers();
   });
 });
 
@@ -403,7 +421,7 @@ describe('handleModelSelectFn', () => {
 
 describe('initiateModelLoad — Load Anyway button (measured loader refusal, turn resume)', () => {
   it('executes Load Anyway callback: hides alert, sets loading state, then force-loads with override', async () => {
-    jest.useFakeTimers();
+    // Real timers + flush (see F16 note): the refusal path now awaits a real 350ms frame.
     // The MEASURED loader refuses (overridable) on the initial attempt.
     mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('OOM'));
     mockGetMultimodalSupport.mockReturnValueOnce({ vision: false });
@@ -422,17 +440,13 @@ describe('initiateModelLoad — Load Anyway button (measured loader refusal, tur
     loadAnywayBtn.onPress();
     expect(deps.setIsModelLoading).toHaveBeenCalledWith(true);
 
-    // Advance past the 350ms waitForRenderFrame timeout
-    jest.advanceTimersByTime(400);
-    await Promise.resolve(); // flush microtasks
+    await flushRenderFrameChain(); // past the 350ms waitForRenderFrame + microtasks
 
     // Retry forces past the residency gate with override:true.
     expect(mockLoadTextModel).toHaveBeenLastCalledWith('model-1', undefined, { override: true });
-    jest.useRealTimers();
   });
 
   it('does not post a system message on the forced load when showGenerationDetails=false', async () => {
-    jest.useFakeTimers();
     mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('OOM'));
     mockGetMultimodalSupport.mockReturnValueOnce(null);
 
@@ -445,16 +459,13 @@ describe('initiateModelLoad — Load Anyway button (measured loader refusal, tur
     deps.setAlertState.mockClear();
     loadAnywayBtn.onPress();
 
-    jest.advanceTimersByTime(400);
-    await Promise.resolve();
+    await flushRenderFrameChain();
 
     expect(mockLoadTextModel).toHaveBeenLastCalledWith('model-1', undefined, { override: true });
     expect(deps.addMessage).not.toHaveBeenCalled(); // showGenerationDetails=false
-    jest.useRealTimers();
   });
 
   it('clears loading state in finally even when the forced load also fails', async () => {
-    jest.useFakeTimers();
     mockLoadTextModel.mockRejectedValueOnce(new OverridableMemoryError('OOM'));
 
     const deps = makeDeps();
@@ -466,13 +477,10 @@ describe('initiateModelLoad — Load Anyway button (measured loader refusal, tur
     deps.setAlertState.mockClear();
     loadAnywayBtn.onPress();
 
-    jest.advanceTimersByTime(400);
-    await Promise.resolve();
-    await Promise.resolve(); // extra flush for rejection
+    await flushRenderFrameChain();
 
     // State cleaned up (setIsModelLoading(false) called in finally)
     expect(deps.setIsModelLoading).toHaveBeenCalledWith(true); // set by callback
-    jest.useRealTimers();
   });
 });
 
