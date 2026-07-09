@@ -25,7 +25,9 @@ const ANSWER = 'Here is the clean answer.';
 
 /** Read the single assistant message the store just finalized into the active conversation. */
 function finalizedMessage(convId: string): Message {
-  const msg = getChatState().conversations.find((c) => c.id === convId)?.messages.at(-1);
+  const msg = getChatState()
+    .conversations.find(c => c.id === convId)
+    ?.messages.at(-1);
   if (!msg) throw new Error('no finalized message');
   return msg;
 }
@@ -33,54 +35,69 @@ function finalizedMessage(convId: string): Message {
 describe('reasoning pipeline — stream → finalize → render, real seams', () => {
   beforeEach(() => resetStores());
 
-  describe.each(REASONING_DELIMITERS)('format opened by %j', ({ open, close }) => {
-    const raw = `${open}${REASONING}${close}${ANSWER}`;
+  describe.each(REASONING_DELIMITERS)(
+    'format opened by %j',
+    ({ open, close }) => {
+      const raw = `${open}${REASONING}${close}${ANSWER}`;
 
-    it('LOCAL flow: inline-tagged content is split into reasoning + clean answer, and renders both', () => {
-      const store = useChatStore.getState();
-      const convId = store.createConversation('local-model');
-      store.startStreaming(convId);
-      // Local (llama.rn) path: raw tokens accumulate in streamingMessage; reasoning is extracted
-      // at finalize by the ONE shared parser.
-      store.appendToStreamingMessage(raw);
-      store.finalizeStreamingMessage(convId);
+      it('LOCAL flow: inline-tagged content is split into reasoning + clean answer, and renders both', () => {
+        const store = useChatStore.getState();
+        const convId = store.createConversation('local-model');
+        store.startStreaming(convId);
+        // Local (llama.rn) path: raw tokens accumulate in streamingMessage; reasoning is extracted
+        // at finalize by the ONE shared parser.
+        store.appendToStreamingMessage(raw);
+        store.finalizeStreamingMessage(convId);
 
-      const msg = finalizedMessage(convId);
-      expect(msg.reasoningContent).toBe(REASONING);
-      expect(msg.content).toBe(ANSWER);
-      // The stored answer carries none of the opener/closer markup.
-      expect(msg.content).not.toContain(open.trim());
-      expect(msg.content).not.toContain(close.trim());
+        const msg = finalizedMessage(convId);
+        expect(msg.reasoningContent).toBe(REASONING);
+        expect(msg.content).toBe(ANSWER);
+        // The stored answer carries none of the opener/closer markup.
+        expect(msg.content).not.toContain(open.trim());
+        expect(msg.content).not.toContain(close.trim());
 
-      const { getByText, queryByText } = render(<ChatMessage message={msg} />);
-      expect(getByText(ANSWER)).toBeTruthy(); // clean answer is visible
-      expect(getByText(new RegExp(REASONING.slice(0, 20)))).toBeTruthy(); // reasoning survived into the block
-      expect(queryByText(new RegExp(open.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeNull(); // no raw markup on screen
-    });
+        const { getByText, queryByText } = render(
+          <ChatMessage message={msg} />,
+        );
+        expect(getByText(ANSWER)).toBeTruthy(); // clean answer is visible
+        expect(getByText(new RegExp(REASONING.slice(0, 20)))).toBeTruthy(); // reasoning survived into the block
+        expect(
+          queryByText(
+            new RegExp(open.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+          ),
+        ).toBeNull(); // no raw markup on screen
+      });
 
-    it('REMOTE flow: ThinkTagParser split → store → finalize keeps reasoning out of the answer (DR1)', () => {
-      const store = useChatStore.getState();
-      const convId = store.createConversation('remote-model');
-      store.startStreaming(convId);
-      // Remote (OpenAI-compatible) path: the streaming parser routes reasoning vs answer live,
-      // feeding the two store channels. Same grammar, different seam.
-      const parser = new ThinkTagParser();
-      parser.process(
-        raw,
-        (t) => useChatStore.getState().appendToStreamingMessage(t),
-        (r) => useChatStore.getState().appendToStreamingReasoningContent(r),
-      );
-      store.finalizeStreamingMessage(convId);
+      it('REMOTE flow: ThinkTagParser split → store → finalize keeps reasoning out of the answer (DR1)', () => {
+        const store = useChatStore.getState();
+        const convId = store.createConversation('remote-model');
+        store.startStreaming(convId);
+        // Remote (OpenAI-compatible) path: the streaming parser routes reasoning vs answer live,
+        // feeding the two store channels. Same grammar, different seam.
+        const parser = new ThinkTagParser();
+        parser.process(
+          raw,
+          t => useChatStore.getState().appendToStreamingMessage(t),
+          r => useChatStore.getState().appendToStreamingReasoningContent(r),
+        );
+        store.finalizeStreamingMessage(convId);
 
-      const msg = finalizedMessage(convId);
-      expect(msg.reasoningContent).toBe(REASONING);
-      expect(msg.content).toBe(ANSWER);
+        const msg = finalizedMessage(convId);
+        expect(msg.reasoningContent).toBe(REASONING);
+        expect(msg.content).toBe(ANSWER);
 
-      const { getByText, queryByText } = render(<ChatMessage message={msg} />);
-      expect(getByText(ANSWER)).toBeTruthy();
-      expect(queryByText(new RegExp(open.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeNull();
-    });
-  });
+        const { getByText, queryByText } = render(
+          <ChatMessage message={msg} />,
+        );
+        expect(getByText(ANSWER)).toBeTruthy();
+        expect(
+          queryByText(
+            new RegExp(open.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+          ),
+        ).toBeNull();
+      });
+    },
+  );
 
   it('tool-call markup never reaches the stored answer or the screen (OD14 / leak class)', () => {
     const store = useChatStore.getState();

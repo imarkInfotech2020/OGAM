@@ -37,7 +37,11 @@ describe('reasoning grammar — single source, both parsers agree', () => {
       const parser = new ThinkTagParser();
       const tokens: string[] = [];
       const reasoning: string[] = [];
-      parser.process(`${open}${REASONING}${close}${ANSWER}`, (t) => tokens.push(t), (r) => reasoning.push(r));
+      parser.process(
+        `${open}${REASONING}${close}${ANSWER}`,
+        t => tokens.push(t),
+        r => reasoning.push(r),
+      );
       expect(reasoning.join('')).toBe(REASONING);
       expect(tokens.join('')).toBe(ANSWER);
     },
@@ -52,7 +56,11 @@ describe('reasoning grammar — single source, both parsers agree', () => {
       const reasoning: string[] = [];
       // Feed one character at a time — the worst case for tag-straddling chunks.
       for (const ch of full) {
-        parser.process(ch, (t) => tokens.push(t), (r) => reasoning.push(r));
+        parser.process(
+          ch,
+          t => tokens.push(t),
+          r => reasoning.push(r),
+        );
       }
       expect(reasoning.join('')).toBe(REASONING);
       expect(tokens.join('')).toBe(ANSWER);

@@ -255,3 +255,16 @@ REMAINING (each a hub migration — grep callers, run ALL their tests in ONE inv
 - Step 4 (DR7): unify tool-call delimiters between stripControlTokens and generationToolLoop parseToolCallsFromText/parseGemmaNativeToolCalls (one GRAMMAR; parser accepts <tool_call: opener the stream filter doesn't suppress → flashes). 
 - Step 5: delete dead duplicate parsers; full suite.
 Note: Step 4 (store-time parse of the persisted Message shape) is the deepest cut — evaluate after 2-4; changes persistence.
+
+### UPDATE 2026-07-09 — branch refactor/parse-once-boundary (Steps A-C + native-first)
+DONE (committed on branch, all gates green — prettier/eslint/tsc/26 suites·834 tests/android bundle):
+- Step A: moved parseThinkingContent + parseModelOutput + ParsedModelOutput DOWN to src/utils/messageContent.ts (util layer); ChatMessage/utils re-exports for back-compat.
+- Step B (DR1): added REASONING_DELIMITERS (single grammar); deleted chatStore.extractChannelThinking+sliceThinkingBlock (route finalize through parseModelOutput); generalized ThinkTagParser (remote stream) from <think>-only to the shared grammar. Contract test (reasoningGrammar) + INTEGRATION test (reasoningPipeline: real store→finalize→render, local + remote flows, all formats, no-leak) green.
+- Step C (DR7): added TOOL_CALL_OPENERS/CLOSERS (single grammar); stripControlTokens + ToolCallTokenFilter both derive from it (fixes the <tool_call: colon leak the parser accepted but stripper/filter missed). Contract test (toolCallGrammar) across full opener×closer matrix + char-by-char.
+- Native-first: buildThinkingCompletionParams Gemma4 reasoning_format 'none'→'auto' so llama.cpp parses Gemma channel + tool calls NATIVELY (resolveToolCalls/finalize already fall back to hand-parse only when native is empty, so behavior-neutral if 'auto' doesn't recognise it). Added [ToolLoop][GEMMA-FALLBACK] log when the hand-parser fires.
+
+REMAINING — Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
+- The native-first flip is a RUNTIME behavior change, NOT verified on-device. Run a Gemma4 thinking + tool-call flow on Android dev build (ai.offgridmobile.dev) AND iOS; pull Documents/offgrid-debug.log; grep [GEMMA-FALLBACK].
+  - If it NEVER fires → native 'auto' works → DELETE parseGemmaNativeToolCalls + Gemma <|channel> branches (dead) + narrow the hand-parsers to the remote-only fallback.
+  - If it fires → native 'auto' does NOT cover Gemma in this llama.rn build → keep the hand-parser; the grammar work stands as the fallback. (Relates to OD13: reasoning_format vs actual channel-format mismatch — 'auto' may also fix OD13.)
+- Must not ship the native-first flip in a beta until this device check passes (TestFlight is distribution-signed → no container logs; verify on the dev build first).
