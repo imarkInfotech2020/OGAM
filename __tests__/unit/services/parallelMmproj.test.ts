@@ -195,6 +195,32 @@ describe('Parallel mmproj download', () => {
       }));
     });
 
+    it('persists metadataJson (with mmProjDownloadUrl) on the store entry so a same-session iOS retry can re-fetch the vision projector', async () => {
+      // The BUG: the store row carried mmProjFileName/Size but NOT metadataJson, so
+      // metadataJson (which holds mmProjDownloadUrl) only appeared after a hydrate from
+      // native — i.e. after an app restart. On a same-session retry, iOS's
+      // restartIosTextDownload found meta=null and re-issued ONLY the main GGUF, silently
+      // dropping the vision projector. The sidecar URL must be on the row the moment the
+      // download is added, exactly as it is handed to the native service.
+      useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
+      stubStartDownload(['42', '43']);
+
+      await performBackgroundDownload({
+        modelId: 'test/model',
+        file: visionFile(),
+        modelsDir: MODELS_DIR,
+        backgroundDownloadContext: bgContext,
+        backgroundDownloadMetadataCallback: metadataCallback,
+      });
+
+      const entry = useDownloadStore.getState().downloads['test/model/vision.gguf'];
+      expect(entry).toBeDefined();
+      expect(entry.mmProjFileName).toBe('vision-mmproj.gguf');
+      expect(entry.metadataJson).toBeDefined();
+      const meta = JSON.parse(entry.metadataJson as string);
+      expect(meta.mmProjDownloadUrl).toBe('https://huggingface.co/test/model/resolve/main/mmproj.gguf');
+    });
+
     it('sets mmProjCompleted=false and mainCompleted=false in context', async () => {
       stubStartDownload(['42', '43']);
 

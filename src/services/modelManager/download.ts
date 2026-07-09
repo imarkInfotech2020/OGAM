@@ -218,6 +218,13 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
         mmProjFileName: mmProjLocalName(file.name),
         mmProjFileSize: file.mmProjFile?.size,
       }),
+      // Persist metadataJson on the store row too, not just in the native download — it
+      // carries mmProjDownloadUrl, which iOS retry/reconcile (restartIosTextDownload) needs
+      // to re-issue the vision sidecar (foreground URLSession can't resume, so it rebuilds
+      // the job from scratch). Without it, metadataJson only appeared after a hydrate from
+      // native (an app restart), so a same-session retry silently re-fetched the main GGUF
+      // alone and dropped the vision projector.
+      metadataJson,
     });
   }
   // Record the sidecar id on the (now-present) store row for restore + cancel.
