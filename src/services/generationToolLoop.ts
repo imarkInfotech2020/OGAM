@@ -843,6 +843,12 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     const assistantMsg: Message = {
       id: `tool-assist-${Date.now()}-${iteration}`, role: 'assistant',
       content: displayResponse || state.streamedContent || '', timestamp: Date.now(),
+      // Persist this round's reasoning on the tool-call message so the chain-of-thought
+      // that LED to the tool call survives in the transcript (OD14) — without it the
+      // thinking visibly vanishes when the tool fires and only reappears on the final
+      // answer, losing the pre-tool-call reasoning (a killer-demo feature). Each round's
+      // thinking stays attached to its own message, so both rounds are kept.
+      ...(state.reasoningContent.trim() ? { reasoningContent: state.reasoningContent.trim() } : {}),
       toolCalls: cappedToolCalls.map(tc => ({ id: tc.id, name: tc.name, arguments: JSON.stringify(tc.arguments) })),
     };
     loopMessages.push(assistantMsg);
