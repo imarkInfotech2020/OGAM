@@ -9,6 +9,9 @@ import {
   parseBetaTag,
   targetVersionFromBetaTag,
   betaTag,
+  parseBuildNumber,
+  buildAnnotationLine,
+  buildNumberFromAnnotation,
 } from '../../../scripts/lib/version';
 
 describe('parseVersion', () => {
@@ -91,5 +94,62 @@ describe('betaTag', () => {
   });
   it('rejects a malformed target version', () => {
     expect(() => betaTag('0.0', 1)).toThrow(/Invalid version/);
+  });
+});
+
+// The store build id is the single source of truth threaded uat.sh → beta tag → promote.sh
+// → fastlane. If the writer and the reader disagree on its format/validation, promote pins
+// the wrong bytes — exactly the class of bug these helpers exist to prevent.
+describe('parseBuildNumber', () => {
+  it('normalises a positive integer to its canonical string', () => {
+    expect(parseBuildNumber(1720000000)).toBe('1720000000');
+    expect(parseBuildNumber('1720000000')).toBe('1720000000');
+  });
+  it('trims surrounding whitespace (shell may pass a trailing newline)', () => {
+    expect(parseBuildNumber('  1720000000\n')).toBe('1720000000');
+  });
+  it.each([0, -1, 1.5, 'x', '', 'NaN'])(
+    'rejects a non-positive-integer build id %p',
+    bad => {
+      expect(() => parseBuildNumber(bad as number)).toThrow(
+        /Invalid build number/,
+      );
+    },
+  );
+});
+
+describe('buildAnnotationLine', () => {
+  it('formats the machine-parseable line uat.sh embeds in the beta tag', () => {
+    expect(buildAnnotationLine(1720000000)).toBe('Build: 1720000000');
+    expect(buildAnnotationLine('1720000000')).toBe('Build: 1720000000');
+  });
+  it('rejects an invalid build id rather than writing a bad line', () => {
+    expect(() => buildAnnotationLine('nope')).toThrow(/Invalid build number/);
+  });
+});
+
+describe('buildNumberFromAnnotation', () => {
+  it('recovers the build id from a full tag annotation body', () => {
+    const annotation = 'Off Grid 0.0.103-beta.1\n\nBuild: 1720000000\n';
+    expect(buildNumberFromAnnotation(annotation)).toBe('1720000000');
+  });
+  it('recovers when the line is the only content', () => {
+    expect(buildNumberFromAnnotation('Build: 42')).toBe('42');
+  });
+  it('round-trips with buildAnnotationLine (writer ↔ reader agree)', () => {
+    const line = buildAnnotationLine(1720000000);
+    expect(buildNumberFromAnnotation(`Off Grid 0.0.103-beta.1\n\n${line}\n`)).toBe(
+      '1720000000',
+    );
+  });
+  it.each([
+    'Off Grid 0.0.103-beta.1', // no Build line at all
+    'build: 1720000000', // wrong case
+    'Build: notanumber', // non-numeric value
+    '',
+  ])('FAILS FAST when the build id is unrecoverable from %p', bad => {
+    expect(() => buildNumberFromAnnotation(bad)).toThrow(
+      /(No "Build: <n>" line|Invalid build number)/,
+    );
   });
 });

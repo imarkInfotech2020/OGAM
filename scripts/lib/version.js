@@ -55,12 +55,55 @@ function betaTag(targetVersion, n) {
   return `v${major}.${minor}.${patch}-beta.${num}`;
 }
 
+// The store build id (Android versionCode / iOS CURRENT_PROJECT_VERSION) that a beta
+// cut shipped is the SINGLE SOURCE OF TRUTH for what promote must ship. uat.sh embeds it
+// in the beta git tag's annotation as a machine-parseable "Build: <n>" line; promote.sh
+// reads it back so it can pin the EXACT tested build (not "latest processed"). Defining the
+// line's format once here means the writer (uat) and the reader (promote) can never drift.
+const BUILD_LINE = /(?:^|\n)Build:\s*(\d+)\s*(?:$|\n)/;
+
+/** Validate + normalise a store build id to its canonical string. Throws on non-integers. */
+function parseBuildNumber(build) {
+  const num = Number(String(build).trim());
+  if (!Number.isInteger(num) || num < 1) {
+    throw new Error(
+      `Invalid build number "${build}" (expected a positive integer, e.g. 1720000000)`,
+    );
+  }
+  return String(num);
+}
+
+/** The line embedded in a beta tag annotation to carry the tested build id. */
+function buildAnnotationLine(build) {
+  return `Build: ${parseBuildNumber(build)}`;
+}
+
+/**
+ * Recover the tested build id from a beta tag's annotation body. Returns the build id as a
+ * string, or throws if no valid "Build: <n>" line is present (promote must FAIL FAST rather
+ * than silently promote "latest processed" when the tested build id is unrecoverable).
+ */
+function buildNumberFromAnnotation(annotation) {
+  const m = BUILD_LINE.exec(String(annotation));
+  if (!m) {
+    throw new Error(
+      'No "Build: <n>" line in the tag annotation — cannot recover the tested build id. ' +
+        'Re-cut the beta with a uat.sh that annotates the build id, or promote will not ' +
+        'know which store build to pin.',
+    );
+  }
+  return parseBuildNumber(m[1]);
+}
+
 module.exports = {
   parseVersion,
   nextPatch,
   parseBetaTag,
   targetVersionFromBetaTag,
   betaTag,
+  parseBuildNumber,
+  buildAnnotationLine,
+  buildNumberFromAnnotation,
 };
 
 // CLI: `node scripts/lib/version.js <command> <arg...>` — used by the shell scripts.
@@ -78,9 +121,18 @@ if (require.main === module) {
       case 'beta-tag':
         out = betaTag(arg, arg2);
         break;
+      case 'build-line':
+        // Emit the "Build: <n>" line uat.sh appends to the beta tag annotation.
+        out = buildAnnotationLine(arg);
+        break;
+      case 'build-from-annotation':
+        // Recover the tested build id from a tag annotation body (passed on argv).
+        out = buildNumberFromAnnotation(arg);
+        break;
       default:
         throw new Error(
-          `Unknown command "${cmd}". Use: next-patch <version> | target-from-beta <tag> | beta-tag <version> <n>`,
+          `Unknown command "${cmd}". Use: next-patch <version> | target-from-beta <tag> | ` +
+            'beta-tag <version> <n> | build-line <n> | build-from-annotation <annotation>',
         );
     }
     process.stdout.write(`${out}\n`);

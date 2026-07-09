@@ -14,3 +14,6 @@ export function nextPatch(version: string): string;
 export function parseBetaTag(tag: string): ParsedBetaTag;
 export function targetVersionFromBetaTag(tag: string): string;
 export function betaTag(targetVersion: string, n: number | string): string;
+export function parseBuildNumber(build: number | string): string;
+export function buildAnnotationLine(build: number | string): string;
+export function buildNumberFromAnnotation(annotation: string): string;
