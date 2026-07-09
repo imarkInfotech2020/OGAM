@@ -179,3 +179,18 @@ green suite — the reason the on-device gate is mandatory. Verdicts + evidence 
 
 | OD12 | **9B loads slowly on CPU + feels frozen (GPU too small → CPU fallback, threads=1)** | instrument-and-revisit | CORRECTED (earlier entry wrongly said 'freeze / survival-floor hole'): the Qwythos 9B DID load and generate (log: `Model loaded, vision/tools/thinking: true` at 11:54:28, first token 11:55:20). GPU (Adreno 4.6GB) can't hold the 9.3GB model → `cannot be used with preferred buffer` → CPU fallback (all 32 layers). On CPU with **threads=1** (app default is nThreads:0/auto — investigate the 0→1 resolution) the load took ~1m43s with a janky/unresponsive 'Loading Qwythos…' UI = the 'frozen' feeling. Not a hard freeze, not a survival-floor hole (it genuinely fit). Fixes worth doing: (a) ensure threads resolves to a sane core count for large models, (b) keep the UI responsive during a long native load (load off the JS/UI-blocking path / progress), (c) OD13 below on the reasoning-format mismatch. |
 | OD13 | **Qwythos output goes entirely to reasoning_content (thinking), answer content undefined** | instrument-and-revisit | Generation logs show `content: undefined, reasoning_content: "The"` and `token: "<|channel>"` (harmony/Gemma-style channel tokens) while `reasoning_format=deepseek`. The model's actual reasoning delimiters don't match the configured format, so the whole turn is classified as thinking with no final answer surfaced — the 'weird thinking/no proper answer' behavior. Model-format vs parser mismatch (Qwythos is a creative merge). Needs reasoning_format detection per model, or accept it's a bad-fit model.
+## RESOLUTION note - 2026-07-09: OD4 / OD11 / OD12 root cause = threads=1
+
+On-device follow-up: the iOS "touch-dead freeze" (OD4) and Android "slow/feels frozen" (OD12)
+were the SAME root cause — the 9B ran with `threads=1` (device default nThreads:0/auto was not
+resolving to a sane core count; device has 8 cores). Single-threaded native inference blocked
+long enough to starve the iOS main/JS thread (touches dead; native swipe survived) and crawl on
+Android. Raising the CPU thread count made BOTH fast and responsive — confirmed on device.
+Not a regression from release/0.0.103; a config/default issue.
+
+Follow-up (own PR, not this branch): investigate why nThreads resolved to 1 instead of auto/
+core-count for large models (see `[LLM] Resolved params: threads=1`); ship a sane default.
+GPU/NPU are NOT viable for this model (Adreno OpenCL max-alloc 1GB can't hold 9.3GB weights →
+CPU fallback; Hexagon NPU experimental + needs QNN-converted models; Qwythos is SSM-hybrid).
+CPU-with-proper-threads is the path. The devicectl "developer disk image could not be mounted"
+is a Mac-side tooling wedge (iOS 26.5.1), independent of the app — reconnect to clear.
