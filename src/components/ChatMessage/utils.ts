@@ -164,10 +164,15 @@ export function buildMessageData(message: Message): { displayContent: string; pa
     parsedContent = { thinking: null, response: message.content, isThinkingComplete: true };
   }
 
-  // Strip control tokens for display
-  const displayContent = parsedContent.response
-    ? stripControlTokens(parsedContent.response)
-    : stripControlTokens(message.content);
+  // Strip control tokens from the RESPONSE SLICE only, and feed the cleaned value back into
+  // parsedContent.response — callers that render parsedContent.response directly (e.g.
+  // ToolCallWithThinking's pre-text) would otherwise show raw tool-call markup
+  // (<tool_call>/<function=…>/<parameter=…>) that parseThinkingContent leaves in the slice.
+  // An empty response STAYS empty (do NOT fall back to the whole message here, or a
+  // thinking-only message duplicates its thinking text into the response). displayContent keeps
+  // the whole-message fallback for its own consumers.
+  const strippedResponse = parsedContent.response ? stripControlTokens(parsedContent.response) : '';
+  const displayContent = strippedResponse || stripControlTokens(message.content);
 
-  return { displayContent, parsedContent };
+  return { displayContent, parsedContent: { ...parsedContent, response: strippedResponse } };
 }
