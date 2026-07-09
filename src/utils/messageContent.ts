@@ -1,4 +1,15 @@
-import type { ParsedContent } from '../components/ChatMessage/types';
+/**
+ * The parsed shape of a model message: reasoning split from the visible response.
+ * Owned HERE (the util that produces it via parseThinkingContent) so store/service/pro layers
+ * import it without a backwards dependency on the ChatMessage component; ChatMessage/types
+ * re-exports it for the UI. (Was imported FROM the component — the wrong direction.)
+ */
+export interface ParsedContent {
+  thinking: string | null;
+  response: string;
+  isThinkingComplete: boolean;
+  thinkingLabel?: string;
+}
 
 /**
  * THE single source of truth for the Gemma-native tool-call delimiter grammar. Both the
@@ -21,6 +32,23 @@ const TOOL_CALL_BLOCK_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
 const TOOL_CALL_UNCLOSED_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
   (open) => new RegExp(`${escapeRegExp(open)}[\\s\\S]*$`),
 );
+
+/**
+ * Length of the longest suffix of `text` that is a PREFIX of `tag` — i.e. how much of a possibly-
+ * incomplete tag is dangling at the end of a stream chunk, so the incremental parsers can hold it
+ * back until the next chunk. Single source shared by ThinkTagParser and ToolCallTokenFilter (both
+ * had a verbatim copy).
+ */
+export function partialTagSuffix(text: string, tag: string): number {
+  for (let len = Math.min(tag.length - 1, text.length); len > 0; len--) {
+    if (text.endsWith(tag.slice(0, len))) return len;
+  }
+  return 0;
+}
+/** Longest suffix of `text` that is a prefix of ANY tag — hold back a partial opener/closer of any form. */
+export function maxPartialTagSuffix(text: string, tags: string[]): number {
+  return tags.reduce((max, tag) => Math.max(max, partialTagSuffix(text, tag)), 0);
+}
 
 const CONTROL_TOKEN_PATTERNS: RegExp[] = [
   /<\|im_start\|>\s*(?:system|assistant|user|tool)?\s*\n?/gi,

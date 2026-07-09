@@ -233,14 +233,14 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 | DR7 | llmToolGeneration:32 (filter) vs generationToolLoop:118 (parser) Gemma tool delimiters | DRIFTED-minor | Parser accepts <tool_call: opener the filter doesn't suppress → tokens flash. Shared GEMMA_TOOLCALL_DELIMITERS. |
 | DR8 | remoteModelCapabilities:202 deltaHasThinking vs openAICompatibleStream:155 | DEBT | Shared REASONING_DELTA_FIELDS + deltaHasReasoning(delta). |
 
-### Test quality (§D) — 371 files, ~13 with a genuinely weak top-tier block
+### Test quality (§D) - 371 files, ~13 with a genuinely weak top-tier block
 | # | File | Verdict | Fix |
 |---|------|---------|-----|
-| TQ1 | __tests__/**/useDownloads.test.ts | WORST | Fakes the reducer under test (hand-sets entry.status then asserts the spy) — 37 call-asserts, 0 real-state. Drive real useDownloadStore; assert getState().downloads[key].status. |
-| TQ2 | ChatScreenSpotlight (step 3→12 block) | WORST | Block ends after advanceTimersByTime with ZERO expect() — can never fail. Assert the coachmark text. |
+| TQ1 | __tests__/**/useDownloads.test.ts | WORST | Fakes the reducer under test (hand-sets entry.status then asserts the spy) - 37 call-asserts, 0 real-state. Drive real useDownloadStore; assert getState().downloads[key].status. |
+| TQ2 | ChatScreenSpotlight (step 3→12 block) | WORST | Block ends after advanceTimersByTime with ZERO expect() - can never fail. Assert the coachmark text. |
 | TQ3 | Spotlight trio (Chat/Home/ModelSettings Spotlight, ~40 tests) | HIGH | Assert goTo(<int>) not the coachmark; unmock react-native-spotlight-tour, assert getByText(coachmark). |
 | TQ4 | useChatGenerationActions.test.ts (132 called vs 16) | HIGH | L932 tautology + mock-on-mock "message appeared"; assert store/rendered outcome. |
-| TQ5 | coreMLModelUtils "downloads sequentially" | MED | Asserts order that only holds by .map push order while impl uses Promise.all — false guarantee. Assert real ordering w/ dynamic out-of-order mock or drop the claim. |
+| TQ5 | coreMLModelUtils "downloads sequentially" | MED | Asserts order that only holds by .map push order while impl uses Promise.all - false guarantee. Assert real ordering w/ dynamic out-of-order mock or drop the claim. |
 | TQ6 | render tests w/ no getByText: TTSButton, ModelFailureCard, ImageGenAdviceCard, ToolAccordionStreaming, ModelsManagerSheet, McpAddServerSheet, PlaybackControls, KokoroTTSBridge | MED | Assert visible content/state, not just container testID. |
 
 ## Parse-once-at-boundary refactor - progress + remaining (2026-07-09)
@@ -249,28 +249,28 @@ Pattern: parse raw model output ONCE into a typed model; render from it, never r
 DONE (committed on main):
 - Step 1 KEYSTONE: parseModelOutput(content, reasoningContent?) → {reasoning, answer} in ChatMessage/utils.ts; answer clean-by-construction; contract test (parseModelOutput.contract.test.ts) asserts answer has NO markup for every format; buildMessageData delegates to it. 179 render/audio tests green together.
 
-REMAINING (each a hub migration — grep callers, run ALL their tests in ONE invocation before commit; render tests assert BOTH what appears AND what must not):
+REMAINING (each a hub migration - grep callers, run ALL their tests in ONE invocation before commit; render tests assert BOTH what appears AND what must not):
 - Step 2: point remaining direct parseThinkingContent/stripControlTokens RENDER callers at parseModelOutput.
-- Step 3 (DR1, real remote bug + PREREQUISITE = MOVE parseModelOutput + parseThinkingContent DOWN to src/utils/messageContent.ts so store/service layers can import without backwards layering; re-export from ChatMessage/utils for back-compat). Then collapse chatStore.extractChannelThinking + providers/openAICompatibleStream.ThinkTagParser (only knows <think>, leaks channel formats remotely — OD16) onto the shared parser/grammar. Touches streaming + finalize — do as ONE careful wave in a fresh session.
+- Step 3 (DR1, real remote bug + PREREQUISITE = MOVE parseModelOutput + parseThinkingContent DOWN to src/utils/messageContent.ts so store/service layers can import without backwards layering; re-export from ChatMessage/utils for back-compat). Then collapse chatStore.extractChannelThinking + providers/openAICompatibleStream.ThinkTagParser (only knows <think>, leaks channel formats remotely - OD16) onto the shared parser/grammar. Touches streaming + finalize - do as ONE careful wave in a fresh session.
 - Step 4 (DR7): unify tool-call delimiters between stripControlTokens and generationToolLoop parseToolCallsFromText/parseGemmaNativeToolCalls (one GRAMMAR; parser accepts <tool_call: opener the stream filter doesn't suppress → flashes). 
 - Step 5: delete dead duplicate parsers; full suite.
-Note: Step 4 (store-time parse of the persisted Message shape) is the deepest cut — evaluate after 2-4; changes persistence.
+Note: Step 4 (store-time parse of the persisted Message shape) is the deepest cut - evaluate after 2-4; changes persistence.
 
-### UPDATE 2026-07-09 — branch refactor/parse-once-boundary (Steps A-C + native-first)
-DONE (committed on branch, all gates green — prettier/eslint/tsc/26 suites·834 tests/android bundle):
+### UPDATE 2026-07-09 - branch refactor/parse-once-boundary (Steps A-C + native-first)
+DONE (committed on branch, all gates green - prettier/eslint/tsc/26 suites·834 tests/android bundle):
 - Step A: moved parseThinkingContent + parseModelOutput + ParsedModelOutput DOWN to src/utils/messageContent.ts (util layer); ChatMessage/utils re-exports for back-compat.
 - Step B (DR1): added REASONING_DELIMITERS (single grammar); deleted chatStore.extractChannelThinking+sliceThinkingBlock (route finalize through parseModelOutput); generalized ThinkTagParser (remote stream) from <think>-only to the shared grammar. Contract test (reasoningGrammar) + INTEGRATION test (reasoningPipeline: real store→finalize→render, local + remote flows, all formats, no-leak) green.
 - Step C (DR7): added TOOL_CALL_OPENERS/CLOSERS (single grammar); stripControlTokens + ToolCallTokenFilter both derive from it (fixes the <tool_call: colon leak the parser accepted but stripper/filter missed). Contract test (toolCallGrammar) across full opener×closer matrix + char-by-char.
 - Native-first: buildThinkingCompletionParams Gemma4 reasoning_format 'none'→'auto' so llama.cpp parses Gemma channel + tool calls NATIVELY (resolveToolCalls/finalize already fall back to hand-parse only when native is empty, so behavior-neutral if 'auto' doesn't recognise it). Added [ToolLoop][GEMMA-FALLBACK] log when the hand-parser fires.
 
-REMAINING — Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
+REMAINING - Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
 - The native-first flip is a RUNTIME behavior change, NOT verified on-device. Run a Gemma4 thinking + tool-call flow on Android dev build (ai.offgridmobile.dev) AND iOS; pull Documents/offgrid-debug.log; grep [GEMMA-FALLBACK].
   - If it NEVER fires → native 'auto' works → DELETE parseGemmaNativeToolCalls + Gemma <|channel> branches (dead) + narrow the hand-parsers to the remote-only fallback.
-  - If it fires → native 'auto' does NOT cover Gemma in this llama.rn build → keep the hand-parser; the grammar work stands as the fallback. (Relates to OD13: reasoning_format vs actual channel-format mismatch — 'auto' may also fix OD13.)
+  - If it fires → native 'auto' does NOT cover Gemma in this llama.rn build → keep the hand-parser; the grammar work is the fallback. (Relates to OD13: reasoning_format vs actual channel-format mismatch - 'auto' may also fix OD13.)
 - Must not ship the native-first flip in a beta until this device check passes (TestFlight is distribution-signed → no container logs; verify on the dev build first).
 
 ## Pre-existing: mid-chat model switch doesn't refresh chat state until remount - 2026-07-10
-**instrument-and-revisit** | Reported on-device (iOS, gemma-4 local + remote), confirmed present on the OLD build (NOT introduced by the parse-once/selection/whisper work). Loading a new model from within the Chat screen mid-conversation does not update the screen's derived active-model state — it's not a freeze/hang; navigating Home → back into the chat re-syncs and it works. Suspect useChatModelStateSync / the chat's derived activeModel not re-running after an in-chat load (the model loads fine; only the screen's projection is stale). Fix separately with its own on-device repro — do NOT bundle into the current release PR (scope + risk).
+**instrument-and-revisit** | Reported on-device (iOS, gemma-4 local + remote), confirmed present on the OLD build (NOT introduced by the parse-once/selection/whisper work). Loading a new model from within the Chat screen mid-conversation does not update the screen's derived active-model state - it's not a freeze/hang; navigating Home → back into the chat re-syncs and it works. Suspect useChatModelStateSync / the chat's derived activeModel not re-running after an in-chat load (the model loads fine; only the screen's projection is stale). Fix separately with its own on-device repro - do NOT bundle into the current release PR (scope + risk).
 
 ## Reverted: Android ZRAM-swap Load-Anyway credit caused an OOM - 2026-07-10
-**resolved (reverted)** | Fix A (getOverrideAvailableMemoryGB crediting free ZRAM swap to the override survival floor) was WRONG for DIRTY models: GPU/LiteRT memory cannot be swapped, so a 5.2GB dirty Gemma-4-E4B loaded into ~4.5GB physical (swap-inclusive ceiling said "fits") and the device OOM-killed the app during generation (device log 19:03Z: `OVERRIDE - forcing load` with no REFUSE, then SIGKILL, no tombstone). Reverted both commits — restores the conservative physical survival floor (the shipped-safe behavior that was correctly refusing these). The original "LiteRT Load-Anyway refused on tight memory" is the SAFE behavior; making large LiteRT loads work needs real on-device memory profiling (physical-fit for dirty + killable-background accounting), verified on the dev build — not a swap-credit heuristic.
+**resolved (reverted)** | Fix A (getOverrideAvailableMemoryGB crediting free ZRAM swap to the override survival floor) was WRONG for DIRTY models: GPU/LiteRT memory cannot be swapped, so a 5.2GB dirty Gemma-4-E4B loaded into ~4.5GB physical (swap-inclusive ceiling said "fits") and the device OOM-killed the app during generation (device log 19:03Z: `OVERRIDE - forcing load` with no REFUSE, then SIGKILL, no tombstone). Reverted both commits - restores the conservative physical survival floor (the shipped-safe behavior that was correctly refusing these). The original "LiteRT Load-Anyway refused on tight memory" is the SAFE behavior; making large LiteRT loads work needs real on-device memory profiling (physical-fit for dirty + killable-background accounting), verified on the dev build - not a swap-credit heuristic.

@@ -4,7 +4,7 @@
  */
 import { createNDJSONStreamingRequest } from '../httpClient';
 import logger from '../../utils/logger';
-import { REASONING_DELIMITERS } from '../../utils/messageContent';
+import { REASONING_DELIMITERS, partialTagSuffix, maxPartialTagSuffix } from '../../utils/messageContent';
 import type { StreamCallbacks } from './types';
 import type {
   OpenAIChatMessage,
@@ -50,7 +50,7 @@ export class ThinkTagParser {
     }
     if (bestIdx === -1) {
       // No complete opener. Hold back only a suffix that could still become one of the openers.
-      const partial = this.maxPartialSuffix(this.buffer, REASONING_DELIMITERS.map((d) => d.open));
+      const partial = maxPartialTagSuffix(this.buffer, REASONING_DELIMITERS.map((d) => d.open));
       if (partial > 0) {
         onToken(this.buffer.slice(0, this.buffer.length - partial));
         this.buffer = this.buffer.slice(this.buffer.length - partial);
@@ -76,7 +76,7 @@ export class ThinkTagParser {
     const closeTag = this.activeClose;
     const idx = this.buffer.indexOf(closeTag);
     if (idx === -1) {
-      const partial = this.partialSuffix(this.buffer, closeTag);
+      const partial = partialTagSuffix(this.buffer, closeTag);
       if (partial > 0) {
         onReasoning(this.buffer.slice(0, this.buffer.length - partial));
         this.buffer = this.buffer.slice(this.buffer.length - partial);
@@ -100,19 +100,6 @@ export class ThinkTagParser {
         : this.handleOutsideThink(onToken);
       if (shouldBreak) break;
     }
-  }
-
-  /** Length of the longest suffix of text that is a prefix of tag. */
-  private partialSuffix(text: string, tag: string): number {
-    for (let len = Math.min(tag.length - 1, text.length); len > 0; len--) {
-      if (text.endsWith(tag.slice(0, len))) return len;
-    }
-    return 0;
-  }
-
-  /** Longest suffix of text that is a prefix of ANY tag — so a partial opener of any format is held back. */
-  private maxPartialSuffix(text: string, tags: string[]): number {
-    return tags.reduce((max, tag) => Math.max(max, this.partialSuffix(text, tag)), 0);
   }
 }
 

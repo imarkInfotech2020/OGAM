@@ -1,9 +1,30 @@
 import { parseModelOutput } from '../../../../src/components/ChatMessage/utils';
+import {
+  REASONING_DELIMITERS,
+  TOOL_CALL_OPENERS,
+  TOOL_CALL_CLOSERS,
+} from '../../../../src/utils/messageContent';
 
 // Contract: parseModelOutput().answer is GUARANTEED free of reasoning + tool-call markup for
-// EVERY format the app can emit. This invariant makes the tool-call-leak class impossible —
-// if a new markup format is added to the parser, add it here.
-const MARKUP = /<think>|<\/think>|<\|channel|<tool_call>|<\|tool_call|<function=|<parameter=|<invoke|<function_call/;
+// EVERY format the app can emit. The MARKUP matcher is DERIVED from the same single-source
+// grammar the parser/stripper use (REASONING_DELIMITERS + TOOL_CALL_OPENERS/CLOSERS) plus the
+// function-style tokens, so a new opener/closer added to the grammar is guarded automatically —
+// the matcher can't silently drift out of sync with the parser (the exact class this PR kills).
+const GRAMMAR_TOKENS = [
+  ...REASONING_DELIMITERS.flatMap(d => [d.open, d.close]),
+  ...TOOL_CALL_OPENERS,
+  ...TOOL_CALL_CLOSERS,
+  // Function-style tokens parsed by generationToolLoop but not part of the delimiter grammar.
+  '<function=',
+  '</function>',
+  '<parameter=',
+  '</parameter>',
+  '<invoke',
+  '<function_call>',
+];
+const MARKUP = new RegExp(
+  GRAMMAR_TOKENS.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+);
 
 describe('parseModelOutput — answer is clean by construction (the anti-leak contract)', () => {
   const toolBlock = '<tool_call>\n<function=search_kb>\n<parameter=query>\nAchilles\n</parameter>\n</function>\n</tool_call>';
