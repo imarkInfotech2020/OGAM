@@ -142,6 +142,40 @@ describe('ChatMessage — Tool message rendering', () => {
       expect(getByTestId('tool-call-message')).toBeTruthy();
     });
 
+    it('renders the pre-tool-call thinking block from message.reasoningContent (OD14 — the on-device disappearing-thinking bug)', () => {
+      // A tool-using turn: the model reasoned, then emitted a tool call. runToolLoop
+      // attaches that reasoning to the intermediate tool-call message as reasoningContent
+      // (content is empty). The tool-call renderer MUST show that thinking block, or the
+      // first round of chain-of-thought visibly disappears when the tool fires (the exact
+      // TestFlight report). This is a RENDER assertion — the object carrying the field is
+      // not enough; it must actually paint a thinking-block.
+      const message = makeMessage({
+        role: 'assistant',
+        content: '',
+        reasoningContent: 'I should search the knowledge base first.',
+        toolCalls: [{ id: 'tc-1', name: 'search_knowledge_base', arguments: '{"q":"achilles"}' }],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      expect(getByTestId('tool-call-message')).toBeTruthy();
+      expect(getByTestId('thinking-block')).toBeTruthy();
+    });
+
+    it('renders the thinking block from inline <think> in a tool-call message content', () => {
+      // Some models stream reasoning inline as <think> in the content rather than the
+      // separate reasoning channel. The tool-call renderer must extract it too.
+      const message = makeMessage({
+        role: 'assistant',
+        content: '<think>Let me check the docs.</think>',
+        toolCalls: [{ id: 'tc-1', name: 'read_url', arguments: '{"url":"x"}' }],
+      });
+
+      const { getByTestId } = render(<ChatMessage message={message} />);
+
+      expect(getByTestId('thinking-block')).toBeTruthy();
+    });
+
     it('shows "Using web_search" text with arguments preview', () => {
       const message = makeMessage({
         role: 'assistant',

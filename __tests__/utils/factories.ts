@@ -55,6 +55,7 @@ export interface MessageFactoryOptions {
   toolCallId?: string;
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
   toolName?: string;
+  reasoningContent?: string;
 }
 
 export const createMessage = (options: MessageFactoryOptions = {}): Message => ({
@@ -71,6 +72,7 @@ export const createMessage = (options: MessageFactoryOptions = {}): Message => (
   toolCallId: options.toolCallId,
   toolCalls: options.toolCalls,
   toolName: options.toolName,
+  reasoningContent: options.reasoningContent,
 });
 
 export const createUserMessage = (content: string, options: Omit<MessageFactoryOptions, 'role' | 'content'> = {}): Message =>

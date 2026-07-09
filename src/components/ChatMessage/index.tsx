@@ -4,7 +4,6 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useUiModeStore, useAccordionExpanded } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import Icon from 'react-native-vector-icons/Feather';
-import { stripControlTokens } from '../../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { AnimatedEntry } from '../AnimatedEntry';
 import { triggerHaptic } from '../../utils/haptics';
@@ -15,7 +14,7 @@ import { GenerationMeta } from './components/GenerationMeta';
 import { ToolsSentCollapsible } from './components/ToolsSentCollapsible';
 import { ActionMenuSheet, EditSheet, SelectTextSheet } from './components/ActionMenuSheet';
 import { MarkdownText } from '../MarkdownText';
-import { parseThinkingContent, formatTime, formatDuration, buildMessageData } from './utils';
+import { formatTime, formatDuration, buildMessageData } from './utils';
 import { ThinkingBlock } from './components/ThinkingBlock';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
@@ -181,7 +180,13 @@ const MessageMetaRow: React.FC<MetaRowProps> = ({ message, styles, isStreaming, 
 const ToolCallWithThinking: React.FC<{
   message: Message; showThinking: boolean; onToggle: () => void; styles: any; colors: any;
 }> = ({ message, showThinking, onToggle, styles, colors }) => {
-  const tc = message.content ? parseThinkingContent(stripControlTokens(message.content)) : null;
+  // Use buildMessageData (the single source that honors message.reasoningContent from the
+  // separate reasoning channel AND inline <think> in content) so a tool-call message keeps
+  // its pre-tool-call thinking block. Reading only parseThinkingContent(content) missed the
+  // reasoningContent case → the first round of thinking vanished when the tool fired (OD14).
+  const tc = (message.content || message.reasoningContent)
+    ? buildMessageData(message).parsedContent
+    : null;
   const hasText = !!tc?.response?.trim();
   return (
     <View style={styles.systemInfoContainer}>
