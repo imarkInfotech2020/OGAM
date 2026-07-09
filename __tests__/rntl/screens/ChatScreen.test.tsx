@@ -61,8 +61,11 @@ jest.mock('@react-navigation/native', () => {
 // Mock services
 const mockGenerateResponse = jest.fn(() => Promise.resolve());
 const mockStopGeneration = jest.fn(() => Promise.resolve());
-const mockLoadModel = jest.fn(() => Promise.resolve());
-const mockUnloadModel = jest.fn(() => Promise.resolve());
+// Typed to accept any args (id, timeout, { override }) so the delegating arrows in
+// the jest.mock factory and the keyed mockImplementation refusal cases typecheck —
+// activeModelService.loadTextModel/unloadTextModel take arguments.
+const mockLoadModel = jest.fn((..._args: any[]) => Promise.resolve());
+const mockUnloadModel = jest.fn((..._args: any[]) => Promise.resolve());
 const mockGenerateImage = jest.fn(() => Promise.resolve(true));
 const mockClassifyIntent = jest.fn(() => Promise.resolve('text'));
 
