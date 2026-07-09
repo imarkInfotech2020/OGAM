@@ -5,6 +5,7 @@
 import * as Keychain from 'react-native-keychain';
 import type { RemoteServer } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { useAppStore } from '../stores/appStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
 import logger from '../utils/logger';
@@ -103,6 +104,11 @@ export async function setActiveRemoteTextModelImpl(
 
   store.setActiveServerId(serverId);
   store.setActiveRemoteTextModelId(modelId);
+  // Mutual exclusion: only ONE active text model. Activating a remote one deselects any active
+  // local model, so the picker never shows both checked and routing has one unambiguous target.
+  // Enforced HERE (the owning service) not in the picker hook, so every activation path — LAN
+  // rediscovery, launch-restore, ModelSelectorModal, the download screen — clears local too.
+  useAppStore.getState().setActiveModelId(null);
 
   let provider = providerRegistry.getProvider(serverId);
   if (!provider) {

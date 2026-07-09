@@ -267,6 +267,36 @@ describe('remoteServerManager', () => {
       expect(mockLoadModel).toHaveBeenCalledWith('llama2');
     });
 
+    it('deselects any active LOCAL text model — mutual exclusion (the dual-selection bug)', async () => {
+      // Real device repro: a remote model was activated via a non-hook path (launch-restore /
+      // LAN rediscovery), which bypassed the picker hook's unload-local, so the picker showed
+      // BOTH a local and a remote text model checked. The owning service must clear local.
+      const { useAppStore } = require('../../../src/stores/appStore');
+      useAppStore.getState().setActiveModelId('local-model-x'); // a local model is active
+
+      const mockProvider = {
+        loadModel: jest.fn().mockResolvedValue(undefined),
+        unloadModel: jest.fn(),
+        isModelLoaded: jest.fn().mockReturnValue(true),
+        getLoadedModelId: jest.fn().mockReturnValue('remote-llama'),
+        isReady: jest.fn().mockResolvedValue(true),
+      };
+      (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
+      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
+      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
+        setActiveServerId: jest.fn(),
+        setActiveRemoteTextModelId: jest.fn(),
+        setActiveRemoteImageModelId: jest.fn(),
+        getServerById: jest.fn().mockReturnValue(null),
+        getModelById: jest.fn().mockReturnValue(null),
+      });
+
+      await remoteServerManager.setActiveRemoteTextModel('server-123', 'remote-llama');
+
+      // Only the remote model stays active — the local one is deselected.
+      expect(useAppStore.getState().activeModelId).toBeNull();
+    });
+
     it('should handle missing provider gracefully', async () => {
       (providerRegistry.getProvider as jest.Mock).mockReturnValue(undefined);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({

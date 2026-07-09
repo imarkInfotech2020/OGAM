@@ -11,6 +11,7 @@
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { activeModelService } from '../../../src/services/activeModelService';
 import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { llmService } from '../../../src/services/llm';
@@ -128,6 +129,20 @@ describe('ActiveModelService Integration', () => {
   });
 
   describe('Text Model Loading', () => {
+    it('deselects an active REMOTE text model when a local one is loaded (mutual exclusion)', async () => {
+      const model = createDownloadedModel({ id: 'local-1' });
+      useAppStore.setState({ downloadedModels: [model] });
+      // A remote text model is active (e.g. restored on launch / picked on the gateway).
+      useRemoteServerStore.setState({ activeServerId: 'srv', activeRemoteTextModelId: 'remote-x' } as any);
+      mockLlmService.loadModel.mockResolvedValue(undefined);
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+
+      await activeModelService.loadTextModel('local-1');
+
+      // Only the local model is active now — the remote one is deselected (no dual selection).
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBeNull();
+    });
+
     it('should load text model via llmService and update store', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({ downloadedModels: [model] });

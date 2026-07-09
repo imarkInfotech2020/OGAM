@@ -112,19 +112,21 @@ class ActiveModelService {
       : llmService.isModelLoaded();
   }
 
+  /** If the model is already the loaded one, sync the store selection and report handled. */
+  private syncActiveIfCurrent(modelId: string): boolean {
+    if (!this.isTextModelCurrent(modelId)) return false;
+    const store = useAppStore.getState();
+    if (store.activeModelId !== modelId) store.setActiveModelId(modelId);
+    return true;
+  }
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
     opts?: { override?: boolean },
   ): Promise<void> {
+    if (useRemoteServerStore.getState().activeRemoteTextModelId) remoteServerManager.clearActiveRemoteModel(); // mutual exclusion: local deselects remote (all load paths, not just the picker hook)
     // Fast path — model already loaded (no lock; just sync the store).
-    if (this.isTextModelCurrent(modelId)) {
-      const store = useAppStore.getState();
-      if (store.activeModelId !== modelId) {
-        store.setActiveModelId(modelId);
-      }
-      return;
-    }
+    if (this.syncActiveIfCurrent(modelId)) return;
     // Everything else goes through the residency manager's global lock so no two
     // model operations ever touch memory at once (the single load gateway).
     await modelResidencyManager.runExclusive(`load:text:${modelId}`, () =>
@@ -137,13 +139,7 @@ class ActiveModelService {
     opts?: { override?: boolean },
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
-    if (this.isTextModelCurrent(modelId)) {
-      const store = useAppStore.getState();
-      if (store.activeModelId !== modelId) {
-        store.setActiveModelId(modelId);
-      }
-      return;
-    }
+    if (this.syncActiveIfCurrent(modelId)) return;
     const store = useAppStore.getState();
     const model = store.downloadedModels.find(m => m.id === modelId);
     if (!model) {

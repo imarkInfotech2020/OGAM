@@ -38,6 +38,7 @@ jest.mock('../../../src/stores/appStore', () => ({
         topP: 0.9,
       },
       activeModelId: null,
+      setActiveModelId: jest.fn(),
       hasEngagedSharePrompt: true,
       incrementTextGenerationCount: jest.fn().mockReturnValue(1),
     }),
