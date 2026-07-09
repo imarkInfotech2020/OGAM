@@ -232,3 +232,13 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 | DR6 | pro/audio outetts:363 + ttsService:207 '<\|im_end\|>' | DEBT-low | Shared IM_END_TOKEN. |
 | DR7 | llmToolGeneration:32 (filter) vs generationToolLoop:118 (parser) Gemma tool delimiters | DRIFTED-minor | Parser accepts <tool_call: opener the filter doesn't suppress → tokens flash. Shared GEMMA_TOOLCALL_DELIMITERS. |
 | DR8 | remoteModelCapabilities:202 deltaHasThinking vs openAICompatibleStream:155 | DEBT | Shared REASONING_DELTA_FIELDS + deltaHasReasoning(delta). |
+
+### Test quality (§D) — 371 files, ~13 with a genuinely weak top-tier block
+| # | File | Verdict | Fix |
+|---|------|---------|-----|
+| TQ1 | __tests__/**/useDownloads.test.ts | WORST | Fakes the reducer under test (hand-sets entry.status then asserts the spy) — 37 call-asserts, 0 real-state. Drive real useDownloadStore; assert getState().downloads[key].status. |
+| TQ2 | ChatScreenSpotlight (step 3→12 block) | WORST | Block ends after advanceTimersByTime with ZERO expect() — can never fail. Assert the coachmark text. |
+| TQ3 | Spotlight trio (Chat/Home/ModelSettings Spotlight, ~40 tests) | HIGH | Assert goTo(<int>) not the coachmark; unmock react-native-spotlight-tour, assert getByText(coachmark). |
+| TQ4 | useChatGenerationActions.test.ts (132 called vs 16) | HIGH | L932 tautology + mock-on-mock "message appeared"; assert store/rendered outcome. |
+| TQ5 | coreMLModelUtils "downloads sequentially" | MED | Asserts order that only holds by .map push order while impl uses Promise.all — false guarantee. Assert real ordering w/ dynamic out-of-order mock or drop the claim. |
+| TQ6 | render tests w/ no getByText: TTSButton, ModelFailureCard, ImageGenAdviceCard, ToolAccordionStreaming, ModelsManagerSheet, McpAddServerSheet, PlaybackControls, KokoroTTSBridge | MED | Assert visible content/state, not just container testID. |
