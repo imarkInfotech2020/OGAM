@@ -148,3 +148,21 @@ Next: confirm whether previews appear on a SECOND (warmed) generation. If they d
 is expected first-run behaviour (optionally: show a "preview available after first run"
 hint). If they never appear on mnn, it's a native gap in the localdream preview path to
 fix on the native side — the JS/UI layer is already correct, so no JS change is warranted.
+
+---
+
+## On-device test session - 2026-07-09 (Qwythos-9B vision + memory, 12GB iPhone/Android)
+
+Surfaced live on real hardware during 0.0.103 vision/memory testing. None caught by the
+green suite — the reason the on-device gate is mandatory. Verdicts + evidence below.
+
+| # | Finding | Verdict | Evidence |
+|---|---------|---------|----------|
+| OD1 | **Vision (mmproj) dropped on download retry** | fix-the-guard | `[DL-SM]` iPhone: main GGUF failed at 9% ("network connection lost") → auto-retry re-issued `needsMmProj:false, mmProjLocalPath:null` → finalized text-only (`savedEngine:llama`, `mmProjFileExists:false`). release/0.0.103 fix (persist metadataJson) targets this; UNVERIFIED on-device. |
+| OD2 | **Repair Vision has no progress feedback** | fix-the-guard | ~900MB mmproj re-download behind an indeterminate "Repairing…" spinner; `[linkOrphanMmProj] recovered` eventually fired ("Vision Repaired"). Needs determinate progress. USER-SELECTED to fix. |
+| OD3 | **Chat vs Home model-selector inconsistency** | fix-the-guard | `checkMemoryForModel` is called ONLY in `useChatModelActions.ts` (:96, :311). Chat pre-checks (predictive fileSize×1.5 ≈ 8.4GB for the 9B → critical on 12GB → gates behind "Load Anyway"); Home skips the pre-check → loads via `makeRoomFor` (measured) → succeeds. Two surfaces, one decision, divergent logic. USER-SELECTED to fix. |
+| OD4 | **UI freeze on forced heavy load (Load Anyway on 9B multimodal)** | instrument-and-revisit | Only iOS native edge-swipe worked; all RN touchables dead; debug log stopped emitting = JS thread blocked by the synchronous native load of ~6GB + vision projector. The failure the override survival-floor is meant to prevent; installed build predates the release/0.0.103 fix. |
+| OD5 | **Android download retry doesn't resume after network drop** | instrument-and-revisit | `[DL-SM]` android: Qwythos errored at 75% ("Network connection lost"), retry dispatched (WorkManager resume in place) → NO further progress milestones. Partly a real WiFi drop; retry-not-resuming is the reliability gap. |
+| OD6 | **Kokoro TTS asset stuck loop** | instrument-and-revisit | android log: `[KOKORO-DL] checkAssetStatus → downloading (phase=ready progress=1.00 genuineCompletion=false)` spamming — stuck "downloading" while phase=ready/progress=1.0. |
+| OD7 | **Thinking toggle missing for Qwythos-9B in settings** | instrument-and-revisit | Model has reasoning (HF tags: reasoning) + emits `<think>`, but settings shows no thinking toggle. Capability detection gap for community GGUF. |
+| OD8 | **Voice-mode thinking not streamed (appears suddenly)** | instrument-and-revisit | Thinking renders live in text chat but batches in voice mode. Suspected in the audio-layout display path (`pro/audio/ui/AudioModeLayout.tsx`), not just the TTS sentence-queue (`pro/audio/streamingSpeech.ts`). Needs the display seam confirmed before fix. USER-SELECTED to fix. |
