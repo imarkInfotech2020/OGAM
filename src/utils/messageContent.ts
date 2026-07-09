@@ -21,6 +21,41 @@ const CHANNEL_FINAL_START = /<\|channel\|>final<\|message\|>/gi;
 const GEMMA4_THINK_OPEN = /<\|channel>thought\n/gi;
 const GEMMA4_THINK_CLOSE = /<channel\|>/gi;
 
+// Reasoning-capability markers a chat_template can carry. Two kinds, both meaning
+// "this model reasons":
+//   OUTPUT delimiters - the model emits these around its reasoning, and
+//   parseThinkingContent extracts them from the model's OUTPUT:
+//     1. <think> ...            DeepSeek/Qwen-style (the OD7 Qwythos case)
+//     2. <|channel>thought      Gemma 4
+//     3. <|channel|>analysis    Qwen channel format
+//   KWARG switch - a template referencing `enable_thinking` honors the
+//     chat_template_kwargs toggle, so the model reasons on demand even without a
+//     literal <think> in the template (verified: Qwen3.5 on the Gateway).
+//
+// This does NOT own parseThinkingContent's positional parsing (that stays in
+// ChatMessage/utils.ts and matches the same OUTPUT delimiters to slice content). It
+// IS the single predicate for "does a chat_template indicate reasoning capability",
+// shared by BOTH local model load (llmHelpers.detectThinkingSupport) and remote
+// capability probing (remoteModelCapabilities) so on-device and gateway detection
+// cannot diverge - the OD7 divergence was this list omitting enable_thinking.
+const REASONING_TEMPLATE_MARKERS: RegExp[] = [
+  /<think>/i,
+  /<\|channel>thought/i,
+  /<\|channel\|>analysis/i,
+  /enable_thinking/i,
+];
+
+/**
+ * Whether a chat_template indicates the model can produce reasoning - either it
+ * embeds a reasoning output delimiter or exposes the enable_thinking kwarg switch.
+ * Derived from the model's own template, not its name. The single source for
+ * template-based reasoning detection, local and remote alike.
+ */
+export function templateEmitsReasoning(template: string | null | undefined): boolean {
+  if (!template) return false;
+  return REASONING_TEMPLATE_MARKERS.some((pattern) => pattern.test(template));
+}
+
 /**
  * Strip all control tokens including thinking delimiters.
  * Use this only on finalised/stored content where thinking has already been

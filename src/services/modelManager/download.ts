@@ -14,9 +14,99 @@ import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, sav
 import logger from '../../utils/logger';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
+import { extractBaseName } from './scan';
 
 export function mmProjLocalName(ggufFileName: string): string {
   return `${ggufFileName.replace(/\.gguf$/i, '')}-mmproj.gguf`;
+}
+
+export interface MmProjRepairDownloadOpts {
+  modelId: string;
+  file: ModelFile;
+  modelsDir: string;
+  onProgress?: DownloadProgressCallback;
+  onDownloadIdReady?: (id: string) => void;
+}
+
+/**
+ * Re-download a model's mmproj (vision projector) sidecar, routing progress through
+ * the SAME download-store rows the normal download writes so the existing determinate
+ * progress bar lights up during the ~900MB fetch instead of an indeterminate spinner
+ * (BUG OD2). The store row is keyed on the model's modelKey (`repo/file`) — the id the
+ * completed model carries — and torn down once the repair settles. Returns the local
+ * path the mmproj resolved to.
+ */
+export async function performMmProjRepairDownload(opts: MmProjRepairDownloadOpts): Promise<string> {
+  const { modelId, file, modelsDir, onProgress, onDownloadIdReady } = opts;
+  const mmProjFile = file.mmProjFile;
+  if (!mmProjFile) throw new Error('Model file has no associated mmproj');
+
+  const modelKey = makeModelKey(modelId, file.name);
+  const mmProjFileName = `${extractBaseName(file.name)}-${mmProjFile.name}`;
+  const mmProjLocalPath = `${modelsDir}/${mmProjFileName}`;
+  const totalBytes = mmProjFile.size;
+  if (await RNFS.exists(mmProjLocalPath)) await RNFS.unlink(mmProjLocalPath).catch(() => {});
+
+  const info = await backgroundDownloadService.startDownload({
+    url: mmProjFile.downloadUrl,
+    fileName: mmProjFile.name,
+    modelId,
+    totalBytes,
+  });
+  onDownloadIdReady?.(info.downloadId);
+
+  useDownloadStore.getState().add({
+    modelKey,
+    downloadId: info.downloadId,
+    modelId,
+    fileName: mmProjFile.name,
+    quantization: file.quantization ?? '',
+    modelType: 'text',
+    status: 'running',
+    bytesDownloaded: 0,
+    totalBytes,
+    combinedTotalBytes: totalBytes,
+    progress: 0,
+    createdAt: Date.now(),
+  });
+
+  let resolvedPath = mmProjLocalPath;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const removeProgress = backgroundDownloadService.onProgress(info.downloadId, (event) => {
+        useDownloadStore.getState().updateProgress(info.downloadId, event.bytesDownloaded, totalBytes);
+        onProgress?.({
+          downloadId: info.downloadId,
+          modelId,
+          fileName: mmProjFile.name,
+          bytesDownloaded: event.bytesDownloaded,
+          totalBytes,
+          progress: totalBytes > 0 ? event.bytesDownloaded / totalBytes : 0,
+        });
+      });
+      const removeComplete = backgroundDownloadService.onComplete(info.downloadId, async (event) => {
+        removeProgress(); removeComplete(); removeError();
+        try {
+          resolvedPath = await backgroundDownloadService.moveCompletedDownload(info.downloadId, mmProjLocalPath);
+        } catch {
+          resolvedPath = event.localUri?.replace('file://', '') || mmProjLocalPath;
+        }
+        useDownloadStore.getState().setCompleted(info.downloadId);
+        resolve();
+      });
+      const removeError = backgroundDownloadService.onError(info.downloadId, (err) => {
+        removeProgress(); removeComplete(); removeError();
+        useDownloadStore.getState().setStatus(info.downloadId, 'failed', { message: err.reason || 'Download failed' });
+        reject(new Error(err.reason || 'Download failed'));
+      });
+      backgroundDownloadService.startProgressPolling();
+    });
+    return resolvedPath;
+  } finally {
+    // The repair row is transient — remove it once settled so the completed model
+    // (rebuilt via loadDownloadedModels) is the only surviving row.
+    useDownloadStore.getState().remove(modelKey);
+  }
 }
 
 function makeAlreadyDownloadedId(modelId: string, fileName: string): string {
@@ -218,6 +308,13 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
         mmProjFileName: mmProjLocalName(file.name),
         mmProjFileSize: file.mmProjFile?.size,
       }),
+      // Persist metadataJson on the store row too, not just in the native download — it
+      // carries mmProjDownloadUrl, which iOS retry/reconcile (restartIosTextDownload) needs
+      // to re-issue the vision sidecar (foreground URLSession can't resume, so it rebuilds
+      // the job from scratch). Without it, metadataJson only appeared after a hydrate from
+      // native (an app restart), so a same-session retry silently re-fetched the main GGUF
+      // alone and dropped the vision projector.
+      metadataJson,
     });
   }
   // Record the sidecar id on the (now-present) store row for restore + cancel.

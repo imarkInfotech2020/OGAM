@@ -103,6 +103,51 @@ describe('textProvider', () => {
     expect(mockMM.downloadModelBackground).not.toHaveBeenCalled();
   });
 
+  // iOS can't resume a foreground download, so retry rebuilds the job from scratch. For a
+  // vision model that MUST include the mmproj sidecar, reconstructed from the row's
+  // metadataJson (mmProjDownloadUrl). Regression guard for the dropped-vision-on-retry bug:
+  // if download.ts stops persisting metadataJson on the row, meta is null here and the
+  // re-issued job silently omits mmProjFile — this test catches that.
+  it('iOS retry of a vision model re-issues the main GGUF WITH its mmproj sidecar (rebuilt from metadataJson)', async () => {
+    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
+    useDownloadStore.getState().add(entry({
+      status: 'failed',
+      mmProjFileName: 'm-mmproj.gguf',
+      mmProjFileSize: 500,
+      metadataJson: JSON.stringify({
+        mmProjFileName: 'm-mmproj.gguf',
+        mmProjDownloadUrl: 'https://hf/author/m/resolve/main/m-mmproj.gguf',
+      }),
+    }));
+
+    await textProvider.retry('text:author/m.gguf');
+
+    expect(mockMM.downloadModelBackground).toHaveBeenCalledWith(
+      'author/m',
+      expect.objectContaining({
+        name: 'm.gguf',
+        mmProjFile: {
+          name: 'm-mmproj.gguf',
+          size: 500,
+          downloadUrl: 'https://hf/author/m/resolve/main/m-mmproj.gguf',
+        },
+      }),
+    );
+  });
+
+  it('iOS retry of a plain (non-vision) model re-issues only the main GGUF, no mmProjFile', async () => {
+    // The FALSE branch: a text-only model has no mmproj fields, so the rebuilt job must
+    // not carry a mmProjFile (proving the reconstruction is gated, not always-on).
+    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
+    useDownloadStore.getState().add(entry({ status: 'failed' }));
+
+    await textProvider.retry('text:author/m.gguf');
+
+    const arg = mockMM.downloadModelBackground.mock.calls[0][1];
+    expect(arg.name).toBe('m.gguf');
+    expect(arg.mmProjFile).toBeUndefined();
+  });
+
   // The Android retry MECHANISM that used to live in the Download Manager screen test.
   // It now belongs to the provider (the View only dispatches retry(id)); this guards it.
   describe('retry on Android (in-place WorkManager resume + mmproj reset + reattach)', () => {

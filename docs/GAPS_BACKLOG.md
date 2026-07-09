@@ -148,3 +148,58 @@ Next: confirm whether previews appear on a SECOND (warmed) generation. If they d
 is expected first-run behaviour (optionally: show a "preview available after first run"
 hint). If they never appear on mnn, it's a native gap in the localdream preview path to
 fix on the native side — the JS/UI layer is already correct, so no JS change is warranted.
+
+---
+
+## On-device test session - 2026-07-09 (Qwythos-9B vision + memory, 12GB iPhone/Android)
+
+Surfaced live on real hardware during 0.0.103 vision/memory testing. None caught by the
+green suite — the reason the on-device gate is mandatory. Verdicts + evidence below.
+
+| # | Finding | Verdict | Evidence |
+|---|---------|---------|----------|
+| OD1 | **Vision (mmproj) dropped on download retry** | fix-the-guard | `[DL-SM]` iPhone: main GGUF failed at 9% ("network connection lost") → auto-retry re-issued `needsMmProj:false, mmProjLocalPath:null` → finalized text-only (`savedEngine:llama`, `mmProjFileExists:false`). release/0.0.103 fix (persist metadataJson) targets this; UNVERIFIED on-device. |
+| OD2 | **Repair Vision has no progress feedback** | fix-the-guard | ~900MB mmproj re-download behind an indeterminate "Repairing…" spinner; `[linkOrphanMmProj] recovered` eventually fired ("Vision Repaired"). Needs determinate progress. USER-SELECTED to fix. |
+| OD3 | **Chat vs Home model-selector inconsistency** | fix-the-guard | `checkMemoryForModel` is called ONLY in `useChatModelActions.ts` (:96, :311). Chat pre-checks (predictive fileSize×1.5 ≈ 8.4GB for the 9B → critical on 12GB → gates behind "Load Anyway"); Home skips the pre-check → loads via `makeRoomFor` (measured) → succeeds. Two surfaces, one decision, divergent logic. USER-SELECTED to fix. |
+| OD4 | **UI freeze on forced heavy load (Load Anyway on 9B multimodal)** | instrument-and-revisit | Only iOS native edge-swipe worked; all RN touchables dead; debug log stopped emitting = JS thread blocked by the synchronous native load of ~6GB + vision projector. The failure the override survival-floor is meant to prevent; installed build predates the release/0.0.103 fix. |
+| OD5 | **Android download retry doesn't resume after network drop** | instrument-and-revisit | `[DL-SM]` android: Qwythos errored at 75% ("Network connection lost"), retry dispatched (WorkManager resume in place) → NO further progress milestones. Partly a real WiFi drop; retry-not-resuming is the reliability gap. |
+| OD6 | **Kokoro TTS asset stuck loop** | instrument-and-revisit | android log: `[KOKORO-DL] checkAssetStatus → downloading (phase=ready progress=1.00 genuineCompletion=false)` spamming — stuck "downloading" while phase=ready/progress=1.0. |
+| OD7 | **Thinking toggle missing for Qwythos-9B in settings** | instrument-and-revisit | Model has reasoning (HF tags: reasoning) + emits `<think>`, but settings shows no thinking toggle. Capability detection gap for community GGUF. |
+| OD8 | **Voice-mode thinking not streamed (appears suddenly)** | instrument-and-revisit | Thinking renders live in text chat but batches in voice mode. Suspected in the audio-layout display path (`pro/audio/ui/AudioModeLayout.tsx`), not just the TTS sentence-queue (`pro/audio/streamingSpeech.ts`). Needs the display seam confirmed before fix. USER-SELECTED to fix. |
+
+## More on-device TTS findings - 2026-07-09 (later)
+
+| # | Finding | Verdict | Status |
+|---|---------|---------|--------|
+| OD-TTS1 | **Play does nothing / "not downloaded" though model is on disk** | fix-the-guard | FIXED (pro fix/tts-download-flag-reconcile). checkAssetStatus reported off the engine's volatile `_genuineCompletion`, which desyncs false on mid-session re-init/bridge-unmount (hydrate only runs on engine switch). `[TTS-SM] play() … downloaded=false` bailing in ~1ms (no icon change). Fix: reconcile to the durable persisted `modelDownloaded` flag; extracted download actions to ttsDownloadActions.ts (no eslint-disable). Red-first test. UNVERIFIED on-device. |
+| OD9 | **TTS speaks tool-call content aloud (voice mode)** | fix-the-guard | DELEGATED (fix/tts-strip-tool-calls). streamingSpeech `answerOf` strips thinking only; `enqueueReadySentences` runs stripControlTokens per-SENTENCE-fragment, so a `<tool_call>…</tool_call>` block spanning sentence boundaries leaks in fragments. Fix: withhold+strip whole control-token blocks before segmentation (mirror the thinking withhold). Red-first. |
+| OD10 | **TTS stops mid-speak** | instrument-and-revisit | `[TTS Store] Engine error: KOKORO_SPEAK The model is currently generating` + `stream segment FAILED session=1 fails=2` — a double-speak concurrency collision aborts the stream mid-sentence. Needs the speak/stream serialization checked (a second speak fired while the first was still generating). |
+
+| OD11 | **Voice mode can't stream TTS alongside a large LLM (falls back to end-of-turn speech)** | fix-the-guard | With a big model resident (Qwythos 9B, ~6GB), the single-model residency rule blocks the ~82MB Kokoro TTS sidecar from co-loading (`[Whisper] Skipping load — no room alongside the active model (single-model rule)`), even with 4.4GB free (os_procAvailMB=4405). streamingSpeech loops `stream feed SKIP: engine not warm` (442× in one turn) then falls back to onStreamingEnd speaking the whole message at generation end. Works, but no live streaming + long silence + log spam. Fix: allow SIDECAR types (tts/whisper/embedding) to co-reside with a generation model when real free RAM fits them (they're tiny), rather than subjecting them to single-model eviction. |
+
+| OD12 | **9B loads slowly on CPU + feels frozen (GPU too small → CPU fallback, threads=1)** | instrument-and-revisit | CORRECTED (earlier entry wrongly said 'freeze / survival-floor hole'): the Qwythos 9B DID load and generate (log: `Model loaded, vision/tools/thinking: true` at 11:54:28, first token 11:55:20). GPU (Adreno 4.6GB) can't hold the 9.3GB model → `cannot be used with preferred buffer` → CPU fallback (all 32 layers). On CPU with **threads=1** (app default is nThreads:0/auto — investigate the 0→1 resolution) the load took ~1m43s with a janky/unresponsive 'Loading Qwythos…' UI = the 'frozen' feeling. Not a hard freeze, not a survival-floor hole (it genuinely fit). Fixes worth doing: (a) ensure threads resolves to a sane core count for large models, (b) keep the UI responsive during a long native load (load off the JS/UI-blocking path / progress), (c) OD13 below on the reasoning-format mismatch. |
+| OD13 | **Qwythos output goes entirely to reasoning_content (thinking), answer content undefined** | instrument-and-revisit | Generation logs show `content: undefined, reasoning_content: "The"` and `token: "<|channel>"` (harmony/Gemma-style channel tokens) while `reasoning_format=deepseek`. The model's actual reasoning delimiters don't match the configured format, so the whole turn is classified as thinking with no final answer surfaced — the 'weird thinking/no proper answer' behavior. Model-format vs parser mismatch (Qwythos is a creative merge). Needs reasoning_format detection per model, or accept it's a bad-fit model.
+## RESOLUTION note - 2026-07-09: OD4 / OD11 / OD12 root cause = threads=1
+
+On-device follow-up: the iOS "touch-dead freeze" (OD4) and Android "slow/feels frozen" (OD12)
+were the SAME root cause — the 9B ran with `threads=1` (device default nThreads:0/auto was not
+resolving to a sane core count; device has 8 cores). Single-threaded native inference blocked
+long enough to starve the iOS main/JS thread (touches dead; native swipe survived) and crawl on
+Android. Raising the CPU thread count made BOTH fast and responsive — confirmed on device.
+Not a regression from release/0.0.103; a config/default issue.
+
+Follow-up (own PR, not this branch): investigate why nThreads resolved to 1 instead of auto/
+core-count for large models (see `[LLM] Resolved params: threads=1`); ship a sane default.
+GPU/NPU are NOT viable for this model (Adreno OpenCL max-alloc 1GB can't hold 9.3GB weights →
+CPU fallback; Hexagon NPU experimental + needs QNN-converted models; Qwythos is SSM-hybrid).
+CPU-with-proper-threads is the path. The devicectl "developer disk image could not be mounted"
+is a Mac-side tooling wedge (iOS 26.5.1), independent of the app — reconnect to clear.
+
+| OD14 | **Pre-tool-call reasoning not persisted (thinking "disappears" when a tool call starts)** | RESOLVED | In a tool-using turn the model reasons, then emits a tool call; that FIRST round's live thinking is cleared (clearStreamingMessage between rounds) and the intermediate tool-call assistant message is built with `content:'', ` NO reasoningContent (generationToolLoop.ts:447-448). The post-tool-result round's thinking IS shown on the final answer (confirmed on device: "Thought process: The knowledge base search returned no results…"). So thinking visibly vanishes at tool-call start then reappears on the final message — the pre-tool-call reasoning is lost from the transcript. Minor fidelity gap, feature works end-to-end. Fix: attach the accumulated reasoningBuffer to the intermediate tool-call assistant message. NOTE (good): iOS ran this 9B on Metal (99 layers GPU offloaded), 2.0 tok/s, TTFT 10.79s — iOS Metal works well; Android Adreno OpenCL (1GB max-alloc) falls back to CPU. |
+
+## New bug reports - 2026-07-09 (Slack #bugs, during 0.0.103 review)
+
+| # | Finding | Verdict | Note |
+|---|---------|---------|------|
+| OD15 | **"Generation Error: Unable to generate parser for this template / Jinja: Conversation roles must alternate" on model switch after a tool call** | fix-the-guard | From llama.rn native minja compiling a chat_template whose Jinja asserts strict user/assistant alternation, when tools are enabled (tool-call parser generation) and/or history has assistant+tool+assistant sequences. NOT caused by 0.0.103 (OD14 added a field to an existing message, no new message; OD3 didn't touch templates). Pre-existing. Fix: graceful fallback — catch the local tool-parser-generation failure and retry WITHOUT tools (the app already does this for REMOTE via isToolGrammarError; add the LOCAL equivalent), instead of a hard "Generation Error". Also consider sanitizing/merging roles before formatting for strict-alternation templates. Separate PR. |
+| OD16 | **Remote model capabilities feel flaky across Ollama / LM Studio / OGA Desktop** | instrument-and-revisit | remoteModelCapabilities has 39 unit + 4 integration tests, per-provider — but all FIXTURE-based. Real-world flakiness is likely response-shape variance across provider versions the fixtures don't capture. Fix: capture real /props (OGA Desktop gateway), /api/show (Ollama), /v1/models (LM Studio) from LIVE instances as integration fixtures; harden derivation against missing/variant fields; add a provider-abstraction contract test so each provider's shape → derived caps is guarded. All three must work well (stated priority). Separate workstream. NOTE: 0.0.103's OD7 fix already made reasoning-detection single-source local+remote (small consistency win). |

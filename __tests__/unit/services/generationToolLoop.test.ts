@@ -321,6 +321,33 @@ describe('runToolLoop', () => {
       expect(mockedGenerateResponseWithTools).toHaveBeenCalledTimes(2);
     });
 
+    it('preserves the pre-tool-call reasoning on the intermediate assistant message (keeps BOTH rounds of chain-of-thought)', async () => {
+      // OD14: the model reasons, THEN calls a tool. That first-round thinking must be
+      // attached to the intermediate tool-call assistant message so it persists in the
+      // transcript (chain-of-thought across tool calls), not vanish when the tool fires.
+      mockExecuteToolCall.mockResolvedValue(makeToolResult());
+      mockedGenerateResponseWithTools
+        .mockImplementationOnce(async (_messages: any, opts: any) => {
+          // Round 1: reasoning streams, then the model emits a tool call.
+          opts.onStream?.({ reasoningContent: 'I should check the knowledge base first.' });
+          return { fullResponse: 'Let me search.', toolCalls: [makeToolCall()] };
+        })
+        .mockResolvedValueOnce({ fullResponse: 'Here is the answer.', toolCalls: [] });
+
+      // onStream must be present or the tool loop never builds its stream handler
+      // (buildStreamHandler returns undefined without it), so reasoning wouldn't accumulate.
+      const ctx = createContext({ onStream: jest.fn() });
+      await runToolLoop(ctx);
+
+      // The intermediate assistant message (the one carrying the tool call) must keep
+      // round-1 reasoning — this is the "both rounds of thinking" the demo relies on.
+      const toolAssistantMsg = mockAddMessage.mock.calls
+        .map((c: any[]) => c[1])
+        .find((m: any) => m?.role === 'assistant' && m?.toolCalls?.length > 0);
+      expect(toolAssistantMsg).toBeDefined();
+      expect(toolAssistantMsg.reasoningContent).toBe('I should check the knowledge base first.');
+    });
+
     // Text-format tool-call parsing — small local models emit tool calls as text
     // (no structured tool_calls). resolveToolCalls must recover them.
     describe('text tool-call format parsing', () => {
