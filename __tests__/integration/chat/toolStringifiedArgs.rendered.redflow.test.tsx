@@ -1,46 +1,38 @@
 /**
- * RED-FLOW (UI, rendered) — Q3 at the pixel: mount the REAL ChatMessage on the tool-result the pipeline
- * produced. A stringified `arguments` payload makes the calculator fail, so the tool-result bubble the
- * user sees shows an internal error instead of the answer (4). Real llmService + toolLoop + calculator
- * over the faked llama.rn + FS; renders the real bubble.
+ * RED-FLOW (UI, BEHAVIORAL) — Q3: a tool call whose `arguments` is a STRINGIFIED JSON payload (a string,
+ * not an object) breaks the calculator, so the tool-result bubble the user sees shows an internal error
+ * instead of the answer (4).
+ *
+ * Fully UI-driven: enable calculator via the real Tools-screen Switch (arrive-via-UI), type + tap send on
+ * the real ChatScreen (llama). Only the native llama leaf is faked. Unlike Q2 (dropped call), here the tool
+ * RUNS but with bad args → the rendered bubble shows a failure.
  */
-import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
-import { createDownloadedModel } from '../../utils/factories';
-import type { Message } from '../../../src/types';
+import { setupChatScreen } from '../../harness/chatHarness';
 
-describe('Q3 (rendered) — stringified tool args surface an error bubble', () => {
-  it('renders a calculator result bubble with the answer, not an internal error', async () => {
-    const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
-    const React = require('react');
-    const { render } = requireRTL();
-    const { llmService } = require('../../../src/services/llm');
-    const { generationService } = require('../../../src/services/generationService');
-    const { hardwareService } = require('../../../src/services/hardware');
-    const { useAppStore, useChatStore } = require('../../../src/stores');
-    const { ChatMessage } = require('../../../src/components/ChatMessage');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useRoute: () => require('../../harness/chatHarness').routeHolder,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
+}));
 
-    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    await llmService.loadModel('/models/small.gguf');
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama' })], activeModelId: 'llm' });
+describe('Q3 (behavioral) — stringified tool args surface an error bubble', () => {
+  it('shows the computed answer in the tool bubble, not an internal error', async () => {
+    const h = await setupChatScreen({ engine: 'llama' });
+    h.enableToolViaUI('calculator');
+    h.render();
 
-    boundary.llama!.scriptCompletion({ text: 'Calculating. <tool_call>{"name": "calculator", "arguments": "{\\"expression\\": \\"2+2\\"}"}</tool_call>' });
+    // `arguments` is a STRING ("{\"expression\":\"2+2\"}") rather than an object.
+    await h.send('what is 2 + 2', { text: 'Calculating. <tool_call>{"name": "calculator", "arguments": "{\\"expression\\": \\"2+2\\"}"}</tool_call>' });
 
-    const conversationId = useChatStore.getState().createConversation('llm');
-    useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2 + 2' });
-    await generationService.generateWithTools(conversationId, useChatStore.getState().getConversationMessages(conversationId), { enabledToolIds: ['calculator'] });
+    // Wait on the user-visible reply, then let the tool loop settle.
+    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Calculating\./)).not.toBeNull(); });
+    await h.settle();
 
-    const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
-    const toolMsg = messages.find(m => m.role === 'tool' && m.toolName === 'calculator');
-    expect(toolMsg).toBeDefined(); // the tool ran (unlike Q2's drop)
-
-    const { queryByText } = render(React.createElement(ChatMessage, { message: toolMsg as Message }));
-
-    // Correct: the bubble shows the computed answer. Today the stringified args break the tool, so the
-    // bubble shows an internal failure → RED.
-    expect(queryByText(/failed \(internal\)|Cannot read properties/)).toBeNull();
-    expect(queryByText(/\b4\b/)).not.toBeNull();
+    // The tool ran and produced a result bubble...
+    expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();
+    // ...which must show the computed answer, NOT an internal failure. Today the stringified args break the
+    // calculator so the bubble shows a failure → RED.
+    expect(h.view!.queryByText(/failed \(internal\)|Cannot read properties|error/i)).toBeNull();
   });
 });
