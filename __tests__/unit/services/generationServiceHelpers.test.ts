@@ -422,7 +422,11 @@ describe('generateResponseImpl — LiteRT path', () => {
     expect(clear).toHaveBeenCalled();
   });
 
-  it('routes an audio attachment to sendMessage as audioUris when the model supports audio', async () => {
+  // PRODUCT RULE (modelMedia single source): a voice note is transcript-only — its audio is NEVER
+  // model input, on ANY engine. These two tests replace the old ones that asserted the removed
+  // behavior (route audio to an audio-capable litert model / hard-reject a non-audio one). The
+  // audio-capability flag is retained as latent data but no path sends audio today.
+  it('NEVER sends a voice note as audio to LiteRT — transcript-only, even for an audio-capable model', async () => {
     mockedGetState.mockReturnValue({
       ...makeLiteRTState(),
       downloadedModels: [{ id: 'litert-1', name: 'Gemma 4 E2B', engine: 'litert', liteRTAudio: true }],
@@ -440,15 +444,16 @@ describe('generateResponseImpl — LiteRT path', () => {
     await generateResponseImpl(makeLiteRTSvc(), {
       conversationId: 'conv-1',
       messages: [{
-        id: '1', timestamp: 0, role: 'user' as const, content: '',
+        id: '1', timestamp: 0, role: 'user' as const, content: 'the transcript',
         attachments: [{ id: 'a', type: 'audio' as const, uri: 'file:///clip.wav' }],
       }],
     });
 
-    expect(mockedLiteRT.sendMessage).toHaveBeenCalledWith('', expect.any(Object), { imageUris: [], audioUris: ['file:///clip.wav'] });
+    // Transcript reaches the model; audioUris is empty despite the model being audio-capable.
+    expect(mockedLiteRT.sendMessage).toHaveBeenCalledWith('the transcript', expect.any(Object), { imageUris: [], audioUris: [] });
   });
 
-  it('rejects an audio attachment when the active model has no audio support', async () => {
+  it('does NOT reject a voice note on a non-audio LiteRT model — it uses the transcript (B5/B9 parity)', async () => {
     mockedGetState.mockReturnValue({
       ...makeLiteRTState(),
       downloadedModels: [{ id: 'litert-1', name: 'Gemma vision-only', engine: 'litert', liteRTAudio: false }],
@@ -459,17 +464,22 @@ describe('generateResponseImpl — LiteRT path', () => {
       startStreaming: jest.fn(), clearStreamingMessage: clear,
       appendToStreamingMessage: jest.fn(), finalizeStreamingMessage: jest.fn(),
     });
+    mockedLiteRT.sendMessage.mockImplementation((_t: any, callbacks: any) => {
+      callbacks.onComplete('', '', null);
+      return Promise.resolve();
+    });
 
-    await expect(generateResponseImpl(makeLiteRTSvc(), {
+    // Must NOT throw "does not support audio" — the voice note is transcript-only.
+    await generateResponseImpl(makeLiteRTSvc(), {
       conversationId: 'conv-1',
       messages: [{
-        id: '1', timestamp: 0, role: 'user' as const, content: '',
+        id: '1', timestamp: 0, role: 'user' as const, content: 'the transcript',
         attachments: [{ id: 'a', type: 'audio' as const, uri: 'file:///clip.wav' }],
       }],
-    })).rejects.toThrow(/does not support audio/);
+    });
 
-    expect(clear).toHaveBeenCalled();
-    expect(mockedLiteRT.sendMessage).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+    expect(mockedLiteRT.sendMessage).toHaveBeenCalledWith('the transcript', expect.any(Object), { imageUris: [], audioUris: [] });
   });
 });
 

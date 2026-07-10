@@ -7,6 +7,7 @@ import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import type { Message, GenerationMeta } from '../types';
 import { runToolLoop, buildLiteRTHistory } from './generationToolLoop';
 import { effectiveCacheType } from './llmHelpers';
+import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
 import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
@@ -207,21 +208,10 @@ function assertLiteRTImageSupport(
   }
 }
 
-function assertLiteRTAudioSupport(
-  audioUris: string[] | undefined,
-  svc: any,
-  chatStore: ReturnType<typeof useChatStore.getState>,
-): void {
-  if (!audioUris || audioUris.length === 0) return;
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const activeModel = downloadedModels.find((m: any) => m.id === activeModelId);
-  const liteRTActiveModel = activeModel?.engine === 'litert' ? activeModel : null;
-  if (!liteRTActiveModel?.liteRTAudio) {
-    chatStore.clearStreamingMessage();
-    svc.resetState();
-    throw new Error('This model does not support audio input. Remove the audio clip or switch to an audio-capable model.');
-  }
-}
+// assertLiteRTAudioSupport was removed: audio is transcript-only (modelInputAudioUris always []),
+// so it could never fire and, when it did, it WRONGLY hard-rejected a non-audio LiteRT model that
+// merely carried a voice note. The model's audio-capability flag (liteRTAudio) is retained as
+// latent data; if a future feature feeds audio, it re-gates at the modelMedia seam, not here.
 
 async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<void> {
   const { conversationId, messages, onFirstToken } = req;
@@ -238,15 +228,14 @@ async function runLiteRTResponseImpl(svc: any, req: GenerationRequest): Promise<
   const systemMsg = messages.find(m => m.role === 'system');
   const systemPrompt = typeof systemMsg?.content === 'string' ? systemMsg.content : '';
   const allAttachments = lastUser.attachments ?? [];
-  const imageUris = allAttachments
-    .filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
-    .map((a: any) => a.uri);
-  const audioUris = allAttachments
-    .filter((a: any) => a.type === 'audio' && typeof a.uri === 'string' && a.uri.trim().length > 0)
-    .map((a: any) => a.uri);
+  // Single source of truth (modelMedia): images may be model input; a voice note is transcript-only,
+  // so audioUris is ALWAYS empty — the transcript is already in lastUser.content. This mirrors the
+  // llama/OAI path (llmMessages) so a voice note behaves identically on every engine (B5/B9 parity):
+  // never send the audio, and never hard-reject a non-audio LiteRT model for carrying a voice note.
+  const imageUris = modelInputImageUris(allAttachments);
+  const audioUris = modelInputAudioUris(allAttachments);
 
   assertLiteRTImageSupport(imageUris, svc, chatStore);
-  assertLiteRTAudioSupport(audioUris, svc, chatStore);
 
   const history = buildLiteRTHistory(messages);
 

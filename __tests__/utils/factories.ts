@@ -146,6 +146,7 @@ export interface DownloadedModelFactoryOptions {
   mmProjFileSize?: number;
   engine?: 'llama' | 'litert';
   liteRTVision?: boolean;
+  liteRTAudio?: boolean;
 }
 
 export const createDownloadedModel = (options: DownloadedModelFactoryOptions = {}): DownloadedModel => ({
@@ -160,6 +161,7 @@ export const createDownloadedModel = (options: DownloadedModelFactoryOptions = {
   credibility: options.credibility,
   engine: options.engine ?? 'llama',
   liteRTVision: options.liteRTVision,
+  liteRTAudio: options.liteRTAudio,
   isVisionModel: options.isVisionModel,
   mmProjPath: options.mmProjPath,
   mmProjFileName: options.mmProjFileName,
