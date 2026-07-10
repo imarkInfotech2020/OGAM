@@ -6,7 +6,7 @@ Status: ✅ verified on device · 🔁 fixed, needs recheck on next build · �
 ## To re-test on the next build (🔁)
 - [ ] **B2** — voice mode: thought-process / enhanced-prompt block width matches the audio bubbles.
 - [ ] **B3** — text + voice: pre-tool-call thinking box is left-aligned + bubble-width (not full-bleed).
-- [ ] **B4** — resend an image turn → it RE-DRAWS the image (does not load a text model / answer in text).
+- [x] **B4** — ✅ VERIFIED iOS: resend "Draw a dog" re-drew the image, enhanced prompt correct (IMG_0114).
 - [ ] **B5** — send a voice note in text mode → it uses the transcript, no "Failed to load media" error.
 - [ ] **B6** — retry an image download that failed extraction → it re-downloads (no "Download not found").
 
@@ -22,6 +22,7 @@ Status: ✅ verified on device · 🔁 fixed, needs recheck on next build · �
 - [x] Regenerate image on iOS (tapping the image message).
 
 ## Still open (🔎)
+- [ ] **B7** — image model with failed extraction has NO retry in Download Manager after app restart. Root cause: downloadStore is NOT persisted (plain create) → the failed entry is wiped on relaunch; imageProvider.list() doesn't scan disk for incomplete dirs → the orphaned model is invisible. Fix: surface an on-disk-incomplete image model as failed+retriable (or removable). NB: same-session retry is fixed by B6 (ad6bf86d) but that's not in the running build yet.
 - [ ] **B5b** — empty transcript: a voice note recorded with whisper not ready attaches with no text.
 - [ ] **B5c** — a media-load error should fall back to text-only generation, not hard-fail the turn.
 - [ ] **B6b** — auto-retry/resume a download after a transient network drop (currently manual only).
