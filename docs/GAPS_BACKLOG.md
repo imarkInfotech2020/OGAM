@@ -20,12 +20,21 @@ job + pre-push). AGGRESSIVE ruleset, all at `error`; existing debt captured in
 debt but FAILS on anything NEW. This is the honest register of that baselined debt - burn it
 down, never regenerate the baseline to hide a new violation.
 
+Baseline is now **61** (was 66). The 5 non-cycle violations were FIXED (not baselined):
+- utils-stay-pure (3): RESOLVED. `utils/downloadAggregate` → `utils/downloadStatus` (extracted the pure
+  status classification + DownloadEntry out of the store; store re-exports for back-compat).
+  `utils/imageModelIntegrity` → `utils/modelLoadErrors` (moved the pure Error classes to utils; service
+  re-exports). `utils/proPrompt` → `services/proPrompt` (it reads the store + does pub/sub + setTimeout —
+  a service, not a pure util; relocated + 3 importers updated).
+- no-backward-layering-core (1): RESOLVED. `services/loadModelWithOverride` no longer imports the
+  CustomAlert component — the pure AlertState + showAlert/hideAlert factories moved to
+  `utils/alertState` (CustomAlert re-exports them); the service builds alert state from the util.
+- components-are-leaf-ui (1): RESOLVED. `VoiceModelsUpsell` moved from `screens/ModelsScreen/` into
+  `components/models/` (it's presentational); both the sheet and the screen import it from components.
+
 | Rule | Count | Verdict | Note |
 |---|---|---|---|
-| no-circular | 61 | fix-the-guard (own PR) | Mostly cycles routed through barrel `index.ts` files (`services/index`, `stores/index`) + intra-screen hook cycles (HomeScreen hooks ⇄ useHomeScreen). Break by importing the concrete module, not the barrel, and extracting shared hook state down a layer. Large - dedicated PR(s). |
-| utils-stay-pure | 3 | fix-the-guard | `utils/proPrompt→stores/appStore`, `utils/imageModelIntegrity→services/modelLoadErrors`, `utils/downloadAggregate→stores/downloadStore`. A "pure" util reaching into a store/service - move the impure bit up or the shared data down. |
-| no-backward-layering-core | 1 | fix-the-guard | `services/loadModelWithOverride→components/CustomAlert`: a service imports a UI component to show an alert. Service should return a decision; the caller renders the alert (SoC §A). |
-| components-are-leaf-ui | 1 | fix-the-guard | `components/models/VoiceModelsSheet→screens/ModelsScreen/VoiceModelsUpsell`: a reusable component imports a screen. Move VoiceModelsUpsell into components/ (or pass it as a prop). |
+| no-circular | 61 | fix-the-guard (own PR) | Cycles routed through barrel `index.ts` files (`services/index`, `stores/index`) + intra-screen hook cycles (HomeScreen hooks ⇄ useHomeScreen). Break by importing the concrete module, not the barrel, and extracting shared hook state down a layer. A broad import refactor — deliberately its own PR AFTER this release (fixing 61 cycles in a release PR is the destabilizing big-bang we avoid); the baseline guards against NEW cycles meanwhile. |
 
 Resolved by the gate on day one (NOT baselined):
 - Engine-DIP: screens importing concrete `litert` → routed through services/engines (see Engine DIP section).

@@ -6,7 +6,7 @@ import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
-import { checkProPromptForImage } from '../utils/proPrompt';
+import { checkProPromptForImage } from './proPrompt';
 import { SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';

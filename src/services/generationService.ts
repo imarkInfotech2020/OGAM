@@ -9,7 +9,7 @@ import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
 import logger from '../utils/logger';
 import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
-import { checkProPromptForText } from '../utils/proPrompt';
+import { checkProPromptForText } from './proPrompt';
 import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,

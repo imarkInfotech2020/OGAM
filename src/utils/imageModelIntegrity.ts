@@ -18,7 +18,7 @@
  */
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { ImageModelIncompleteError } from '../services/modelLoadErrors';
+import { ImageModelIncompleteError } from './modelLoadErrors';
 import logger from './logger';
 
 type ReadDirItem = Awaited<ReturnType<typeof RNFS.readDir>>[number];

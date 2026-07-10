@@ -1,33 +1,5 @@
 [
   {
-    "type": "dependency",
-    "from": "src/components/models/VoiceModelsSheet.tsx",
-    "to": "src/screens/ModelsScreen/VoiceModelsUpsell.tsx",
-    "unresolvedTo": "../../screens/ModelsScreen/VoiceModelsUpsell",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "components-are-leaf-ui"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/services/loadModelWithOverride.ts",
-    "to": "src/components/CustomAlert.tsx",
-    "unresolvedTo": "../components/CustomAlert",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "no-backward-layering-core"
-    }
-  },
-  {
     "type": "cycle",
     "from": "src/screens/HomeScreen/hooks/useHomeScreen.ts",
     "to": "src/screens/HomeScreen/hooks/useLANDiscovery.ts",
@@ -3525,47 +3497,5 @@
         ]
       }
     ]
-  },
-  {
-    "type": "dependency",
-    "from": "src/utils/downloadAggregate.ts",
-    "to": "src/stores/downloadStore.ts",
-    "unresolvedTo": "../stores/downloadStore",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "utils-stay-pure"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/utils/imageModelIntegrity.ts",
-    "to": "src/services/modelLoadErrors.ts",
-    "unresolvedTo": "../services/modelLoadErrors",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "utils-stay-pure"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/utils/proPrompt.ts",
-    "to": "src/stores/appStore.ts",
-    "unresolvedTo": "../stores/appStore",
-    "dependencyTypes": [
-      "local",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "utils-stay-pure"
-    }
   }
 ]

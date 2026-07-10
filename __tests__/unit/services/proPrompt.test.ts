@@ -12,7 +12,7 @@ import {
   emitProPrompt,
   checkProPromptForText,
   checkProPromptForImage,
-} from '../../../src/utils/proPrompt';
+} from '../../../src/services/proPrompt';
 import { useAppStore } from '../../../src/stores/appStore';
 
 const mockedGetState = useAppStore.getState as jest.Mock;
