@@ -105,32 +105,47 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
 
     /**
-     * Drive the REAL regenerate gesture: script the next turn, long-press the assistant bubble to open the
-     * REAL action menu, and press the REAL "Retry" item. The real regenerateResponseFn re-runs generation.
+     * Open the REAL action menu for the last message of `role`, via the requested affordance:
+     *  - 'longpress' → long-press the message bubble
+     *  - 'dots'      → tap the 3-dots '•••' button in the message meta row
+     * BOTH are real user entry points and must both be exercised (they wire the same setShowActionMenu).
      */
-    async regenerateLast(scripted: { text?: string; content?: string; reasoning?: string; toolCalls?: unknown[] }) {
-      if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
-      else boundary.litert.scriptTurn(scripted as { content?: string });
-
+    async openActionMenu(role: 'user' | 'assistant', via: 'longpress' | 'dots') {
       const view = this.view!;
-      const bubbles = await rtl.waitFor(() => { const b = view.queryAllByTestId('assistant-message'); expect(b.length).toBeGreaterThan(0); return b; });
-      rtl.fireEvent(bubbles[bubbles.length - 1], 'longPress');
-      const retry = await rtl.waitFor(() => view.getByTestId('action-retry'));
-      rtl.fireEvent.press(retry);
+      const testId = role === 'user' ? 'user-message' : 'assistant-message';
+      const bubbles = await rtl.waitFor(() => { const b = view.queryAllByTestId(testId); expect(b.length).toBeGreaterThan(0); return b; });
+      const target = bubbles[bubbles.length - 1];
+      if (via === 'longpress') {
+        rtl.fireEvent(target, 'longPress');
+      } else {
+        // The 3-dots '•••' lives inside THIS message's element — scope to it (not the global-last dots,
+        // which would be a different message's button).
+        const dots = await rtl.waitFor(() => rtl.within(target).getByText('•••'));
+        rtl.fireEvent.press(dots);
+      }
+      await rtl.waitFor(() => { expect(view.getByTestId('action-menu')).toBeTruthy(); });
     },
 
     /**
-     * Drive the REAL edit gesture: long-press the last USER bubble → tap "Edit" → change the text →
-     * tap "SAVE & RESEND". The real edit handler rewrites history and re-runs generation.
+     * REAL regenerate gesture: open the action menu (via long-press OR 3-dots) and press "Retry".
      */
-    async editLastUserMessage(newText: string, scripted: { text?: string; content?: string }) {
+    async regenerateLast(scripted: { text?: string; content?: string; reasoning?: string; toolCalls?: unknown[] }, via: 'longpress' | 'dots' = 'longpress') {
       if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
       else boundary.litert.scriptTurn(scripted as { content?: string });
+      await this.openActionMenu('assistant', via);
+      rtl.fireEvent.press(this.view!.getByTestId('action-retry'));
+    },
 
+    /**
+     * REAL edit gesture: open the action menu (via long-press OR 3-dots) → "Edit" → change text →
+     * "SAVE & RESEND". The real edit handler rewrites history and re-runs generation.
+     */
+    async editLastUserMessage(newText: string, scripted: { text?: string; content?: string }, via: 'longpress' | 'dots' = 'longpress') {
+      if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
+      else boundary.litert.scriptTurn(scripted as { content?: string });
+      await this.openActionMenu('user', via);
       const view = this.view!;
-      const bubbles = await rtl.waitFor(() => { const b = view.queryAllByTestId('user-message'); expect(b.length).toBeGreaterThan(0); return b; });
-      rtl.fireEvent(bubbles[bubbles.length - 1], 'longPress');
-      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('action-edit')));
+      rtl.fireEvent.press(view.getByTestId('action-edit'));
       const input = await rtl.waitFor(() => view.getByPlaceholderText('Enter message...'));
       rtl.fireEvent.changeText(input, newText);
       rtl.fireEvent.press(view.getByText('SAVE & RESEND'));

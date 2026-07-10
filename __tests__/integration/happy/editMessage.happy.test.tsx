@@ -16,15 +16,17 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 describe('happy — edit a message via the real action menu (heavy entry point)', () => {
-  it('long-press → Edit → change text → SAVE & RESEND re-runs generation with the edit', async () => {
+  // The action menu opens TWO ways — long-press the bubble AND the 3-dots '•••' button. Both are real
+  // user entry points, so the edit flow is validated through each.
+  it.each(['longpress', 'dots'] as const)('%s → Edit → change text → SAVE & RESEND re-runs generation', async (via) => {
     const h = await setupChatScreen({ engine: 'litert' });
     h.render();
 
     await h.send('what is the capital of span', { content: 'The capital of Spain is Madrid.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The capital of Spain is Madrid\./)).not.toBeNull(); });
 
-    // User fixes the typo and resends via the real Edit gesture.
-    await h.editLastUserMessage('what is the capital of Spain', { content: 'Madrid is the capital of Spain.' });
+    // User fixes the typo and resends via the real Edit gesture (opened via this affordance).
+    await h.editLastUserMessage('what is the capital of Spain', { content: 'Madrid is the capital of Spain.' }, via);
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Madrid is the capital of Spain\./)).not.toBeNull(); });
   });
 });
