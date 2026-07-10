@@ -4,8 +4,8 @@ On-device testing of PR #510 (Android dev `ai.offgridmobile.dev` + iOS "Mac's iP
 Status: ✅ verified on device · 🔁 fixed, needs recheck on next build · 🔎 open/investigating.
 
 ## To re-test on the next build (🔁)
-- [ ] **B2** — voice mode: thought-process / enhanced-prompt block width matches the audio bubbles.
-- [ ] **B3** — text + voice: pre-tool-call thinking box is left-aligned + bubble-width (not full-bleed).
+- [x] **B2** — ✅ VERIFIED: voice-mode thought-process / enhanced-prompt block matches audio-bubble width (IMG_0131).
+- [x] **B3** — ✅ VERIFIED: pre-tool-call thinking box left-aligned + bubble-width, text + voice (IMG_0131).
 - [x] **B4** — ✅ VERIFIED iOS: resend "Draw a dog" re-drew the image, enhanced prompt correct (IMG_0114).
 - [ ] **B5** — send a voice note in text mode → it uses the transcript, no "Failed to load media" error.
 - [ ] **B6** — retry an image download that failed extraction → it re-downloads (no "Download not found").
