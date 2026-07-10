@@ -94,6 +94,11 @@ export interface LiteRTFake {
    * Honest: the fake only emits device-shaped events; OUR loop decides what the user sees.
    */
   scriptTurn(turn: LiteRTTurn): void;
+  /**
+   * Script a QUEUE of turns consumed one-per-generateRaw — for flows with more than one native round
+   * trip (e.g. the LiteRT tool-router does a separate generateToolSelection pass, THEN the main turn).
+   */
+  scriptTurns(turns: LiteRTTurn[]): void;
 }
 
 /** Run fn on a macrotask so it lands after the current async chain (native call → awaited resolve). */
@@ -102,8 +107,10 @@ const defer = (fn: () => void) => { setTimeout(fn, 0); };
 function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   const calls: LiteRTFake['calls'] = { generateRaw: [], resetConversation: [], sendMessageWithMedia: [] };
 
-  // Scripted turn state — set by scriptTurn(), consumed by the send/respond methods below.
+  // Scripted turn state — set by scriptTurn()/scriptTurns(), consumed by the send/respond methods below.
   let pending: LiteRTTurn | null = null;
+  const queue: LiteRTTurn[] = [];
+  let currentTurn: LiteRTTurn | null = null; // the turn onSend picked (for respondToToolCall completion)
   let toolCallsRemaining = 0;
 
   const emitCompletion = (turn: LiteRTTurn) => {
@@ -113,7 +120,8 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   };
 
   const onSend = () => {
-    const turn = pending;
+    const turn = queue.length ? queue.shift()! : pending;
+    currentTurn = turn;
     if (!turn) { defer(() => handle.emit('litert_complete', '{}')); return; }
     const tcs = turn.toolCalls ?? [];
     toolCallsRemaining = tcs.length;
@@ -132,7 +140,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     sendMessageWithMedia: jest.fn((...args: unknown[]) => { calls.sendMessageWithMedia.push(args); onSend(); return Promise.resolve(); }),
     respondToToolCall: jest.fn(() => {
       // After the LAST tool result is delivered, the native model continues and completes.
-      if (pending && --toolCallsRemaining <= 0) { const turn = pending; defer(() => emitCompletion(turn)); }
+      if (currentTurn && --toolCallsRemaining <= 0) { const turn = currentTurn; defer(() => emitCompletion(turn)); }
       return Promise.resolve();
     }),
     generateRaw: jest.fn((...args: unknown[]) => { calls.generateRaw.push(args); return Promise.resolve(''); }),
@@ -149,6 +157,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     events: handle,
     calls,
     scriptTurn: (turn: LiteRTTurn) => { pending = turn; },
+    scriptTurns: (turns: LiteRTTurn[]) => { queue.length = 0; queue.push(...turns); },
   };
 }
 
