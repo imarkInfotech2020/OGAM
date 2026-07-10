@@ -31,6 +31,12 @@
 // error/tool_call. loadModel resolves { backend, maxNumTokens }.
 // ---------------------------------------------------------------------------
 
+// Tests require @testing-library/react-native AFTER installNativeBoundary()'s jest.resetModules()
+// (so React + RNTL + the component share one module graph). RNTL's index registers afterEach/afterAll
+// cleanup hooks on require; requiring it mid-run would throw "add a hook after tests started". Skipping
+// auto-cleanup avoids that — each red-flow file mounts once and jest tears down the env per file.
+process.env.RNTL_SKIP_AUTO_CLEANUP = 'true';
+
 type Listener = (payload: unknown) => void;
 
 /** An in-JS stand-in for a native module's NativeEventEmitter surface. Drive events from the test. */
