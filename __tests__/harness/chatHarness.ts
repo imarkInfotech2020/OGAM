@@ -104,6 +104,33 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
 
     /**
+     * Tap the real quick-image-mode toggle once (opens the quick-settings popover, taps the image-mode row).
+     * Cycles auto → ON(force) → OFF(disabled) → auto. Requires an image model (the toggle refuses without
+     * one, alerting "No Image Model").
+     */
+    async cycleImageMode() {
+      const view = this.view!;
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('quick-settings-button')));
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('quick-image-mode')));
+    },
+
+    /**
+     * Place a downloaded image model that SURVIVES the ChatScreen's async disk-hydration (which otherwise
+     * resets downloadedImageModels to the empty disk). Settles first so hydration has run, then sets +
+     * re-asserts. A downloaded model is a native/disk boundary, so seeding it directly is legitimate.
+     */
+    async placeImageModel(id = 'sd', modelPath = '/models/sd') {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createONNXImageModel } = require('../utils/factories');
+      const model = createONNXImageModel({ id, name: 'SD', modelPath, backend: 'coreml' });
+      await this.settle(50); // let the mount's hydration finish clearing the (empty) disk list
+      this.useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: id });
+      this.useAppStore.getState().updateSettings({ enhanceImagePrompts: false, imageThreads: 4, imageUseOpenCL: false, imageSteps: 8 });
+      boundary.diffusion.module.getLoadedModelPath.mockResolvedValue(modelPath);
+      return model;
+    },
+
+    /**
      * Gesture-only send: type into the real input + press the real send button, WITHOUT scripting a turn.
      * Use when the test scripts multi-turn native output itself (e.g. boundary.litert.scriptTurns([...]) for
      * a two-pass router). The gesture is identical to send() — only the scripting differs.
