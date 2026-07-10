@@ -393,7 +393,6 @@ class ModelResidencyManager {
       const realAvailMB = Math.round(
         hardwareService.getAvailableMemoryGB() * 1024,
       );
-      const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
       // Reclaimable-aware ceiling. `availMem` is what's free WITHOUT reclaiming anything — but our
       // app is FOREGROUND, so Android's low-memory killer evicts background/cached apps to give us
       // physical RAM. That reclaimed RAM is REAL physical (a dirty/GPU model can occupy it) — unlike
