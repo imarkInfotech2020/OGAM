@@ -88,6 +88,19 @@ export function invalidateActiveConversation(): void {
 }
 
 /**
+ * Is this LOCAL text model actually resident on its engine? The per-engine readiness predicate
+ * in ONE place: LiteRT tracks only "a model is loaded"; llama must have the SELECTED model's path
+ * loaded (a different llama model resident is NOT ready). Callers pass their own model and use
+ * this instead of branching on engine === 'litert' for readiness.
+ */
+export function isModelReady(model: { engine?: string; filePath?: string } | null | undefined): boolean {
+  if (!model) return false;
+  return model.engine === 'litert'
+    ? liteRTService.isModelLoaded()
+    : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
+}
+
+/**
  * Returns the service for the currently active text engine, or null if no
  * model is loaded. Use this for operations that both engines support
  * (stopGeneration, isModelLoaded, unloadModel). For engine-specific
