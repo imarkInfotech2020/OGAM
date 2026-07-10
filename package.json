@@ -19,9 +19,7 @@
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest",
     "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
     "postinstall": "patch-package",
-    "depcruise": "depcruise src --config .dependency-cruiser.js --ignore-known",
-    "depcruise:all": "depcruise src --config .dependency-cruiser.js",
-    "depcruise:baseline": "depcruise src --config .dependency-cruiser.js --output-type baseline > .dependency-cruiser-known-violations.json"
+    "depcruise": "depcruise src --config .dependency-cruiser.js"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.38.1",

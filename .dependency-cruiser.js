@@ -8,10 +8,11 @@
  * does NOT catch the `engine === 'litert'` VALUE branch (an ESLint no-restricted-syntax rule
  * guards that) or DRY drift / logic bugs. Complements the hygiene standard; does not replace it.
  *
- * Existing debt is captured in .dependency-cruiser-known-violations.json so the gate PASSES on
- * current debt but FAILS on anything NEW. Burn the baseline down; never regenerate it to hide a
- * new violation. Run: `npm run depcruise` (gate) / `depcruise:baseline` (regenerate) /
- * `depcruise:all` (show everything incl. known).
+ * The tree is CLEAN — zero violations, no baseline file. Every rule is fully enforced with no
+ * exceptions; any new violation fails `npm run depcruise` (CI + pre-push). If you ever must adopt
+ * a new strict rule onto legacy debt, baseline it (`depcruise --output-type baseline >
+ * .dependency-cruiser-known-violations.json` + run the gate with `--ignore-known`) and burn it
+ * down — never regenerate a baseline to hide a fresh violation.
  */
 module.exports = {
   forbidden: [
