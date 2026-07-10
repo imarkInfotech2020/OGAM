@@ -1,6 +1,20 @@
 [
   {
     "type": "dependency",
+    "from": "src/components/models/VoiceModelsSheet.tsx",
+    "to": "src/screens/ModelsScreen/VoiceModelsUpsell.tsx",
+    "unresolvedTo": "../../screens/ModelsScreen/VoiceModelsUpsell",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "components-are-leaf-ui"
+    }
+  },
+  {
+    "type": "dependency",
     "from": "src/services/loadModelWithOverride.ts",
     "to": "src/components/CustomAlert.tsx",
     "unresolvedTo": "../components/CustomAlert",
@@ -10,7 +24,7 @@
     ],
     "rule": {
       "severity": "error",
-      "name": "no-backward-layering-utils"
+      "name": "no-backward-layering-core"
     }
   },
   {
@@ -3552,33 +3566,6 @@
     "rule": {
       "severity": "error",
       "name": "utils-stay-pure"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/bootstrap/proStub.js",
-    "to": "src/bootstrap/proStub.js",
-    "rule": {
-      "severity": "warn",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/config/revenueCatKeys.ts",
-    "to": "src/config/revenueCatKeys.ts",
-    "rule": {
-      "severity": "warn",
-      "name": "no-orphans"
-    }
-  },
-  {
-    "type": "module",
-    "from": "src/screens/ChatScreen/toolUsage.ts",
-    "to": "src/screens/ChatScreen/toolUsage.ts",
-    "rule": {
-      "severity": "warn",
-      "name": "no-orphans"
     }
   }
 ]
