@@ -140,6 +140,60 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
 }
 
 // ---------------------------------------------------------------------------
+// Fake: llama.rn (the GGUF text engine, an npm native package globally jest.mock-ed in jest.setup).
+// A scriptable llama context whose completion returns the exact model text (and/or structured
+// tool_calls) the test wants, so the REAL llmService + generationToolLoop parse it. Tool-calling is
+// enabled via a jinja caps stub so the loop keeps the tools.
+// ---------------------------------------------------------------------------
+
+export interface LlamaFake {
+  /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser). */
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> }): void;
+  /** react-native module object to inject for 'llama.rn'. */
+  module: Record<string, jest.Mock>;
+  calls: { completion: unknown[][] };
+}
+
+function makeLlamaFake(): LlamaFake {
+  const calls: LlamaFake['calls'] = { completion: [] };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> } = { text: '' };
+
+  const context: Record<string, jest.Mock> = {
+    completion: jest.fn(async (params: unknown) => {
+      calls.completion.push([params]);
+      return {
+        text: pending.text,
+        content: pending.text,
+        tool_calls: pending.toolCalls,
+        tokens_predicted: 8, tokens_evaluated: 4,
+        timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+      };
+    }),
+    stopCompletion: jest.fn().mockResolvedValue(undefined),
+    release: jest.fn().mockResolvedValue(undefined),
+    tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
+    initMultimodal: jest.fn().mockResolvedValue(false),
+    getMultimodalSupport: jest.fn().mockResolvedValue({ vision: false, audio: false }),
+  };
+  // The service reads context.model.chatTemplates.jinja to decide tool-calling support.
+  (context as Record<string, unknown>).model = {
+    nParams: 1_000_000,
+    chatTemplates: { jinja: { defaultCaps: { toolCalls: true }, toolUse: true, toolUseCaps: { toolCalls: true } } },
+  };
+
+  const module: Record<string, jest.Mock> = {
+    initLlama: jest.fn().mockResolvedValue(context),
+    releaseContext: jest.fn().mockResolvedValue(undefined),
+    completion: jest.fn().mockResolvedValue({ text: '' }),
+    stopCompletion: jest.fn().mockResolvedValue(undefined),
+    tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
+    detokenize: jest.fn().mockResolvedValue({ text: '' }),
+  };
+
+  return { module, calls, scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls }; } };
+}
+
+// ---------------------------------------------------------------------------
 // Fake: diffusion native (NativeModules.LocalDreamModule / CoreMLDiffusionModule). Destructured at
 // import in src/services/localDreamGenerator.ts (DiffusionModule = Platform.select). generateImage
 // ECHOES the width/height/seed it was called with (native renders at the requested size), so the REAL
@@ -276,6 +330,8 @@ export interface InstallOpts {
   ram?: RamProfile;
   /** Replace the dumb global react-native-fs stub with a stateful in-memory filesystem. */
   fs?: boolean;
+  /** Replace the global llama.rn stub with a scriptable context (boundary.llama.scriptCompletion). */
+  llama?: boolean;
 }
 
 export interface NativeBoundary {
@@ -286,6 +342,8 @@ export interface NativeBoundary {
   diffusion: DiffusionFake;
   /** Stateful in-memory filesystem — present only when installed with { fs: true }. */
   fs?: FsFake;
+  /** Scriptable llama.rn text engine — present only when installed with { llama: true }. */
+  llama?: LlamaFake;
   /** Re-read RAM at the leaf mid-test (e.g. simulate OS pressure between a pre-check and the load). */
   setRam(profile: RamProfile): void;
 }
@@ -309,6 +367,10 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   // Stateful FS: override the dumb global react-native-fs stub BEFORE any service requires it.
   const fsFake = opts.fs ? makeFsFake() : undefined;
   if (fsFake) jest.doMock('react-native-fs', () => fsFake.module);
+
+  // Scriptable llama.rn: override the global stub so completion output is under test control.
+  const llamaFake = opts.llama ? makeLlamaFake() : undefined;
+  if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const RN = require('react-native');
@@ -352,5 +414,5 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     Object.defineProperty(RN.Platform, 'OS', { value: profile.platform, configurable: true });
   };
 
-  return { litert, litertEvents: handle, diffusion, fs: fsFake, setRam };
+  return { litert, litertEvents: handle, diffusion, fs: fsFake, llama: llamaFake, setRam };
 }
