@@ -7,8 +7,13 @@
  * logic (litertToolSelector.ts:55-62): `raw.includes(name)` selects on any mention, and
  * `selected.length > 0` returns BEFORE the `'none'` check — so a decline that names the tool selects it.
  *
- * (Screen surface — the "Tools sent" row — is gated behind the MCP subsystem; this exercises the exact
- * decision that row renders, with real router logic. A screen-level variant would additionally wire MCP.)
+ * DOCUMENTED EXCEPTION to the UI-driven standard: this bug lives in a PURE FUNCTION (selectRelevantTools,
+ * a router/parser). The hygiene standard tests pure functions at the unit layer underneath, and driving it
+ * through ChatScreen does NOT faithfully reproduce it — the on-device routing path only runs under specific
+ * conditions (MCP enabled + tool count over TOOL_SELECTION_THRESHOLD); through the real ChatScreen with a
+ * default tool set the router returns all tools without invoking this substring path, so a "rendered"
+ * variant would assert a code path it never actually exercises. So the FUNCTION is the faithful surface.
+ * (A prior render-only variant was removed for exactly this reason — it could not honestly drive the bug.)
  */
 import { selectRelevantTools } from '../../../src/services/litertToolSelector';
 
