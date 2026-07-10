@@ -22,6 +22,12 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     color: colors.textMuted,
     textAlign: 'center' as const,
   },
+  // A tool-call reply's content column — matches the assistant bubble width (85%) + left alignment
+  // so the thinking box, pre-text, and tool cards line up with every other AI message.
+  toolCallReplyContent: {
+    width: '85%' as const,
+    alignSelf: 'flex-start' as const,
+  },
   toolCallPreText: {
     alignSelf: 'flex-start' as const,
     paddingBottom: 6,

@@ -188,19 +188,25 @@ const ToolCallWithThinking: React.FC<{
     ? buildMessageData(message).parsedContent
     : null;
   const hasText = !!tc?.response?.trim();
+  // Left-aligned + bubble-width, matching a NORMAL assistant reply — a tool-call reply is an
+  // assistant message, so its thinking box + pre-text + tool cards must line up with every other
+  // AI message. (Previously used systemInfoContainer — centered, full-bleed — so the pre-tool-call
+  // thinking box lost its left alignment and ran full width in both text and voice mode.)
   return (
-    <View style={styles.systemInfoContainer}>
-      {!!tc?.thinking && (
-        <View style={styles.thinkingBlockWrapper}>
-          <ThinkingBlock parsedContent={tc} showThinking={showThinking} onToggle={onToggle} styles={styles} />
-        </View>
-      )}
-      {hasText && (
-        <View testID="tool-call-pre-text" style={styles.toolCallPreText}>
-          <MarkdownText>{tc!.response}</MarkdownText>
-        </View>
-      )}
-      <ToolCallMessage message={message} styles={styles} colors={colors} />
+    <View style={[styles.container, styles.assistantContainer]}>
+      <View style={styles.toolCallReplyContent}>
+        {!!tc?.thinking && (
+          <View style={styles.thinkingBlockWrapper}>
+            <ThinkingBlock parsedContent={tc} showThinking={showThinking} onToggle={onToggle} styles={styles} />
+          </View>
+        )}
+        {hasText && (
+          <View testID="tool-call-pre-text" style={styles.toolCallPreText}>
+            <MarkdownText>{tc!.response}</MarkdownText>
+          </View>
+        )}
+        <ToolCallMessage message={message} styles={styles} colors={colors} />
+      </View>
     </View>
   );
 };
