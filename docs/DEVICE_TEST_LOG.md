@@ -59,6 +59,20 @@ the turn on a media-load error — fall back to text-only generation; (c) chase 
 
 ---
 
+### B6 — Download retry not working + no auto-retry after network drop (Android)
+**INVESTIGATING (fix in this PR).** Two parts:
+1. **No auto-retry:** a whisper "Base" transcription-model download failed mid-way with "The connection
+   dropped while downloading. Please try again." (IMG_0108) — it did NOT auto-resume/retry after the
+   network blip. (Ties to backlog OD5: Android retry doesn't resume after a WiFi drop.)
+2. **Manual Retry does nothing:** the Download Manager shows several failed downloads (SmolLM5,
+   Mistral-7B-Instruct, whisper 99M small.en, Anything V5) with red-X + a Retry button; tapping Retry
+   doesn't restart them (IMG_0109). CRITICAL LOG SIGNAL: tapping Retry produced ZERO `[DL-SM]` lines in
+   the trace → the retry handler isn't firing (or isn't reaching modelDownloadService.retry()). Also
+   "Anything V5" shows "File not found. It may have been moved or removed" (a stale/orphaned entry).
+This also blocks B5 (the whisper model can't finish downloading → no transcription model → empty
+transcript). Fix: wire/repair Retry → modelDownloadService.retry() (resume from partial), and add
+auto-retry/resume on a transient network drop.
+
 ## Verified passing (tested on device this session)
 - Gemma-4 LiteRT load + generate (Android) — B1.
 - Gemma-4 GGUF load + generate (iOS).
