@@ -29,6 +29,16 @@ Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session sta
 
 **Merge strategy: ALWAYS a merge commit. NEVER squash (and never rebase-merge).** When merging a PR, use `gh pr merge --merge` (or the "Create a merge commit" button) so the full commit history is preserved on `main`. Do not squash under any circumstances - the small, meaningful per-concern commits are the record and must survive the merge. This applies to both the core repo and the `pro` submodule.
 
+### Commit early, commit often - never lose progress (agents especially)
+
+**A long task is a chain of small, GREEN, committed steps - not one giant uncommitted diff.** Agents run against context/session limits; anything uncommitted is lost when the session ends. So:
+
+- **Commit each cohesive step as soon as it is green** (typecheck + the relevant tests pass), with a real per-concern message. A refactor done in slices commits after each slice, not at the end.
+- **Never leave a large uncommitted working tree across a risky/long operation.** If you are about to start something big, commit what already works first so there is a clean restore point.
+- **Every commit is a safe restore point:** it must be behavior-neutral-or-better and pass the gates for the files it touches. Do not commit a knowingly-broken tree; if mid-refactor is unavoidably broken, finish to green before committing (or stash), never push broken.
+- **Prefer many small commits over few large ones.** They survive a merge (we never squash), make review tractable, and mean a lost session costs one step, not the whole task.
+- This is not optional polish - it is how work is not lost. Treat "a lot of uncommitted changes" as a bug to fix immediately by landing them as small commits.
+
 ## Copy & Content Standards
 
 **Any change to website copy, essays, docs text, UI strings, or marketing content must follow the brand voice guide:**

@@ -183,6 +183,15 @@ is a Mac-side tooling wedge (iOS 26.5.1), independent of the app — reconnect t
 | OD15 | **"Generation Error: Unable to generate parser for this template / Jinja: Conversation roles must alternate" on model switch after a tool call** | fix-the-guard | From llama.rn native minja compiling a chat_template whose Jinja asserts strict user/assistant alternation, when tools are enabled (tool-call parser generation) and/or history has assistant+tool+assistant sequences. NOT caused by 0.0.103 (OD14 added a field to an existing message, no new message; OD3 didn't touch templates). Pre-existing. Fix: graceful fallback — catch the local tool-parser-generation failure and retry WITHOUT tools (the app already does this for REMOTE via isToolGrammarError; add the LOCAL equivalent), instead of a hard "Generation Error". Also consider sanitizing/merging roles before formatting for strict-alternation templates. Separate PR. |
 | OD16 | **Remote model capabilities feel flaky across Ollama / LM Studio / OGA Desktop** | instrument-and-revisit | remoteModelCapabilities has 39 unit + 4 integration tests, per-provider — but all FIXTURE-based. Real-world flakiness is likely response-shape variance across provider versions the fixtures don't capture. Fix: capture real /props (OGA Desktop gateway), /api/show (Ollama), /v1/models (LM Studio) from LIVE instances as integration fixtures; harden derivation against missing/variant fields; add a provider-abstraction contract test so each provider's shape → derived caps is guarded. All three must work well (stated priority). Separate workstream. NOTE: 0.0.103's OD7 fix already made reasoning-detection single-source local+remote (small consistency win). |
 
+## Prod review - Android image-gen "Resend" fails with "model cannot be loaded" - 2026-07-10
+**Verdict: investigating (possible regression "after the update").** 1★ Android review: after
+updating, an image-generation "Resend" errors that the model can't be loaded. Suspects to rule out
+in THIS PR: (a) Fix C local/remote mutual-exclusion or the engine/readiness changes touching the
+image dispatch/resend path, (b) image model residency/eviction interaction with the text-engine
+unload changes. Reproduce the resend flow (dispatchGeneration → image route → loadImageModel) and
+confirm whether the image model load path regressed vs main. Needs a meaningful regression test on
+the image resend→load path + on-device confirm.
+
 ## Repo-wide /hygiene audit - 2026-07-09 (SOLID §A/§B + DRY §C, all spot-verified)
 
 Through-line: decision/capability logic derived ad-hoc at many call sites instead of owned once
