@@ -9,8 +9,7 @@ import {
   contextCompactionService, ragService, retrievalService,
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { liteRTService } from '../../services/litert';
-import { invalidateActiveConversation } from '../../services/engines';
+import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken } from '../../services/engines';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
@@ -249,19 +248,19 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
   }
   return prompt;
 }
-/** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT. */
-const applyGemma4ThinkToken = (prompt: string, isRemote: boolean, opts?: { isLiteRT?: boolean; thinkingEnabled?: boolean }): string => {
-  const { isLiteRT = false, thinkingEnabled = false } = opts ?? {};
-  const liteRTWantsThink = !isRemote && isLiteRT && thinkingEnabled;
-  const llamaWantsThink = !isRemote && llmService.isGemma4Model() && llmService.isThinkingEnabled();
-  return (liteRTWantsThink || llamaWantsThink) ? `<|think|>\n${prompt}` : prompt;
-};
-function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; isLiteRT: boolean } {
+/** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT.
+ *  The engine-specific decision lives in engines.wantsLeadingThinkToken (the seam), not here. */
+const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | undefined, opts: { isRemote: boolean; thinkingEnabled: boolean }): string =>
+  wantsLeadingThinkToken(model, opts) ? `<|think|>\n${prompt}` : prompt;
+
+function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _messageText: string): { enabledTools: string[]; rawPrompt: string; localToolSupport: boolean } {
   const project = conversation?.projectId ? useProjectStore.getState().getProject(conversation.projectId) : null;
   const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
-  const isLiteRT = deps.activeModel?.engine === 'litert' && liteRTService.isModelLoaded();
+  // Native tool-calling of the ACTIVE LOCAL engine (llama Jinja support / LiteRT loaded), resolved
+  // by the engine registry — no engine === 'litert' branch here (OCP: add a backend in engines.ts).
+  const localToolSupport = activeLocalTextCapabilities(deps.activeModel).tools;
   // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
-  const canUseTools = deps.supportsToolCalling !== false && (llmService.supportsToolCalling() || !!(activeServerId && activeRemoteTextModelId) || isLiteRT);
+  const canUseTools = deps.supportsToolCalling !== false && (localToolSupport || !!(activeServerId && activeRemoteTextModelId));
 
   let enabledTools = canUseTools ? (deps.settings.enabledTools || []) : [];
 
@@ -271,7 +270,7 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, _message
   }
 
   const rawPrompt = project?.systemPrompt || deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt;
-  return { enabledTools, rawPrompt, isLiteRT };
+  return { enabledTools, rawPrompt, localToolSupport };
 }
 export async function startGenerationFn(deps: GenerationDeps, call: StartGenerationCall): Promise<void> {
   const { setDebugInfo, targetConversationId, messageText } = call;
@@ -285,7 +284,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     return;
   }
   const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
-  const { enabledTools, rawPrompt, isLiteRT } = resolveToolsAndPrompt(deps, conversation, messageText);
+  const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(deps, conversation, messageText);
   let basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
 
   // In voice/audio mode the pro audio feature augments the prompt for spoken
@@ -294,9 +293,10 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
 
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
-  // LiteRT passes tools natively via ConversationConfig — text hint would double-inject.
-  // llama.cpp uses text hint only when it lacks native Jinja tool calling support.
-  const useTextHint = !isRemote && !isLiteRT && activeTools.length > 0 && !llmService.supportsToolCalling();
+  // Text hint only when the LOCAL engine lacks native tool-calling (llama without Jinja); LiteRT
+  // and remote pass tools natively, so injecting a hint would double-inject. localToolSupport is
+  // the engine-registry answer — no engine === 'litert' branch here.
+  const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
 
   // MCP/extension hints are injected once, centrally, by augmentSystemPromptForTools
   // in the tool loop (covers every engine + tool path). Do NOT add them here too, or
@@ -306,8 +306,8 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     useTextHint
       ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
       : basePrompt,
-    isRemote,
-    { isLiteRT, thinkingEnabled: deps.settings.thinkingEnabled },
+    deps.activeModel,
+    { isRemote, thinkingEnabled: !!deps.settings.thinkingEnabled },
   );
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
@@ -464,19 +464,19 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const messages = (conversation?.messages || []).filter((m: Message) => !m.isSystemInfo);
   const messagesUpToUser = messages.slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1)
     .map(m => m.id === userMessage.id ? { ...m, content: messageText } : m);
-  const { enabledTools, rawPrompt, isLiteRT: isLiteRTRegen } = resolveToolsAndPrompt(deps, conversation, messageText);
+  const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(deps, conversation, messageText);
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
   const activeTools = enabledTools;
   const basePrompt = await injectRagContext(conversation?.projectId, messageText, rawPrompt);
-  const useTextHint = !isRemote && !isLiteRTRegen && activeTools.length > 0 && !llmService.supportsToolCalling();
+  const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
   // MCP/extension hints come solely from augmentSystemPromptForTools in the tool loop
   // (see the send path above) — adding them here too would double-inject.
   const systemPrompt = applyGemma4ThinkToken(
     useTextHint
       ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
       : basePrompt,
-    isRemote,
-    { isLiteRT: isLiteRTRegen, thinkingEnabled: deps.settings.thinkingEnabled },
+    deps.activeModel,
+    { isRemote, thinkingEnabled: !!deps.settings.thinkingEnabled },
   );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {

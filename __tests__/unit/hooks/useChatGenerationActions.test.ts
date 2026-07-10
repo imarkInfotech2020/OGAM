@@ -68,12 +68,18 @@ jest.mock('../../../src/services/llm', () => ({
     isModelLoaded: jest.fn(),
     supportsToolCalling: jest.fn(() => false),
     supportsThinking: jest.fn(() => false),
+    getMultimodalSupport: jest.fn(() => null),
     isGemma4Model: jest.fn(() => false),
     isThinkingEnabled: jest.fn(() => false),
     stopGeneration: jest.fn(),
     getContextDebugInfo: jest.fn(),
     clearKVCache: jest.fn(),
   },
+}));
+// engines.activeLocalTextCapabilities / wantsLeadingThinkToken read the litert service directly;
+// mock it as a dumb flag reader so the real engine registry resolves deterministically here.
+jest.mock('../../../src/services/litert', () => ({
+  liteRTService: { isModelLoaded: jest.fn(() => false) },
 }));
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: {
@@ -125,6 +131,8 @@ const mockStopLlmGeneration = llmService.stopGeneration as jest.Mock;
 const mockGetContextDebugInfo = llmService.getContextDebugInfo as jest.Mock;
 const mockClearKVCache = llmService.clearKVCache as jest.Mock;
 const mockDeleteGeneratedImage = localDreamGeneratorService.deleteGeneratedImage as jest.Mock;
+const { liteRTService } = require('../../../src/services/litert');
+const mockLiteRTLoaded = liteRTService.isModelLoaded as jest.Mock;
 
 const { ragService } = require('../../../src/services/rag');
 const { retrievalService } = require('../../../src/services/rag');
@@ -171,6 +179,7 @@ beforeEach(() => {
   (llmService.supportsToolCalling as jest.Mock).mockReturnValue(false);
   (llmService.isGemma4Model as jest.Mock).mockReturnValue(false);
   (llmService.isThinkingEnabled as jest.Mock).mockReturnValue(false);
+  mockLiteRTLoaded.mockReturnValue(false);
   mockStopLlmGeneration.mockResolvedValue(undefined);
   mockGetContextDebugInfo.mockResolvedValue({ truncatedCount: 0, contextUsagePercent: 0 });
   mockClearKVCache.mockResolvedValue(undefined);
@@ -839,6 +848,63 @@ describe('UI tool gate (supportsToolCalling) gates generation', () => {
 
     expect(mockGenerateWithTools).not.toHaveBeenCalled();
     expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────
+// SO4 — engine tool-routing via the engine registry (no `engine === 'litert'` in the caller).
+// These prove the migrated capability seam preserves the LiteRT behavior: native tools with NO
+// text-hint double-inject, and the Gemma-4 <|think|> token driven by the engine, not a branch.
+// ─────────────────────────────────────────────
+
+describe('SO4 engine tool-routing (LiteRT native path via engine registry)', () => {
+  const litertModel = createDownloadedModel({ id: 'lr', engine: 'litert', liteRTVision: false });
+  const makeLiteRTDeps = (overrides: Record<string, unknown> = {}) => makeGenerationDeps({
+    activeModelId: 'lr',
+    activeModel: litertModel,
+    activeModelInfo: { isRemote: false, model: litertModel, modelId: 'lr', modelName: 'LiteRT' },
+    downloadedModels: [litertModel],
+    ...overrides,
+  });
+
+  it('routes tools natively when the LiteRT engine is loaded (canUseTools from the registry, not supportsToolCalling)', async () => {
+    // llama's Jinja tool support is OFF; only the LiteRT-loaded flag can make tools available.
+    // Old code needed the explicit `isLiteRT` OR-term; the migration must keep this working.
+    (llmService.supportsToolCalling as jest.Mock).mockReturnValue(false);
+    mockLiteRTLoaded.mockReturnValue(true);
+    const deps = makeLiteRTDeps({ settings: { ...makeGenerationDeps().settings, enabledTools: ['get_current_datetime'] } });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what time is it?' });
+
+    expect(mockGenerateWithTools).toHaveBeenCalledWith('conv-1', expect.any(Array), expect.objectContaining({ enabledToolIds: ['get_current_datetime'] }));
+  });
+
+  it('does NOT inject the built-in tool text hint for LiteRT (native tools would double-inject)', async () => {
+    mockLiteRTLoaded.mockReturnValue(true);
+    const deps = makeLiteRTDeps({ settings: { ...makeGenerationDeps().settings, systemPrompt: 'Be helpful', enabledTools: ['get_current_datetime'] } });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'what time is it?' });
+
+    // Terminal artifact: the system message that reaches generation. For LiteRT it is exactly the
+    // base prompt — no appended tool-hint text (which is what llama-without-Jinja would get).
+    const [, messages] = mockGenerateWithTools.mock.calls[0];
+    expect(messages[0].content).toBe('Be helpful');
+  });
+
+  it('prepends the Gemma-4 <|think|> token for a loaded LiteRT model when thinking is enabled', async () => {
+    mockLiteRTLoaded.mockReturnValue(true);
+    const deps = makeLiteRTDeps({ settings: { ...makeGenerationDeps().settings, systemPrompt: 'Be helpful', thinkingEnabled: true, enabledTools: ['get_current_datetime'] } });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'think about it' });
+
+    const [, messages] = mockGenerateWithTools.mock.calls[0];
+    expect(messages[0].content).toBe('<|think|>\nBe helpful');
+  });
+
+  it('does NOT prepend the think token for LiteRT when thinking is disabled', async () => {
+    mockLiteRTLoaded.mockReturnValue(true);
+    const deps = makeLiteRTDeps({ settings: { ...makeGenerationDeps().settings, systemPrompt: 'Be helpful', thinkingEnabled: false, enabledTools: ['get_current_datetime'] } });
+    await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'no thinking' });
+
+    const [, messages] = mockGenerateWithTools.mock.calls[0];
+    expect(messages[0].content).toBe('Be helpful');
   });
 });
 

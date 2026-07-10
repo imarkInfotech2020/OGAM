@@ -1,6 +1,7 @@
 import { useAppStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
+import { isLiteRTModel, type DownloadedModel } from '../types';
 import logger from '../utils/logger';
 
 /** Every text-generation engine, defined ONCE here so callers never hardcode the concrete set. */
@@ -98,6 +99,48 @@ export function isModelReady(model: { engine?: string; filePath?: string } | nul
   return model.engine === 'litert'
     ? liteRTService.isModelLoaded()
     : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
+}
+
+/**
+ * Live capabilities of the ACTIVE LOCAL text engine, read from the running services and fed
+ * through the one pure rule (deriveEngineCapabilities). This is the imperative counterpart to
+ * deriveEngineCapabilities: generation/load paths call this instead of poking llmService /
+ * liteRTService and branching on engine === 'litert' themselves. Remote is out of scope here
+ * (pass isRemote:false) — callers layer the remote decision on top. Adding a backend = extend
+ * deriveEngineCapabilities, not the callers (OCP).
+ */
+export function activeLocalTextCapabilities(model: DownloadedModel | null | undefined): EngineCapabilities {
+  const litert = !!model && isLiteRTModel(model);
+  return deriveEngineCapabilities({
+    isRemote: false,
+    engine: model?.engine,
+    liteRTVision: litert ? model.liteRTVision : undefined,
+    liteRTAudio: litert ? model.liteRTAudio : undefined,
+    liteRTLoaded: liteRTService.isModelLoaded(),
+    llama: {
+      loaded: llmService.isModelLoaded(),
+      vision: llmService.getMultimodalSupport()?.vision ?? false,
+      audio: false,
+      tools: llmService.supportsToolCalling(),
+      thinking: llmService.isThinkingEnabled(),
+    },
+  });
+}
+
+/**
+ * Should a leading Gemma-4 `<|think|>` token be prepended to activate thinking for THIS turn?
+ * The engine-specific detection lives here (the seam), not in the caller: LiteRT relies on the
+ * turn's thinkingEnabled flag; llama introspects the loaded model (isGemma4Model + thinking on).
+ * Remote never gets it. Callers pass their model + flags and never name a concrete engine.
+ */
+export function wantsLeadingThinkToken(
+  model: DownloadedModel | null | undefined,
+  opts: { isRemote: boolean; thinkingEnabled: boolean },
+): boolean {
+  if (opts.isRemote) return false;
+  return !!model && isLiteRTModel(model) && liteRTService.isModelLoaded()
+    ? opts.thinkingEnabled
+    : llmService.isGemma4Model() && llmService.isThinkingEnabled();
 }
 
 /**

@@ -159,6 +159,7 @@ export const createDownloadedModel = (options: DownloadedModelFactoryOptions = {
   downloadedAt: options.downloadedAt ?? new Date().toISOString(),
   credibility: options.credibility,
   engine: options.engine ?? 'llama',
+  liteRTVision: options.liteRTVision,
   isVisionModel: options.isVisionModel,
   mmProjPath: options.mmProjPath,
   mmProjFileName: options.mmProjFileName,

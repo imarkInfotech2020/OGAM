@@ -6,7 +6,7 @@ import {
 } from '../../components';
 import { llmService, activeModelService, modelManager } from '../../services';
 import { liteRTService } from '../../services/litert';
-import { deriveEngineCapabilities } from '../../services/engines';
+import { deriveEngineCapabilities, isModelReady, activeLocalTextCapabilities } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
@@ -16,16 +16,10 @@ import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-/** Vision support for a just-loaded local model, via the single capability rule (engines.ts) —
- *  so these post-load sites don't branch on engine === 'litert' themselves. */
+/** Vision support for a just-loaded local model, via the single engine-registry reader
+ *  (engines.activeLocalTextCapabilities) — so these post-load sites don't branch on the engine. */
 function loadedModelVision(model: DownloadedModel): boolean {
-  return deriveEngineCapabilities({
-    isRemote: false,
-    engine: model.engine,
-    liteRTVision: isLiteRTModel(model) ? model.liteRTVision : undefined,
-    liteRTLoaded: liteRTService.isModelLoaded(),
-    llama: { loaded: llmService.isModelLoaded(), vision: llmService.getMultimodalSupport()?.vision ?? false, audio: false, tools: false, thinking: false },
-  }).vision;
+  return activeLocalTextCapabilities(model).vision;
 }
 
 type ActiveModelInfo = {
@@ -206,28 +200,23 @@ export async function ensureModelLoadedFn(
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected' };
-  if (activeModel.engine === 'litert') {
-    if (liteRTService.isModelLoaded()) {
-      deps.setSupportsVision(!!activeModel.liteRTVision);
-      return { ok: true };
-    }
-    deps.setSupportsVision(!!activeModel.liteRTVision);
-    const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading, onLoadedResume);
-    if (!outcome.ok) return outcome;
-    return liteRTService.isModelLoaded()
-      ? { ok: true }
-      : { ok: false, reason: 'load-threw', detail: 'LiteRT model not loaded after load' };
-  }
-  const loadedPath = llmService.getLoadedModelPath();
-  const currentVisionSupport = llmService.getMultimodalSupport()?.vision || false;
-  const needsReload = loadedPath !== activeModel.filePath ||
-    (activeModel.mmProjPath && !currentVisionSupport);
-  if (!needsReload && loadedPath === activeModel.filePath) {
-    deps.setSupportsVision(currentVisionSupport);
+  // Vision-repair (llama only): a vision model whose mmproj didn't load reports no vision — force a
+  // reload so it comes back with vision. LiteRT has no separate mmproj, so this never applies.
+  const needsVisionRepair = !isLiteRTModel(activeModel)
+    && !!activeModel.mmProjPath
+    && !(llmService.getMultimodalSupport()?.vision);
+  // ONE readiness predicate for both engines (engines.isModelReady); vision from the single rule.
+  if (isModelReady(activeModel) && !needsVisionRepair) {
+    deps.setSupportsVision(loadedModelVision(activeModel));
     return { ok: true };
   }
-  const alreadyLoading = activeModelService.getActiveModels().text.isLoading;
-  return initiateModelLoad(deps, alreadyLoading, onLoadedResume);
+  deps.setSupportsVision(loadedModelVision(activeModel)); // LiteRT: known from the flag pre-load
+  const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading, onLoadedResume);
+  if (!outcome.ok) return outcome;
+  // Post-verify against native truth — catches a load that reported ok but left no resident model.
+  return isModelReady(activeModel)
+    ? { ok: true }
+    : { ok: false, reason: 'load-threw', detail: 'the model is not resident after load' };
 }
 
 export async function proceedWithModelLoadFn(
