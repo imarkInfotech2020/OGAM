@@ -98,6 +98,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       tools.unmount();
     },
 
+    /** Let async work (tool loop → tool-result bubble render) settle before asserting. */
+    async settle(ms = 300) {
+      await new Promise((r) => setTimeout(r, ms));
+    },
+
     /** Mount the real ChatScreen. */
     render() {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
