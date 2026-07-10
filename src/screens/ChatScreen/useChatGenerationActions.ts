@@ -95,6 +95,29 @@ function buildMessagesForContext(conversationId: string, messageText: string, sy
   const userMessageForContext = (lastMsg?.role === 'user' ? { ...lastMsg, content: messageText } : lastMsg) as Message;
   return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
 }
+/** The modality of a turn. Resolved ONCE from user intent when the turn is created, recorded on
+ *  the turn's record, and READ on resend/edit so the same pipeline runs again (deterministic) —
+ *  never re-classified from current settings. STT/TTS join this union as the pipeline grows. */
+export type TurnKind = 'text' | 'image';
+
+/** Did this assistant reply produce an image? An image turn's final assistant message carries an
+ *  image attachment (imageGenerationService), so that message IS the owning record of the turn's
+ *  modality. Read it instead of re-deriving from the prompt + current settings. */
+export function messageHasImageOutput(message: Message | undefined | null): boolean {
+  return !!message?.attachments?.some(a => a.type === 'image');
+}
+
+/** The recorded kind of the turn whose USER message is userMessageId — taken from the assistant
+ *  reply that followed it. undefined when there is no reply yet (never generated) or the message
+ *  is unknown, in which case the caller falls back to classifier routing (legacy behavior). */
+export function recordedTurnKind(messages: Message[], userMessageId: string): TurnKind | undefined {
+  const idx = messages.findIndex(m => m.id === userMessageId);
+  if (idx === -1) return undefined;
+  const reply = messages.slice(idx + 1).find(m => m.role === 'assistant');
+  if (!reply) return undefined;
+  return messageHasImageOutput(reply) ? 'image' : 'text';
+}
+
 export async function shouldRouteToImageGenerationFn(
   deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'activeImageModel' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage' | 'hasTextModel'>,
   text: string,
@@ -440,16 +463,23 @@ export async function executeDeleteConversationFn(
   deps.setActiveConversation(null);
   deps.navigation.goBack();
 }
-export type RegenerateCall = { setDebugInfo: SetState<any>; userMessage: Message };
+export type RegenerateCall = { setDebugInfo: SetState<any>; userMessage: Message; recordedKind?: TurnKind };
 export async function regenerateResponseFn(deps: GenerationDeps, call: RegenerateCall): Promise<void> {
-  const { userMessage } = call;
-  logger.log(`[RESEND-SM] regenerate start userMsg=${userMessage.id} conv=${deps.activeConversationId} hasActiveModel=${deps.hasActiveModel} isRemote=${deps.activeModelInfo?.isRemote} hasActiveModelObj=${!!deps.activeModel}`);
+  const { userMessage, recordedKind } = call;
+  logger.log(`[RESEND-SM] regenerate start userMsg=${userMessage.id} conv=${deps.activeConversationId} hasActiveModel=${deps.hasActiveModel} isRemote=${deps.activeModelInfo?.isRemote} hasActiveModelObj=${!!deps.activeModel} recordedKind=${recordedKind ?? 'none'}`);
   if (!deps.activeConversationId || !deps.hasActiveModel) { logger.log('[RESEND-SM] regenerate BAIL: no conv or no active model'); return; }
   await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before the LLM reload (memory-tight)
   const targetConversationId = deps.activeConversationId;
   const messageText = appendAttachmentText(userMessage.content, userMessage.attachments);
-  const shouldGenerateImage = await shouldRouteToImageGenerationFn(deps, messageText);
-  if (shouldGenerateImage && deps.activeImageModel) {
+  // DETERMINISTIC replay: the turn's RECORDED kind wins. An image turn re-runs the image pipeline
+  // (its own "no image model" guard messages), NEVER re-classifies to text and fails to load a text
+  // model (the 1★ resend bug). Only when the kind wasn't recorded (older turns) do we classify.
+  const routeToImage = recordedKind === 'image'
+    ? true
+    : recordedKind === 'text'
+      ? false
+      : await shouldRouteToImageGenerationFn(deps, messageText);
+  if (routeToImage) {
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }

@@ -389,7 +389,7 @@ export const useChatScreen = () => {
     handleRetryMessage: (message: Message) =>
       handleRetryMessageFn(message, genDeps, { activeConversationId, hasActiveModel, activeConversation, deleteMessagesAfter, setDebugInfo }),
     handleEditMessage: (message: Message, newContent: string) =>
-      handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
+      handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, activeConversation, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
     handleSelectProject: (project: Project | null) => {
       setPendingProjectId(project?.id);
       if (!activeConversationId) {

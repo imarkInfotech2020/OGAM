@@ -21,6 +21,7 @@ import {
   handleSelectProjectFn,
   dispatchGenerationFn,
 } from '../../../src/screens/ChatScreen/useChatGenerationActions';
+import * as generationActions from '../../../src/screens/ChatScreen/useChatGenerationActions';
 import * as hookRegistry from '../../../src/bootstrap/hookRegistry';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { generationSession } from '../../../src/services/generationSession';
@@ -489,6 +490,95 @@ describe('regenerateResponseFn', () => {
     });
     await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg });
     expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Generation Error' }));
+  });
+
+  // ── Deterministic resend: the turn's RECORDED kind picks the pipeline (the 1★ Android
+  //    "Resend → model cannot be loaded" regression). An image turn must re-run the image
+  //    pipeline even when current settings/classifier would say "text", and must NOT be
+  //    re-classified into the text pipeline (which then fails to load a text model).
+  it('recordedKind=image re-runs the IMAGE pipeline even when the classifier would say text', async () => {
+    mockClassifyIntent.mockResolvedValue('text'); // classifier would misroute to text
+    mockGenerateImage.mockResolvedValueOnce({ imagePath: '/out.png' });
+    const deps = makeGenerationDeps({
+      imageModelLoaded: true,
+      activeImageModel: baseImageModel,
+      settings: { ...makeGenerationDeps().settings, imageGenerationMode: 'manual' }, // manual → classifier off, old code → text
+    });
+    const msg = { id: 'm1', role: 'user' as const, content: 'a fox in snow', timestamp: 0 };
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: msg, recordedKind: 'image' });
+    expect(mockGenerateImage).toHaveBeenCalled();
+    expect(mockGenerateResponse).not.toHaveBeenCalled();
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+  });
+
+  it('recordedKind=image does NOT consult the classifier at all (deterministic replay)', async () => {
+    mockGenerateImage.mockResolvedValueOnce({ imagePath: '/out.png' });
+    const deps = makeGenerationDeps({ imageModelLoaded: true, activeImageModel: baseImageModel });
+    const msg = { id: 'm1', role: 'user' as const, content: 'a fox', timestamp: 0 };
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: msg, recordedKind: 'image' });
+    expect(mockClassifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('recordedKind=text re-runs the TEXT pipeline even when the classifier would say image', async () => {
+    mockClassifyIntent.mockResolvedValue('image'); // classifier would misroute to image
+    mockGenerateResponse.mockResolvedValueOnce(undefined);
+    const userMsg = { id: 'm1', role: 'user' as const, content: 'draw me a diagram of X', timestamp: 0 };
+    const deps = makeGenerationDeps({
+      activeImageModel: baseImageModel, // image model IS available, but this turn was text
+      activeConversation: { id: 'conv-1', messages: [userMsg] },
+    });
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: userMsg, recordedKind: 'text' });
+    expect(mockGenerateResponse).toHaveBeenCalled();
+    expect(mockGenerateImage).not.toHaveBeenCalled();
+    expect(mockClassifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('no recordedKind (legacy turn) falls back to classifier routing', async () => {
+    mockClassifyIntent.mockResolvedValue('image');
+    mockGenerateImage.mockResolvedValueOnce({ imagePath: '/out.png' });
+    const deps = makeGenerationDeps({ imageModelLoaded: true, activeImageModel: baseImageModel });
+    const msg = { id: 'm1', role: 'user' as const, content: 'draw a fox', timestamp: 0 };
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage: msg });
+    expect(mockClassifyIntent).toHaveBeenCalled(); // legacy path still classifies
+    expect(mockGenerateImage).toHaveBeenCalled();
+  });
+});
+
+// ── Pure helpers: recorded-turn-modality lookup (single source read on resend/edit) ──
+describe('recordedTurnKind / messageHasImageOutput', () => {
+  const userMsg = (id: string, content = 'hi') => ({ id, role: 'user' as const, content, timestamp: 0 });
+  const textReply = (id: string) => ({ id, role: 'assistant' as const, content: 'answer', timestamp: 0 });
+  const imageReply = (id: string) => ({
+    id, role: 'assistant' as const, content: '', timestamp: 0,
+    attachments: [{ id: 'img', type: 'image' as const, uri: 'file:///out.png', width: 512, height: 512 }],
+  });
+
+  it('reads image when the reply after the user message carries an image attachment', () => {
+    const msgs = [userMsg('u1'), imageReply('a1')];
+    expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('image');
+  });
+
+  it('reads text when the reply is a plain assistant message', () => {
+    const msgs = [userMsg('u1'), textReply('a1')];
+    expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('text');
+  });
+
+  it('returns undefined when the turn has no reply yet (never generated)', () => {
+    expect(generationActions.recordedTurnKind([userMsg('u1')], 'u1')).toBeUndefined();
+  });
+
+  it('returns undefined when the user message is unknown', () => {
+    expect(generationActions.recordedTurnKind([userMsg('u1'), textReply('a1')], 'ghost')).toBeUndefined();
+  });
+
+  it('messageHasImageOutput distinguishes image attachments from documents/none', () => {
+    expect(generationActions.messageHasImageOutput(imageReply('a1'))).toBe(true);
+    expect(generationActions.messageHasImageOutput(textReply('a1'))).toBe(false);
+    expect(generationActions.messageHasImageOutput({
+      id: 'a', role: 'assistant', content: 'x', timestamp: 0,
+      attachments: [{ id: 'd', type: 'document', uri: 'file:///f.pdf' }],
+    } as any)).toBe(false);
+    expect(generationActions.messageHasImageOutput(undefined)).toBe(false);
   });
 });
 

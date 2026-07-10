@@ -7,8 +7,9 @@ import { modelResidencyManager } from '../../services/modelResidency';
 import { hardwareService } from '../../services/hardware';
 import {
   regenerateResponseFn, executeDeleteConversationFn, handleImageGenerationFn,
+  recordedTurnKind, messageHasImageOutput,
 } from './useChatGenerationActions';
-import type { GenerationDeps } from './useChatGenerationActions';
+import type { GenerationDeps, TurnKind } from './useChatGenerationActions';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -40,16 +41,21 @@ export async function handleRetryMessageFn(
   callHook(HOOKS.audioStop);
   if (message.role === 'user') {
     const idx = msgs.findIndex((m: Message) => m.id === message.id);
-    logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1}`);
+    // Read the turn's recorded modality BEFORE deleting the reply that carries it, so resend
+    // re-runs the SAME pipeline (deterministic) instead of re-classifying — the image-resend fix.
+    const recordedKind = recordedTurnKind(msgs, message.id);
+    logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1} recordedKind=${recordedKind ?? 'none'}`);
     if (idx !== -1 && idx < msgs.length - 1) p.deleteMessagesAfter(p.activeConversationId, message.id);
-    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message });
+    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind });
   } else {
     const idx = msgs.findIndex((m: Message) => m.id === message.id);
     const prev = idx > 0 ? msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user') : null;
-    logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'}`);
+    // The retried assistant message IS the turn's reply — its output determines the kind directly.
+    const recordedKind: TurnKind | undefined = messageHasImageOutput(message) ? 'image' : (prev ? 'text' : undefined);
+    logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'} recordedKind=${recordedKind ?? 'none'}`);
     if (prev) {
       p.deleteMessagesAfter(p.activeConversationId, prev.id);
-      await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev });
+      await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev, recordedKind });
     }
   }
 }
@@ -59,6 +65,7 @@ type EditParams = {
   newContent: string;
   activeConversationId: string | null | undefined;
   hasActiveModel: boolean;
+  activeConversation: any;
   updateMessageContent: (c: string, m: string, v: string) => void;
   deleteMessagesAfter: (c: string, m: string) => void;
   setDebugInfo: SetState<any>;
@@ -68,9 +75,12 @@ export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams
   // Same as retry: no model loaded → alert instead of a silent no-op.
   if (!p.hasActiveModel) { genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
   if (!p.activeConversationId) return;
+  // Preserve the turn's modality across an edit: an edited image prompt re-runs the image pipeline
+  // (read BEFORE the update/delete strips the reply that records it), not a re-classification.
+  const recordedKind = recordedTurnKind(p.activeConversation?.messages || [], p.message.id);
   p.updateMessageContent(p.activeConversationId, p.message.id, p.newContent);
   p.deleteMessagesAfter(p.activeConversationId, p.message.id);
-  await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: { ...p.message, content: p.newContent } });
+  await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: { ...p.message, content: p.newContent }, recordedKind });
 }
 
 export function handleDeleteConversationFn(
