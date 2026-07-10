@@ -291,12 +291,14 @@ describe('extractImageUris', () => {
 });
 
 // ==========================================================================
-// B5 regression: a TRANSCRIBED voice note is display-only — its audio must NOT be sent to the model
-// as media (the transcript is already in message.content). Sending it made a non-audio mmproj throw
-// "Failed to load media" and hard-fail the turn. A transcript-LESS audio IS still a model input.
+// B5/B9 regression: PRODUCT RULE — every voice note is transcribed and ONLY the transcript is sent
+// to the model; audio is NEVER model input. Sending the audio (a) is redundant with the transcript
+// and (b) hard-fails the turn ("Failed to load media" on a non-audio mmproj; "File does not exist"
+// when the absolute iOS container path went stale after a reinstall). So NO audio attachment — with
+// or without a transcript — is ever attached as media.
 // ==========================================================================
 
-describe('voice-note audio is not re-sent as model media when transcribed (B5)', () => {
+describe('voice-note audio is NEVER sent as model media — transcript-only (B5/B9)', () => {
   const transcribedVoiceNote = (uri: string, transcript: string) =>
     ({ id: `a-${uri}`, type: 'audio' as const, uri, audioFormat: 'wav' as const, textContent: transcript });
   const rawAudio = (uri: string) =>
@@ -311,11 +313,11 @@ describe('voice-note audio is not re-sent as model media when transcribed (B5)',
     expect(result).toContain('spoken text');
   });
 
-  it('formatLlamaMessages: a transcript-less audio IS sent as media', () => {
+  it('formatLlamaMessages: even a transcript-LESS audio (whisper not ready) is NOT sent as media', () => {
     const messages: Message[] = [
       createUserMessage('', { attachments: [rawAudio('file:///raw.wav')] }),
     ];
-    expect(formatLlamaMessages(messages, false, true)).toContain('<__media__>');
+    expect(formatLlamaMessages(messages, false, true)).not.toContain('<__media__>');
   });
 
   it('buildOAIMessages: a transcribed voice note stays a plain text message (no input_audio part)', () => {
@@ -326,12 +328,14 @@ describe('voice-note audio is not re-sent as model media when transcribed (B5)',
     expect(msg).toEqual({ role: 'user', content: 'spoken text' }); // text, not a media-parts array
   });
 
-  it('buildOAIMessages: a transcript-less audio produces an input_audio media part', () => {
+  it('buildOAIMessages: a voice note NEVER produces an input_audio part (the B9 file-not-found fix)', () => {
     const messages: Message[] = [
-      createUserMessage('', { attachments: [rawAudio('file:///raw.wav')] }),
+      createUserMessage('spoken text', { attachments: [rawAudio('file:///raw.wav')] }),
     ];
     const [msg] = buildOAIMessages(messages, true);
-    expect(Array.isArray(msg.content)).toBe(true);
-    expect((msg.content as any[]).some(p => p.type === 'input_audio')).toBe(true);
+    // Text-only (or, if there were an image, no input_audio in the parts) — never input_audio.
+    const parts = Array.isArray(msg.content) ? (msg.content as any[]) : [];
+    expect(parts.some(p => p.type === 'input_audio')).toBe(false);
+    if (!Array.isArray(msg.content)) expect(msg.content).toBe('spoken text');
   });
 });

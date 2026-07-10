@@ -2,13 +2,17 @@ import { RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
 import { Message, MediaAttachment } from '../types';
 
 /**
- * Audio attachments that are genuine MODEL input (sent to the LLM as media), vs a transcribed voice
- * note — which carries its whisper transcript in `message.content` (voiceNoteSend design) and is
- * DISPLAY-ONLY. Sending a transcribed voice note's audio as media is redundant with the transcript
- * AND makes a non-audio mmproj throw "Failed to load media", hard-failing the turn. So only a
- * transcript-less audio attachment counts as model audio input. */
-function modelAudioAttachments(attachments: MediaAttachment[] | undefined): MediaAttachment[] {
-  return (attachments ?? []).filter(a => a.type === 'audio' && !a.textContent?.trim());
+ * PRODUCT RULE: every voice note is transcribed (whisper) and ONLY its transcript is sent to the
+ * model — the audio attachment is display/playback ONLY, never model input. So the llama message
+ * builders NEVER attach audio as media. Sending the audio broke turns two ways:
+ *  - the transcript is already in message.content, so the audio is redundant; and
+ *  - the audio path is an absolute iOS container path that goes stale on reinstall/rebuild (new
+ *    container UUID) → "File does not exist or cannot be opened", hard-failing every voice-mode turn
+ *    in a persisted conversation (B9); a non-audio mmproj also throws "Failed to load media" (B5).
+ * Returning [] unconditionally enforces the transcript-only contract for every model + state
+ * (including a not-yet-transcribed note — which must not reach the model as raw audio either). */
+function modelAudioAttachments(_attachments: MediaAttachment[] | undefined): MediaAttachment[] {
+  return [];
 }
 
 export function formatLlamaMessages(messages: Message[], supportsVision: boolean, supportsAudio = false): string {
