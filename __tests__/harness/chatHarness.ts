@@ -118,6 +118,23 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       const retry = await rtl.waitFor(() => view.getByTestId('action-retry'));
       rtl.fireEvent.press(retry);
     },
+
+    /**
+     * Drive the REAL edit gesture: long-press the last USER bubble → tap "Edit" → change the text →
+     * tap "SAVE & RESEND". The real edit handler rewrites history and re-runs generation.
+     */
+    async editLastUserMessage(newText: string, scripted: { text?: string; content?: string }) {
+      if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
+      else boundary.litert.scriptTurn(scripted as { content?: string });
+
+      const view = this.view!;
+      const bubbles = await rtl.waitFor(() => { const b = view.queryAllByTestId('user-message'); expect(b.length).toBeGreaterThan(0); return b; });
+      rtl.fireEvent(bubbles[bubbles.length - 1], 'longPress');
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('action-edit')));
+      const input = await rtl.waitFor(() => view.getByPlaceholderText('Enter message...'));
+      rtl.fireEvent.changeText(input, newText);
+      rtl.fireEvent.press(view.getByText('SAVE & RESEND'));
+    },
   };
   return harness;
 }
