@@ -26,7 +26,17 @@ reuses, so the real logic always runs on top of it.
 
 ## The shared harness (build ONCE — this is the enabler)
 
-Six boundary fakes under `__tests__/harness/`. Everything else is real.
+Six boundary fakes under `__tests__/harness/`. Everything else is real. **Use an off-the-shelf fake
+for every STANDARD boundary; hand-roll ONLY the first-party native modules — and make those VERIFIED
+FAKES** (a shared contract-test suite runs against both the fake and the real module to catch drift;
+term of art: "verified fake", per Google SWE ch.13 / Shai Yallin "Fake, Don't Mock"). Library map:
+- filesystem → **`memfs`** (or `mock-fs`) behind the RNFS interface — do NOT reimplement file storage.
+- MCP/network → **MSW** (`msw/native`, official RN support) — replaces the tools agent's hand-faked XHR.
+- clock → **jest fake timers**; UI terminal-artifact → **React Native Testing Library**.
+- DB (if any) → real engine `:memory:` (prefer-real tier, above faking).
+- `fakeDownloadNative` + `stubEngines` → HAND-ROLLED verified fakes behind the one-typed-TS-contract-
+  per-native-capability rule (already mandated in CLAUDE.md); each gets a contract test vs the real module.
+
 
 1. **`fakeFs`** — an in-memory implementation of the RNFS subset actually used (`exists`, `mkdir`,
    `readDir`, `stat`, `writeFile`, `readFile`/`read`, `unlink`, `DocumentDirectoryPath`). Real enough
