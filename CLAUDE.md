@@ -119,21 +119,26 @@ If the answer to 1 is "no", say so and write the simple version. If "yes", build
 - **Contract tests run against the abstraction, so they catch both platforms.** Test the common interface + the capability flags; a single test then guards iOS and Android together. If a test can only be written per-platform, the abstraction is wrong.
 - **Native module contract parity is mandatory.** The Swift and Kotlin implementations of a module must expose the SAME method names, the SAME events (names + payloads), and the SAME semantics (persistence, cleanup, error cascading). Contract drift between Swift and Kotlin is the root cause of platform-only bugs - when you touch a native module on one platform, verify/mirror the other side against the shared TS contract.
 
-## Pre-Commit Quality Gates
+## Quality Gates run on PRE-PUSH (not pre-commit)
 
-All quality gates run automatically via Husky on every `git commit`, scoped to the file types you staged:
+**Commits are intentionally ungated so red-first / work-in-progress tests can land as small commits.**
+The full quality gate runs via Husky on `git push` (`.husky/pre-push`), scoped to the files pushed
+since upstream:
 
-| Staged file type | Checks that run automatically |
+| Pushed file type | Checks that run automatically (pre-push) |
 |---|---|
-| `.ts` / `.tsx` / `.js` / `.jsx` | eslint (staged only), `tsc --noEmit`, `npm test` |
-| `.swift` | swiftlint (staged only), `npm run test:ios` |
-| `.kt` / `.kts` | `compileDebugKotlin` (type check), `lintDebug`, `npm run test:android` |
+| `.ts` / `.tsx` / `.js` / `.jsx` | eslint, `tsc --noEmit`, `jest --findRelatedTests`, `npm run depcruise` |
+| `.swift` | `npm run test:ios` |
+| `.kt` / `.kts` | `npm run test:android` |
 
 **Requirements:**
 - SwiftLint: `brew install swiftlint` (skipped with a warning if not installed)
 - Android checks require the Gradle wrapper in `android/`
 
-Before writing new code, ensure tests exist for your changes. If the hook fails, fix the issue and recommit - never skip with `--no-verify`.
+**Workflow implication (TDD / adversarial red-first):** write a failing test, commit it red (commit is
+free), then drive it green; the branch must be green before `git push` (the gate blocks a red push).
+Never bypass the push gate with `--no-verify`. `core.hooksPath` is `.husky/_` (husky v9); there is no
+pre-commit hook by design.
 
 ## Testing Requirements
 
