@@ -6,6 +6,7 @@ import {
 } from '../../components';
 import { llmService, activeModelService, modelManager } from '../../services';
 import { liteRTService } from '../../services/litert';
+import { deriveEngineCapabilities } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
@@ -363,31 +364,26 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   // (ensureModelReady → ensureModelLoaded). Loading eagerly here is what made opening a
   // chat — and switching models — spin up the model before the user sent anything.
   useEffect(() => {
-    if (activeModelInfo.isRemote) {
-      setSupportsVision(activeRemoteModel?.capabilities?.supportsVision ?? false);
-    } else if (activeModel?.engine === 'litert') {
-      setSupportsVision(!!activeModel.liteRTVision);
-    } else if (activeModelMmProjPath && llmService.isModelLoaded()) {
-      setSupportsVision(llmService.getMultimodalSupport()?.vision ?? false);
-    } else {
-      setSupportsVision(false);
-    }
-
+    // Single capability rule (engines.deriveEngineCapabilities); vision keys on activeModelInfo.isRemote.
+    setSupportsVision(deriveEngineCapabilities({
+      isRemote: activeModelInfo.isRemote,
+      remoteCaps: activeRemoteModel?.capabilities,
+      engine: activeModel?.engine,
+      liteRTVision: activeModel?.engine === 'litert' ? activeModel.liteRTVision : undefined,
+      liteRTLoaded: liteRTService.isModelLoaded(),
+      llama: { loaded: llmService.isModelLoaded(), vision: llmService.getMultimodalSupport()?.vision ?? false, audio: false, tools: false, thinking: false },
+    }).vision);
   }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading]);
   useEffect(() => {
-    if (activeRemoteTextModelId) {
-      setSupportsToolCalling(activeRemoteModel?.capabilities?.supportsToolCalling ?? false);
-      setSupportsThinking(activeRemoteModel?.capabilities?.supportsThinking ?? false);
-    } else if (activeModel?.engine === 'litert' && liteRTService.isModelLoaded()) {
-      setSupportsToolCalling(true);
-      setSupportsThinking(true);
-    } else if (llmService.isModelLoaded()) {
-      setSupportsToolCalling(llmService.supportsToolCalling());
-      setSupportsThinking(llmService.supportsThinking());
-    } else {
-      setSupportsToolCalling(false);
-      setSupportsThinking(false);
-    }
-
+    // Same rule; tools/thinking key on activeRemoteTextModelId (preserved from the prior branch).
+    const caps = deriveEngineCapabilities({
+      isRemote: !!activeRemoteTextModelId,
+      remoteCaps: activeRemoteModel?.capabilities,
+      engine: activeModel?.engine,
+      liteRTLoaded: liteRTService.isModelLoaded(),
+      llama: { loaded: llmService.isModelLoaded(), vision: false, audio: false, tools: llmService.supportsToolCalling(), thinking: llmService.supportsThinking() },
+    });
+    setSupportsToolCalling(caps.tools);
+    setSupportsThinking(caps.thinking);
   }, [activeModelId, activeModel?.engine, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
 }
