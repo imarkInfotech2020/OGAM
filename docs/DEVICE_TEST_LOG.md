@@ -3,6 +3,35 @@
 On-device testing of PR #510 (Android dev `ai.offgridmobile.dev` + iOS "Mac's iPhone"). One line per bug.
 Status: ✅ verified on device · 🔁 fixed, needs recheck on next build · 🔎 open/investigating.
 
+## Adversarial QA sweep — broken user flows to verify after fix (🔎)
+
+Found by a 6-agent bug-hunt (download/chat/voice/tools+mcp/thinking/projects+settings), each crossing
+engine × modality × platform. Every item below is CROSS-CHECKED as still-live on current HEAD unless
+marked. Tag: [type · confidence]. Fix each, then run the flow on device to confirm.
+
+**Confirmed live on HEAD — highest value:**
+- [ ] **Q1 — Image Size you set ≠ size generated** [SoC drift · HIGH]. Model Settings → Image → set size 128 (slider allows it) → generate → the image is forced to 256 (`imageGenerationService` floors to SWEET_SPOT_SIZE). The value shown is never used.
+- [ ] **Q2 — MCP tool call silently dropped on small-model JSON** [functional/DRY · HIGH]. Use an MCP tool with a small model that emits unquoted keys / trailing comma / single quotes → no tool runs, model says "I couldn't find anything." (MCP parser is strict `JSON.parse`; built-in parser recovers via `fixUnquotedKeys` — two parsers drifted.)
+- [ ] **Q3 — MCP tool call with stringified `arguments`** [functional/DRY · MED]. Model emits `"arguments":"{...}"` → sent to the MCP server as a raw string, server gets bad params / ignores them.
+- [ ] **Q4 — On-device tool router false-positive** [functional · MED]. With several MCP tools, if the router's prose contains a tool name as a substring (or says "none" while naming one) → that tool is force-selected; the "none" branch never runs (litert/llama-iOS).
+- [ ] **Q5 — Successful tool + empty final = "(No response)"** [functional · MED]. MCP tool returns real data, model's final turn is empty → user sees "_(No response)_" and the fetched data is discarded (litert can't recover).
+- [ ] **Q6 — Thinking box shows "Thought process" while still thinking** [UI · MED]. On litert/remote (separate reasoning channel), the reasoning box header reads the DONE label + "T" badge while reasoning is still streaming (should be "Thinking…/…"). llama inline `<think>` is correct — divergence.
+- [ ] **Q7 — Image guidance-scale drifts to 2.0** [DRY · MED]. If `imageGuidanceScale` is ever 0/stale, generation runs at 2.0 while every slider/default shows 7.5 (three fallback literals: `2`, `2.0`, `7.5` for one setting).
+- [ ] **Q8 — Prompt enhancement silently skipped for a REMOTE text model** [SOLID gap · MED]. Active text model = remote/gateway + image-gen + enhancement on → enhancement is skipped (generateStandalone has only llama/litert branches, no remote path).
+
+**Projects/new-chat — found on base, seam likely live (verify on device):**
+- [ ] **Q9 — Delete a project → its chats orphaned** [SoC · MED]. Delete a project that has chats → chats survive but keep a dangling projectId; not re-filable from any project view, only via the global Chats list.
+- [ ] **Q10 — Project pick on a NEW chat not saved** [SoC (state in presentation) · MED]. On a brand-new chat (before first message) pick a project → it lives only in ChatScreen local state (`pendingProjectId`); lost if the send/create path omits it.
+- [ ] **Q11 — "New chat" on context-full drops the project** [functional · LOW-MED]. In a project chat, fill the context window, tap "New chat" in the alert → new chat is unassigned.
+- [ ] **Q12 — Modal "Reset to Defaults" is partial** [functional · LOW]. Chat Settings sheet → Reset to Defaults resets only the 7 text params; image steps/size/guidance/threads unchanged.
+- [ ] **Q13 — Duplicate Image sliders diverge** [DRY · LOW]. The modal vs Model Settings render the same Image-Size/Steps sliders with different mins/fallbacks (256 vs 128) — the root of Q1.
+
+**Validated FIXED by the sweep (independent adversarial confirmation — recheck on next build):**
+- [x] QNN/NPU image download integrity (B8) — fresh QNN download extracts + registers, no phantom `clip_v2.mnn.weight`.
+- [x] LiteRT image prompt-enhancement — enhances via the active engine, no longer llama-hardcoded (engine-DIP).
+- [x] Pre-tool-call thinking box — renders for separate-channel AND inline `<think>`, left-aligned 85% (parse-once + B3).
+- [x] Voice note transcript-only across llama + litert — audio never sent as model media (B5/B9), 34 adversarial tests green.
+
 ## To re-test on the next build (🔁)
 - [x] **B2** — ✅ VERIFIED: voice-mode thought-process / enhanced-prompt block matches audio-bubble width (IMG_0131).
 - [x] **B3** — ✅ VERIFIED: pre-tool-call thinking box left-aligned + bubble-width, text + voice (IMG_0131).
