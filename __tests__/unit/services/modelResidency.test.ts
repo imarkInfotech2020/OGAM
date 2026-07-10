@@ -794,13 +794,17 @@ describe('ModelResidencyManager', () => {
       const originalOS = RN.Platform.OS;
       afterEach(() => { RN.Platform.OS = originalOS; });
 
-      // All three share the same real seam (makeRoomFor with override on a dirty model, 4500MB
-      // physical); only platform + model size differ, driving a different floor verdict. Physical
-      // is always the guard — no swap credit — so an oversized dirty model is refused on both.
+      // Same real seam (makeRoomFor with override on a dirty model) on a 12GB device whose raw
+      // availMem reads ~4.5GB. ANDROID uses the reclaimable-aware ceiling (foreground load → the
+      // LMK frees background apps → the physical budget modelMemoryBudgetMB ≈ 12288*0.70 = 8601MB),
+      // so a 5.2GB E4B LOADS. A genuinely oversized dirty model (bigger than that budget) still goes
+      // negative → refused (the OOM guard survives — NOT the reverted swap-credit). iOS gets no
+      // reclaim (jetsam kills US), so it stays on raw availMem and refuses the 3.7GB model.
       it.each([
-        { os: 'android', sizeMB: 3700, expected: true, why: 'leaves 800MB > 700 android floor → LOADS (the 12GB-phone case)' },
-        { os: 'android', sizeMB: 5235, expected: false, why: '4500-5235 negative → refused (the E4B OOM guard, no swap credit)' },
-        { os: 'ios', sizeMB: 3700, expected: false, why: 'leaves 800MB < 1200 iOS jetsam floor → refused' },
+        { os: 'android', sizeMB: 3700, expected: true, why: '8601-3700 → LOADS (reclaimable ceiling)' },
+        { os: 'android', sizeMB: 5235, expected: true, why: '8601-5235 → E4B LOADS on a 12GB phone (the fix)' },
+        { os: 'android', sizeMB: 9000, expected: false, why: '8601-9000 negative → refused (oversized OOM guard)' },
+        { os: 'ios', sizeMB: 3700, expected: false, why: 'raw availMem 4500-3700=800 < 1200 iOS jetsam floor → refused' },
       ])('$os: a $sizeMB MB dirty model → fits=$expected ($why)', async ({ os, sizeMB, expected }) => {
         RN.Platform.OS = os;
         modelResidencyManager.setBudgetOverrideMB(null);

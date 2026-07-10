@@ -9,7 +9,7 @@
  *
  * See docs/design/MODEL_ROUTING.md §5.1–5.2.
  */
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import {
@@ -18,7 +18,7 @@ import {
   Resident,
   ResidentType,
 } from './policy';
-import { LoadPolicy, overrideSurvivalFloorMB } from '../memoryBudget';
+import { LoadPolicy, overrideSurvivalFloorMB, modelMemoryBudgetMB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
 
@@ -393,19 +393,33 @@ class ModelResidencyManager {
       const realAvailMB = Math.round(
         hardwareService.getAvailableMemoryGB() * 1024,
       );
+      const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
+      // Reclaimable-aware ceiling. `availMem` is what's free WITHOUT reclaiming anything — but our
+      // app is FOREGROUND, so Android's low-memory killer evicts background/cached apps to give us
+      // physical RAM. That reclaimed RAM is REAL physical (a dirty/GPU model can occupy it) — unlike
+      // zram swap, which dirty pages CANNOT use (the reverted Fix-A mistake that OOM'd). So on
+      // Android the true ceiling for a foreground load is the physical budget (modelMemoryBudgetMB —
+      // the single source for "how much of total RAM a foreground app may commit"), not the raw
+      // availMem snapshot. This is what lets a 5.2GB E4B load on a 12GB phone whose availMem reads
+      // ~4.5GB. iOS gets NO such reclaim (jetsam kills US, not background apps) → keep raw availMem.
+      const effectiveAvailMB = Platform.OS === 'android'
+        ? Math.max(realAvailMB, modelMemoryBudgetMB(totalMB, 'android'))
+        : realAvailMB;
       const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
-      const postLoadFreeMB = realAvailMB - incomingDirtyMB;
-      // Physical-based (NO swap credit): the dirty model's own footprint is subtracted from real
-      // physical availMem, so an oversized dirty model still goes negative and is refused (the
-      // OOM guard). The FLOOR is platform-aware: Android backs the OS/other apps with zram so it
-      // reserves only a KV-growth margin; iOS holds the full jetsam reserve.
+      const postLoadFreeMB = effectiveAvailMB - incomingDirtyMB;
+      // The dirty model's own footprint is subtracted from the effective physical ceiling, so a
+      // GENUINELY oversized dirty model (bigger than the foreground budget) still goes negative and
+      // is refused (the OOM guard survives). The FLOOR is platform-aware (Android lower; iOS full).
       const floorMB = overrideSurvivalFloorMB();
       if (postLoadFreeMB < floorMB) {
         logger.log(
-          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override - real post-evict free ~${postLoadFreeMB}MB < survival floor ${floorMB}MB`,
+          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override - post-evict free ~${postLoadFreeMB}MB (realAvail=${realAvailMB} effectiveAvail=${effectiveAvailMB} total=${totalMB}) < survival floor ${floorMB}MB`,
         );
         return { evicted: plan.evict.map(e => e.key), fits: false };
       }
+      logger.log(
+        `[MEM-SM] makeRoomFor ${spec.key} OVERRIDE OK - post-evict free ~${postLoadFreeMB}MB (realAvail=${realAvailMB} effectiveAvail=${effectiveAvailMB}) >= floor ${floorMB}MB`,
+      );
     }
     return { evicted: plan.evict.map(e => e.key), fits: true };
   }
