@@ -11,6 +11,31 @@ Verdict legend:
 
 ---
 
+## Dependency-cruiser architecture baseline - 2026-07-10 (PR #510)
+
+Added dependency-cruiser as the STANDING GATE for the architectural boundaries we kept
+re-establishing by hand (`.dependency-cruiser.js`; `npm run depcruise`; CI `architecture`
+job + pre-push). Rules are at `error`; the existing debt is captured in
+`.dependency-cruiser-known-violations.json` (68 violations) so the gate PASSES on current
+debt but FAILS on anything NEW. This is the honest register of that baselined debt - burn it
+down, never regenerate the baseline to hide a new violation.
+
+| Rule | Count | Verdict | Note |
+|---|---|---|---|
+| no-circular | 61 | fix-the-guard (own PR) | Mostly cycles routed through barrel `index.ts` files (`services/index`, `stores/index`) + intra-screen hook cycles (HomeScreen hooks ⇄ useHomeScreen). Break by importing the concrete module, not the barrel, and extracting shared hook state down a layer. Large - dedicated PR(s). |
+| utils-stay-pure | 3 | fix-the-guard | `utils/proPrompt→stores/appStore`, `utils/imageModelIntegrity→services/modelLoadErrors`, `utils/downloadAggregate→stores/downloadStore`. A "pure" util reaching into a store/service - move the impure bit up or the shared data down. |
+| no-backward-layering-utils | 1 | fix-the-guard | `services/loadModelWithOverride→components/CustomAlert`: a service imports a UI component to show an alert. Service should return a decision; the caller renders the alert (SoC §A). |
+| no-orphans (warn) | 3 | instrument-and-revisit | `screens/ChatScreen/toolUsage.ts`, `config/revenueCatKeys.ts`, `bootstrap/proStub.js` - grep-verify each is truly unreferenced (proStub is likely a pro-gating shell) before delete. |
+
+Engine-DIP violations found by the gate on day one (screens importing concrete `litert`)
+were FIXED in this PR, not baselined (see the Engine DIP section) - the gate proving its value.
+
+NOTE: the gate catches the IMPORT-edge half of the DIP rule. The VALUE-branch half
+(`model.engine === 'litert'` comparing a store value) is not an edge - guard it with an
+ESLint `no-restricted-syntax` rule (follow-up).
+
+---
+
 ## Dead-code recon - 2026-07-06
 
 Recon sweep (4 parallel agents over disjoint subsystems) for unreferenced exports,

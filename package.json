@@ -18,7 +18,10 @@
     "test:e2e:single": "maestro test",
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest",
     "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "depcruise": "depcruise src --config .dependency-cruiser.js --ignore-known",
+    "depcruise:all": "depcruise src --config .dependency-cruiser.js",
+    "depcruise:baseline": "depcruise src --config .dependency-cruiser.js --output-type baseline > .dependency-cruiser-known-violations.json"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.38.1",
@@ -93,6 +96,7 @@
     "@types/react": "^19.2.0",
     "@types/react-test-renderer": "^19.1.0",
     "babel-plugin-react-compiler": "^1.0.0",
+    "dependency-cruiser": "^18.0.0",
     "eslint": "^8.19.0",
     "eslint-plugin-react-compiler": "^19.1.0-rc.2",
     "husky": "^9.1.7",
