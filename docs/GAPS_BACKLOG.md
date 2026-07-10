@@ -25,7 +25,6 @@ small PRs after each is confirmed.
 | ML1 | activeModelService/index.ts:~469 | `getCurrentlyLoadedMemoryGB()` (private wrapper) | instrument-and-revisit | CORRECTION: recon said "zero call sites" but tests DO exercise it (integration + memory unit). Test-only API - deleting needs the tests reworked, not a blind delete. |
 | ML2 | activeModelService/index.ts:~475 | `checkMemoryForDualModel()` (public wrapper) | instrument-and-revisit | CORRECTION: exercised by integration tests + mocked in HomeScreen test. Prod never calls it - decide keep-vs-remove in the dead-code PR, with tests. |
 | ML3 | activeModelService/utils.ts:16-17 vs types.ts:48-50 | overhead multipliers (1.2/1.3 hardcoded vs 1.5/1.8 constants) | fix-the-guard | HomeScreen memory display disagrees with the load-path math; import the shared constants |
-| ML4 | useChatModelActions.ts (needsReload double-check) | redundant `&& loadedPath === activeModel.filePath` | instrument-and-revisit | logically impossible to be false; simplify |
 | ML5 | activeModelService/index.ts:~338 + loaders.ts | `cpuOnly: false` (always false) | delete-safe | native CPU-only branch unreachable from TS |
 
 > Note: the recon confirmed the "Load Anyway" flow is NOT dead once the residency gate
@@ -49,7 +48,6 @@ small PRs after each is confirmed.
 |---|----------|--------|---------|------|
 | AU1 | whisperStore.ts:172-189 | `deleteModel()` (vs used `deleteModelById`) | delete-safe | zero call sites |
 | AU2 | audioSessionManager.ts:51-57 | `ensurePlayback()` | delete-safe | only referenced in comments |
-| AU3 | whisperService.ts:145-164 (+ store 97-116) | `downloadFromUrl()` | delete-safe | only reached from an unused store action |
 | AU4 | ChatInput/Voice.ts:136-143 | stopRecording early-return guard | fix-the-guard | inverted condition; can't be true when recording |
 | AU5 | whisperService.ts:338-400 | `transcriptionFullyStopped` promise overwrite | fix-the-guard | new start replaces a promise unloadModel may await |
 | AU6 | audioRecorderService.ts:12-14 | `supportsDirectAudioInput()` stub `return true` | instrument-and-revisit | placeholder; add real capability detection |
@@ -58,7 +56,6 @@ small PRs after each is confirmed.
 
 | # | Location | Symbol | Verdict | Note |
 |---|----------|--------|---------|------|
-| IM1 | types/index.ts:314-320 | duplicate `ImageGenerationState` | delete-safe | authoritative def is in imageGenerationService.ts |
 | IM2 | localDreamGenerator.ts:67 (+ loaders.ts:296) | `backend` param always `'auto'` | delete-safe | 'mnn'/'qnn' branches never reached from TS |
 | IM3 | imageGenerationHelpers.ts:42-44 | iOS short-circuit ignores `backend` | fix-the-guard | 'coreml'/default 'mnn' unreachable on iOS; make explicit |
 | IM4 | localDreamGenerator.ts:236-238 | `hasKernelCache()` wraps `hasOpenCLCache` (name mismatch) | fix-the-guard | rename to match native call |
@@ -66,33 +63,18 @@ small PRs after each is confirmed.
 
 ### Verification pass - 2026-07-06 (before acting)
 
-Every "delete-safe" candidate was re-grepped across `src`, `__tests__`, and `pro/`
-before touching anything. The recon **over-reported**: most flagged symbols are
-actually referenced (largely by tests, some by prod). Blind deletion would have
-broken the suite. Verified outcomes:
+Every "delete-safe" candidate was re-grepped across `src`, `__tests__`, and `pro/`.
+The recon **over-reported**: most flagged symbols are actually referenced (largely by tests).
+Still-open decisions:
 
-- **RESOLVED (removed):**
-  - IM1 - duplicate `ImageGenerationState` in `types/index.ts`: zero importers (every
-    consumer takes the service's version). Deleted.
-  - AU3 - `whisperService.downloadFromUrl` + the `whisperStore.downloadFromUrl` action:
-    no UI/hook/screen/pro caller (custom-URL whisper download was never wired). Removed
-    across service + store + its orphaned tests.
-- **FALSE POSITIVE - verified USED, kept:**
-  - AU1 `whisperStore.deleteModel` - called at whisperStore.ts:180/201 + store test.
-  - AU2 `audioSessionManager.ensurePlayback` - full test suite + whisperService.test call.
-  - DL4 `isMmProjFileName` export - imported by `modelManager/restore.ts` + tested directly.
-  - ML1/ML2 - exercised by integration + memory unit tests (see corrected rows above).
-- **DEFERRED (not "dead", changing risks behaviour - kept out of this PR):**
-  - Unreachable-branch removals (DL1/DL2 `retrying`, IM3/IM7 iOS backend short-circuits):
-    they never execute, but removing a value from a status/type union risks exhaustiveness
-    breakage; do it as a typed refactor with its own tests.
-  - Threaded-constant params (ML5 `cpuOnly`, IM2 `backend:'auto'`): passed to the native
-    bridge; removing the arg changes the native call. Not dead in a way that's safe to cut here.
-  - Race/stub items (AU4/AU5/AU6, DL5, DL3 deprecated-callback threading): need on-device
-    observation before change - `instrument-and-revisit`, not a blind edit.
-
-Net: the genuinely-dead, safe-to-remove set was small (IM1 + AU3). Removed here; the
-rest stay in the register with an honest verdict rather than a risky change.
+- **FALSE POSITIVE - verified USED, keep (drop from register):** AU1 `whisperStore.deleteModel`,
+  AU2 `audioSessionManager.ensurePlayback`, DL4 `isMmProjFileName`, ML1/ML2 (test-exercised).
+- **DEFERRED (not "dead", changing risks behaviour):**
+  - Unreachable-branch removals (DL1/DL2 `retrying`, IM3 iOS backend short-circuit): removing a
+    value from a status/type union risks exhaustiveness breakage; do it as a typed refactor with tests.
+  - Threaded-constant params (ML5 `cpuOnly`, IM2 `backend:'auto'`): passed to the native bridge;
+    removing the arg changes the native call. Not safe to cut blind.
+  - Race/stub items (AU4/AU5/AU6, DL5, DL3): need on-device observation - `instrument-and-revisit`.
 
 ### Handling policy (how we close these)
 1. **delete-safe** → each removed in a small, single-concern PR with a grep proof of zero references in the description.
@@ -171,7 +153,6 @@ green suite — the reason the on-device gate is mandatory. Verdicts + evidence 
 
 | # | Finding | Verdict | Status |
 |---|---------|---------|--------|
-| OD-TTS1 | **Play does nothing / "not downloaded" though model is on disk** | fix-the-guard | FIXED (pro fix/tts-download-flag-reconcile). checkAssetStatus reported off the engine's volatile `_genuineCompletion`, which desyncs false on mid-session re-init/bridge-unmount (hydrate only runs on engine switch). `[TTS-SM] play() … downloaded=false` bailing in ~1ms (no icon change). Fix: reconcile to the durable persisted `modelDownloaded` flag; extracted download actions to ttsDownloadActions.ts (no eslint-disable). Red-first test. UNVERIFIED on-device. |
 | OD9 | **TTS speaks tool-call content aloud (voice mode)** | fix-the-guard | DELEGATED (fix/tts-strip-tool-calls). streamingSpeech `answerOf` strips thinking only; `enqueueReadySentences` runs stripControlTokens per-SENTENCE-fragment, so a `<tool_call>…</tool_call>` block spanning sentence boundaries leaks in fragments. Fix: withhold+strip whole control-token blocks before segmentation (mirror the thinking withhold). Red-first. |
 | OD10 | **TTS stops mid-speak** | instrument-and-revisit | `[TTS Store] Engine error: KOKORO_SPEAK The model is currently generating` + `stream segment FAILED session=1 fails=2` — a double-speak concurrency collision aborts the stream mid-sentence. Needs the speak/stream serialization checked (a second speak fired while the first was still generating). |
 
@@ -195,8 +176,6 @@ CPU fallback; Hexagon NPU experimental + needs QNN-converted models; Qwythos is 
 CPU-with-proper-threads is the path. The devicectl "developer disk image could not be mounted"
 is a Mac-side tooling wedge (iOS 26.5.1), independent of the app — reconnect to clear.
 
-| OD14 | **Pre-tool-call reasoning not persisted (thinking "disappears" when a tool call starts)** | RESOLVED | In a tool-using turn the model reasons, then emits a tool call; that FIRST round's live thinking is cleared (clearStreamingMessage between rounds) and the intermediate tool-call assistant message is built with `content:'', ` NO reasoningContent (generationToolLoop.ts:447-448). The post-tool-result round's thinking IS shown on the final answer (confirmed on device: "Thought process: The knowledge base search returned no results…"). So thinking visibly vanishes at tool-call start then reappears on the final message — the pre-tool-call reasoning is lost from the transcript. Minor fidelity gap, feature works end-to-end. Fix: attach the accumulated reasoningBuffer to the intermediate tool-call assistant message. NOTE (good): iOS ran this 9B on Metal (99 layers GPU offloaded), 2.0 tok/s, TTFT 10.79s — iOS Metal works well; Android Adreno OpenCL (1GB max-alloc) falls back to CPU. |
-
 ## New bug reports - 2026-07-09 (Slack #bugs, during 0.0.103 review)
 
 | # | Finding | Verdict | Note |
@@ -213,9 +192,6 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 | # | Location | Verdict | Fix |
 |---|----------|---------|-----|
 | SO1 | src/screens/ModelsScreen/TextModelsTab.tsx:143 handleRetryDownload | BLOCKING | Renderer re-implements download retry (Platform.OS branch, store mutation, mmproj, polling) — CLAUDE.md L100 says this moved to ModelDownloadService. Delete; delegate to modelDownloadService.retry() like useDownloadManager:278. |
-| SO2 | src/screens/ChatScreen/useChatGenerationActions.ts:460 | BLOCKING | Hook calls concrete liteRTService.invalidateConversation() off engine==='litert'. Move to activeModelService.invalidateActiveConversation(). |
-| SO3 | useChatModelActions.ts:71,111,248 + useChatModelStateSync:368-390 | DEBT | supportsVision re-derived from engine==='litert' in 6 UI sites. Add activeModelService.getActiveCapabilities(){vision,audio,tools,thinking}. |
-| SO4 | generationServiceHelpers:202,218 · generationToolLoop:386,747 · useChatGenerationActions:261 · useChatScreen:58,342 · modelReadiness:65 | DEBT | engine==='litert' + Platform.OS='ios' tool-routing scattered. Expose normalized capability/routing flags from service. |
 | SO5 | src/screens/ModelsScreen/ImageFilterBar.tsx:55,73,91,129,139,149 | DEBT | Platform.OS chooses which filter DIMENSIONS exist. Data-driven filter descriptor from service. |
 | SO6 | src/services/remoteServerManagerUtils.ts:122 | DEBT | provider instanceof OpenAICompatibleProvider to call updateCapabilities. Put on the provider interface (ISP). |
 | SO7 | pro/audio/ttsStore.ts:377,385 | DEBT | instanceof OuteTTSEngine for cache ops. Optional getAudioCacheSizeMB?/clearAudioCache? on TTS engine interface. |
@@ -224,13 +200,11 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 ### DRY (§C)
 | # | Location | Verdict | Fix |
 |---|----------|---------|-----|
-| DR1 | chatStore.extractChannelThinking + ChatMessage/utils.parseThinkingContent + providers/openAICompatibleStream.ThinkTagParser | DRIFTED (live) | 3 thinking parsers; the remote STREAM parser only knows <think>, omits channel formats → Gemma4/Qwen-channel model over remote endpoint leaks raw <\|channel>thought. Ties to OD16. One shared splitReasoning() in messageContent (already owns REASONING_TEMPLATE_MARKERS). |
 | DR2 | remoteServerManagerUtils:60 (20 patterns) vs ModelsScreen/utils:41 + huggingface:178 (3) | DRIFTED (live) | Vision keyword lists diverged → Pixtral/Moondream/InternVL vision remotely, text-only locally. One VISION_NAME_PATTERNS + looksLikeVisionModel(). |
 | DR3 | src/screens/HomeScreen/components/ModelPickerSheet.tsx:63,201 (*1.8/*1.5, -1.5) | DRIFTED (live) | Third memory-fit verdict bypassing memoryBudget.ts (self-declared single source). Can say "fits" when residency refuses — the Load-Anyway/selector bug family. Call modelMemoryBudgetMB. |
 | DR4 | CHARS_PER_TOKEN=4 bare literal in llmHelpers,liteRTCompaction,litert,llm,generationServiceHelpers,providers/*,documentService (const only in contextCompaction:34) | DEBT | Export CHARS_PER_TOKEN_ESTIMATE + estimateTokens(); all import. |
 | DR5 | STOP_TOKENS (llmHelpers:427) + CONTROL_TOKEN_PATTERNS (messageContent:1) + tests re-hardcode | DEBT | One token registry; derive stop-list + strip-patterns; tests import. |
 | DR6 | pro/audio outetts:363 + ttsService:207 '<\|im_end\|>' | DEBT-low | Shared IM_END_TOKEN. |
-| DR7 | llmToolGeneration:32 (filter) vs generationToolLoop:118 (parser) Gemma tool delimiters | DRIFTED-minor | Parser accepts <tool_call: opener the filter doesn't suppress → tokens flash. Shared GEMMA_TOOLCALL_DELIMITERS. |
 | DR8 | remoteModelCapabilities:202 deltaHasThinking vs openAICompatibleStream:155 | DEBT | Shared REASONING_DELTA_FIELDS + deltaHasReasoning(delta). |
 
 ### Test quality (§D) - 371 files, ~13 with a genuinely weak top-tier block
@@ -243,53 +217,32 @@ by a service. Two findings (DR1, DR3) are root-cause siblings of today's shipped
 | TQ5 | coreMLModelUtils "downloads sequentially" | MED | Asserts order that only holds by .map push order while impl uses Promise.all - false guarantee. Assert real ordering w/ dynamic out-of-order mock or drop the claim. |
 | TQ6 | render tests w/ no getByText: TTSButton, ModelFailureCard, ImageGenAdviceCard, ToolAccordionStreaming, ModelsManagerSheet, McpAddServerSheet, PlaybackControls, KokoroTTSBridge | MED | Assert visible content/state, not just container testID. |
 
-## Parse-once-at-boundary refactor - progress + remaining (2026-07-09)
-Pattern: parse raw model output ONCE into a typed model; render from it, never re-parse (parse-don't-validate / anti-corruption layer). Kills the tool-call-leak class + DR1 + DR7.
+## Parse-once-at-boundary refactor - REMAINING device gate (2026-07-09)
+Steps A-C + native-first are DONE (committed on branch refactor/parse-once-boundary; single
+REASONING_DELIMITERS + TOOL_CALL_OPENERS/CLOSERS grammars; DR1/DR7 closed; contract + integration
+tests green). What is LEFT:
 
-DONE (committed on main):
-- Step 1 KEYSTONE: parseModelOutput(content, reasoningContent?) → {reasoning, answer} in ChatMessage/utils.ts; answer clean-by-construction; contract test (parseModelOutput.contract.test.ts) asserts answer has NO markup for every format; buildMessageData delegates to it. 179 render/audio tests green together.
-
-REMAINING (each a hub migration - grep callers, run ALL their tests in ONE invocation before commit; render tests assert BOTH what appears AND what must not):
-- Step 2: point remaining direct parseThinkingContent/stripControlTokens RENDER callers at parseModelOutput.
-- Step 3 (DR1, real remote bug + PREREQUISITE = MOVE parseModelOutput + parseThinkingContent DOWN to src/utils/messageContent.ts so store/service layers can import without backwards layering; re-export from ChatMessage/utils for back-compat). Then collapse chatStore.extractChannelThinking + providers/openAICompatibleStream.ThinkTagParser (only knows <think>, leaks channel formats remotely - OD16) onto the shared parser/grammar. Touches streaming + finalize - do as ONE careful wave in a fresh session.
-- Step 4 (DR7): unify tool-call delimiters between stripControlTokens and generationToolLoop parseToolCallsFromText/parseGemmaNativeToolCalls (one GRAMMAR; parser accepts <tool_call: opener the stream filter doesn't suppress → flashes). 
-- Step 5: delete dead duplicate parsers; full suite.
-Note: Step 4 (store-time parse of the persisted Message shape) is the deepest cut - evaluate after 2-4; changes persistence.
-
-### UPDATE 2026-07-09 - branch refactor/parse-once-boundary (Steps A-C + native-first)
-DONE (committed on branch, all gates green - prettier/eslint/tsc/26 suites·834 tests/android bundle):
-- Step A: moved parseThinkingContent + parseModelOutput + ParsedModelOutput DOWN to src/utils/messageContent.ts (util layer); ChatMessage/utils re-exports for back-compat.
-- Step B (DR1): added REASONING_DELIMITERS (single grammar); deleted chatStore.extractChannelThinking+sliceThinkingBlock (route finalize through parseModelOutput); generalized ThinkTagParser (remote stream) from <think>-only to the shared grammar. Contract test (reasoningGrammar) + INTEGRATION test (reasoningPipeline: real store→finalize→render, local + remote flows, all formats, no-leak) green.
-- Step C (DR7): added TOOL_CALL_OPENERS/CLOSERS (single grammar); stripControlTokens + ToolCallTokenFilter both derive from it (fixes the <tool_call: colon leak the parser accepted but stripper/filter missed). Contract test (toolCallGrammar) across full opener×closer matrix + char-by-char.
-- Native-first: buildThinkingCompletionParams Gemma4 reasoning_format 'none'→'auto' so llama.cpp parses Gemma channel + tool calls NATIVELY (resolveToolCalls/finalize already fall back to hand-parse only when native is empty, so behavior-neutral if 'auto' doesn't recognise it). Added [ToolLoop][GEMMA-FALLBACK] log when the hand-parser fires.
-
-REMAINING - Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
-- The native-first flip is a RUNTIME behavior change, NOT verified on-device. Run a Gemma4 thinking + tool-call flow on Android dev build (ai.offgridmobile.dev) AND iOS; pull Documents/offgrid-debug.log; grep [GEMMA-FALLBACK].
-  - If it NEVER fires → native 'auto' works → DELETE parseGemmaNativeToolCalls + Gemma <|channel> branches (dead) + narrow the hand-parsers to the remote-only fallback.
-  - If it fires → native 'auto' does NOT cover Gemma in this llama.rn build → keep the hand-parser; the grammar work is the fallback. (Relates to OD13: reasoning_format vs actual channel-format mismatch - 'auto' may also fix OD13.)
-- Must not ship the native-first flip in a beta until this device check passes (TestFlight is distribution-signed → no container logs; verify on the dev build first).
+Step 5 = ON-DEVICE PROOF (GATE before any beta/release, §H):
+- The native-first flip (buildThinkingCompletionParams Gemma4 reasoning_format 'none'→'auto') is a
+  RUNTIME behavior change, NOT verified on-device. Run a Gemma4 thinking + tool-call flow on Android
+  dev build (ai.offgridmobile.dev) AND iOS; pull Documents/offgrid-debug.log; grep [GEMMA-FALLBACK].
+  - If it NEVER fires → native 'auto' works → DELETE parseGemmaNativeToolCalls + Gemma <|channel>
+    branches (dead) + narrow the hand-parsers to the remote-only fallback.
+  - If it fires → native 'auto' does NOT cover Gemma in this llama.rn build → keep the hand-parser;
+    the grammar work is the fallback. (Relates to OD13; 'auto' may also fix OD13.)
+- Must not ship the native-first flip in a beta until this device check passes (TestFlight is
+  distribution-signed → no container logs; verify on the dev build first).
 
 ## Pre-existing: mid-chat model switch doesn't refresh chat state until remount - 2026-07-10
 **instrument-and-revisit** | Reported on-device (iOS, gemma-4 local + remote), confirmed present on the OLD build (NOT introduced by the parse-once/selection/whisper work). Loading a new model from within the Chat screen mid-conversation does not update the screen's derived active-model state - it's not a freeze/hang; navigating Home → back into the chat re-syncs and it works. Suspect useChatModelStateSync / the chat's derived activeModel not re-running after an in-chat load (the model loads fine; only the screen's projection is stale). Fix separately with its own on-device repro - do NOT bundle into the current release PR (scope + risk).
 
-## Reverted: Android ZRAM-swap Load-Anyway credit caused an OOM - 2026-07-10
-**resolved (reverted)** | Fix A (getOverrideAvailableMemoryGB crediting free ZRAM swap to the override survival floor) was WRONG for DIRTY models: GPU/LiteRT memory cannot be swapped, so a 5.2GB dirty Gemma-4-E4B loaded into ~4.5GB physical (swap-inclusive ceiling said "fits") and the device OOM-killed the app during generation (device log 19:03Z: `OVERRIDE - forcing load` with no REFUSE, then SIGKILL, no tombstone). Reverted both commits - restores the conservative physical survival floor (the shipped-safe behavior that was correctly refusing these). The original "LiteRT Load-Anyway refused on tight memory" is the SAFE behavior; making large LiteRT loads work needs real on-device memory profiling (physical-fit for dirty + killable-background accounting), verified on the dev build - not a swap-credit heuristic.
-
-## Engine DIP refactor - progress 2026-07-10 (PR #510)
-DONE (behavior-neutral, tested): deriveEngineCapabilities (engines.ts) is the single source for
-active-model vision/audio/tools/thinking; migrated useChatModelStateSync (was UNTESTED - added
-characterization tests first), the 3 post-load supportsVision sites (SO3), and SO2
-(invalidateActiveConversation via the engine registry). DR1/DR7 already resolved earlier in this PR
-(single reasoning + tool-call grammars). unloadAllTextEngines centralizes the engine set.
-
-REMAINING (needs an engine-INTERFACE extension, higher risk, device-verifiable - NOT a blind cram):
-- SO4 tool-routing (useChatGenerationActions:261-263 isLiteRT/useTextHint/canUseTools): partly
-  expressible via caps.tools, but isLiteRT also gates the LiteRT-specific gemma-think token - needs
-  a `wantsThinkToken` capability on the engine, not just a flag.
-- Lifecycle branches (modelReadiness:65, useChatModelActions ensureModelLoadedFn:198, useChatScreen:342):
-  per-engine isModelReady (llama matches loadedPath===filePath, LiteRT uses isModelLoaded) and per-engine
-  unload. Blocked on a LATENT BUG: activeModelService.doUnloadTextModelLocked (index.ts:~223) only
-  unloads llmService - a residency eviction of a LiteRT text model never frees its native memory. Fix:
-  route doUnloadTextModelLocked through getActiveEngineService()/unloadAllTextEngines so eviction unloads
-  the ACTIVE engine; then the caller unload/readiness branches collapse. This is a memory-path behavior
-  change - verify on the Android dev build ([MEM-SM]) before shipping.
+## Device-verification gate before release (PR #510)
+Unverified-on-device changes that MUST be checked on the Android dev build (ai.offgridmobile.dev)
++ iOS before shipping (§H - device-gate unverified fixes):
+- Platform-aware override memory floor (700MB Android / 1200MB iOS, physical-based, no swap credit) -
+  confirm a tight-memory LiteRT load refuses cleanly (no OOM) via [MEM-SM].
+- doUnloadTextModelLocked now unloads the ACTIVE engine (LiteRT eviction frees native memory) -
+  confirm [MEM-SM] on a LiteRT→llama switch under pressure.
+- Readiness change: ensureModelReady/ensureModelLoadedFn now require isModelLoaded() (desync guard).
+- Native-first Gemma flip - see the parse-once Step 5 gate above ([GEMMA-FALLBACK]).
+- iOS collapsed thinking-box width fix - screenshot check.
