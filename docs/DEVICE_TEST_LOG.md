@@ -20,9 +20,10 @@ Status: ✅ verified on device · 🔁 fixed, needs recheck on next build · �
 - [x] Message queues.
 - [x] Tool calling.
 - [x] Regenerate image on iOS (tapping the image message).
+- [x] Image gen on iOS (SD 2.1 Palettized / CoreML) — generates fine (IMG_0114 dog).
 
 ## Still open (🔎)
-- [ ] **B7** — image model with failed extraction has NO retry in Download Manager after app restart. Root cause: downloadStore is NOT persisted (plain create) → the failed entry is wiped on relaunch; imageProvider.list() doesn't scan disk for incomplete dirs → the orphaned model is invisible. Fix: surface an on-disk-incomplete image model as failed+retriable (or removable). NB: same-session retry is fixed by B6 (ad6bf86d) but that's not in the running build yet.
+- [ ] **B7** (Android) — QNN image model (anythingv5) with failed extraction has NO retry in Download Manager after app restart. Root cause: downloadStore is NOT persisted (plain create) → the failed entry is wiped on relaunch; imageProvider.list() doesn't scan disk for incomplete dirs → the orphaned model is invisible. Fix: surface an on-disk-incomplete image model as failed+retriable (or removable). NB: same-session retry is fixed by B6 (ad6bf86d), not in the running build yet. Ties to the QNN-over-recommendation backlog item (anythingv5_npu_min is a non-flagship QNN model that keeps failing extraction on this SoC).
 - [ ] **B5b** — empty transcript: a voice note recorded with whisper not ready attaches with no text.
 - [ ] **B5c** — a media-load error should fall back to text-only generation, not hard-fail the turn.
 - [ ] **B6b** — auto-retry/resume a download after a transient network drop (currently manual only).
