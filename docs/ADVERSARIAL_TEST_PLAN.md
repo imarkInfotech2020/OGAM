@@ -159,6 +159,35 @@ alone verifies them:
 - D4 — iOS URLSession row survival across app-kill.
 - Q17 — the native file-not-found/crash (jest: "audioUris reached native non-empty").
 
+## Shared native-boundary harness — REVERSE-ENGINEERED SPEC (build this ONCE, everything mounts on it)
+
+Per the taxonomy (integration = mock ONLY what's outside our system), a real ChatScreen/image-gen flow
+runs our WHOLE stack (screen → hooks → generationService/activeModelService/imageGenerationService →
+modelResidencyManager → localDreamGenerator/llm/litert) and only the DEVICE leaves are faked. Confirmed
+by tracing the image-gen flow: to reach `DiffusionModule.generateImage`, the real `loadImageModel`/
+residency needs the RAM + engine leaves seeded too. So a one-off per-test seed fails — seed the SET.
+
+**Native leaves to seed (the complete set):**
+- `NativeModules.CoreMLDiffusionModule` / `NativeModules.LocalDreamModule` — image diffusion (destructured at import in localDreamGenerator): `isModelLoaded`, `loadModel`, `unloadModel`, `generateImage(nativeParams)` [assert width/guidance HERE], `getLoadedModelPath`, `cancelGeneration`, `getGeneratedImages`, `addListener`/`removeListeners`.
+- `NativeModules.LiteRTModule` — litert engine (destructured at import): `loadModel→{backend,maxNumTokens}`, `resetConversation`, `sendMessage*`, `generateRaw` path, `stopGeneration`.
+- `llama.rn` — llama engine (npm; use `__mocks__/llama.rn.js`).
+- `react-native-device-info` (`DeviceInfo.getTotalMemory`) + `NativeModules.DeviceMemoryModule` — the RAM sensor read by hardwareService (device-info is npm → likely already jest-mocked; DeviceMemoryModule is dynamic access, seed anytime).
+- `whisper.rn` / TTS native — transcript / audio path.
+- background-download NativeModule — progress→complete→error events + rows dropped on relaunch.
+- `react-native-fs` → memfs (`__mocks__/react-native-fs.js`).
+
+**Injection pattern that works (avoids the `requireActual('react-native')` DevMenu crash AND the
+destructure-at-import timing):** for NativeModules-based leaves, `jest.resetModules()` → `const RN =
+require('react-native')` → set `RN.NativeModules.X = fake` → THEN `require()` our services (so their
+module-scope `const {X} = NativeModules` captures the fake). For npm native packages (`llama.rn`,
+`react-native-fs`, `react-native-device-info`), use `__mocks__/` manual mocks (auto-applied before any
+import — cleaner than resetModules). PROVEN: this loads the real services without crashing; the only
+remaining work is seeding the FULL set so the real load/residency path reaches the native call.
+
+Package this as `__tests__/harness/nativeBoundary.ts` exporting the fake set + an `installNativeBoundary()`
+that seeds NativeModules and returns `{ fakes, imageGenerationService, activeModelService, useAppStore, ... }`
+freshly required. Then Q1/Q7/Q8/Q17/memory/screen-mount verticals all reuse it.
+
 ## Sequencing
 1. Build `__tests__/harness/` (the 6 fakes + relaunch). One PR-sized unit, reused everywhere.
 2. Write the red journey tests cluster by cluster (memory → engine-parity → mcp → downloads → settings
