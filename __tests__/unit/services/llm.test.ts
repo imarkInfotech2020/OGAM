@@ -568,6 +568,53 @@ describe('LLMService', () => {
       expect(onComplete).toHaveBeenCalledWith({ content: 'Hello World', reasoningContent: '' });
     });
 
+    // Native-first (reasoning_format:'auto') fail-safe: the runtime may return the answer in
+    // `content` (filtered) + `reasoning_content`, OR — if 'auto' mis-parses a model it doesn't
+    // recognise — an empty `content`. These prove the answer is NEVER lost: content falls back to
+    // the raw `text`, then to the streamed accumulation, and reasoning survives for the finalizer
+    // to hand-parse. Worst case = today's behavior (raw text + downstream hand-parse), never blank.
+    describe('native-parse fail-safe (reasoning_format auto result shapes)', () => {
+      it('uses native content + reasoning_content when the runtime parsed them (auto worked)', async () => {
+        await setupLoadedModel({
+          completion: jest.fn(async (_p: any, cb: any) => {
+            cb({ token: 'The clean answer.' });
+            return { content: 'The clean answer.', reasoning_content: 'the reasoning', text: '<think>the reasoning</think>The clean answer.', tokens_predicted: 1 };
+          }),
+          tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
+        });
+        const onComplete = jest.fn();
+        const result = await llmService.generateResponse([createUserMessage('hi')], undefined, onComplete);
+        expect(result).toBe('The clean answer.');
+        expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning' });
+      });
+
+      it('FAIL-SAFE: empty filtered content from auto → the raw text still surfaces (answer never blank)', async () => {
+        await setupLoadedModel({
+          completion: jest.fn(async (_p: any, cb: any) => {
+            cb({ token: 'The raw answer.' });
+            return { content: '', reasoning_content: '', text: 'The raw answer.', tokens_predicted: 1 };
+          }),
+          tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
+        });
+        const result = await llmService.generateResponse([createUserMessage('hi')]);
+        expect(result).toBe('The raw answer.'); // cr.content('') → falls back to cr.text
+      });
+
+      it('FAIL-SAFE: auto emits NO content/reasoning fields → streamed tokens surface for the finalizer to hand-parse', async () => {
+        await setupLoadedModel({
+          completion: jest.fn(async (_p: any, cb: any) => {
+            cb({ token: '<think>r</think>the answer' });
+            return { text: '', tokens_predicted: 1 };
+          }),
+          tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
+        });
+        const result = await llmService.generateResponse([createUserMessage('hi')]);
+        // Not blank: the accumulated raw stream is returned; chatStore.finalize hand-parses it
+        // (parseModelOutput is separately tested) → reasoning split from the clean answer.
+        expect(result).toContain('the answer');
+      });
+    });
+
     it('updates performance stats', async () => {
       await setupLoadedModel();
       const messages = [createUserMessage('Hello')];
