@@ -22,15 +22,15 @@ export interface ParsedContent {
 export const TOOL_CALL_OPENERS: string[] = ['<|tool_call>', '<tool_call:', '<tool_call>'];
 export const TOOL_CALL_CLOSERS: string[] = ['<tool_call|>', '</tool_call>'];
 
-const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const CLOSERS_ALT = TOOL_CALL_CLOSERS.map(escapeRegExp).join('|');
 // One closed-block pattern per opener, built from the grammar so parser and stripper cannot drift.
 const TOOL_CALL_BLOCK_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
-  (open) => new RegExp(`${escapeRegExp(open)}[\\s\\S]*?(?:${CLOSERS_ALT})\\s*`, 'g'),
+  (open) => new RegExp(String.raw`${escapeRegExp(open)}[\s\S]*?(?:${CLOSERS_ALT})\s*`, 'g'),
 );
 // Unclosed opener at end of text (model hit EOS mid tool-call) — strip to end for stored content.
 const TOOL_CALL_UNCLOSED_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
-  (open) => new RegExp(`${escapeRegExp(open)}[\\s\\S]*$`),
+  (open) => new RegExp(String.raw`${escapeRegExp(open)}[\s\S]*$`),
 );
 
 /**
@@ -216,120 +216,77 @@ export function stripMarkdownForSpeech(content: string): string {
  * 2. <|channel>thought\n...<channel|> (Gemma 4)
  * 3. <|channel|>analysis<|message|>...<|channel|>final<|message|> (Qwen and similar models)
  */
-export function parseThinkingContent(content: string): ParsedContent {
-  // Gemma 4 thinking format: <|channel>thought\n[thinking]<channel|>[response]
-  // Note asymmetric tags: <|channel> opens (with channel name 'thought'), <channel|> closes.
-  const gemmaOpenMatch = content.match(/<\|channel>thought\n/i);
-  const gemmaCloseMatch = content.match(/<channel\|>/i);
-
-  if (gemmaOpenMatch) {
-    const thinkStart = gemmaOpenMatch.index! + gemmaOpenMatch[0].length;
-    if (gemmaCloseMatch && gemmaCloseMatch.index! >= thinkStart) {
-      const thinkEnd = gemmaCloseMatch.index!;
-      return {
-        thinking: content.slice(thinkStart, thinkEnd).trim(),
-        response: content.slice(thinkEnd + gemmaCloseMatch[0].length).trim(),
-        isThinkingComplete: true,
-      };
-    }
-    // Still streaming — thinking not yet closed
+/** Gemma 4: `<|channel>thought\n[thinking]<channel|>[response]` (asymmetric tags). null if absent. */
+function parseGemmaThinking(content: string): ParsedContent | null {
+  const open = /<\|channel>thought\n/i.exec(content);
+  if (!open) return null;
+  const thinkStart = open.index! + open[0].length;
+  const close = /<channel\|>/i.exec(content);
+  if (close && close.index! >= thinkStart) {
+    const thinkEnd = close.index!;
     return {
-      thinking: content.slice(thinkStart).trim(),
-      response: '',
-      isThinkingComplete: false,
+      thinking: content.slice(thinkStart, thinkEnd).trim(),
+      response: content.slice(thinkEnd + close[0].length).trim(),
+      isThinkingComplete: true,
     };
   }
+  // Still streaming — thinking not yet closed.
+  return { thinking: content.slice(thinkStart).trim(), response: '', isThinkingComplete: false };
+}
 
-  // Check for channel-based thinking format
-  // Format: <|channel|>analysis<|message|>[thinking content]<|channel|>final<|message|>[response]
-  const channelAnalysisMatch = content.match(/<\|channel\|>analysis<\|message\|>/i);
-  const channelFinalMatch = content.match(/<\|channel\|>final<\|message\|>/i);
-
-  if (channelAnalysisMatch) {
-    const analysisStart = channelAnalysisMatch.index! + channelAnalysisMatch[0].length;
-
-    if (channelFinalMatch) {
-      // We have both analysis and final markers
-      const finalStart = channelFinalMatch.index!;
-
-      // Guard against out-of-order markers (final before analysis)
-      if (finalStart < analysisStart) {
-        return {
-          thinking: content.slice(analysisStart).trim(),
-          response: '',
-          isThinkingComplete: false,
-        };
-      }
-
-      const thinkingContent = content.slice(analysisStart, finalStart).trim();
-      const responseContent = content.slice(finalStart + channelFinalMatch[0].length).trim();
-
-      return {
-        thinking: thinkingContent,
-        response: responseContent,
-        isThinkingComplete: true,
-      };
-    }
-
-    // Only analysis marker - thinking is still in progress
-    const thinkingContent = content.slice(analysisStart).trim();
-    return {
-      thinking: thinkingContent,
-      response: '',
-      isThinkingComplete: false,
-    };
+/** Qwen-style channel: `<|channel|>analysis<|message|>[thinking]<|channel|>final<|message|>[response]`. */
+function parseChannelThinking(content: string): ParsedContent | null {
+  const analysis = /<\|channel\|>analysis<\|message\|>/i.exec(content);
+  if (!analysis) return null;
+  const analysisStart = analysis.index! + analysis[0].length;
+  const final = /<\|channel\|>final<\|message\|>/i.exec(content);
+  // No final marker, or markers out of order → thinking still in progress.
+  if (!final || final.index! < analysisStart) {
+    return { thinking: content.slice(analysisStart).trim(), response: '', isThinkingComplete: false };
   }
+  const finalStart = final.index!;
+  return {
+    thinking: content.slice(analysisStart, finalStart).trim(),
+    response: content.slice(finalStart + final[0].length).trim(),
+    isThinkingComplete: true,
+  };
+}
 
-  // Fall back to <think></think> format
-  const thinkStartMatch = content.match(/<think>/i);
-  const thinkEndMatch = content.match(/<\/think>/i);
-
-  if (!thinkStartMatch) {
-    // Handle  HLSL without HLSL — llama.rn Jinja template may consume
-    // the opening HLSL tag while leaving thinking text + HLSL as tokens
-    if (thinkEndMatch) {
-      const thinkEnd = thinkEndMatch.index!;
-      const thinkingContent = content.slice(0, thinkEnd).trim();
-      const responseContent = content.slice(thinkEnd + thinkEndMatch[0].length).trim();
-      if (thinkingContent) {
-        return {
-          thinking: thinkingContent,
-          response: responseContent,
-          isThinkingComplete: true,
-        };
+/** `<think>...</think>` fallback — also handles a missing opening tag (llama.rn Jinja can consume it)
+ *  and a leading `__LABEL:` prefix. Always returns (the terminal format). */
+function parseThinkTags(content: string): ParsedContent {
+  const startM = /<think>/i.exec(content);
+  const endM = /<\/think>/i.exec(content);
+  if (!startM) {
+    // Opening tag consumed by the template, but thinking text + closing tag survive as tokens.
+    if (endM) {
+      const thinkEnd = endM.index!;
+      const thinking = content.slice(0, thinkEnd).trim();
+      if (thinking) {
+        return { thinking, response: content.slice(thinkEnd + endM[0].length).trim(), isThinkingComplete: true };
       }
     }
     return { thinking: null, response: content, isThinkingComplete: true };
   }
-
-  const thinkStart = thinkStartMatch.index! + thinkStartMatch[0].length;
-
-  if (!thinkEndMatch) {
-    const thinkingContent = content.slice(thinkStart);
-    return {
-      thinking: thinkingContent,
-      response: '',
-      isThinkingComplete: false,
-    };
+  const thinkStart = startM.index! + startM[0].length;
+  if (!endM) {
+    return { thinking: content.slice(thinkStart), response: '', isThinkingComplete: false };
   }
-
-  const thinkEnd = thinkEndMatch.index!;
-  let thinkingContent = content.slice(thinkStart, thinkEnd).trim();
-  const responseContent = content.slice(thinkEnd + thinkEndMatch[0].length).trim();
-
+  const thinkEnd = endM.index!;
+  let thinking = content.slice(thinkStart, thinkEnd).trim();
+  const response = content.slice(thinkEnd + endM[0].length).trim();
   let thinkingLabel: string | undefined;
-  const labelMatch = thinkingContent.match(/^__LABEL:(.+?)__\n*/);
+  const labelMatch = /^__LABEL:(.+?)__\n*/.exec(thinking);
   if (labelMatch) {
     thinkingLabel = labelMatch[1];
-    thinkingContent = thinkingContent.slice(labelMatch[0].length).trim();
+    thinking = thinking.slice(labelMatch[0].length).trim();
   }
+  return { thinking, response, isThinkingComplete: true, thinkingLabel };
+}
 
-  return {
-    thinking: thinkingContent,
-    response: responseContent,
-    isThinkingComplete: true,
-    thinkingLabel,
-  };
+export function parseThinkingContent(content: string): ParsedContent {
+  // Try each format in precedence order; the <think> fallback always returns.
+  return parseGemmaThinking(content) ?? parseChannelThinking(content) ?? parseThinkTags(content);
 }
 
 export interface ParsedModelOutput {

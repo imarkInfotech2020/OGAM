@@ -4,17 +4,11 @@ import logger from '../utils/logger';
 // The status classification + DownloadEntry shape live in a PURE util so pure consumers can use
 // them without depending on this store (utils-stay-pure). Re-exported here for back-compat — every
 // existing `from '../stores/downloadStore'` importer of these keeps working unchanged.
-import {
-  DownloadStatus,
-  ModelType,
-  DownloadEntry,
-  isActiveStatus,
-  isQueuedStatus,
-  isDownloadingStatus,
-} from '../utils/downloadStatus';
+import { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
-export type { DownloadStatus, ModelType, DownloadEntry };
-export { isActiveStatus, isQueuedStatus, isDownloadingStatus };
+export type { DownloadStatus, DownloadEntry };
+export type { ModelType } from '../utils/downloadStatus';
+export { isActiveStatus, isQueuedStatus, isDownloadingStatus } from '../utils/downloadStatus';
 
 interface DownloadStoreState {
   downloads: Record<ModelKey, DownloadEntry>

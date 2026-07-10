@@ -16,10 +16,13 @@ export interface EngineCapabilities {
 }
 
 /** Runtime inputs for deriveEngineCapabilities — passed explicitly so the rule is pure/testable. */
+/** A remote model's declared capabilities (single named type so callers don't index CapabilityInputs). */
+export type RemoteCaps = { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } | null;
+
 export interface CapabilityInputs {
   /** A remote (gateway) model is active — its declared capabilities win. */
   isRemote: boolean;
-  remoteCaps?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } | null;
+  remoteCaps?: RemoteCaps;
   /** The active LOCAL model's engine ('litert' | 'llama' | ...) and LiteRT capability flags. */
   engine?: string;
   liteRTVision?: boolean;
@@ -113,7 +116,7 @@ export function isModelReady(model: { engine?: string; filePath?: string } | nul
  */
 export function activeTextCapabilities(i: {
   isRemote: boolean;
-  remoteCaps?: CapabilityInputs['remoteCaps'];
+  remoteCaps?: RemoteCaps;
   model: DownloadedModel | null | undefined;
 }): EngineCapabilities {
   const litert = i.model && isLiteRTModel(i.model) ? i.model : null;

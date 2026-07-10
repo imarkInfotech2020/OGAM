@@ -21,6 +21,38 @@ type RetryParams = {
   setDebugInfo: SetState<any>;
 };
 
+/** Recorded modality when retrying an ASSISTANT message: its own output is the fact (an image
+ *  attachment → image turn); otherwise it's a text turn when it had a preceding user message. */
+function assistantRetryKind(message: Message, prevUser: Message | null): TurnKind | undefined {
+  if (messageHasImageOutput(message)) return 'image';
+  return prevUser ? 'text' : undefined;
+}
+
+/** Shared context for the retry-branch helpers (bundled so each stays within the param limit). */
+type RetryCtx = { message: Message; genDeps: GenerationDeps; p: RetryParams; convId: string; msgs: Message[] };
+
+/** Retry from a USER message: read the turn's recorded modality BEFORE deleting the reply that
+ *  carries it, so resend re-runs the SAME pipeline (deterministic) instead of re-classifying. */
+async function retryFromUserMessage({ message, genDeps, p, convId, msgs }: RetryCtx): Promise<void> {
+  const idx = msgs.findIndex((m: Message) => m.id === message.id);
+  const recordedKind = recordedTurnKind(msgs, message.id);
+  logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1} recordedKind=${recordedKind ?? 'none'}`);
+  if (idx !== -1 && idx < msgs.length - 1) p.deleteMessagesAfter(convId, message.id);
+  await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind });
+}
+
+/** Retry from an ASSISTANT message: regenerate the preceding user turn with the recorded kind. */
+async function retryFromAssistantMessage({ message, genDeps, p, convId, msgs }: RetryCtx): Promise<void> {
+  const idx = msgs.findIndex((m: Message) => m.id === message.id);
+  const prev = idx > 0 ? msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user') ?? null : null;
+  const recordedKind = assistantRetryKind(message, prev);
+  logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'} recordedKind=${recordedKind ?? 'none'}`);
+  if (prev) {
+    p.deleteMessagesAfter(convId, prev.id);
+    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev, recordedKind });
+  }
+}
+
 export async function handleRetryMessageFn(
   message: Message, genDeps: GenerationDeps, p: RetryParams,
 ): Promise<void> {
@@ -39,25 +71,9 @@ export async function handleRetryMessageFn(
   if (!p.activeConversationId) { logger.log('[RESEND-SM] retry BAIL: no conv'); return; }
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
   callHook(HOOKS.audioStop);
-  if (message.role === 'user') {
-    const idx = msgs.findIndex((m: Message) => m.id === message.id);
-    // Read the turn's recorded modality BEFORE deleting the reply that carries it, so resend
-    // re-runs the SAME pipeline (deterministic) instead of re-classifying — the image-resend fix.
-    const recordedKind = recordedTurnKind(msgs, message.id);
-    logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1} recordedKind=${recordedKind ?? 'none'}`);
-    if (idx !== -1 && idx < msgs.length - 1) p.deleteMessagesAfter(p.activeConversationId, message.id);
-    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind });
-  } else {
-    const idx = msgs.findIndex((m: Message) => m.id === message.id);
-    const prev = idx > 0 ? msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user') : null;
-    // The retried assistant message IS the turn's reply — its output determines the kind directly.
-    const recordedKind: TurnKind | undefined = messageHasImageOutput(message) ? 'image' : (prev ? 'text' : undefined);
-    logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'} recordedKind=${recordedKind ?? 'none'}`);
-    if (prev) {
-      p.deleteMessagesAfter(p.activeConversationId, prev.id);
-      await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev, recordedKind });
-    }
-  }
+  const ctx: RetryCtx = { message, genDeps, p, convId: p.activeConversationId, msgs };
+  if (message.role === 'user') await retryFromUserMessage(ctx);
+  else await retryFromAssistantMessage(ctx);
 }
 
 type EditParams = {

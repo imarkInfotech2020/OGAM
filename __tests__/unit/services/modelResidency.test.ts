@@ -794,43 +794,24 @@ describe('ModelResidencyManager', () => {
       const originalOS = RN.Platform.OS;
       afterEach(() => { RN.Platform.OS = originalOS; });
 
-      it('ANDROID: a ~3.7GB dirty model that leaves ~800MB physical LOADS (was refused by the iOS 1200 floor)', async () => {
-        RN.Platform.OS = 'android';
+      // All three share the same real seam (makeRoomFor with override on a dirty model, 4500MB
+      // physical); only platform + model size differ, driving a different floor verdict. Physical
+      // is always the guard — no swap credit — so an oversized dirty model is refused on both.
+      it.each([
+        { os: 'android', sizeMB: 3700, expected: true, why: 'leaves 800MB > 700 android floor → LOADS (the 12GB-phone case)' },
+        { os: 'android', sizeMB: 5235, expected: false, why: '4500-5235 negative → refused (the E4B OOM guard, no swap credit)' },
+        { os: 'ios', sizeMB: 3700, expected: false, why: 'leaves 800MB < 1200 iOS jetsam floor → refused' },
+      ])('$os: a $sizeMB MB dirty model → fits=$expected ($why)', async ({ os, sizeMB, expected }) => {
+        RN.Platform.OS = os;
         modelResidencyManager.setBudgetOverrideMB(null);
         jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
         jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
         jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4.5); // ~4500MB physical
         const { fits } = await modelResidencyManager.makeRoomFor(
-          { key: 'text', type: 'text', sizeMB: 3700, dirtyMemory: true }, // 4500-3700=800 > 700 android floor
+          { key: 'text', type: 'text', sizeMB, dirtyMemory: true },
           { override: true },
         );
-        expect(fits).toBe(true); // loads on Android (800 > 700) — the user's 12GB-phone case
-      });
-
-      it('ANDROID: an oversized dirty model that exceeds PHYSICAL is still refused (the OOM guard, no swap credit)', async () => {
-        RN.Platform.OS = 'android';
-        modelResidencyManager.setBudgetOverrideMB(null);
-        jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-        jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
-        jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4.5);
-        const { fits } = await modelResidencyManager.makeRoomFor(
-          { key: 'text', type: 'text', sizeMB: 5235, dirtyMemory: true }, // 4500-5235 = negative → refuse (the E4B OOM case)
-          { override: true },
-        );
-        expect(fits).toBe(false); // refused — a 5.2GB dirty model can't fit ~4.5GB physical (would OOM)
-      });
-
-      it('iOS: the same ~3.7GB dirty model is REFUSED (full jetsam floor stands — no user swap)', async () => {
-        RN.Platform.OS = 'ios';
-        modelResidencyManager.setBudgetOverrideMB(null);
-        jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-        jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
-        jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(4.5);
-        const { fits } = await modelResidencyManager.makeRoomFor(
-          { key: 'text', type: 'text', sizeMB: 3700, dirtyMemory: true }, // 4500-3700=800 < 1200 iOS floor
-          { override: true },
-        );
-        expect(fits).toBe(false); // iOS unchanged — 800 < 1200 jetsam floor
+        expect(fits).toBe(expected);
       });
     });
   });
