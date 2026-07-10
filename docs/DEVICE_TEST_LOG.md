@@ -26,7 +26,28 @@ marked. Tag: [type · confidence]. Fix each, then run the flow on device to conf
 - [ ] **Q12 — Modal "Reset to Defaults" is partial** [functional · LOW]. Chat Settings sheet → Reset to Defaults resets only the 7 text params; image steps/size/guidance/threads unchanged.
 - [ ] **Q13 — Duplicate Image sliders diverge** [DRY · LOW]. The modal vs Model Settings render the same Image-Size/Steps sliders with different mins/fallbacks (256 vs 128) — the root of Q1.
 
-**Validated FIXED by the sweep (independent adversarial confirmation — recheck on next build):**
+## Memory-budgeting adversarial recon (Android + iOS + cross-platform) — 🔎
+
+3 recon agents attacked the CURRENT budget code (this session's `effectiveAvailableMB` reclaim-credit +
+survival floor + residency). Every item cross-checked live on HEAD. **Some implicate this session's own
+memory fix** — honest. The OOM/jetsam magnitude is only *truthfully* confirmable on a physical device
+(the `[MEM-SM] makeRoomFor` log is ground truth); tests prove the gate ADMITS the load (necessary
+condition), device proves the crash (sufficient). Do NOT blindly tighten — the same code, device-verified,
+fixes the E4B false-refusal; a naive tightening re-introduces it.
+
+- [ ] **M1 — text + image models CO-RESIDE instead of swapping** [P0 · SoC vs design doc · HIGH]. 12GB, load a text model then start image-gen → BOTH stay resident (`residents=[text:5235,image:2369] avail=640`) → near-OOM. Balanced `planEviction` has NO text↔image mutual exclusion (design doc says it should swap). This is "Part B". Aggressive mode swaps correctly → fix is the balanced branch.
+- [ ] **M2 — reclaim credit defeats the dirty gate for a 2nd in-app heavy** [P0 · REGRESSION from this session's `effectiveAvailableMB` · HIGH]. With one dirty model resident, loading a second credits the physical budget (~8602MB) though only ~640MB is truly free → co-load admitted. Pre-session code (raw availMem) would have REFUSED. Root: reclaim credit models "LMK evicts BACKGROUND apps" but here the RAM is pinned by our OWN resident model. (M1 swap removes the worst case; also subtract resident dirty footprint before crediting.)
+- [ ] **M3 — override survival floor checks the CREDITED ceiling, not real free RAM** [P0 · Android · HIGH]. Load-Anyway a 7900MB dirty model on 12GB with 665MB truly free → ADMITTED (`postLoadFree = effectiveAvail 8602 − 7900 = 702 ≥ 700`). The floor can't see the real OOM state; it's 100MB from admitting a guaranteed jetsam. (`index.ts:407-414`.)
+- [ ] **M4 — iOS clean/GGUF loads charge NOTHING to the floor + never consult live free RAM** [iOS · HIGH code / NEEDS-DEVICE for jetsam]. Load-Anyway an 8GB GGUF on a 12GB iPhone at 1200MB free → admitted (clean → `incomingDirtyMB=0` → floor sees full availMem); and a no-override clean 9GB "fits" at 500MB free (clean branch returns physical cap, ignores availMem). Nuance: clean mmap weights DO page from file (the design's correct insight, device-verified for E4B), BUT the dirty inference working set (KV/compute) is uncharged — iOS has no swap for it. Needs device to size the working-set charge; don't over-correct.
+- [ ] **M5 — iOS 1200 survival floor OVER-refuses a legit small dirty Load-Anyway** [iOS · under-commit · MED]. 12GB iPhone, 3.1GB free, Load-Anyway a 2GB dirty LiteRT model → REFUSED (needs size+1200 = 3200 free). Defeats the escape hatch for a load that's plainly safe. The flat 1200 floor is simultaneously too low (M4) and too high (M5).
+- [ ] **M6 — aggressive policy over-commits a single dirty model** [both platforms · MED]. Aggressive (0.88 Android / 0.92 iOS) admits a 9GB dirty model on 12GB at 3GB free; zram/dirty pages can't back it.
+- [ ] **M7 — SOLID: `dirtyMemory` decided by `model.engine === 'litert'` in the caller** [SOLID · LOW-MED]. `activeModelService/index.ts:152` branches on the concrete engine to set the eviction-relevant dirty flag; should be a capability the model/engine declares.
+- [ ] **M8 — SOLID: `IMAGE_MODEL_OVERHEAD_MULTIPLIER = Platform.OS==='ios'?1.5:1.8`** [SOLID · LOW]. `types.ts:50` — a `Platform.OS` mechanism branch; should be capability-as-data (CoreML vs ONNX).
+- [ ] **M9 — DRY: `SIDECAR_TYPES` + the physical-cap expression each defined twice** [DRY · LOW]. `policy.ts` vs `modelResidency/index.ts` — two owners can drift.
+- [ ] **M10 — jest silently SKIPS `__tests__/integration/memory/{android,ios}/`** [INFRA · P1 · HIGH, safe fix]. `testPathIgnorePatterns` has unanchored `'/android/'` + `'/ios/'` (meant for the native build dirs) → any memory test there never runs in CI. `/pro/` was already anchored for this exact reason; anchor these to `<rootDir>/`. Confirmed by two agents independently.
+- [ ] **M-GAP — `handleMemoryWarning` can't reclaim a heavy** [defense-in-depth]. Only reclaims sidecars; with two heavies co-resident (M1) a real memory warning frees nothing. Moot once M1 lands.
+
+## Validated FIXED by the sweep (independent adversarial confirmation — recheck on next build):
 - [x] QNN/NPU image download integrity (B8) — fresh QNN download extracts + registers, no phantom `clip_v2.mnn.weight`.
 - [x] LiteRT image prompt-enhancement — enhances via the active engine, no longer llama-hardcoded (engine-DIP).
 - [x] Pre-tool-call thinking box — renders for separate-channel AND inline `<think>`, left-aligned 85% (parse-once + B3).
