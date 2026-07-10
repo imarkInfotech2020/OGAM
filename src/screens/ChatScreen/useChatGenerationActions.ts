@@ -118,6 +118,20 @@ export function recordedTurnKind(messages: Message[], userMessageId: string): Tu
   return messageHasImageOutput(reply) ? 'image' : 'text';
 }
 
+/** THE single modality decision for a turn — the seam send AND resend both go through, so the two
+ *  can never disagree (the resend-misroute bug was two decision sites with different inputs). A REPLAY
+ *  passes the turn's recorded kind and it wins verbatim (deterministic, no classify); a NEW turn has
+ *  none, so the route rule (force / manual / classifier) decides. Adding a modality (stt/tts) extends
+ *  this one function, not each call site (OCP). */
+export async function resolveTurnKind(
+  deps: Parameters<typeof shouldRouteToImageGenerationFn>[0],
+  input: { text: string; recordedKind?: TurnKind; forceImageMode?: boolean; imageEnabled?: boolean },
+): Promise<TurnKind> {
+  if (input.recordedKind) return input.recordedKind; // replay: the recorded fact wins
+  if (input.imageEnabled === false) return 'text'; // image route explicitly disabled for this turn
+  return (await shouldRouteToImageGenerationFn(deps, input.text, input.forceImageMode)) ? 'image' : 'text';
+}
+
 export async function shouldRouteToImageGenerationFn(
   deps: Pick<GenerationDeps, 'isGeneratingImage' | 'settings' | 'activeImageModel' | 'downloadedModels' | 'setIsClassifying' | 'setAppImageGenerationStatus' | 'setAppIsGeneratingImage' | 'hasTextModel'>,
   text: string,
@@ -404,7 +418,9 @@ export async function dispatchGenerationFn(
   // [ROUTE-SM]: confirms the turn reached the router (esp. the voice path) + the
   // final routed destination — so a "pipeline never triggered" is visible in logs.
   logger.log(`[ROUTE-SM] dispatch text="${text.slice(0, 60)}" imageMode=${imageMode} hasImageModel=${!!deps.activeImageModel}`);
-  const shouldGenerateImage = imageMode !== 'disabled' && await shouldRouteToImageGenerationFn(deps, messageText, imageMode === 'force');
+  // ONE decision seam (resolveTurnKind); a NEW turn has no recorded kind so the route rule decides.
+  const kind = await resolveTurnKind(deps, { text: messageText, forceImageMode: imageMode === 'force', imageEnabled: imageMode !== 'disabled' });
+  const shouldGenerateImage = kind === 'image';
   if (shouldGenerateImage && deps.activeImageModel) {
     logger.log('[ROUTE-SM] dispatch → IMAGE pipeline');
     await handleImageGenerationFn(deps, { prompt: text, conversationId, attachments }); // adds user msg (keeps voice note)
@@ -471,15 +487,11 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before the LLM reload (memory-tight)
   const targetConversationId = deps.activeConversationId;
   const messageText = appendAttachmentText(userMessage.content, userMessage.attachments);
-  // DETERMINISTIC replay: the turn's RECORDED kind wins. An image turn re-runs the image pipeline
-  // (its own "no image model" guard messages), NEVER re-classifies to text and fails to load a text
-  // model (the 1★ resend bug). Only when the kind wasn't recorded (older turns) do we classify.
-  const routeToImage = recordedKind === 'image'
-    ? true
-    : recordedKind === 'text'
-      ? false
-      : await shouldRouteToImageGenerationFn(deps, messageText);
-  if (routeToImage) {
+  // Same decision seam as dispatch (resolveTurnKind): a replay passes the RECORDED kind, which wins
+  // verbatim — an image turn re-runs the image pipeline, NEVER re-classifies to text and fails to
+  // load a text model (the 1★ resend bug). Only a legacy turn with no recorded kind classifies.
+  const kind = await resolveTurnKind(deps, { text: messageText, recordedKind });
+  if (kind === 'image') {
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }

@@ -544,6 +544,35 @@ describe('regenerateResponseFn', () => {
   });
 });
 
+// ── resolveTurnKind: the ONE modality decision seam send + resend share ──
+describe('resolveTurnKind', () => {
+  it('a recorded kind wins verbatim and never consults the classifier (replay determinism)', async () => {
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
+    expect(await generationActions.resolveTurnKind(deps, { text: 'anything', recordedKind: 'image' })).toBe('image');
+    expect(await generationActions.resolveTurnKind(deps, { text: 'anything', recordedKind: 'text' })).toBe('text');
+    expect(mockClassifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('a new turn with image disabled resolves to text without classifying', async () => {
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
+    expect(await generationActions.resolveTurnKind(deps, { text: 'draw a cat', imageEnabled: false })).toBe('text');
+    expect(mockClassifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('a new turn (no recorded kind) defers to the route rule', async () => {
+    mockClassifyIntent.mockResolvedValue('image');
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
+    expect(await generationActions.resolveTurnKind(deps, { text: 'draw a cat' })).toBe('image');
+    mockClassifyIntent.mockResolvedValue('text');
+    expect(await generationActions.resolveTurnKind(deps, { text: 'hello there' })).toBe('text');
+  });
+
+  it('forceImageMode forces image on a new turn', async () => {
+    const deps = makeGenerationDeps({ activeImageModel: baseImageModel });
+    expect(await generationActions.resolveTurnKind(deps, { text: 'x', forceImageMode: true })).toBe('image');
+  });
+});
+
 // ── Pure helpers: recorded-turn-modality lookup (single source read on resend/edit) ──
 describe('recordedTurnKind / messageHasImageOutput', () => {
   const userMsg = (id: string, content = 'hi') => ({ id, role: 'user' as const, content, timestamp: 0 });
