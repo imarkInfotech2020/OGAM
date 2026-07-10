@@ -1,7 +1,7 @@
 import { useAppStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
-import { isLiteRTModel, type DownloadedModel } from '../types';
+import { isLiteRTModel, type DownloadedModel, type Message } from '../types';
 import logger from '../utils/logger';
 
 /** Every text-generation engine, defined ONCE here so callers never hardcode the concrete set. */
@@ -175,4 +175,37 @@ export function getActiveEngineService(): typeof llmService | typeof liteRTServi
   const model = downloadedModels.find(m => m.id === activeModelId);
   if (!model) return null;
   return model.engine === 'litert' ? liteRTService : llmService;
+}
+
+/**
+ * One-shot standalone text completion on the ACTIVE text engine — engine-agnostic.
+ *
+ * For NON-chat callers (image-prompt enhancement) that need a prompt→text completion
+ * WITHOUT the chat streaming/turn/store machinery. The two engines have genuinely
+ * different one-shot entry shapes — llama takes Message[] via generateResponse; LiteRT
+ * runs on a throwaway native session (prepareConversation + generateRaw) so it never
+ * pollutes a real chat's KV/history — so this is the SINGLE place that difference lives.
+ * Callers depend on this seam, never on a concrete engine (the enhancement path used to
+ * hardcode llmService, so a LiteRT text model reported "not loaded" and enhancement was
+ * skipped even though the model was resident).
+ */
+export async function generateStandalone(messages: Message[]): Promise<string> {
+  if (getActiveEngineService() === liteRTService) {
+    const system = messages.find(m => m.role === 'system');
+    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+    const systemPrompt = typeof system?.content === 'string' ? system.content : '';
+    const userText = typeof lastUser?.content === 'string' ? lastUser.content : '';
+    const { settings } = useAppStore.getState();
+    await liteRTService.prepareConversation('__standalone__', systemPrompt, {
+      samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
+      history: [],
+    });
+    try {
+      return await liteRTService.generateRaw(userText);
+    } finally {
+      liteRTService.invalidateConversation();
+    }
+  }
+  // llama (default engine). A no-op stream callback → we only want the final string.
+  return llmService.generateResponse(messages, () => {});
 }

@@ -1,7 +1,7 @@
 /** ImageGenerationService - Handles image generation independently of UI lifecycle */
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
-import { llmService } from './llm';
+import { getActiveEngineService, generateStandalone } from './engines';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
@@ -209,13 +209,14 @@ class ImageGenerationService {
   }
 
   private async _resetLlmAfterEnhancement(): Promise<void> {
-    logger.log('[ImageGen] 🔄 Starting cleanup - generating:', llmService.isCurrentlyGenerating());
+    // Engine-agnostic: reset whichever text engine ran the enhancement (llama OR LiteRT).
+    // stopGeneration is supported by both; binding to llmService left a LiteRT generation
+    // running after enhancement.
     try {
-      await llmService.stopGeneration();
-      logger.log('[ImageGen] ✓ stopGeneration() called');
-      logger.log('[ImageGen] ✅ LLM service reset complete - generating:', llmService.isCurrentlyGenerating());
+      await getActiveEngineService()?.stopGeneration();
+      logger.log('[ImageGen] ✓ text engine stopGeneration() called');
     } catch (resetError) {
-      logger.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
+      logger.error('[ImageGen] ❌ Failed to reset text engine:', resetError);
     }
   }
 
@@ -238,9 +239,11 @@ class ImageGenerationService {
       logger.log('[ImageGen] Enhancement disabled, using original prompt');
       return params.prompt;
     }
-    let isTextModelLoaded = llmService.isModelLoaded();
-    const isLlmGenerating = llmService.isCurrentlyGenerating();
-    logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded, 'LLM generating:', isLlmGenerating);
+    // Engine-agnostic loaded check — a LiteRT text model lives in liteRTService, so the
+    // old llmService.isModelLoaded() always read false for it and enhancement was skipped
+    // even though the model was resident.
+    let isTextModelLoaded = getActiveEngineService()?.isModelLoaded() ?? false;
+    logger.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded);
     if (!isTextModelLoaded) {
       // Text and image models are mutually exclusive (one resident at a time), so
       // during image gen the text model usually isn't loaded. Load it on demand to
@@ -262,7 +265,7 @@ class ImageGenerationService {
       let loadError: unknown = null;
       try {
         await activeModelService.loadTextModel(textModelId);
-        isTextModelLoaded = llmService.isModelLoaded();
+        isTextModelLoaded = getActiveEngineService()?.isModelLoaded() ?? false;
       } catch (err) {
         loadError = err;
         logger.warn('[ImageGen] Failed to load text model for enhancement, using original prompt:', err);
@@ -292,10 +295,9 @@ class ImageGenerationService {
       tempMessageId = tempMessage.id;
     }
     try {
-      logger.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
-      let raw = await llmService.generateResponse(buildEnhancementMessages(params.prompt, contextMessages), (_data) => { });
-      logger.log('[ImageGen] 📥 llmService.generateResponse returned');
-      logger.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());
+      logger.log('[ImageGen] 📤 Calling generateStandalone for enhancement (active engine)...');
+      let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages));
+      logger.log('[ImageGen] 📥 generateStandalone returned');
       raw = cleanEnhancedPrompt(raw);
       logger.log('[ImageGen] ✅ Original prompt:', params.prompt);
       logger.log('[ImageGen] ✅ Enhanced prompt:', raw);
