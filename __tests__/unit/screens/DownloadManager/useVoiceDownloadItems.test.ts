@@ -12,7 +12,7 @@ import type { ModelDownload } from '../../../../src/services/modelDownloadServic
 
 const mockListDownloadedModels = jest.fn((..._a: any[]) => Promise.resolve([] as any[]));
 const mockDeleteModel = jest.fn((..._a: any[]) => Promise.resolve());
-const mockUnloadModel = jest.fn(async () => {});
+const mockUnloadModel = jest.fn(async (..._a: any[]) => {});
 // The hook reads whisperService.listDownloadedModels from the barrel, but the STT delete routes
 // through the REAL whisperStore, which reads the CONCRETE services/whisperService. Mock BOTH paths,
 // wired to the SAME mock closures, so the delete assertion sees the call regardless of which import
