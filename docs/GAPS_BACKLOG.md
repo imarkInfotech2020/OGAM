@@ -145,7 +145,7 @@ proper-threads is the path.
 ## Repo-wide /hygiene audit — open items - 2026-07-09 (SOLID §A/§B + DRY §C)
 
 Through-line: decision/capability logic derived ad-hoc at many call sites instead of owned once by a
-service. (DR2 vision-detection divergence was RESOLVED — unified onto utils/visionModel.ts.)
+service.
 
 ### SOLID (§A/§B)
 | # | Location | Verdict | Fix |
