@@ -346,45 +346,50 @@ export interface FsFake {
 
 function makeFsFake(): FsFake {
   const DocumentDirectoryPath = '/docs';
-  // path → { size, isDir }. Directories are entries with isDir=true.
-  const tree = new Map<string, { size: number; isDir: boolean }>();
-  tree.set(DocumentDirectoryPath, { size: 0, isDir: true });
+  // Backed by memfs — a REAL in-memory filesystem engine does the storage/tree work; this only maps the
+  // react-native-fs API onto it. (Off-the-shelf fake engine, per the plan, not a hand-rolled tree.)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Volume } = require('memfs');
+  const vol = Volume.fromJSON({});
+  vol.mkdirSync(DocumentDirectoryPath, { recursive: true });
 
-  const norm = (p: string) => p.replace(/\/+$/, '');
-  const parent = (p: string) => norm(p).slice(0, norm(p).lastIndexOf('/')) || '/';
+  const norm = (p: string) => p.replace(/^file:\/\//, '').replace(/\/+$/, '') || '/';
   const base = (p: string) => norm(p).slice(norm(p).lastIndexOf('/') + 1);
-  const ensureDir = (p: string) => { if (p && p !== '/' && !tree.has(norm(p))) { tree.set(norm(p), { size: 0, isDir: true }); ensureDir(parent(p)); } };
-
-  const seedFile = (path: string, sizeBytes: number) => { ensureDir(parent(path)); tree.set(norm(path), { size: sizeBytes, isDir: false }); };
-  const seedDir = (path: string) => ensureDir(path);
-
-  const statEntry = (p: string) => tree.get(norm(p));
-  const mkStat = (p: string, e: { size: number; isDir: boolean }) => ({
-    path: norm(p), name: base(p), size: e.size,
-    isFile: () => !e.isDir, isDirectory: () => e.isDir, mtime: new Date(0),
+  const mkStat = (p: string, st: { size: number; isFile(): boolean; isDirectory(): boolean; mtime: Date }) => ({
+    path: norm(p), name: base(p), size: Number(st.size),
+    isFile: () => st.isFile(), isDirectory: () => st.isDirectory(), mtime: st.mtime,
   });
+
+  const seedFile = (path: string, sizeBytes: number) => {
+    const p = norm(path);
+    vol.mkdirSync(p.slice(0, p.lastIndexOf('/')) || '/', { recursive: true });
+    vol.writeFileSync(p, Buffer.alloc(sizeBytes));
+  };
+  const seedDir = (path: string) => vol.mkdirSync(norm(path), { recursive: true });
 
   const module: Record<string, unknown> = {
     DocumentDirectoryPath,
     CachesDirectoryPath: '/caches',
-    exists: jest.fn(async (p: string) => tree.has(norm(p))),
-    mkdir: jest.fn(async (p: string) => { ensureDir(p); }),
+    exists: jest.fn(async (p: string) => vol.existsSync(norm(p))),
+    mkdir: jest.fn(async (p: string) => { vol.mkdirSync(norm(p), { recursive: true }); }),
     readDir: jest.fn(async (p: string) => {
       const dir = norm(p);
-      return [...tree.entries()]
-        .filter(([k]) => k !== dir && parent(k) === dir)
-        .map(([k, e]) => mkStat(k, e));
+      return (vol.readdirSync(dir) as string[]).map((name) => {
+        const full = `${dir}/${name}`;
+        return mkStat(full, vol.statSync(full) as never);
+      });
     }),
-    stat: jest.fn(async (p: string) => { const e = statEntry(p); if (!e) throw new Error(`ENOENT: ${p}`); return mkStat(p, e); }),
-    writeFile: jest.fn(async (p: string, contents: string) => { seedFile(p, Buffer.byteLength(String(contents ?? ''))); }),
-    readFile: jest.fn(async (p: string) => { if (!tree.has(norm(p))) throw new Error(`ENOENT: ${p}`); return ''; }),
+    stat: jest.fn(async (p: string) => mkStat(p, vol.statSync(norm(p)) as never)),
+    writeFile: jest.fn(async (p: string, contents: string) => {
+      const np = norm(p);
+      vol.mkdirSync(np.slice(0, np.lastIndexOf('/')) || '/', { recursive: true });
+      vol.writeFileSync(np, String(contents ?? ''));
+    }),
+    readFile: jest.fn(async (p: string) => vol.readFileSync(norm(p), 'utf8')),
     read: jest.fn(async () => 'GGUF'),
-    unlink: jest.fn(async (p: string) => {
-      const d = norm(p);
-      [...tree.keys()].filter(k => k === d || k.startsWith(d + '/')).forEach(k => tree.delete(k));
-    }),
-    moveFile: jest.fn(async (from: string, to: string) => { const e = statEntry(from); if (e) { seedFile(to, e.size); tree.delete(norm(from)); } }),
-    copyFile: jest.fn(async (from: string, to: string) => { const e = statEntry(from); if (e) seedFile(to, e.size); }),
+    unlink: jest.fn(async (p: string) => { vol.rmSync(norm(p), { recursive: true, force: true }); }),
+    moveFile: jest.fn(async (from: string, to: string) => { vol.renameSync(norm(from), norm(to)); }),
+    copyFile: jest.fn(async (from: string, to: string) => { vol.copyFileSync(norm(from), norm(to)); }),
     hash: jest.fn(async () => 'deadbeef'),
     downloadFile: jest.fn(() => ({ jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 0 }) })),
     stopDownload: jest.fn(),
