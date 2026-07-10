@@ -7,9 +7,9 @@ import { modelResidencyManager } from '../../services/modelResidency';
 import { hardwareService } from '../../services/hardware';
 import {
   regenerateResponseFn, executeDeleteConversationFn, handleImageGenerationFn,
-  recordedTurnKind, messageHasImageOutput,
+  recordedTurnKind,
 } from './useChatGenerationActions';
-import type { GenerationDeps, TurnKind } from './useChatGenerationActions';
+import type { GenerationDeps } from './useChatGenerationActions';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -20,13 +20,6 @@ type RetryParams = {
   deleteMessagesAfter: (c: string, m: string) => void;
   setDebugInfo: SetState<any>;
 };
-
-/** Recorded modality when retrying an ASSISTANT message: its own output is the fact (an image
- *  attachment → image turn); otherwise it's a text turn when it had a preceding user message. */
-function assistantRetryKind(message: Message, prevUser: Message | null): TurnKind | undefined {
-  if (messageHasImageOutput(message)) return 'image';
-  return prevUser ? 'text' : undefined;
-}
 
 /** Shared context for the retry-branch helpers (bundled so each stays within the param limit). */
 type RetryCtx = { message: Message; genDeps: GenerationDeps; p: RetryParams; convId: string; msgs: Message[] };
@@ -41,11 +34,13 @@ async function retryFromUserMessage({ message, genDeps, p, convId, msgs }: Retry
   await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind });
 }
 
-/** Retry from an ASSISTANT message: regenerate the preceding user turn with the recorded kind. */
+/** Retry from an ASSISTANT message: regenerate the preceding user turn. Uses the SAME whole-turn
+ *  recordedTurnKind (keyed on that user message) as the user-message path, so tapping resend on
+ *  EITHER the enhanced-prompt or the image-result message of an image turn re-draws the image. */
 async function retryFromAssistantMessage({ message, genDeps, p, convId, msgs }: RetryCtx): Promise<void> {
   const idx = msgs.findIndex((m: Message) => m.id === message.id);
   const prev = idx > 0 ? msgs.slice(0, idx).reverse().find((m: Message) => m.role === 'user') ?? null : null;
-  const recordedKind = assistantRetryKind(message, prev);
+  const recordedKind = prev ? recordedTurnKind(msgs, prev.id) : undefined;
   logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'} recordedKind=${recordedKind ?? 'none'}`);
   if (prev) {
     p.deleteMessagesAfter(convId, prev.id);

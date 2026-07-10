@@ -107,15 +107,24 @@ export function messageHasImageOutput(message: Message | undefined | null): bool
   return !!message?.attachments?.some(a => a.type === 'image');
 }
 
-/** The recorded kind of the turn whose USER message is userMessageId — taken from the assistant
- *  reply that followed it. undefined when there is no reply yet (never generated) or the message
- *  is unknown, in which case the caller falls back to classifier routing (legacy behavior). */
+/** The recorded kind of the turn whose USER message is userMessageId — scanned across EVERY
+ *  assistant reply in that turn (until the next user message), not just the first. An image turn
+ *  emits an "Enhanced prompt" assistant message BEFORE the image-result message, so checking only
+ *  the first reply misclassified it as text → resend loaded a text model instead of re-drawing
+ *  (device-confirmed). If ANY reply in the turn produced an image, the turn is an image turn.
+ *  undefined when the turn has no reply yet / the message is unknown → caller falls back to classify. */
 export function recordedTurnKind(messages: Message[], userMessageId: string): TurnKind | undefined {
   const idx = messages.findIndex(m => m.id === userMessageId);
   if (idx === -1) return undefined;
-  const reply = messages.slice(idx + 1).find(m => m.role === 'assistant');
-  if (!reply) return undefined;
-  return messageHasImageOutput(reply) ? 'image' : 'text';
+  let sawReply = false;
+  for (let i = idx + 1; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role === 'user') break; // next turn begins — stop scanning
+    if (m.role !== 'assistant') continue;
+    sawReply = true;
+    if (messageHasImageOutput(m)) return 'image';
+  }
+  return sawReply ? 'text' : undefined;
 }
 
 /** THE single modality decision for a turn — the seam send AND resend both go through, so the two

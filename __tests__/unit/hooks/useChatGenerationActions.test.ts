@@ -587,6 +587,21 @@ describe('recordedTurnKind / messageHasImageOutput', () => {
     expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('image');
   });
 
+  // Device-confirmed regression: an image turn emits an "Enhanced prompt" assistant message (no
+  // image) BEFORE the image-result message. Scanning only the FIRST reply returned 'text' → resend
+  // loaded a text model instead of re-drawing. Must scan the WHOLE turn.
+  it('reads image when a LATER reply in the turn has the image (enhanced-prompt precedes it)', () => {
+    const enhancedPrompt = { id: 'a1', role: 'assistant' as const, content: '<think>enhanced</think>', timestamp: 0 };
+    const msgs = [userMsg('u1', 'draw a dog'), enhancedPrompt, imageReply('a2')];
+    expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('image');
+  });
+
+  it('stops at the NEXT user message — an image in a later turn does not leak into this one', () => {
+    const msgs = [userMsg('u1'), textReply('a1'), userMsg('u2', 'draw'), imageReply('a2')];
+    expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('text');
+    expect(generationActions.recordedTurnKind(msgs, 'u2')).toBe('image');
+  });
+
   it('reads text when the reply is a plain assistant message', () => {
     const msgs = [userMsg('u1'), textReply('a1')];
     expect(generationActions.recordedTurnKind(msgs, 'u1')).toBe('text');
