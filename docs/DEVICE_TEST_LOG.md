@@ -59,19 +59,23 @@ the turn on a media-load error — fall back to text-only generation; (c) chase 
 
 ---
 
-### B6 — Download retry not working + no auto-retry after network drop (Android)
-**INVESTIGATING (fix in this PR).** Two parts:
-1. **No auto-retry:** a whisper "Base" transcription-model download failed mid-way with "The connection
-   dropped while downloading. Please try again." (IMG_0108) — it did NOT auto-resume/retry after the
-   network blip. (Ties to backlog OD5: Android retry doesn't resume after a WiFi drop.)
-2. **Manual Retry does nothing:** the Download Manager shows several failed downloads (SmolLM5,
-   Mistral-7B-Instruct, whisper 99M small.en, Anything V5) with red-X + a Retry button; tapping Retry
-   doesn't restart them (IMG_0109). CRITICAL LOG SIGNAL: tapping Retry produced ZERO `[DL-SM]` lines in
-   the trace → the retry handler isn't firing (or isn't reaching modelDownloadService.retry()). Also
-   "Anything V5" shows "File not found. It may have been moved or removed" (a stale/orphaned entry).
-This also blocks B5 (the whisper model can't finish downloading → no transcription model → empty
-transcript). Fix: wire/repair Retry → modelDownloadService.retry() (resume from partial), and add
-auto-retry/resume on a transient network drop.
+### B6 — Retry on an image download that failed at EXTRACTION throws "Download not found" (Android)
+**ROOT-CAUSED (fix in this PR).** Refined from the fuller trace:
+- STT + text downloads DID recover/resume after the network drops (`stt:small.en → completed` 09:46,
+  `stt:medium.en → completed` 09:51, `SmolLM3 → completed` 09:48) — so resume works for those. The
+  IMG_0108/0109 red-X rows were mostly mid-recovery, not permanently dead.
+- The genuinely-broken case is the QNN image model `anythingv5_npu_min`: its bytes finished (100%,
+  994513330/995100213) but EXTRACTION failed — `Image model files are incomplete (missing: unet.bin /
+  clip_v2.mnn.weight). The download was corrupted or interrupted.` The native download row is then gone
+  (download completed), so Retry → imageProvider.resumeImageDownload → looks up the row → throws
+  `Download not found` every time (log 09:45, 09:52, repeatedly). Retry on an EXTRACTION failure is
+  hunting a download-to-resume that no longer exists.
+FIX: when an image entry's error is an incomplete/corrupt extraction (ImageModelIncompleteError, no
+resumable native row), Retry must DELETE + RE-DOWNLOAD from scratch, not resume. (Also relates to the
+QNN over-recommendation backlog item — anythingv5_npu_min is the non-flagship QNN model that arguably
+shouldn't be offered on this SoC.)
+SUB-ITEM (auto-retry): a transient net drop shows "connection dropped, please try again" (IMG_0108)
+without auto-resume — consider auto-retry with backoff (backlog OD5).
 
 ## Verified passing (tested on device this session)
 - Gemma-4 LiteRT load + generate (Android) — B1.
