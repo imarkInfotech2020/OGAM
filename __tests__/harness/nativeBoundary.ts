@@ -160,8 +160,9 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
 // ---------------------------------------------------------------------------
 
 export interface LlamaFake {
-  /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser). */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> }): void;
+  /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser).
+   *  Pass { throwMessage } to make completion REJECT (e.g. a native context-overflow error). */
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string }): void;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
   calls: { completion: unknown[][] };
@@ -169,11 +170,12 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string } = { text: '' };
 
   const context: Record<string, jest.Mock> = {
     completion: jest.fn(async (params: unknown) => {
       calls.completion.push([params]);
+      if (pending.throwMessage) throw new Error(pending.throwMessage);
       return {
         text: pending.text,
         content: pending.text,
@@ -203,7 +205,7 @@ function makeLlamaFake(): LlamaFake {
     detokenize: jest.fn().mockResolvedValue({ text: '' }),
   };
 
-  return { module, calls, scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls }; } };
+  return { module, calls, scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage }; } };
 }
 
 // ---------------------------------------------------------------------------
