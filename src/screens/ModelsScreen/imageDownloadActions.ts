@@ -3,7 +3,7 @@
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { showAlert, AlertState } from '../../components/CustomAlert';
+import { showAlert } from '../../components/CustomAlert';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
