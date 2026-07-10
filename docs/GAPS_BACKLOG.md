@@ -15,8 +15,8 @@ Verdict legend:
 
 Added dependency-cruiser as the STANDING GATE for the architectural boundaries we kept
 re-establishing by hand (`.dependency-cruiser.js`; `npm run depcruise`; CI `architecture`
-job + pre-push). Rules are at `error`; the existing debt is captured in
-`.dependency-cruiser-known-violations.json` (68 violations) so the gate PASSES on current
+job + pre-push). AGGRESSIVE ruleset, all at `error`; existing debt captured in
+`.dependency-cruiser-known-violations.json` (66 violations) so the gate PASSES on current
 debt but FAILS on anything NEW. This is the honest register of that baselined debt - burn it
 down, never regenerate the baseline to hide a new violation.
 
@@ -24,15 +24,58 @@ down, never regenerate the baseline to hide a new violation.
 |---|---|---|---|
 | no-circular | 61 | fix-the-guard (own PR) | Mostly cycles routed through barrel `index.ts` files (`services/index`, `stores/index`) + intra-screen hook cycles (HomeScreen hooks ⇄ useHomeScreen). Break by importing the concrete module, not the barrel, and extracting shared hook state down a layer. Large - dedicated PR(s). |
 | utils-stay-pure | 3 | fix-the-guard | `utils/proPrompt→stores/appStore`, `utils/imageModelIntegrity→services/modelLoadErrors`, `utils/downloadAggregate→stores/downloadStore`. A "pure" util reaching into a store/service - move the impure bit up or the shared data down. |
-| no-backward-layering-utils | 1 | fix-the-guard | `services/loadModelWithOverride→components/CustomAlert`: a service imports a UI component to show an alert. Service should return a decision; the caller renders the alert (SoC §A). |
-| no-orphans (warn) | 3 | instrument-and-revisit | `screens/ChatScreen/toolUsage.ts`, `config/revenueCatKeys.ts`, `bootstrap/proStub.js` - grep-verify each is truly unreferenced (proStub is likely a pro-gating shell) before delete. |
+| no-backward-layering-core | 1 | fix-the-guard | `services/loadModelWithOverride→components/CustomAlert`: a service imports a UI component to show an alert. Service should return a decision; the caller renders the alert (SoC §A). |
+| components-are-leaf-ui | 1 | fix-the-guard | `components/models/VoiceModelsSheet→screens/ModelsScreen/VoiceModelsUpsell`: a reusable component imports a screen. Move VoiceModelsUpsell into components/ (or pass it as a prop). |
 
-Engine-DIP violations found by the gate on day one (screens importing concrete `litert`)
-were FIXED in this PR, not baselined (see the Engine DIP section) - the gate proving its value.
+Resolved by the gate on day one (NOT baselined):
+- Engine-DIP: screens importing concrete `litert` → routed through services/engines (see Engine DIP section).
+- Dead code: `screens/ChatScreen/toolUsage.ts` (shouldUseToolsForMessage, zero prod callers) deleted with its test.
+- Phantom-dep false positives excluded (not debt): `whisper.rn` (declared; `.rn` defeats the resolver),
+  `@offgrid/pro` (private open-core submodule wired via metro haste through the one bootstrap loader).
+
+Aggressive rules also active with ZERO current violations (pure forward-guards): not-to-test-from-prod,
+not-to-dev-dep, no-phantom-deps, no-deprecated-core (warn).
 
 NOTE: the gate catches the IMPORT-edge half of the DIP rule. The VALUE-branch half
 (`model.engine === 'litert'` comparing a store value) is not an edge - guard it with an
 ESLint `no-restricted-syntax` rule (follow-up).
+
+## SonarJS in ESLint - burn-down - 2026-07-10 (PR #510)
+
+Added `eslint-plugin-sonarjs` (recommended-legacy) so Sonar-grade bug/smell rules run in normal
+lint - FREE, LOCAL, and it covers PRO too (pro has no cloud Sonar project; a private cloud project
+is paid-by-LOC). Most rules are at the recommended `error` (forward guard on new code). Six rules
+already tripped on legacy core are relaxed to `warn` - ratchet each back to `error` as its count
+hits zero. ESLint v8 has no native suppression baseline, hence warn-then-ratchet rather than a
+baseline file.
+
+Real bugs SonarJS caught immediately and we FIXED (not warned):
+- `openAICompatibleProvider.test.ts`: `expect(... .length >= 0).toBe(true)` - a tautology assertion
+  (always true, could never fail). Rewrote to assert the terminal outcome (onComplete fired, no abort).
+- `streamingStateMachine.test.ts`: `releasers` - a collection declared + reset but never pushed/read
+  (dead). Removed.
+- `pro/ui/McpServerModal.tsx`: `borderRadius: open ? 8 : 8` - redundant ternary (same value both
+  branches). Fixed to `borderRadius: 8`. (Fixed in the pro submodule - the "SonarJS catches pro" win.)
+
+`no-duplicate-string` is OFF (not warn): it fights RN styling — style literals ('space-between',
+'center', color values) repeat by design across StyleSheet objects; a constant per value is noise.
+Also unblocks pro's `--max-warnings=0` pre-commit hook.
+
+Warn-level burn-down (core src, ratchet to error as each hits zero):
+| Rule | Count |
+|---|---|
+| sonarjs/prefer-single-boolean-return | 9 |
+| sonarjs/no-nested-template-literals | 6 |
+| sonarjs/no-collapsible-if | 2 |
+| sonarjs/prefer-immediate-return | 1 |
+| sonarjs/no-duplicated-branches | 1 |
+
+Test override: `no-identical-functions` + `cognitive-complexity` are OFF for test files (duplicate
+arrange/act across cases is clearer than over-DRYed tests); the real-bug rules stay ON for tests.
+
+SonarCloud: CORE uses Automatic Analysis (public project, free) + Codecov for coverage - NO CI
+scan job (it would only duplicate Codecov's coverage). PRO is covered by the SonarJS ESLint rules
+above, locally - never sent to any cloud project.
 
 ---
 
