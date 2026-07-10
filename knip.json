@@ -1,19 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "index.js",
-    "App.tsx",
-    "jest.setup.ts",
-    "__tests__/**/*.{ts,tsx}",
-    "pro/**/*.{ts,tsx}"
-  ],
-  "project": ["src/**/*.{ts,tsx}"],
+  "entry": ["App.tsx", "__tests__/**/*.{ts,tsx}", "pro/**/*.{ts,tsx}"],
+  "project": ["src/**/*.{ts,tsx}", "pro/**/*.{ts,tsx}"],
   "ignoreBinaries": ["swiftlint", "maestro", "xcpretty"],
   "ignoreDependencies": [
     "@offgrid/pro",
     "react-compiler-runtime",
     "eslint-plugin-react-compiler",
+    "eslint-plugin-react-native",
+    "eslint-plugin-react",
+    "eslint-plugin-react-hooks",
     "@babel/preset-env",
-    "@babel/runtime"
+    "@babel/runtime",
+    "sonar-scanner"
   ]
 }
