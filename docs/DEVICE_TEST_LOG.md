@@ -43,10 +43,19 @@ Evidence (iOS log 09:41): `retry user msg ... recordedKind=text` on a "Draw a do
 09:40 assistant-msg resend correctly got `recordedKind=image` — the hole was the user-msg path.)
 
 ### B5 — Voice note in text mode has no transcript → "Generation Error: Failed to load media" (iOS)
-**INVESTIGATING.** Recording a voice note in TEXT mode attached the voice message with NO transcript,
-then generation failed with "Failed to load media". Suspected: STT transcription didn't run/attach for
-a text-mode voice note, so the audio media can't be loaded for the turn. Need the [TTS-SM]/[STT]/
-[GEN-SM] trace around the failed send.
+**ROOT-CAUSED (fix pending).** Two compounding issues:
+1. **The turn-breaker:** the DESIGN (voiceNoteSend.ts) is "whisper transcript → message.content (text);
+   the audio attachment is display-only." But `formatLlamaMessages` (llmMessages.ts:15-18) ALSO injects
+   the voice-note audio as a `<__media__>` marker + passes its uri as media whenever the model reports
+   `supportsAudio`. gemma-4-E4B-it-GGUF's mmproj then tries to load the audio file and throws — surfaced
+   as `[GenerationService] Tool generation error: Failed to load media` → `[ChatGen] Generation failed`
+   (iOS log 09:42:33 / 09:43:27), hard-failing the whole turn. A transcribed voice note should be sent
+   as its TEXT transcript only, never re-sent as audio media in the chat/text path.
+2. **The empty transcript:** this voice note attached with NO textContent (transcription produced nothing
+   — whisper not ready / failed / empty capture). Needs the [STT]/whisper-readiness trace; separate from #1.
+FIX DIRECTION: (a) don't send a voice-note audio attachment as LLM media when it carries a transcription
+(the transcript in message.content is the input) — likely never in the chat text path; (b) don't hard-fail
+the turn on a media-load error — fall back to text-only generation; (c) chase the empty-transcript cause.
 
 ---
 
