@@ -103,6 +103,31 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       await new Promise((r) => setTimeout(r, ms));
     },
 
+    /**
+     * Gesture-only send: type into the real input + press the real send button, WITHOUT scripting a turn.
+     * Use when the test scripts multi-turn native output itself (e.g. boundary.litert.scriptTurns([...]) for
+     * a two-pass router). The gesture is identical to send() — only the scripting differs.
+     */
+    async tapSend(text: string) {
+      const view = this.view!;
+      const input = await rtl.waitFor(() => view.getByTestId('chat-input'));
+      rtl.fireEvent.changeText(input, text);
+      rtl.fireEvent.press(view.getByTestId('send-button'));
+    },
+
+    /**
+     * Arrive-via-UI: turn on "Show Generation Details" by tapping its real segmented control (the same
+     * control the settings screen renders). Needed to see the per-message details (model, tok/s, tools
+     * sent). NOT settings.updateSettings seeding.
+     */
+    enableGenerationDetailsViaUI() {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { ShowGenerationDetailsToggle } = require('../../src/components/settings/textGenAdvancedSections');
+      const s = rtl.render(React.createElement(ShowGenerationDetailsToggle, {}));
+      rtl.fireEvent.press(s.getByTestId('show-gen-details-on-button'));
+      s.unmount();
+    },
+
     /** Mount the real ChatScreen. */
     render() {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
