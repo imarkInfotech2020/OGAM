@@ -105,7 +105,7 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T028 | 🔴 P1 | ✅ `overrideFloor` | Load-Anyway a too-big dirty model at low real free RAM (RAM fake) | survival floor BLOCKS the guaranteed OOM (invariant: post-load free ≥ floor uses REAL free, not credited ceiling) | M3/M4 · verify | |
 | T029 | 🔴 P2 | ✅ `overrideFloor`(M5) | iOS 12GB, 3.1GB free → Load-Anyway a 2GB dirty litert model (RAM fake, platform ios) | NOT over-refused (loads) (RED: flat 1200 floor over-refuses a safe load) | M5 · NOT-RUN device | |
 | T030 | 🔴 P1 | ✅ `ttsDeleteResidencyStale` | Load TTS (registers key:'tts') → delete TTS in DM (gesture) → load a text/image model | no phantom TTS pressure (invariant: `release('tts')` fired on delete → resident set excludes tts) (RED: 320MB phantom → wrong refusal) | V4 · BROKEN | |
-| T031 | 🔴 P0 | ❌ | Drive a very long/runaway context, keep sending | app caps/trims context (invariant/guard); doesn't grind to freeze (RED on device: 30–47s/token thermal-throttle → crash) | DEV-B31 · CRASHED | |
+| T031 | ℹ️ P0 | n/a (device-stress observation) | Drive a very long/runaway context, keep sending | thermal-throttle → 30–47s/token → crash under heavy/polluted context. **IGNORED per user: a device-stress data point (user was intentionally pushing past limits), not a fixable/testable app bug — no app-side guard to assert.** | DEV-B31 · observation | |
 
 ## Area 4 — Text generation (thinking / streaming / stop / queue)
 
