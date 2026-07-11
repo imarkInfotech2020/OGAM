@@ -63,6 +63,25 @@ imageModeToggle (auto/ON/OFF). Full happy suite: **33/33 deterministic**.
 - **KB**: indexDocumentRollback, toolEmbeddingStaleDim, searchKB — DB/embedding atomicity invariants
   (documented exception; real in-memory sqlite).
 
+## Setup-fidelity pass (no store-seeding of state) — DONE
+Per the "no store setup for state" bar (only download/RAM/native may be pre-placed):
+- **Model activation is now a real gesture**: `setupChatScreen` seeds ONLY the download boundary (a
+  persisted `@local_llm/downloaded_models` record + the file on disk), then mounts the REAL HomeScreen — its
+  real hydration loads the record — opens the picker and TAPS the model row (`handleSelectTextModel`). No
+  `setState({activeModelId})`. Verified non-regressing (happy 33/33).
+- **Settings via real controls**: `settingsApplied` drags the real Temperature slider (`setTextSettingViaUI`);
+  tools uses the real "Show Generation Details" toggle; reasoning's `thinkingEnabled` seed removed
+  (unnecessary — the block renders from reasoningContent); pure-default `updateSettings` no-ops
+  (autoDetect:'pattern', imageMode:'auto', enhance:false) removed across the suite.
+
+### Remaining setup shortcuts (next)
+- **Image-model activation**: a few tests still `setState({ activeImageModelId })` (`placeImageModel` /
+  imageIntentRouting's `withImageModel`). The image model PRESENCE is a boundary (downloaded), but ACTIVATING
+  it should be an image-picker tap (same pattern as the Home text picker). Rework analogous to the text model.
+- **Service-level image tests** (`imageBackends`, `smartBudgeting`, `promptEnhancement`) drive
+  `imageGenerationService.generateImage` directly. Convert to the ChatScreen force-mode + send gesture (the
+  harness now has `cycleImageMode` + `placeImageModel`).
+
 ## Key lesson reinforced (folded into /hygiene + LEDGER)
 Converting to UI-driven is **investigative, not mechanical** — it repeatedly caught reds asserting symptoms
 the user never sees (Q5's "(No response)", N3 unreachable, Q4 pure-fn). Each conversion must: arrive-via-UI,
