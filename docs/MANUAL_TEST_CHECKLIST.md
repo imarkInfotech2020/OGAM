@@ -74,50 +74,58 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T032 | ✅ P1 | Send a plain prompt (thinking off, tools off) | Clean answer streams in; no stray `<think>` block shown | DEV | WORKS | |
-| T033 | 🔴 P1 | Thinking ON → send a reasoning prompt; watch the stream from the FIRST token | Reasoning renders in the THINKING block from token 1 (not in the answer bubble, then reclassified) | DEV-B14/B5 | BROKEN (leaks to answer until close) | |
-| T034 | 🔴 P2 | Long answer that hits the max-token cap | User gets a "cut off"/continue indication, not a silent truncation | DEV-B15 | silent cutoff | |
-| T035 | 🔴 P2 | litert/remote (separate reasoning channel) while reasoning streams | Header shows "Thinking…" (not the DONE label + T badge) | Q6 | BROKEN (divergence) | |
-| T036 | ✅ P1 | Send a 2nd message while the 1st is still generating | 2nd queues; both answer in order (no drop/collide) | DEV | WORKS | |
-| T037 | ✅ P1 | Stop a generation mid-stream | Halts cleanly; partial retained; queue advances; input recovers | DEV | WORKS | |
-| T038 | ✅ P2 | Thinking + tools, multi-round (reason→tool→reason→answer) | All phases render in order; rich correct answer | DEV | WORKS (GPU) | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T032 | ✅ P1 | ✅ `firstMessage` | Thinking off, tools off → type + send a plain prompt (litert fake streams a clean answer) | reply text renders in the answer bubble; NO stray `<think></think>` block | DEV · WORKS | |
+| T033 | 🔴 P1 | ❌ (`reasoning.happy` = happy only) | Thinking ON → send a reasoning prompt; llama fake streams `<think>…</think>` (Qwen) tokens | during streaming, reasoning tokens render in the THINKING block (answer bubble stays empty) from token 1 (RED: they render in the answer bubble until the close delimiter, then reclassify) | DEV-B14/B5 · BROKEN | |
+| T034 | 🔴 P2 | ❌ | Send a prompt whose completion hits the max-predict cap (fake: `stopped_eos=false` at n_predict) | a "cut off / continue" indication renders (RED: silently truncated mid-sentence, no signal) | DEV-B15 · silent cutoff | |
+| T035 | 🔴 P2 | ❌ | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
+| T036 | ✅ P1 | ✅ `resend` | Send msg 1 (fake holds it streaming) → type + send msg 2 before it finishes | both replies render in order; neither dropped/collided | DEV · WORKS | |
+| T037 | ✅ P1 | ~ `resend` | Start a generation → tap the Stop button (input transforms to stop) mid-stream | generation halts; partial text retained; input returns to send state; next queued item proceeds | DEV · WORKS | |
+| T038 | ✅ P2 | ✅ `tools` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order | DEV · WORKS | |
 
 ## Area 5 — Tools (calculator / MCP / parallel)
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T039 | 🔴 P1 | MCP tool + small model that emits **unquoted keys / trailing comma / single quotes** | Tool still runs (parser recovers); result shown | Q2 | BROKEN (silent drop) | |
-| T040 | 🔴 P2 | Model emits `"arguments":"{...}"` (stringified) to an MCP tool | Server gets parsed params, not a raw string | Q3 | BROKEN | |
-| T041 | 🔴 P2 | Several MCP tools; router prose names a tool as substring / says "none" | Correct/no tool selected (no false-positive force-select) | Q4 | BROKEN (litert/llama-iOS) | |
-| T042 | 🔴 P1 | Tool returns data but model's final turn is empty | User sees the tool data, not "(No response)"/blank | Q5 | BROKEN (litert) | |
-| T043 | ✅ P1 | Calculator tool: ask a multiplication (explicitly "use the calculator") | Correct answer via the tool | DEV | WORKS (500×321=160500) | |
-| T044 | ✅ P1 | Two calculations in one prompt (parallel tools) | Both tool calls fire; both correct | DEV | WORKS (remote) | |
-| T045 | ℹ️ P2 | A 0.8B model with tools, no explicit "use tool" nudge | (KNOWN) small models under-call tools — model capability, not a bug | DEV | Model-limit | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T039 | 🔴 P1 | ✅ `toolMessyJson` | Enable a tool (Tools screen switch) → send; fake emits a tool_call with **unquoted keys / trailing comma / single quotes** | a tool-result bubble renders with real data (RED: MCP strict JSON.parse drops it → "I couldn't find anything"). Falsify: quoted JSON → bubble renders | Q2 · BROKEN | |
+| T040 | 🔴 P2 | ✅ `toolStringifiedArgs` | Tool on → send; fake emits `"arguments":"{...}"` (stringified) | tool runs with parsed params → result bubble (RED: raw string sent → error/empty bubble) | Q3 · BROKEN | |
+| T041 | 🔴 P2 | ✅ `toolRouterFalsePositive` | Several tools; router prose contains a tool name as substring / says "none" | correct/no tool selected (RED: substring force-selects the wrong tool; "none" branch skipped) | Q4 · BROKEN | |
+| T042 | 🔴 P1 | ✅ `toolEmptyFinal` | Tool on → send; fake: tool returns data, final turn EMPTY | the assistant bubble shows the tool data / non-empty reply (RED: blank reply; data discarded — note "(No response)" is never rendered through streaming) | Q5 · BROKEN | |
+| T043 | ✅ P1 | ✅ `tools` | Enable calculator (real Tools-screen switch) → new chat → send "use the calculator: 500×321" | a tool-result bubble + correct answer (160500) render | DEV · WORKS | |
+| T044 | ✅ P1 | ~ `tools` | Calculator on → send two calculations in one prompt (fake: parallel tool_calls index 0+1) | two tool-result bubbles render; both correct | DEV · WORKS | |
+| T045 | ℹ️ P2 | n/a | 0.8B model + tools, no explicit "use tool" nudge | (KNOWN model limit) small models under-call tools — not an app bug; no test | DEV · model-limit | |
 
 ## Area 6 — Remote providers (OGAD / LM Studio / Ollama)
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T046 | ✅ P1 | Scan network with a server running → connect (or manual add) | Server found/added; connects | DEV | WORKS | |
-| T047 | 🔴 P2 | Scan with nothing running | "No servers found" AND list stays empty (no desync) | DEV-B8 | desync (found+added) | |
-| T048 | ✅ P1 | Remote (OGAD/LM Studio): plain, tool, reasoning, reason+tool, 2 tools | All correct; tools fire (structured, parallel) | DEV | WORKS | |
-| T049 | 🔴 P1 | Remote **LM Studio** + reasoning model + thinking | The thinking block renders (server sends `reasoning_content`) | DEV-B16 | BROKEN (reasoning dropped) | |
-| T050 | 🔴 P1 | Any remote model → open chat settings | A thinking on/off toggle exists for remote | DEV-B17 | MISSING | |
-| T051 | ✅ P1 | **Ollama** (native) reasoning model + tools | Thinking renders + tools fire | DEV | WORKS (thinking field) | |
-| T052 | 🔴 P1 | Active text model = REMOTE + image-gen + enhancement on | Enhancement runs (has a remote path) | Q8 | BROKEN (no remote branch) | |
-| T053 | 🔴 P2 | Model modality selector with a remote model selected | Remote model is visually distinguishable (cloud icon) | DEV | no indicator | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T046 | ✅ P1 | ❌ | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
+| T047 | 🔴 P2 | ❌ | Scan with no server (fake HTTP: none) | "No servers found" AND the server list stays empty (RED: shows "none found" yet adds a server) | DEV-B8 · desync | |
+| T048 | ✅ P1 | ❌ | Connect remote (OpenAI-compat fake replays real `[WIRE-REMOTE]` deltas) → send the 5 prompts | correct replies; thinking + parallel tool_calls render (accumulate by index) | DEV · WORKS | |
+| T049 | 🔴 P1 | ❌ | LM Studio remote + reasoning model + thinking; fake emits `reasoning_content` deltas | thinking block renders (RED: no thinking toggle → thinkingEnabled=false → processDelta drops `reasoning_content` → reasoning=0). Tools DO work | DEV-B16 · BROKEN | |
+| T050 | 🔴 P1 | ❌ | Mount chat settings with a remote model active | a thinking on/off toggle is present (RED: absent for remote) | DEV-B17 · MISSING | |
+| T051 | ✅ P1 | ❌ | Ollama remote (native NDJSON fake, `message.thinking` field) + tools → send | thinking renders + tool-result bubbles render | DEV · WORKS | |
+| T052 | 🔴 P1 | ✅ `remoteEnhanceSkipped` | Active text model = remote + image-gen + enhancement on → generate | enhancement runs via the remote model (RED: `generateStandalone` has only llama/litert branches → skipped on remote) | Q8 · BROKEN | |
+| T053 | 🔴 P2 | ❌ | Open the model modality selector with a remote model selected | remote model is visually marked (cloud icon) (RED: identical to local, no indicator) | DEV · no indicator | |
 
 ## Area 7 — Vision (multimodal)
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T054 | ✅ P1 | Attach an image (Qwen0.8B vision or LM Studio) → "what's in this image?" | Correct description of the actual image | DEV | WORKS | |
-| T055 | 🔴 P1 | Attach an image to a bigger vision model (SmolVLM / Qwen2B) → send | Describes the image (no "Failed to evaluate chunks" crash) | DEV-B9 | BROKEN (decode fails) | |
-| T056 | 🔴 P1 | A vision decode error occurs | Spinner clears + an error renders (not infinite spin) | DEV-B13 | BROKEN (spins forever) | |
-| T057 | 🔴 P2 | Attach an image in the input box → tap the thumbnail (pre-send) | A preview opens | DEV | BROKEN (no preview) | |
-| T058 | 🔴 P2 | A vision-capable model on litert vs its gguf variant | Vision affordance consistent across engines | DEV-B20 | litert hides vision | |
-| T059 | 🔴 P1 | Voice note + a TOOL enabled on LiteRT | Transcript sent, not raw audio; no "File does not exist" | Q17 | BROKEN (tool-loop leaks audio) | |
-| T060 | 🔴 P1 | Image on a non-vision LiteRT model + tool | Graceful "does not support images", not a native crash | Q17b | BROKEN | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T054 | ✅ P1 | ✅ `multimodalVision` | Vision model active → tap attach → Photo Library → faked picker → type "what's in this image?" → send | a coherent description of the (faked) image renders | DEV · WORKS | |
+| T055 | 🔴 P1 | ❌ | Attach image to a bigger vision model → send; llama fake models the `invalid token / failed to decode` (SmolVLM/Qwen2B shape) | a description renders (RED: "Failed to evaluate chunks" error). Falsify: Qwen0.8B-shape → works | DEV-B9 · BROKEN | |
+| T056 | 🔴 P1 | ❌ | Drive a generation that errors (e.g. the B9 vision decode fail) | the loading spinner CLEARS + an error bubble renders (RED: session ends reason=error but UI spins forever) | DEV-B13 · BROKEN | |
+| T057 | 🔴 P2 | ❌ | Attach an image → tap the thumbnail in the input box (pre-send) | a preview opens (RED: tapping does nothing) | DEV · no preview | |
+| T058 | 🔴 P2 | ❌ | Load gemma-4-E2B litert (reports supportsVision:true) then its gguf variant → check the attach/vision affordance | vision affordance consistent across engines (RED: litert hides vision, gguf shows it) | DEV-B20 · inconsistent | |
+| T059 | 🔴 P1 | ✅ `voiceNoteToolAudio` | LiteRT model + a tool enabled → record a voice note → send | the TRANSCRIPT reaches the model, raw audio is NOT sent (RED: litert tool-loop re-derives audioUris → "File does not exist") | Q17 · BROKEN | |
+| T060 | 🔴 P1 | ~ `voiceNoteToolAudio` | Attach an image on a non-vision LiteRT model + a tool → send | graceful "does not support images" (RED: no vision gate → raw native crash) | Q17b · BROKEN | |
 
 ## Area 8 — Image generation & settings
 
