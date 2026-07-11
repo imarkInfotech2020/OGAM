@@ -98,10 +98,10 @@ export const DownloadManagerScreen: React.FC = () => {
                   <Icon name="download" size={16} color={colors.primary} />
                   <Text style={styles.sectionTitle}>Active Downloads</Text>
                   <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{activeDownloadingCount}</Text>
+                    <Text testID="dm-active-downloading-count" style={styles.countText}>{activeDownloadingCount}</Text>
                   </View>
                   {activeQueuedCount > 0 && (
-                    <Text style={[styles.countText, { color: colors.textSecondary }]}>
+                    <Text testID="dm-active-queued-count" style={[styles.countText, { color: colors.textSecondary }]}>
                       {activeQueuedCount} queued
                     </Text>
                   )}
