@@ -5,17 +5,17 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - Prior 6-agent adversarial sweep (`DEVICE_TEST_LOG.md`): Q1–Q20, M1–M11, D1–D4, V1–V5, log-B1–B9.
 - Today's on-device wire-capture run (`DEVICE_TEST_FINDINGS.md`): DEV-B1–B33 + validated successes.
 
-**Legend**
-- **Type:** 🔴 = adversarial (a known/suspected bug — must be FIXED & verified before release) · ✅ = happy
-  (must keep WORKING — regression check).
-- **Sev:** P0 (blocker/crash/data-privacy) · P1 (major broken flow) · P2 (UX/cosmetic).
-- **Device status:** what today's device run actually observed (BROKEN / WORKS / NOT-RUN / GUARDED).
-- **Result:** you fill in ✅/❌ + notes each release.
+**Columns per row:** `ID · 🔴/✅ Sev · Auto · Steps · UI validation · Ref · Device · Result`
+- **🔴/✅ Sev:** 🔴 = adversarial (a known/suspected bug — must be FIXED & verified before release) · ✅ = happy
+  (must keep WORKING — regression check). Sev = P0 (blocker/crash/privacy) · P1 (major flow) · P2 (UX/cosmetic).
+- **Auto:** automated-test coverage — ✅ (test file named) · ❌ none · ~ partial/service-level · n/a.
+- **Steps:** the real gestures to imitate (same for a manual tester and the automated UI test).
+- **UI validation:** what to assert on the live rendered screen (+ the RED reason for adversarial rows).
+- **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
+- **Result:** you fill ✅/❌ + notes each release.
 
-How to use each row: do the **Steps** (real gestures), check the **Expected**, mark **Result**. If ❌, it
-regressed / still broken.
-
-Paste any table into Sheets/Excel (they're pipe-delimited).
+Coverage: **98 cases · 37 have automated tests (✅) · 7 partial (~) · 52 not yet automated (❌) · 2 n/a.**
+Paste any table into Sheets/Excel (pipe-delimited).
 
 ---
 
@@ -55,8 +55,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 3 — Memory / residency / budget
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T022 | 🔴 P0 | ❌ | Download an STT model (download fake `complete` event) → do NOT transcribe → load a chat model via picker+send | whisper NOT auto-resident; chat model loads without a phantom 1.5GB resident (invariant: assert `getResidents()` excludes whisper) (RED: whisper auto-loads on download) | DEV-B1 · BROKEN | |
@@ -72,8 +70,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 4 — Text generation (thinking / streaming / stop / queue)
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T032 | ✅ P1 | ✅ `firstMessage` | Thinking off, tools off → type + send a plain prompt (litert fake streams a clean answer) | reply text renders in the answer bubble; NO stray `<think></think>` block | DEV · WORKS | |
@@ -86,8 +82,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 5 — Tools (calculator / MCP / parallel)
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T039 | 🔴 P1 | ✅ `toolMessyJson` | Enable a tool (Tools screen switch) → send; fake emits a tool_call with **unquoted keys / trailing comma / single quotes** | a tool-result bubble renders with real data (RED: MCP strict JSON.parse drops it → "I couldn't find anything"). Falsify: quoted JSON → bubble renders | Q2 · BROKEN | |
@@ -100,8 +94,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 6 — Remote providers (OGAD / LM Studio / Ollama)
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T046 | ✅ P1 | ❌ | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
@@ -115,8 +107,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 7 — Vision (multimodal)
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T054 | ✅ P1 | ✅ `multimodalVision` | Vision model active → tap attach → Photo Library → faked picker → type "what's in this image?" → send | a coherent description of the (faked) image renders | DEV · WORKS | |
@@ -129,8 +119,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 8 — Image generation & settings
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T061 | ✅ P1 | ✅ `imageBackends`/`imageModeToggle` | Image model placed (boundary) → cycle image-mode to ON (`quick-image-mode`) → tap send "a fox in snow" | a generated image renders; details show the correct backend label (MNN GPU / Core ML) | DEV · WORKS | |
@@ -146,8 +134,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 9 — Prompt enhancement
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T071 | 🔴 P1 | ❌ (`promptEnhancement` = service-level, not B30) | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt) | DEV-B30 · BROKEN | |
@@ -157,8 +143,6 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 10 — STT / voice input
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
-|---|---|---|---|---|---|---|
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T075 | 🔴 P0 | ❌ | **Chat mode** → tap the mic (VoiceButton) → speak → release; whisper realtime fake | a transcript lands in the input / a message is sent (RED: `hasData:false` → nothing on screen). Falsify: the working file-transcribe path yields text | DEV-B26 · BROKEN | |
@@ -170,41 +154,41 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 ## Area 11 — TTS
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T081 | ✅ P1 | Voice mode → get a reply | Kokoro speaks the answer aloud (24kHz) | DEV | WORKS | |
-| T082 | 🔴 P1 | **Chat mode** → tap the speaker on an assistant bubble | Reads clean text (no `**`, `##`, backticks, table pipes) | Q19 | BROKEN (raw markdown) | |
-| T083 | 🔴 P2 | Delete a TTS model mid-playback | Graceful (canEvict veto), no broken playback | V5-gap | verify | |
+| T081 | ✅ P1 | ✅ `speakMessage` | Register the `audio.*` hook seam (kokoro) → open a reply's action menu → tap Speak (`action-speak`) | the reply's text is dispatched to the audio engine (kokoro synth); no Speak on user messages | DEV · WORKS | |
+| T082 | 🔴 P1 | ✅ `speakMarkdown` | **Chat mode** → tap the speaker on an assistant bubble with markdown | the text fed to TTS is markdown-stripped (no `**`/`##`/backticks/pipes) (RED: MessageRenderer passes only `stripControlTokens`) | Q19 · BROKEN | |
+| T083 | 🔴 P2 | ❌ | TTS playing → delete the TTS model in DM (gesture) | graceful (canEvict veto), no broken playback (verify) | V5-gap · verify | |
 
 ## Area 12 — Voice-mode journeys (end-to-end)
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T084 | ✅ P1 | Voice mode → "draw a dog" | STT → routes to IMAGE → image renders → TTS confirms | DEV | WORKS | |
-| T085 | ✅ P1 | Voice mode → "calculate 500 × 321" (nudge tool) | STT → routes to TEXT → calculator → correct answer → TTS | DEV | WORKS | |
-| T086 | 🔴 P2 | Voice mode with a thinking reply | Thinking block == voice-note bubble width, LEFT-aligned (not full-width) | DEV-B27 | BROKEN (full-width) | |
-| T087 | 🔴 P2 | Voice mode after a tool turn | No stray empty "#" bubble renders | DEV-B32 | BROKEN (stray # bubble) | |
-| T088 | 🔴 P1 | Voice mode, generation in flight | Mic button becomes a STOP button (can't accidentally start a new recording) | DEV-B29 | BROKEN in some states | |
+| T084 | ✅ P1 | ❌ | Voice mode + image model active → record "draw a dog" (fake STT → "Draw a dog.") | STT transcript → ROUTE-SM → IMAGE pipeline → image renders → TTS confirmation. Full journey | DEV · WORKS | |
+| T085 | ✅ P1 | ❌ | Voice mode + calculator on → record "use the calculator: 500 × 321" | STT → routes to TEXT → calculator tool → correct answer → TTS speaks it | DEV · WORKS | |
+| T086 | 🔴 P2 | ❌ | Voice mode → a reply that thinks (render assertion) | thinking bubble width == voice-note bubble width AND left-aligned (RED: full-width, edge-to-edge) | DEV-B27 · BROKEN | |
+| T087 | 🔴 P2 | ❌ | Voice mode → after a tool turn (render assertion) | no empty / "#"-only message bubble renders (RED: stray empty `#` bubble) | DEV-B32 · BROKEN | |
+| T088 | 🔴 P1 | ❌ | Voice mode, generation in flight (render assertion) | the mic button shows STOP while generating (RED: still a mic → a tap starts a colliding recording → the STT race) | DEV-B29 · BROKEN | |
 
 ## Area 13 — Projects & RAG
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T089 | ✅ P1 | Create a project (form) → add a text PDF to KB → chat a doc question (≥2B model) | Calls search_knowledge_base → retrieves real chunks → answer grounded in the doc | DEV | WORKS (validated) | |
-| T090 | 🔴 P1 | Create a project + chats → delete the project | Chats not orphaned with a dangling projectId (re-filable/cleared) | Q9 | BROKEN | |
-| T091 | 🔴 P1 | Orphaned chat (project deleted) → send | Does NOT inject search_knowledge_base for the gone project | Q9b | BROKEN | |
-| T092 | 🔴 P1 | New chat → pick a project (before 1st message) → send | Chat is filed under the project | Q10 | BROKEN (pendingProjectId lost) | |
-| T093 | 🔴 P2 | Project chat → context-full → tap "New chat" in the alert | New chat inherits the project | Q11 | BROKEN (unassigned) | |
-| T094 | ℹ️ P2 | RAG with a 0.8B model | (KNOWN) needs ≥2B model to reliably call the KB tool | DEV | model-limit | |
+| T089 | ✅ P1 | ~ `toolEmbeddingStaleDim`/`indexDocumentRollback` | Create project (form) → attach text PDF to KB → new chat in project → ask a doc question (≥2B model); embed fake 384-dim | model calls `search_knowledge_base` → retrieved chunks → answer grounded in the doc; query dim 384 == stored 384 (existing tests cover embed-dim + index rollback, not the full UI round-trip yet) | DEV · WORKS | |
+| T090 | 🔴 P1 | ✅ `deleteProjectOrphansChats` | Create a project + file a chat (real ProjectChatsScreen) → open ProjectDetail → tap "Delete Project" → confirm | the chat is not left with a dangling projectId (RED: `deleteProject` doesn't cascade → orphaned) | Q9 · BROKEN | |
+| T091 | 🔴 P1 | ✅ `orphanChatInjectsKbTool` | Orphaned chat (project deleted) → send | `search_knowledge_base` is NOT force-injected for the gone project (RED: injected on truthy projectId, project existence unchecked) | Q9b · BROKEN | |
+| T092 | 🔴 P1 | ❌ | New chat → pick a project (before 1st message) → send | chat is filed under the project (RED: `pendingProjectId` in local state lost on send) | Q10 · BROKEN | |
+| T093 | 🔴 P2 | ✅ `contextFullNewChatDropsProject` | Project chat → fill context → tap "New chat" in the alert | the continuation chat inherits the project (RED: unassigned) | Q11 · BROKEN | |
+| T094 | ℹ️ P2 | n/a | RAG with a 0.8B model | (KNOWN model limit) needs ≥2B to reliably call the KB tool; no test | DEV · model-limit | |
 
 ## Area 14 — UI / rendering / misc
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T095 | ✅ P2 | Complete onboarding with a server+model configured | Skips onboarding into the app | DEV | WORKS | |
-| T096 | ✅ P2 | Support-share sheet (GH/X) → return from X | Sheet dismisses, doesn't re-nag | DEV | WORKS | |
-| T097 | ✅ P2 | Home "Text" count with a remote model active | Count reflects reality (or "0 local" is clearly not a desync) | DEV | verify (showed 0) | |
-| T098 | 🔴 P2 | Load a local model, then send a NEW message (not resend) | The local model is the ACTIVE model (not still remote) | DEV-B18 | verify (resend went isRemote) | |
+| T095 | ✅ P2 | ❌ | Configure a server+model → complete onboarding (tap continue) | routes straight into the app, skips remaining onboarding | DEV · WORKS | |
+| T096 | ✅ P2 | ❌ | Trigger the support-share sheet → tap Share on X → return to app | the sheet is dismissed (doesn't re-nag) | DEV · WORKS | |
+| T097 | ✅ P2 | ❌ | Home with a remote model active → read the "Text" count | count reflects reality / "0 local" isn't a misleading desync (verify) | DEV · verify | |
+| T098 | 🔴 P2 | ❌ | Load a local model → send a NEW message (not a resend) | the generation uses the LOCAL model (`isRemote=false`) (RED-suspected: a resend went `isRemote=true` with gemma resident — verify local-select makes it active) | DEV-B18 · verify | |
 
 ## Platform parity (iOS — run the native-divergent ones)
 Re-run on iOS (native differs): T003/T004/T008 (downloads/URLSession-kill), T015–T021 (backends — note litert is
