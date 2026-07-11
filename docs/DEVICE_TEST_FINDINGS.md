@@ -42,6 +42,19 @@ Inline-thinking delimiter is **model-specific**: Qwen3.5 = `<think>...</think>`;
   (OpenCL KV cache on Adreno). litert GPU: coherent output. NPU IMAGE models present (`*_npu_min`) but text
   NPU broken.
 
+### B28 — ARCHITECTURAL: STT is fragmented into ≥3 divergent pipelines (SOLID violation) — the ROOT of B26/Q20
+Both chat mode and voice mode do the same primitive (voice in → text out); only the UI + post-transcript
+action should differ. Instead the MECHANISM of getting the transcript branches by mode (`Voice.ts`
+`stopRecording`):
+1. **record file → `whisperService.transcribeFile(path)`** (voice/audio-interface mode) — **WORKS** ✅
+2. **record file → `onAudioAttachment({uri,format})`** (chat-mode direct) — attaches AUDIO, no transcript — **Q20/B10** ❌
+3. **`transcribeRealtime` streaming** (chat-mode hold-to-talk) — `hasData:false` — **B26** ❌
+Per CLAUDE.md ("never branch on mode to decide HOW; one owning service"), this should be ONE pipeline
+(record → file → transcribe → text — the path that works) used by both modes, differing only in UI + what
+happens with the text. B26 and Q20 exist BECAUSE they are separate broken mechanisms the working path doesn't
+share. User surfaced this ("shouldn't this be a common pipeline? it's just the UI that changes — per SOLID it
+should be one pipeline"). Fix at the seam, not per-path. (session 3)
+
 ### STT — realtime (VoiceButton hold-to-talk) is BROKEN (session 3, Qwen0.8B GPU, medium whisper)
 - **B26 — realtime STT (chat-mode hold-to-talk) captures NO data → no transcript. CONFIRMED FUNDAMENTAL.**
   Spoke a clear "Hello, how are you?"; result: blank screen, nothing in the input box, no message. Trace:
