@@ -131,36 +131,42 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T061 | ✅ P1 | Image mode ON → "draw a dog" (fresh message) | Generates an image; details show correct backend | DEV | WORKS (GPU/mnn) | |
-| T062 | 🔴 P1 | Generate "draw a dog" → **resend it** (action menu) | Resend STILL routes to image (draws), not the text model | DEV-B33 | BROKEN (resend→text) | |
-| T063 | ✅ P2 | Model Settings → Image Size | Cannot go below 256 (input floor) | Q1/DEV | GUARDED (works) | |
-| T064 | 🔴 P2 | Set image size / verify the generated image size matches | Generated size == the size shown (no silent floor to 256 at gen) | Q1/Q13 | guarded at input now | |
-| T065 | 🔴 P2 | Set `imageGuidanceScale` to 0 / stale → generate | Uses 7.5 default, not a drift to 2.0 | Q7 | BROKEN (2.0 drift) | |
-| T066 | 🔴 P2 | Chat Settings sheet → "Reset to Defaults" | Resets image steps/size/guidance/threads too (not only text params) | Q12 | BROKEN (partial) | |
-| T067 | 🔴 P2 | Compare Image sliders in the modal vs Model Settings | Same mins/fallbacks (256 vs 128 divergence gone) | Q13 | BROKEN (diverge) | |
-| T068 | ✅ P1 | Tap a generated image in chat | Fullscreen lightbox opens with Save/Close; Save persists + confirms | DEV | WORKS | |
-| T069 | ✅ P1 | Image-intent routing: "calculate X" with an image model active | Routes to TEXT (not image) | DEV | WORKS | |
-| T070 | ✅ P2 | First image gen on a model | ~120s warmup notice matches reality (or is accurate) | DEV-B21 | UI says 120s, was ~10s | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T061 | ✅ P1 | ✅ `imageBackends`/`imageModeToggle` | Image model placed (boundary) → cycle image-mode to ON (`quick-image-mode`) → tap send "a fox in snow" | a generated image renders; details show the correct backend label (MNN GPU / Core ML) | DEV · WORKS | |
+| T062 | 🔴 P1 | ❌ | Send "draw a dog" (routes to IMAGE ✓) → open action menu (long-press/3-dots) → tap **Regenerate/Resend** | resend STILL routes to IMAGE (re-runs ROUTE-SM classify) (RED: resend jumps to LLM text path, no classify → text answer). Falsify: fresh "draw a dog" → image | DEV-B33 · BROKEN | |
+| T063 | ✅ P2 | ✅ `imageGenMeta` (guard) | Mount image settings → drag the image-size control to minimum | the size input floors at 256 (can't select 128) — green guard | Q1/DEV · GUARDED | |
+| T064 | 🔴 P2 | ✅ `imageGenMeta`/`imageSettings` | Set image size (via Model Settings path) → generate | generated size == the size set (no silent floor at gen). Currently guarded at input (256 min) so the red is the chat-modal clamp divergence (Q13) | Q1/Q13 · guarded | |
+| T065 | 🔴 P2 | ✅ `imageGenMeta` | Force `imageGuidanceScale` 0/stale → generate | meta shows cfg **7.5** (RED: drifts to 2.0 — three fallback literals) | Q7 · BROKEN | |
+| T066 | 🔴 P2 | ✅ `imageSettings` | Change image params → open Chat Settings sheet → tap "Reset to Defaults" | image steps/size/guidance/threads ALSO reset (RED: only the 7 text params reset) | Q12 · BROKEN | |
+| T067 | 🔴 P2 | ✅ `imageSettings` | Compare the Image-Size/Steps sliders in the chat modal vs Model Settings | same mins/fallbacks (RED: 256 vs 128 divergence — the root of Q1) | Q13 · BROKEN | |
+| T068 | ✅ P1 | ✅ `imageLightbox` | Generate an image → tap the rendered `generated-image` | fullscreen viewer opens with Save/Close; Close dismisses; Save → "Image Saved" + file on disk | DEV · WORKS | |
+| T069 | ✅ P1 | ✅ `imageIntentRouting` | With an image model active, send "what is the capital of France" (non-draw) | routes to TEXT (answer renders), image generator NOT called | DEV · WORKS | |
+| T070 | ✅ P2 | ❌ | First image gen on a model | the "~120s one-time" warmup notice matches actual time (or is accurate) (device: said 120s, was ~10s — cosmetic) | DEV-B21 · misleading | |
 
 ## Area 9 — Prompt enhancement
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T071 | 🔴 P1 | Enable "Enhance Image Prompts" + thinking ON → "draw a cat" | Enhanced prompt is a clean image description (NO "Thinking Process:…" reasoning in it) | DEV-B30 | BROKEN (thinking→prompt) | |
-| T072 | 🔴 P1 | Same as above — observe timing | Enhancement is fast (a plain completion, not a full reasoning chain) | DEV-B30 | SLOW (thinking chain) | |
-| T073 | 🔴 P2 | During enhancement | It streams / shows progress (not a static frozen-looking screen) | DEV-B30b | no stream | |
-| T074 | ✅ P2 | Enhancement mechanics (thinking off) | Rewrites prompt → regenerates image from it | DEV | works (slow) | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T071 | 🔴 P1 | ❌ (`promptEnhancement` = service-level, not B30) | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt) | DEV-B30 · BROKEN | |
+| T072 | 🔴 P1 | ❌ | Same — measure the enhancement generation length | enhancement is a fast plain completion, not a multi-thousand-token reasoning chain (RED: slow "million characters") | DEV-B30 · SLOW | |
+| T073 | 🔴 P2 | ❌ | During the enhancement step | it streams / shows progress (RED: static "Enhancing…", looks frozen) | DEV-B30b · no stream | |
+| T074 | ~ P2 | ~ `promptEnhancement` (service-level) | Enhancement on, thinking OFF → generate | prompt rewritten → image regenerated from it (mechanics work; existing test is service-level, not UI-gesture) | DEV · works | |
 
 ## Area 10 — STT / voice input
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T075 | 🔴 P0 | **Chat mode** → tap mic → speak a clear phrase → release | Transcript appears in the input / message (audio actually captured) | DEV-B26 | BROKEN (hasData:false, nothing) | |
-| T076 | 🔴 P1 | **Chat mode** → record a voice note → send (direct-audio model) | The TRANSCRIPT is sent to the model, never raw audio | Q20/DEV-B10 | BROKEN (sends audio) | |
-| T077 | 🔴 P1 | Start recording → wait / move on | Recording auto-stops; whisper doesn't stay resident indefinitely | DEV-B11 | BROKEN (7+ min leak) | |
-| T078 | 🔴 P2 | Double-tap the mic quickly | No `State:-100` race / start-while-recording collision | DEV-B12 | BROKEN (race) | |
-| T079 | ✅ P1 | **Voice mode** → record → "hey how are you doing" | Correct transcript renders | DEV | WORKS | |
-| T080 | 🔴 P0 | ARCHITECTURE: chat-mode & voice-mode STT | Both use ONE transcribe pipeline (record→file→transcribe) | DEV-B28 | BROKEN (3 divergent pipelines) | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T075 | 🔴 P0 | ❌ | **Chat mode** → tap the mic (VoiceButton) → speak → release; whisper realtime fake | a transcript lands in the input / a message is sent (RED: `hasData:false` → nothing on screen). Falsify: the working file-transcribe path yields text | DEV-B26 · BROKEN | |
+| T076 | 🔴 P1 | ✅ `voiceNoteChatModeEmptyTurn` | **Chat mode**, direct-audio model → record a voice note → send | the TRANSCRIPT reaches the model, never raw audio (RED: `onAudioAttachment` sends audio, content='') | Q20/DEV-B10 · BROKEN | |
+| T077 | 🔴 P1 | ❌ | Start recording (mic) → wait / navigate away | recording auto-stops; whisper doesn't stay resident (RED: 7+ min capture, whisper resident 1.5GB) | DEV-B11 · BROKEN | |
+| T078 | 🔴 P2 | ❌ | Double-tap the mic quickly (start-while-recording) | no `State:-100` race / collision; clean single recording (RED: "Already recording, stopping first" → race error) | DEV-B12 · BROKEN | |
+| T079 | ✅ P1 | ✅ `transcription` | **Voice mode** → record a note (fake `transcribeFile` returns real `{segments:[{text}]}`) | the correct transcript renders (real whisper segment shape) | DEV · WORKS | |
+| T080 | 🔴 P0 | ❌ | ARCHITECTURE seam: both chat-mode and voice-mode STT | both routes go through ONE transcribe pipeline (record→file→transcribe) (RED: 3 divergent mechanisms — the root of B26/Q20) | DEV-B28 · BROKEN | |
 
 ## Area 11 — TTS
 
