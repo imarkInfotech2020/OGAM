@@ -14,9 +14,44 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
 - **Result:** you fill ✅/❌ + notes each release.
 
-Coverage (verified against the actual test `it()` titles, not names): **98 cases · 45 automated (✅) ·
-11 partial/service-level (~) · 40 not yet automated (❌) · 2 n/a.**
+Coverage (verified against the actual test `it()` titles, not names): **110 cases · 47 automated (✅) ·
+15 partial/service-level (~) · 38 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
+Areas 1–14 = user-facing flows (T001–T098); **Area 15 (T099–T110)** = the latent/architecture/infra findings
+from the 2026-07-12 cross-check that had no row (so this doc is the ONE exhaustive record).
 Paste any table into Sheets/Excel (pipe-delimited).
+
+---
+
+## Automation surface plan — what src each new UI test touches (verified against code, 2026-07-12)
+
+Every un-automated row is being turned into a **UI-behavioral integration test** (mount the real screen, arrive
+at the precondition via real gestures, run the whole real stack over fakes at the **device boundary only**,
+assert the **terminal artifact the user perceives**). No `store.setState` on the state under test. The honest
+accounting of which rows need a src touch (grounded in the code, not guessed):
+
+- **✅ No src change (~75 rows).** Assert on surfaces that already render: reply text, tool-result bubbles,
+  generated image + **`GenerationMeta` backend/layers/tok/s** (renders `GPU (24L)` / `CPU` when *Show
+  Generation Details* is on → covers the text-backend cluster **T014/T015/T021**), `ModelFailureCard` "Not
+  Enough Memory" (**T024/T027/T028**), download cards (**T004–T008**), error bubbles, transcript-in-input,
+  thinking block (**T033/T035**), project lists, "No servers found", the **`isRemote` header indicator**
+  (**T098**, `ChatScreenComponents.tsx:109`), `stop-button` (**T077/T088**, `ChatInput/index.tsx:312`),
+  lightbox, etc.
+- **🔧 `testID` added — existing surface, just a selector (~5 rows).**
+  **T001** (downloads badge count + DownloadManager running/queued counts), **T003** (model ready/preparing
+  status label), **T057** (pre-send attach thumbnail tap target), **T086** (thinking-bubble + voice-note-bubble
+  to compare widths).
+- **🏷️ Test-mode-only label behind a jest-only flag (never dev/prod) (~5 rows).** The **resident set**
+  (`getResidents()`) has no clean UI surface — the Models Manager sheet shows per-*type* rows
+  (`models-row-${type}`), not "is whisper resident". So **T022/T023/T025/T026/T030** get one small
+  `probe-residents` label gated by a new `__TEST_PROBE__` flag (set only in jest setup). **T016/T072** (8s GPU
+  timeout, enhancement-slow) — timing isn't rendered; assert the *outcome* on existing surfaces and drop the
+  raw-timing sub-assertion (no label) unless a `probe-timing` is later wanted.
+- **🎧 Audio-boundary — assert at the boundary stub, not the UI (documented §D audio exception) (~3 rows).**
+  **T081/T082** (TTS speaks / markdown-stripped): audio isn't a rendered surface; assert what reached the
+  `speak` seam (already how `speakMessage`/`speakMarkdown` work). No src change.
+
+Bottom line: the only planned src touches are **~5 `testID`s** + **one `probe-residents` test-mode label**
+(+ its `__TEST_PROBE__` jest-only gate). Everything else rides existing rendered output or the audio boundary.
 
 ---
 
@@ -28,8 +63,8 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T001 | 🔴 P1 | ❌ (unit `downloadAggregate` only) | Mount ModelsScreen → tap download on a **vision** model (mmproj → 2 rows, per log: `SmolVLM-Instruct-Q4_K_M.gguf` + `…-mmproj.gguf`) → read `downloads-icon` badge (`vm.activeDownloadCount`) → tap `downloads-icon` → DownloadManagerScreen | `downloads-icon` badge number **==** DownloadManagerScreen running (`activeDownloadingCount`) + queued (`activeQueuedCount`) (RED: device saw badge **10** vs screen **4+7=11** — off by 1 while mmproj in-flight). Falsify: non-vision model (no mmproj) → equal | DEV-B7 · BROKEN | |
-| T002 | 🔴 P2 | ❌ | Drive `DownloadComplete` for a text model, then an image model, in the same foreground state | completion notification behavior is consistent + intentional. NOTE: my earlier "image notifies, text doesn't" was CORRECTED — device showed **text models DID notify** (SmolLM3, Mistral); real variable is foreground/timing. User's gripe: the toast is noisy ("shouldn't have come"). *Product decision: show a completion toast at all?* | DEV-B4 · corrected (type-independent) | |
-| T003 | 🔴 P1 | ❌ | Start image-model download → fake emits native `DownloadComplete` but zip NOT extracted (no `_ready`, integrity files absent on memfs) → select model + image-mode send | model status ≠ "ready/usable" until extracted; on generate a visible "preparing/extracting" state (RED: "downloaded successfully" fires at native-complete, extract deferred) | DEV-B4 · PREMATURE | |
+| T002 | 🔴 P2 | n/a (product decision) | Drive `DownloadComplete` for a text model, then an image model, in the same foreground state | completion notification behavior is consistent + intentional. NOTE: my earlier "image notifies, text doesn't" was CORRECTED — device showed **text models DID notify** (SmolLM3, Mistral); real variable is foreground/timing. User's gripe: the toast is noisy ("shouldn't have come"). *Product decision: show a completion toast at all?* **Reds-pass: SKIPPED — no falsifiable bug (behavior is type-independent/consistent); "should the toast exist" is a product question, not a spec violation.** | DEV-B4 · corrected (type-independent) | |
+| T003 | 🔴 P1 | n/a (not reproducible) | Start image-model download → fake emits native `DownloadComplete` but zip NOT extracted (no `_ready`, integrity files absent on memfs) → select model + image-mode send | model status ≠ "ready/usable" until extracted; on generate a visible "preparing/extracting" state (RED: "downloaded successfully" fires at native-complete, extract deferred) **Reds-pass: SKIPPED — code gates readiness on extraction: `imageDownloadActions.ts:446-453` does unzip → `ensureImageExtractionComplete` (integrity) → `_ready` → THEN `registerAndNotify`. The device's premature "downloaded successfully" was the native NOTIFICATION (T002), not app readiness. Mid-unzip-kill recovery is covered by T004.** | DEV-B4 · PREMATURE→corrected | |
 | T004 | 🔴 P1 | ✅ `imageExtractLostRelaunch` | Seed image download that completes-then-extraction-fails (missing `unet.bin`) → `simulateRelaunch()` (fresh stores, drop native rows, keep disk) → mount DownloadManagerScreen | a retriable/removable **failed card** renders after relaunch (RED: none renders — store not persisted, dir/zip unlinked) | D1/log-B7 · BROKEN | |
 | T005 | 🔴 P1 | ✅ `whisperDeleteCancelsOther` | Start `base.en` whisper download (fake, in-flight) → mount DownloadManagerScreen → tap delete on downloaded `small.en` → confirm alert | `base.en`'s in-progress card **still present** after deleting small.en (RED: it vanishes — deleteModel cancels the single activeDownloadId) | V1 · BROKEN | |
 | T006 | 🔴 P1 | ✅ `whisperTruncatedListed` | Seed a truncated `ggml-<id>.bin` on disk (below size floor) → mount DownloadManagerScreen / model list | truncated file NOT listed as a completed/loadable model (RED: shown as downloaded — name-only filter, no size floor) | V2 · BROKEN | |
@@ -191,6 +226,29 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T097 | ✅ P2 | ❌ | Home with a remote model active → read the "Text" count | count reflects reality / "0 local" isn't a misleading desync (verify) | DEV · verify | |
 | T098 | 🔴 P2 | ✅ `unifiedModelSelection` | Load a local model → send a NEW message (not a resend) | the generation uses the LOCAL model (`isRemote=false`) (RED-suspected: a resend went `isRemote=true` with gemma resident — verify local-select makes it active) | DEV-B18 · verify | |
 
+## Area 15 — Latent / architecture / infra findings (findings cross-check, 2026-07-12)
+
+These findings from `DEVICE_TEST_FINDINGS.md` + the prior Q/M/D/V sweep (`DEVICE_TEST_LOG.md`) had NO row
+until this cross-check. Most are NOT user-gesture tests — they are latent code footguns, SOLID/DRY
+violations, or test-infra fixes (the honest "not user-facing" residue). They live here so this checklist is
+the ONE exhaustive record. **Auto:** ✅ test · ~ partial · ❌ none · n/a = code-review/infra (no runtime UI
+surface). Line refs verified current 2026-07-12.
+
+| ID | 🔴/✅ Sev | Auto | Steps (gestures / how to check) | UI validation / invariant (+ RED reason) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T099 | 🔴 P1 | ~ (`budgetRedflow`/`failedUnloadOverCommits` at T024 cover the caller-side `fits` gate) | Drive a load through a path that calls `ensureResident` directly (RAM fake: model size > `os_procAvail` so `makeRoomFor` returns `fits:false`, no override) | load is REFUSED / no over-commit (invariant: `ensureResident` HONORS `fits`, never loads unconditionally) (RED: `modelResidency/index.ts` `ensureResident` takes only `{evicted}` from `makeRoomFor` and discards `fits`, then loads anyway — the "call the gate, ignore its verdict" class CLAUDE.md forbids). Dead in prod today (callers pre-check `fits`) but a live trap | Q15 · latent OOM | |
+| T100 | ℹ️ P2 | n/a (resolve WITH M1/T026) | Read `modelResidency/policy.ts:5-7` + `imageGenerationService.ts:250` vs the balanced planner's actual behavior | doc-drift: the routing doc + comments claim text/image are mutually EXCLUSIVE (swap), but the balanced planner CO-RESIDES them. Fix WITH M1/T026 (make the swap true, don't just edit the doc). Same root as T026 | Q16 · doc-drift (=M1) | |
+| T101 | 🔴 P1 | ✅ `litertSamplerRedflow` (service-level) | LiteRT model active, mid-conversation → drag Temperature / Top-P in Chat Settings → send another message (no new chat / no system-prompt change) | the NEW sampler value takes effect on the next send (RED: LiteRT keeps sampling at the ORIGINAL value until a reset — `litert.ts:223` only pushes `samplerConfig` on `needsReset` = id/sys/tools changed, so the fresh config at `generationServiceHelpers.ts` is discarded; llama re-applies every `completion`). Engine parity: both apply mid-convo | Q18 · engine divergence | |
+| T102 | 🔴 P1 | ~ (`overrideFloor`/T028 cover the DIRTY floor; the clean-GGUF working-set charge is UNtested) | iOS (RAM fake, platform ios) → Load-Anyway an 8GB **clean GGUF** at ~1200MB free; also a no-override clean 9GB at ~500MB free | the inference WORKING SET (KV/compute, which IS dirty) is charged against the survival floor even for clean mmap weights (RED: clean → `incomingDirtyMB=0` → floor sees full availMem → admits; iOS has no swap for the working set). NB the weight paging being free is CORRECT (device-verified for E4B) — only the working-set charge is missing. **NEEDS-DEVICE** to size the charge; the fake test asserts the JS gate, the human confirms jetsam on iOS | M4 · iOS / needs-device | |
+| T103 | 🔴 P2 | ❌ | Aggressive memory policy (0.88 Android / 0.92 iOS) + RAM fake 12GB total / ~3GB free → Load-Anyway a **9GB dirty** (CoreML/ONNX image) model | not admitted / refused (invariant: aggressive headroom still refuses a dirty model that can't be backed) (RED: aggressive admits the 9GB dirty on 12GB@3GB-free; zram/dirty pages can't back it → OOM). Fake asserts the JS admission; human confirms the OOM | M6 · policy edge (both platforms) | |
+| T104 | 🔴 P2 | n/a (code-review + FIX-mode) | Code review — `activeModelService/index.ts:152` `const textIsDirty = model.engine === 'litert'` | `dirtyMemory` is a capability the model/engine DECLARES (data on the resident spec), not an `engine === 'litert'` branch in the caller (DIP violation — a new engine needs a caller edit). No runtime UI surface; fix in FIX-mode by moving the flag onto the model/engine | M7 · SOLID/DIP | |
+| T105 | 🔴 P2 | n/a (code-review + FIX-mode) | Code review — `activeModelService/types.ts:50` `IMAGE_MODEL_OVERHEAD_MULTIPLIER = Platform.OS === 'ios' ? 1.5 : 1.8` | the overhead is capability-as-DATA (CoreML vs ONNX runtime), normalized once, NOT a `Platform.OS` mechanism branch. Consumed by `memory.ts:53`. No runtime UI surface; fix in FIX-mode | M8 · SOLID/Platform.OS | |
+| T106 | 🔴 P2 | n/a (code-review + FIX-mode) | Code review — `SIDECAR_TYPES` is defined TWICE: `modelResidency/policy.ts:55` AND `modelResidency/index.ts:34` (+ the physical-cap expression duplicated) | one definition, imported everywhere (single source of truth) — two owners can drift (a sidecar type added to one, missed in the other). No runtime UI surface; fix in FIX-mode by exporting from `policy.ts` and importing in `index.ts` | M9 · DRY | |
+| T107 | 🔴 P1 | n/a (jest.config fix) | Inspect `jest.config.js` `testPathIgnorePatterns`; drop a dummy `.test.ts` under `__tests__/integration/memory/ios/` and confirm jest never runs it | anchor the unanchored `'/android/'` + `'/ios/'` patterns to `<rootDir>/` (as `/pro/` already is) so a platform-named test dir isn't silently skipped; also add `.claude/worktrees/` to the ignore list (currently test-collected — stale worktree dupes in `--listTests`). **VERIFIED 2026-07-12: patterns ARE unanchored, but NO current memory test sits under those paths → the memory suite (T024/26/28/29/30) genuinely runs today; the trap is latent, fix pre-emptively** | M10 · infra (confirmed by 2 agents) | |
+| T108 | 🔴 P2 | ~ (tied to T004 `imageExtractLostRelaunch`) | Relaunch mid-unzip: partial extracted dir, no `_ready`, `_zip_name` present, the zip still on disk → the `scan.ts:228-262` recovery | on next launch the recovery re-extracts from the surviving zip (RED: the zip-finalize catch deletes dir+zip FIRST, so this branch can NEVER fire for the primary zip path — dead code). Fixed together with T004 (D1) option b (keep the zip on extract-fail) | D2 · dead branch | |
+| T109 | 🔴 P1 | n/a (code-review + FIX-mode; ROOT behind D1/D2/T003/T004) | Code review — `imageDownloadActions.ts` + `imageDownloadResume.ts` own unzip, integrity, `_ready`/`_zip_name` writes, cleanup, store mutation, retry | image download FINALIZE belongs in a SERVICE (an image finalizer under `modelDownloadService`), NOT in the screen — the "no side-effects/finalize logic/store-mutation in presentation" rule. Text has a `textProvider` seam; image has none — this is WHY T003/T004/T108 have no correct home. FIX-mode: build the image finalizer, migrate the logic off the screen | D3 · SoC root | |
+| T110 | 🔴 P2 | ~ (T083 is "V5-gap · verify") | With TWO TTS engines registered, one ACTIVE → in DM tap delete/retry on the NON-active TTS engine | the op targets the SPECIFIED engine without flipping the active selection (RED: `ttsProvider.remove`/`retry` do `if (engineId !== active) setEngine(engineId)` → active flips to the target, now model-less; and `setEngine` never `release('tts')`, so the stale resident's unload fn releases the WRONG engine). LATENT — only kokoro registered today, fires when a 2nd TTS ships. Fix: operate on the target instance without switching active | V5 · latent | |
+
 ## Platform parity (iOS — run the native-divergent ones)
 Re-run on iOS (native differs): T003/T004/T008 (downloads/URLSession-kill), T015–T021 (backends — note litert is
 Android-only; iOS has Metal), T024/T028/T029 (memory/jetsam), T054–T056 (vision Core ML), T061/T068 (image Core
@@ -200,5 +258,9 @@ covered by Android — don't re-run the full matrix on iOS.
 ---
 
 ### Summary counts (fill Result each release)
-- Adversarial 🔴 to verify-fixed: ~55 · Happy ✅ regression: ~25 · Known model-limits ℹ️: 3.
+- Adversarial 🔴 to verify-fixed: ~63 · Happy ✅ regression: ~25 · Known model-limits ℹ️: 3 · product-decision n/a: 1.
 - P0 blockers to watch: T022/T023 (whisper leak+eject), T024/T031 (memory/thermal), T075/T080 (STT capture+arch).
+- **Area 15 (T099–T110) — non-user-facing residue:** T099 (Q15 `fits`-ignored OOM footgun), T101 (Q18 litert
+  mid-convo sampler), T102 (M4 iOS clean-GGUF working-set), T103 (M6 aggressive over-commit) are testable;
+  T104/T105/T106/T109 (M7/M8/M9/D3 SOLID/DRY/SoC) + T107 (M10 jest infra) are code-review/FIX-mode; T100
+  (Q16) + T108 (D2) fold into T026/T004. None are user-facing release blockers, but all are now on record.
