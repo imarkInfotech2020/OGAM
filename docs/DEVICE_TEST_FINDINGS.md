@@ -312,3 +312,16 @@ queue, stop); gemma-4-E2B gguf (load+caps; thinking+tools turn pending decode); 
 - **Candidate — thinking not shown in voice mode:** user noted twice "thinking is on but no thinking blocks."
   Ambiguous (image-gen turns don't show thinking); needs a clear reasoning prompt in voice mode to confirm
   whether voice mode suppresses the thinking-block render. TO VERIFY.
+
+### B30 — Prompt enhancement captures the model's THINKING as the "enhanced prompt" (thinking ON)
+Device trace (draw a cat, enhancement ON, thinking ON):
+  [ImageGen] ✅ Enhanced prompt: "Thinking Process:\n  *  Okay, so I need to respond with a text-based
+  explanation or description of what I'd produce without actually drawing images? No, I should just output th..."
+  → phase enhancing → generating → done   (image generated FROM that text)
+The enhanced prompt should be a clean expanded image description; instead the model's reasoning_content
+("Thinking Process:...") leaked in and became the image prompt. The enhancement's generateStandalone call
+doesn't disable thinking / doesn't strip reasoning → the image model is fed garbage thinking text.
+It LOOKED like it worked (an image appeared) but the prompt was nonsense. Confirms the Q8 adversarial case on
+device. Also explains the user's "thinking is on but no thinking blocks" note (the thinking went INTO the
+enhanced prompt, not a block). Enhancement round-trip is also slow (~2min: image→swap-to-text→enhance→swap-back
+→regenerate). (part29)
