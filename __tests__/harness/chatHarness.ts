@@ -151,11 +151,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * is NOT activated here: activation is a real gesture (cycleImageMode's toggle sets activeImageModelId
      * when an image model is downloaded). Settles first so the mount's hydration has cleared the empty disk.
      */
-    async placeImageModel(opts: { id?: string; modelPath?: string; backend?: 'mnn' | 'qnn' | 'coreml' } = {}) {
-      const { id = 'sd', modelPath = '/models/sd', backend = 'coreml' } = opts;
+    async placeImageModel(opts: { id?: string; modelPath?: string; backend?: 'mnn' | 'qnn' | 'coreml'; size?: number } = {}) {
+      const { id = 'sd', modelPath = '/models/sd', backend = 'coreml', size } = opts;
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { createONNXImageModel } = require('../utils/factories');
-      const model = createONNXImageModel({ id, name: 'SD', modelPath, backend });
+      const model = createONNXImageModel({ id, name: 'SD', modelPath, backend, ...(size != null ? { size } : {}) });
       // A downloaded+extracted image model IS its file set on disk (the boundary) — seed the exact files the
       // real integrity gate + native load require, so the REAL load path runs (mnn/qnn validate the dir;
       // coreml doesn't). No pre-marking-loaded shortcut.
