@@ -325,3 +325,13 @@ It LOOKED like it worked (an image appeared) but the prompt was nonsense. Confir
 device. Also explains the user's "thinking is on but no thinking blocks" note (the thinking went INTO the
 enhanced prompt, not a block). Enhancement round-trip is also slow (~2min: image→swap-to-text→enhance→swap-back
 →regenerate). (part29)
+
+### B30 downstream effect — the enhancement thinking-garbage POLLUTES the conversation context
+Follow-up: after B30 (enhanced prompt = "Thinking Process:..." reasoning garbage), the NEXT turn (voice +
+calculator "500 into 321") had that garbage in its context:
+  system/history content: "<think>__LABEL:Enhanced prompt__\nThinking Process:\n1. Analyze the Request: User
+  Input: 'draw a cat'..."
+Result: the calculator turn crawled (Grammar still awaiting trigger, token-by-token over minutes, ~21K chars
+of reasoning in context) and produced no timely response → UI showed "streaming voice response" with NO audio
+(nothing ready to speak — premature/misleading state, like B29). So B30 is worse than a bad prompt: the leaked
+reasoning enters conversation history and degrades subsequent turns. (part30)
