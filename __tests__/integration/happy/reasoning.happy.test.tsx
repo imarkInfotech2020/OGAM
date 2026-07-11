@@ -18,7 +18,6 @@ jest.mock('@react-navigation/native', () => ({
 describe('happy — reasoning renders a thinking block + the answer (heavy entry point)', () => {
   it('shows the thinking block and the final answer when the model reasons first', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
-    h.useAppStore.getState().updateSettings({ thinkingEnabled: true });
     h.render();
 
     await h.send('is 17 prime', { reasoning: 'Check divisors up to sqrt(17): 2,3 — none divide it.', content: 'Yes, 17 is prime.' });

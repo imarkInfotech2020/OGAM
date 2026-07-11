@@ -23,7 +23,6 @@ describe('happy — image-mode toggle routes correctly (heavy entry point)', () 
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
     h.render();
     await h.placeImageModel();
-    h.useAppStore.getState().updateSettings({ autoDetectMethod: 'pattern', imageGenerationMode: 'auto' });
 
     await h.cycleImageMode(); // auto → ON(force)
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });
@@ -37,7 +36,6 @@ describe('happy — image-mode toggle routes correctly (heavy entry point)', () 
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
     h.render();
     await h.placeImageModel();
-    h.useAppStore.getState().updateSettings({ autoDetectMethod: 'pattern', imageGenerationMode: 'auto' });
 
     await h.cycleImageMode(); // auto → ON
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });

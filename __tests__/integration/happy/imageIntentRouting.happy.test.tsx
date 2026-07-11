@@ -19,7 +19,7 @@ jest.mock('@react-navigation/native', () => ({
 async function withImageModel(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   const imageModel = createONNXImageModel({ id: 'sd', name: 'SD', modelPath: '/models/sd', backend: 'coreml' as never });
   h.useAppStore.setState({ downloadedImageModels: [imageModel], activeImageModelId: 'sd' });
-  h.useAppStore.getState().updateSettings({ autoDetectMethod: 'pattern', imageGenerationMode: 'auto', enhanceImagePrompts: false, imageThreads: 4, imageUseOpenCL: false, imageSteps: 8 });
+  h.useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, imageSteps: 8 });
   h.boundary.diffusion.module.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
 }
 

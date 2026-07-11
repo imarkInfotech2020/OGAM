@@ -25,7 +25,6 @@ jest.mock('@react-navigation/native', () => ({
 describe('N3 (guard) — draw request with no image model routes safely', () => {
   it('does not leak the internal image marker into the text model prompt', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
-    h.useAppStore.getState().updateSettings({ autoDetectMethod: 'pattern', imageGenerationMode: 'auto' });
     h.render();
 
     await h.send('draw a dragon', { content: 'A dragon is a large mythical reptile.' });

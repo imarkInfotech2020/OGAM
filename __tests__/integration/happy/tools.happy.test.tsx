@@ -58,7 +58,7 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
 
   it('show generation details: the details row renders when enabled', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
-    h.useAppStore.getState().updateSettings({ showGenerationDetails: true });
+    h.enableGenerationDetailsViaUI(); // real segmented toggle
     h.render();
     await h.send('hello', { content: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
