@@ -14,3 +14,10 @@ FINDING (consistent across BOTH remote providers — confirmed bug):
 Thinking field ground truth (all 4):
   local gguf = inline <think>; litert = litert_thinking channel;
   openai-compat (OGAD/LM Studio) = reasoning_content; ollama native = message.thinking
+
+=== CORRECTION (user confirmed Ollama SHOWED thinking in both messages) ===
+My "consistent across both providers" was WRONG. The reasoning counts prove they DIFFER:
+  - Ollama:   reasoning=211 → thinking CAPTURED + RENDERED (works, user confirmed on screen).
+  - LM Studio: reasoning=0  → thinking DROPPED (no render) — THIS is the real bug.
+So: parser handles Ollama native `thinking` field correctly, but drops OpenAI-compat `reasoning_content`
+(LM Studio path). Toggle absence is a separate minor UX gap; Ollama renders thinking regardless.
