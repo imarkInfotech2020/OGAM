@@ -363,6 +363,9 @@ class WhisperService {
           hasData: !!evt.data,
           text: evt.data?.result?.slice(0, 50),
         });
+        // [WIRE] raw realtime transcription event shape from-device (voice-mode STT path) — full result +
+        // segments + timing, so we can ground the realtime-transcript fixtures (distinct from file transcribe).
+        logger.log(`[WIRE-STT-REALTIME] ${JSON.stringify(evt)}`);
 
         const { isCapturing, data, processTime, recordingTime } = evt;
         onResult({
