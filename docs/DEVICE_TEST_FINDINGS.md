@@ -8,6 +8,77 @@ User's verbatim commentary in `DEVICE_SESSION_COMMENTARY.md` (gitignored).
 
 ---
 
+## SESSION 2 (afternoon) — additional findings, corrections, and ground truth
+
+### NEW BUGS (session 2)
+- **B9 — On-device vision decode fails on bigger models (SmolVLM, Qwen3.5-2B), works on Qwen3.5-0.8B.**
+  `evaluate chunks` / `llama_decode: failed to decode, ret=-1` / `invalid token[29]=-1` +
+  `<|vision_start|>/<|vision_end|>/<|vision_pad|>` not-marked-as-EOG. Reproducible ×3. Qwen0.8B vision WORKS
+  (read the image correctly). So it's model/tokenizer-specific, NOT device-wide. (part2, part5)
+- **B10 — Q20 CONFIRMED ON DEVICE + spec:** voice note dispatched as raw `.wav` (`[WIRE-RECORDER]`), `[WIRE-STT]`=0,
+  `Transcription result: false`. USER SPEC: *"in any mode we always send a transcript, never audio to the model."*
+  So this is a definite spec violation, not just adversarial hypothesis. (part3)
+- **B11 — STT no-stop leak:** `startRecording` → 7+ min continuous mic capture, whisper stayed resident 1500MB,
+  never stopped. (part3)
+- **B12 — Realtime transcribe race:** double-trigger → `Failed to start realtime transcribe. State: -100`. (part3)
+- **B13 — Error doesn't clear the spinner:** a generation that ended `reason=error` (vision fail) left the UI
+  spinning indefinitely; user saw no error. (part2)
+- **B14 — B5 UPGRADED (thinking render-timing):** the ENTIRE thinking phase renders in the ANSWER bubble until
+  the close delimiter, then retroactively reclassifies into the thinking block. Should render in the thinking
+  block from token 1. Data exists (`reasoning_content` populated). On slow CPU vision this is minutes of
+  thinking masquerading as the answer. (part6, part7)
+- **B15 — max-predict cutoff, silent:** vision turn hit `predicted=1024, stopped_eos=false` → cut off
+  mid-sentence with no indication. Raising max-tokens to 4.4k → `predicted=1604, stopped_eos=true` (finished).
+  Root: n_predict cap (NOT context — `context_full=false`); the leaked thinking (B14) burned the budget. (part6,7)
+- **B16 — LM Studio (OpenAI-compat) drops reasoning:** LM Studio SENDS `reasoning_content` (raw-curl proof +
+  WIRE captured it), but app `reasoning=0` → no thinking render. Cause: no thinking toggle for remote →
+  `thinkingEnabled=false` → processDelta discards `reasoning_content`. **TOOLS WORK** (parallel, executed).
+  (part8 + CORRECTION)
+- **B17 — No thinking toggle for remote models (UX gap):** neither LM Studio nor Ollama exposes a thinking
+  on/off toggle. (part10)
+- **B18 (observation, verify):** loading a local model may not make it the ACTIVE model — a resend with gemma
+  resident (5854MB) still dispatched `isRemote=true`. Ties to "text says 0" + "no remote indicator". (part13)
+- **B19 (UX):** cannot preview an attached image in the input box (pre-send) — tapping the thumbnail does
+  nothing. (part5)
+- **B20 (UX):** litert gemma-4-E2B reports `supportsVision:true` natively but the app doesn't expose vision for
+  it, while the gguf variant does. Engine-inconsistent vision affordance. (part5)
+- **B21 (minor UX):** image-gen shows "~120s one-time GPU optimization" but actual gen was ~10s. (part12)
+
+### CORRECTIONS (I over-concluded; user caught these — logged for honesty)
+- **Phantom VoiceButton press — RETRACTED.** Controlled hands-off test (launch→select→15s idle) showed 0
+  presses, 0 whisper. The earlier 17ms/orphaned presses were accidental brushes during the wedged session.
+- **"LM Studio drops tools" — WRONG.** Tools WORK on LM Studio (structured parallel `tool_calls`, executed).
+  My bad-data-slice error; only reasoning is dropped.
+- **"Remote thinking broken on both providers" — WRONG.** Ollama thinking WORKS (`reasoning=211/1358` rendered,
+  user confirmed). Only LM Studio (OpenAI-compat) drops it. They differ.
+
+### CONFIRMED WORKING (session 2 — happy paths / positive results)
+- **Litert fully works:** bare (pure token channel, NO stray `<think>`), thinking (dedicated `litert_thinking`
+  channel), structured per-call tool JSON, GPU load, eager-load-on-select (fine UX).
+- **Qwen0.8B vision works** (reads image). **LM Studio remote vision works** (gemma-4-e2b, image described).
+- **Ollama:** tools work, thinking works (renders).
+- **Image gen works** (AnythingV5 + Absolute Reality, GPU/mnn backend, 512x512, ~10s each).
+- **Image-intent routing works:** a non-draw prompt routes to text even with an image model active.
+- **M11 eviction WORKS on this device:** text load after image-gen evicted the resident image (`evict=[image]`).
+- **App-restart clears the whisper leak** → models fast again (validates B1 as the slowness cause).
+- Queue-while-busy, stop-mid-stream, onboarding-skip, lazy-load (gguf) — all confirmed.
+
+### WIRE-FORMAT GROUND TRUTH — thinking delivered FOUR ways (all captured raw)
+| Source | Thinking field |
+|---|---|
+| local gguf (llama.rn) | inline `<think>...</think>` in token stream (empty `<think></think>` even when off) |
+| litert | dedicated `litert_thinking` native channel |
+| OpenAI-compat (OGAD/LM Studio) | `reasoning_content` field in deltas |
+| Ollama native (`/api/chat`) | `thinking` field inside `message` |
+
+Tool calls: OGAD/LM Studio = structured `tool_calls`, args stream as partial-JSON fragments, accumulate by
+`index`, parallel = index:0+1 same round. Litert = whole structured JSON per call. Local gguf = `[WIRE-LLAMA-TOOL]`.
+
+### CAPS observation
+Qwen0.8B AND gemma-4-E2B both advertise `tools:true, toolCalls:true, parallelToolCalls:true, toolUse:false`.
+
+---
+
 ## BUGS (confirmed with device evidence)
 
 ### B1 — Whisper STT model leaks resident; eject-all can't clear it *(TOP PRIORITY)*
