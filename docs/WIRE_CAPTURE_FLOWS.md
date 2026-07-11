@@ -1,78 +1,72 @@
-# From-device ground-truth capture — fresh-start flow script
+# From-device ground-truth capture — OPTIMIZED fresh-start run
 
-Goal: exercise EVERY native seam the test fakes invent a shape for, so fixtures are real, not guessed.
-All capture lines are teed into an append-only, never-rotated file: `Documents/offgrid-wire.log`.
+Goal: exercise every native seam the test fakes invent a shape for, in the order that costs the least
+phone wall-clock. All capture lines tee into an append-only, never-rotated `Documents/offgrid-wire.log`.
 
-Run **from a fresh install** (delete the app first). Do Android fully, tell me "Android done", then iOS.
-Pull after each phase (safe even though the file is lossless):
+Two constraints drive the ordering:
+1. **Downloads are the long pole** (GBs). Start them ALL first, then do work that needs no download while they run.
+2. **Only ONE heavy model is resident at a time** — every text↔image↔vision switch forces a load/unload.
+   So do ALL prompts for a loaded model before switching. Never ping-pong.
 
-```sh
-adb exec-out run-as ai.offgridmobile cat files/offgrid-wire.log > /tmp/wire-android.log   # Android
-# iOS:
-xcrun devicectl device copy from --device <IOS_UDID> --domain-type appDataContainer \
-  --domain-identifier ai.offgridmobile --source Documents/offgrid-wire.log --destination /tmp/wire-ios.log
-```
-
-Label each paste: **platform · model/provider · which phase**.
+Pull anytime (lossless): `adb exec-out run-as ai.offgridmobile.dev cat files/offgrid-wire.log > /tmp/wire-android.log`
 
 ---
 
-## Phase 0 — fresh install
-1. Delete app → reinstall → complete onboarding.
-   - *Why:* empty-state hydration; confirms no stale rows. (No WIRE yet.)
+## Stage A — launch (FREE, one-time, automatic)  → `[WIRE-DEVICE]`, `[WIRE-DEVICE-SOC]`
+1. Delete app → reinstall → open. Device detection fires on first launch (RAM/model/SoC/NPU).
+   - *Why:* grounds onboarding recommendations + the memory budget + the qnn/NPU image gate. No action needed beyond launching.
 
-## Phase 1 — downloads (queue / parallel / unzip)  → `[WIRE-DOWNLOAD]`, `[WIRE-UNZIP]`
-2. Queue these back-to-back so they run **parallel + queued** (that's the point — capture the active/queued rows):
-   gguf (Qwen3.5), litert (Gemma-4 litert), an **image** model (zip), whisper **STT**, a **TTS** voice, a **vision** gguf (+mmproj), an **embedding** model.
-   - *Why:* `[WIRE-DOWNLOAD]` = real progress/complete/error event shapes + `getActiveDownloads` rows (parallel/queued) that drive the download + relaunch fixtures (D1/D4/V1/V2/V3).
-3. Let the **image** model finish → it extracts.
-   - *Why:* `[WIRE-UNZIP]` = the real extracted dir listing (file names + sizes) → grounds the integrity/truncation gate (V2) and the image-model-incomplete path.
-4. Optional: kill the app mid-download of one, relaunch.
-   - *Why:* iOS URLSession-dies-on-kill vs Android WorkManager-survives — the platform-parity capability the fake models.
+## Stage B — kick off ALL downloads at once (start the long pole)  → `[WIRE-DOWNLOAD]`, `[WIRE-UNZIP]`
+2. From onboarding/model manager, queue everything in this order (front finishes first → testable soonest;
+   big ones at the back keep downloading while you work):
+   **(a)** a small text gguf (e.g. Qwen3.5) · **(b)** whisper STT · **(c)** embedding model · **(d)** a TTS voice
+   · **(e)** Gemma-4 litert · **(f)** Mistral gguf · **(g)** Llama gguf · **(h)** vision gguf (+mmproj, big)
+   · **(i)** image model (zip, big).
+   - *Why:* queuing 8-9 at once = real parallel + queued rows (`[WIRE-DOWNLOAD]` getActiveDownloads); the image zip → `[WIRE-UNZIP]` extracted listing. This is the download/relaunch + integrity fixtures. **Do NOT wait here — go to Stage C while these run.**
+3. (Optional, high value) once one download is mid-flight, force-quit + relaunch the app.
+   - *Why:* iOS-URLSession-dies vs Android-WorkManager-survives — the platform-parity capability.
 
-## Phase 2 — on-device text, per engine  → `[WIRE-CAPS]`, `[WIRE-LITERT-LOAD]`, `[WIRE-RAM]`, `[WIRE-LLAMA*]`, `[WIRE-LITERT*]`
-For **each** text model (Gemma-4 gguf, Qwen3.5 gguf, Mistral gguf, Llama gguf, Gemma-4 litert):
-5. Select/load it. → `[WIRE-CAPS]` (gguf chat-template tool caps), `[WIRE-LITERT-LOAD]` (litert backend/maxTokens), `[WIRE-RAM]` (real memory numbers).
-6. Send **plain**: `What is the capital of France?`
-7. Send **thinking** (reasoning ON): `A train covers 60 km in 45 minutes. What is its speed in km/h? Reason step by step.`
-8. Send **tool** (a tool enabled): `What is 47 times 89?` → let it run + answer.
-9. Send **thinking + tool**: `Reason about it, then compute 128 * 256 with the calculator.`
-10. Send **two tools**: `What is 12*12 and also 30% of 400?`
-    - *Why:* `[WIRE-LLAMA]`/`[WIRE-LITERT]` = the real token stream shape (inline `<think>` vs `reasoning_content` channel); `[WIRE-LLAMA-TOOL]`/`[WIRE-LITERT-TOOL]` = the real tool-call framing (structured vs inline `<tool_call>`/`[TOOL_CALLS]`/`<|python_tag|>`) — the Q2/Q3 fault line. This is the single highest-value capture.
+## Stage C — REMOTE providers (runs DURING downloads — needs no local model)  → `[WIRE-REMOTE]`, `[WIRE-OLLAMA]`
+4. Configure **LM Studio**, then **Ollama**, then **OGA Desktop** (one at a time). For each, send the 5 prompts:
+   - plain: `What is the capital of France?`
+   - thinking (reasoning ON): `A train covers 60 km in 45 min. Speed in km/h? Reason step by step.`
+   - tool (calculator ON): `What is 47 times 89?` (let it run + answer)
+   - thinking+tool: `Reason about it, then compute 128 * 256 with the calculator.`
+   - two tools: `What is 12*12 and also 30% of 400?`
+   - *Why:* `[WIRE-REMOTE]`/`[WIRE-OLLAMA]` = how remote streams thinking (`<think>` vs reasoning field) + tool_calls (delta-partial vs final). Pure network → overlaps the downloads perfectly, zero wasted wait.
 
-## Phase 3 — remote providers  → `[WIRE-REMOTE]`, `[WIRE-OLLAMA]`
-11. Configure **LM Studio**, **Ollama**, **OGA Desktop** (one at a time). For each, prompts 6–10.
-    - *Why:* `[WIRE-REMOTE]` (OpenAI-compat delta) + `[WIRE-OLLAMA]` (native /api/chat NDJSON) = how remote streams thinking + tool_calls (delta-partial vs final) — a different parser path than on-device.
+## Stage D — on-device text, ONE block per model (as each finishes; minimize swaps)  → `[WIRE-CAPS]`, `[WIRE-LLAMA*]`, `[WIRE-LITERT*]`, `[WIRE-LLAMA-LOAD]`, `[WIRE-RAM]`
+First: enable the **calculator tool** once (it persists). Then for **each** text model (small gguf, Mistral, Llama, Gemma-4 litert), in this ONE block before switching:
+5. Load it → `[WIRE-CAPS]` (tool caps), `[WIRE-LLAMA-LOAD]`/`[WIRE-LITERT-LOAD]` (load config), `[WIRE-RAM]`.
+6. Send the 5 prompts (plain, thinking, tool, thinking+tool, two-tools) → `[WIRE-LLAMA]`/`[WIRE-LITERT]` stream + `[WIRE-*-TOOL]` framing.
+7. Change **Temperature** + toggle **Thinking**, resend one prompt → `[WIRE-LLAMA-PARAMS]` (settings→native, no reload).
+8. (Once, on ONE model only) change **context size** in model settings + reload → a second `[WIRE-LLAMA-LOAD]` (load-config mapping). No need to repeat per model.
+   - *Why:* the single highest-value capture — real token/thinking/tool wire format per model family, plus the settings→native mappings. Grouped so each model loads once.
 
-## Phase 4 — image gen + settings→native  → `[WIRE-IMAGE-CONSTANTS]`, `[WIRE-IMAGE-PARAMS]`, `[WIRE-IMAGE]`, `[WIRE-IMAGE-PROGRESS]`
-12. First image gen (defaults). → `[WIRE-IMAGE-CONSTANTS]` (real DEFAULT_STEPS/GUIDANCE/SUPPORTED sizes), `[WIRE-IMAGE-PARAMS]`, `[WIRE-IMAGE]`, `[WIRE-IMAGE-PROGRESS]`.
-13. In settings, change **Image Size** (try 128 and 256), **Steps**, **Guidance** → generate after each.
-    - *Why:* `[WIRE-IMAGE-PARAMS]` = requested-vs-native values → grounds the size-floor / guidance-clamp bugs (Q1/Q7/Q13). `[WIRE-IMAGE-PROGRESS]` = preview/progress event shape (differs Core ML vs LocalDream — parity).
+## Stage E — heavy single-resident blocks (each forces a swap; do all-in-one)
+9. **Image**  → `[WIRE-IMAGE-CONSTANTS]`, `[WIRE-IMAGE-PARAMS]`, `[WIRE-IMAGE]`, `[WIRE-IMAGE-PROGRESS]`
+   Generate once (defaults), then change **Image Size** (128 then 256), **Steps**, **Guidance** → generate after each.
+   - *Why:* requested-vs-native params (size-floor/guidance-clamp bugs Q1/Q7/Q13) + real progress/preview event shape.
+   - *Note:* your device's SoC (`[WIRE-DEVICE-SOC]`) decides backends — qnn only on Snapdragon; elsewhere the qnn refusal + mnn/cpu path are the real captures.
+10. **Vision**  → `[WIRE-VISION]`, `[WIRE-LLAMA]`
+    Load the vision gguf, attach a photo, ask `What's in this image?`.
+    - *Why:* real `initMultimodal` support flags + vision response shape. (Use a **gguf** vision model — the litert vision path only captures the response, not the init flags.)
 
-## Phase 5 — vision / multimodal  → `[WIRE-VISION]`, `[WIRE-LLAMA]`
-14. Load the vision gguf, attach a photo, ask `What's in this image?`.
-    - *Why:* `[WIRE-VISION]` = real `initMultimodal` support flags; `[WIRE-LLAMA]` = the vision response shape.
-
-## Phase 6 — STT  → `[WIRE-STT]`
-15. Record a voice note → let it transcribe. Also record a **silent/short** clip.
-    - *Why:* `[WIRE-STT]` = real whisper result shape (segments/timestamps/text) + the no-speech marker (`[BLANK_AUDIO]`) that drives the empty-transcript handling.
-
-## Phase 7 — TTS  → `[WIRE-TTS]`
-16. Tap **Speak** on an assistant reply (note the engine: OuteTTS / Kokoro / Qwen3).
-    - *Why:* `[WIRE-TTS]` = audio-token count + decoded PCM length/sampleRate/duration. (OuteTTS instrumented; if you use Kokoro/Qwen3 tell me and I'll add those two synth points.)
-
-## Phase 8 — embeddings / RAG  → `[WIRE-EMBED]`
-17. Create a project, add a document to its knowledge base, start a chat in it, ask something answerable from the doc.
-    - *Why:* `[WIRE-EMBED]` = the embedding model's real dimensionality → grounds the KB index/search + stale-dim fixtures (toolEmbeddingStaleDim).
-
-## Phase 9 — settings that change native behavior  → `[WIRE-LLAMA-PARAMS]`
-18. Change **Temperature**, toggle **Thinking**, change **max tokens** → send a prompt after each.
-    - *Why:* `[WIRE-LLAMA-PARAMS]` = the exact params handed to the engine → proves the settings→native mapping (the class of bug where a slider doesn't reach the model).
+## Stage F — small-model blocks (fast; any order)
+11. **STT**  → `[WIRE-STT]` — record a voice note (let it transcribe) AND a **silent/short** clip (captures the no-speech marker).
+12. **TTS**  → `[WIRE-TTS]` — tap **Speak** on any assistant reply (note the engine; OuteTTS is instrumented — tell me if you use Kokoro/Qwen3).
+13. **RAG**  → `[WIRE-EMBED]`, `[WIRE-PDF]` — create a project, add a **PDF** to its knowledge base, chat a question answerable from it.
+    - *Why:* real embedding dimensionality + native PDF→text shape.
 
 ---
 
-### Capture tag → fake it grounds (checklist so nothing is missed)
-`[WIRE-DOWNLOAD]` events+active · `[WIRE-UNZIP]` extract · `[WIRE-CAPS]` tool support · `[WIRE-LLAMA]`/`[WIRE-LITERT]` stream ·
-`[WIRE-LLAMA-TOOL]`/`[WIRE-LITERT-TOOL]` tool framing · `[WIRE-LLAMA-PARAMS]`/`[WIRE-IMAGE-PARAMS]` settings→native ·
-`[WIRE-LITERT-LOAD]` backend · `[WIRE-RAM]` memory · `[WIRE-REMOTE]`/`[WIRE-OLLAMA]` remote · `[WIRE-IMAGE]`/`[WIRE-IMAGE-PROGRESS]`/`[WIRE-IMAGE-CONSTANTS]` image ·
-`[WIRE-VISION]` multimodal · `[WIRE-STT]` transcribe · `[WIRE-TTS]` synth · `[WIRE-EMBED]` embedding.
+## What is NOT a capture target (pure JS — already real in jest, no device run needed)
+Projects, conversation management (rename/move/delete), message edit/copy, settings *storage*, navigation.
+These run for real in the tests over faked AsyncStorage — nothing native to ground.
+
+## Efficiency summary
+- **Stage C overlaps Stage B** — remote testing fills the entire download wait (biggest time save).
+- **One load per model** (Stage D grouped) — no repeated heavy loads.
+- **Load-config + context-size captured once**, not per model.
+- **Free/auto captures**: device detection (A), RAM (every load), caps (every load).
+- Pull `offgrid-wire.log` once at the end — it's lossless, so no need to pull between stages.
