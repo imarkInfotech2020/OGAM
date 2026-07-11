@@ -20,16 +20,18 @@ import React from 'react';
 import { Text } from 'react-native';
 // Required AFTER installNativeBoundary() → resolves the same fresh module graph the screens use.
 import { modelResidencyManager } from '../../src/services/modelResidency';
-import { useWhisperStore } from '../../src/stores/whisperStore';
-import { useAppStore } from '../../src/stores/appStore';
 
 export const ResidentsProbe: React.FC = () => {
-  // Subscribe to the reactive fields that move in lockstep with a residency change, so this component
-  // re-renders when the (non-reactive) residents Map mutates. These are ticks, not the asserted value.
-  useWhisperStore((s) => s.isModelLoaded);
-  useWhisperStore((s) => s.downloadedModelId);
-  useAppStore((s) => s.activeModelId);
-  useAppStore((s) => s.activeImageModelId);
+  // `modelResidencyManager` holds a plain (non-reactive) Map, and residency changes (load / eject /
+  // release / eviction) do NOT all coincide with a reactive store change — an eject that frees a sidecar
+  // touches no store the UI subscribes to. So POLL the real residency on a short interval and re-render:
+  // getByTestId then always reads a FRESH read, never a stale precondition render. Test-only, so the poll
+  // is fine; waitFor (1s) comfortably catches a 25ms tick. This is what lets a fix flip the probe green.
+  const [, tick] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 25);
+    return () => clearInterval(id);
+  }, []);
 
   const types = modelResidencyManager
     .getResidents()
