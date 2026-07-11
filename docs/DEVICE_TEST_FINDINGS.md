@@ -461,3 +461,10 @@ enable_thinking=**true** → First token "Thinking" → reasoning chain (slow, "
 SMOKING GUN: the enhancement request carries enable_thinking=true. TEST ASSERTION: the enhancement
 generateStandalone request must NOT have thinking on (enable_thinking !== true) → enhanced prompt has no
 reasoning markers + returns fast. B30 causes BOTH garbage prompt AND slowness (the reasoning chain). (part37)
+
+### B30 — secondary UX symptom: enhancement doesn't stream (no progress during the slow reasoning)
+User: "enhancing prompt doesn't stream." During enhancement the UI shows a static "Enhancing prompt with AI..."
+with NO streaming/progress feedback, so the (B30-slow) reasoning chain reads as frozen/stuck even though it's
+working. Entangled with B30: if enhancement is fixed to a fast plain completion (few tokens), this is moot.
+But note: whenever enhancement runs long, the absence of streaming/progress makes it look hung. Candidate:
+either fix B30 (fast) or show a progress/streaming indicator for the enhancement step.
