@@ -50,12 +50,19 @@ async function recoverZipDownload(opts: {
   }
 
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-  await unzip(zipPath, modelDir);
-  // [WIRE] real extracted image-model dir listing (name + size) — grounds the integrity/truncation fixtures.
+  // [WIRE] capture BOTH outcomes of the MNN/QNN extract (the known-bug path): on success the real
+  // extracted file set (grounds the integrity gate); on FAILURE the error + whatever partially extracted
+  // (grounds the D1/extract-fail → retriable-card bug). Behavior preserved — the error still propagates.
   try {
-    const entries = await RNFS.readDir(modelDir);
-    logger.log(`[WIRE-UNZIP] ${JSON.stringify({ zipPath, modelDir, files: entries.map(e => ({ name: e.name, size: Number(e.size), isFile: e.isFile() })) })}`);
-  } catch (e) { logger.log(`[WIRE-UNZIP] readDir failed for ${modelDir}: ${String(e)}`); }
+    const zipStat = await RNFS.stat(zipPath).catch(() => null);
+    await unzip(zipPath, modelDir);
+    const entries = await RNFS.readDir(modelDir).catch(() => []);
+    logger.log(`[WIRE-UNZIP] ${JSON.stringify({ ok: true, zipPath, zipSize: zipStat ? Number(zipStat.size) : null, modelDir, backend: metadata.imageModelBackend, files: entries.map(e => ({ name: e.name, size: Number(e.size), isFile: e.isFile() })) })}`);
+  } catch (e) {
+    const partial = await RNFS.readDir(modelDir).catch(() => [] as Array<{ name: string; size: string | number; isFile: () => boolean }>);
+    logger.log(`[WIRE-UNZIP] ${JSON.stringify({ ok: false, zipPath, modelDir, backend: metadata.imageModelBackend, error: String((e as Error)?.message ?? e), partialFiles: partial.map(f => ({ name: f.name, size: Number(f.size), isFile: f.isFile() })) })}`);
+    throw e;
+  }
   await RNFS.unlink(zipPath).catch(() => {});
 
   if (metadata.imageModelBackend === 'coreml') {
