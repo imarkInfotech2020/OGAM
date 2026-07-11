@@ -446,3 +446,11 @@ is a UTILITY call (rewrite an image prompt), not a reasoning task. FIX: the enha
 description, never "Thinking Process:...". (Root fix; better than stripping reasoning after the fact.) This is
 the definitive spec for B30. Test: with thinking ON globally, an image-gen enhancement turn's request has
 enable_thinking=false and the enhanced prompt contains no reasoning markers.
+
+### B30 — FIX SPEC refined (user): enhancement = a plain LLM completion, NOT the thinking path
+User: "it should just normally hit the LLM without turning on thinking mode." So the fix isn't bolting an
+enable_thinking=false flag onto the reasoning path — the enhancement is a background UTILITY completion
+("rewrite this into a better image prompt") that should NEVER be routed through the thinking-enabled generation
+path at all. That path is what pulls in <think>/reasoning_content and yields the "Thinking Process:..." garbage.
+Enhancement should use a plain completion (no thinking apparatus), so the output is just a clean rewritten
+prompt. Test: enhancement request carries no thinking params and the enhanced prompt has zero reasoning markers.
