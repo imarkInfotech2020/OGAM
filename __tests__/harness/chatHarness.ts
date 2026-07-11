@@ -78,18 +78,22 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const rows = await rtl.waitFor(() => { const r = home.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 4000 });
   rtl.fireEvent.press(rows[0]);
   await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 4000 });
+
+  // GESTURE: with the model now selected, tap "New Chat" on Home — the real way a user starts a chat. A new
+  // chat has NO conversation yet; it is created on the first message (real app behavior). No createConversation.
+  rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('new-chat-button')));
   home.unmount();
 
   // Load via the REAL load path (the app loads lazily on the first send; we trigger the same path so the
   // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
   await activeModelService.loadTextModel('m');
 
-  const conversationId = useChatStore.getState().createConversation('m');
-  useChatStore.getState().setActiveConversation(conversationId);
-  routeHolder.params = { conversationId };
+  routeHolder.params = {}; // new chat — the first send() creates the conversation
 
   const harness = {
-    boundary, React, rtl, useAppStore, useChatStore, conversationId,
+    boundary, React, rtl, useAppStore, useChatStore,
+    /** The active conversation id — a NEW chat has none until the first send() creates it. */
+    get conversationId(): string | null { return useChatStore.getState().activeConversationId; },
     view: null as ReturnType<typeof rtl.render> | null,
 
     /**
