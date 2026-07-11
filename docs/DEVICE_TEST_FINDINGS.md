@@ -8,6 +8,24 @@ User's verbatim commentary in `DEVICE_SESSION_COMMENTARY.md` (gitignored).
 
 ---
 
+## SESSION 3 SUMMARY (evening) — backends, STT/TTS/voice, enhancement, thermal
+New bugs this session: **B22** llama-NPU-gibberish, **B23** litert-CPU-status13, **B24** GPU-timeout/partial,
+**B25** litert-context-clamp-drops-tools, **B26** realtime-STT-no-capture (fundamental), **B27** voice thinking-
+block-full-width, **B28** STT-fragmented-3-pipelines (SOLID root of B26/Q20), **B29** mic-not-stop-during-gen
+(invites STT collision), **B30** enhancement-captures-thinking-as-prompt (thinking ON), **B31** thermal-throttle
+→ crash under heavy/polluted context.
+Working this session: llama CPU/GPU, litert GPU, **voice mode END-TO-END** (STT `transcribeFile` +
+`[WIRE-STT]` {language, segments[{t0,t1,text}]} + kokoro `[WIRE-TTS]` 24000Hz 48054-sample chunks + draw-a-dog
+journey STT→route→image→TTS), image-intent routing (draw→image, calculate→text), prompt-enhancement mechanics
+(slow round-trip). Corrections logged where I over-concluded (NPU "works", B30 "context pollution").
+
+### B31 — Thermal throttle → freeze → crash under heavy/polluted context
+Qwen0.8B (GPU) + B30's ~21K-char polluted context + tool-grammar grind → sustained compute → phone overheated →
+thermal throttling: token time degraded to **30–47 SECONDS per token** (`Grammar still awaiting trigger` ×34),
+UI froze, user hit stop, then the app CRASHED. Log survived (append-only). User was intentionally pushing past
+limits — but it's a real device-stress data point: heavy/runaway context on a mid-range phone throttles to
+unusable then crashes. Candidate guard: trim/cap context, or warn before runaway. (part31, part32)
+
 ## SESSION 3 (evening) — compute-backend matrix (clean install, models preserved)
 
 ### Backend matrix (gemma-4-E2B / Qwen0.8B on device SM8635)
