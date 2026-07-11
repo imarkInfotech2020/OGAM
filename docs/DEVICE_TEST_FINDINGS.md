@@ -454,3 +454,10 @@ enable_thinking=false flag onto the reasoning path — the enhancement is a back
 path at all. That path is what pulls in <think>/reasoning_content and yields the "Thinking Process:..." garbage.
 Enhancement should use a plain completion (no thinking apparatus), so the output is just a clean rewritten
 prompt. Test: enhancement request carries no thinking params and the enhanced prompt has zero reasoning markers.
+
+### B30 — DEFINITIVE PROOF + test assertion (part37)
+Reproduced cleanly: draw a dog → "Starting prompt enhancement" → generateStandalone → [THINKING]
+enable_thinking=**true** → First token "Thinking" → reasoning chain (slow, "taking forever", user).
+SMOKING GUN: the enhancement request carries enable_thinking=true. TEST ASSERTION: the enhancement
+generateStandalone request must NOT have thinking on (enable_thinking !== true) → enhanced prompt has no
+reasoning markers + returns fast. B30 causes BOTH garbage prompt AND slowness (the reasoning chain). (part37)
