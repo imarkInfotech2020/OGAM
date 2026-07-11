@@ -14,10 +14,11 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
 - **Result:** you fill ✅/❌ + notes each release.
 
-Coverage (verified against the actual test `it()` titles, not names): **110 cases · 50 automated (✅) ·
-15 partial/service-level (~) · 35 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
-UI-integration reds written this pass: T001 (`downloadCountDivergence`), T022 (`whisperResidentOnDownload`),
-T023 (`ejectAllLeavesWhisper`) — all in `__tests__/integration/`, red-for-the-right-reason + falsified.
+Coverage (verified against the actual test `it()` titles, not names): **110 cases · 52 automated (✅) ·
+15 partial/service-level (~) · 33 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
+UI-integration reds written this pass (all `__tests__/integration/`, red-for-the-right-reason, device-grounded):
+T001 (`downloadCountDivergence`), T022 (`whisperResidentOnDownload`), T023 (`ejectAllLeavesWhisper`),
+T075+T080 (`chatModeSttArchitecture` — chat-mode STT never transcribes; full ChatScreen + real mic gesture).
 Areas 1–14 = user-facing flows (T001–T098); **Area 15 (T099–T110)** = the latent/architecture/infra findings
 from the 2026-07-12 cross-check that had no row (so this doc is the ONE exhaustive record).
 Paste any table into Sheets/Excel (pipe-delimited).
