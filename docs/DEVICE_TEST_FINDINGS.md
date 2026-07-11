@@ -425,3 +425,9 @@ Sports). Model's answer correctly said "a document about leadership in India" an
 VERBATIM from the PDF. NOT hallucinating — grounded in real retrieved content. Minor: it treated the print code
 "BTB140414/06/K/1" as an identifier, but that code is genuinely in the extracted text layer (noise from the
 PDF, faithfully reflected — not a model error). RAG end-to-end CORRECT + validated against ground truth.
+
+### RAG validation COMPLETE — zero hallucination
+Every specific claim in the model's summary is verbatim in the real PDF (verified by grep on extracted text):
+Srishty Jain ✓, "vision, velocity, values" ✓, Tejesh G Reddy ✓ (×3), Ironman 70.3 Goa ✓, adaptive leadership ✓.
+Model accurately summarized retrieved chunks with specific verifiable facts. RAG end-to-end CORRECT + fully
+grounded. (litert gemma-4-E2B GPU; multi-round thinking+search_knowledge_base tool chain)
