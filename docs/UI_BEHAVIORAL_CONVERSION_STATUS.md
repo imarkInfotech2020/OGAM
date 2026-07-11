@@ -49,8 +49,22 @@ on `generateImage`, mirroring the native module, so the app's downstream file re
 real file. Threaded `fsFake.seedFile` into `makeDiffusionFake`. Verified non-regressing (happy 31/31; image
 adversarial reds — Q7/Q12/Q13/imageEstimatorDivergence — still red for the right reason).
 
-**Next investigative step — rendered ModelFailureCard (the OOM surface users hit):** no rendered test yet
-proves the user SEES the "Not Enough Memory" / "Load Anyway" card. The memory reds (M11/failedUnload/
+**DONE — rendered ModelFailureCard OOM surface (`imageOomCard.happy`):** proves the user SEES the graceful
+"Not Enough Memory" + "Load Anyway" card. Heavy entry point: image-mode ON + send on a modest device (4GB,
+300MB free, dropped AFTER the text model loaded via `boundary.setRam` + `hardwareService.refreshMemoryInfo`).
+The REAL activeModelService/modelResidencyManager gate refuses the image load (even evicting the resident
+text model, the ~3.7GB estimate can't fit) → REAL imageGenerationService reports → REAL ModelFailureCard
+renders; no image generated. Falsified (no RAM drop → no card, image generates). **Reusable pattern:**
+`setRam`-AFTER-setup (setup loads the text model at generous RAM, then drop RAM before the gated action) lets
+a send drive any memory-refusal card — this is the hook the M-series card-rendering reds can use. NOTE: on a
+truly-too-small device (300MB free) "Load Anyway" correctly CAN'T fit a 3.7GB model (hard survival floor, not a
+bug); a "Load Anyway succeeds" test would need a brittle RAM value where the soft budget refuses but the
+physical fits — skipped as too fragile.
+
+**Superseded next step — text-model OOM card:** the send-time TEXT memory refusal surfaces as an ALERT
+(`ensureReadyOrAlert` → `setAlertState`), NOT the card; the card's text populators are empty-output
+(`useChatGenerationActions:404`) and image gen (`imageGenerationService`). The IMAGE path above is the clean
+card surface. A no-preload harness mode is still the route if a rendered TEXT-load-refusal card is wanted. The memory reds (M11/failedUnload/
 sttReclaim/imageEstimator/overrideFloor) are pure residency INVARIANTS (documented gesture-less carve-out,
 real `makeRoomFor`/resident-set assertions) — defensible, but the card itself is unexercised. Driving it needs
 a NO-PRE-LOAD harness mode: `setupChatScreen` currently eagerly `loadTextModel`s, so `isModelReady` short-
