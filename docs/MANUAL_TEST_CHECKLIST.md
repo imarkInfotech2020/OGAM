@@ -14,7 +14,8 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
 - **Result:** you fill ✅/❌ + notes each release.
 
-Coverage: **98 cases · 37 have automated tests (✅) · 7 partial (~) · 52 not yet automated (❌) · 2 n/a.**
+Coverage (verified against the actual test `it()` titles, not names): **98 cases · 45 automated (✅) ·
+11 partial/service-level (~) · 40 not yet automated (❌) · 2 n/a.**
 Paste any table into Sheets/Excel (pipe-delimited).
 
 ---
@@ -26,15 +27,15 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T001 | 🔴 P1 | ❌ | Mount Home → tap `browse-models-button` → tap download on a **vision** model (has mmproj); download fake emits `getActiveDownloads` with model + mmproj as 2 rows → tap download-manager icon → DownloadManagerScreen | top-bar badge number **==** count of download rows rendered in the list (RED: differ by 1 while mmproj in-flight). Falsify: non-vision model → equal | DEV-B7 · BROKEN | |
-| T002 | 🔴 P2 | ❌ | Mount Home (foreground) → drive download fake to emit `DownloadComplete` for a **text** model; repeat for an **image** model | completion sheet/toast renders **identically** for both types in the same foreground state (RED: image shows sheet, text doesn't). *Needs product decision on intended behavior* | DEV-B4 · INCONSISTENT | |
+| T001 | 🔴 P1 | ❌ (unit `downloadAggregate` only) | Mount ModelsScreen → tap download on a **vision** model (mmproj → 2 rows, per log: `SmolVLM-Instruct-Q4_K_M.gguf` + `…-mmproj.gguf`) → read `downloads-icon` badge (`vm.activeDownloadCount`) → tap `downloads-icon` → DownloadManagerScreen | `downloads-icon` badge number **==** DownloadManagerScreen running (`activeDownloadingCount`) + queued (`activeQueuedCount`) (RED: device saw badge **10** vs screen **4+7=11** — off by 1 while mmproj in-flight). Falsify: non-vision model (no mmproj) → equal | DEV-B7 · BROKEN | |
+| T002 | 🔴 P2 | ❌ | Drive `DownloadComplete` for a text model, then an image model, in the same foreground state | completion notification behavior is consistent + intentional. NOTE: my earlier "image notifies, text doesn't" was CORRECTED — device showed **text models DID notify** (SmolLM3, Mistral); real variable is foreground/timing. User's gripe: the toast is noisy ("shouldn't have come"). *Product decision: show a completion toast at all?* | DEV-B4 · corrected (type-independent) | |
 | T003 | 🔴 P1 | ❌ | Start image-model download → fake emits native `DownloadComplete` but zip NOT extracted (no `_ready`, integrity files absent on memfs) → select model + image-mode send | model status ≠ "ready/usable" until extracted; on generate a visible "preparing/extracting" state (RED: "downloaded successfully" fires at native-complete, extract deferred) | DEV-B4 · PREMATURE | |
 | T004 | 🔴 P1 | ✅ `imageExtractLostRelaunch` | Seed image download that completes-then-extraction-fails (missing `unet.bin`) → `simulateRelaunch()` (fresh stores, drop native rows, keep disk) → mount DownloadManagerScreen | a retriable/removable **failed card** renders after relaunch (RED: none renders — store not persisted, dir/zip unlinked) | D1/log-B7 · BROKEN | |
 | T005 | 🔴 P1 | ✅ `whisperDeleteCancelsOther` | Start `base.en` whisper download (fake, in-flight) → mount DownloadManagerScreen → tap delete on downloaded `small.en` → confirm alert | `base.en`'s in-progress card **still present** after deleting small.en (RED: it vanishes — deleteModel cancels the single activeDownloadId) | V1 · BROKEN | |
 | T006 | 🔴 P1 | ✅ `whisperTruncatedListed` | Seed a truncated `ggml-<id>.bin` on disk (below size floor) → mount DownloadManagerScreen / model list | truncated file NOT listed as a completed/loadable model (RED: shown as downloaded — name-only filter, no size floor) | V2 · BROKEN | |
 | T007 | 🔴 P1 | ✅ `sttInterruptedRelaunch` | Seed STT download killed mid-flight → `simulateRelaunch()` → mount DownloadManagerScreen | a retriable/removable entry renders (RED: empty — store not persisted, no disk scan) | V3/D1 · BROKEN | |
 | T008 | 🔴 P2 | ✅ `iosInterruptedNoFailedEntry` | iOS-shaped: download running → drop the native URLSession row (app-kill) → `simulateRelaunch()` → mount DownloadManagerScreen | a stranded/failed entry renders (RED: vanishes — reconcile reads empty native-rebuilt store) | D4 · NOT-RUN device | |
-| T009 | ✅ P1 | ❌ | Mount → create project (form) → attach a text PDF to its KB (attach gesture); PDF fake returns real text; embed fake 384-dim | KB shows the doc indexed (chunk/embedding count); no error card | DEV · WORKS | |
+| T009 | ✅ P1 | ~ `searchKnowledgeBaseRoundtrip`/`indexDocumentRollback` | Mount → create project (form) → attach a text PDF to its KB (attach gesture); PDF fake returns real text; embed fake 384-dim | KB shows the doc indexed (chunk/embedding count); no error card | DEV · WORKS | |
 | T010 | 🔴 P2 | ❌ | Attach a **scanned/image** PDF (pdf fake returns textLength:0) to a KB | a clear "no text layer / scanned PDF" message renders (RED: vague "could not extract text") | DEV · 0-text vague | |
 | T011 | 🔴 P2 | ❌ | Attach a **>5MB** PDF to a KB (fake file size >5MB) | "Maximum file size is 5MB" renders, upload rejected (works — confirm still gated) | DEV · GATED | |
 | T012 | ✅ P2 | ❌ | Seed N downloaded models (boundary) → mount ModelsScreen | the solid downloaded-count badge renders == N | DEV · WORKS | |
@@ -59,12 +60,12 @@ manual tester and the automated test). **UI validation** = what to assert on the
 |---|---|---|---|---|---|---|
 | T022 | 🔴 P0 | ❌ | Download an STT model (download fake `complete` event) → do NOT transcribe → load a chat model via picker+send | whisper NOT auto-resident; chat model loads without a phantom 1.5GB resident (invariant: assert `getResidents()` excludes whisper) (RED: whisper auto-loads on download) | DEV-B1 · BROKEN | |
 | T023 | 🔴 P0 | ❌ | With whisper resident, mount Home → tap **Eject All** → confirm | after eject, `getResidents()` == [] incl. whisper (RED: ejectAll returns count=1, whisper survives) | DEV-B1 · BROKEN | |
-| T024 | 🔴 P0 | ~ `failedUnloadOverCommits`/`overrideFloor` | Seed RAM so soft budget≥size but `os_procAvail`<size → drive a load via the real `makeRoomFor` gesture path | load refused (graceful card) OR doesn't over-commit (invariant: `fits` gates on physical, not soft budget) (RED: fits=true while size>procAvail) | DEV-B2/M2/M3 · BROKEN | |
+| T024 | 🔴 P0 | ✅ `budgetRedflow`(M2/M3)/`failedUnloadOverCommits` | Seed RAM so soft budget≥size but `os_procAvail`<size → drive a load via the real `makeRoomFor` gesture path | load refused (graceful card) OR doesn't over-commit (invariant: `fits` gates on physical, not soft budget) (RED: fits=true while size>procAvail) | DEV-B2/M2/M3 · BROKEN | |
 | T025 | ✅ P1 | ✅ `residencySwap`/`resendAfterImageGen` | Generate an image (image resident) → go to chat → send text | (invariant) text load evicts image (`evicted` contains 'image'); text-model reply renders | M11/DEV · WORKS | |
-| T026 | 🔴 P1 | ~ `smartBudgeting` | Load text model → start image-gen | text & image do NOT co-reside (`getResidents()` has one heavy) (verify — worked in one device flow) | M1/M16 · verify | |
+| T026 | 🔴 P1 | ✅ `budgetRedflow`(M1) | Load text model → start image-gen | text & image do NOT co-reside (`getResidents()` has one heavy) (verify — worked in one device flow) | M1/M16 · verify | |
 | T027 | 🔴 P1 | ✅ `imageEstimatorDivergence` | Image model: the pre-load advisory (`checkMemoryForModel` 1.5/1.8×) vs the gate (`estimateImageModelRam` 2.5×) | both estimators agree (invariant) (RED: ~40% divergence → "safe to load" then a hard "not enough memory" card) | Q14 · BROKEN | |
 | T028 | 🔴 P1 | ✅ `overrideFloor` | Load-Anyway a too-big dirty model at low real free RAM (RAM fake) | survival floor BLOCKS the guaranteed OOM (invariant: post-load free ≥ floor uses REAL free, not credited ceiling) | M3/M4 · verify | |
-| T029 | 🔴 P2 | ❌ | iOS 12GB, 3.1GB free → Load-Anyway a 2GB dirty litert model (RAM fake, platform ios) | NOT over-refused (loads) (RED: flat 1200 floor over-refuses a safe load) | M5 · NOT-RUN device | |
+| T029 | 🔴 P2 | ✅ `overrideFloor`(M5) | iOS 12GB, 3.1GB free → Load-Anyway a 2GB dirty litert model (RAM fake, platform ios) | NOT over-refused (loads) (RED: flat 1200 floor over-refuses a safe load) | M5 · NOT-RUN device | |
 | T030 | 🔴 P1 | ✅ `ttsDeleteResidencyStale` | Load TTS (registers key:'tts') → delete TTS in DM (gesture) → load a text/image model | no phantom TTS pressure (invariant: `release('tts')` fired on delete → resident set excludes tts) (RED: 320MB phantom → wrong refusal) | V4 · BROKEN | |
 | T031 | 🔴 P0 | ❌ | Drive a very long/runaway context, keep sending | app caps/trims context (invariant/guard); doesn't grind to freeze (RED on device: 30–47s/token thermal-throttle → crash) | DEV-B31 · CRASHED | |
 
@@ -73,12 +74,12 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
 | T032 | ✅ P1 | ✅ `firstMessage` | Thinking off, tools off → type + send a plain prompt (litert fake streams a clean answer) | reply text renders in the answer bubble; NO stray `<think></think>` block | DEV · WORKS | |
-| T033 | 🔴 P1 | ❌ (`reasoning.happy` = happy only) | Thinking ON → send a reasoning prompt; llama fake streams `<think>…</think>` (Qwen) tokens | during streaming, reasoning tokens render in the THINKING block (answer bubble stays empty) from token 1 (RED: they render in the answer bubble until the close delimiter, then reclassify) | DEV-B14/B5 · BROKEN | |
+| T033 | 🔴 P1 | ~ `reasoningPipeline`(LOCAL split) | Thinking ON → send a reasoning prompt; llama fake streams `<think>…</think>` (Qwen) tokens | during streaming, reasoning tokens render in the THINKING block (answer bubble stays empty) from token 1 (RED: they render in the answer bubble until the close delimiter, then reclassify) | DEV-B14/B5 · BROKEN | |
 | T034 | 🔴 P2 | ❌ | Send a prompt whose completion hits the max-predict cap (fake: `stopped_eos=false` at n_predict) | a "cut off / continue" indication renders (RED: silently truncated mid-sentence, no signal) | DEV-B15 · silent cutoff | |
-| T035 | 🔴 P2 | ❌ | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
-| T036 | ✅ P1 | ✅ `resend` | Send msg 1 (fake holds it streaming) → type + send msg 2 before it finishes | both replies render in order; neither dropped/collided | DEV · WORKS | |
-| T037 | ✅ P1 | ~ `resend` | Start a generation → tap the Stop button (input transforms to stop) mid-stream | generation halts; partial text retained; input returns to send state; next queued item proceeds | DEV · WORKS | |
-| T038 | ✅ P2 | ✅ `tools` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order | DEV · WORKS | |
+| T035 | 🔴 P2 | ~ `reasoningPipeline`(REMOTE) | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
+| T036 | ✅ P1 | ✅ `queuedSendFeedback` | Send msg 1 (fake holds it streaming) → type + send msg 2 before it finishes | both replies render in order; neither dropped/collided | DEV · WORKS | |
+| T037 | ✅ P1 | ✅ `generationFlow`(stop/save-partial) | Start a generation → tap the Stop button (input transforms to stop) mid-stream | generation halts; partial text retained; input returns to send state; next queued item proceeds | DEV · WORKS | |
+| T038 | ✅ P2 | ~ `thinkingAcrossToolCall`/`toolExtensionLoop` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order | DEV · WORKS | |
 
 ## Area 5 — Tools (calculator / MCP / parallel)
 
@@ -96,12 +97,12 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T046 | ✅ P1 | ❌ | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
+| T046 | ✅ P1 | ~ `remoteProviderRouting` | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
 | T047 | 🔴 P2 | ❌ | Scan with no server (fake HTTP: none) | "No servers found" AND the server list stays empty (RED: shows "none found" yet adds a server) | DEV-B8 · desync | |
-| T048 | ✅ P1 | ❌ | Connect remote (OpenAI-compat fake replays real `[WIRE-REMOTE]` deltas) → send the 5 prompts | correct replies; thinking + parallel tool_calls render (accumulate by index) | DEV · WORKS | |
+| T048 | ✅ P1 | ~ `remoteProviderRouting`/`reasoningPipeline` | Connect remote (OpenAI-compat fake replays real `[WIRE-REMOTE]` deltas) → send the 5 prompts | correct replies; thinking + parallel tool_calls render (accumulate by index) | DEV · WORKS | |
 | T049 | 🔴 P1 | ❌ | LM Studio remote + reasoning model + thinking; fake emits `reasoning_content` deltas | thinking block renders (RED: no thinking toggle → thinkingEnabled=false → processDelta drops `reasoning_content` → reasoning=0). Tools DO work | DEV-B16 · BROKEN | |
 | T050 | 🔴 P1 | ❌ | Mount chat settings with a remote model active | a thinking on/off toggle is present (RED: absent for remote) | DEV-B17 · MISSING | |
-| T051 | ✅ P1 | ❌ | Ollama remote (native NDJSON fake, `message.thinking` field) + tools → send | thinking renders + tool-result bubbles render | DEV · WORKS | |
+| T051 | ✅ P1 | ~ `remoteProviderRouting` | Ollama remote (native NDJSON fake, `message.thinking` field) + tools → send | thinking renders + tool-result bubbles render | DEV · WORKS | |
 | T052 | 🔴 P1 | ✅ `remoteEnhanceSkipped` | Active text model = remote + image-gen + enhancement on → generate | enhancement runs via the remote model (RED: `generateStandalone` has only llama/litert branches → skipped on remote) | Q8 · BROKEN | |
 | T053 | 🔴 P2 | ❌ | Open the model modality selector with a remote model selected | remote model is visually marked (cloud icon) (RED: identical to local, no indicator) | DEV · no indicator | |
 
@@ -111,7 +112,7 @@ manual tester and the automated test). **UI validation** = what to assert on the
 |---|---|---|---|---|---|---|
 | T054 | ✅ P1 | ✅ `multimodalVision` | Vision model active → tap attach → Photo Library → faked picker → type "what's in this image?" → send | a coherent description of the (faked) image renders | DEV · WORKS | |
 | T055 | 🔴 P1 | ❌ | Attach image to a bigger vision model → send; llama fake models the `invalid token / failed to decode` (SmolVLM/Qwen2B shape) | a description renders (RED: "Failed to evaluate chunks" error). Falsify: Qwen0.8B-shape → works | DEV-B9 · BROKEN | |
-| T056 | 🔴 P1 | ❌ | Drive a generation that errors (e.g. the B9 vision decode fail) | the loading spinner CLEARS + an error bubble renders (RED: session ends reason=error but UI spins forever) | DEV-B13 · BROKEN | |
+| T056 | 🔴 P1 | ~ `remoteFailureClearsLoading`(remote-error path) | Drive a generation that errors (e.g. the B9 vision decode fail) | the loading spinner CLEARS + an error bubble renders (RED: session ends reason=error but UI spins forever) | DEV-B13 · BROKEN | |
 | T057 | 🔴 P2 | ❌ | Attach an image → tap the thumbnail in the input box (pre-send) | a preview opens (RED: tapping does nothing) | DEV · no preview | |
 | T058 | 🔴 P2 | ❌ | Load gemma-4-E2B litert (reports supportsVision:true) then its gguf variant → check the attach/vision affordance | vision affordance consistent across engines (RED: litert hides vision, gguf shows it) | DEV-B20 · inconsistent | |
 | T059 | 🔴 P1 | ✅ `voiceNoteToolAudio` | LiteRT model + a tool enabled → record a voice note → send | the TRANSCRIPT reaches the model, raw audio is NOT sent (RED: litert tool-loop re-derives audioUris → "File does not exist") | Q17 · BROKEN | |
@@ -130,16 +131,16 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T067 | 🔴 P2 | ✅ `imageSettings` | Compare the Image-Size/Steps sliders in the chat modal vs Model Settings | same mins/fallbacks (RED: 256 vs 128 divergence — the root of Q1) | Q13 · BROKEN | |
 | T068 | ✅ P1 | ✅ `imageLightbox` | Generate an image → tap the rendered `generated-image` | fullscreen viewer opens with Save/Close; Close dismisses; Save → "Image Saved" + file on disk | DEV · WORKS | |
 | T069 | ✅ P1 | ✅ `imageIntentRouting` | With an image model active, send "what is the capital of France" (non-draw) | routes to TEXT (answer renders), image generator NOT called | DEV · WORKS | |
-| T070 | ✅ P2 | ❌ | First image gen on a model | the "~120s one-time" warmup notice matches actual time (or is accurate) (device: said 120s, was ~10s — cosmetic) | DEV-B21 · misleading | |
+| T070 | ✅ P2 | ✅ `imageGenerationFlow`(120s notice) | First image gen on a model | the "~120s one-time" warmup notice matches actual time (or is accurate) (device: said 120s, was ~10s — cosmetic) | DEV-B21 · misleading | |
 
 ## Area 9 — Prompt enhancement
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T071 | 🔴 P1 | ❌ (`promptEnhancement` = service-level, not B30) | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt) | DEV-B30 · BROKEN | |
+| T071 | 🔴 P1 | ~ `imageGenerationFlow`(strips `<think>`; but device saw enable_thinking=true leak) | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt) | DEV-B30 · BROKEN | |
 | T072 | 🔴 P1 | ❌ | Same — measure the enhancement generation length | enhancement is a fast plain completion, not a multi-thousand-token reasoning chain (RED: slow "million characters") | DEV-B30 · SLOW | |
 | T073 | 🔴 P2 | ❌ | During the enhancement step | it streams / shows progress (RED: static "Enhancing…", looks frozen) | DEV-B30b · no stream | |
-| T074 | ~ P2 | ~ `promptEnhancement` (service-level) | Enhancement on, thinking OFF → generate | prompt rewritten → image regenerated from it (mechanics work; existing test is service-level, not UI-gesture) | DEV · works | |
+| T074 | ~ P2 | ✅ `imageGenerationFlow`/`promptEnhancement` | Enhancement on, thinking OFF → generate | prompt rewritten → image regenerated from it (mechanics work; existing test is service-level, not UI-gesture) | DEV · works | |
 
 ## Area 10 — STT / voice input
 
@@ -174,10 +175,10 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T089 | ✅ P1 | ~ `toolEmbeddingStaleDim`/`indexDocumentRollback` | Create project (form) → attach text PDF to KB → new chat in project → ask a doc question (≥2B model); embed fake 384-dim | model calls `search_knowledge_base` → retrieved chunks → answer grounded in the doc; query dim 384 == stored 384 (existing tests cover embed-dim + index rollback, not the full UI round-trip yet) | DEV · WORKS | |
+| T089 | ✅ P1 | ✅ `searchKnowledgeBaseRoundtrip`(+`indexDocumentRollback`,`toolEmbeddingStaleDim`) | Create project (form) → attach text PDF to KB → new chat in project → ask a doc question (≥2B model); embed fake 384-dim | model calls `search_knowledge_base` → retrieved chunks → answer grounded in the doc; query dim 384 == stored 384 (existing tests cover embed-dim + index rollback, not the full UI round-trip yet) | DEV · WORKS | |
 | T090 | 🔴 P1 | ✅ `deleteProjectOrphansChats` | Create a project + file a chat (real ProjectChatsScreen) → open ProjectDetail → tap "Delete Project" → confirm | the chat is not left with a dangling projectId (RED: `deleteProject` doesn't cascade → orphaned) | Q9 · BROKEN | |
 | T091 | 🔴 P1 | ✅ `orphanChatInjectsKbTool` | Orphaned chat (project deleted) → send | `search_knowledge_base` is NOT force-injected for the gone project (RED: injected on truthy projectId, project existence unchecked) | Q9b · BROKEN | |
-| T092 | 🔴 P1 | ❌ | New chat → pick a project (before 1st message) → send | chat is filed under the project (RED: `pendingProjectId` in local state lost on send) | Q10 · BROKEN | |
+| T092 | 🔴 P1 | ✅ `newChatFilesPendingProject.guard` | New chat → pick a project (before 1st message) → send | chat is filed under the project (RED: `pendingProjectId` in local state lost on send) | Q10 · BROKEN | |
 | T093 | 🔴 P2 | ✅ `contextFullNewChatDropsProject` | Project chat → fill context → tap "New chat" in the alert | the continuation chat inherits the project (RED: unassigned) | Q11 · BROKEN | |
 | T094 | ℹ️ P2 | n/a | RAG with a 0.8B model | (KNOWN model limit) needs ≥2B to reliably call the KB tool; no test | DEV · model-limit | |
 
@@ -188,7 +189,7 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T095 | ✅ P2 | ❌ | Configure a server+model → complete onboarding (tap continue) | routes straight into the app, skips remaining onboarding | DEV · WORKS | |
 | T096 | ✅ P2 | ❌ | Trigger the support-share sheet → tap Share on X → return to app | the sheet is dismissed (doesn't re-nag) | DEV · WORKS | |
 | T097 | ✅ P2 | ❌ | Home with a remote model active → read the "Text" count | count reflects reality / "0 local" isn't a misleading desync (verify) | DEV · verify | |
-| T098 | 🔴 P2 | ❌ | Load a local model → send a NEW message (not a resend) | the generation uses the LOCAL model (`isRemote=false`) (RED-suspected: a resend went `isRemote=true` with gemma resident — verify local-select makes it active) | DEV-B18 · verify | |
+| T098 | 🔴 P2 | ✅ `unifiedModelSelection` | Load a local model → send a NEW message (not a resend) | the generation uses the LOCAL model (`isRemote=false`) (RED-suspected: a resend went `isRemote=true` with gemma resident — verify local-select makes it active) | DEV-B18 · verify | |
 
 ## Platform parity (iOS — run the native-divergent ones)
 Re-run on iOS (native differs): T003/T004/T008 (downloads/URLSession-kill), T015–T021 (backends — note litert is
