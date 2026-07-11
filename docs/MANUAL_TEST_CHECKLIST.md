@@ -21,49 +21,54 @@ Paste any table into Sheets/Excel (they're pipe-delimited).
 
 ## Area 1 — Model download & management
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+Columns: **Auto** = automated test (✅ file · ❌ none · ~ partial). **Steps** = gestures to imitate (same for a
+manual tester and the automated test). **UI validation** = what to assert on the live rendered screen.
+
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T001 | 🔴 P1 | Download several models at once (incl. a vision model w/ mmproj); open Download Manager; note the top-bar badge count vs the in-list running+queued count | Badge count == list count (no off-by-one) | DEV-B7 | BROKEN (off-by-one while mmproj in-flight) | |
-| T002 | 🔴 P2 | Download a text model; watch for a completion toast/sheet | Notification behavior is consistent across model types (or intentional) | DEV-B4-note | INCONSISTENT (image notified, timing-dependent) | |
-| T003 | 🔴 P1 | Download an **image** model (NPU/QNN `_min`); let it finish; without visiting the image tab, try to generate | "Downloaded" only after extraction; a "ready" model is actually usable | DEV-B4 | Premature "downloaded" (extract deferred) | |
-| T004 | 🔴 P1 | Image model download where **extraction fails**; see the failed card; force-quit + relaunch; open Download Manager | A retriable/removable failed card survives relaunch | D1/log-B7 | BROKEN (lost on relaunch) | |
-| T005 | 🔴 P1 | Start an STT (whisper) download; while it runs, **delete a different already-downloaded whisper model** | The in-flight download is NOT cancelled | V1 | BROKEN | |
-| T006 | 🔴 P1 | App-kill mid-whisper-download (leaves a truncated `ggml-*.bin`); relaunch; open Download Manager | Truncated file is NOT shown as a completed model (size floor / .part) | V2 | BROKEN | |
-| T007 | 🔴 P1 | STT download killed → relaunch → Download Manager | A retriable/removable entry is shown (not empty) | V3/D1 | BROKEN | |
-| T008 | 🔴 P2 | iOS: start a download → app-kill → relaunch | Interrupted download shows a failed/stranded entry, not vanished | D4 | NOT-RUN (iOS) | |
-| T009 | ✅ P1 | Download a text-based PDF (<5MB) into a project KB | Indexes cleanly (extract → chunks → embeddings) | DEV | WORKS | |
-| T010 | 🔴 P2 | Upload a **scanned/image** PDF to a KB | Clear message ("no text layer / scanned"), not a vague fail | DEV | 0-text, vague msg | |
-| T011 | 🔴 P2 | Upload a **>5MB** PDF to a KB | Clear "Maximum file size is 5MB" | DEV | WORKS (gated) | |
-| T012 | ✅ P2 | Download Manager shows the solid count of downloaded models | Count is accurate at steady state | DEV | WORKS (=14) | |
+| T001 | 🔴 P1 | ❌ | Mount Home → tap `browse-models-button` → tap download on a **vision** model (has mmproj); download fake emits `getActiveDownloads` with model + mmproj as 2 rows → tap download-manager icon → DownloadManagerScreen | top-bar badge number **==** count of download rows rendered in the list (RED: differ by 1 while mmproj in-flight). Falsify: non-vision model → equal | DEV-B7 · BROKEN | |
+| T002 | 🔴 P2 | ❌ | Mount Home (foreground) → drive download fake to emit `DownloadComplete` for a **text** model; repeat for an **image** model | completion sheet/toast renders **identically** for both types in the same foreground state (RED: image shows sheet, text doesn't). *Needs product decision on intended behavior* | DEV-B4 · INCONSISTENT | |
+| T003 | 🔴 P1 | ❌ | Start image-model download → fake emits native `DownloadComplete` but zip NOT extracted (no `_ready`, integrity files absent on memfs) → select model + image-mode send | model status ≠ "ready/usable" until extracted; on generate a visible "preparing/extracting" state (RED: "downloaded successfully" fires at native-complete, extract deferred) | DEV-B4 · PREMATURE | |
+| T004 | 🔴 P1 | ✅ `imageExtractLostRelaunch` | Seed image download that completes-then-extraction-fails (missing `unet.bin`) → `simulateRelaunch()` (fresh stores, drop native rows, keep disk) → mount DownloadManagerScreen | a retriable/removable **failed card** renders after relaunch (RED: none renders — store not persisted, dir/zip unlinked) | D1/log-B7 · BROKEN | |
+| T005 | 🔴 P1 | ✅ `whisperDeleteCancelsOther` | Start `base.en` whisper download (fake, in-flight) → mount DownloadManagerScreen → tap delete on downloaded `small.en` → confirm alert | `base.en`'s in-progress card **still present** after deleting small.en (RED: it vanishes — deleteModel cancels the single activeDownloadId) | V1 · BROKEN | |
+| T006 | 🔴 P1 | ✅ `whisperTruncatedListed` | Seed a truncated `ggml-<id>.bin` on disk (below size floor) → mount DownloadManagerScreen / model list | truncated file NOT listed as a completed/loadable model (RED: shown as downloaded — name-only filter, no size floor) | V2 · BROKEN | |
+| T007 | 🔴 P1 | ✅ `sttInterruptedRelaunch` | Seed STT download killed mid-flight → `simulateRelaunch()` → mount DownloadManagerScreen | a retriable/removable entry renders (RED: empty — store not persisted, no disk scan) | V3/D1 · BROKEN | |
+| T008 | 🔴 P2 | ✅ `iosInterruptedNoFailedEntry` | iOS-shaped: download running → drop the native URLSession row (app-kill) → `simulateRelaunch()` → mount DownloadManagerScreen | a stranded/failed entry renders (RED: vanishes — reconcile reads empty native-rebuilt store) | D4 · NOT-RUN device | |
+| T009 | ✅ P1 | ❌ | Mount → create project (form) → attach a text PDF to its KB (attach gesture); PDF fake returns real text; embed fake 384-dim | KB shows the doc indexed (chunk/embedding count); no error card | DEV · WORKS | |
+| T010 | 🔴 P2 | ❌ | Attach a **scanned/image** PDF (pdf fake returns textLength:0) to a KB | a clear "no text layer / scanned PDF" message renders (RED: vague "could not extract text") | DEV · 0-text vague | |
+| T011 | 🔴 P2 | ❌ | Attach a **>5MB** PDF to a KB (fake file size >5MB) | "Maximum file size is 5MB" renders, upload rejected (works — confirm still gated) | DEV · GATED | |
+| T012 | ✅ P2 | ❌ | Seed N downloaded models (boundary) → mount ModelsScreen | the solid downloaded-count badge renders == N | DEV · WORKS | |
 
 ## Area 2 — Model load & compute backends
 
-| ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T013 | ✅ P1 | Select a gguf model → send a prompt (lazy load on first send) | Loads and replies; default backend works | DEV | WORKS (CPU default) | |
-| T014 | ✅ P1 | Model Settings → Text → Advanced → Backend = **GPU/OpenCL** → reload → send | Loads on GPU (offloads real layers), correct reply | DEV | WORKS (24/36, 8s init) | |
-| T015 | 🔴 P1 | Backend = **NPU (Beta)/HTP** → reload → send a prompt | A correct answer (NOT gibberish/empty) | DEV-B22 | BROKEN (loads, gibberish) | |
-| T016 | 🔴 P2 | GPU backend, first load | GPU init doesn't 8s-timeout then partial-offload (or is handled gracefully) | DEV-B24 | timeout→retry→24/36 | |
-| T017 | ✅ P1 | Select a **litert** model → send | Loads on GPU, correct reply | DEV | WORKS (GPU) | |
-| T018 | 🔴 P1 | litert model → Backend = **CPU** → reload → send | Works, OR the CPU option isn't offered for a GPU-compiled model | DEV-B23 | BROKEN (Status 13) | |
-| T019 | 🔴 P2 | litert + tools + a tool prompt (long system prompt) | Tool call still fires (context clamp 880 doesn't drop it) | DEV-B25 | dropped tools once | |
-| T020 | ✅ P1 | litert model select | Eager-loads on select (warming) — acceptable UX | DEV | WORKS | |
-| T021 | 🔴 P2 | Load a vision gguf (gemma-4-E2B + mmproj); check speed/backend | Reasonable estimate; offloads to GPU (not forced CPU by inflated estimate) | DEV-B3 | CPU-fallback (est 5854MB) | |
+| T013 | ✅ P1 | ✅ `firstMessage`/`modelLifecycle` | Model downloaded (boundary) → mount Home → tap `browse-models-button` → tap `model-item` (select) → tap `new-chat-button` → type + send | reply text renders in an assistant bubble (lazy-load on first send works) | DEV · WORKS | |
+| T014 | ✅ P1 | ❌ | Mount → Model Settings → Text → Advanced → tap Backend → **GPU/OpenCL** → reload → send; llama-load fake reports OpenCL offload | reply renders; (invariant) load path shows GPU layers offloaded, not 0 | DEV · WORKS (24/36) | |
+| T015 | 🔴 P1 | ❌ | Same, Backend = **NPU (Beta)/HTP** → reload → send; llama fake: HTP loads then emits gibberish tokens (real B22 shape) | assistant reply is a **correct answer**, not gibberish/empty (RED: NPU loads but generation is garbage) | DEV-B22 · BROKEN | |
+| T016 | 🔴 P2 | ❌ | GPU backend, first load; llama-load fake models 8s init-timeout → retry → 24/36 | load succeeds without a silent 8s hang / partial-offload surprise (invariant on the load path; labeled) | DEV-B24 · timeout→24/36 | |
+| T017 | ✅ P1 | ✅ `firstMessage` (litert) | litert model downloaded → select via Home picker → new chat → send | reply renders (litert GPU works) | DEV · WORKS | |
+| T018 | 🔴 P1 | ❌ | Select litert model → Advanced → Backend = **CPU** → reload → send; litert fake throws `Status 13 Failed to invoke the compiled model` on CPU | an answer renders, OR the CPU option isn't offered for a GPU-compiled model (RED: "Failed to invoke the compiled model" error) | DEV-B23 · BROKEN | |
+| T019 | 🔴 P2 | ❌ | litert + tools enabled + a tool prompt (long tool-augmented system prompt); litert fake clamps ctx to 880 | a tool-result bubble renders (RED: tool call dropped when the clamp truncates the tool prompt) | DEV-B25 · dropped once | |
+| T020 | ✅ P1 | ❌ | Select a litert model in the picker (no send) | model shows loading/loaded on select (eager warm — acceptable) | DEV · WORKS | |
+| T021 | 🔴 P2 | ❌ | Load a vision gguf (gemma-4-E2B + mmproj) via select+send | (invariant) estimate not mmproj-inflated → offloads to GPU, not forced 0/36 CPU (RED: est 5854MB → CPU fallback → slow) | DEV-B3 · CPU-fallback | |
 
 ## Area 3 — Memory / residency / budget
 
 | ID | Type/Sev | Steps (gestures) | Expected | Ref | Device | Result |
 |---|---|---|---|---|---|---|
-| T022 | 🔴 P0 | Download an STT model; do NOT transcribe; check RAM/residency; load a chat model | Whisper is NOT auto-resident; loading chat model doesn't fight a phantom 1.5GB | DEV-B1 | BROKEN (auto-loads, leaks) | |
-| T023 | 🔴 P0 | With whisper stuck resident, tap **Eject All** | ALL heavy models unload (incl. whisper) | DEV-B1 | BROKEN (ejectAll misses whisper) | |
-| T024 | 🔴 P0 | Load a model larger than physically-free RAM (soft budget says ok) | Refused with graceful card, OR loads without thrash — not silent over-commit | DEV-B2/M2/M3 | BROKEN (budget>physical) | |
-| T025 | ✅ P1 | Generate an image (image model resident) → go to chat → send text | Text load EVICTS the image model (mutual exclusion) | M11/DEV | WORKS (evict=[image]) | |
-| T026 | 🔴 P1 | Text model resident → start image-gen | Text & image do NOT co-reside (swap) | M1/M16 | verify (worked in one flow) | |
-| T027 | 🔴 P1 | Image model → pre-load "Safe to load" advisory, then generate | Advisory & the load gate agree (no "safe" then "not enough memory") | Q14 | BROKEN (est multipliers differ) | |
-| T028 | 🔴 P1 | Load-Anyway a too-big dirty model on low free RAM | Survival floor blocks a guaranteed OOM (checks real free RAM) | M3/M4 | verify | |
-| T029 | 🔴 P2 | Load-Anyway a small 2GB dirty model on 3GB free (iOS 12GB) | NOT over-refused | M5 | NOT-RUN (iOS) | |
-| T030 | 🔴 P1 | TTS loaded → delete the TTS model in DM → later load a text/image model | No phantom TTS pressure causing a wrong refusal | V4 | verify | |
-| T031 | 🔴 P0 | Very long / runaway conversation context, keep generating | App caps/trims context; doesn't thermal-throttle to freeze/crash | DEV-B31 | CRASHED (pushed to limit) | |
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T022 | 🔴 P0 | ❌ | Download an STT model (download fake `complete` event) → do NOT transcribe → load a chat model via picker+send | whisper NOT auto-resident; chat model loads without a phantom 1.5GB resident (invariant: assert `getResidents()` excludes whisper) (RED: whisper auto-loads on download) | DEV-B1 · BROKEN | |
+| T023 | 🔴 P0 | ❌ | With whisper resident, mount Home → tap **Eject All** → confirm | after eject, `getResidents()` == [] incl. whisper (RED: ejectAll returns count=1, whisper survives) | DEV-B1 · BROKEN | |
+| T024 | 🔴 P0 | ~ `failedUnloadOverCommits`/`overrideFloor` | Seed RAM so soft budget≥size but `os_procAvail`<size → drive a load via the real `makeRoomFor` gesture path | load refused (graceful card) OR doesn't over-commit (invariant: `fits` gates on physical, not soft budget) (RED: fits=true while size>procAvail) | DEV-B2/M2/M3 · BROKEN | |
+| T025 | ✅ P1 | ✅ `residencySwap`/`resendAfterImageGen` | Generate an image (image resident) → go to chat → send text | (invariant) text load evicts image (`evicted` contains 'image'); text-model reply renders | M11/DEV · WORKS | |
+| T026 | 🔴 P1 | ~ `smartBudgeting` | Load text model → start image-gen | text & image do NOT co-reside (`getResidents()` has one heavy) (verify — worked in one device flow) | M1/M16 · verify | |
+| T027 | 🔴 P1 | ✅ `imageEstimatorDivergence` | Image model: the pre-load advisory (`checkMemoryForModel` 1.5/1.8×) vs the gate (`estimateImageModelRam` 2.5×) | both estimators agree (invariant) (RED: ~40% divergence → "safe to load" then a hard "not enough memory" card) | Q14 · BROKEN | |
+| T028 | 🔴 P1 | ✅ `overrideFloor` | Load-Anyway a too-big dirty model at low real free RAM (RAM fake) | survival floor BLOCKS the guaranteed OOM (invariant: post-load free ≥ floor uses REAL free, not credited ceiling) | M3/M4 · verify | |
+| T029 | 🔴 P2 | ❌ | iOS 12GB, 3.1GB free → Load-Anyway a 2GB dirty litert model (RAM fake, platform ios) | NOT over-refused (loads) (RED: flat 1200 floor over-refuses a safe load) | M5 · NOT-RUN device | |
+| T030 | 🔴 P1 | ✅ `ttsDeleteResidencyStale` | Load TTS (registers key:'tts') → delete TTS in DM (gesture) → load a text/image model | no phantom TTS pressure (invariant: `release('tts')` fired on delete → resident set excludes tts) (RED: 320MB phantom → wrong refusal) | V4 · BROKEN | |
+| T031 | 🔴 P0 | ❌ | Drive a very long/runaway context, keep sending | app caps/trims context (invariant/guard); doesn't grind to freeze (RED on device: 30–47s/token thermal-throttle → crash) | DEV-B31 · CRASHED | |
 
 ## Area 4 — Text generation (thinking / streaming / stop / queue)
 
