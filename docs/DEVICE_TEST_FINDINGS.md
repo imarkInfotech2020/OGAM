@@ -362,3 +362,13 @@ the image prompt). The "degrades subsequent turns" is just the NORMAL consequenc
 history — NOT a separate context-management bug. Fix = enhancement call forces thinking OFF (or strips
 reasoning) so the enhanced prompt is a clean image description. (Whether the enhancement output should be a
 persistent chat message at all is a separate design choice, not asserted as a bug.)
+
+### B32 — Voice-mode message layout is GLITCHED (functionality works)
+Screenshot evidence: docs/wire-captures/B32-voicemode-ui-glitch-20260711.png (voice+calculator turn).
+FUNCTIONALITY CORRECT: "500 * 321 = 160500 (193ms)" — calculator tool fired (after explicit nudge; the 0.8B
+model wouldn't invoke it unprompted — model-capability, not app bug) and computed the right answer.
+UI GLITCH: the voice-mode message layout renders broken — fragmented/misaligned bubbles, empty/malformed
+cards, a stray floating "#" character, scattered empty bubbles; the reasoning bubble + voice waveform + result
+card don't compose into a coherent layout. Related to B27 (voice thinking-block full-width). The mic DID show
+as a red Stop button here (so B29's stop-state does appear in some states — scope B29 to when it doesn't).
+User: "for sure this is a bug… UI glitch… functionality works". (voice mode, Qwen0.8B GGUF)
