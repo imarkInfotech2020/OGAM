@@ -42,6 +42,18 @@ Inline-thinking delimiter is **model-specific**: Qwen3.5 = `<think>...</think>`;
   (OpenCL KV cache on Adreno). litert GPU: coherent output. NPU IMAGE models present (`*_npu_min`) but text
   NPU broken.
 
+### STT — realtime (VoiceButton hold-to-talk) is BROKEN (session 3, Qwen0.8B GPU, medium whisper)
+- **B26 — realtime STT captures NO data → no transcript.** Spoke a clear "Hello, how are you?"; result: blank
+  screen, nothing in the input box, no message. Trace: `transcribeRealtime error: State: -100` (race, B12) on
+  first tries, then when it starts → `Event: {isCapturing:false, hasData:false}` (captured nothing) → no
+  `[WIRE-STT]`, no `[WIRE-RECORDER]`. Took 3 attempts to even start (leftover recording collisions:
+  "Already recording, stopping first"). **Needs a clean force-restart test to confirm fundamental vs
+  state-pollution.** (part22, part23)
+- Ties to B11 (no-stop leak — a realtime transcription stayed active and collided with new presses) and
+  B12 (State:-100 race on double-trigger).
+- **Two distinct broken STT flows now:** voice-note-attach = records .wav but sends AUDIO not transcript
+  (Q20/B10); realtime hold-to-talk = captures nothing (B26). USER SPEC: always transcript, never audio.
+
 ---
 
 ## SESSION 2 (afternoon) — additional findings, corrections, and ground truth
