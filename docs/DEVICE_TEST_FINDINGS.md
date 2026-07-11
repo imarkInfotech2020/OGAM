@@ -294,3 +294,21 @@ queue, stop); gemma-4-E2B gguf (load+caps; thinking+tools turn pending decode); 
 - **RAG** — project + PDF in KB + ask (`[WIRE-EMBED]` + `[WIRE-PDF]`)
 - **Remote:** LM Studio (gemma-4-E2B) + Ollama (minimax-m3:cloud), 2 samples each (thinking/tools on/off)
 - **iOS** — repeat the native-divergent seams (image Core ML, STT, one gguf turn) for platform parity
+
+### VOICE MODE — session 3 (working round-trip + UI bugs)
+- **WORKS end-to-end:** STT (`transcribeFile` → `[WIRE-STT]` {language, segments[{t0,t1,text}]}) → response →
+  kokoro TTS (`[WIRE-TTS]` 24000Hz). And the "draw a dog" journey: STT → ROUTE-SM dispatch→IMAGE → image
+  generated → TTS confirmation. 4-subsystem happy path works (the Voice.ts-warned misroute does NOT happen).
+- **Prompt enhancement WORKS but is slow + opaque:** engaging it swaps image→text model, generates the
+  enhanced prompt (generateStandalone, ~9s to first token), then swaps back to image. Functional but the UX
+  gives no sign it's a multi-step slow round-trip. (Enhance toggle confirmed working: first gen had
+  enhanceImagePrompts:false, then on.)
+- **B27 (UI):** in voice mode the thinking block takes the WHOLE screen width, doesn't match the (narrower)
+  voice-note bubble width.
+- **B29 (UI/SAFETY):** during an in-progress voice-mode generation, the mic button does NOT transform into a
+  STOP button. Two problems: (a) no way to stop the generation; (b) it still LOOKS like a mic, so a user taps
+  it to "record again" → starts a COLLIDING recording → triggers the exact double-record race (B12 State:-100 /
+  B26 tangle). The UI bug is a direct on-ramp to the STT collision bugs. User: "which is fucked up."
+- **Candidate — thinking not shown in voice mode:** user noted twice "thinking is on but no thinking blocks."
+  Ambiguous (image-gen turns don't show thinking); needs a clear reasoning prompt in voice mode to confirm
+  whether voice mode suppresses the thinking-block render. TO VERIFY.
