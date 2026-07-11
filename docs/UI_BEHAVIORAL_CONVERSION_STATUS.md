@@ -74,7 +74,26 @@ Per the "no store setup for state" bar (only download/RAM/native may be pre-plac
   (unnecessary — the block renders from reasoningContent); pure-default `updateSettings` no-ops
   (autoDetect:'pattern', imageMode:'auto', enhance:false) removed across the suite.
 
-### Remaining setup shortcuts (next)
+### Setup-fidelity round 2 — DONE
+- **Conversation via the real New Chat gesture**: setupChatScreen no longer `createConversation`s — after the
+  model-select tap it taps "New Chat" on Home and mounts a NEW chat (the first send creates the conversation).
+- **imageBackends / smartBudgeting / multimodalVision** converted from direct service calls to real gestures:
+  image model downloaded (real per-backend files on disk = boundary) + activated by the toggle; generated via
+  force-mode + send; multimodal via the full attach-photo gesture (attach → Photo Library → faked picker).
+- **Regression fixed**: the global afterEach cleanup was requiring RTL fresh after resetModules and breaking
+  non-render tests — now scoped to tests that actually rendered (requireRTL stashes its own cleanup).
+
+### Still service/store-driven (honest remainder)
+- **promptEnhancement** — the "Enhance Image Prompts" toggle lives in a conditionally-rendered advanced
+  section that doesn't mount cleanly standalone; the litert enhancement path is also uncertain. Left at the
+  service+meta layer (real service, real native-prompt assertion) with the enhance-setting seeded. Deferred.
+- **modelLifecycle / residencySwap** — residency/lifecycle INVARIANTS (load→resident→unload→swap). Model
+  select is now a gesture, but unload/delete/swap need the eject/delete buttons (some modal-gated). Partly
+  service-layer by nature (the invariant), partly gesturable.
+- **persistence** — project + conversation creation should be form + New-Chat gestures, then relaunch.
+- **convoManagement** — delete-convo is swipe-blocked in jest; move-to-project + edit are gesturable.
+
+### Older remaining notes
 - **Image-model activation**: a few tests still `setState({ activeImageModelId })` (`placeImageModel` /
   imageIntentRouting's `withImageModel`). The image model PRESENCE is a boundary (downloaded), but ACTIVATING
   it should be an image-picker tap (same pattern as the Home text picker). Rework analogous to the text model.
