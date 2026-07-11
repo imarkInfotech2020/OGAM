@@ -183,12 +183,12 @@ manual tester and the automated test). **UI validation** = what to assert on the
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T075 | 🔴 P0 | ❌ | **Chat mode** → tap the mic (VoiceButton) → speak → release; whisper realtime fake | a transcript lands in the input / a message is sent (RED: `hasData:false` → nothing on screen). Falsify: the working file-transcribe path yields text | DEV-B26 · BROKEN | |
+| T075 | 🔴 P0 | ✅ `chatModeSttArchitecture.rendered.redflow` (shared w/ T080) | **Chat mode** → tap the mic (VoiceButton) → speak → release; whisper realtime fake | a transcript lands in the input / a message is sent (RED: `hasData:false` → nothing on screen). Falsify: the working file-transcribe path yields text | DEV-B26 · BROKEN | |
 | T076 | 🔴 P1 | ✅ `voiceNoteChatModeEmptyTurn` | **Chat mode**, direct-audio model → record a voice note → send | the TRANSCRIPT reaches the model, never raw audio (RED: `onAudioAttachment` sends audio, content='') | Q20/DEV-B10 · BROKEN | |
 | T077 | 🔴 P1 | ❌ | Start recording (mic) → wait / navigate away | recording auto-stops; whisper doesn't stay resident (RED: 7+ min capture, whisper resident 1.5GB) | DEV-B11 · BROKEN | |
 | T078 | 🔴 P2 | ❌ | Double-tap the mic quickly (start-while-recording) | no `State:-100` race / collision; clean single recording (RED: "Already recording, stopping first" → race error) | DEV-B12 · BROKEN | |
 | T079 | ✅ P1 | ✅ `transcription` | **Voice mode** → record a note (fake `transcribeFile` returns real `{segments:[{text}]}`) | the correct transcript renders (real whisper segment shape) | DEV · WORKS | |
-| T080 | 🔴 P0 | ❌ | ARCHITECTURE seam: both chat-mode and voice-mode STT | both routes go through ONE transcribe pipeline (record→file→transcribe) (RED: 3 divergent mechanisms — the root of B26/Q20) | DEV-B28 · BROKEN | |
+| T080 | 🔴 P0 | ✅ `chatModeSttArchitecture.rendered.redflow` | ARCHITECTURE seam: both chat-mode and voice-mode STT | both routes go through ONE transcribe pipeline (record→file→transcribe) (RED: 3 divergent mechanisms — the root of B26/Q20) | DEV-B28 · BROKEN | |
 
 ## Area 11 — TTS
 
