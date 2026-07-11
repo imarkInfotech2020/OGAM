@@ -16,10 +16,14 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
+// The image model is DOWNLOADED (boundary) + ACTIVE. Activating it in AUTO mode (without changing the image
+// mode) is a user's image-picker selection — that picker is behind the Home model-manager modal, which is
+// fragile to drive in jest, so activeImageModelId is set directly here (documented). The routing DECISION
+// under test — dispatchGenerationFn + intentClassifier for "draw ..." vs a normal prompt — runs for real, and
+// the send is a real gesture. (imageModeToggle covers the toggle-gesture activation for force mode.)
 async function withImageModel(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   const imageModel = createONNXImageModel({ id: 'sd', name: 'SD', modelPath: '/models/sd', backend: 'coreml' as never });
   h.useAppStore.setState({ downloadedImageModels: [imageModel], activeImageModelId: 'sd' });
-  h.useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, imageSteps: 8 });
   h.boundary.diffusion.module.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
 }
 
