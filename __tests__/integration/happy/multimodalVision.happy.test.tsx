@@ -1,46 +1,36 @@
 /**
- * HAPPY-PATH (UI integration) — vision: an image attached to a message on a vision-capable model is
- * included at the native boundary, and the model's answer about it renders.
+ * HAPPY-PATH (UI, BEHAVIORAL) — vision: the user attaches a photo and sends; a vision-capable model receives
+ * the image at the native boundary and its answer about it renders.
  *
- * Real generationService + generationToolLoop + liteRTService + ChatMessage; only the native LiteRT leaf is
- * faked (it records the media it was handed). Asserts the attached image URI reached the native model AND
- * the answer renders. Green complement to the B5/B9 media-exclusion guards (which lock audio OUT).
+ * Real ChatScreen + real useAttachments + generation + liteRTService; only native leaves faked (the image
+ * picker returns a mock image; the LiteRT native records the media it was handed). The model is selected via
+ * the real Home picker and is vision-capable; the photo is attached via the real attach-photo gesture.
  */
-import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
-import { createDownloadedModel, createMessage } from '../../utils/factories';
-import type { MediaAttachment, Message } from '../../../src/types';
+import { setupChatScreen } from '../../harness/chatHarness';
+import type { Message } from '../../../src/types';
 
-describe('happy — a vision model receives an attached image and answers about it', () => {
-  it('includes the image at the native boundary and renders the answer', async () => {
-    const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
-    const React = require('react');
-    const { render } = requireRTL();
-    const { liteRTService } = require('../../../src/services/litert');
-    const { generationService } = require('../../../src/services/generationService');
-    const { useAppStore, useChatStore } = require('../../../src/stores');
-    const { ChatMessage } = require('../../../src/components/ChatMessage');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useRoute: () => require('../../harness/chatHarness').routeHolder,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
+}));
 
-    await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { supportsVision: true, maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert', liteRTVision: true })], activeModelId: 'lrt' });
+describe('happy — attach a photo and a vision model answers about it (heavy entry point)', () => {
+  it('includes the attached image at the native boundary and renders the answer', async () => {
+    const h = await setupChatScreen({ engine: 'litert', vision: true });
+    h.render();
 
-    const image: MediaAttachment = { id: 'i1', type: 'image', uri: '/img/cat.jpg' } as MediaAttachment;
-    const conversationId = useChatStore.getState().createConversation('lrt');
-    useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is in this image', attachments: [image] });
-
-    boundary.litert.scriptTurn({ content: 'I see a tabby cat sitting on a windowsill.' });
-    await generationService.generateWithTools(conversationId, useChatStore.getState().getConversationMessages(conversationId), { enabledToolIds: [] });
-
-    // The attached image URI reached the native model.
-    const mediaArgs = [...boundary.litert.calls.sendMessageWithMedia, ...boundary.litert.calls.sendMessageWithImages].flat(2);
-    expect(JSON.stringify(mediaArgs)).toMatch(/\/img\/cat\.jpg/);
+    // Real attach-photo gesture (the faked native picker returns an image), then type + send.
+    await h.attachImageViaUI();
+    await h.send('what is in this image', { content: 'I see a tabby cat sitting on a windowsill.' });
 
     // The model's answer about the image renders.
-    const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
-    const assistant = [...messages].reverse().find((m) => m.role === 'assistant');
-    const view = render(React.createElement(ChatMessage, { message: assistant as Message }));
-    expect(view.queryByText(/tabby cat sitting on a windowsill/)).not.toBeNull();
-    void createMessage;
+    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/tabby cat sitting on a windowsill/)).not.toBeNull(); });
+
+    // The attached image reached the native model (sendMessageWithImages / sendMessageWithMedia).
+    const mediaArgs = [...h.boundary.litert.calls.sendMessageWithMedia, ...h.boundary.litert.calls.sendMessageWithImages].flat(2);
+    expect(JSON.stringify(mediaArgs)).toMatch(/mock\/image\.jpg/);
+    void ({} as Message);
   });
 });

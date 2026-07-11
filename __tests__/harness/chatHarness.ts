@@ -31,6 +31,8 @@ export interface ChatHarnessOptions {
   /** 'ios' surfaces the Metal accelerator path for llama; default 'android'. */
   platform?: 'ios' | 'android';
   ram?: RamProfile;
+  /** Make the (LiteRT) model vision-capable so the attach-photo gesture is allowed. */
+  vision?: boolean;
 }
 
 const LLAMA_PATH = '/models/small.gguf';
@@ -66,7 +68,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const fileName = opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm';
   const modelPath = `${docs}/models/${fileName}`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: opts.engine, filePath: modelPath, fileName });
+  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
 
@@ -180,6 +182,22 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       const input = await rtl.waitFor(() => view.getByTestId('chat-input'));
       rtl.fireEvent.changeText(input, text);
       rtl.fireEvent.press(view.getByTestId('send-button'));
+    },
+
+    /**
+     * REAL attach-photo gesture: open the attach popover, tap "Photo" — the (faked) native image picker
+     * returns an image, which the real useAttachments hook adds as a pending attachment. Requires a
+     * vision-capable model (setupChatScreen({vision:true})), else the app alerts instead of attaching.
+     */
+    async attachImageViaUI() {
+      const view = this.view!;
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-button')));
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-photo')));
+      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" (a real gesture),
+      // which (after a short delay) launches the faked picker and adds the attachment.
+      rtl.fireEvent.press(await rtl.waitFor(() => view.getByText('Photo Library')));
+      await this.settle(400); // the handler defers pickFromLibrary via setTimeout(300)
+      await rtl.waitFor(() => { expect(view.queryByTestId('attachments-container')).not.toBeNull(); });
     },
 
     /**
