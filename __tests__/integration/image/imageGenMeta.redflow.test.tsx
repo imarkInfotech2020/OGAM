@@ -7,13 +7,16 @@
  * then render the REAL ChatMessage the service wrote into the REAL chatStore and read the generation
  * details the user sees.
  *
- * Q1 — user set Image Size 128 → the details line shows "256x256" (imageGenerationService.ts:456 floors
- *      to SWEET_SPOT_SIZE) — the size shown is never used.
- * Q7 — imageGuidanceScale is 0/stale → the details line shows "cfg 2.0" (imageGenerationService.ts:452
- *      `|| 2.0` fallback) while every slider/default is 7.5.
+ * Q1 (GUARD, green) — 128 is NOT a supported image size; the pipeline correctly floors to the sweet spot
+ *      (256), and the details line shows "256x256". Locks that intended behavior. (Confirmed with the
+ *      product owner: stop at 256.)
+ * Q7 (RED) — imageGuidanceScale is 0/stale → the details line shows "cfg 2.0" (imageGenerationService.ts:452
+ *      `|| 2.0` fallback) while the slider default is 7.5 — the shown default and the used default DIVERGE.
  *
- * The model is pre-loaded on the fake so _ensureImageModelLoaded's already-loaded fast-path is taken
- * (no native model load, no filesystem integrity scan needed).
+ * The model is pre-loaded on the fake so _ensureImageModelLoaded's already-loaded fast-path is taken.
+ * (NOTE: entry is at the imageGenerationService layer + real ChatMessage meta render. A full ChatScreen
+ * force-mode + send gesture entry is deferred — that flow is fragile in jest via the quick-settings popover;
+ * see UI_BEHAVIORAL_CONVERSION_STATUS.md.)
  */
 import { installNativeBoundary, GB, requireRTL } from '../../harness/nativeBoundary';
 import { createONNXImageModel } from '../../utils/factories';
@@ -48,12 +51,11 @@ async function generateWithSettings(settings: Record<string, unknown>) {
 }
 
 describe('image gen meta — UI red-flow (the size/guidance you set is what runs)', () => {
-  it('Q1: generating at Image Size 128 shows the size actually used as 128x128', async () => {
+  it('Q1 (guard): an unsupported 128 size correctly floors to 256x256', async () => {
     const view = await generateWithSettings({ imageWidth: 128, imageHeight: 128 });
-    // Proves the details line rendered (not a missing-element false red): today it shows 256x256...
+    // 128 is not supported; the pipeline floors to the 256 sweet spot and the details show it. Correct.
     expect(view.queryByText(/256x256/)).not.toBeNull();
-    // ...but the user set 128. Correct: the size used matches the setting → RED today.
-    expect(view.queryByText(/128x128/)).not.toBeNull();
+    expect(view.queryByText(/128x128/)).toBeNull();
   });
 
   it('Q7: with guidance 0/stale the generation uses the 7.5 default, not 2.0', async () => {
