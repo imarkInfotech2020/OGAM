@@ -372,3 +372,11 @@ cards, a stray floating "#" character, scattered empty bubbles; the reasoning bu
 card don't compose into a coherent layout. Related to B27 (voice thinking-block full-width). The mic DID show
 as a red Stop button here (so B29's stop-state does appear in some states — scope B29 to when it doesn't).
 User: "for sure this is a bug… UI glitch… functionality works". (voice mode, Qwen0.8B GGUF)
+
+### B32 — refined (2nd screenshot, clearer): the artifact is a STRAY EMPTY "#" BUBBLE
+Second screenshot (B32-voicemode-ui-glitch-2-20260711.png) shows the full flow working correctly (Thought
+process → calculator 500*321=160500 (193ms) → "500 multiplied by 321 equals 160,500. That's the correct
+answer" → Tools sent in respect (6)). The GLITCH is specifically a small EMPTY message card containing just a
+stray "#" character, rendered mid-conversation where no bubble should be. So B32 = an empty/malformed bubble
+(likely an empty assistant/tool placeholder or a markdown "#" that rendered as an orphan bubble). Functionality
+100% correct; purely a stray-empty-bubble render bug. (voice mode)
