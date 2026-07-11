@@ -22,7 +22,15 @@ adb exec-out run-as ai.offgridmobile.dev cat files/offgrid-debug.log > /tmp/debu
 3. **Then iOS** — only the native-divergent seams (image Core ML + meta, downloads+kill, memory,
    sanity gguf/STT/vision). NOT the full text/remote/format matrix (shared JS — Android covers it).
 
-## ▶ START HERE (resuming — Android)
+## ✅ ANDROID CAPTURE COMPLETE (2026-07-11)
+All subsystems captured + validated: text (CPU/GPU/NPU backends), remote (OGAD/LM Studio/Ollama), vision,
+image gen, voice mode (STT/TTS/draw+calc journeys), budget/residency, STT (all flows), TTS, prompt
+enhancement, RAG (index + retrieval, validated vs the real PDF), image lightbox. ~33 findings (B1–B33) +
+corrections, all in DEVICE_TEST_FINDINGS.md. 39 snapshot sets in docs/wire-captures/.
+**NEXT PHASE:** write the tests (adversarial/red for bugs grounded in the real wire captures; happy for what
+worked), then iOS (native-divergent seams only — image Core ML, downloads+kill, memory, sanity gguf/STT/vision).
+
+## ▶ START HERE (resuming — Android) — [DONE, kept for reference]
 1. **Force-restart the app first** (clears any leaked whisper model → everything fast).
 2. Work down the "TO DO" list below. Ping to pull after each subsystem (or run several — log is lossless).
 3. Per-model recipe when relevant: **(a)** thinking OFF + tools OFF → `What is 47*89 and what is 30% of 400?`
