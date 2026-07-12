@@ -78,4 +78,10 @@ Format:
   `searchKnowledgeBaseRoundtrip`) is service-level with NO mounted screen. · Trace: n/a. · Hypothesis: needs a
   RAG UI harness (mount the project/KB screen + a real attach-document gesture, or a chat harness that files a
   chat under a project with a seeded-but-embeddable doc). The embedding residency registration itself is real
-  and service-covered. · Status: OPEN — needs a RAG UI harness. Not a device mismatch; a test-infra gap.
+  and service-covered. · Status: NARROWED (2026-07-12) — the mounted-KB doc-attach harness now EXISTS
+  (`kbFileSizeGuard`/`kbScannedPdfMessage` mount the real KnowledgeBaseScreen + real attach gesture over
+  memfs/picker/native-PDF/Alert). The remaining T118-specific gap is: a SUCCESSFUL index needs real SQLite
+  (`installRealSqlite`) COMPOSED with the mounted screen's `installNativeBoundary` (both call jest.resetModules
+  today, so they don't compose — needs one combined setup) PLUS real `embeddingService.load` (not the
+  service-test spy) so the embed model registers residency, then assert `resident-item-embedding` in the model
+  selector In Memory section. Focused follow-up, not a device mismatch.
