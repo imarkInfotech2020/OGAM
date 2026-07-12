@@ -147,7 +147,27 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
               setTimeout(() => setDirectError(null), 3000);
             }
           } else {
-            onAudioAttachmentRef.current?.({ uri: path, format, durationSeconds });
+            // CHAT mode with a direct-audio model: still transcribe (spec: in ANY mode we
+            // send a TRANSCRIPT, never raw audio to the model). Bypassing this dispatched
+            // the note with empty content, so the model got a contentless turn (Q20).
+            // Mirror the audio-mode path: transcribe, gate, attach WITH the transcript so
+            // sendVoiceNote sends the text (onAudioAttachment reads audio.transcription).
+            let whisperReady = false;
+            let transcript = '';
+            if (downloadedModelId) {
+              setIsTranscribingFile(true);
+              try {
+                whisperReady = await ensureWhisper();
+                if (whisperReady) transcript = await whisperService.transcribeFile(path);
+              } catch (err) { logger.error('[Voice] chat-mode voice-note transcription error:', err); }
+              setIsTranscribingFile(false);
+            }
+            const outcome = resolveTranscription(whisperReady, transcript);
+            onAudioAttachmentRef.current?.(
+              outcome.dispatch
+                ? { uri: path, format, durationSeconds, transcription: outcome.text }
+                : { uri: path, format, durationSeconds },
+            );
           }
         }
         recordingConversationIdRef.current = null;
