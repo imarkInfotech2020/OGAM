@@ -14,8 +14,11 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
 - **Result:** you fill ✅/❌ + notes each release.
 
-Coverage (verified against the actual test `it()` titles, not names): **110 cases · 52 automated (✅) ·
-15 partial/service-level (~) · 33 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
+Coverage (verified against the actual test `it()` titles, not names): **120 cases · 56 automated (✅) ·
+15 partial/service-level (~) · 39 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
+The 2026-07-12 residency pass added T111–T120 (Area 3 additions): residency/co-residency/auto-eviction/budget
+across modalities × text/voice, validated through the model selector **In Memory** UI. T111–T114 automated;
+T115–T120 are the to-write backlog.
 UI-integration reds written this pass (all `__tests__/integration/`, red-for-the-right-reason, device-grounded):
 T001 (`downloadCountDivergence`), T022 (`whisperResidentOnDownload`), T023 (`ejectAllLeavesWhisper`),
 T075+T080 (`chatModeSttArchitecture` — chat-mode STT never transcribes; full ChatScreen + real mic gesture).
@@ -107,6 +110,27 @@ manual tester and the automated test). **UI validation** = what to assert on the
 | T029 | 🔴 P2 | ✅ `overrideFloor`(M5) | iOS 12GB, 3.1GB free → Load-Anyway a 2GB dirty litert model (RAM fake, platform ios) | NOT over-refused (loads) (RED: flat 1200 floor over-refuses a safe load) | M5 · NOT-RUN device | |
 | T030 | 🔴 P1 | ✅ `ttsDeleteResidencyStale` | Load TTS (registers key:'tts') → delete TTS in DM (gesture) → load a text/image model | no phantom TTS pressure (invariant: `release('tts')` fired on delete → resident set excludes tts) (RED: 320MB phantom → wrong refusal) | V4 · BROKEN | |
 | T031 | ℹ️ P0 | n/a (device-stress observation) | Drive a very long/runaway context, keep sending | thermal-throttle → 30–47s/token → crash under heavy/polluted context. **IGNORED per user: a device-stress data point (user was intentionally pushing past limits), not a fixable/testable app bug — no app-side guard to assert.** | DEV-B31 · observation | |
+
+### Area 3 additions (2026-07-12) — residency / co-residency / auto-eviction / budget across modalities & text/voice
+
+Prior Area 3 rows are text/image + eject-centric. These add the missing modality × scenario cells, and — per the
+new pattern — **validate residency through the model selector's real "In Memory" section** (`in-memory-section`,
+`resident-item-${type}`, `resident-${type}-ram`, `eject-resident-${type}`), the feature that removed the residency
+black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LOGS=1 npx jest <file>` (mirrors all
+`[MODEL-SM]`/`[MEM-SM]`/`[COMPOSER-SM]` source logs to stderr).
+
+| ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
+|---|---|---|---|---|---|---|
+| T111 | ✅ P0 | ✅ `sttReclaimedOnSend.rendered.happy` | Text model + whisper both resident (roomy device) → drop device to ≤6GB (RAM fake) → type + send a text turn | the reply renders AND the model selector **In Memory** section no longer lists whisper (`resident-item-whisper` gone) while `resident-item-text` stays — idle STT reclaimed for the generation working set. Falsify: keep device >6GB → whisper stays listed | DEV-B1/B2 · GUARDED | |
+| T112 | ✅ P1 | ✅ `modelSelectorEjectResident.rendered.redflow` | Reach image + whisper resident (real load + real STT select) → open the model selector | **In Memory** lists every resident with its RAM (`resident-${type}-ram` shows `GB RAM`); tap `eject-resident-whisper` → frees ONLY whisper (its real unload runs), image stays (`resident-item-image` remains) | DEV-B1 · GUARDED | |
+| T113 | ✅ P1 | ✅ `modelSelectorShowsLoadedRam.rendered.redflow` | Load a text (and image) model → open the model selector | the selector shows the loaded model name + its RAM consumed (`currently-loaded-model-ram`) — removes the black box | DEV · GUARDED | |
+| T114 | ✅ P1 | ✅ `lazyReloadAfterEject.rendered.redflow` | Text model resident → eject it via the In Memory section → send a new message | the ejected model lazy-reloads on demand and the answer renders (eject frees RAM, does not disable the model) | DEV-B1 · GUARDED | |
+| T115 | 🔴 P1 | ❌ | **Voice**: whisper + text resident on a ≤6GB device → record a voice note → send (real transcribe → onTranscript → send) | after transcription the idle whisper is reclaimed for the LLM turn — In Memory drops `resident-item-whisper`, keeps text; the reply renders. Voice-modality twin of T111 (the reclaim fires on the same send path) | DEV-B1/B2 · TO-WRITE | |
+| T116 | 🔴 P1 | ❌ | **Allowed co-residence**: roomy device (>6GB) → text model resident → download+select whisper (STT) | In Memory lists BOTH `resident-item-text` and `resident-item-whisper` — the single-HEAVY rule evicts heavies for each other, NOT the STT sidecar (which co-resides warm). Contrast to T026 (two heavies must NOT co-reside) | M1/M16 · TO-WRITE | |
+| T117 | 🔴 P1 | ❌ | **Auto-eviction**: text + whisper (+tts) resident → fire an OS memory-warning (native boundary event) → open the selector | idle sidecars (whisper/tts/embedding) are reclaimed by `handleMemoryWarning`; In Memory drops them, the active heavy stays. (`modelResidency.test.ts` covers it service-level — this is the UI-flow version) | DEV · TO-WRITE | |
+| T118 | 🔴 P2 | ❌ | **Embedding sidecar**: create project + KB with a doc → new chat in project → ask a doc question (first RAG query) | the embedding model lazy-loads on the first query, co-resides as a sidecar (In Memory lists `resident-item-embedding` with RAM), and the grounded answer renders | DEV · TO-WRITE | |
+| T119 | 🔴 P1 | ❌ | **Whisper blocked→free→retry**: tight device, a heavy text model owns RAM → record a voice note (needs whisper NOW) | `ensureWhisperForTranscription` sees the load `blocked` by the single-model rule, frees the generation model, retries → whisper loads, transcript reaches the model. In Memory shows whisper resident, text evicted then reloaded for the answer | DEV-B1 · TO-WRITE | |
+| T120 | 🔴 P2 | ❌ | **TTS co-residence in a voice turn**: voice mode, tight device → complete a turn that speaks the reply (TTS loads with override) | In Memory lists `resident-item-tts` during playback; on the next generation the reclaim/budget applies (TTS is a reclaimable sidecar, not a co-resident heavy). Contrast to T030 (stale TTS phantom on delete) | V4/V5 · TO-WRITE | |
 
 ## Area 4 — Text generation (thinking / streaming / stop / queue)
 
