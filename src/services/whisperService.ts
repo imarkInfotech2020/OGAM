@@ -166,7 +166,17 @@ class WhisperService {
     if (!(await RNFS.exists(dir))) return [];
     const entries = await RNFS.readDir(dir);
     return entries
-      .filter(f => f.isFile() && f.name.startsWith('ggml-') && f.name.endsWith('.bin'))
+      .filter(
+        f =>
+          f.isFile() &&
+          f.name.startsWith('ggml-') &&
+          f.name.endsWith('.bin') &&
+          // Apply the same corrupt-file floor the load path uses: an app-kill
+          // mid-download leaves a short ggml-<id>.bin at the final path (no .part),
+          // which would otherwise be surfaced as "downloaded" and then fail to load
+          // with no retry. Size gate here so the Download Manager never lists it.
+          (Number(f.size) || 0) >= WhisperService.MIN_MODEL_FILE_SIZE,
+      )
       .map(f => ({
         modelId: f.name.replace(/^ggml-/, '').replace(/\.bin$/, ''),
         fileName: f.name,
