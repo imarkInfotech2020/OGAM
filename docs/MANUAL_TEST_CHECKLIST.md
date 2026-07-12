@@ -202,7 +202,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T071 | 🔴 P1 | ~ `imageGenerationFlow`(strips `<think>`; but device saw enable_thinking=true leak) | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt) | DEV-B30 · BROKEN | |
+| T071 | 🔴 P1 | ✅ `enhancementNoThinking.rendered.redflow` | Enable "Enhance Image Prompts" + thinking ON → send "draw a cat" | the enhancement request carries **no thinking** (`enable_thinking !== true`) and the enhanced prompt has NO reasoning markers (RED: "Thinking Process:…" becomes the image prompt). Full-UI red, boundary-record assertion (arg-level enable_thinking is the sanctioned engine-seam exception); red for the right reason (DEV-B30 unfixed) | DEV-B30 · BROKEN | |
 | T072 | 🔴 P1 | ❌ | Same — measure the enhancement generation length | enhancement is a fast plain completion, not a multi-thousand-token reasoning chain (RED: slow "million characters") | DEV-B30 · SLOW | |
 | T073 | 🔴 P2 | ❌ | During the enhancement step | it streams / shows progress (RED: static "Enhancing…", looks frozen) | DEV-B30b · no stream | |
 | T074 | ~ P2 | ✅ `imageGenerationFlow`/`promptEnhancement` | Enhancement on, thinking OFF → generate | prompt rewritten → image regenerated from it (mechanics work; existing test is service-level, not UI-gesture) | DEV · works | |
