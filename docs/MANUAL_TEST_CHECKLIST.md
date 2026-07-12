@@ -14,8 +14,14 @@ test claims. Aggregated from **both** adversarial/device sessions:
 - **Ref · Device:** original bug ID · what today's device run observed (BROKEN/WORKS/NOT-RUN/GUARDED/verify).
 - **Result:** you fill ✅/❌ + notes each release.
 
-Coverage (verified against the actual test `it()` titles, not names): **120 cases · 60 automated (✅) ·
-15 partial/service-level (~) · 35 not yet automated (❌) · 10 n/a (product-decision / code-review / infra).**
+Coverage (verified against the actual test `it()` titles, not names): **121 cases · 73 automated (✅) ·
+7 partial/service-level (~) · 30 not yet automated (❌, incl. 2 deferred) · 11 n/a (product-decision /
+code-review / infra).** The 2026-07-12 partial-upgrade pass converted 6 of the 13 partials to full mounted-UI
+(T044 parallel tools, T038 thinking+tool+answer, T048 remote parallel tool_calls, T035 thinking-header Q6 red,
+T046 remote-server connect) + fixed T071 (enhancementNoThinking, boundary-validated). The 7 still ~ are
+legitimately partial (documented, can't be full-UI): T009 (needs RAG UI harness), T050 (folded into T049),
+T060 (device-only native crash, no gate exists), T099 (dead-in-prod invariant), T102 (NEEDS-DEVICE jetsam),
+T108 (dead branch tied to T004), T110 (latent — 2nd TTS).
 The 2026-07-12 residency pass added T111–T120 (Area 3 additions): residency/co-residency/auto-eviction/budget
 across modalities × text/voice, validated through the model selector **In Memory** UI. Automated: T111–T117 +
 T120 (8). Deferred with honest reasons in `docs/RESIDENCY_TEST_MISMATCHES.md`: **T119** (whisper
@@ -141,7 +147,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 | T032 | ✅ P1 | ✅ `firstMessage` | Thinking off, tools off → type + send a plain prompt (litert fake streams a clean answer) | reply text renders in the answer bubble; NO stray `<think></think>` block | DEV · WORKS | |
 | T033 | 🔴 P1 | ✅ `thinkingRendersInBlockMidStream.rendered.redflow` (GREEN guard, falsified — B14 fixed) | Thinking ON → send a reasoning prompt; llama fake streams `<think>…</think>` (Qwen) tokens | during streaming, reasoning tokens render in the THINKING block (answer bubble stays empty) from token 1 (RED: they render in the answer bubble until the close delimiter, then reclassify) | DEV-B14/B5 · BROKEN | |
 | T034 | 🔴 P2 | ❌ | Send a prompt whose completion hits the max-predict cap (fake: `stopped_eos=false` at n_predict) | a "cut off / continue" indication renders (RED: silently truncated mid-sentence, no signal) | DEV-B15 · silent cutoff | |
-| T035 | 🔴 P2 | ~ `reasoningPipeline`(REMOTE) | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
+| T035 | 🔴 P2 | ✅ `thinkingHeaderWhileStreaming.rendered.redflow` | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
 | T036 | ✅ P1 | ✅ `queuedSendFeedback` | Send msg 1 (fake holds it streaming) → type + send msg 2 before it finishes | both replies render in order; neither dropped/collided | DEV · WORKS | |
 | T037 | ✅ P1 | ✅ `generationFlow`(stop/save-partial) | Start a generation → tap the Stop button (input transforms to stop) mid-stream | generation halts; partial text retained; input returns to send state; next queued item proceeds | DEV · WORKS | |
 | T038 | ✅ P2 | ✅ `thinkingToolAnswerRender.rendered.happy` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order. Full mounted-UI (128*256 device prompt): expand the thinking block → reasoning shown, `tool-result-label-calculator` bubble, 32768 answer. Falsified: no reasoning → red | DEV · WORKS | |
@@ -162,7 +168,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 
 | ID | 🔴/✅ Sev | Auto | Steps (gestures to imitate) | UI validation (assert on live screen) | Ref · Device | Result |
 |---|---|---|---|---|---|---|
-| T046 | ✅ P1 | ~ `remoteProviderRouting` | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
+| T046 | ✅ P1 | ✅ `remoteServerConnect.rendered.happy` | Mount remote-server config → scan (fake HTTP returns a server) or manual-add URL → tap connect | server appears + connects (connected state renders) | DEV · WORKS | |
 | T047 | 🔴 P2 | ❌ | Scan with no server (fake HTTP: none) | "No servers found" AND the server list stays empty (RED: shows "none found" yet adds a server) | DEV-B8 · desync | |
 | T048 | ✅ P1 | ✅ `remoteParallelTools.rendered.happy` (parallel tools) + `remoteReasoningDropped`/`remoteOllamaReasoningRenders` (thinking) | Connect remote (OpenAI-compat fake replays real `[WIRE-REMOTE]` deltas) → send the 5 prompts | correct replies; thinking + parallel tool_calls render (accumulate by index). Full mounted-UI: captured LM Studio SSE (3 parallel calculator calls 47*83/128*256/0.3*400) → real accumulate-by-index + tool loop → 3 tool bubbles + reply (3901,32768,120). Falsified: 1 call → red | DEV · WORKS | |
 | T049 | 🔴 P1 | ✅ `remoteReasoningDropped.rendered.redflow` (PROVEN RED — falsified via processDelta gate) | LM Studio remote + reasoning model + thinking; fake emits `reasoning_content` deltas | thinking block renders (RED: no thinking toggle → thinkingEnabled=false → processDelta drops `reasoning_content` → reasoning=0). Tools DO work | DEV-B16 · BROKEN | |
