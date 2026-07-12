@@ -296,7 +296,20 @@ class ImageGenerationService {
     }
     try {
       logger.log('[ImageGen] 📤 Calling generateStandalone for enhancement (active engine)...');
-      let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages));
+      // Stream the partial rewrite into the temp thinking message so the user sees live
+      // progress instead of a frozen "Enhancing..." (B30b) — the enhancement can take a
+      // while and looked hung. Rendered under the same "Enhanced prompt" label the final
+      // result uses, so the partial reads as the answer forming.
+      let streamed = '';
+      const onEnhanceToken = (token: string) => {
+        streamed += token;
+        if (params.conversationId && tempMessageId) {
+          useChatStore.getState().updateMessageContent(
+            params.conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${streamed}</think>`,
+          );
+        }
+      };
+      let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages), onEnhanceToken);
       logger.log('[ImageGen] 📥 generateStandalone returned');
       raw = cleanEnhancedPrompt(raw);
       logger.log('[ImageGen] ✅ Original prompt:', params.prompt);
