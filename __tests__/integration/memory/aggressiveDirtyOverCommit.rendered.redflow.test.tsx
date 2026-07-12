@@ -114,6 +114,17 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
     expect(h.view!.queryByText(/Not Enough Memory/)).not.toBeNull();      // no card on HEAD → RED here too
     after.unmount();
 
+    // NO DEAD-END: a refusal must ALWAYS offer "Load Anyway" (we don't recommend it, but the user can
+    // force it — evict everything and load). The card is not a terminal "not enough memory, stop".
+    expect(h.view!.queryByTestId('model-failure-load-anyway-image')).not.toBeNull();
+
+    // NO TERMINAL DEAD-END: the button's onLoadAnyway re-runs the load with { override: true }, which the
+    // budget gate can no longer refuse (makeRoomFor under override always returns fits=true — no survival
+    // floor). So the old "we evicted everything and there's STILL no memory" NON-overridable card is
+    // unreachable. That override-always-loads invariant is proven at the service altitude in
+    // overrideFloor.redflow (M3/M4/M6); whether the forced 9GB dirty load then survives is the native OOM
+    // outcome (Provit, per the SPLIT note above) — not something the in-Node fake can honestly assert.
+
     stopSync();
   });
 });
