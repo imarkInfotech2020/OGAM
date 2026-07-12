@@ -207,6 +207,19 @@ export function stripMarkdownForSpeech(content: string): string {
   return result.trim();
 }
 
+/**
+ * The SINGLE source of truth for turning a stored assistant message into text
+ * fit to speak: strip our control/reasoning tokens, then strip markdown syntax
+ * TTS would otherwise voice as literal "star star" / "hash" / backticks / pipes.
+ * Every speech caller (the chat-bubble Speak button, voice-mode turn speech, the
+ * streaming-segment speaker) MUST route through this so they can never diverge —
+ * previously the chat Speak button applied only stripControlTokens and read raw
+ * markdown aloud (Q19).
+ */
+export function prepareMessageForSpeech(content: string): string {
+  return stripMarkdownForSpeech(stripControlTokens(content));
+}
+
 // ── Model-output parsing (moved from ChatMessage/utils so store/service/pro layers
 //    can import the ONE parser without a backwards component dependency) ──────────
 /**
