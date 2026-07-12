@@ -22,9 +22,11 @@ jest.mock('@react-navigation/native', () => ({
 describe('T038 (rendered) — thinking + tool-result + answer all render in a reason→tool→answer turn', () => {
   it('shows the reasoning in the thinking block, the tool-result bubble, and the final answer', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'android' });
-    h.useAppStore.getState().updateSettings({ thinkingEnabled: true }); // precondition: thinking on
     h.enableToolViaUI('calculator'); // real Tools-screen switch
     h.render();
+    // Precondition via a REAL gesture (not updateSettings): open the composer quick-settings and flip Thinking on.
+    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')));
+    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-thinking-toggle')));
 
     // The litert model reasons, calls the calculator (128*256), then answers (the device 128*256 prompt).
     await h.send('reason about it then compute 128*256', {
