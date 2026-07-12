@@ -144,7 +144,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 | T035 | 🔴 P2 | ~ `reasoningPipeline`(REMOTE) | litert/remote turn (separate reasoning channel) — assert the thinking-box header WHILE reasoning streams | header reads "Thinking…" while streaming (RED: shows the DONE label + "T" badge; llama inline `<think>` is correct → divergence) | Q6 · BROKEN | |
 | T036 | ✅ P1 | ✅ `queuedSendFeedback` | Send msg 1 (fake holds it streaming) → type + send msg 2 before it finishes | both replies render in order; neither dropped/collided | DEV · WORKS | |
 | T037 | ✅ P1 | ✅ `generationFlow`(stop/save-partial) | Start a generation → tap the Stop button (input transforms to stop) mid-stream | generation halts; partial text retained; input returns to send state; next queued item proceeds | DEV · WORKS | |
-| T038 | ✅ P2 | ~ `thinkingAcrossToolCall`/`toolExtensionLoop` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order | DEV · WORKS | |
+| T038 | ✅ P2 | ✅ `thinkingToolAnswerRender.rendered.happy` | Thinking + calculator on → send a reason+compute prompt (fake: reason→tool→reason→answer, real multi-round shape) | thinking block, tool-result bubble, and final answer all render in order. Full mounted-UI (128*256 device prompt): expand the thinking block → reasoning shown, `tool-result-label-calculator` bubble, 32768 answer. Falsified: no reasoning → red | DEV · WORKS | |
 
 ## Area 5 — Tools (calculator / MCP / parallel)
 
@@ -155,7 +155,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 | T041 | 🔴 P2 | ✅ `toolRouterFalsePositive` | Several tools; router prose contains a tool name as substring / says "none" | correct/no tool selected (RED: substring force-selects the wrong tool; "none" branch skipped) | Q4 · BROKEN | |
 | T042 | 🔴 P1 | ✅ `toolEmptyFinal` | Tool on → send; fake: tool returns data, final turn EMPTY | the assistant bubble shows the tool data / non-empty reply (RED: blank reply; data discarded — note "(No response)" is never rendered through streaming) | Q5 · BROKEN | |
 | T043 | ✅ P1 | ✅ `tools` | Enable calculator (real Tools-screen switch) → new chat → send "use the calculator: 500×321" | a tool-result bubble + correct answer (160500) render | DEV · WORKS | |
-| T044 | ✅ P1 | ~ `tools` | Calculator on → send two calculations in one prompt (fake: parallel tool_calls index 0+1) | two tool-result bubbles render; both correct | DEV · WORKS | |
+| T044 | ✅ P1 | ✅ `tools.happy` (T044) | Calculator on → send two calculations in one prompt (fake: parallel tool_calls index 0+1) | two tool-result bubbles render; both correct. Full mounted-UI: 2 structured litert tool_calls → 2 `tool-result-label-calculator` bubbles + both results in the answer. Falsified: one call → red | DEV · WORKS | |
 | T045 | ℹ️ P2 | n/a | 0.8B model + tools, no explicit "use tool" nudge | (KNOWN model limit) small models under-call tools — not an app bug; no test | DEV · model-limit | |
 
 ## Area 6 — Remote providers (OGAD / LM Studio / Ollama)
