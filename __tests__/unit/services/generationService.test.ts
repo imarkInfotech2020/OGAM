@@ -39,9 +39,10 @@ jest.mock('../../../src/services/activeModelService', () => ({
   },
 }));
 
-// Mock sharePrompt utility
+// Mock sharePrompt utility (the once-per-session trigger the service delegates to)
 jest.mock('../../../src/utils/sharePrompt', () => ({
-  shouldShowSharePrompt: jest.fn(() => false),
+  maybeScheduleSharePrompt: jest.fn(),
+  resetSharePromptSession: jest.fn(),
   emitSharePrompt: jest.fn(),
 }));
 
@@ -1238,10 +1239,9 @@ describe('generationService', () => {
   // checkSharePrompt — true branch (emitSharePrompt called)
   // ============================================================================
   describe('checkSharePrompt — triggers share', () => {
-    it('calls emitSharePrompt when shouldShowSharePrompt returns true', async () => {
-      jest.useFakeTimers();
-      const { shouldShowSharePrompt, emitSharePrompt } = require('../../../src/utils/sharePrompt');
-      (shouldShowSharePrompt as jest.Mock).mockReturnValueOnce(true);
+    it('delegates to maybeScheduleSharePrompt with the text variant + generation count', async () => {
+      const { maybeScheduleSharePrompt } = require('../../../src/utils/sharePrompt');
+      (maybeScheduleSharePrompt as jest.Mock).mockClear();
 
       const convId = setupWithConversation();
       setupWithActiveModel();
@@ -1256,9 +1256,8 @@ describe('generationService', () => {
         createMessage({ role: 'user', content: 'Hi' }),
       ]);
 
-      jest.advanceTimersByTime(2000);
-      expect(emitSharePrompt).toHaveBeenCalledWith('text');
-      jest.useRealTimers();
+      // The service owns the count; the once-per-session decision lives in the util.
+      expect(maybeScheduleSharePrompt).toHaveBeenCalledWith('text', expect.any(Number), expect.any(Boolean), expect.any(Number));
     });
   });
 

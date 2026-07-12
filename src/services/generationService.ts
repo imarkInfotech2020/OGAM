@@ -8,7 +8,7 @@ import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
 import logger from '../utils/logger';
-import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
 import {
   buildGenerationMetaImpl,
@@ -134,7 +134,7 @@ class GenerationService {
   private checkSharePrompt(delayMs = SHARE_PROMPT_DELAY_MS): void {
     const s = useAppStore.getState();
     const count = s.incrementTextGenerationCount();
-    if (!s.hasEngagedSharePrompt && shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('text'), delayMs);
+    maybeScheduleSharePrompt('text', count, s.hasEngagedSharePrompt, delayMs);
     checkProPromptForText(delayMs);
   }
 

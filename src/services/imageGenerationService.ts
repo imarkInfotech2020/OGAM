@@ -5,7 +5,7 @@ import { getActiveEngineService, generateStandalone } from './engines';
 import { useAppStore, useChatStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
-import { shouldShowSharePrompt, emitSharePrompt } from '../utils/sharePrompt';
+import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
 import { SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
@@ -204,7 +204,7 @@ class ImageGenerationService {
   private _checkSharePrompt(): void {
     const s = useAppStore.getState();
     const count = s.incrementImageGenerationCount();
-    if (!s.hasEngagedSharePrompt && shouldShowSharePrompt(count)) setTimeout(() => emitSharePrompt('image'), SHARE_PROMPT_DELAY_MS);
+    maybeScheduleSharePrompt('image', count, s.hasEngagedSharePrompt, SHARE_PROMPT_DELAY_MS);
     checkProPromptForImage(SHARE_PROMPT_DELAY_MS);
   }
 
