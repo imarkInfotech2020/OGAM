@@ -255,6 +255,7 @@ async function generateWithCompactionRetry(
   projectId?: string,
 ): Promise<void> {
   const extCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
+  logger.log(`[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`);
   const gen = (msgs: Message[]) => (enabledTools.length > 0 || extCount > 0)
     ? generationService.generateWithTools(opts.id, msgs, { enabledToolIds: enabledTools, projectId })
     : generationService.generateResponse(opts.id, msgs);

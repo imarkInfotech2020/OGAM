@@ -142,6 +142,13 @@ pre-commit hook by design.
 
 ## Testing Requirements
 
+**Before writing or modifying ANY test, invoke the `/tests` skill (the testing doctrine) and follow it.**
+It is the source of truth for how tests are written here — FAKES not mocks, mount the real screen, drive
+real gestures, assert the rendered artifact, ground every test in the device evidence
+(`docs/DEVICE_TEST_FINDINGS.md` / `DEVICE_SESSION_COMMENTARY.md` / `wire-captures/`) and match the exact
+engine/mode/provider the finding used, and SHOW THE RED before calling any green a guard. Do not write a
+test without it.
+
 Always write **both** unit tests and integration tests for new features and significant changes:
 
 - **Unit tests** (`__tests__/unit/`): Test individual functions, hooks, and store actions in isolation with mocked dependencies.

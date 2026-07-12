@@ -76,6 +76,7 @@ class GenerationService {
     const { activeServerId } = useRemoteServerStore.getState();
     const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
     const localLoaded = llmService.isModelLoaded();
+    logger.log(`[REMOTE-SM] isUsingRemoteProvider? activeServerId=${activeServerId ?? 'none'} hasProvider=${hasProvider} localLoaded=${localLoaded}`);
     if (!activeServerId) return false;
     // Provider must be registered (not just persisted from a previous session)
     if (!hasProvider) return false;
@@ -149,6 +150,7 @@ class GenerationService {
     messages: Message[],
     onFirstToken?: () => void,
   ): Promise<void> {
+    logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
     // Route to remote provider if active
     if (this.isUsingRemoteProvider()) {
       return this.generateRemoteResponse(conversationId, messages, onFirstToken);
