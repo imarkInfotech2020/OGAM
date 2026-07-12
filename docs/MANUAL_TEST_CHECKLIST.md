@@ -175,7 +175,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 | T050 | 🔴 P1 | ~ folded into T049 (real bug = reasoning dropped, not the toggle; toggle is a minor UX gap) | Mount chat settings with a remote model active | a thinking on/off toggle is present (RED: absent for remote) | DEV-B17 · MISSING | |
 | T051 | ✅ P1 | ✅ `remoteOllamaReasoningRenders.rendered.redflow` (GREEN guard, falsified — contrast to T049) | Ollama remote (native NDJSON fake, `message.thinking` field) + tools → send | thinking renders + tool-result bubbles render | DEV · WORKS | |
 | T052 | 🔴 P1 | ✅ `remoteEnhanceSkipped` | Active text model = remote + image-gen + enhancement on → generate | enhancement runs via the remote model (RED: `generateStandalone` has only llama/litert branches → skipped on remote) | Q8 · BROKEN | |
-| T053 | 🔴 P2 | ❌ | Open the model modality selector with a remote model selected | remote model is visually marked (cloud icon) (RED: identical to local, no indicator) | DEV · no indicator | |
+| T053 | 🔴 P2 | ✅ `remoteModelIndicator.rendered.happy` | Add a remote server (real modal flow) → open the model selector | the remote model is visually marked — a wifi server-name header + a "Remote" badge per row (TextTab.tsx:135,152) distinguish it from local. GREEN guard (indicator now exists). Falsified in-test: before adding, no "Remote" badge / server header renders | DEV · no indicator (fixed) | |
 
 ## Area 7 — Vision (multimodal)
 
