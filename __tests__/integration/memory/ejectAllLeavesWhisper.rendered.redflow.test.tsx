@@ -1,12 +1,14 @@
 /**
- * RED-FLOW (UI, rendered) — T023 / DEV-B1: "Eject All" does NOT free the whisper (STT) sidecar. On device
- * it reported "Unloaded 1 model" (the text model) while whisper stayed resident at ~1.5GB.
+ * GUARD (UI, rendered) — T023 / DEV-B1 (FIXED): "Eject All" MUST free the whisper (STT) sidecar. On device
+ * it used to report "Unloaded 1 model" (the text model) while whisper stayed resident at ~1.5GB.
  *
- * ROOT: `activeModelService.ejectAll()` (`activeModelService/index.ts:428-443`) calls `unloadAllModels(true)`
- * and counts/unloads only text + image (`count = (textUnloaded?1:0)+(imageUnloaded?1:0)`); the whisper/tts
- * SIDECARS registered with modelResidencyManager are never unloaded → they survive an "eject all". (The
- * Home button's own guard `useHomeScreen.ts:166` also ignores sidecars — it only fires when a text/image
- * model is active — which both masks and compounds this.)
+ * HISTORY: `activeModelService.ejectAll()` called `unloadAllModels(true)` and counted/unloaded only text +
+ * image (`count = (textUnloaded?1:0)+(imageUnloaded?1:0)`); the whisper/tts SIDECARS registered with
+ * modelResidencyManager were never unloaded → they survived an "eject all". FIXED by iterating the remaining
+ * residents through modelResidencyManager.evictByKey after unloadAllModels. This guard locks the fix — revert
+ * the eviction loop and whisper stays resident → red. (The Home button's own guard `useHomeScreen.ts:166`
+ * also ignores sidecars — it only fires when a text/image model is active — which both masks and compounds
+ * this.)
  *
  * Arrival is REAL: whisper is made resident by the SAME real download gesture as T022 (tap the download
  * button on the real TranscriptionModelsTab, drive the native DownloadComplete → whisperStore auto-loads →
@@ -15,14 +17,14 @@
  * isolates the residency invariant: the button's `activeModelId||activeImageModelId` guard would otherwise
  * force us to co-load a second model that is irrelevant to the sidecar-eviction bug.
  *
- * Assertion is on the UI (ResidentsProbe over the REAL modelResidencyManager): after eject, whisper is STILL
- * resident → RED. Product-correct: eject frees ALL resident models incl. sidecars → '(none)'. Falsify: make
- * ejectAll release sidecars → whisper drops → green.
+ * Assertion is on the UI (ResidentsProbe over the REAL modelResidencyManager): after eject, whisper is NO
+ * LONGER resident → GREEN. Product-correct: eject frees ALL resident models incl. sidecars. Falsify: remove
+ * ejectAll's sidecar-eviction loop → whisper survives → red.
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
-describe('T023 (rendered) — Eject All leaves whisper resident (DEV-B1)', () => {
-  it('does NOT free the whisper sidecar on ejectAll', async () => {
+describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed)', () => {
+  it('frees the whisper sidecar on ejectAll', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
     /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
@@ -60,7 +62,7 @@ describe('T023 (rendered) — Eject All leaves whisper resident (DEV-B1)', () =>
     // Trigger the REAL Eject All (the exact function the Home button's onPress calls).
     await act(async () => { await activeModelService.ejectAll(); await new Promise((r) => setTimeout(r, 0)); });
 
-    // SPEC: eject frees ALL resident models, sidecars included. HEAD leaves whisper → RED.
+    // SPEC: eject frees ALL resident models, sidecars included. The fix makes whisper drop → GREEN.
     await waitFor(() => {
       expect(ui.getByTestId('probe-residents').props.children).not.toContain('whisper');
     });

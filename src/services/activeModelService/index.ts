@@ -435,6 +435,14 @@ class ActiveModelService {
     // turned the rows into "Unknown"/"—" after an eject.)
     const results = await this.unloadAllModels(true);
     let count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+    // Eject means ALL, not just text+image: free every remaining resident (sidecars — whisper/tts/embedding),
+    // which unloadAllModels does not touch. Their real unload runs; they lazy-reload on next use. Previously
+    // these leaked and kept charging the memory budget after the user ejected everything (DEV-B1).
+    for (const r of modelResidencyManager.getResidents()) {
+      const ejected = await modelResidencyManager.evictByKey(r.key);
+      logger.log(`[MODEL-SM] ejectAll → sidecar ${r.type} (${r.key}) evicted=${ejected}`);
+      if (ejected) count += 1;
+    }
     if (hasRemote) {
       remoteServerManager.clearActiveRemoteModel();
       count += 1;
