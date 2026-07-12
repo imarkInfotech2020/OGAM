@@ -41,6 +41,9 @@ export interface IncomingModel {
   key: string;
   type: ResidentType;
   sizeMB: number;
+  /** True for real committed RAM that cannot page (CoreML/ONNX image, LiteRT); a clean
+   *  (mmap GGUF) incoming pages in and only competes for the physical-RAM ceiling. */
+  dirtyMemory?: boolean;
 }
 
 export interface EvictionPlan {
@@ -132,9 +135,15 @@ export function planEviction(
   const isEvicted = (r: Resident) => evict.some(e => e.key === r.key);
   const alreadyResident = current.some(r => r.key === incoming.key);
 
+  // What competes with the incoming model for RAM. A DIRTY incoming needs genuine free
+  // physical RAM, so only OTHER dirty residents compete — CLEAN residents (mmap/file-backed
+  // GGUF weights) page out under pressure and don't hold real RAM against it, so they can
+  // co-reside (this is why a text model + an image model both stay warm). A CLEAN incoming
+  // pages itself, so it just counts everyone.
   const usedMB = () =>
     current
       .filter(r => r.key !== incoming.key && !isEvicted(r))
+      .filter(r => (incoming.dirtyMemory ? !!r.dirtyMemory : true))
       .reduce((sum, r) => sum + r.sizeMB, 0);
   const incomingCostMB = alreadyResident ? 0 : incoming.sizeMB;
 
