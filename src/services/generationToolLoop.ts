@@ -8,6 +8,7 @@ import { Message } from '../types';
 import { getToolsAsOpenAISchema, executeToolCall } from './tools';
 import type { ToolCall, ToolResult } from './tools/types';
 import { normalizeToolResult, toolErrorResult, toolResultModelContent } from './tools/toolResult';
+import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
 import { getToolExtensions } from './tools/extensions';
 import { Platform } from 'react-native';
 import { selectRelevantTools } from './litertToolSelector';
@@ -501,12 +502,12 @@ async function callLiteRTForLoop(
   const text = buildLiteRTSendText(messages);
   const history = buildLiteRTHistory(messages);
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
-  const imageUris = lastUser?.attachments
-    ?.filter((a: any) => a.type === 'image' && typeof a.uri === 'string' && a.uri.trim().length > 0)
-    .map((a: any) => a.uri);
-  const audioUris = lastUser?.attachments
-    ?.filter((a: any) => a.type === 'audio' && typeof a.uri === 'string' && a.uri.trim().length > 0)
-    .map((a: any) => a.uri);
+  // Route media through the SAME seam the non-tool path uses (generationServiceHelpers),
+  // not an inline re-derivation. modelInputAudioUris is transcript-only ([]), so a voice
+  // note's stale audio path never reaches native (Q17: the tool-loop's own filter sent
+  // the .wav → "File does not exist" crash). One media rule, both paths.
+  const imageUris = modelInputImageUris(lastUser?.attachments);
+  const audioUris = modelInputAudioUris(lastUser?.attachments);
   const liteRTSettings = useAppStore.getState().settings;
   const samplerConfig = {
     temperature: liteRTSettings.liteRTTemperature,
