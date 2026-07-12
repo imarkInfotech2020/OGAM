@@ -251,7 +251,18 @@ function makeLlamaFake(): LlamaFake {
   };
 
   const module: Record<string, jest.Mock> = {
-    initLlama: jest.fn().mockResolvedValue(context),
+    // Faithful to llama.rn/llama.cpp: the native loader reports gpu=true (+ the offload device
+    // list) when it actually offloaded layers (n_gpu_layers > 0), and gpu=false for a pure-CPU
+    // init. Echo that from the requested load params so the REAL captureGpuInfo → GenerationMeta
+    // path surfaces the true backend — EMERGENT from the settings→load flow, never programmed.
+    initLlama: jest.fn(async (params?: Record<string, unknown>) => {
+      const n = Number((params?.n_gpu_layers as number) ?? 0);
+      const devices = Array.isArray(params?.devices) ? (params!.devices as string[]) : [];
+      (context as Record<string, unknown>).gpu = n > 0;
+      (context as Record<string, unknown>).devices = n > 0 ? devices : [];
+      (context as Record<string, unknown>).reasonNoGPU = n > 0 ? '' : 'gpu layers not requested';
+      return context;
+    }),
     releaseContext: jest.fn().mockResolvedValue(undefined),
     completion: jest.fn().mockResolvedValue({ text: '' }),
     stopCompletion: jest.fn().mockResolvedValue(undefined),
