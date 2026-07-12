@@ -59,6 +59,11 @@ type AppSettings = {
    *  default (behaviour-neutral). Single source of truth read by both the Settings
    *  screen and the in-chat settings; projected onto the residency manager. */
   aggressiveModelLoading: boolean;
+  /** How the residency manager handles multiple models (single source of truth read
+   *  by both settings surfaces, projected onto the manager via loadPolicySync):
+   *  'conservative' = one model at a time; 'balanced' = co-reside within budget;
+   *  'aggressive' = co-reside with a larger RAM commitment. */
+  modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
@@ -204,6 +209,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   gpuLayers: 99,
   flashAttn: true,
   aggressiveModelLoading: false,
+  modelLoadingMode: 'balanced',
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],

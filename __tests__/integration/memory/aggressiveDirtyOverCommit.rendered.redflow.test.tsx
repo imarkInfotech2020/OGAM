@@ -10,7 +10,7 @@
  * Device ground truth (M6, docs/DEVICE_TEST_LOG.md:43): "aggressive (0.88 Android / 0.92 iOS) admits a 9GB
  * dirty model on 12GB at 3GB free; zram/dirty pages can't back it." The gate-verdict twin is
  * overrideFloor.redflow M6 (service level). This test proves the SAME bug at the UI altitude the checklist
- * asks for: the whole real stack — the real AggressiveLoadingToggle gesture → real loadPolicySync → real
+ * asks for: the whole real stack — the real ModelLoadingModeSelector gesture → real loadPolicySync → real
  * activeModelService/imageGenerationService → real modelResidencyManager — over the RAM-sensor + native
  * leaves only, validated on the model selector's "In Memory" section (a sanctioned residency UI surface).
  *
@@ -57,7 +57,7 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
 
     /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
-    const { AggressiveLoadingToggle } = require('../../../src/components/settings/textGenAdvancedSections');
+    const { ModelLoadingModeSelector } = require('../../../src/components/settings/textGenAdvancedSections');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
     const { hardwareService } = require('../../../src/services/hardware');
@@ -79,8 +79,8 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
 
     // GESTURE: turn Aggressive Loading ON via the real segmented control (the same control both settings
     // surfaces render). updateSettings → loadPolicySync → modelResidencyManager.setLoadPolicy('aggressive').
-    const toggle = h.rtl.render(React.createElement(AggressiveLoadingToggle, {}));
-    h.rtl.fireEvent.press(toggle.getByTestId('aggressive-loading-on-button'));
+    const toggle = h.rtl.render(React.createElement(ModelLoadingModeSelector, {}));
+    h.rtl.fireEvent.press(toggle.getByTestId('model-loading-mode-aggressive-button'));
     toggle.unmount();
     expect(require('../../../src/services/modelResidency').modelResidencyManager.getLoadPolicy()).toBe('aggressive');
 

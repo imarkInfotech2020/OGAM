@@ -42,8 +42,17 @@
  */
 import { Platform } from 'react-native';
 
-/** How hard we push RAM utilisation when loading a model. */
-export type LoadPolicy = 'balanced' | 'aggressive';
+/**
+ * How the residency manager handles multiple models:
+ *  - 'conservative': ONE model at a time — loading any model evicts every other
+ *    (no co-residency), the safest on tight devices.
+ *  - 'balanced' (default): co-reside models while the RAM budget holds; evict
+ *    lowest-priority/LRU when a new model doesn't fit.
+ *  - 'aggressive': balanced co-residency but commits a larger share of RAM (smaller
+ *    OS reserve) so bigger models load before the gate refuses.
+ * (A per-load "Load Anyway" override is separate and works in every mode.)
+ */
+export type LoadPolicy = 'conservative' | 'balanced' | 'aggressive';
 
 /** Never commit the last ~1.5GB — OS + app baseline must always have headroom. */
 export const MEMORY_RESERVE_MB = 1500;

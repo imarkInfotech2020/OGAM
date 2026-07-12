@@ -17,8 +17,13 @@ import { useAppStore } from '../stores';
 import { modelResidencyManager } from './modelResidency';
 import { LoadPolicy } from './memoryBudget';
 
-/** The one boolean→policy mapping. */
-export function loadPolicyFromSettings(settings: { aggressiveModelLoading?: boolean }): LoadPolicy {
+/** The one setting→policy mapping. Prefer the explicit 3-mode setting; fall back to
+ *  the legacy aggressiveModelLoading boolean so pre-migration installs still work. */
+export function loadPolicyFromSettings(settings: {
+  modelLoadingMode?: LoadPolicy;
+  aggressiveModelLoading?: boolean;
+}): LoadPolicy {
+  if (settings.modelLoadingMode) return settings.modelLoadingMode;
   return settings.aggressiveModelLoading ? 'aggressive' : 'balanced';
 }
 

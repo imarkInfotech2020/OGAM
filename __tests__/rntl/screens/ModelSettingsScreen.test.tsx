@@ -242,24 +242,24 @@ describe('ModelSettingsScreen', () => {
   });
 
   // ============================================================================
-  describe('aggressive loading toggle', () => {
-    it('renders the Aggressive Loading label', () => {
+  describe('model loading mode selector', () => {
+    it('renders the Model Loading label', () => {
       const { getByText } = renderWithSections('text');
-      expect(getByText('Aggressive Loading')).toBeTruthy();
+      expect(getByText('Model Loading')).toBeTruthy();
     });
 
-    it('turns the setting on', () => {
-      useAppStore.getState().updateSettings({ aggressiveModelLoading: false });
+    it('selects aggressive', () => {
+      useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
       const { getByTestId } = renderWithSections('text');
-      fireEvent.press(getByTestId('aggressive-loading-on-button'));
-      expect(useAppStore.getState().settings.aggressiveModelLoading).toBe(true);
+      fireEvent.press(getByTestId('model-loading-mode-aggressive-button'));
+      expect(useAppStore.getState().settings.modelLoadingMode).toBe('aggressive');
     });
 
-    it('turns the setting off', () => {
-      useAppStore.getState().updateSettings({ aggressiveModelLoading: true });
+    it('selects conservative', () => {
+      useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
       const { getByTestId } = renderWithSections('text');
-      fireEvent.press(getByTestId('aggressive-loading-off-button'));
-      expect(useAppStore.getState().settings.aggressiveModelLoading).toBe(false);
+      fireEvent.press(getByTestId('model-loading-mode-conservative-button'));
+      expect(useAppStore.getState().settings.modelLoadingMode).toBe('conservative');
     });
   });
 

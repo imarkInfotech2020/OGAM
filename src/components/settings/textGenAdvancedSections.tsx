@@ -218,17 +218,26 @@ export const KvCacheTypeToggle: React.FC = () => {
  * residency manager is driven off it by loadPolicySync). Shared by the llama and
  * LiteRT panels on both surfaces.
  */
-export const AggressiveLoadingToggle: React.FC = () => {
+type ModelLoadingMode = 'conservative' | 'balanced' | 'aggressive';
+const MODE_OPTIONS: PillOption<ModelLoadingMode>[] = [
+  { id: 'conservative', label: 'Conservative' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'aggressive', label: 'Aggressive' },
+];
+
+export const ModelLoadingModeSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const on = !!settings.aggressiveModelLoading;
+  // Single source of truth: the 3-mode setting, falling back to the legacy boolean.
+  const current: ModelLoadingMode =
+    settings.modelLoadingMode ?? (settings.aggressiveModelLoading ? 'aggressive' : 'balanced');
   return (
-    <SegmentedRow<'off' | 'on'>
-      label="Aggressive Loading"
-      description="Commits a larger share of your RAM to the model and cuts the OS reserve from 1.5GB to 0.8GB, so larger models load. If one still will not fit, you can override the safeguards and load it anyway. Leaves less RAM for other apps."
-      options={BOOL_OPTIONS}
-      current={on ? 'on' : 'off'}
-      onSelect={(id) => updateSettings({ aggressiveModelLoading: id === 'on' })}
-      testIdFor={(id) => `aggressive-loading-${id}-button`}
+    <SegmentedRow<ModelLoadingMode>
+      label="Model Loading"
+      description="Conservative keeps ONE model in memory at a time. Balanced keeps models loaded together when they fit and swaps when they do not. Aggressive commits a larger share of RAM so bigger models load. You can always Load Anyway if a model is refused."
+      options={MODE_OPTIONS}
+      current={current}
+      onSelect={(id) => updateSettings({ modelLoadingMode: id })}
+      testIdFor={(id) => `model-loading-mode-${id}-button`}
     />
   );
 };
