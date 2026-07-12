@@ -18,7 +18,7 @@ import {
   Resident,
   ResidentType,
 } from './policy';
-import { LoadPolicy, overrideSurvivalFloorMB, effectiveAvailableMB } from '../memoryBudget';
+import { LoadPolicy, effectiveAvailableMB } from '../memoryBudget';
 
 type UnloadFn = () => Promise<void>;
 
@@ -340,7 +340,10 @@ class ModelResidencyManager {
     // Aggressive policy (or an override) keeps ONE model at a time: evict every evictable
     // resident instead of co-residing whatever fits, so the incoming model gets the
     // maximum RAM. Balanced mode keeps smart co-residency.
-    const singleModel = this.loadPolicy === 'aggressive' || override;
+    // Conservative = ONE model at a time (evict everything else). Override ("Load Anyway")
+    // also evicts everything to free maximum RAM. Aggressive is NOT single-model — it
+    // co-resides like balanced, just with a larger RAM budget.
+    const singleModel = this.loadPolicy === 'conservative' || override;
     const plan = planEviction(residents, spec, budgetMB, { singleModel });
     // [MEM-SM] trace (kept forever): the exact numbers behind every fit decision.
     // budgetForSpec already folds in the live os_proc budget under dirty pressure, so
@@ -380,15 +383,26 @@ class ModelResidencyManager {
           .join(',')}]`,
       );
     }
+    const actuallyEvicted: string[] = [];
+    let unloadFailed = false;
     for (const victim of plan.evict) {
       const reg = this.residents.get(victim.key);
       if (!reg) continue;
-      await reg
-        .unload()
-        .catch(err =>
-          logger.log(`[ModelResidency] unload ${victim.key} failed:`, err),
-        );
-      this.residents.delete(victim.key);
+      try {
+        await reg.unload();
+        this.residents.delete(victim.key);
+        actuallyEvicted.push(victim.key);
+      } catch (err) {
+        // The native unload REJECTED — the victim still holds its RAM. Do NOT delete it
+        // from the budget map (counting phantom-freed memory over-commits the incoming
+        // load → OOM). Keep it resident and abort the fit.
+        logger.log(`[ModelResidency] unload ${victim.key} failed:`, err);
+        unloadFailed = true;
+        break;
+      }
+    }
+    if (unloadFailed) {
+      return { evicted: actuallyEvicted, fits: false };
     }
     // Survival floor: even an override can't cross physics. Now that the evictions have
     // ACTUALLY happened (iOS has reclaimed the unloaded pages), re-read real free RAM and
@@ -397,31 +411,14 @@ class ModelResidencyManager {
     // SIGKILL (uncatchable) mid-load. This is the real physics guard; measuring after the
     // real unload (not predicting) is what stops the false refusals.
     if (override) {
-      await hardwareService.refreshMemoryInfo().catch(() => {});
-      const realAvailMB = Math.round(
-        hardwareService.getAvailableMemoryGB() * 1024,
-      );
-      // Reclaimable-aware ceiling — the SAME owner budgetForSpec's fit check reads, so the
-      // two can never disagree (a foreground Android load may commit up to the physical
-      // budget because the OS reclaims background apps; iOS keeps the raw availMem snapshot).
-      const effectiveAvailMB = effectiveAvailableMB(realAvailMB, totalMB, Platform.OS, this.loadPolicy);
-      const incomingDirtyMB = spec.dirtyMemory ? spec.sizeMB : 0;
-      const postLoadFreeMB = effectiveAvailMB - incomingDirtyMB;
-      // The dirty model's own footprint is subtracted from the effective physical ceiling, so a
-      // GENUINELY oversized dirty model (bigger than the foreground budget) still goes negative and
-      // is refused (the OOM guard survives). The FLOOR is platform-aware (Android lower; iOS full).
-      const floorMB = overrideSurvivalFloorMB();
-      if (postLoadFreeMB < floorMB) {
-        logger.log(
-          `[MEM-SM] makeRoomFor ${spec.key} REFUSED even under override - post-evict free ~${postLoadFreeMB}MB (realAvail=${realAvailMB} effectiveAvail=${effectiveAvailMB} total=${totalMB}) < survival floor ${floorMB}MB`,
-        );
-        return { evicted: plan.evict.map(e => e.key), fits: false };
-      }
+      // Load Anyway is unconditional: the user explicitly accepted the risk, so we evict
+      // everything else (via singleModel above) to free maximum RAM and load — NO survival
+      // floor, NO refusal. The UI frames it as "not recommended, but you can try".
       logger.log(
-        `[MEM-SM] makeRoomFor ${spec.key} OVERRIDE OK - post-evict free ~${postLoadFreeMB}MB (realAvail=${realAvailMB} effectiveAvail=${effectiveAvailMB}) >= floor ${floorMB}MB`,
+        `[MEM-SM] makeRoomFor ${spec.key} OVERRIDE - forced load after evicting [${plan.evict.map(e => e.key).join(',')}] (no floor)`,
       );
     }
-    return { evicted: plan.evict.map(e => e.key), fits: true };
+    return { evicted: actuallyEvicted, fits: true };
   }
 
   async ensureResident(
@@ -429,10 +426,16 @@ class ModelResidencyManager {
     handlers: { load: () => Promise<void>; unload: UnloadFn },
     now: number = Date.now(),
   ): Promise<EnsureResult> {
-    const { evicted } = await this.makeRoomFor(spec);
+    const { evicted, fits } = await this.makeRoomFor(spec);
 
     if (this.residents.has(spec.key)) {
       this.markUsed(spec.key, now);
+      return { loaded: false, evicted };
+    }
+
+    // Honor the fit verdict: a model that does not fit must NOT be loaded (the caller
+    // used to invoke the gate then load regardless — the STT/OOM bug class).
+    if (!fits) {
       return { loaded: false, evicted };
     }
 
@@ -493,10 +496,14 @@ class ModelResidencyManager {
       logger.log(
         '[ModelResidency] reclaiming idle STT for generation turn (memory-tight)',
       );
-      await w
-        .unload()
-        .catch(err => logger.log('[ModelResidency] STT reclaim failed:', err));
-      this.residents.delete('whisper');
+      try {
+        await w.unload();
+        this.residents.delete('whisper');
+      } catch (err) {
+        // Native unload REJECTED — whisper still holds its RAM. Keep it counted resident so
+        // the next load sizes against real (not phantom-freed) memory rather than OOMing.
+        logger.log('[ModelResidency] STT reclaim failed:', err);
+      }
     });
   }
 
