@@ -42,25 +42,25 @@ function parseXmlStyleToolCall(body: string, idSuffix: number): ToolCall | null 
 }
 
 function parseToolCallBody(body: string, idSuffix: number): ToolCall | null {
-  const makeCall = (name: string, args: Record<string, any>): ToolCall =>
-    ({ id: `text-tc-${Date.now()}-${idSuffix}`, name, arguments: args });
+  const makeCall = (name: string, args: any): ToolCall =>
+    ({ id: `text-tc-${Date.now()}-${idSuffix}`, name, arguments: normalizeToolArgs(args) });
 
   // Standard JSON: {"name": "tool", "arguments": {...}}
   try {
-    const parsed = JSON.parse(body);
-    if (parsed.name) return makeCall(parsed.name, parsed.arguments || parsed.parameters || {});
+    const parsed = parseJsonLenient(body);
+    if (parsed.name) return makeCall(parsed.name, parsed.arguments ?? parsed.parameters ?? {});
   } catch { /* fall through */ }
 
   // Function-call style: tool_name({"key": "value"})
   const funcMatch = (/^(\w+)\s*\((\{[\s\S]*\})\)$/).exec(body);
   if (funcMatch) {
-    try { return makeCall(funcMatch[1], JSON.parse(funcMatch[2])); } catch { /* fall through */ }
+    try { return makeCall(funcMatch[1], parseJsonLenient(funcMatch[2])); } catch { /* fall through */ }
   }
 
   // Bare style: tool_name{"key": "value"}
   const bareMatch = (/^(\w+)\s*(\{[\s\S]*\})$/).exec(body);
   if (bareMatch) {
-    try { return makeCall(bareMatch[1], JSON.parse(bareMatch[2])); } catch { /* fall through */ }
+    try { return makeCall(bareMatch[1], parseJsonLenient(bareMatch[2])); } catch { /* fall through */ }
   }
 
   // No-args style: just a tool name with no arguments
@@ -73,11 +73,41 @@ function fixUnquotedKeys(json: string): string {
   return json.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*):/g, '$1"$2"$3:');
 }
 
+/**
+ * Parse JSON, recovering from the unquoted object keys small models routinely
+ * emit ({expression: "2+2"}). The single lenient-parse used by EVERY tool-call
+ * body path so the standard and Gemma parsers can't drift (they did: the Gemma
+ * path recovered via fixUnquotedKeys while the standard path used a raw
+ * JSON.parse and silently dropped the call — Q2). Throws if both attempts fail,
+ * so callers keep their existing try/catch fall-through.
+ */
+function parseJsonLenient(s: string): any {
+  try { return JSON.parse(s); }
+  catch { return JSON.parse(fixUnquotedKeys(s)); }
+}
+
+/**
+ * Normalize a tool call's `arguments` to an object. Small models sometimes emit
+ * arguments as a STRINGIFIED JSON object ("{...}") rather than an object (Q3);
+ * forwarding that string verbatim gives the tool undefined params. Parse a
+ * JSON-object string to an object; pass a real object through; anything else → {}.
+ */
+function normalizeToolArgs(args: any): Record<string, any> {
+  if (typeof args === 'string') {
+    const s = args.trim();
+    if (s.startsWith('{')) {
+      try { return parseJsonLenient(s); } catch { /* not JSON → no usable params */ }
+    }
+    return {};
+  }
+  return args && typeof args === 'object' ? args : {};
+}
+
 function parseGemmaColonArgs(name: string, colonArgs: string): Record<string, any> {
   if (colonArgs.startsWith(name)) {
     const jsonBody = colonArgs.slice(name.length).trim();
     if (jsonBody.startsWith('{')) {
-      try { return JSON.parse(fixUnquotedKeys(jsonBody)) as Record<string, any>; }
+      try { return parseJsonLenient(jsonBody) as Record<string, any>; }
       catch { /* fall through */ }
     }
   }
@@ -103,11 +133,12 @@ function parseGemmaToolCallBody(raw: string, toolCalls: ToolCall[]): void {
   const argsStr = (/^\((\{[\s\S]*\})\)$/).exec(rest)?.[1] ?? (/^(\{[\s\S]*\})$/).exec(rest)?.[1] ?? null;
   if (argsStr) {
     try {
-      args = JSON.parse(fixUnquotedKeys(argsStr));
+      args = parseJsonLenient(argsStr);
     } catch { /* fall through */ }
   } else if (rest.startsWith(':')) {
     args = parseGemmaColonArgs(name, rest.slice(1));
   }
+  args = normalizeToolArgs(args);
 
   if (name === 'web_search' && !args.query && args.queries) {
     args = { ...args, query: Array.isArray(args.queries) ? args.queries[0] : args.queries };
