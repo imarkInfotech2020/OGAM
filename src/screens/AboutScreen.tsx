@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking, ScrollView, Image, StyleSheet } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
+import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -57,6 +58,44 @@ export const AboutScreen: React.FC = () => {
             <View style={styles.navItemContent}>
               <Text style={styles.navItemTitle}>Open Source</Text>
               <Text style={styles.navItemDesc}>View the source on GitHub</Text>
+            </View>
+            <Icon name="external-link" size={14} color={colors.textMuted} />
+          </AnimatedListItem>
+        </View>
+
+        {/* Follow / Community */}
+        <View style={styles.navSection}>
+          <AnimatedListItem
+            index={1}
+            staggerMs={40}
+            trigger={focusTrigger}
+            style={styles.navItem}
+            testID="about-follow-on-x"
+            onPress={() => Linking.openURL('https://x.com/alichherawalla')}
+          >
+            <View style={styles.navItemIcon}>
+              <Icon name="twitter" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.navItemContent}>
+              <Text style={styles.navItemTitle}>Follow @alichherawalla on X</Text>
+              <Text style={styles.navItemDesc}>New features first, promo discounts, roadmap</Text>
+            </View>
+            <Icon name="external-link" size={14} color={colors.textMuted} />
+          </AnimatedListItem>
+          <AnimatedListItem
+            index={2}
+            staggerMs={40}
+            trigger={focusTrigger}
+            style={[styles.navItem, styles.navItemLast]}
+            testID="about-join-slack"
+            onPress={() => Linking.openURL('https://join.slack.com/t/off-grid-mobile/shared_invite/zt-43kbisqxf-hM0y07EnaNnIfVN9DLR3Dg')}
+          >
+            <View style={styles.navItemIcon}>
+              <IconMC name="slack" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.navItemContent}>
+              <Text style={styles.navItemTitle}>Join the Slack community</Text>
+              <Text style={styles.navItemDesc}>Issues fixed fast, debug together, early access</Text>
             </View>
             <Icon name="external-link" size={14} color={colors.textMuted} />
           </AnimatedListItem>
