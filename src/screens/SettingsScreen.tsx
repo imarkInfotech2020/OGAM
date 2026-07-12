@@ -30,7 +30,7 @@ import RNFS from 'react-native-fs';
 import { useAppStore, useRemoteServerStore } from '../stores';
 import { hardwareService } from '../services';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
-import { GITHUB_URL, shareOnX } from '../utils/sharePrompt';
+import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL, shareOnX } from '../utils/sharePrompt';
 import { clearProForTesting } from '../services/proLicenseService';
 import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import packageJson from '../../package.json';
@@ -286,7 +286,7 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.navItem}
               testID="follow-on-x"
-              onPress={() => Linking.openURL('https://x.com/alichherawalla')}
+              onPress={() => Linking.openURL(FOLLOW_X_URL)}
             >
               <View style={styles.followItemIcon}>
                 <Icon name="twitter" size={16} color={colors.primary} />
@@ -300,7 +300,7 @@ export const SettingsScreen: React.FC = () => {
             <TouchableOpacity
               style={[styles.navItem, styles.navItemLast]}
               testID="join-slack"
-              onPress={() => Linking.openURL('https://join.slack.com/t/off-grid-mobile/shared_invite/zt-43kbisqxf-hM0y07EnaNnIfVN9DLR3Dg')}
+              onPress={() => Linking.openURL(SLACK_INVITE_URL)}
             >
               <View style={styles.followItemIcon}>
                 <IconMC name="slack" size={16} color={colors.primary} />

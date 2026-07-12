@@ -10,7 +10,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { MadeWithLove } from '../components/MadeWithLove';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { GITHUB_URL } from '../utils/sharePrompt';
+import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL } from '../utils/sharePrompt';
 import { withUtm } from '../utils/utm';
 import packageJson from '../../package.json';
 
@@ -71,7 +71,7 @@ export const AboutScreen: React.FC = () => {
             trigger={focusTrigger}
             style={styles.navItem}
             testID="about-follow-on-x"
-            onPress={() => Linking.openURL('https://x.com/alichherawalla')}
+            onPress={() => Linking.openURL(FOLLOW_X_URL)}
           >
             <View style={styles.navItemIcon}>
               <Icon name="twitter" size={16} color={colors.primary} />
@@ -88,7 +88,7 @@ export const AboutScreen: React.FC = () => {
             trigger={focusTrigger}
             style={[styles.navItem, styles.navItemLast]}
             testID="about-join-slack"
-            onPress={() => Linking.openURL('https://join.slack.com/t/off-grid-mobile/shared_invite/zt-43kbisqxf-hM0y07EnaNnIfVN9DLR3Dg')}
+            onPress={() => Linking.openURL(SLACK_INVITE_URL)}
           >
             <View style={styles.navItemIcon}>
               <IconMC name="slack" size={16} color={colors.primary} />
@@ -104,7 +104,7 @@ export const AboutScreen: React.FC = () => {
         {/* Built by Wednesday row */}
         <View style={styles.navSection}>
           <AnimatedListItem
-            index={1}
+            index={3}
             staggerMs={40}
             trigger={focusTrigger}
             style={[styles.navItem, styles.navItemLast]}
