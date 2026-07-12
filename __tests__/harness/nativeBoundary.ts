@@ -104,6 +104,12 @@ export interface LiteRTFake {
    * trip (e.g. the LiteRT tool-router does a separate generateToolSelection pass, THEN the main turn).
    */
   scriptTurns(turns: LiteRTTurn[]): void;
+  /**
+   * Make the NEXT send/generate emit a device-shaped litert_error (the native runtime failing to invoke —
+   * e.g. B23 "Status 13 Failed to invoke the compiled model" on a CPU backend), so the REAL error path runs
+   * (litertService.onError → generation error surface). One-shot: cleared after it fires.
+   */
+  scriptError(message: string): void;
 }
 
 /** Run fn on a macrotask so it lands after the current async chain (native call → awaited resolve). */
@@ -117,6 +123,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   const queue: LiteRTTurn[] = [];
   let currentTurn: LiteRTTurn | null = null; // the turn onSend picked (for respondToToolCall completion)
   let toolCallsRemaining = 0;
+  let pendingError: string | null = null; // one-shot: next send emits litert_error instead of completing
 
   const emitCompletion = (turn: LiteRTTurn) => {
     if (turn.reasoning) handle.emit('litert_thinking', turn.reasoning);
@@ -125,6 +132,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   };
 
   const onSend = () => {
+    if (pendingError) { const m = pendingError; pendingError = null; defer(() => handle.emit('litert_error', m)); return; }
     const turn = queue.length ? queue.shift()! : pending;
     currentTurn = turn;
     if (!turn) { defer(() => handle.emit('litert_complete', '{}')); return; }
@@ -163,6 +171,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     calls,
     scriptTurn: (turn: LiteRTTurn) => { pending = turn; },
     scriptTurns: (turns: LiteRTTurn[]) => { queue.length = 0; queue.push(...turns); },
+    scriptError: (message: string) => { pendingError = message; },
   };
 }
 
