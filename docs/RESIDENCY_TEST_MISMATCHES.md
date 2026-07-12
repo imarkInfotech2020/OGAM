@@ -13,4 +13,16 @@ Format:
 
 ---
 
-_No mismatches logged yet._
+- **[T119] whisper blocked→free→retry — DEFERRED (harness gap, not a device mismatch)** —
+  Expected (from `DEVICE_TEST_FINDINGS.md` B1 + `ensureWhisperForTranscription.ts`): on a tight device where a
+  heavy text model owns RAM, recording a voice note makes `whisperStore.loadModel` return `'blocked'` (the
+  sidecar rule won't evict the heavy), so `ensureWhisperForTranscription` calls `freeGenerationModels()` then
+  retries → whisper loads, the transcript reaches the model. · Observed (test): not yet built — reproducing the
+  `'blocked'` verdict needs (a) whisper **downloaded but NOT resident** (the harness `setupWhisperModel` both
+  downloads AND selects+loads, so there's no "downloaded-only" state), and (b) a `setBudgetOverrideMB` tuned so
+  the text model fills the budget and the small STT sidecar can't co-reside — plus confirming the AUDIO-mode
+  voice path actually calls `ensureWhisperForTranscription` (it may warm whisper eagerly, in which case the
+  blocked path is chat-mode-only). · Trace: n/a (not run). · Hypothesis: harness needs a
+  `downloadWhisperOnly()` helper (download gesture, no select) + a budget knob; the code path itself is real
+  and unit-tested (`ensureWhisperForTranscription`). · Status: OPEN — needs a focused session + a small harness
+  addition. Not a device-behavior mismatch; a test-infra gap.
