@@ -194,7 +194,9 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
 export interface LlamaFake {
   /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser).
    *  Pass { throwMessage } to make completion REJECT (e.g. a native context-overflow error). */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string }): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string }): void;
+  /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
+  releaseStream(): void;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
   calls: { completion: unknown[][] };
@@ -202,7 +204,8 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string } = { text: '' };
+  let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
 
   const context: Record<string, jest.Mock> = {
     // Faithful to llama.rn: completion(params, onToken) STREAMS token-by-token through the callback
@@ -214,9 +217,18 @@ function makeLlamaFake(): LlamaFake {
       calls.completion.push([params]);
       if (pending.throwMessage) throw new Error(pending.throwMessage);
       if (pending.text && typeof onToken === 'function') {
-        const tokens = pending.text.match(/\S+\s*|\s+/g) ?? [pending.text];
+        // Char-by-char streaming so a pauseAfter lands EXACTLY (never spanning a delimiter like </think>).
+        const chars = [...pending.text];
         let acc = '';
-        for (const t of tokens) { acc += t; onToken({ token: t, content: acc }); }
+        let paused = false;
+        for (const c of chars) {
+          acc += c;
+          onToken({ token: c, content: acc });
+          if (pending.pauseAfter && !paused && acc.endsWith(pending.pauseAfter)) {
+            paused = true;
+            await new Promise<void>((res) => { releaseFn = res; }); // HOLD until releaseStream()
+          }
+        }
       }
       return {
         text: pending.text,
@@ -247,7 +259,11 @@ function makeLlamaFake(): LlamaFake {
     detokenize: jest.fn().mockResolvedValue({ text: '' }),
   };
 
-  return { module, calls, scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage }; } };
+  return {
+    module, calls,
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, pauseAfter: r.pauseAfter }; },
+    releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
+  };
 }
 
 // ---------------------------------------------------------------------------
