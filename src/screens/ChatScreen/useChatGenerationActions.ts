@@ -395,7 +395,13 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
         prominentMessage: true,
       });
     } else {
-      deps.setAlertState(showAlert('Generation Error', msg));
+      // A runtime engine failure (e.g. LiteRT CPU 'Status Code: 13 Failed to invoke the
+      // compiled model', B23) must not vanish into an ephemeral alert, leaving the user
+      // staring at their own message. Surface the exact error durably inline as an
+      // assistant message on the turn, AND keep the immediate alert (generic body so the
+      // detailed error text lives in ONE place — the inline message).
+      deps.addMessage(targetConversationId, { role: 'assistant', content: msg });
+      deps.setAlertState(showAlert('Generation Error', 'The model could not complete this response. The details are shown in the chat.'));
     }
     generationSession.end('error');
     return;
