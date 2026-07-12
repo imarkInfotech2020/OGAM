@@ -230,7 +230,7 @@ black box, instead of reading `getResidents()`. Trace any failure with `DEBUG_LO
 |---|---|---|---|---|---|---|
 | T081 | ✅ P1 | ✅ `speakMessage` | Register the `audio.*` hook seam (kokoro) → open a reply's action menu → tap Speak (`action-speak`) | the reply's text is dispatched to the audio engine (kokoro synth); no Speak on user messages | DEV · WORKS | |
 | T082 | 🔴 P1 | ✅ `speakMarkdown` | **Chat mode** → tap the speaker on an assistant bubble with markdown | the text fed to TTS is markdown-stripped (no `**`/`##`/backticks/pipes) (RED: MessageRenderer passes only `stripControlTokens`) | Q19 · BROKEN | |
-| T083 | 🔴 P2 | ❌ | TTS playing → delete the TTS model in DM (gesture) | graceful (canEvict veto), no broken playback (verify) | V5-gap · verify | |
+| T083 | 🔴 P2 | ✅ `ttsDeleteMidPlaybackBreaks.redflow` | Voice turn speaking (TTS playing) → open DM → delete the Voice model (gesture) | playback intact — STOP control stays, bar doesn't snap to the idle mic (RED: the DM delete path `deleteModels→deleteAssets→release→bridge.stop(true)` never consults the canEvict veto that exists only on the residency path → active playback killed). UI-pure (tts-stop-button present / voice-record-button-audio absent); observe-transient precondition. Falsified: delete honors the veto while playing → green (verified). FIX-mode: honor the veto on the delete path | V5-gap · BROKEN | |
 
 ## Area 12 — Voice-mode journeys (end-to-end)
 
