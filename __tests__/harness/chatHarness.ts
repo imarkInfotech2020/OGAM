@@ -38,6 +38,10 @@ export interface ChatHarnessOptions {
   /** Activate the PRO feature set (audio/voice mode header toggle, audio layout, TTS, MCP) via the real
    *  bootstrap, so pro user-flows are reachable in the mounted screen. */
   pro?: boolean;
+  /** Skip the deterministic pre-load after model select, so the model is selected-but-not-loaded exactly
+   *  as the real lazy flow leaves it (load defers to the first send). Use to assert the lazy-on-select
+   *  invariant (no eager warm) via the In Memory section. Default false (pre-load for send determinism). */
+  deferInitialLoad?: boolean;
 }
 
 const LLAMA_PATH = '/models/small.gguf';
@@ -104,7 +108,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
   // Load via the REAL load path (the app loads lazily on the first send; we trigger the same path so the
   // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
-  await activeModelService.loadTextModel('m');
+  // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
+  // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
+  if (!opts.deferInitialLoad) await activeModelService.loadTextModel('m');
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
