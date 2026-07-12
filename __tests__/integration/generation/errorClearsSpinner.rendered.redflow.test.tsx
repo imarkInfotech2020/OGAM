@@ -1,16 +1,20 @@
 /**
- * T056 / DEV-B13 — a generation that ends in ERROR must clear the loading state and show the error; it must
- * NOT leave the UI spinning forever.
+ * T056 / DEV-B13 — a LLAMA (GGUF) generation that fails must show the user an error AND clear the loading
+ * state. On device it does NEITHER: the vision decode fails, no error is shown, and the spinner spins forever.
  *
- * Device (B13, part2): a generation that ended reason=error (vision decode fail) left the UI spinning
- * indefinitely and the user saw no error — a dead-end with no way forward.
+ * Device (part2/part7 wire capture): a vision send on a bigger GGUF model →
+ *   [LLM-NATIVE] error: llama_decode: failed to decode, ret = -1
+ *   [GenerationService] Generation error: Failed to evaluate chunks
+ *   [ChatGen] Generation failed: Failed to evaluate chunks   →   [GEN-SM] session end reason=error
+ * ...yet the UI showed no error and kept spinning. User (this session): "the vision thing failed and I
+ * didn't get a fucking error."
  *
- * User behavior, real gestures: litert model active, send a message HELD in-flight so the loading state is
- * genuinely on screen (the stop control renders), THEN the native runtime fails it (device-shaped
- * litert_error). Observed transition — spinner ON → cleared — so the assertion is real, not trivially true.
+ * IMPORTANT: this is the LLAMA path. The litert error path DOES clear + surface the error (verified) — the
+ * bug is specific to the llama engine's failure handling, so this test pins engine:'llama'.
  *
- * Falsified: breaking chatStore.clearStreamingMessage (the isStreaming/isThinking reset the error path calls)
- * makes this go RED (stop control persists). GREEN on HEAD ⇒ B13 fixed on the local path.
+ * User behavior, real gestures: llama model active, send; the native runtime fails the completion (device-
+ * shaped "Failed to evaluate chunks"). SPEC: the user sees an error and the input returns to idle.
+ * RED on HEAD (B13): no error is shown and the generating STOP control stays (spinner never clears).
  */
 import { setupChatScreen } from '../../harness/chatHarness';
 
@@ -20,22 +24,22 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {}, useIsFocused: () => true,
 }));
 
-describe('T056 (rendered) — generation error clears the spinner + surfaces the error (DEV-B13)', () => {
-  it('clears the generating STOP control and shows the error after a failed generation', async () => {
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android' });
+describe('T056 (rendered) — a failed LLAMA generation shows an error + clears the spinner (DEV-B13)', () => {
+  it('surfaces the error and returns the input to idle after a llama generation fails', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     h.render();
 
-    // Send with the generation HELD in-flight so the loading state truly renders (a stop control appears).
-    h.boundary.litert.scriptHang();
+    // The native llama runtime fails the completion (device-shaped vision-decode failure).
+    h.boundary.llama!.scriptCompletion({ throwMessage: 'Failed to evaluate chunks' });
     await h.tapSend('describe this image');
-    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).not.toBeNull(); }, { timeout: 4000 });
 
-    // The in-flight generation now fails (device-shaped litert_error).
-    h.boundary.litertEvents.emit('litert_error', 'Failed to evaluate chunks');
+    // The send happened (proves the errored generation actually ran, not a no-op).
+    await h.rtl.waitFor(() => { expect(h.view!.queryAllByText('describe this image').length).toBeGreaterThan(0); }, { timeout: 4000 });
+    await h.settle(400);
 
-    // The error reached the user...
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Failed to evaluate chunks/)).not.toBeNull(); }, { timeout: 4000 });
-    // ...and the generating STOP control CLEARED — the input is usable again, not spinning forever.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).toBeNull(); }, { timeout: 4000 });
+    // SPEC: the user is told the generation failed. RED (B13): no error is shown at all.
+    expect(h.view!.queryByText(/Failed to evaluate chunks|Generation Error/i)).not.toBeNull();
+    // SPEC: the loading state cleared — input usable again. RED (B13): the STOP control spins forever.
+    expect(h.view!.queryByTestId('stop-button')).toBeNull();
   });
 });
