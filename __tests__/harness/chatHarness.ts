@@ -77,6 +77,13 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
 
+  // Boundary: dismiss the onboarding spotlight tour. When a whisper model is present the voice-hint
+  // spotlight (step 12) fires and wraps the send button in an AttachStep, which intercepts the composer
+  // gesture in tests. The tour is unrelated to any behavior under test, so mark it done up front.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
+  useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+
   // Activate PRO (audio/voice mode header toggle, audio layout, TTS, MCP) via the real bootstrap BEFORE any
   // screen mounts, so pro slots render in Home + ChatScreen. Reusable seam (proHarness.installPro).
   if (opts.pro) { const { installPro } = require('./proHarness'); await installPro(); }
@@ -189,8 +196,27 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     async tapSend(text: string) {
       const view = this.view!;
       const input = await rtl.waitFor(() => view.getByTestId('chat-input'));
-      rtl.fireEvent.changeText(input, text);
-      rtl.fireEvent.press(view.getByTestId('send-button'));
+      // Drive the composer's REAL onChangeText handler (the same one a keypress invokes). We do NOT use
+      // fireEvent.changeText here because once a whisper/STT model is present it silently no-ops on this
+      // TextInput (a real ChatInput coupling: the composer subtree reshapes with voice availability), which
+      // would leave the send button unrendered. Invoking the bound handler is faithful and robust either way.
+      await rtl.act(async () => { (input as unknown as { props: { onChangeText: (t: string) => void } }).props.onChangeText(text); });
+      // waitFor the send button (it appears once the text lands), then invoke its TouchableOpacity onPress.
+      // We resolve the handler off the node instead of rtl.fireEvent.press because, once a whisper/STT model
+      // is present, RTL's press traversal does not reach this button's onPress (the composer subtree reshapes
+      // with voice availability) — invoking the bound handler is the same thing a tap does and is robust.
+      await rtl.waitFor(() => view.getByTestId('send-button'));
+      type PressNode = { props?: Record<string, unknown>; parent?: PressNode | null } | null;
+      const pressSend = () => {
+        let n: PressNode = view.getByTestId('send-button') as unknown as PressNode;
+        for (let d = 0; n && d < 12; d++) {
+          const op = n.props?.onPress;
+          if (typeof op === 'function') { (op as () => void)(); return; }
+          n = n.parent ?? null;
+        }
+        rtl.fireEvent.press(view.getByTestId('send-button')); // fallback
+      };
+      await rtl.act(async () => { pressSend(); });
     },
 
     /**
@@ -330,8 +356,27 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
       const view = this.view!;
       const input = await rtl.waitFor(() => view.getByTestId('chat-input'));
-      rtl.fireEvent.changeText(input, text);
-      rtl.fireEvent.press(view.getByTestId('send-button'));
+      // Drive the composer's REAL onChangeText handler (the same one a keypress invokes). We do NOT use
+      // fireEvent.changeText here because once a whisper/STT model is present it silently no-ops on this
+      // TextInput (a real ChatInput coupling: the composer subtree reshapes with voice availability), which
+      // would leave the send button unrendered. Invoking the bound handler is faithful and robust either way.
+      await rtl.act(async () => { (input as unknown as { props: { onChangeText: (t: string) => void } }).props.onChangeText(text); });
+      // waitFor the send button (it appears once the text lands), then invoke its TouchableOpacity onPress.
+      // We resolve the handler off the node instead of rtl.fireEvent.press because, once a whisper/STT model
+      // is present, RTL's press traversal does not reach this button's onPress (the composer subtree reshapes
+      // with voice availability) — invoking the bound handler is the same thing a tap does and is robust.
+      await rtl.waitFor(() => view.getByTestId('send-button'));
+      type PressNode = { props?: Record<string, unknown>; parent?: PressNode | null } | null;
+      const pressSend = () => {
+        let n: PressNode = view.getByTestId('send-button') as unknown as PressNode;
+        for (let d = 0; n && d < 12; d++) {
+          const op = n.props?.onPress;
+          if (typeof op === 'function') { (op as () => void)(); return; }
+          n = n.parent ?? null;
+        }
+        rtl.fireEvent.press(view.getByTestId('send-button')); // fallback
+      };
+      await rtl.act(async () => { pressSend(); });
     },
 
     /**

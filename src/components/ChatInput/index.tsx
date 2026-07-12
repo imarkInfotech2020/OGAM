@@ -6,6 +6,7 @@ import { ImageModeState, MediaAttachment } from '../../types';
 import { VoiceRecordButton } from '../VoiceRecordButton';
 import { AttachStep } from 'react-native-spotlight-tour';
 import { triggerHaptic } from '../../utils/haptics';
+import logger from '../../utils/logger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
 import { createStyles, PILL_ICON_SIZE, ANIM_DURATION_IN, ANIM_DURATION_OUT } from './styles';
 import { QueueRow } from './Toolbar';
@@ -178,6 +179,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const canSend = (message.trim().length > 0 || attachments.length > 0) && !disabled;
 
   const handleSend = () => {
+    logger.log(`[COMPOSER-SM] handleSend canSend=${canSend} disabled=${disabled} hasText=${message.trim().length > 0} attachments=${attachments.length} imageMode=${imageMode}`);
     if (!canSend) return;
     triggerHaptic('impactMedium');
     onSend(message.trim(), attachments.length > 0 ? attachments : undefined, imageMode);

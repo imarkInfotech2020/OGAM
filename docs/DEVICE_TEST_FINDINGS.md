@@ -165,17 +165,21 @@ Qwen0.8B AND gemma-4-E2B both advertise `tools:true, toolCalls:true, parallelToo
 ### B1 — Whisper STT model leaks resident; eject-all can't clear it *(TOP PRIORITY)*
 **The headline bug.** Chain of three defects, all confirmed from `[MEM-SM]`/`[MODEL-SM]` traces + code:
 
-1. **Whisper auto-loads resident the instant it finishes downloading** — not on first transcription.
-   Trace: `[Whisper] Downloaded → makeRoomFor whisper sizeMB=1500 → Loading model → Model loaded successfully`
-   at 07:20. It should not load into RAM until the user actually transcribes.
-2. **`makeRoomFor` counts it in the budget but never evicts it.** When loading gemma (text, 5854MB) with
-   `residents=[text:1055, whisper:1500]`, it returned `fits=true evict=[]` while `os_procAvailMB=1662` —
-   i.e. it green-lit a 5854MB load into 1.6GB of real free RAM.
-3. **`ejectAll` doesn't know whisper exists.** After eject-all: `[MODEL-SM] ejectAll → done count=1`, and the
-   next load shows `residents=[whisper:1500]` — the chat model ejected, **whisper survived**.
-   Code: `activeModelService.unloadAllModels()` returns only `{textUnloaded, imageUnloaded}`; STT/whisper is
-   absent from the unload set (`activeModelService/index.ts:394,428`). So the user's only manual escape hatch
-   structurally cannot free whisper — app-kill is the sole recourse.
+1. **[FIXED — commit d7e78c9f]** **Whisper auto-loads resident the instant it finishes downloading** — not on
+   first transcription. Trace: `[Whisper] Downloaded → makeRoomFor whisper sizeMB=1500 → Loading model → Model
+   loaded successfully` at 07:20. It should not load into RAM until the user actually transcribes. FIX: removed
+   the `await get().loadModel()` from `whisperStore.downloadModel`; whisper now lazy-loads on the transcribe
+   path only (`ensureWhisperForTranscription`) + the fits-gated launch warm. Guard: T022
+   `whisperResidentOnDownload.rendered.redflow` (green).
+2. **[OPEN — T024/T099]** **`makeRoomFor` counts it in the budget but never evicts it.** When loading gemma
+   (text, 5854MB) with `residents=[text:1055, whisper:1500]`, it returned `fits=true evict=[]` while
+   `os_procAvailMB=1662` — i.e. it green-lit a 5854MB load into 1.6GB of real free RAM.
+3. **[FIXED — commit d47ed91b]** **`ejectAll` doesn't know whisper exists.** After eject-all:
+   `[MODEL-SM] ejectAll → done count=1`, and the next load shows `residents=[whisper:1500]` — the chat model
+   ejected, **whisper survived**. Code: `activeModelService.unloadAllModels()` returned only
+   `{textUnloaded, imageUnloaded}`; STT/whisper was absent from the unload set. FIX: `ejectAll` now loops the
+   remaining `getResidents()` through `modelResidencyManager.evictByKey` after `unloadAllModels`, so every
+   sidecar is freed. Guards: T023 `ejectAllLeavesWhisper` + T023b `ejectAllUnloadsEveryType` (both green).
 
 **User symptom (their words):** "this gemma4 e2b is struggling on my phone. I'm pretty sure its some coresident
 bullshit in the ram" / "cause normally its super fast." Exactly right — 1.5GB whisper squatter → thrash.
