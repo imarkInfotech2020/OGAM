@@ -26,6 +26,19 @@ Format:
   `downloadWhisperOnly()` helper (download gesture, no select) + a budget knob; the code path itself is real
   and unit-tested (`ensureWhisperForTranscription`). · Status: OPEN — needs a focused session + a small harness
   addition. Not a device-behavior mismatch; a test-infra gap.
+- **[T015] llama NPU (HTP) loads but generation is gibberish — DEFERRED (native-only, no JS surface)** —
+  Expected (from `DEVICE_TEST_FINDINGS.md` B22): on SM8635 (qnn `min`), selecting the NPU (Beta)/HTP backend
+  loads cleanly (layers on HTP0, no fallback) but generation emits garbage tokens; the product-correct
+  outcome is a coherent answer. · Observed (analysis, not a test): there is NO app-side gate or JS decision
+  to assert — grep of `src/services` confirms the HTP path (`llmHelpers.initContextWithFallback` +
+  `llm.ts` HTP branch) loads normally and streams whatever the native runtime emits; nothing detects
+  gibberish, and nothing blocks/warns NPU for gemma-style models. The gibberish is decided entirely by the
+  Hexagon firmware/quantization (B22 confirmed genuinely on HTP, no fallback). · Trace: n/a. · Hypothesis:
+  a "reply is coherent" UI test would only assert the tokens the fake was told to emit (testing-the-fake,
+  red-for-the-wrong-reason) — the real fix is native, not JS. The load-path GPU/backend surfacing IS covered
+  by T014 (GenerationMeta shows the backend/layers). If the product later adds an app-side guard (detect
+  gemma+HTP → fall back to CPU, or warn), THAT guard becomes a real UI test. · Status: OPEN — native-only;
+  needs a device (Provit N/A) to verify, or an app-side guard to make it JS-testable. Not a false green.
 - **[T118] embedding sidecar lazy-load on first RAG query — DEFERRED (harness gap)** —
   Expected (from `embedding.ts:85` + `searchKnowledgeBaseRoundtrip`): the embedding model loads on the first
   real `embed()` (indexing a KB doc, or a doc-question → `search_knowledge_base` → embed), registers as
