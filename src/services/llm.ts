@@ -288,7 +288,7 @@ class LLMService {
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-  async generateResponse(messages: Message[], onStream?: StreamCallback, onComplete?: CompleteCallback): Promise<string> {
+  async generateResponse(messages: Message[], onStream?: StreamCallback, onComplete?: CompleteCallback, opts?: { disableThinking?: boolean }): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -304,7 +304,11 @@ class LLMService {
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
       const __wire: Array<Record<string, unknown>> = []; // [WIRE] capture raw per-token shape from-device
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(this.isThinkingEnabled(), this.isGemma4Model()) };
+      // A caller may force thinking OFF (e.g. the image-prompt enhancement utility call),
+      // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
+      // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
+      const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model()) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {

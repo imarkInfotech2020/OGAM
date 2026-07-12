@@ -1,6 +1,7 @@
-import { useAppStore } from '../stores';
+import { useAppStore, useRemoteServerStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
+import { providerRegistry } from './providers';
 import { isLiteRTModel, type DownloadedModel, type Message } from '../types';
 import logger from '../utils/logger';
 
@@ -189,7 +190,33 @@ export function getActiveEngineService(): typeof llmService | typeof liteRTServi
  * hardcode llmService, so a LiteRT text model reported "not loaded" and enhancement was
  * skipped even though the model was resident).
  */
-export async function generateStandalone(messages: Message[]): Promise<string> {
+export async function generateStandalone(
+  messages: Message[],
+  onToken?: (token: string) => void,
+): Promise<string> {
+  // Remote/gateway text model active with no local engine loaded: enhancement used to
+  // fall through to the (unloaded) local llama and throw, so it was silently skipped
+  // (Q8). Route the one-shot through the active provider, streaming content so the UI
+  // can show live progress (B30b). Thinking OFF — enhancement is a utility rewrite.
+  const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
+  const useRemote = !!activeServerId && providerRegistry.hasProvider(activeServerId) && !llmService.isModelLoaded() && getActiveEngineService() !== liteRTService;
+  if (useRemote) {
+    const provider = providerRegistry.getProvider(activeServerId!)!;
+    if (activeRemoteTextModelId && provider.getLoadedModelId() !== activeRemoteTextModelId) {
+      await provider.loadModel(activeRemoteTextModelId);
+    }
+    let content = '';
+    await provider.generate(
+      messages,
+      { enableThinking: false },
+      {
+        onToken: (t: string) => { content += t; onToken?.(t); },
+        onComplete: (result) => { if (result?.content) content = result.content; },
+        onError: (err) => { throw err instanceof Error ? err : new Error(String(err)); },
+      },
+    );
+    return content;
+  }
   if (getActiveEngineService() === liteRTService) {
     const system = messages.find(m => m.role === 'system');
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
@@ -201,11 +228,17 @@ export async function generateStandalone(messages: Message[]): Promise<string> {
       history: [],
     });
     try {
-      return await liteRTService.generateRaw(userText);
+      return await liteRTService.generateRaw(userText, undefined, { onToken: (t: string) => onToken?.(t) });
     } finally {
       liteRTService.invalidateConversation();
     }
   }
-  // llama (default engine). A no-op stream callback → we only want the final string.
-  return llmService.generateResponse(messages, () => {});
+  // llama (default engine). Stream tokens for live progress; force thinking OFF so the
+  // enhanced prompt is a clean rewrite, never a leaked reasoning chain (B30/B30b).
+  return llmService.generateResponse(
+    messages,
+    onToken ? (data) => { if (typeof (data as { content?: string })?.content === 'string') onToken((data as { content: string }).content); } : () => {},
+    undefined,
+    { disableThinking: true },
+  );
 }
