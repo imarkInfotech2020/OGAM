@@ -56,6 +56,25 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
     _clearExtensionsForTesting();
   });
 
+  it('T044: two parallel calculator calls render two tool-result bubbles, both correct', async () => {
+    const h = await setupChatScreen({ engine: 'litert' });
+    h.enableToolViaUI('calculator');
+    h.render();
+    // The model emits TWO calculator tool calls in one turn (parallel, index 0+1); the real tool loop runs
+    // both and the answer carries both results.
+    await h.send('compute 500*321 and 12+13', {
+      toolCalls: [
+        { name: 'calculator', arguments: { expression: '500*321' } },
+        { name: 'calculator', arguments: { expression: '12+13' } },
+      ],
+      content: 'Results: 160500 and 25.',
+    });
+    // Two tool-result bubbles render (both calculator runs are visible).
+    await h.rtl.waitFor(() => { expect(h.view!.queryAllByTestId('tool-result-label-calculator').length).toBe(2); });
+    // ...and the answer with both results renders.
+    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/160500 and 25/)).not.toBeNull(); });
+  });
+
   it('show generation details: the details row renders when enabled', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
     h.enableGenerationDetailsViaUI(); // real segmented toggle
