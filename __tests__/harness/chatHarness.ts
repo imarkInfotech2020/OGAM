@@ -20,7 +20,7 @@
  *   await h.send('what is the capital of France', { text: 'Paris.' });  // types, presses send, awaits reply
  *   expect(h.view.queryByText(/Paris\./)).not.toBeNull();
  */
-import { installNativeBoundary, requireRTL, GB, type RamProfile } from './nativeBoundary';
+import { installNativeBoundary, requireRTL, GB, type RamProfile, type CompletionMeta } from './nativeBoundary';
 import { createDownloadedModel } from '../utils/factories';
 
 /** Shared route params the test's navigation mock reads (set by setupChatScreen). */
@@ -356,7 +356,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * send button, and await the assistant reply rendering. `scripted` is what the (faked) native engine
      * returns — the real generation pipeline turns it into the rendered bubble.
      */
-    async send(text: string, scripted: { text?: string; content?: string; reasoning?: string; toolCalls?: unknown[] }) {
+    async send(text: string, scripted: { text?: string; content?: string; reasoning?: string; toolCalls?: unknown[]; completionMeta?: CompletionMeta }) {
       if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
       else boundary.litert.scriptTurn(scripted as { content?: string; toolCalls?: { name: string; arguments: Record<string, unknown> }[] });
 

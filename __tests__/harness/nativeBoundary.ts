@@ -191,6 +191,16 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
 // enabled via a jinja caps stub so the loop keeps the tools.
 // ---------------------------------------------------------------------------
 
+/** Completion-result metadata a real llama.rn NativeCompletionResult carries (verified against
+ *  llama.rn types). Lets a test script a TRUNCATED turn (hit the n_predict cap without EOS) so the
+ *  cutoff is device-shaped, not hand-asserted. Defaults model a normal complete turn. */
+export interface CompletionMeta {
+  stopped_eos?: boolean;    // false = did NOT stop on an end-of-sequence token
+  stopped_limit?: number;   // 1 = hit the n_predict cap (B15's condition)
+  truncated?: boolean;      // llama.rn's own truncation flag
+  tokens_predicted?: number;// == n_predict at the cap (device saw 1024)
+}
+
 export interface LlamaFake {
   /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser).
    *  Pass { throwMessage } to make completion REJECT (e.g. a native context-overflow error).
@@ -198,7 +208,7 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string }): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta }): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** react-native module object to inject for 'llama.rn'. */
@@ -208,7 +218,7 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
 
   const context: Record<string, jest.Mock> = {
@@ -239,11 +249,17 @@ function makeLlamaFake(): LlamaFake {
           }
         }
       }
+      // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
+      // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
+      const meta = pending.completionMeta ?? {};
       return {
         text: outText,
         content: outText,
         tool_calls: pending.toolCalls,
-        tokens_predicted: 8, tokens_evaluated: 4,
+        tokens_predicted: meta.tokens_predicted ?? 8, tokens_evaluated: 4,
+        stopped_eos: meta.stopped_eos ?? true,
+        stopped_limit: meta.stopped_limit ?? 0,
+        truncated: meta.truncated ?? false,
         timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
       };
     }),
@@ -281,7 +297,7 @@ function makeLlamaFake(): LlamaFake {
 
   return {
     module, calls,
-    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, pauseAfter: r.pauseAfter, thinkingText: r.thinkingText }; },
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, pauseAfter: r.pauseAfter, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
   };
 }
