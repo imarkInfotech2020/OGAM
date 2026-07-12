@@ -497,8 +497,11 @@ describe('ActiveModelService Integration', () => {
     });
   });
 
-  describe('extreme mode (aggressive) — single-model switching text/image/STT', () => {
-    beforeEach(() => modelResidencyManager.setLoadPolicy('aggressive'));
+  describe('conservative mode — single-model switching text/image/STT', () => {
+    // Conservative = ONE model at a time (evict everything else on each load). Aggressive is NOT
+    // single-model — it co-resides like balanced (covered in loadingModes.redflow); conservative is
+    // where the mutual-exclusion swap is the contract.
+    beforeEach(() => modelResidencyManager.setLoadPolicy('conservative'));
     afterEach(() => modelResidencyManager.setLoadPolicy('balanced'));
 
     it('switching text -> image evicts the text model (single model, not co-resident)', async () => {
@@ -511,7 +514,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('txt-1');
       expect(modelResidencyManager.isResident('text')).toBe(true);
 
-      // Under aggressive single-model, loading the image evicts the resident text model.
+      // Under conservative single-model, loading the image evicts the resident text model.
       await activeModelService.loadImageModel('img-1');
       expect(mockLlmService.unloadModel).toHaveBeenCalled();
       expect(modelResidencyManager.isResident('text')).toBe(false);
@@ -1850,11 +1853,13 @@ describe('ActiveModelService Integration', () => {
       mockHardwareService.getTotalMemoryGB.mockReturnValue(4);
     };
 
-    it('evicts the text model to fit an image when they cannot co-reside (tight device)', async () => {
+    it('co-resides a clean text + dirty image on a tight device (the clean text pages, is NOT evicted)', async () => {
       setupLowMemDevice(); // 4GB → ~2GB budget
 
-      // Each fits ALONE (~1.5GB text est, ~1.0GB image est) but not TOGETHER (~2.5GB),
-      // so loading the image must free the text model to fit.
+      // The clean (mmap GGUF) text is ~1.5GB and the dirty image ~1.0GB — nominally ~2.5GB, over the
+      // ~2GB budget. But a CLEAN model pages out under pressure, so it does NOT compete with the dirty
+      // image for real RAM: the image loads and the text stays resident (co-reside, no forced swap).
+      // This is the tight-boundary proof of the clean/dirty gate — distinct from the small co-fit case.
       const textModel = createDownloadedModel({ id: 'txt', fileSize: 1000 * 1024 * 1024 });
       const imageModel = createONNXImageModel({ id: 'img', size: 400 * 1024 * 1024 });
       useAppStore.setState({
@@ -1871,9 +1876,10 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.loadModel.mockResolvedValue(true);
       await activeModelService.loadImageModel('img');
 
-      // Text freed from RAM (they don't co-fit), but its SELECTION is kept so chat
-      // still shows it and it reloads on demand (eviction must not deselect).
-      expect(mockLlmService.unloadModel).toHaveBeenCalled();
+      // The clean text is NOT evicted (it pages around the dirty image); both stay resident.
+      expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
+      expect(modelResidencyManager.isResident('text')).toBe(true);
+      expect(modelResidencyManager.isResident('image')).toBe(true);
       expect(getAppState().activeModelId).toBe('txt');
       expect(getAppState().activeImageModelId).toBe('img');
     });
@@ -2050,8 +2056,8 @@ describe('ActiveModelService Integration', () => {
         createDeviceInfo({ totalMemory: 6 * 1024 * 1024 * 1024 }),
       );
 
-      // 1.5GB * 1.8x = 2.7GB, budget = 6 * 0.6 = 3.6GB → safe
-      const model = createONNXImageModel({ id: 'mid-6gb', size: 1.5 * 1024 * 1024 * 1024 });
+      // 1.2GB * 2.5x = 3.0GB, budget = 6 * 0.6 = 3.6GB → safe (would fail a 40% budget: 2.4GB)
+      const model = createONNXImageModel({ id: 'mid-6gb', size: 1.2 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedImageModels: [model] });
 
       const result = await activeModelService.checkMemoryForModel('mid-6gb', 'image');
@@ -2063,8 +2069,8 @@ describe('ActiveModelService Integration', () => {
         createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 }),
       );
 
-      // 2GB * 1.8x = 3.6GB, budget = 8 * 0.6 = 4.8GB → safe
-      const model = createONNXImageModel({ id: 'mid-8gb', size: 2 * 1024 * 1024 * 1024 });
+      // 1.6GB * 2.5x = 4.0GB, budget = 8 * 0.6 = 4.8GB → safe (would fail a 40% budget: 3.2GB)
+      const model = createONNXImageModel({ id: 'mid-8gb', size: 1.6 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedImageModels: [model] });
 
       const result = await activeModelService.checkMemoryForModel('mid-8gb', 'image');

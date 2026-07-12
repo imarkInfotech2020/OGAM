@@ -48,13 +48,20 @@ describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () =>
     expect(view.queryByText(/Free up space/)).not.toBeNull();
   });
 
-  it('under "Load Anyway", a model far larger than real free RAM is STILL refused (no silent admit)', async () => {
+  it('under "Load Anyway" (override), the budget gate no longer refuses — never a terminal dead-end', async () => {
     const t = await setup({ platform: 'android', totalBytes: 12 * GB, availBytes: 665 * MB }, 8 * GB);
-    await t.imageGenerationService.generateImage({ prompt: 'a cat' });          // first attempt refuses
-    const overridden = await t.imageGenerationService.generateImage({ prompt: 'a cat' }, { override: true });
+    await t.imageGenerationService.generateImage({ prompt: 'a cat' });                 // 1st attempt: refused (overridable)
+    // The Load Anyway button dismisses the refusal card, THEN re-runs with override — replicate that
+    // dismiss so we isolate whether the OVERRIDE attempt itself produces a fresh memory refusal.
+    require('../../../src/stores/modelFailureStore').useModelFailureStore.getState().clear();
+    await t.imageGenerationService.generateImage({ prompt: 'a cat' }, { override: true }); // Load Anyway
 
-    // ~665MB truly free cannot hold a multi-GB dirty model even under override → still refused,
-    // so on-device jetsam is avoided rather than triggered by the escape hatch.
-    expect(overridden).toBeNull();
+    // Load Anyway is unconditional: makeRoomFor under override always fits (no survival floor), so the
+    // budget stops refusing — the user is NEVER dead-ended at "we evicted everything and there's STILL
+    // no memory". After the override attempt the memory-refusal card is gone (the gate admitted the load).
+    // Whether the forced 8GB dirty load then survives on the physical device is the native OOM outcome —
+    // Provit, not something the in-Node fake can honestly assert.
+    const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
+    expect(view.queryByText('Image model: Not Enough Memory')).toBeNull();
   });
 });
