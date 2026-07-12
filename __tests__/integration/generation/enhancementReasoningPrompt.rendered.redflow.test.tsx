@@ -6,8 +6,8 @@
  * enable_thinking=true, so the model produced a reasoning-style answer ("Thinking Process:\n1. Analyze the
  * Request…") — and THAT became the image prompt (slow "million characters", garbage image). User's fix
  * spec: enhancement is a utility completion that must NOT think. T071 asserts the request PARAM
- * (enable_thinking !== true); this asserts the user-observable OUTCOME — the prompt handed to the diffusion
- * engine is the clean rewrite, not the reasoning dump.
+ * (enable_thinking !== true); this asserts the user-observable OUTCOME on the UI — the enhanced prompt the
+ * user SEES (rendered as the "Enhanced prompt" block in the chat) is the clean rewrite, not the reasoning dump.
  *
  * Emergent, not testing-the-fake: the llama fake emits the reasoning dump ONLY when the request carries
  * enable_thinking===true (device-faithful — a reasoning model reasons when thinking is on), and the clean
@@ -32,7 +32,7 @@ const REASONING_DUMP =
 const CLEAN_PROMPT = 'a photorealistic tabby cat sitting in a sunlit garden, shallow depth of field';
 
 describe('T072 (rendered) — enhancement reasoning must not become the image prompt (DEV-B30)', () => {
-  it('does not feed the model reasoning chain to the image generator as the prompt', async () => {
+  it('shows the clean rewrite as the enhanced prompt, not the model reasoning chain', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     h.render();
 
@@ -49,11 +49,14 @@ describe('T072 (rendered) — enhancement reasoning must not become the image pr
     // The model reasons when thinking is on (dump), rewrites cleanly when it is off.
     h.boundary.llama!.scriptCompletion({ text: CLEAN_PROMPT, thinkingText: REASONING_DUMP });
     await h.tapSend('draw a cat');
-    await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 6000 });
+    // The enhancement ran and its result reached the chat as the "Enhanced prompt" block (precondition:
+    // a real rendered surface, so a no-op can't fake a pass).
+    await h.rtl.waitFor(() => { expect(h.view!.queryByText('Enhanced prompt')).not.toBeNull(); }, { timeout: 6000 });
 
-    const imagePrompt = String(h.boundary.diffusion.calls.generateImage[0].prompt);
-    // SPEC: the image is generated from the clean rewrite, never the model's reasoning.
-    // RED on HEAD: enhancement leaves thinking on → the reasoning dump becomes the prompt.
-    expect(imagePrompt).not.toMatch(/Thinking Process/i);
+    // SPEC (UI layer): the enhanced prompt the user sees is the clean rewrite. RED on HEAD: enhancement
+    // leaves thinking on → the reasoning dump ("Thinking Process:…") is what renders as the prompt.
+    expect(h.view!.queryByText(/Thinking Process/i)).toBeNull();
+    // And the clean rewrite is the one shown (its preview text renders).
+    expect(h.view!.queryByText(/photorealistic tabby cat/i)).not.toBeNull();
   });
 });
