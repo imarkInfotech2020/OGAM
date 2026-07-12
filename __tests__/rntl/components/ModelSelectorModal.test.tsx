@@ -55,6 +55,8 @@ jest.mock('../../../src/services', () => ({
   hardwareService: {
     formatModelSize: jest.fn(() => '4.0 GB'),
     formatBytes: jest.fn(() => '2.0 GB'),
+    formatModelRam: jest.fn(() => '~3.0 GB'),
+    estimateImageModelRam: jest.fn(() => 2_000_000_000),
   },
   remoteServerManager: {
     clearActiveRemoteModel: jest.fn(),
