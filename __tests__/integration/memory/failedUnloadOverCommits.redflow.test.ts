@@ -15,12 +15,14 @@ afterEach(() => resetDeviceMemory());
 describe('PR#454 — failed eviction unload over-commits memory (red-flow)', () => {
   it('keeps the victim resident and reports fits=false when its unload rejects', async () => {
     setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
-    // A resident that must be evicted to make room — but its native unload will FAIL.
+    // A resident DIRTY heavy that must be evicted to make room for another DIRTY heavy (two dirty
+    // models can't co-reside on 640MB real free — a clean model would just page, so it must be dirty
+    // to force the eviction) — but its native unload will FAIL.
     const unload = makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true });
     unload.mockRejectedValue(new Error('native unload failed — bridge torn down'));
 
     const { fits, evicted } = await modelResidencyManager.makeRoomFor({
-      key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: false,
+      key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: true,
     });
 
     // Correct: the unload failed, so the RAM was NOT freed — refuse rather than over-commit, and keep

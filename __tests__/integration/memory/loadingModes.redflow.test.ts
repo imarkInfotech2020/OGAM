@@ -14,9 +14,10 @@
  *    aggressive behaves single-model.
  *  - Load Anyway (override): ALWAYS loads — evict everything else, never refuse, no floor.
  *
- * Budget note: on a 12GB device the balanced budget is ~8GB, so 2000+2000 co-reside and
- * 5000+4000 (=9000) does not. availGB is kept high so a dirty image fits real free RAM
- * (the clean/dirty gate is a separate concern).
+ * Budget note: on a 12GB device the balanced budget is ~8GB, so 2000+2000 co-reside. A CLEAN
+ * model always co-resides beside a dirty one (it pages — see M1/budgetRedflow), so a genuine
+ * balanced SWAP is dirty-vs-dirty on tight real free: two dirty heavies (4000+5000=9000) can't
+ * both fit ~4GB free, so the resident is evicted.
  */
 import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
@@ -56,17 +57,21 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
     expect(modelResidencyManager.isResident('text')).toBe(true);
   });
 
-  it('balanced: SWAP (evict text) when text + image exceed the budget', async () => {
-    roomy();
+  it('balanced: SWAP (evict the resident dirty model) when two dirty heavies cannot co-reside', async () => {
+    // A CLEAN resident would just page and co-reside (M1), so a genuine swap is dirty-vs-dirty on
+    // tight real free: ~4GB free can't hold a resident dirty 4000 + an incoming dirty 5000 (=9000),
+    // so balanced evicts the resident to fit the incoming.
+    setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(4000) });
     modelResidencyManager.setLoadPolicy('balanced');
-    makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5000, dirtyMemory: false });
+    makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 4000, dirtyMemory: true });
 
     const { fits, evicted } = await modelResidencyManager.makeRoomFor({
-      key: 'image', type: 'image', modelId: 'sd', sizeMB: 4000, dirtyMemory: true,
+      key: 'text', type: 'text', modelId: 'big', sizeMB: 5000, dirtyMemory: true,
     });
 
-    expect(evicted).toContain('text'); // 5000 + 4000 > ~8000 budget → swap
+    expect(evicted).toContain('image'); // 4000 + 5000 > real free → evict the resident dirty model
     expect(fits).toBe(true);
+    expect(modelResidencyManager.isResident('image')).toBe(false);
   });
 
   it('aggressive: text + image CO-RESIDE (not single-model) when they fit', async () => {
