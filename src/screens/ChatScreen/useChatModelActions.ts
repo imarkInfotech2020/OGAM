@@ -313,7 +313,17 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     const timer = setTimeout(async () => {
       if (!cancelled) {
         const models = await modelManager.getDownloadedImageModels();
-        if (!cancelled) setDownloadedImageModels(models);
+        if (cancelled) return;
+        // Never orphan the currently-active image model: activeImageModelId is persisted
+        // but downloadedImageModels is not, so on a cold mount the disk scan is the sole
+        // hydrator. If it hasn't surfaced the active model yet (slow FS, or one already
+        // placed in the store), keep that entry rather than blanking the selection —
+        // otherwise activeImageModel resolves to undefined and image routing dies.
+        const { downloadedImageModels: current, activeImageModelId: activeId } = useAppStore.getState();
+        const merged = activeId && !models.some(m => m.id === activeId)
+          ? [...models, ...current.filter(m => m.id === activeId)]
+          : models;
+        setDownloadedImageModels(merged);
       }
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
