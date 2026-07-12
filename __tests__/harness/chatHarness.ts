@@ -316,11 +316,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * driving the real transcribeFile → onTranscript → send path (the working voice-mode STT pipeline). Pass
      * `scripted` for a text reply; omit it for an image request (the diffusion boundary renders the image).
      */
-    async voiceSend(transcript: string, scripted?: { text?: string; content?: string }) {
+    async voiceSend(transcript: string, scripted?: { text?: string; content?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> }) {
       const view = this.view!;
       if (scripted) {
         if (opts.engine === 'llama') boundary.llama!.scriptCompletion(scripted as { text?: string });
-        else boundary.litert.scriptTurn(scripted as { content?: string });
+        else boundary.litert.scriptTurn(scripted as { content?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }> });
       }
       // BOUNDARY: the whisper model transcribes the recorded audio file to this text.
       boundary.whisper!.setFileTranscript(transcript);
