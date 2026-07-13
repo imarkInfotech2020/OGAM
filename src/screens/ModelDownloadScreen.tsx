@@ -176,9 +176,12 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     return () => { cancelled = true; };
   }, []);
 
-  // Health-check persisted servers — only show reachable ones
-  const refreshServerHealth = useCallback(async (): Promise<Set<string>> => {
-    if (healthCheckInFlight.current) return new Set<string>();
+  // Health-check persisted servers — only show reachable ones.
+  // Returns { ran, reachable }: `ran` is false when the in-flight guard short-circuited this call
+  // (another check is already running), so callers can distinguish "checked and found nothing" from
+  // "did not actually check". The reachable set is only authoritative when `ran` is true.
+  const refreshServerHealth = useCallback(async (): Promise<{ ran: boolean; reachable: Set<string> }> => {
+    if (healthCheckInFlight.current) return { ran: false, reachable: new Set<string>() };
     healthCheckInFlight.current = true;
     setIsCheckingNetwork(true);
     const store = useRemoteServerStore.getState();
@@ -194,7 +197,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     setReachableServerIds(reachable);
     setIsCheckingNetwork(false);
     healthCheckInFlight.current = false;
-    return reachable;
+    return { ran: true, reachable };
   }, []);
 
   useEffect(() => { refreshServerHealth(); }, [servers.length, refreshServerHealth]);
@@ -206,13 +209,20 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       const discovered = await discoverLANServers();
       const store = useRemoteServerStore.getState();
       const existing = new Set(store.servers.map(s => s.endpoint.replace(/\/$/, '')));
+      let added = 0;
       for (const d of discovered) {
         if (existing.has(d.endpoint.replace(/\/$/, ''))) continue;
         await remoteServerManager.addServer({ name: d.name, endpoint: d.endpoint, providerType: 'openai-compatible' });
+        added += 1;
       }
-      const reachable = await refreshServerHealth();
-      // Only alert if there are truly no reachable servers after the scan
-      if (reachable.size === 0) {
+      const { ran, reachable } = await refreshServerHealth();
+      // The alert must AGREE with the rendered list: never claim "no servers" while one is present or
+      // was just discovered. Show it only when the scan genuinely found nothing on the network — no
+      // server discovered/added, none already listed, AND a real check ran (not short-circuited by the
+      // in-flight auto-check) that found nothing reachable. If the check was skipped by the in-flight
+      // guard, the auto-check that owns it will settle the reachable list, so we do not alert.
+      const noServersPresent = added === 0 && useRemoteServerStore.getState().servers.length === 0;
+      if (noServersPresent && ran && reachable.size === 0) {
         setAlertState(showAlert(
           'No Servers Found',
           'Make sure you\'re on the same WiFi network as your server and that it\'s running. Off Grid AI Desktop serves its models to this phone over your network.',

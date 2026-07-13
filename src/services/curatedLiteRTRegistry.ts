@@ -14,6 +14,13 @@ export interface CuratedLiteRTEntry {
   highlight: string;
   liteRTVision: boolean;
   liteRTAudio: boolean;
+  /**
+   * Warning COPY to surface before downloading this file — DATA only, not a
+   * device-blind "always warn" flag. Whether the warning actually shows is a
+   * device-aware decision made by the caller (fileExceedsBudget: the file's size
+   * vs this device's RAM budget). A device that comfortably fits the model shows
+   * no warning; one that doesn't warns with this copy.
+   */
   confirmDownload?: { title: string; message: string };
 }
 
