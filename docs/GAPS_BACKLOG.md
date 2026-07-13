@@ -228,6 +228,17 @@ state-machine traces:
   Tests owed: rendered chat — send tool turn → stop mid-prefill (fake native with delayed unwind
   honoring stopCompletion) → assert stopped-partial finalization, NO busy sheet, NO "_(No response)_"
   bubble, button back to send; immediate resend then succeeds.
+- **Settings-triggered RELOAD is a second, drifted load path — drops GPU layers + thinking + KV type
+  in one shot** (device-confirmed 2026-07-14 00:29-00:31; SMOKING GUN log 18:50:28Z:
+  `[LLM][THINKING] thinkingSupported=false, thinkingEnabled=true, enable_thinking=false` for the SAME
+  gemma-4-E2B gguf that supported thinking before the reload). One turn showed all three symptoms:
+  backend=GPU + 99 layers selected → meta says CPU; Thinking ON → no thinking block; KV flipped
+  q8_0 → f16. Root: llm.ts `reloadModel` (~:470) does not run the same post-load feature/param path
+  as the normal load (supportsNativeThinking re-detection, n_gpu_layers, KV cache type). FIX at the
+  seam per /hygiene: ONE load path — reload delegates to the exact same loadModel pipeline (no
+  second copy); /tests journey: change backend via the real Chat Settings UI → reload → send →
+  assert the thinking block renders + the meta line reports the selected backend + KV type persists
+  (falsifier: CPU-selected shows CPU). Subsumes the earlier 'GPU selected but CPU' entry below.
 - **GPU selected but generation ran on CPU** (device-reported 2026-07-14 00:29, IMG). Backend=GPU +
   GPU Layers 99 set in Chat Settings, model reloaded ("Model loaded: gemma-4-E2B (19.1s)"), yet the
   turn's meta reads CPU (3.4 tok/s). T014/DEV-B24 class: either the GPU/OpenCL init failed or timed
