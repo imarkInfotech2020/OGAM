@@ -60,9 +60,10 @@ describe('image gen meta — UI red-flow (the size/guidance you set is what runs
 
   it('Q7: with guidance 0/stale the generation uses the 7.5 default, not 2.0', async () => {
     const view = await generateWithSettings({ imageGuidanceScale: 0, imageWidth: 256, imageHeight: 256 });
-    // Today the details line shows "cfg 2.0" (the || 2.0 fallback)...
-    expect(view.queryByText(/cfg 2/)).not.toBeNull();
-    // ...while every slider/default is 7.5. Correct: generation uses 7.5 → RED today.
+    // With a stale/0 guidance the generation must fall back to the single-source 7.5 default
+    // (DEFAULT_IMAGE_GUIDANCE), NOT the old magic || 2.0. The details line the user sees shows it.
     expect(view.queryByText(/cfg 7\.5/)).not.toBeNull();
+    // And the old buggy 2.0 fallback must be gone.
+    expect(view.queryByText(/cfg 2/)).toBeNull();
   });
 });

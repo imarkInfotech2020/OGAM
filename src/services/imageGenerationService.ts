@@ -7,7 +7,7 @@ import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
-import { SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
+import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
 import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
@@ -465,7 +465,7 @@ class ImageGenerationService {
     if (!activeImageModel) return this._fail('No image model selected');
 
     const steps = params.steps || settings.imageSteps || 8;
-    const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
+    const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE;
     // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
     // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
     // this guards the persisted-value + programmatic paths so the user never sees garbage.

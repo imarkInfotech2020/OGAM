@@ -20,6 +20,7 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
+import { DEFAULT_IMAGE_GUIDANCE } from '../../utils/imageGenAdvice';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
@@ -229,7 +230,7 @@ export async function handleImageGenerationFn(
   const result = await imageGenerationService.generateImage({
     prompt, conversationId,
     steps: deps.settings.imageSteps || 8,
-    guidanceScale: deps.settings.imageGuidanceScale || 2,
+    guidanceScale: deps.settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE,
     previewInterval: 2,
   });
   if (!result && deps.imageGenState.error && !deps.imageGenState.error.includes('cancelled')) {
