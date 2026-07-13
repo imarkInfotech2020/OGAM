@@ -208,6 +208,26 @@ state-machine traces:
   ('auto' may also fix OD13.) Must not ship in a beta until this device check passes (TestFlight is
   distribution-signed → no container logs; verify on the dev build first).
 - **iOS collapsed thinking-box width fix** — screenshot check.
+- **STOP-PATH CLUSTER (device-diagnosed 2026-07-13, offgrid-debug.log 18:12–18:16 + IMG_0143/44/45): one root, four symptoms.**
+  Root: a stop during PREFILL cannot interrupt llama until prefill completes (~9s on a 2.6k-token KB
+  context; 74s cold on CPU), and the app's stop path lies about idleness while the native context
+  unwinds. Chain + fixes (each at its owning seam):
+  1. `llm.ts stopGeneration()` sets `isGenerating=false` BEFORE awaiting `activeCompletionPromise`
+     → readiness says free while native is busy. FIX: declare idle only AFTER the unwind await.
+  2. `generationToolLoop` is stop/interrupt-BLIND: no abortRequested check between iterations, and a
+     completion result with `interrupted:true, predicted=0` flows onward as a normal empty result →
+     zombie follow-up completions after a stop (these held the engine → the 'LLM service busy' error
+     on the next send, log 18:12:34), and the empty result renders the WRONG "No response /
+     incompatible backend (K-quant on NPU/GPU)" card (IMG_0145) — model/backend were fine. FIX:
+     surface `interrupted` from `llmToolGeneration`/`generateResponseWithTools` returns; loop treats
+     interrupted as STOPPED (finalize partial, no further completions, no error card).
+  3. Resend/busy-error path left the send button latched as a fake STOP with phantom "..." while no
+     session was live (IMG_0144; `prepareGenerationImpl` clears on readiness-throw, so the latch is in
+     the RESEND caller's state) — find the resend action's generating flag + clear on error.
+  4. A stale "No response" error card is not cleared when a subsequent retry succeeds (IMG_0145→next).
+  Tests owed: rendered chat — send tool turn → stop mid-prefill (fake native with delayed unwind
+  honoring stopCompletion) → assert stopped-partial finalization, NO busy sheet, NO "_(No response)_"
+  bubble, button back to send; immediate resend then succeeds.
 - **Kokoro TTS download bypasses the 3-slot concurrency cap** (device-reported, 2026-07-13). The TTS
   (Kokoro) model download does NOT respect `backgroundDownloadService`'s `MAX_CONCURRENT_DOWNLOADS = 3`
   admission cap — it starts immediately regardless of how many downloads are already running. Likely

@@ -161,7 +161,10 @@ async function checkProviderReadiness(svc: any): Promise<string | null> {
     if (!liteRTService.isModelLoaded()) return 'No LiteRT model loaded';
   } else {
     if (!llmService.isModelLoaded()) return 'No model loaded';
-    if (llmService.isCurrentlyGenerating()) return 'LLM service busy';
+    // A still-unwinding completion (a stop can only take effect once prefill finishes) is NOT an
+    // error — wait for the engine to go idle instead of failing the user's send. Only a genuinely
+    // stuck/concurrent generation (still busy after the bounded wait) surfaces the busy error.
+    if (llmService.isCurrentlyGenerating() && !(await llmService.waitForIdle())) return 'LLM service busy';
   }
   return null;
 }

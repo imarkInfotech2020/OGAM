@@ -300,7 +300,7 @@ class LLMService {
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
@@ -391,8 +391,19 @@ class LLMService {
   }
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
-    this.isGenerating = false;
+    // Declare idle only AFTER the in-flight completion actually unwinds — llama cannot honor a
+    // stop during prefill (a 2.6k-token KB prefill unwound ~9s on-device), so clearing the flag
+    // early made the readiness check say "free" while the native context was still busy, racing
+    // the user's next send straight into 'LLM service busy' / a stale-stop-killed empty turn.
     if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
+    this.isGenerating = false;
+  }
+  /** Wait (bounded) until no completion is in flight. Returns true when idle. */
+  async waitForIdle(timeoutMs: number = 15000): Promise<boolean> {
+    if (!this.isGenerating) return true;
+    const active = this.activeCompletionPromise; // already swallow-wrapped, never rejects
+    if (active !== null) await Promise.race([active, new Promise((r) => setTimeout(r, timeoutMs))]);
+    return !this.isGenerating;
   }
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;

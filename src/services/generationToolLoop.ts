@@ -404,7 +404,7 @@ async function callLocalWithRetry(
   messages: Message[],
   tools: any[],
   onStream?: (data: StreamToken) => void,
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
   let lastError: any;
   for (let attempt = 0; attempt < MAX_LLM_RETRIES; attempt++) {
     try {
@@ -663,7 +663,7 @@ async function callLLMWithRetry(
   messages: Message[],
   tools: any[],
   { onStream, forceRemote, disableThinking, conversationId, ctx }: CallLLMOptions = {},
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
   // Append tool-use behavioral guidance to the system prompt when tools are present.
   // Only covers the "when and how" — schemas are injected separately by each engine.
   // Also append extension system-prompt hints so the model knows about MCP/pro tools.
@@ -869,7 +869,21 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
     state.reasoningContent = '';
 
     const onStream = buildStreamHandler(ctx, state);
-    const { fullResponse, toolCalls } = await callLLMWithRetry(loopMessages, effectiveSchemas, { onStream, forceRemote: ctx.forceRemote, conversationId: ctx.conversationId, ctx });
+    const { fullResponse, toolCalls, interrupted } = await callLLMWithRetry(loopMessages, effectiveSchemas, { onStream, forceRemote: ctx.forceRemote, conversationId: ctx.conversationId, ctx });
+
+    // A user STOP landing mid-completion returns `interrupted` — the turn is OVER. Before this
+    // guard, the interrupted (usually empty) result fell into the no-tools fallback below and
+    // re-ran a FULL generation the user never asked for: a zombie that held the engine for
+    // minutes (74s CPU prefill on-device) so every next send failed 'LLM service busy', and
+    // whose empty output painted the wrong "No response / incompatible backend" card. Finalize
+    // whatever streamed; issue NO further completions. When aborted, stopGeneration() owns the
+    // partial-content cleanup — emit nothing here.
+    if (interrupted || ctx.isAborted()) {
+      // Streamed partial content is already in the store's streaming message: the aborted path is
+      // finalized by stopGeneration(), the non-aborted path by generate()'s post-loop finalize.
+      logger.log(`[ToolLoop] completion interrupted (aborted=${ctx.isAborted()}) — ending turn, no follow-up generation`);
+      return;
+    }
 
     const { effectiveToolCalls, displayResponse } = resolveToolCalls(fullResponse, toolCalls);
     const cappedToolCalls = effectiveToolCalls.slice(0, MAX_TOTAL_TOOL_CALLS - totalToolCalls);
@@ -877,8 +891,9 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<void> {
 
     // No tool calls → model gave a final text response
     if (cappedToolCalls.length === 0) {
-      // Empty response with tools — retry once without tools (some models choke on tool schemas)
-      if (!state.streamedContent && !displayResponse) {
+      // Empty response with tools — retry once without tools (some models choke on tool schemas).
+      // Never after an abort: this retry is a FULL generation, the exact zombie a stop must kill.
+      if (!state.streamedContent && !displayResponse && !ctx.isAborted()) {
         state.streamedContent = '';
         state.reasoningContent = '';
         state.firstTokenFired = false;

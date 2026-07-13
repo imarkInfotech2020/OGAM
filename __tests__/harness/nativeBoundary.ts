@@ -44,7 +44,7 @@ export function requireRTL(): typeof import('@testing-library/react-native') {
   const prev = process.env.RNTL_SKIP_AUTO_CLEANUP;
   process.env.RNTL_SKIP_AUTO_CLEANUP = 'true';
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const rtl = require('@testing-library/react-native');
     // Register THIS instance's cleanup on a global so jest.setup's afterEach can unmount the tree WITHOUT
     // requiring RTL fresh (requiring it fresh after a test's resetModules corrupts the module graph and
@@ -208,7 +208,7 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta }): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; completionMeta?: CompletionMeta }): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -222,8 +222,13 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
+  // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
+  // streaming further tokens, releases a held pause, and the completion RESOLVES with
+  // `interrupted: true` (the exact device wire shape: predicted stops, stopped_eos=false). The flag
+  // is per-completion (a fresh completion starts un-stopped), matching the native abort behavior.
+  let stopRequested = false;
   let gpuInitFails = false; // when true, initLlama with n_gpu_layers>0 rejects (GPU/HTP init timeout → CPU fallback)
 
   const context: Record<string, jest.Mock> = {
@@ -234,7 +239,13 @@ function makeLlamaFake(): LlamaFake {
     // false (a real stop), because the service's own callback guards on `data.token` + isGenerating.
     completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content: string }) => void) => {
       calls.completion.push([params]);
+      stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
       if (pending.throwMessage) throw new Error(pending.throwMessage);
+      // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
+      // tokens. llama cannot honor a stop mid-prefill; on release-by-stop it resolves interrupted with
+      // nothing streamed — the exact device state whose empty result the tool loop mistook for a
+      // normal empty reply (firing the no-tools fallback zombie).
+      if (pending.holdBeforeStream) { await new Promise<void>((res) => { releaseFn = res; }); }
       // Device-faithful: a reasoning model emits its reasoning-style output when thinking is on. If the
       // caller left enable_thinking on for a request that shouldn't reason (B30 enhancement), it gets the
       // reasoning dump; disabling thinking yields the clean text. Emergent from the caller's own decision.
@@ -246,11 +257,12 @@ function makeLlamaFake(): LlamaFake {
         let acc = '';
         let paused = false;
         for (const c of chars) {
+          if (stopRequested) break; // native abort: no further tokens after stopCompletion()
           acc += c;
           onToken({ token: c, content: acc });
           if (pending.pauseAfter && !paused && acc.endsWith(pending.pauseAfter)) {
             paused = true;
-            await new Promise<void>((res) => { releaseFn = res; }); // HOLD until releaseStream()
+            await new Promise<void>((res) => { releaseFn = res; }); // HOLD until releaseStream() or stopCompletion()
           }
         }
       }
@@ -262,6 +274,17 @@ function makeLlamaFake(): LlamaFake {
       // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
       // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
       const meta = pending.completionMeta ?? {};
+      // An aborted completion carries the device wire shape: interrupted=true, no EOS, and only
+      // what streamed before the stop (tool_calls are dropped — the turn never finished them).
+      if (stopRequested) {
+        return {
+          text: '', content: '', tool_calls: undefined,
+          interrupted: true,
+          tokens_predicted: 0, tokens_evaluated: 4,
+          stopped_eos: false, stopped_limit: 0, truncated: false,
+          timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+        };
+      }
       return {
         text: outText,
         content: outText,
@@ -273,7 +296,10 @@ function makeLlamaFake(): LlamaFake {
         timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
       };
     }),
-    stopCompletion: jest.fn().mockResolvedValue(undefined),
+    stopCompletion: jest.fn(async () => {
+      stopRequested = true;
+      const f = releaseFn; releaseFn = null; f?.(); // release a held mid-stream pause so the abort lands
+    }),
     release: jest.fn().mockResolvedValue(undefined),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
     initMultimodal: jest.fn().mockResolvedValue(false),
@@ -315,7 +341,7 @@ function makeLlamaFake(): LlamaFake {
 
   return {
     module, calls,
-    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
   };
@@ -533,7 +559,7 @@ function makeFsFake(): FsFake {
   const DocumentDirectoryPath = '/docs';
   // Backed by memfs — a REAL in-memory filesystem engine does the storage/tree work; this only maps the
   // react-native-fs API onto it. (Off-the-shelf fake engine, per the plan, not a hand-rolled tree.)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { Volume } = require('memfs');
   const vol = Volume.fromJSON({});
   vol.mkdirSync(DocumentDirectoryPath, { recursive: true });
@@ -650,7 +676,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const whisperFake = opts.whisper ? makeWhisperFake() : undefined;
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const RN = require('react-native');
   RN.NativeModules.LiteRTModule = litert.module;
   // Both platform names point at the same fake; localDreamGenerator's Platform.select picks one.
@@ -704,7 +730,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   });
 
   // react-native-device-info total-memory leaf (npm package, already jest.mock-ed in jest.setup).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const DeviceInfo = require('react-native-device-info');
   (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(ram.totalBytes);
   (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(ram.totalBytes - ram.availBytes);

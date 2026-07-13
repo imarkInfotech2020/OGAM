@@ -116,7 +116,7 @@ export async function generateWithToolsImpl(
   deps: ToolGenerationDeps,
   messages: Message[],
   options: { tools: any[]; onStream?: ToolStreamCallback; onComplete?: ToolCompleteCallback },
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
   if (!deps.context) throw new Error('No model loaded');
   if (deps.isGenerating) throw new Error('Generation already in progress');
   deps.setIsGenerating(true);
@@ -204,7 +204,12 @@ export async function generateWithToolsImpl(
       throw new Error('Context is full');
     }
     options.onComplete?.(fullResponse);
-    return { fullResponse, toolCalls: collectedToolCalls };
+    // Surface a native interrupt (user stop landing mid-completion) to the caller — the tool
+    // loop must treat it as a STOPPED turn, never as a normal empty result (which re-ran a
+    // full no-tools generation after the stop: the zombie that held the engine and made every
+    // next send fail 'LLM service busy', and whose empty output painted the wrong
+    // "No response / incompatible backend" card).
+    return { fullResponse, toolCalls: collectedToolCalls, interrupted: cr?.interrupted === true };
   } catch (error) {
     generating = false;
     deps.setIsGenerating(false);
