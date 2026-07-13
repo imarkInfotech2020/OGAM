@@ -100,6 +100,7 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const description = cardDescription(model.description, recommended?.highlightText);
 
   return (
     <>
@@ -136,9 +137,9 @@ export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = (
       </View>
       {/* One common description line for EVERY compact card: model description +
           any recommended highlight, same slot (under the name), same muted style. */}
-      {cardDescription(model.description, recommended?.highlightText) && (
+      {!!description && (
         <Text style={styles.descriptionCompact} numberOfLines={2}>
-          {cardDescription(model.description, recommended?.highlightText)}
+          {description}
         </Text>
       )}
       {recommended?.chips && recommended.chips.length > 0 ? (
@@ -207,6 +208,7 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const description = cardDescription(model.description, recommended?.highlightText);
 
   return (
     <>
@@ -251,9 +253,9 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
           </View>
         )}
       </View>
-      {cardDescription(model.description, recommended?.highlightText) && (
+      {!!description && (
         <Text style={styles.description} numberOfLines={2}>
-          {cardDescription(model.description, recommended?.highlightText)}
+          {description}
         </Text>
       )}
     </>
