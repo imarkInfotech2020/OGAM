@@ -502,12 +502,20 @@ export interface WhisperFake {
    *  its stop() or on release(). Models the device mic: capture continues until explicitly stopped, so a
    *  leaked session (never stopped on navigate-away) reads true. The device-boundary residue for B11. */
   realtimeActive(): boolean;
+  /** HOLD the next model load (initWhisper) open until releaseLoad() — the device-shaped load window a
+   *  real ggml init has (seconds on device), so an in-flight tap-triggered load is observable. One-shot. */
+  holdNextLoad(): void;
+  /** Release a load held via holdNextLoad(). No-op if not held. */
+  releaseLoad(): void;
 }
 
 function makeWhisperFake(): WhisperFake {
   let realtimeCb: ((evt: unknown) => void) | null = null;
   let fileTranscript = 'Transcribed text';
   let rtActive = false; // the native mic session is capturing until stop()/release()
+  // Load hold: opens the in-flight model-load window a real (seconds-long) ggml init has.
+  let loadHoldPending = false;
+  let loadHoldRelease: (() => void) | null = null;
   const context: Record<string, jest.Mock> = {
     // Faithful to whisper.rn: transcribe(path, opts) returns { stop, promise }, the promise resolving to
     // { result, segments } — this is the method whisperService.transcribeFile (the voice-mode file path) drives.
@@ -527,7 +535,15 @@ function makeWhisperFake(): WhisperFake {
     bench: jest.fn(async () => ''),
   };
   const module: Record<string, jest.Mock> = {
-    initWhisper: jest.fn(async () => context),
+    initWhisper: jest.fn(async () => {
+      // A scripted hold parks the caller INSIDE the native load — the real device's
+      // in-flight window between the load intent and readiness — until releaseLoad().
+      if (loadHoldPending) {
+        loadHoldPending = false;
+        await new Promise<void>((res) => { loadHoldRelease = res; });
+      }
+      return context;
+    }),
     releaseAllWhisper: jest.fn(async () => {}),
     // Some call sites read module-level too; mirror the context.
     transcribeFile: context.transcribeFile,
@@ -546,6 +562,8 @@ function makeWhisperFake(): WhisperFake {
     setFileTranscript: (t) => { fileTranscript = t; },
     hasRealtimeSubscriber: () => realtimeCb != null,
     realtimeActive: () => rtActive,
+    holdNextLoad: () => { loadHoldPending = true; },
+    releaseLoad: () => { const f = loadHoldRelease; loadHoldRelease = null; f?.(); },
   };
 }
 
