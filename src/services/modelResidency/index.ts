@@ -363,9 +363,25 @@ class ModelResidencyManager {
         .map(e => e.key)
         .join(',')}]`,
     );
-    if (!plan.fits && !override) {
-      // Won't fit even after the planned evictions - DON'T evict (otherwise we'd
-      // strand the device with nothing). The caller blocks the load (overridable).
+    // SECOND GATE — the dirty physical ceiling. Aggressive mode's larger RAM fraction is safe for
+    // CLEAN (mmap, pageable) weights, but NOT for a DIRTY model whose un-pageable GPU/anonymous
+    // pages can't be zram-backed: committing 88% of RAM to dirty pages jetsams. So a dirty model's
+    // footprint (the incoming + any dirty residents that STAY) is bounded by the BALANCED physical
+    // ceiling regardless of policy — a genuinely-oversized dirty model (9GB on a 12GB phone) is
+    // refused even in aggressive (overridable via Load Anyway), while a reasonable dirty model that
+    // fits the balanced ceiling still co-resides on aggressive's larger total budget. This is
+    // INDEPENDENT of the total-budget check above, so it never changes the clean+dirty swap cases
+    // (a large image still evicts a resident text via the total budget).
+    const dirtyCeilingMB = computeBudgetMB(totalMB, { policy: 'balanced' });
+    const keptDirtyMB = residents
+      .filter(r => r.dirtyMemory && !plan.evict.some(e => e.key === r.key))
+      .reduce((sum, r) => sum + r.sizeMB, 0);
+    const dirtyFootprintMB = (spec.dirtyMemory ? spec.sizeMB : 0) + keptDirtyMB;
+    const dirtyCeilingExceeded = !!spec.dirtyMemory && dirtyFootprintMB > dirtyCeilingMB;
+
+    if ((!plan.fits || dirtyCeilingExceeded) && !override) {
+      // Won't fit even after the planned evictions (total budget OR the dirty ceiling) - DON'T
+      // evict (otherwise we'd strand the device with nothing). The caller blocks the load (overridable).
       return { evicted: [], fits: false };
     }
     // Override ("Load Anyway"): the user explicitly accepted the risk (this call or

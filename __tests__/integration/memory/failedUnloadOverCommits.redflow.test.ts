@@ -14,21 +14,21 @@ afterEach(() => resetDeviceMemory());
 
 describe('PR#454 — failed eviction unload over-commits memory (red-flow)', () => {
   it('keeps the victim resident and reports fits=false when its unload rejects', async () => {
-    setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
-    // A resident DIRTY heavy that must be evicted to make room for another DIRTY heavy (two dirty
-    // models can't co-reside on 640MB real free — a clean model would just page, so it must be dirty
-    // to force the eviction) — but its native unload will FAIL.
-    const unload = makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true });
+    setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(4000) });
+    // A normal SWAP: a resident text model must be evicted to fit a large incoming image they can't
+    // co-reside with (5000 + 6500 = 11500 > the ~8600 budget) — but the text's native unload FAILS.
+    const unload = makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5000, dirtyMemory: false });
     unload.mockRejectedValue(new Error('native unload failed — bridge torn down'));
 
     const { fits, evicted } = await modelResidencyManager.makeRoomFor({
-      key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: true,
+      key: 'image', type: 'image', modelId: 'sd', sizeMB: 6500, dirtyMemory: true,
     });
 
-    // Correct: the unload failed, so the RAM was NOT freed — refuse rather than over-commit, and keep
-    // the victim resident. Today the victim is deleted + counted as evicted and fits=true → OOM → RED.
+    // Correct: the text's unload failed, so its RAM was NOT freed — refuse rather than over-commit,
+    // and keep the victim (text) resident. The bug would delete text + count it as evicted and report
+    // fits=true → the image loads on top → OOM.
     expect(fits).toBe(false);
-    expect(evicted).not.toContain('image');
-    expect(modelResidencyManager.isResident('image')).toBe(true);
+    expect(evicted).not.toContain('text');
+    expect(modelResidencyManager.isResident('text')).toBe(true);
   });
 });

@@ -36,18 +36,11 @@ describe('memory budget — red-flow (correct behavior; currently RED due to the
     expect(modelResidencyManager.isResident('text')).toBe(true);
   });
 
-  // M2 — a 2nd in-app dirty heavy must NOT co-load when real free RAM can't hold it; the reclaim
-  // credit models BACKGROUND-app reclaim, not RAM already pinned by our own resident dirty model.
-  it('M2: a 2nd dirty model is REFUSED when real free RAM is 640MB (Android reclaim credit must not cover an in-app dirty resident)', async () => {
-    setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
-    makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true, canEvict: () => false });
-
-    const { fits } = await modelResidencyManager.makeRoomFor({
-      key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: true,
-    });
-
-    expect(fits).toBe(false); // today: true — reclaim credit inflates avail past real physical free
-  });
+  // M2 (the "2nd in-app dirty heavy piled onto a PINNED dirty resident is refused") scenario was
+  // DROPPED from the model: there is no UI to start a second heavy load while one is mid-generation
+  // (you stop the current one first), so a heavy is never pinned against a competing heavy load. The
+  // only real concurrency is text streaming + TTS speaking, and TTS is an exempt sidecar. See the
+  // residency matrix (residencyMatrix.modes) for the co-reside/swap cases that DO occur.
 
   // M3 — Load-Anyway (override) is UNCONDITIONAL: the user explicitly accepted the risk, so
   // we evict everything else and load, with NO survival floor and NO refusal. The UI frames

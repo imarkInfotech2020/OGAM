@@ -1853,13 +1853,11 @@ describe('ActiveModelService Integration', () => {
       mockHardwareService.getTotalMemoryGB.mockReturnValue(4);
     };
 
-    it('co-resides a clean text + dirty image on a tight device (the clean text pages, is NOT evicted)', async () => {
+    it('evicts the text model to fit an image when they cannot co-reside (tight device)', async () => {
       setupLowMemDevice(); // 4GB → ~2GB budget
 
-      // The clean (mmap GGUF) text is ~1.5GB and the dirty image ~1.0GB — nominally ~2.5GB, over the
-      // ~2GB budget. But a CLEAN model pages out under pressure, so it does NOT compete with the dirty
-      // image for real RAM: the image loads and the text stays resident (co-reside, no forced swap).
-      // This is the tight-boundary proof of the clean/dirty gate — distinct from the small co-fit case.
+      // Each fits ALONE (~1.5GB text est, ~1.0GB image est) but not TOGETHER (~2.5GB) against the
+      // ~2GB budget, so loading the image must free the text model to fit (a swap).
       const textModel = createDownloadedModel({ id: 'txt', fileSize: 1000 * 1024 * 1024 });
       const imageModel = createONNXImageModel({ id: 'img', size: 400 * 1024 * 1024 });
       useAppStore.setState({
@@ -1876,10 +1874,9 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.loadModel.mockResolvedValue(true);
       await activeModelService.loadImageModel('img');
 
-      // The clean text is NOT evicted (it pages around the dirty image); both stay resident.
-      expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('text')).toBe(true);
-      expect(modelResidencyManager.isResident('image')).toBe(true);
+      // Text freed from RAM (they don't co-fit), but its SELECTION is kept so chat still shows it
+      // and it reloads on demand (eviction must not deselect).
+      expect(mockLlmService.unloadModel).toHaveBeenCalled();
       expect(getAppState().activeModelId).toBe('txt');
       expect(getAppState().activeImageModelId).toBe('img');
     });
