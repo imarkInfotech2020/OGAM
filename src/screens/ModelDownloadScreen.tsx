@@ -33,6 +33,7 @@ import {
   LITERT_PARENT_ID,
   buildCuratedLiteRTFiles,
   getCuratedLiteRTEntry,
+  curatedLiteRTDownloadWarning,
   CuratedLiteRTEntry,
 } from '../services/curatedLiteRTRegistry';
 import { makeModelKey } from '../utils/modelKey';
@@ -301,12 +302,15 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const handleLiteRTDownload = (file: ModelFile) => {
-    const curatedEntry = getCuratedLiteRTEntry(file.name);
     const proceed = () => handleDownload(LITERT_PARENT_ID, file);
-    if (curatedEntry?.confirmDownload) {
+    // Same DEVICE-AWARE decision the Models tab uses (curatedLiteRTDownloadWarning):
+    // warn only when the file genuinely exceeds this device's RAM budget, never a
+    // device-blind static flag. On a device where the model fits, no warning.
+    const warning = curatedLiteRTDownloadWarning(file.name, file.size, totalRamGB);
+    if (warning) {
       setAlertState(showAlert(
-        curatedEntry.confirmDownload.title,
-        curatedEntry.confirmDownload.message,
+        warning.title,
+        warning.message,
         [
           { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
           { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceed(); } },

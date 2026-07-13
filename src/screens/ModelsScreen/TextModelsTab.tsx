@@ -3,7 +3,6 @@ import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, Tou
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
 import { modelBudgetFraction } from '../../services/memoryBudget';
-import { fileExceedsBudget } from './textModelsTabHelpers';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -24,7 +23,7 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTFiles, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
+import { CURATED_LITERT_ENTRIES, buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
 import { backgroundDownloadService, modelManager } from '../../services';
 import { useAppStore } from '../../stores';
 
@@ -68,19 +67,21 @@ type DetailProps = Pick<Props,
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
-// Build the file card's onDownload handler. The curated confirm-download warning is
-// DEVICE-AWARE (fileExceedsBudget: ramGB vs size), never a static per-model flag.
-function buildFileDownloadHandler({ s, curatedEntry, sizeBytes, ramGB, proceedDownload, setAlertState }: {
+// Build the file card's onDownload handler. Whether to show the curated confirm-download
+// warning is the registry's single DEVICE-AWARE decision (curatedLiteRTDownloadWarning),
+// shared with the onboarding screen — never a static per-model flag re-derived here.
+function buildFileDownloadHandler({ s, fileName, sizeBytes, ramGB, proceedDownload, setAlertState }: {
   s: { downloaded: boolean; progress: unknown; hasFailed: boolean };
-  curatedEntry: ReturnType<typeof getCuratedLiteRTEntry>;
+  fileName: string;
   sizeBytes: number; ramGB: number;
   proceedDownload: () => void;
   setAlertState: (state: AlertState) => void;
 }): (() => void) | undefined {
   if (s.downloaded || s.progress || s.hasFailed) return undefined;
   return () => {
-    if (curatedEntry?.confirmDownload && fileExceedsBudget(sizeBytes, ramGB)) {
-      setAlertState(showAlert(curatedEntry.confirmDownload.title, curatedEntry.confirmDownload.message, [
+    const warning = curatedLiteRTDownloadWarning(fileName, sizeBytes, ramGB);
+    if (warning) {
+      setAlertState(showAlert(warning.title, warning.message, [
         { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
         { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
       ]));
@@ -180,12 +181,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     const s = getFileCardState(item);
-    const curatedEntry = getCuratedLiteRTEntry(item.name);
     const proceedDownload = () => {
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
-    const onDownload = buildFileDownloadHandler({ s, curatedEntry, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
+    const onDownload = buildFileDownloadHandler({ s, fileName: item.name, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;

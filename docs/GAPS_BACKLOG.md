@@ -208,3 +208,20 @@ state-machine traces:
   ('auto' may also fix OD13.) Must not ship in a beta until this device check passes (TestFlight is
   distribution-signed → no container logs; verify on the dev build first).
 - **iOS collapsed thinking-box width fix** — screenshot check.
+- **Kokoro TTS download bypasses the 3-slot concurrency cap** (device-reported, 2026-07-13). The TTS
+  (Kokoro) model download does NOT respect `backgroundDownloadService`'s `MAX_CONCURRENT_DOWNLOADS = 3`
+  admission cap — it starts immediately regardless of how many downloads are already running. Likely
+  cause: the TTS start path passes `isSidecar: true` (or otherwise goes through the uncounted
+  `beginDownload(counted=false)` branch), which is meant only for dependent sub-downloads (a vision
+  model's mmproj) that ride alongside their main. Kokoro is a standalone model, so it should be counted
+  and queued like any other. Fix: route the Kokoro/TTS download through the counted path (not sidecar)
+  so it occupies a slot and queues when the cap is hit; add a test that enqueues > 3 including the TTS
+  model and asserts it queues rather than starting immediately.
+- **Onboarding litert download-warning: rendered test for the ModelDownloadScreen caller** (2026-07-13).
+  The device-aware curated-litert warning decision (`curatedLiteRTDownloadWarning`) is now a single owned
+  function called by BOTH the Models tab (`TextModelsTab`) and the onboarding screen (`ModelDownloadScreen`).
+  It is covered by an all-branch pure unit test + a rendered test through the Models-tab caller. The
+  onboarding caller is identical thin wiring but has no dedicated rendered test yet (mounting the full
+  onboarding screen with device-init + Android litert rendering is heavier). Follow-up: add a
+  `ModelDownloadScreen`-mounted rendered test (Android, 12GB) that taps the E4B litert download and asserts
+  no "may exceed your device's memory" sheet — the exact device-reported surface (IMG_0142).

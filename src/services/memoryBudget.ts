@@ -170,3 +170,17 @@ export function modelWarningThresholdMB(totalRamMB: number, platform: Plat = Pla
   const byFraction = totalRamMB * modelWarningFraction(totalRamGB, platform);
   return Math.min(byFraction, modelMemoryBudgetMB(totalRamMB, platform));
 }
+
+const BYTES_PER_GB = 1024 ** 3;
+
+/**
+ * Does a model file's on-disk size exceed this device's safe RAM budget
+ * (`totalRamGB * modelBudgetFraction`)? The SINGLE device-aware fit primitive that
+ * every download-warning decision and the detail-list compatibility filter compute
+ * from — a static per-model flag was device-blind and fired on every device. Zero-IO
+ * so it is unit-testable; callers pass the RAM read from the device boundary
+ * (hardwareService.getTotalMemoryGB).
+ */
+export function fileExceedsBudget(sizeBytes: number, ramGB: number): boolean {
+  return sizeBytes / BYTES_PER_GB >= ramGB * modelBudgetFraction(ramGB);
+}
