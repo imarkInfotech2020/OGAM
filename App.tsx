@@ -20,6 +20,7 @@ import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
+import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { startLoadPolicySync } from './src/services/loadPolicySync';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
@@ -118,6 +119,11 @@ function App() {
     onForeground: useCallback(() => {
       // Rebuild the unified store before reattaching JS listeners so restored
       // progress events map onto current download entries instead of racing hydration.
+      // NOTE: restoreQueuedDownloads() is intentionally NOT called here — on a foreground
+      // resume the process was never killed, so backgroundDownloadService.startQueue (the
+      // in-memory FIFO) is still the live source of truth for queued items. Replaying the
+      // persisted queue here would DOUBLE-issue starts that are still waiting in memory.
+      // Restore is a cold-start-only concern (the queue owner is gone only after a kill).
       hydrateDownloadStore()
         .catch((error) => {
           logger.error('[App] Failed to hydrate download store on foreground:', error);
@@ -163,6 +169,16 @@ function App() {
       // becomes the SINGLE owner only once the Download Manager consumes the service
       // and the old recovery paths are folded into the providers.
       registerCoreDownloadProviders();
+
+      // Re-surface QUEUED downloads that never started before an app kill. A queued item (waiting for
+      // one of the 3 concurrency slots) has no native row, so hydrateDownloadStore can't recover it —
+      // it lives only in the durably-persisted queue. restore replays it through the owning provider's
+      // real start (re-creating the pending row + watch); items auto-start as slots free. Runs AFTER
+      // provider registration (restore dispatches to the providers) and hydrate (so it dedupes against
+      // any native row that DID start). Fire-and-forget: a failure must not abort launch.
+      await restoreQueuedDownloads().catch((error) => {
+        logger.error('[App] Failed to restore queued downloads during startup:', error);
+      });
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection

@@ -2,6 +2,7 @@
 import { NativeModules, NativeEventEmitter, Platform, Alert } from 'react-native';
 import { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../types';
 import logger from '../utils/logger';
+import { serializeQueue, saveQueuedDownloads } from './queuedDownloadPersistence';
 import type {
   DownloadParams,
   DownloadProgressEvent, DownloadCompleteEvent, DownloadErrorEvent,
@@ -83,7 +84,18 @@ class BackgroundDownloadService {
     let reject!: (err: unknown) => void;
     const promise = new Promise<BackgroundDownloadInfo>((res, rej) => { resolve = res; reject = rej; });
     this.startQueue.push({ params, key, promise, resolve, reject });
+    this.persistQueue();
     return promise;
+  }
+
+  /**
+   * Durably persist the SERIALIZABLE projection of the queue (params only — never the
+   * promise/resolve/reject) so a queued start survives an app kill. Called on every queue mutation
+   * (enqueue / admit-to-start / cancel / cleanup). Fire-and-forget: the write must never block the
+   * queue, and a failure is logged, not thrown (see queuedDownloadPersistence).
+   */
+  private persistQueue(): void {
+    saveQueuedDownloads(serializeQueue(this.startQueue)).catch(() => { /* best-effort; adapter logs */ });
   }
 
   private keyFor(p: DownloadParams): string {
@@ -157,12 +169,17 @@ class BackgroundDownloadService {
   }
 
   private pump(): void {
+    let admitted = false;
     while (this.activeIds.size < MAX_CONCURRENT_DOWNLOADS && this.startQueue.length > 0) {
       const next = this.startQueue.shift()!;
+      admitted = true;
       // beginDownload reserves the slot synchronously, so the loop condition sees the
       // updated size before considering the next queued item.
       this.beginDownload(next.params).then(next.resolve, next.reject);
     }
+    // An admitted item leaves the queue → it now has (or is starting) a native row, so it must drop
+    // out of the persisted queue projection or a relaunch would re-issue a download that already began.
+    if (admitted) this.persistQueue();
   }
 
   /**
@@ -244,6 +261,7 @@ class BackgroundDownloadService {
     const idx = this.startQueue.findIndex((q) => q.key === key);
     if (idx === -1) return false;
     const [removed] = this.startQueue.splice(idx, 1);
+    this.persistQueue(); // a cancelled queued start must not resurrect on relaunch
     const error = new Error('Download cancelled') as Error & { cancelled?: boolean };
     error.cancelled = true;
     removed.reject(error);
