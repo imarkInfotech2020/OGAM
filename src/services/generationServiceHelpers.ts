@@ -8,6 +8,7 @@ import type { Message, GenerationMeta } from '../types';
 import { runToolLoop, buildLiteRTHistory } from './generationToolLoop';
 import { effectiveCacheType } from './llmHelpers';
 import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
+import { clearModelFailure } from './modelFailureHandler';
 import type { ToolResult } from './tools/types';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
@@ -171,6 +172,10 @@ async function checkProviderReadiness(svc: any): Promise<string | null> {
 
 export async function prepareGenerationImpl(svc: any, conversationId: string): Promise<boolean> {
   if (svc.state.isGenerating) return false;
+  // A NEW attempt owns the text failure surface: clear any card left by a previous failed/stopped
+  // attempt at the ONE dispatch seam every path (send/retry/regenerate, local/remote, with/without
+  // tools) funnels through — a stale card must never sit next to a live stream (device IMG 00:23).
+  clearModelFailure('text');
   svc.updateState({
     isGenerating: true, isThinking: true, conversationId,
     streamingContent: '', startTime: Date.now(),
