@@ -149,12 +149,11 @@ real gestures, assert the rendered artifact, ground every test in the device evi
 engine/mode/provider the finding used, and SHOW THE RED before calling any green a guard. Do not write a
 test without it.
 
-Always write **both** unit tests and integration tests for new features and significant changes:
+**Integration tests are THE standard — unit tests are not required and not wanted as the proof of anything.**
 
-- **Unit tests** (`__tests__/unit/`): Test individual functions, hooks, and store actions in isolation with mocked dependencies.
-- **Integration tests** (`__tests__/integration/`): Test how multiple modules work together end-to-end (e.g., service A calls service B which writes to database C). Use mocked native modules but real logic across layers.
-
-Do not consider a feature complete with only unit tests. Integration tests catch wiring bugs, incorrect data flow between layers, and lifecycle issues that unit tests miss.
+- **Integration tests** (`__tests__/integration/`): the deliverable for every feature/fix. Mount the real screen, arrive via real gestures, run the whole real stack (hooks/services/stores/parsers) over fakes ONLY at the device boundary (`__tests__/harness/`), and assert what the user SEES. This is the only test shape that counts as coverage of a behavior.
+- **Unit tests** (`__tests__/unit/`): optional, and only as a thin layer under genuinely pure logic (a parser, budget math) — driving the real function with zero mocks. Never write one as the proof a feature works, and never write one that mocks our own code.
+- **Mockist tests are deprecated: any existing test that `jest.mock`s our own code or proves behavior via `toHaveBeenCalled` gets DELETED when it fails — never repaired.** Do not update a hand-rolled mock to track a code change; delete the test and make sure an integration test covers the behavior instead.
 
 ### Coverage (core AND pro, 100% on new code)
 
