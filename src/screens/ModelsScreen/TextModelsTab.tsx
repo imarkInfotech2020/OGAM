@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, Tou
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
 import { modelBudgetFraction } from '../../services/memoryBudget';
+import { fileExceedsBudget } from './textModelsTabHelpers';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -67,17 +68,18 @@ type DetailProps = Pick<Props,
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
-// Build the file card's onDownload handler (extracted to keep renderFileItem below the
-// ESLint complexity ceiling; behavior is identical to the previous inline form).
-function buildFileDownloadHandler({ s, curatedEntry, proceedDownload, setAlertState }: {
+// Build the file card's onDownload handler. The curated confirm-download warning is
+// DEVICE-AWARE (fileExceedsBudget: ramGB vs size), never a static per-model flag.
+function buildFileDownloadHandler({ s, curatedEntry, sizeBytes, ramGB, proceedDownload, setAlertState }: {
   s: { downloaded: boolean; progress: unknown; hasFailed: boolean };
   curatedEntry: ReturnType<typeof getCuratedLiteRTEntry>;
+  sizeBytes: number; ramGB: number;
   proceedDownload: () => void;
   setAlertState: (state: AlertState) => void;
 }): (() => void) | undefined {
   if (s.downloaded || s.progress || s.hasFailed) return undefined;
   return () => {
-    if (curatedEntry?.confirmDownload) {
+    if (curatedEntry?.confirmDownload && fileExceedsBudget(sizeBytes, ramGB)) {
       setAlertState(showAlert(curatedEntry.confirmDownload.title, curatedEntry.confirmDownload.message, [
         { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
         { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
@@ -183,7 +185,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       handleDownload(selectedModel, item);
       if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
-    const onDownload = buildFileDownloadHandler({ s, curatedEntry, proceedDownload, setAlertState });
+    const onDownload = buildFileDownloadHandler({ s, curatedEntry, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
@@ -290,8 +292,6 @@ const ModelDetailView: React.FC<DetailProps> = ({
     </View>
   );
 };
-
-;
 
 // LiteRT-specific per-file metadata (display name + highlight) used to render
 // individual file cards in the detail view. Derived from the curated registry —
