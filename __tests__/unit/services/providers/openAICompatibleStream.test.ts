@@ -148,12 +148,16 @@ describe('processDelta', () => {
     expect(state.fullContent).toBe('hello');
   });
 
-  it('does not call onReasoning when thinkingEnabled=false and reasoning_content present', () => {
+  it('STILL surfaces the DEDICATED reasoning_content field when thinkingEnabled=false (B16/B17)', () => {
+    // A provider's structured `reasoning_content` field is real reasoning output and is always
+    // surfaced — remote models have no local thinking toggle (B17), so suppressing it hid
+    // legitimate reasoning. Only INLINE <think> tags respect the local toggle (see the
+    // "suppresses think-tag reasoning when thinkingEnabled=false" case below).
     const state = makeState();
     const { thinkTagParser, callbacks, onReasoning } = makeCtx(false);
     processDelta({ reasoning_content: 'private thought' }, state, { thinkingEnabled: false, callbacks, thinkTagParser });
-    expect(onReasoning).not.toHaveBeenCalled();
-    expect(state.fullReasoningContent).toBe('');
+    expect(onReasoning).toHaveBeenCalledWith('private thought');
+    expect(state.fullReasoningContent).toBe('private thought');
   });
 
   it('calls onReasoning for reasoning_content when thinkingEnabled=true', () => {
