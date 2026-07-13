@@ -13,7 +13,6 @@
  * the engine × modality intersection (see docs/TEST_MATRIX.md).
  */
 import { useAppStore } from '../../../src/stores/appStore';
-import { useChatStore } from '../../../src/stores/chatStore';
 import { generationService } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';

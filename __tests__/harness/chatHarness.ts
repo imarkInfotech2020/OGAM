@@ -44,9 +44,6 @@ export interface ChatHarnessOptions {
   deferInitialLoad?: boolean;
 }
 
-const LLAMA_PATH = '/models/small.gguf';
-const LITERT_PATH = '/models/gemma.litertlm';
-
 export async function setupChatScreen(opts: ChatHarnessOptions) {
   const platform = opts.platform ?? 'android';
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
@@ -173,15 +170,15 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * is NOT activated here: activation is a real gesture (cycleImageMode's toggle sets activeImageModelId
      * when an image model is downloaded). Settles first so the mount's hydration has cleared the empty disk.
      */
-    async placeImageModel(opts: { id?: string; modelPath?: string; backend?: 'mnn' | 'qnn' | 'coreml'; size?: number } = {}) {
-      const { id = 'sd', modelPath = '/models/sd', backend = 'coreml', size } = opts;
+    async placeImageModel(imgOpts: { id?: string; modelPath?: string; backend?: 'mnn' | 'qnn' | 'coreml'; size?: number } = {}) {
+      const { id = 'sd', modelPath: imgModelPath = '/models/sd', backend = 'coreml', size } = imgOpts;
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { createONNXImageModel } = require('../utils/factories');
-      const model = createONNXImageModel({ id, name: 'SD', modelPath, backend, ...(size != null ? { size } : {}) });
+      const imgModel = createONNXImageModel({ id, name: 'SD', modelPath: imgModelPath, backend, ...(size != null ? { size } : {}) });
       // A downloaded+extracted image model IS its file set on disk (the boundary) — seed the exact files the
       // real integrity gate + native load require, so the REAL load path runs (mnn/qnn validate the dir;
       // coreml doesn't). No pre-marking-loaded shortcut.
-      const seedFile = (name: string) => boundary.fs!.seedFile(`${modelPath}/${name}`, 8 * 1024 * 1024);
+      const seedFile = (name: string) => boundary.fs!.seedFile(`${imgModelPath}/${name}`, 8 * 1024 * 1024);
       if (backend === 'mnn' || backend === 'qnn') {
         ['pos_emb.bin', 'token_emb.bin', 'tokenizer.json'].forEach(seedFile);
         if (backend === 'mnn') ['unet.mnn', 'unet.mnn.weight', 'vae_decoder.mnn', 'vae_decoder.mnn.weight', 'clip_v2.mnn', 'clip_v2.mnn.weight'].forEach(seedFile);
@@ -190,8 +187,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         seedFile('model.mlmodelc'); // coreml: a non-empty dir
       }
       await this.settle(50); // let the mount's hydration finish clearing the (empty) disk list
-      this.useAppStore.setState({ downloadedImageModels: [model] }); // downloaded (boundary), NOT active
-      return model;
+      this.useAppStore.setState({ downloadedImageModels: [imgModel] }); // downloaded (boundary), NOT active
+      return imgModel;
     },
 
     /**
