@@ -232,7 +232,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   if (!isAvailable) {
     return (
       <View style={styles.container}>
-        <TouchableOpacity style={styles.buttonWrapper} onPress={handleUnavailableTap} disabled={isDownloading}>
+        <TouchableOpacity testID="voice-record-button-unavailable" style={styles.buttonWrapper} onPress={handleUnavailableTap} disabled={isDownloading}>
           <UnavailableButton asSendButton={asSendButton} downloadProgress={isDownloading ? downloadProgress : undefined} />
         </TouchableOpacity>
         {alert}

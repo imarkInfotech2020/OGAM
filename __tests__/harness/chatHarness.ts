@@ -35,6 +35,9 @@ export interface ChatHarnessOptions {
   vision?: boolean;
   /** Install the driveable whisper.rn STT fake (for chat-mode voice input flows). */
   whisper?: boolean;
+  /** Install the stateful background-download native fake (drive DownloadProgress/Complete/Error
+   *  events through the real backgroundDownloadService — e.g. an in-flight STT model download). */
+  download?: boolean;
   /** Activate the PRO feature set (audio/voice mode header toggle, audio layout, TTS, MCP) via the real
    *  bootstrap, so pro user-flows are reachable in the mounted screen. */
   pro?: boolean;
@@ -51,7 +54,7 @@ export interface ChatHarnessOptions {
 export async function setupChatScreen(opts: ChatHarnessOptions) {
   const platform = opts.platform ?? 'android';
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
-  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', fs: true, ram, whisper: opts.whisper });
+  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', fs: true, ram, whisper: opts.whisper, download: opts.download });
 
   // Global boundary polyfill: React 19's error reporter calls window.dispatchEvent; in the node test
   // env there is no window, so an unrelated crash would mask real errors. This is a jsdom/global shim,
