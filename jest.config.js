@@ -102,5 +102,6 @@ module.exports = {
     './src/utils/imageGenAdvice.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/services/modelLoadErrors.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
     './src/components/ImageGenAdviceCard.tsx': { statements: 100, branches: 100, functions: 100, lines: 100 },
+    './src/components/VoiceRecordButton/derive.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
   },
 };

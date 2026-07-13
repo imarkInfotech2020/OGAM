@@ -43,7 +43,6 @@ describe('mic during a background STT download — a download affordance, never 
   it('keeps chat usable and shows download progress on the mic — NOT the busy spinner', async () => {
     const h = await setupChatScreen({ engine: 'llama', whisper: true, download: true });
     h.render();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { ActivityIndicator } = require('react-native');
 
     // PRE-CONDITION (observed-transition guard): before any download the mic is the plain
@@ -91,7 +90,6 @@ describe('mic during a background STT download — a download affordance, never 
     const h = await setupChatScreen({ engine: 'llama', whisper: true });
     await h.setupWhisperModel('tiny.en'); // downloaded + selected + resident, via the real select gesture
     h.render();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
 
     // BOUNDARY: the OS fires a memory warning → residency reclaims the idle STT sidecar. The model is
