@@ -1,6 +1,5 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import logger from '../../utils/logger';
 import { ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
@@ -50,19 +49,7 @@ async function recoverZipDownload(opts: {
   }
 
   if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-  // [WIRE] capture BOTH outcomes of the MNN/QNN extract (the known-bug path): on success the real
-  // extracted file set (grounds the integrity gate); on FAILURE the error + whatever partially extracted
-  // (grounds the D1/extract-fail → retriable-card bug). Behavior preserved — the error still propagates.
-  try {
-    const zipStat = await RNFS.stat(zipPath).catch(() => null);
-    await unzip(zipPath, modelDir);
-    const entries = await RNFS.readDir(modelDir).catch(() => []);
-    logger.log(`[WIRE-UNZIP] ${JSON.stringify({ ok: true, zipPath, zipSize: zipStat ? Number(zipStat.size) : null, modelDir, backend: metadata.imageModelBackend, files: entries.map(e => ({ name: e.name, size: Number(e.size), isFile: e.isFile() })) })}`);
-  } catch (e) {
-    const partial = await RNFS.readDir(modelDir).catch(() => [] as Array<{ name: string; size: string | number; isFile: () => boolean }>);
-    logger.log(`[WIRE-UNZIP] ${JSON.stringify({ ok: false, zipPath, modelDir, backend: metadata.imageModelBackend, error: String((e as Error)?.message ?? e), partialFiles: partial.map(f => ({ name: f.name, size: Number(f.size), isFile: f.isFile() })) })}`);
-    throw e;
-  }
+  await unzip(zipPath, modelDir);
   await RNFS.unlink(zipPath).catch(() => {});
 
   if (metadata.imageModelBackend === 'coreml') {

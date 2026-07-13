@@ -8,9 +8,10 @@
  *
  * Real stack: mount the REAL KnowledgeBaseScreen, tap "Add Document" → real handleAddDocument → real
  * ragService.indexDocument → real documentService.processDocumentFromPath → real pdfExtractor. The only fakes
- * are device leaves: the picker, memfs, the native PDFExtractorModule (returns '' = a scanned page), and the
- * OS alert (the named boundary the user sees). RED on HEAD: the alert is the vague message, not one that names
- * the scanned/no-text-layer cause. Falsify: the fix greens it by emitting a clear scanned-PDF message.
+ * are device leaves: the picker, memfs, and the native PDFExtractorModule (returns '' = a scanned page). The
+ * user-visible artifact is the on-screen index-error card (the same retriable card the ABORT contract
+ * surfaces for any index failure). RED on HEAD: the message is the vague one, not one that names the
+ * scanned/no-text-layer cause. Falsify: the fix greens it by emitting a clear scanned-PDF message.
  */
 import { installNativeBoundary, requireRTL, MB } from '../../harness/nativeBoundary';
 
@@ -30,7 +31,6 @@ describe('T010 (rendered) — scanned/no-text-layer PDF must show a clear messag
     // DEVICE BOUNDARY: the native PDF extractor. A scanned/image PDF has no text layer → extractText returns
     // '' (exactly [WIRE-PDF] textLength:0). Set BEFORE requiring the screen so pdfExtractor captures it.
     RN.NativeModules.PDFExtractorModule = { extractText: jest.fn(async () => '') };
-    const { Alert } = RN;
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
@@ -40,17 +40,16 @@ describe('T010 (rendered) — scanned/no-text-layer PDF must show a clear messag
     picker.pick.mockResolvedValue([{ uri: 'file:///docs/scan.pdf', name: 'scan.pdf', size: 200 * 1024 }]);
     useProjectStore.setState({ projects: [{ id: 'p1', name: 'Research', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }] });
 
-    const alertSpy = jest.spyOn(Alert, 'alert');
     const view = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
     await rtl.waitFor(() => { expect(view.queryByText('No documents yet')).not.toBeNull(); });
 
     // Real gesture: attach the scanned PDF.
     rtl.fireEvent.press(view.getByText('Add Document'));
 
-    // Precondition: the extraction genuinely failed and the user was alerted (the flow reached the failure).
-    await rtl.waitFor(() => { expect(alertSpy).toHaveBeenCalled(); }, { timeout: 4000 });
+    // Precondition: the extraction genuinely failed and the on-screen error card appeared (flow reached failure).
+    await rtl.waitFor(() => { expect(view.queryByTestId('kb-index-error-card')).not.toBeNull(); }, { timeout: 4000 });
     // SPEC: the message names the scanned / no-text-layer cause. RED on HEAD: it is the vague
     // "Could not extract text from document" instead.
-    expect(alertSpy.mock.calls.some(c => /scanned|no text layer|OCR/i.test(String(c[1])))).toBe(true);
+    expect(view.queryByText(/scanned|no text layer|OCR/i)).not.toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
+import { audioRecorderService } from './audioRecorderService';
 import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
@@ -349,10 +350,41 @@ class WhisperService {
       resolveTranscriptionStopped = resolve;
     });
 
+    // B26/B28 ROOT: realtime capture yields NO audio on device (spoke, blank input). The reliable
+    // pipeline is record→file→transcribeFile (the voice-mode path, T079). So we record the SAME
+    // utterance to a file alongside the realtime stream, and on the stream's FINAL event, when it
+    // produced no usable transcript, we transcribe the recorded FILE and deliver THAT as the
+    // authoritative result — one uniform "voice in → transcribed text out" pipeline for every mode.
+    // Best-effort: if the recorder can't start (permission/hardware), realtime alone still runs.
+    let recordedFile = false;
+    try {
+      await audioRecorderService.startRecording();
+      recordedFile = true;
+    } catch (recErr) {
+      logger.error('[WhisperService] Fallback recorder failed to start (realtime only):', recErr);
+    }
+
+    // Resolve the authoritative transcript for the finished utterance: prefer the realtime result;
+    // when it's empty (B26), transcribe the recorded file. Pure decision, one place.
+    const resolveFinalText = async (realtimeText: string): Promise<string> => {
+      if (cleanTranscription(realtimeText)) return realtimeText;
+      if (!recordedFile) return realtimeText;
+      try {
+        const { path } = await audioRecorderService.stopRecording();
+        const fileText = await this.transcribeFile(path);
+        logger.log(`[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(0, 50)}"`);
+        return fileText;
+      } catch (fileErr) {
+        logger.error('[WhisperService] File-transcribe fallback failed:', fileErr);
+        return realtimeText;
+      }
+    };
+
     try {
       // Guard: context could have been released during the async permission check
       if (!this.context) {
         this.isTranscribing = false;
+        if (recordedFile) audioRecorderService.cancelRecording();
         resolveTranscriptionStopped();
         throw new Error('Whisper context was released before transcription could start');
       }
@@ -388,22 +420,36 @@ class WhisperService {
         logger.log(`[WIRE-STT-REALTIME] ${JSON.stringify(evt)}`);
 
         const { isCapturing, data, processTime, recordingTime } = evt;
-        onResult({
-          text: data?.result || '',
-          isCapturing,
-          processTime: processTime || 0,
-          recordingTime: recordingTime || 0,
-        });
 
-        if (!isCapturing) {
-          logger.log('[WhisperService] Recording finished');
+        if (isCapturing) {
+          // Live partial — surface immediately for the "listening…" preview.
+          onResult({
+            text: data?.result || '',
+            isCapturing: true,
+            processTime: processTime || 0,
+            recordingTime: recordingTime || 0,
+          });
+          return;
+        }
+
+        // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
+        // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
+        logger.log('[WhisperService] Recording finished');
+        void resolveFinalText(data?.result || '').then((finalText) => {
+          onResult({
+            text: finalText,
+            isCapturing: false,
+            processTime: processTime || 0,
+            recordingTime: recordingTime || 0,
+          });
           this.isTranscribing = false;
           this.stopFn = null;
           // Signal that native processing is complete - safe to release context
           resolveTranscriptionStopped();
-        }
+        });
       });
     } catch (error) {
+      if (recordedFile) audioRecorderService.cancelRecording();
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
       this.stopFn = null;
@@ -453,6 +499,9 @@ class WhisperService {
     if (fn && this.context) {
       try { fn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
     }
+    // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
+    // realtime session must not leave the file recorder capturing (B11-class leak).
+    if (audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording();
     this.isTranscribing = false;
     this.transcriptionFullyStopped = Promise.resolve();
   }

@@ -8,8 +8,9 @@
  * fakes are device leaves: the document picker (@react-native-documents/picker), the filesystem (memfs), and
  * the OS alert (Alert.alert — a native dialog, asserted as the named device-boundary the user sees).
  *
- * The >5MB rejection's user-visible artifact is the native alert; the KB list staying empty ("No documents
- * yet") corroborates that nothing was added. Falsify: a <5MB file does NOT trigger the 5MB alert.
+ * The >5MB rejection's user-visible artifact is the on-screen index-error card (the same retriable card the
+ * ABORT contract surfaces for any index failure); the KB list staying empty ("No documents yet") corroborates
+ * that nothing was added. Falsify: a <5MB file does NOT surface the 5MB rejection message.
  */
 import { installNativeBoundary, requireRTL, MB } from '../../harness/nativeBoundary';
 
@@ -24,7 +25,6 @@ async function mountKbWithPickedFile(sizeBytes: number) {
   /* eslint-disable @typescript-eslint/no-var-requires */
   const React = require('react');
   const rtl = requireRTL();
-  const { Alert } = require('react-native');
   const picker = require('@react-native-documents/picker');
   const { useProjectStore } = require('../../../src/stores/projectStore');
   const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
@@ -40,32 +40,33 @@ async function mountKbWithPickedFile(sizeBytes: number) {
   // doc-attach behavior — the attach is driven by the real gesture below.
   useProjectStore.setState({ projects: [{ id: 'p1', name: 'Research', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }] });
 
-  const alertSpy = jest.spyOn(Alert, 'alert');
   const view = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
   await rtl.waitFor(() => { expect(view.queryByText('No documents yet')).not.toBeNull(); });
-  return { view, rtl, alertSpy };
+  return { view, rtl };
 }
 
 describe('T011 (rendered) — >5MB document is rejected from the knowledge base', () => {
   it('shows "Maximum size is 5MB" and adds no document', async () => {
-    const { view, rtl, alertSpy } = await mountKbWithPickedFile(6 * MB); // over the 5MB limit
+    const { view, rtl } = await mountKbWithPickedFile(6 * MB); // over the 5MB limit
 
     // Real gesture: tap "Add Document" → the whole real attach→index pipeline runs over the boundary.
     rtl.fireEvent.press(view.getByText('Add Document'));
 
-    // The user is told the file is too large (the native alert dialog — the artifact they see).
+    // The user is told the file is too large — on the on-screen index-error card (the artifact they see).
     await rtl.waitFor(() => {
-      expect(alertSpy.mock.calls.some(c => /Maximum size is 5MB/.test(String(c[1])))).toBe(true);
+      expect(view.queryByTestId('kb-index-error-card')).not.toBeNull();
     }, { timeout: 4000 });
+    expect(view.queryByText(/Maximum size is 5MB/)).not.toBeNull();
     // ...and nothing was added: the KB list still shows the empty state.
     expect(view.queryByText('No documents yet')).not.toBeNull();
   });
 
-  it('falsify: a <5MB file does NOT trigger the 5MB rejection', async () => {
-    const { view, rtl, alertSpy } = await mountKbWithPickedFile(1 * MB); // under the limit
+  it('falsify: a <5MB file does NOT surface the 5MB rejection', async () => {
+    const { view, rtl } = await mountKbWithPickedFile(1 * MB); // under the limit
     rtl.fireEvent.press(view.getByText('Add Document'));
-    await rtl.waitFor(() => { expect(alertSpy).toHaveBeenCalled(); }).catch(() => {});
-    // Whatever happens downstream, the 5MB rejection is NOT the message (the guard is size-specific).
-    expect(alertSpy.mock.calls.some(c => /Maximum size is 5MB/.test(String(c[1])))).toBe(false);
+    // Whatever happens downstream (e.g. no embedding model present), the size guard did NOT fire — the
+    // 5MB rejection message is never shown (the guard is size-specific).
+    await rtl.waitFor(() => { expect(view.queryByTestId('kb-index-error-card')).not.toBeNull(); }).catch(() => {});
+    expect(view.queryByText(/Maximum size is 5MB/)).toBeNull();
   });
 });

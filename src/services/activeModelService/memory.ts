@@ -49,6 +49,10 @@ function estimateModelMemoryGB(
     return sizeGB * TEXT_MODEL_OVERHEAD_MULTIPLIER;
   }
   const imageModel = model as ONNXImageModel;
+  // ONE image-RAM estimator: delegate to the authoritative load-gate estimator so the
+  // advisory pre-check and the gate can't diverge ('Safe to load' then a hard refusal).
+  const estimate = hardwareService.estimateImageModelRam?.(imageModel);
+  if (estimate != null) return estimate / (1024 * 1024 * 1024);
   const sizeGB = (imageModel.size || 0) / (1024 * 1024 * 1024);
   return sizeGB * IMAGE_MODEL_OVERHEAD_MULTIPLIER;
 }

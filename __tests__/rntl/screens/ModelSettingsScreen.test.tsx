@@ -708,12 +708,12 @@ describe('ModelSettingsScreen', () => {
       const allViews = UNSAFE_getAllByType(View);
       const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
 
-      const sizeSlider = sliders.find((s: any) => s.props.value === 512 && s.props.maximumValue === 512 && s.props.minimumValue === 128);
-      if (sizeSlider) {
-        fireEvent(sizeSlider, 'slidingComplete', 256);
-        expect(useAppStore.getState().settings.imageWidth).toBe(256);
-        expect(useAppStore.getState().settings.imageHeight).toBe(256);
-      }
+      // Min is the shared 256 floor (SWEET_SPOT_SIZE) — same as the chat modal, no divergence.
+      const sizeSlider = sliders.find((s: any) => s.props.value === 512 && s.props.maximumValue === 512 && s.props.minimumValue === 256);
+      expect(sizeSlider).toBeTruthy();
+      fireEvent(sizeSlider!, 'slidingComplete', 320);
+      expect(useAppStore.getState().settings.imageWidth).toBe(320);
+      expect(useAppStore.getState().settings.imageHeight).toBe(320);
     });
   });
 
