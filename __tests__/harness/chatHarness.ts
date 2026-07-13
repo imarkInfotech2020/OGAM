@@ -42,6 +42,10 @@ export interface ChatHarnessOptions {
    *  as the real lazy flow leaves it (load defers to the first send). Use to assert the lazy-on-select
    *  invariant (no eager warm) via the In Memory section. Default false (pre-load for send determinism). */
   deferInitialLoad?: boolean;
+  /** Override the installed model's display name / file name — for flows whose behavior keys on the
+   *  model identity (e.g. the name-based capability prediction for a selected-but-not-loaded gguf). */
+  modelName?: string;
+  modelFileName?: string;
 }
 
 export async function setupChatScreen(opts: ChatHarnessOptions) {
@@ -55,33 +59,33 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const g = globalThis as unknown as { window?: Record<string, unknown> };
   if (!g.window) g.window = { dispatchEvent: () => true, addEventListener: () => {}, removeEventListener: () => {} };
 
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const rtl = requireRTL();
   const { hardwareService } = require('../../src/services/hardware');
   const { useAppStore, useChatStore } = require('../../src/stores');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   // BOUNDARY (not a gesture): a downloaded model = a persisted record (@local_llm/downloaded_models) + the
   // file on disk — exactly what a real download leaves. Downloading is native and can't be gestured in jest,
   // so we pre-place ONLY this. Everything above it (hydration, the picker, selection, load) runs for real.
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
   const { activeModelService } = require('../../src/services/activeModelService');
   const { HomeScreen } = require('../../src/screens/HomeScreen');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
   const docs = boundary.fs!.DocumentDirectoryPath;
-  const fileName = opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm';
+  const fileName = opts.modelFileName ?? (opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm');
   const modelPath = `${docs}/models/${fileName}`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision });
+  const model = createDownloadedModel({ id: 'm', name: opts.modelName ?? 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
 
   // Boundary: dismiss the onboarding spotlight tour. When a whisper model is present the voice-hint
   // spotlight (step 12) fires and wraps the send button in an AttachStep, which intercepts the composer
   // gesture in tests. The tour is unrelated to any behavior under test, so mark it done up front.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   require('../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
   useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
 
@@ -111,7 +115,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
-  const harness = {
+  return {
     boundary, React, rtl, useAppStore, useChatStore,
     /** The active conversation id — a NEW chat has none until the first send() creates it. */
     get conversationId(): string | null { return useChatStore.getState().activeConversationId; },
@@ -123,10 +127,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * live when we return to chat. NOT settings.updateSettings seeding.
      */
     enableToolViaUI(toolId: string) {
-      /* eslint-disable @typescript-eslint/no-var-requires */
+       
       const { ToolsScreen } = require('../../src/screens/ToolsScreen');
       const { Switch } = require('react-native');
-      /* eslint-enable @typescript-eslint/no-var-requires */
+       
       const tools = rtl.render(React.createElement(ToolsScreen, {}));
       const row = tools.getByTestId(`tool-picker-row-${toolId}`);
       // The RN Switch toggles via onValueChange (not press) — locate it in the row and flip it.
@@ -139,7 +143,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * value into the real numeric input on the real TextGenerationSection — NOT updateSettings seeding.
      */
     setTextSettingViaUI(key: string, value: number) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const { TextGenerationSection } = require('../../src/components/GenerationSettingsModal/TextGenerationSection');
       const s = rtl.render(React.createElement(TextGenerationSection, {}));
       rtl.fireEvent.press(s.getByTestId(`setting-${key}-value-button`));
@@ -172,7 +176,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      */
     async placeImageModel(imgOpts: { id?: string; modelPath?: string; backend?: 'mnn' | 'qnn' | 'coreml'; size?: number } = {}) {
       const { id = 'sd', modelPath: imgModelPath = '/models/sd', backend = 'coreml', size } = imgOpts;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const { createONNXImageModel } = require('../utils/factories');
       const imgModel = createONNXImageModel({ id, name: 'SD', modelPath: imgModelPath, backend, ...(size != null ? { size } : {}) });
       // A downloaded+extracted image model IS its file set on disk (the boundary) — seed the exact files the
@@ -244,7 +248,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * sent). NOT settings.updateSettings seeding.
      */
     enableGenerationDetailsViaUI() {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const { ShowGenerationDetailsToggle } = require('../../src/components/settings/textGenAdvancedSections');
       const s = rtl.render(React.createElement(ShowGenerationDetailsToggle, {}));
       rtl.fireEvent.press(s.getByTestId('show-gen-details-on-button'));
@@ -258,10 +262,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * TranscriptionModelsTab → the real selectModel sets it active + loads it resident. Requires whisper:true.
      */
     async setupWhisperModel(modelId = 'tiny.en') {
-      /* eslint-disable @typescript-eslint/no-var-requires */
+       
       const { TranscriptionModelsTab } = require('../../src/screens/ModelsScreen/TranscriptionModelsTab');
       const { useWhisperStore } = require('../../src/stores/whisperStore');
-      /* eslint-enable @typescript-eslint/no-var-requires */
+       
       boundary.fs!.seedFile(`${docs}/whisper-models/ggml-${modelId}.bin`, 75 * 1024 * 1024);
       await useWhisperStore.getState().refreshPresentModels(); // real disk scan → present
       const t = rtl.render(React.createElement(TranscriptionModelsTab, {}));
@@ -295,7 +299,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      */
     async enterVoiceMode() {
       const view = this.view!;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const { useTTSStore } = require('@offgrid/pro/audio/ttsStore');
       const engineId = useTTSStore.getState().settings.engineId;
       // BOUNDARY: the persisted artifact a completed voice-model download leaves — drives shouldLoad in the
@@ -336,10 +340,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     /** Mount the real ChatScreen (plus the real app.root slot when pro is active, so the TTS EngineBridge
      *  mounts and the voice engine can load over the executorch fake — the same slot App.tsx renders). */
     render() {
-      /* eslint-disable @typescript-eslint/no-var-requires */
+       
       const { ChatScreen } = require('../../src/screens/ChatScreen');
       const { getSlot, SLOTS } = require('../../src/bootstrap/slotRegistry');
-      /* eslint-enable @typescript-eslint/no-var-requires */
+       
       const AppRoot = opts.pro ? getSlot(SLOTS.appRoot) : undefined;
       const tree = AppRoot
         ? React.createElement(React.Fragment, null, React.createElement(AppRoot, {}), React.createElement(ChatScreen, {}))
@@ -429,5 +433,4 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       rtl.fireEvent.press(view.getByText('SAVE & RESEND'));
     },
   };
-  return harness;
 }

@@ -3,6 +3,7 @@ import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { providerRegistry } from './providers';
 import { isLiteRTModel, type DownloadedModel, type Message } from '../types';
+import { predictGgufCapabilities, type PredictedGgufCapabilities } from '../utils/ggufCapabilities';
 import logger from '../utils/logger';
 
 /** Every text-generation engine, defined ONCE here so callers never hardcode the concrete set. */
@@ -32,6 +33,10 @@ export interface CapabilityInputs {
   liteRTLoaded: boolean;
   /** The llama engine's live capabilities (only meaningful when loaded). */
   llama: { loaded: boolean; vision: boolean; audio: boolean; tools: boolean; thinking: boolean };
+  /** Static PREDICTION for a llama model that is selected but not loaded (models load lazily on
+   *  first send). Without it the Tools/Thinking affordances were hidden for a just-selected
+   *  Gemma 4 until the first send loaded it (device 2026-07-13). Loaded live caps win. */
+  llamaPredicted?: PredictedGgufCapabilities;
 }
 
 /**
@@ -58,12 +63,14 @@ export function deriveEngineCapabilities(i: CapabilityInputs): EngineCapabilitie
       thinking: i.liteRTLoaded,
     };
   }
-  // llama (and any future engine): capabilities come from the loaded engine, false when not loaded.
+  // llama (and any future engine): the LOADED engine's template-derived capabilities are
+  // authoritative; before the lazy load, fall back to the static name/mmproj PREDICTION so a
+  // just-selected model shows its real affordances (unknown names predict false — no change).
   return {
-    vision: i.llama.loaded ? i.llama.vision : false,
+    vision: i.llama.loaded ? i.llama.vision : (i.llamaPredicted?.vision ?? false),
     audio: i.llama.loaded ? i.llama.audio : false,
-    tools: i.llama.loaded ? i.llama.tools : false,
-    thinking: i.llama.loaded ? i.llama.thinking : false,
+    tools: i.llama.loaded ? i.llama.tools : (i.llamaPredicted?.tools ?? false),
+    thinking: i.llama.loaded ? i.llama.thinking : (i.llamaPredicted?.thinking ?? false),
   };
 }
 
@@ -135,6 +142,7 @@ export function activeTextCapabilities(i: {
       tools: llmService.supportsToolCalling(),
       thinking: llmService.supportsThinking(),
     },
+    llamaPredicted: i.model?.engine === 'llama' ? predictGgufCapabilities(i.model) : undefined,
   });
 }
 
