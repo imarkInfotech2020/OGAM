@@ -215,6 +215,15 @@ export interface LlamaFake {
    *  accelerator init does — so initContextWithFallback falls back to the CPU attempt (n_gpu_layers:0).
    *  Models B24 (GPU init timeout → CPU/partial fallback). Persistent until cleared. */
   scriptGpuInitFailure(fail?: boolean): void;
+  /** HOLD the next post-init multimodal-support check (context.getMultimodalSupport) open until
+   *  releaseMultimodalHold() — the device-shaped load window between context init and capability
+   *  detection (the 2026-07-13 18:50 device log shows ~3.4s there for gemma-4-E2B: init succeeded
+   *  18:50:26.905, capabilities logged 18:50:30.409, and a send raced in between). One-shot. */
+  scriptMultimodalHold(): void;
+  /** Release a load held via scriptMultimodalHold(). No-op if not held. */
+  releaseMultimodalHold(): void;
+  /** True while a held load is parked INSIDE the multimodal check (the window is open). */
+  multimodalHoldActive(): boolean;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
   calls: { completion: unknown[][] };
@@ -230,6 +239,10 @@ function makeLlamaFake(): LlamaFake {
   // is per-completion (a fresh completion starts un-stopped), matching the native abort behavior.
   let stopRequested = false;
   let gpuInitFails = false; // when true, initLlama with n_gpu_layers>0 rejects (GPU/HTP init timeout → CPU fallback)
+  // Multimodal-check hold: opens the post-init capability window a real slow device has.
+  let mmHoldPending = false;
+  let mmHoldEngaged = false;
+  let mmHoldRelease: (() => void) | null = null;
 
   const context: Record<string, jest.Mock> = {
     // Faithful to llama.rn: completion(params, onToken) STREAMS token-by-token through the callback
@@ -303,7 +316,17 @@ function makeLlamaFake(): LlamaFake {
     release: jest.fn().mockResolvedValue(undefined),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
     initMultimodal: jest.fn().mockResolvedValue(false),
-    getMultimodalSupport: jest.fn().mockResolvedValue({ vision: false, audio: false }),
+    // The post-init multimodal probe. A scripted hold parks the caller here — the real device's
+    // window between context init and capability detection — until releaseMultimodalHold().
+    getMultimodalSupport: jest.fn(async () => {
+      if (mmHoldPending) {
+        mmHoldPending = false;
+        mmHoldEngaged = true;
+        await new Promise<void>((res) => { mmHoldRelease = res; });
+        mmHoldEngaged = false;
+      }
+      return { vision: false, audio: false };
+    }),
     // Embedding boundary (embedding-model contexts, initLlama({embedding:true})): return a device-shaped
     // 384-dim vector derived from the text so RAG cosine ranking is real. Matches all-MiniLM-L6-v2 (384).
     embedding: jest.fn(async (text: string) => ({
@@ -344,6 +367,9 @@ function makeLlamaFake(): LlamaFake {
     scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
+    scriptMultimodalHold: () => { mmHoldPending = true; },
+    releaseMultimodalHold: () => { const f = mmHoldRelease; mmHoldRelease = null; f?.(); },
+    multimodalHoldActive: () => mmHoldEngaged,
   };
 }
 
