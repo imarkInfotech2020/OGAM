@@ -238,44 +238,8 @@ export const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
         </AnimatedEntry>
 
-        {/* Community */}
-        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
-          <View style={styles.navSection}>
-            <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
-              <View style={styles.navItemIcon}>
-                <Icon name="star" size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Star on GitHub</Text>
-                <Text style={styles.navItemDesc}>Support the open-source project</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} onPress={handleSendFeedback}>
-              <View style={styles.navItemIcon}>
-                <Icon name="mail" size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Send Feedback</Text>
-                <Text style={styles.navItemDesc}>Report a bug or share a suggestion</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => shareOnX()}>
-              <View style={styles.navItemIcon}>
-                <Icon name="share-2" size={16} color={colors.textSecondary} />
-              </View>
-              <View style={styles.navItemContent}>
-                <Text style={styles.navItemTitle}>Share on X</Text>
-                <Text style={styles.navItemDesc}>Tell others about Off Grid AI</Text>
-              </View>
-              <Icon name="external-link" size={14} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </AnimatedEntry>
-
         {/* Stay in the loop */}
-        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+        <AnimatedEntry index={7} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.followSection}>
             <View style={styles.followHeader}>
               <Text style={styles.followHeaderTitle}>Stay in the loop</Text>
@@ -308,6 +272,42 @@ export const SettingsScreen: React.FC = () => {
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>Join the Slack community</Text>
                 <Text style={styles.navItemDesc}>Issues fixed fast, debug together, early access</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </AnimatedEntry>
+
+        {/* Community */}
+        <AnimatedEntry index={8} staggerMs={40} trigger={focusTrigger}>
+          <View style={styles.navSection}>
+            <TouchableOpacity style={styles.navItem} onPress={() => Linking.openURL(GITHUB_URL)}>
+              <View style={styles.navItemIcon}>
+                <Icon name="star" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Star on GitHub</Text>
+                <Text style={styles.navItemDesc}>Support the open-source project</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} onPress={handleSendFeedback}>
+              <View style={styles.navItemIcon}>
+                <Icon name="mail" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Send Feedback</Text>
+                <Text style={styles.navItemDesc}>Report a bug or share a suggestion</Text>
+              </View>
+              <Icon name="external-link" size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.navItem, styles.navItemLast]} onPress={() => shareOnX()}>
+              <View style={styles.navItemIcon}>
+                <Icon name="share-2" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.navItemContent}>
+                <Text style={styles.navItemTitle}>Share on X</Text>
+                <Text style={styles.navItemDesc}>Tell others about Off Grid AI</Text>
               </View>
               <Icon name="external-link" size={14} color={colors.textMuted} />
             </TouchableOpacity>
