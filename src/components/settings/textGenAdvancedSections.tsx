@@ -220,7 +220,9 @@ export const KvCacheTypeToggle: React.FC = () => {
  */
 type ModelLoadingMode = 'conservative' | 'balanced' | 'aggressive';
 const MODE_OPTIONS: PillOption<ModelLoadingMode>[] = [
-  { id: 'conservative', label: 'Conservative' },
+  // Label is "Lean" (short enough to sit on one line in the 3-segment row); the underlying policy
+  // id stays 'conservative' so nothing downstream changes.
+  { id: 'conservative', label: 'Lean' },
   { id: 'balanced', label: 'Balanced' },
   { id: 'aggressive', label: 'Aggressive' },
 ];
@@ -233,7 +235,7 @@ export const ModelLoadingModeSelector: React.FC = () => {
   return (
     <SegmentedRow<ModelLoadingMode>
       label="Model Loading"
-      description="Conservative keeps ONE model in memory at a time. Balanced keeps models loaded together when they fit and swaps when they do not. Aggressive commits a larger share of RAM so bigger models load. You can always Load Anyway if a model is refused."
+      description="Lean keeps ONE model in memory at a time. Balanced keeps models loaded together when they fit and swaps when they do not. Aggressive commits a larger share of RAM so bigger models load. You can always Load Anyway if a model is refused."
       options={MODE_OPTIONS}
       current={current}
       onSelect={(id) => updateSettings({ modelLoadingMode: id })}
