@@ -7,6 +7,13 @@ import { audioRecorderService } from './audioRecorderService';
 import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
+import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
+import * as whisperModelFiles from './whisperModelFiles';
+
+// Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
+// to keep this file within the max-lines budget). Behavior-neutral: every existing
+// `import { WHISPER_MODELS, cleanTranscription } from './whisperService'` keeps working.
+export { WHISPER_MODELS, cleanTranscription } from './whisperModels';
 
 interface TranscriptionResult {
   text: string;
@@ -15,23 +22,6 @@ interface TranscriptionResult {
   recordingTime: number;
 }
 type TranscriptionCallback = (result: TranscriptionResult) => void;
-
-const GGML_BASE = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
-
-export const WHISPER_MODELS = [
-  // ── English-only ──────────────────────────────────────────────────────────
-  { id: 'tiny.en',   name: 'Tiny',   size: 75,   lang: 'en',    url: `${GGML_BASE}/ggml-tiny.en.bin`,   description: 'Fastest, English only' },
-  { id: 'base.en',   name: 'Base',   size: 142,  lang: 'en',    url: `${GGML_BASE}/ggml-base.en.bin`,   description: 'Better accuracy, English only' },
-  { id: 'small.en',  name: 'Small',  size: 466,  lang: 'en',    url: `${GGML_BASE}/ggml-small.en.bin`,  description: 'High accuracy, English only' },
-  { id: 'medium.en', name: 'Medium', size: 1500, lang: 'en',    url: `${GGML_BASE}/ggml-medium.en.bin`, description: 'Near human-level, English only, ~2 GB RAM' },
-  // ── Multilingual ──────────────────────────────────────────────────────────
-  { id: 'tiny',           name: 'Tiny',             size: 75,   lang: 'multi', url: `${GGML_BASE}/ggml-tiny.bin`,           description: 'Fastest, 99 languages' },
-  { id: 'base',           name: 'Base',             size: 142,  lang: 'multi', url: `${GGML_BASE}/ggml-base.bin`,           description: 'Better accuracy, 99 languages' },
-  { id: 'small',          name: 'Small',            size: 466,  lang: 'multi', url: `${GGML_BASE}/ggml-small.bin`,          description: 'High accuracy, 99 languages' },
-  { id: 'medium',         name: 'Medium',           size: 1500, lang: 'multi', url: `${GGML_BASE}/ggml-medium.bin`,         description: 'Near human-level, 99 languages, ~2 GB RAM' },
-  { id: 'large-v3-turbo', name: 'Large v3 Turbo',  size: 809,  lang: 'multi', url: `${GGML_BASE}/ggml-large-v3-turbo.bin`, description: 'Fast + accurate, distilled large, 99 languages' },
-  { id: 'large-v3',       name: 'Large v3',         size: 1550, lang: 'multi', url: `${GGML_BASE}/ggml-large-v3.bin`,       description: 'Best quality, 99 languages, ~3 GB RAM' },
-];
 
 class WhisperService {
   private context: WhisperContext | null = null;
@@ -47,13 +37,10 @@ class WhisperService {
   // unrelated (already-downloaded) model must never abort a different in-flight one.
   private activeDownloadModelId: string | null = null;
 
-  getModelsDir(): string { return `${RNFS.DocumentDirectoryPath}/whisper-models`; }
-  async ensureModelsDirExists(): Promise<void> {
-    const dir = this.getModelsDir();
-    if (!await RNFS.exists(dir)) await RNFS.mkdir(dir);
-  }
-  getModelPath(modelId: string): string { return `${this.getModelsDir()}/ggml-${modelId}.bin`; }
-  async isModelDownloaded(modelId: string): Promise<boolean> { return RNFS.exists(this.getModelPath(modelId)); }
+  getModelsDir(): string { return whisperModelFiles.getModelsDir(); }
+  async ensureModelsDirExists(): Promise<void> { return whisperModelFiles.ensureModelsDirExists(); }
+  getModelPath(modelId: string): string { return whisperModelFiles.getModelPath(modelId); }
+  async isModelDownloaded(modelId: string): Promise<boolean> { return whisperModelFiles.isModelDownloaded(modelId); }
 
   async downloadModel(modelId: string, onProgress?: (progress: number) => void): Promise<string> {
     const model = WHISPER_MODELS.find(m => m.id === modelId);
@@ -163,27 +150,7 @@ class WhisperService {
   }
   /** List every downloaded ggml whisper model on disk (for the Download Manager). */
   async listDownloadedModels(): Promise<Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>> {
-    const dir = this.getModelsDir();
-    if (!(await RNFS.exists(dir))) return [];
-    const entries = await RNFS.readDir(dir);
-    return entries
-      .filter(
-        f =>
-          f.isFile() &&
-          f.name.startsWith('ggml-') &&
-          f.name.endsWith('.bin') &&
-          // Apply the same corrupt-file floor the load path uses: an app-kill
-          // mid-download leaves a short ggml-<id>.bin at the final path (no .part),
-          // which would otherwise be surfaced as "downloaded" and then fail to load
-          // with no retry. Size gate here so the Download Manager never lists it.
-          (Number(f.size) || 0) >= WhisperService.MIN_MODEL_FILE_SIZE,
-      )
-      .map(f => ({
-        modelId: f.name.replace(/^ggml-/, '').replace(/\.bin$/, ''),
-        fileName: f.name,
-        sizeBytes: Number(f.size) || 0,
-        filePath: f.path,
-      }));
+    return whisperModelFiles.listDownloadedModels();
   }
 
   async deleteModel(modelId: string): Promise<void> {
@@ -200,40 +167,13 @@ class WhisperService {
   }
 
   /**
-   * Minimum valid model file size in bytes (10 MB).
-   * The smallest whisper model (tiny) is ~75 MB, so anything under 10 MB
-   * is almost certainly a corrupted or incomplete download.
-   */
-  private static readonly MIN_MODEL_FILE_SIZE = 10 * 1024 * 1024;
-
-  /**
    * Validate that a whisper model file exists and has a reasonable size
    * before passing it to the native layer. The native initWithModelPath
    * calls abort() on invalid files, which kills the process without
    * giving JS a chance to handle the error.
    */
   async validateModelFile(modelPath: string): Promise<void> {
-    if (!modelPath) {
-      throw new Error('Whisper model path is empty or undefined');
-    }
-
-    const exists = await RNFS.exists(modelPath);
-    if (!exists) {
-      throw new Error(`Whisper model file not found at: ${modelPath}`);
-    }
-
-    const stat = await RNFS.stat(modelPath);
-    const fileSize = Number(stat.size);
-    if (Number.isNaN(fileSize) || fileSize < WhisperService.MIN_MODEL_FILE_SIZE) {
-      // Remove the corrupted file so the user can re-download
-      await RNFS.unlink(modelPath).catch(() => {});
-      throw new Error(
-        `Whisper model file is too small (${Math.round(fileSize / 1024)} KB) and likely corrupted. ` +
-        'The file has been removed. Please re-download the model.'
-      );
-    }
-
-    logger.log(`[Whisper] Model file validated: ${modelPath} (${Math.round(fileSize / (1024 * 1024))} MB)`);
+    return whisperModelFiles.validateModelFile(modelPath);
   }
 
   async loadModel(modelPath: string): Promise<void> {
@@ -530,27 +470,6 @@ class WhisperService {
     const { result } = __res;
     return cleanTranscription(result);
   }
-}
-
-/**
- * Normalize a raw Whisper transcription: strip the non-speech markers Whisper
- * emits for silence/noise — [BLANK_AUDIO], [ Silence ], [MUSIC], (inaudible),
- * (speaking foreign language), etc. — and return '' when nothing but markers
- * (or punctuation) remains. Without this, a silent/too-short clip returned the
- * literal "[BLANK_AUDIO]" token, which then got SENT as the message text instead
- * of being treated as "couldn't hear that". The single place this rule lives, so
- * every path (file + realtime) treats no-speech identically.
- */
-export function cleanTranscription(raw: string): string {
-  if (!raw) return '';
-  const stripped = raw
-    .replace(/\[[^\]]*\]/g, ' ') // [BLANK_AUDIO], [ Silence ], [MUSIC]
-    .replace(/\([^)]*\)/g, ' ')  // (silence), (speaking foreign language)
-    .replace(/\s+/g, ' ')
-    .trim();
-  // Only markers / punctuation left → no real speech.
-  if (!/[a-z0-9]/i.test(stripped)) return '';
-  return stripped;
 }
 
 export const whisperService = new WhisperService();

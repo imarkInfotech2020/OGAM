@@ -16,63 +16,24 @@ import {
   planEviction,
   computeBudgetMB,
   Resident,
-  ResidentType,
 } from './policy';
 import { LoadPolicy, effectiveAvailableMB } from '../memoryBudget';
-
-type UnloadFn = () => Promise<void>;
-
-/** Hard floor so a small model can always load, even under memory pressure. */
-const MIN_BUDGET_MB = 1024;
-/** For DIRTY-memory models (CoreML/ONNX image): keep this much real RAM free for the
- *  OS + other apps so a dirty load never spills into swap. (Not applied to mmap'd
- *  GGUF - their clean weights don't pressure this limit.) */
-const DIRTY_AVAILABILITY_HEADROOM_MB = 1024;
-/** Aggressive-mode dirty headroom - leaner, still non-zero (lenient safeguard). */
-const AGGRESSIVE_DIRTY_HEADROOM_MB = 512;
-/** Small, cheaply-reloadable models reclaimed first under memory pressure. */
-const SIDECAR_TYPES = new Set<ResidentType>(['whisper', 'tts', 'embedding']);
-
-interface RegisteredResident extends Resident {
-  unload: UnloadFn;
-  /** Owner's veto: returns false when the model is in use right now (e.g. TTS is
-   *  playing) so residency never evicts it mid-use. Absent → always evictable. */
-  canEvict?: () => boolean;
-}
-
-interface ResidentSpec {
-  key: string;
-  type: ResidentType;
-  /** The specific downloaded-model id - keys the per-model session override memory.
-   *  (`key` is only the slot/type, e.g. 'text', so it can't distinguish models.) */
-  modelId?: string;
-  sizeMB: number;
-  pinned?: boolean;
-  /** Owner's veto: returns false while the model is in use (e.g. TTS playing) so
-   *  residency never evicts it mid-use. Absent → always evictable. */
-  canEvict?: () => boolean;
-  /**
-   * Whether the model's weights occupy DIRTY (anonymous, jetsam-counted) memory -
-   * the gap modeled as DATA, not a Platform/type branch in the budget.
-   *  - false (default): mmap-backed GGUF (llama text / whisper). Weights are CLEAN,
-   *    file-backed pages the OS pages freely; they do NOT pressure os_proc_available.
-   *    Bounded by PHYSICAL RAM only - so an 8GB GGUF loads on a 12GB phone.
-   *  - true: CoreML/ONNX image weights load into dirty/GPU memory that DOES count
-   *    against the jetsam limit → also bounded by real free RAM (os_proc_available)
-   *    so it never loads into swap.
-   */
-  dirtyMemory?: boolean;
-}
-
-interface EnsureResult {
-  loaded: boolean;
-  evicted: string[];
-}
-
-const stripUnload = ({
-  unload: _unload,
-  ...rest
-}: RegisteredResident): Resident => rest;
+import {
+  formatMakeRoomForLine,
+  formatOverrideForcingLine,
+  formatOverrideForcedLine,
+} from './logging';
+import {
+  UnloadFn,
+  MIN_BUDGET_MB,
+  DIRTY_AVAILABILITY_HEADROOM_MB,
+  AGGRESSIVE_DIRTY_HEADROOM_MB,
+  SIDECAR_TYPES,
+  RegisteredResident,
+  ResidentSpec,
+  EnsureResult,
+  stripUnload,
+} from './residents';
 
 class ModelResidencyManager {
   private readonly residents = new Map<string, RegisteredResident>();
@@ -355,13 +316,7 @@ class ModelResidencyManager {
     const availMB = Math.round(hardwareService.getAvailableMemoryGB() * 1024);
     const totalMB = Math.round(hardwareService.getTotalMemoryGB() * 1024);
     logger.log(
-      `[MEM-SM] makeRoomFor ${spec.key} sizeMB=${
-        spec.sizeMB
-      } dirty=${!!spec.dirtyMemory} budgetMB=${budgetMB} os_procAvailMB=${availMB} totalMB=${totalMB} residents=[${residents
-        .map(r => `${r.key}:${r.sizeMB}${r.pinned ? '(pinned)' : ''}`)
-        .join(',')}] fits=${plan.fits} evict=[${plan.evict
-        .map(e => e.key)
-        .join(',')}]`,
+      formatMakeRoomForLine({ spec, budgetMB, availMB, totalMB, residents, plan }),
     );
     // SECOND GATE — the dirty physical ceiling. Aggressive mode's larger RAM fraction is safe for
     // CLEAN (mmap, pageable) weights, but NOT for a DIRTY model whose un-pageable GPU/anonymous
@@ -393,13 +348,7 @@ class ModelResidencyManager {
     // estimate is what users defeated with "load a small model, wait, then load the big
     // one" - and why tapping "Load Anyway" still failed.
     if (!plan.fits && override) {
-      logger.log(
-        `[MEM-SM] makeRoomFor ${
-          spec.key
-        } OVERRIDE - forcing load after evicting [${plan.evict
-          .map(e => e.key)
-          .join(',')}]`,
-      );
+      logger.log(formatOverrideForcingLine(spec.key, plan.evict));
     }
     const actuallyEvicted: string[] = [];
     let unloadFailed = false;
@@ -432,9 +381,7 @@ class ModelResidencyManager {
       // Load Anyway is unconditional: the user explicitly accepted the risk, so we evict
       // everything else (via singleModel above) to free maximum RAM and load — NO survival
       // floor, NO refusal. The UI frames it as "not recommended, but you can try".
-      logger.log(
-        `[MEM-SM] makeRoomFor ${spec.key} OVERRIDE - forced load after evicting [${plan.evict.map(e => e.key).join(',')}] (no floor)`,
-      );
+      logger.log(formatOverrideForcedLine(spec.key, plan.evict));
     }
     return { evicted: actuallyEvicted, fits: true };
   }
