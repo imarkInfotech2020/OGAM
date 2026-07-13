@@ -1,11 +1,13 @@
-import React from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
+import { useResidentRows, ejectResident } from './useResidentRows';
+import logger from '../../utils/logger';
 
 export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
 
@@ -47,6 +49,19 @@ export const ModelsManagerSheet: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  // Residency projection from the owning service (what is ACTUALLY in RAM) — the sheet is the
+  // residency surface: a RAM chip + per-row eject on resident rows (agreed design 2026-07-14).
+  const residentByRow = useResidentRows(visible);
+  const [ejectingRow, setEjectingRow] = useState<ModelRowType | null>(null);
+  const ejectRow = (row: ModelRowType) => {
+    const resident = residentByRow[row];
+    if (!resident || ejectingRow) return;
+    setEjectingRow(row);
+    logger.log(`[MODEL-SM] sheet eject → ${resident.type} (${resident.key}) ~${(resident.sizeMB / 1024).toFixed(1)}GB`);
+    ejectResident(resident)
+      .catch((err) => logger.log(`[MODEL-SM] sheet eject ${resident.key} failed:`, err))
+      .finally(() => setEjectingRow(null));
+  };
 
   return (
     <AppSheet visible={visible} onClose={onClose} onClosed={onClosed} title="MODELS" enableDynamicSizing>
@@ -55,6 +70,7 @@ export const ModelsManagerSheet: React.FC<Props> = ({
           const isLoading = loadingState.isLoading && loadingState.type === row.type;
           const value = labels[row.type];
           const isSet = value && value !== '—';
+          const resident = residentByRow[row.type];
           return (
             <AnimatedPressable
               key={row.type}
@@ -65,7 +81,27 @@ export const ModelsManagerSheet: React.FC<Props> = ({
             >
               <Icon name={row.icon} size={16} color={colors.textMuted} />
               <Text style={styles.label}>{row.label}</Text>
+              {/* Fixed-width eject column right of the label so all four rows align; empty when not resident. */}
+              <View style={styles.ejectSlot}>
+                {resident && (ejectingRow === row.type
+                  ? <ActivityIndicator size="small" color={colors.error} />
+                  : (
+                    <TouchableOpacity
+                      testID={`models-row-${row.type}-eject`}
+                      accessibilityLabel={`Eject ${row.label} model from memory`}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      onPress={() => ejectRow(row.type)}
+                    >
+                      <Icon name="power" size={14} color={colors.error} style={styles.ejectGlyph} />
+                    </TouchableOpacity>
+                  ))}
+              </View>
               <View style={styles.valueGroup}>
+                {resident && (
+                  <View testID={`models-row-${row.type}-ram`} style={styles.ramChip}>
+                    <Text style={styles.ramChipText}>{`${(resident.sizeMB / 1024).toFixed(1)} GB`}</Text>
+                  </View>
+                )}
                 <Text style={[styles.value, isSet && styles.valueSet]} numberOfLines={1}>
                   {isLoading ? 'Loading…' : value}
                 </Text>
@@ -112,6 +148,17 @@ const createStyles = (colors: ThemeColors) => ({
     backgroundColor: colors.surface,
   },
   label: { ...TYPOGRAPHY.label, textTransform: 'uppercase' as const, color: colors.textMuted, width: 64 },
+  // Fixed-width control column right of the label — all four rows align whether or not resident.
+  ejectSlot: { width: 22, alignItems: 'center' as const, justifyContent: 'center' as const },
+  ejectGlyph: { opacity: 0.8 },
+  ramChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 4,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 1,
+  },
+  ramChipText: { ...TYPOGRAPHY.label, color: colors.textMuted },
   // Right-aligned value cluster: the name (shrinks/ellipsizes) with the remote cloud hugging its
   // right edge at the minimum token gap (xs) — the marker reads as part of the name, not the row.
   valueGroup: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: SPACING.xs },
