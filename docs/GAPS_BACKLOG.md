@@ -260,20 +260,6 @@ state-machine traces:
 - **Stale failure card not cleared when a NEW attempt starts (still open).** Clear the text
   modelFailure card at generation dispatch so a card from a failed/stopped attempt never sits next to
   a live stream (IMG 00:23). Small seam: clearModelFailure('text') at prepare/dispatch + rendered test.
-- **Mic button shows a loader for the WHOLE background STT download — reads as "app not ready to
-  chat"** (device-reported 2026-07-13, IMG_0143; re-raised 2026-07-14). VoiceRecordButton derives its
-  loading/unavailable rendering from the whisper DOWNLOAD state (useWhisperStore.downloadProgressById
-  → isDownloading → UnavailableButton/disabled + the spinner-ish circle), so a background model
-  download holds the mic in an indefinite busy state while chat is fully usable — the user reads it
-  as the LLM not being ready. SPEC: a background download must not render as mic "loading". While an
-  STT model downloads: if another STT model is ALREADY usable → normal idle mic; if none → the
-  unavailable-mic glyph with a small, clearly-download progress ring (not a full-button loader), and
-  the text composer visibly unaffected. Spinner ONLY during a tap-triggered model load or live
-  transcription. FIX at the presentation seam (VoiceRecordButton state derivation — split
-  isDownloading from isModelLoading rendering); /tests journey: mount real ChatScreen, drive a real
-  whisper download via the download boundary (progress events mid-flight) → assert the composer +
-  send work and the mic shows the download-progress affordance, NOT the loading spinner; falsifier:
-  a genuine model-load tap DOES show the spinner.
 - **Kokoro TTS download bypasses the 3-slot concurrency cap** (device-reported, 2026-07-13). The TTS
   (Kokoro) model download does NOT respect `backgroundDownloadService`'s `MAX_CONCURRENT_DOWNLOADS = 3`
   admission cap — it starts immediately regardless of how many downloads are already running. Likely
