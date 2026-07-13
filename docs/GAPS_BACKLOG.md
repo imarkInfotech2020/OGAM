@@ -228,6 +228,26 @@ state-machine traces:
   Tests owed: rendered chat — send tool turn → stop mid-prefill (fake native with delayed unwind
   honoring stopCompletion) → assert stopped-partial finalization, NO busy sheet, NO "_(No response)_"
   bubble, button back to send; immediate resend then succeeds.
+- **GPU selected but generation ran on CPU** (device-reported 2026-07-14 00:29, IMG). Backend=GPU +
+  GPU Layers 99 set in Chat Settings, model reloaded ("Model loaded: gemma-4-E2B (19.1s)"), yet the
+  turn's meta reads CPU (3.4 tok/s). T014/DEV-B24 class: either the GPU/OpenCL init failed or timed
+  out (silent CPU fallback — earlier device runs DID get 24/36 layers) or the backend/n_gpu_layers
+  setting never reached the load params. NEXT: pull offgrid-debug.log [MODEL-SM]/GPU lines for this
+  load (init timeout? reasonNoGPU?); then a /tests journey — set backend via the real settings UI →
+  reload → assert the loaded backend surfaces (GPU meta) or a VISIBLE fallback notice (never a
+  silent CPU downgrade); fix at the load-param seam if the setting is dropped.
+- **Manager sheet = the residency surface (agreed design, 2026-07-14).** Move "In Memory" out of the
+  Select Model picker into the MODELS manager sheet: each modality row shows its model + a RAM chip
+  when RESIDENT + a per-row eject (power glyph, muted red, right of the fixed-width type label so all
+  four align as a control column; generous hitSlop; row tap still opens the picker). "Eject All"
+  stays. Needs: per-row residency projection (text/image/voice/speech), per-type eject actions via
+  the owning services (no engine branching in the view), rendered journey tests per row + falsifiers.
+- **Concurrent-retry race journey test (owed).** The 'No response'-card race fix (per-turn
+  ToolLoopOutcome) is covered by construction + the stop journey's no-card assertions; still owed a
+  rendered journey that starts a retry BEFORE the stopped turn's classifier runs and asserts no card.
+- **Stale failure card not cleared when a NEW attempt starts (still open).** Clear the text
+  modelFailure card at generation dispatch so a card from a failed/stopped attempt never sits next to
+  a live stream (IMG 00:23). Small seam: clearModelFailure('text') at prepare/dispatch + rendered test.
 - **Kokoro TTS download bypasses the 3-slot concurrency cap** (device-reported, 2026-07-13). The TTS
   (Kokoro) model download does NOT respect `backgroundDownloadService`'s `MAX_CONCURRENT_DOWNLOADS = 3`
   admission cap — it starts immediately regardless of how many downloads are already running. Likely
