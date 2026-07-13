@@ -331,7 +331,7 @@ class LLMService {
       tools: options.tools,
       onStream: options.onStream,
       onComplete: options.onComplete
-        ? ((onComplete) => (fullResponse: string) => onComplete({ content: fullResponse, reasoningContent: '' }))(options.onComplete) : undefined,
+        ? ((onComplete) => (fullResponse: string, reasoningContent: string) => onComplete({ content: fullResponse, reasoningContent }))(options.onComplete) : undefined,
     });
     this.activeCompletionPromise = work.then(() => { }, () => { });
     try { return await work; } finally { this.activeCompletionPromise = null; }

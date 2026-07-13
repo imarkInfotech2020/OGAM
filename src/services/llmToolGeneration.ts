@@ -6,13 +6,13 @@
 import { useAppStore } from '../stores/appStore';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
 import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
 
 type ToolStreamCallback = (data: StreamToken) => void;
-type ToolCompleteCallback = (fullResponse: string) => void;
+type ToolCompleteCallback = (fullResponse: string, reasoningContent: string) => void;
 
 /**
  * Suppresses Gemma 4's native tool call tokens from the visible text stream.
@@ -134,6 +134,9 @@ export async function generateWithToolsImpl(
     let firstTokenMs = 0;
     let tokenCount = 0;
     let fullResponse = '';
+    let fullReasoning = '';
+    let streamedContentSoFar = '';
+    let streamedReasoningSoFar = '';
     let firstReceived = false;
     const collectedToolCalls: ToolCall[] = [];
     // Gemma 4 emits <|tool_call>...<tool_call|> tokens in the stream; filter them out.
@@ -158,9 +161,22 @@ export async function generateWithToolsImpl(
       if (!data.token) return;
       if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; }
       tokenCount++;
-      const visibleToken = toolCallFilter ? toolCallFilter.process(data.token) : data.token;
-      fullResponse += visibleToken;
-      if (visibleToken) options.onStream?.({ content: visibleToken });
+      // Consume the SAME structured fields the runtime returns as the plain path does: with
+      // reasoning_format=auto llama separates the reasoning into reasoning_content and the clean answer
+      // into content. Route each to its own channel so the thinking block renders and the raw
+      // <|channel> markers (data.token) never leak into the answer. (The tool path previously appended
+      // data.token verbatim, so gemma's reasoning + its <|channel> delimiters landed in the reply.)
+      const contentPiece = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
+      const reasoningPiece = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
+      if (data.content) streamedContentSoFar = data.content;
+      else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
+      if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
+      if (reasoningPiece) { fullReasoning += reasoningPiece; options.onStream?.({ reasoningContent: reasoningPiece }); }
+      if (contentPiece) {
+        const visible = toolCallFilter ? toolCallFilter.process(contentPiece) : contentPiece;
+        fullResponse += visible;
+        if (visible) options.onStream?.({ content: visible });
+      }
     }), 'generateWithTools');
     logger.log('[LLM-Tools] === OUTPUT ===');
     logger.log(JSON.stringify(completionResult, null, 2));
@@ -173,12 +189,15 @@ export async function generateWithToolsImpl(
     logger.log(`[LLM-Tools] Result: predicted=${cr?.tokens_predicted}, evaluated=${cr?.tokens_evaluated}, context_full=${cr?.context_full}, stopped_eos=${cr?.stopped_eos}`);
     logger.log(`[LLM-Tools] Result text="${(cr?.text || '').substring(0, 200)}", content="${(cr?.content || '').substring(0, 200)}"`);
 
-    // If streaming didn't capture tokens but completionResult has text, use it
-    if (!fullResponse && cr?.text) {
-      fullResponse = cr.text;
-      tokenCount = cr.tokens_predicted || 0;
-      logger.log(`[LLM-Tools] Using completionResult.text as response (${fullResponse.length} chars)`);
+    // If streaming didn't capture tokens, fall back to the CLEAN parsed content — NEVER cr.text, which
+    // carries the raw <|channel>thought…<channel|> reasoning markers. reasoning falls back likewise.
+    if (!fullResponse) {
+      fullResponse = cr?.content ?? cr?.text ?? '';
+      tokenCount = cr?.tokens_predicted || tokenCount;
+      logger.log(`[LLM-Tools] Using completionResult.content as response (${fullResponse.length} chars)`);
     }
+    // The reasoning the user sees: prefer the runtime's parsed reasoning_content, else what streamed.
+    const finalReasoning = (typeof cr?.reasoning_content === 'string' && cr.reasoning_content) || fullReasoning;
 
     // Prefer completionResult tool_calls over streamed ones — streaming may
     // deliver partial tool calls (name only, no arguments) while the final
@@ -204,7 +223,7 @@ export async function generateWithToolsImpl(
       logger.log('[LLM-Tools] Context full detected — signalling for compaction');
       throw new Error('Context is full');
     }
-    options.onComplete?.(fullResponse);
+    options.onComplete?.(fullResponse, finalReasoning);
     // Surface a native interrupt (user stop landing mid-completion) to the caller — the tool
     // loop must treat it as a STOPPED turn, never as a normal empty result (which re-ran a
     // full no-tools generation after the stop: the zombie that held the engine and made every

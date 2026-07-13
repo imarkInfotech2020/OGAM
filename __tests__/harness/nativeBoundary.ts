@@ -208,7 +208,7 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; completionMeta?: CompletionMeta }): void;
+  scriptCompletion(result: { text?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta }): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -231,7 +231,7 @@ export interface LlamaFake {
 
 function makeLlamaFake(): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; completionMeta?: CompletionMeta } = { text: '' };
+  let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
   // streaming further tokens, releases a held pause, and the completion RESOLVES with
@@ -250,7 +250,7 @@ function makeLlamaFake(): LlamaFake {
     // resolving with the final result. This drives the REAL streaming render path (getStreamingDelta →
     // streamingMessage), not a single-shot final text. onToken stops being fed once isGenerating flips
     // false (a real stop), because the service's own callback guards on `data.token` + isGenerating.
-    completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content: string }) => void) => {
+    completion: jest.fn(async (params: unknown, onToken?: (data: { token: string; content?: string; reasoning_content?: string }) => void) => {
       calls.completion.push([params]);
       stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
       if (pending.throwMessage) throw new Error(pending.throwMessage);
@@ -259,10 +259,32 @@ function makeLlamaFake(): LlamaFake {
       // nothing streamed — the exact device state whose empty result the tool loop mistook for a
       // normal empty reply (firing the no-tools fallback zombie).
       if (pending.holdBeforeStream) { await new Promise<void>((res) => { releaseFn = res; }); }
+      const wantsThinking = !!(params as { enable_thinking?: boolean })?.enable_thinking;
+      // Device-faithful native reasoning (reasoning_format=auto): when the runtime reasons, it emits the
+      // reasoning on the reasoning_content channel and the CLEAN answer on content — separated, exactly as
+      // the on-device log showed (content:"Hello…", reasoning_content:"The user said…", text: raw <|channel>).
+      // The final `text` carries the raw combined markers, which the app must NOT surface as the answer.
+      if (wantsThinking && pending.reasoning != null && typeof onToken === 'function') {
+        let accR = '';
+        for (const c of [...pending.reasoning]) { if (stopRequested) break; accR += c; onToken({ token: c, reasoning_content: accR }); }
+        let accC = '';
+        for (const c of [...pending.text]) { if (stopRequested) break; accC += c; onToken({ token: c, content: accC, reasoning_content: accR }); }
+        if (!stopRequested) {
+          const metaR = pending.completionMeta ?? {};
+          return {
+            text: `<|channel>thought\n${pending.reasoning}<channel|>${pending.text}`,
+            content: pending.text,
+            reasoning_content: pending.reasoning,
+            tool_calls: pending.toolCalls,
+            tokens_predicted: metaR.tokens_predicted ?? 8, tokens_evaluated: 4,
+            stopped_eos: metaR.stopped_eos ?? true, stopped_limit: metaR.stopped_limit ?? 0, truncated: metaR.truncated ?? false,
+            timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+          };
+        }
+      }
       // Device-faithful: a reasoning model emits its reasoning-style output when thinking is on. If the
       // caller left enable_thinking on for a request that shouldn't reason (B30 enhancement), it gets the
       // reasoning dump; disabling thinking yields the clean text. Emergent from the caller's own decision.
-      const wantsThinking = !!(params as { enable_thinking?: boolean })?.enable_thinking;
       const outText = wantsThinking && pending.thinkingText != null ? pending.thinkingText : pending.text;
       if (outText && typeof onToken === 'function') {
         // Char-by-char streaming so a pauseAfter lands EXACTLY (never spanning a delimiter like </think>).
@@ -364,7 +386,7 @@ function makeLlamaFake(): LlamaFake {
 
   return {
     module, calls,
-    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, completionMeta: r.completionMeta }; },
+    scriptCompletion: (r) => { pending = { text: r.text ?? '', toolCalls: r.toolCalls, throwMessage: r.throwMessage, throwAfter: r.throwAfter, pauseAfter: r.pauseAfter, holdBeforeStream: r.holdBeforeStream, thinkingText: r.thinkingText, reasoning: r.reasoning, completionMeta: r.completionMeta }; },
     releaseStream: () => { const f = releaseFn; releaseFn = null; f?.(); },
     scriptGpuInitFailure: (fail = true) => { gpuInitFails = fail; },
     scriptMultimodalHold: () => { mmHoldPending = true; },
