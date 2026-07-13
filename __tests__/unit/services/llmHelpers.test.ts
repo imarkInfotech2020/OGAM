@@ -591,7 +591,7 @@ describe('initContextWithFallback — GPU timeout on Android', () => {
       .mockResolvedValueOnce(cpuCtx);
 
     const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
-    jest.advanceTimersByTime(8001);
+    jest.advanceTimersByTime(25001);
     const result = await resultPromise;
 
     expect(result.gpuAttemptFailed).toBe(true);
@@ -615,7 +615,7 @@ describe('initContextWithFallback — GPU timeout on Android', () => {
       .mockResolvedValueOnce(cpuCtx);
 
     const resultPromise = initContextWithFallback({ model: '/m.gguf' }, 2048, 4);
-    jest.advanceTimersByTime(8001);
+    jest.advanceTimersByTime(25001);
     await resultPromise;
 
     // Late ctx whose release() throws — safeRelease must swallow the error
