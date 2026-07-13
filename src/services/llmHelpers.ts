@@ -115,8 +115,12 @@ export interface ContextInitResult {
   gpuAttemptFailed: boolean;
   actualLength: number;
 }
-/** Timeout for Adreno GPU context init on Android -- bail before OS triggers ANR. */
-const GPU_INIT_TIMEOUT_MS = 8000;
+/** Timeout for Adreno GPU context init on Android. 8s proved too tight on-device: Adreno 735
+ *  first-load OpenCL kernel compilation exceeded it (2026-07-13 20:11 log: "timed out after
+ *  8000ms" on a load that succeeded with 24 offloaded layers in an earlier session), silently
+ *  downgrading every reload to CPU. The init runs on a native thread (no ANR exposure); 25s
+ *  bounds a genuinely hung driver while letting a slow first compile finish. */
+const GPU_INIT_TIMEOUT_MS = 25000;
 /** Timeout for HTP/NPU context init -- DSP firmware load takes longer than Adreno. */
 const HTP_INIT_TIMEOUT_MS = 30000;
 /** iOS Metal init timeout. Larger than Android's because a legit large-model
