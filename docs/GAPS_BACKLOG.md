@@ -228,25 +228,26 @@ state-machine traces:
   Tests owed: rendered chat — send tool turn → stop mid-prefill (fake native with delayed unwind
   honoring stopCompletion) → assert stopped-partial finalization, NO busy sheet, NO "_(No response)_"
   bubble, button back to send; immediate resend then succeeds.
-- **Settings-triggered RELOAD is a second, drifted load path — drops GPU layers + thinking + KV type
-  in one shot** (device-confirmed 2026-07-14 00:29-00:31; SMOKING GUN log 18:50:28Z:
-  `[LLM][THINKING] thinkingSupported=false, thinkingEnabled=true, enable_thinking=false` for the SAME
-  gemma-4-E2B gguf that supported thinking before the reload). One turn showed all three symptoms:
-  backend=GPU + 99 layers selected → meta says CPU; Thinking ON → no thinking block; KV flipped
-  q8_0 → f16. Root: llm.ts `reloadModel` (~:470) does not run the same post-load feature/param path
-  as the normal load (supportsNativeThinking re-detection, n_gpu_layers, KV cache type). FIX at the
-  seam per /hygiene: ONE load path — reload delegates to the exact same loadModel pipeline (no
-  second copy); /tests journey: change backend via the real Chat Settings UI → reload → send →
-  assert the thinking block renders + the meta line reports the selected backend + KV type persists
-  (falsifier: CPU-selected shows CPU). Subsumes the earlier 'GPU selected but CPU' entry below.
-- **GPU selected but generation ran on CPU** (device-reported 2026-07-14 00:29, IMG). Backend=GPU +
-  GPU Layers 99 set in Chat Settings, model reloaded ("Model loaded: gemma-4-E2B (19.1s)"), yet the
-  turn's meta reads CPU (3.4 tok/s). T014/DEV-B24 class: either the GPU/OpenCL init failed or timed
-  out (silent CPU fallback — earlier device runs DID get 24/36 layers) or the backend/n_gpu_layers
-  setting never reached the load params. NEXT: pull offgrid-debug.log [MODEL-SM]/GPU lines for this
-  load (init timeout? reasonNoGPU?); then a /tests journey — set backend via the real settings UI →
-  reload → assert the loaded backend surfaces (GPU meta) or a VISIBLE fallback notice (never a
-  silent CPU downgrade); fix at the load-param seam if the setting is dropped.
+- **RESOLVED 2026-07-14 (reload capability drift + silent GPU→CPU): root cause was NOT a second load
+  path.** Device log 18:50 proved the reload ran the ONE loadModel pipeline and detected thinking
+  correctly (`Model loaded ... thinking: true` at 18:50:30.409) — but `applyLoadedContext` published
+  `this.context` (the isModelLoaded readiness signal) BEFORE the multimodal probe + capability
+  detection, so the 18:50:27.733 send raced into a ~3.5s window and generated with stale
+  `thinkingSupported=false`. Fixed: capabilities derived on the local context, published atomically
+  (396bea25; journey reloadRaceKeepsThinking.rendered.redflow). The GPU symptom was a REAL init
+  timeout (18:57:19 `GPU context init timed out after 8000ms`) falling back silently — now surfaced
+  as an always-on system notice (gpuFallbackNoticeVisible.rendered.redflow); the meta also stops
+  claiming the uncapped layer count. `reloadWithSettings` (the drifted copy, zero callers) deleted.
+  Residual gaps, still open:
+  1. **Fallback notice needs a conversation.** The notice renders as a system-info chat message; a
+     GPU→CPU fallback on a load with NO active conversation (fresh chat, Home-screen load) has no
+     surface. Decide a surface (chat placeholder card / header chip) and add a rendered test.
+  2. **CPU fallback inherits OpenCL-shaped params.** When the OpenCL attempt times out, attempts
+     2/3 reuse the OpenCL-coerced params (no cache_type → f16, flash_attn off) instead of
+     rebuilding CPU params (user's q8_0 + flash attn). Fix at initContextWithFallback/loadModel:
+     rebuild params for the CPU attempt; assert via WIRE-LLAMA-LOAD in a journey.
+  3. **8s GPU-init timeout may be too tight for this device/model** (earlier runs DID get 24/36
+     layers on the same phone). Device-verify whether a longer Adreno timeout restores GPU.
 - **Manager sheet = the residency surface (agreed design, 2026-07-14).** Move "In Memory" out of the
   Select Model picker into the MODELS manager sheet: each modality row shows its model + a RAM chip
   when RESIDENT + a per-row eject (power glyph, muted red, right of the fixed-width type label so all
