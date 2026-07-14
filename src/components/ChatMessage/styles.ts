@@ -82,8 +82,9 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     minWidth: '85%' as const,
   },
   attachmentsContainer: {
-    flexDirection: 'row' as const,
-    flexWrap: 'wrap' as const,
+    // Stack attachments vertically (voice note on top, image below) instead of side-by-side —
+    // a voice-note + image message rendered in a row looked broken (device 2026-07-14).
+    flexDirection: 'column' as const,
     gap: 4,
     marginBottom: 8,
   },
