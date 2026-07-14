@@ -268,17 +268,13 @@ export function describeGpuFallback(info: { requestedGpuLayers: number; activeGp
 export function supportsNativeThinking(context: LlamaContext | null): boolean {
   if (!context) return false;
   try {
-    const jinjaSupported = typeof context.isJinjaSupported === 'function'
-      ? context.isJinjaSupported()
-      : (() => {
-          const jinja = (context as any)?.model?.chatTemplates?.jinja;
-          return !!(jinja?.default || jinja?.toolUse);
-        })();
-    if (jinjaSupported) return true;
-    // OD7: a community reasoning model (e.g. a merge whose chat template minja
-    // cannot flag) reports jinja unsupported yet still emits <think>/channel
-    // reasoning the runtime parser renders. Derive the capability from the same
-    // reasoning delimiters in the model's own chat_template — never from its name.
+    // Thinking capability comes SOLELY from the model's own chat_template emitting reasoning
+    // delimiters (<think>, Gemma/Qwen channels) or exposing the enable_thinking kwarg — the same
+    // single-source predicate remote capability probing uses (templateEmitsReasoning). It is NEVER
+    // derived from whether Jinja renders: a model with a perfectly valid Jinja template but no
+    // reasoning markers (e.g. Mistral 7B, which has a tool-use template) does NOT think, yet the old
+    // `isJinjaSupported() → true` short-circuit falsely surfaced the Thinking toggle for it. Covers
+    // both jinja-supported and OD7 jinja-unsupported reasoning models: both carry the template here.
     const metadata = (context as any)?.model?.metadata;
     const template = metadata?.['tokenizer.chat_template'] ?? metadata?.chat_template;
     return templateEmitsReasoning(typeof template === 'string' ? template : undefined);

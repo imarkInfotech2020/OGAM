@@ -52,12 +52,16 @@ export interface ChatHarnessOptions {
    *  model identity (e.g. the name-based capability prediction for a selected-but-not-loaded gguf). */
   modelName?: string;
   modelFileName?: string;
+  /** (llama) GGUF chat_template on the model context's metadata — drives the REAL Thinking-capability
+   *  detection. Omit for the reasoning-capable default; pass a marker-free template (Mistral's tool-use
+   *  template) to model a model that does NOT support thinking so the Thinking toggle stays hidden. */
+  chatTemplate?: string;
 }
 
 export async function setupChatScreen(opts: ChatHarnessOptions) {
   const platform = opts.platform ?? 'android';
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
-  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', fs: true, ram, whisper: opts.whisper, download: opts.download });
+  const boundary = installNativeBoundary({ llama: opts.engine === 'llama', llamaChatTemplate: opts.chatTemplate, fs: true, ram, whisper: opts.whisper, download: opts.download });
 
   // Global boundary polyfill: React 19's error reporter calls window.dispatchEvent; in the node test
   // env there is no window, so an unrelated crash would mask real errors. This is a jsdom/global shim,

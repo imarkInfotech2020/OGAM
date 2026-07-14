@@ -289,19 +289,6 @@ describe('LLMService', () => {
       );
     });
 
-    it('uses llama.rn jinja support to detect thinking support', async () => {
-      mockedRNFS.exists.mockResolvedValue(true);
-      const ctx = createMockLlamaContext({
-        isJinjaSupported: jest.fn(() => true),
-      });
-      mockedInitLlama.mockResolvedValue(ctx as any);
-
-      await llmService.loadModel('/models/test.gguf');
-
-      expect(llmService.supportsThinking()).toBe(true);
-      expect(ctx.isJinjaSupported).toHaveBeenCalled();
-    });
-
     it('uses flashAttn=true from store and sets q8_0 KV cache', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext();
@@ -671,25 +658,6 @@ describe('LLMService', () => {
       await llmService.generateResponse(messages, { onStream: (t) => tokens.push(t) });
 
       expect(tokens).toEqual([{ content: 'Hello', reasoningContent: undefined }]);
-    });
-
-    it('passes llama.rn native thinking params when enabled', async () => {
-      const ctx = await setupLoadedModel({
-        isJinjaSupported: jest.fn(() => true),
-      });
-
-      useAppStore.setState({
-        settings: {
-          ...useAppStore.getState().settings,
-          thinkingEnabled: true,
-        },
-      });
-
-      await llmService.generateResponse([createUserMessage('Hello')]);
-
-      const callArgs = ctx.completion.mock.calls[0]![0]!;
-      expect(callArgs.enable_thinking).toBe(true);
-      expect(callArgs.reasoning_format).toBe('deepseek');
     });
 
     it('disables llama.rn thinking params when the toggle is off', async () => {

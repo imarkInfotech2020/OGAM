@@ -145,19 +145,13 @@ describe('supportsNativeThinking', () => {
     expect(supportsNativeThinking(null)).toBe(false);
   });
 
-  it('returns result of isJinjaSupported() when available', () => {
-    const ctx = { isJinjaSupported: jest.fn(() => true) } as any;
-    expect(supportsNativeThinking(ctx)).toBe(true);
-    expect(ctx.isJinjaSupported).toHaveBeenCalled();
-  });
-
-  it('reads chatTemplates.jinja when isJinjaSupported is not a function', () => {
-    const ctx = { model: { chatTemplates: { jinja: { default: 'template' } } } } as any;
-    expect(supportsNativeThinking(ctx)).toBe(true);
-  });
-
-  it('returns false when jinja has no default or toolUse', () => {
-    const ctx = { model: { chatTemplates: { jinja: {} } } } as any;
+  // A valid Jinja template with NO reasoning markers (Mistral 7B has a tool-use template) does
+  // NOT support thinking — capability is the reasoning delimiters, not Jinja support.
+  it('returns false for a jinja-supported model whose template has no reasoning markers (Mistral 7B)', () => {
+    const ctx = {
+      isJinjaSupported: jest.fn(() => true),
+      model: { metadata: { 'tokenizer.chat_template': "{{ bos }}[INST] {{ messages }} [/INST]" } },
+    } as any;
     expect(supportsNativeThinking(ctx)).toBe(false);
   });
 
@@ -319,13 +313,6 @@ describe('getStreamingDelta', () => {
 
   it('returns nextValue when it does not start with previousValue', () => {
     expect(getStreamingDelta('different', 'prev')).toBe('different');
-  });
-});
-
-describe('supportsNativeThinking — toolUse branch', () => {
-  it('returns true when jinja has toolUse but no default', () => {
-    const ctx = { model: { chatTemplates: { jinja: { toolUse: 'some-template' } } } } as any;
-    expect(supportsNativeThinking(ctx)).toBe(true);
   });
 });
 

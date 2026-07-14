@@ -246,7 +246,7 @@ export interface LlamaFake {
   calls: { completion: unknown[][] };
 }
 
-function makeLlamaFake(onRelease?: () => void): LlamaFake {
+function makeLlamaFake(onRelease?: () => void, chatTemplate?: string): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
   let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
@@ -380,6 +380,12 @@ function makeLlamaFake(onRelease?: () => void): LlamaFake {
   (context as Record<string, unknown>).model = {
     nParams: 1_000_000,
     chatTemplates: { jinja: { defaultCaps: { toolCalls: true }, toolUse: true, toolUseCaps: { toolCalls: true } } },
+    // Device-faithful: a real llama.rn context exposes the GGUF chat_template in model.metadata.
+    // supportsNativeThinking derives the Thinking capability from the reasoning delimiters in THIS
+    // template — NOT from Jinja support. Default carries a <think> marker (reasoning-capable, matching
+    // the prior harness default); a test passes a plain template (e.g. Mistral's tool-use template,
+    // no markers) to assert the Thinking toggle stays hidden.
+    metadata: { 'tokenizer.chat_template': chatTemplate ?? '{{bos}}<think>\n{{reasoning}}\n</think>{{content}}' },
   };
 
   const module: Record<string, jest.Mock> = {
@@ -709,6 +715,10 @@ export interface InstallOpts {
   fs?: boolean;
   /** Replace the global llama.rn stub with a scriptable context (boundary.llama.scriptCompletion). */
   llama?: boolean;
+  /** GGUF chat_template exposed on the llama context's model.metadata — drives the REAL
+   *  supportsNativeThinking (reasoning-delimiter detection). Omit for the reasoning-capable default;
+   *  pass a marker-free template (e.g. Mistral's) to model a non-thinking model. */
+  llamaChatTemplate?: string;
   /** Seed a stateful background-download native module (boundary.download). */
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
@@ -770,7 +780,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const diffusion = makeDiffusionFake(fsFake?.seedFile);
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
-  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory) : undefined;
+  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate) : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
   // Driveable whisper.rn: override the global stub so realtime/file transcription is under test control.
