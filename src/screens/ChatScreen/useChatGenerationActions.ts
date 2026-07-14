@@ -84,6 +84,24 @@ function applyCompactionPrefix(conversation: any, systemPrompt: string, messages
   }
   return { prefix, filtered };
 }
+/**
+ * The SINGLE vision gate for any turn that carries an image — used by BOTH the send and the resend paths so
+ * they behave identically. Returns true (and shows a repair-aware alert) when the image can't go to the
+ * active model because it can't do vision, so neither path reaches the native completion with an image and
+ * crashes with "Multimodal support not enabled" (device 2026-07-14).
+ */
+function blockedImageForNonVisionModel(deps: GenerationDeps, attachments?: MediaAttachment[]): boolean {
+  if (!attachments?.some(a => a.type === 'image')) return false;
+  if (deps.activeModelInfo?.isRemote || localModelAcceptsImages(deps.activeModel)) return false;
+  const repair = needsVisionRepair(deps.activeModel);
+  deps.setAlertState(showAlert(
+    repair ? 'Vision File Missing' : 'Vision Not Supported',
+    repair
+      ? 'This model supports vision, but its vision file has not been installed.\n\nOpen Download Manager and tap the wrench next to the model to download it.'
+      : 'This model does not support image input.\n\nSwitch to a vision-capable model to send images.',
+  ));
+  return true;
+}
 function appendAttachmentText(text: string, attachments?: MediaAttachment[]): string {
   if (!attachments) return text;
   return attachments.filter(a => a.type === 'document' && a.textContent)
@@ -477,20 +495,8 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   const { text, attachments, imageMode, startGeneration } = call;
   abortPreload(); // user acted — stop background warming so it can't block them
   if (!deps.hasActiveModel) { deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
-  // Gate an image send on the model's ACTUAL vision capability — regardless of how the image was attached
-  // (the attach button, OR a share/"Explain this" pre-attached image that bypasses the button gate). Sending
-  // an image to a model without a working projector throws "Multimodal support not enabled" in native and
-  // crashes the turn; block it here with a repair-aware message instead (device 2026-07-14).
-  if (attachments?.some(a => a.type === 'image') && !deps.activeModelInfo?.isRemote && !localModelAcceptsImages(deps.activeModel)) {
-    const repair = needsVisionRepair(deps.activeModel);
-    deps.setAlertState(showAlert(
-      repair ? 'Vision File Missing' : 'Vision Not Supported',
-      repair
-        ? 'This model supports vision, but its vision file has not been installed.\n\nOpen Download Manager and tap the wrench next to the model to download it.'
-        : 'This model does not support image input.\n\nSwitch to a vision-capable model to send images.',
-    ));
-    return;
-  }
+  // Vision gate (shared with resend): never send an image to a model that can't do vision.
+  if (blockedImageForNonVisionModel(deps, attachments)) return;
   callHook(HOOKS.audioStop); // stop stale TTS on the new turn (not a streaming-flag effect — see useChatScreen)
   await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before LLM+TTS so they don't OOM on tight devices
   let targetConversationId = deps.activeConversationId;
@@ -542,6 +548,9 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
     await handleImageGenerationFn(deps, { prompt: userMessage.content, conversationId: targetConversationId, skipUserMessage: true });
     return;
   }
+  // Same vision gate as the send path: resending a turn whose message carries an image must not push it to a
+  // model that can't do vision (would crash with "Multimodal support not enabled"). Shared gate → identical UX.
+  if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   if (!deps.activeModelInfo?.isRemote && deps.activeModel &&
       !(await ensureReadyOrAlert(deps, 'regenerate', () => { regenerateResponseFn(deps, call); }))) return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');

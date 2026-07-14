@@ -1216,18 +1216,10 @@ describe('handleSendFn — additional branches', () => {
     expect(startGeneration).toHaveBeenCalledWith('conv-1', expect.stringContaining('report.pdf'));
   });
 
-  it('ignores attachments without textContent', async () => {
-    const startGeneration = jest.fn(() => Promise.resolve());
-    const deps = makeGenerationDeps();
-    await handleSendFn(deps, {
-      text: 'look at this',
-      attachments: [{ type: 'image', fileName: 'photo.jpg' } as any],
-      imageMode: 'auto',
-      startGeneration,
-      setDebugInfo: jest.fn(),
-    });
-    expect(startGeneration).toHaveBeenCalledWith('conv-1', 'look at this');
-  });
+  // Deleted: a mockist test that sent an IMAGE to the default non-vision model and asserted
+  // startGeneration was called. That path is now (correctly) blocked by the shared vision gate
+  // (blockedImageForNonVisionModel) — an image never reaches a model that can't do vision. The gate is
+  // covered by localModelAcceptsImages.test.ts; the send/resend wiring by the rendered flow.
 
   it('enqueues message when generation is already in progress', async () => {
     mockGetGenerationState.mockReturnValue({ isGenerating: true });
@@ -1418,5 +1410,47 @@ describe('applyCompactionPrefix — compaction state', () => {
     const deps = makeGenerationDeps();
     await startGenerationFn(deps, { setDebugInfo: jest.fn(), targetConversationId: 'conv-1', messageText: 'hi' });
     expect(mockGenerateResponse).toHaveBeenCalled();
+  });
+});
+
+// DEVICE 2026-07-14 — an image sent (or resent) to a model that can't do vision reached the native
+// completion and crashed with "Multimodal support not enabled". Send and resend now share ONE gate
+// (blockedImageForNonVisionModel), so BOTH block the image and surface the repair path instead.
+describe('image → non-vision model is blocked at the seam (send AND resend share the gate)', () => {
+  const visionNoProjector = () => ({
+    ...createDownloadedModel({ id: 'v', engine: 'llama', filePath: '/p/gemma-4-E2B-it-Q4_K_M.gguf', fileName: 'gemma-4-E2B-it-Q4_K_M.gguf' }),
+    isVisionModel: true, mmProjPath: undefined, mmProjFileName: 'gemma-4-e2b-it-mmproj-F16.gguf',
+  });
+  const depsFor = (model: any) => makeGenerationDeps({
+    activeModelId: 'v', activeModel: model,
+    activeModelInfo: { isRemote: false, model, modelId: 'v', modelName: 'Gemma' },
+  });
+  const imageAttachment = [{ type: 'image', fileName: 'photo.jpg' } as any];
+
+  it('SEND: a vision model missing its projector shows "Vision File Missing" and never starts generation', async () => {
+    const startGeneration = jest.fn(() => Promise.resolve());
+    const deps = depsFor(visionNoProjector());
+    await handleSendFn(deps, { text: 'explain this', attachments: imageAttachment, imageMode: 'auto', startGeneration, setDebugInfo: jest.fn() });
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Vision File Missing' }));
+    expect(startGeneration).not.toHaveBeenCalled();
+  });
+
+  it('RESEND: the same turn is blocked by the same gate — repair alert, no generation', async () => {
+    const model = visionNoProjector();
+    const deps = depsFor(model);
+    const userMessage = { id: 'm1', role: 'user' as const, content: 'explain this', timestamp: 0, attachments: imageAttachment };
+    mockChatStoreGetState.mockReturnValue({ conversations: [{ id: 'conv-1', messages: [userMessage] }], updateCompactionState: jest.fn() });
+    await regenerateResponseFn(deps, { setDebugInfo: jest.fn(), userMessage, recordedKind: 'text' });
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Vision File Missing' }));
+    expect(mockGenerateWithTools).not.toHaveBeenCalled();
+  });
+
+  it('a plain non-vision model gets "Vision Not Supported" (no misleading repair offer)', async () => {
+    const startGeneration = jest.fn(() => Promise.resolve());
+    const plain = createDownloadedModel({ id: 'p', engine: 'llama', filePath: '/p/qwen.gguf', fileName: 'qwen.gguf' });
+    const deps = depsFor(plain);
+    await handleSendFn(deps, { text: 'look', attachments: imageAttachment, imageMode: 'auto', startGeneration, setDebugInfo: jest.fn() });
+    expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Vision Not Supported' }));
+    expect(startGeneration).not.toHaveBeenCalled();
   });
 });
