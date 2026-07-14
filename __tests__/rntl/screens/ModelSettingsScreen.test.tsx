@@ -980,3 +980,20 @@ describe('ModelSettingsScreen', () => {
     });
   });
 });
+
+describe('Speech sections — Transcription (STT) + Text to Speech (TTS)', () => {
+  it('opening Transcription reveals the model row that opens the picker', () => {
+    const view = renderScreen();
+    // collapsed by default
+    expect(view.queryByTestId('stt-open-picker')).toBeNull();
+    fireEvent.press(view.getByTestId('transcription-accordion'));
+    // the row appears and shows the "no model yet" state (whisper store empty in a fresh app)
+    expect(view.getByTestId('stt-open-picker')).toBeTruthy();
+    expect(view.getByText('None selected — tap to choose')).toBeTruthy();
+  });
+
+  it('does NOT show Text to Speech without the pro TTS slot (free build)', () => {
+    const view = renderScreen();
+    expect(view.queryByTestId('tts-accordion')).toBeNull();
+  });
+});
