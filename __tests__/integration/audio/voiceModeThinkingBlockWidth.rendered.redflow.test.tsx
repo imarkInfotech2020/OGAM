@@ -81,16 +81,25 @@ describe('T086 (rendered) — voice-mode thinking block matches voice-note bubbl
     expect(bubbleWidth).toBe('88%');
     expect(bubbleAlign).toBe('flex-start');
 
-    // The thinking block's own resolved width, and its wrapper's alignSelf (the AudioModeThinkingBlock
-    // wrapper View is the block's parent). Full-width == '100%' + wrapper 'stretch' is the B27 bug.
+    // The 88% width constraint lives on the AudioModeThinkingBlock WRAPPER (an ancestor of the
+    // thinking-block node); the inner block FILLS it (100%). Applying 88% to BOTH was the double-88%
+    // bug (~77% effective — narrower than the bubble; device 2026-07-14). Walk up from the block to the
+    // ancestor that carries the width — that ancestor's width must equal the bubble, left-aligned.
     const blockStyle = flatStyle(thinkingBlock as never);
-    const wrapperNode = (thinkingBlock as unknown as { parent?: { props?: { style?: unknown } } }).parent;
-    const wrapperStyle = wrapperNode ? flatStyle(wrapperNode as never) : {};
+    type N = { props?: { style?: unknown }; parent?: N } | null | undefined;
+    let n: N = (thinkingBlock as unknown as N)?.parent;
+    let constrainingStyle: Record<string, unknown> = {};
+    for (let d = 0; n && d < 8; d++, n = n.parent) {
+      const s = flatStyle(n as never);
+      if (s.width === bubbleWidth) { constrainingStyle = s; break; } // the 88% wrapper (== bubble)
+    }
 
-    // B27 #1 — SAME WIDTH as the voice-note bubble, not full-width edge-to-edge.
-    expect(blockStyle.width).toBe(bubbleWidth); // fails on HEAD: '100%' !== '88%'
+    // B27 #1 — EFFECTIVE width equals the voice-note bubble: the constraining wrapper is 88% (== bubble)
+    // and the inner block fills it (100%), so it renders at the bubble width — not full-width, not narrower.
+    expect(constrainingStyle.width).toBe(bubbleWidth);
+    expect(blockStyle.width).toBe('100%');
     // B27 #2 — LEFT-ALIGNED like a normal assistant message, not stretched edge-to-edge.
-    expect(wrapperStyle.alignSelf).not.toBe('stretch'); // fails on HEAD: wrapper is 'stretch'
-    expect(wrapperStyle.alignSelf ?? bubbleAlign).toBe('flex-start');
+    expect(constrainingStyle.alignSelf).not.toBe('stretch');
+    expect(constrainingStyle.alignSelf ?? bubbleAlign).toBe('flex-start');
   });
 });
