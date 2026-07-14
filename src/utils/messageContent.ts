@@ -83,13 +83,24 @@ export interface ReasoningDelimiter {
 }
 export const REASONING_DELIMITERS: ReasoningDelimiter[] = [
   { open: '<|channel|>analysis<|message|>', close: '<|channel|>final<|message|>' },
-  { open: '<|channel>thought\n', close: '<channel|>' },
+  // Gemma opener is the BARE `<|channel>thought` — the trailing newline it usually (but not always)
+  // emits is OPTIONAL whitespace, NOT part of the delimiter. Encoding the `\n` here made the streaming
+  // parser leak the bare opener when the model went straight to a tool call with an empty thought
+  // (`<|channel>thought<tool_call>…`, device 2026-07-14). With the bare opener, streaming captures a
+  // leading `\n` into reasoning (trimmed for display); the complete parser strips it via `\n?`.
+  { open: '<|channel>thought', close: '<channel|>' },
   { open: '<think>', close: '</think>' },
 ];
 
-// Gemma 4 thinking tags: <|channel>thought\n...<channel|>
-const GEMMA4_THINK_OPEN = /<\|channel>thought\n/gi;
-const GEMMA4_THINK_CLOSE = /<channel\|>/gi;
+// Gemma 4 thinking tags: `<|channel>thought`[optional `\n`]…`<channel|>`. The trailing newline MUST
+// be optional — the model omits it when the thought is empty and it jumps straight to a tool call
+// (`<|channel>thought<tool_call>…`), and a hardcoded `\n` then leaves the bare opener leaking into the
+// visible answer (device 2026-07-14). Single source for the grammar: both the module regex consts and
+// parseGemmaThinking derive from these strings so they cannot disagree on the delimiter shape.
+const GEMMA4_THINK_OPEN_SRC = '<\\|channel>thought\\n?';
+const GEMMA4_THINK_CLOSE_SRC = '<channel\\|>';
+const GEMMA4_THINK_OPEN = new RegExp(GEMMA4_THINK_OPEN_SRC, 'gi');
+const GEMMA4_THINK_CLOSE = new RegExp(GEMMA4_THINK_CLOSE_SRC, 'gi');
 
 // Reasoning-capability markers a chat_template can carry. Two kinds, both meaning
 // "this model reasons":
@@ -231,10 +242,10 @@ export function prepareMessageForSpeech(content: string): string {
  */
 /** Gemma 4: `<|channel>thought\n[thinking]<channel|>[response]` (asymmetric tags). null if absent. */
 function parseGemmaThinking(content: string): ParsedContent | null {
-  const open = /<\|channel>thought\n/i.exec(content);
+  const open = new RegExp(GEMMA4_THINK_OPEN_SRC, 'i').exec(content);
   if (!open) return null;
   const thinkStart = open.index! + open[0].length;
-  const close = /<channel\|>/i.exec(content);
+  const close = new RegExp(GEMMA4_THINK_CLOSE_SRC, 'i').exec(content);
   if (close && close.index! >= thinkStart) {
     const thinkEnd = close.index!;
     return {

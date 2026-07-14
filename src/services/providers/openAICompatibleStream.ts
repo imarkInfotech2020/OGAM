@@ -24,6 +24,11 @@ export class ThinkTagParser {
   // The close tag for the reasoning format currently open — set when an opener is matched,
   // so a block opened as Gemma closes on `<channel|>` and one opened as <think> on </think>.
   private activeClose = '';
+  // A single `\n` immediately after an opener is a SYNTACTIC separator (`<|channel>thought\n…`,
+  // `<think>\n…`), not reasoning — consume it once on block entry so reasoning has no leading
+  // newline. Mirrors the complete parser's `\n?` after the Gemma opener; without it the bare
+  // `<|channel>thought` opener would emit the separating newline as reasoning content.
+  private stripLeadingNewlineOnEntry = false;
 
   process(content: string, onToken: (t: string) => void, onReasoning: (t: string) => void): void {
     this.buffer += content;
@@ -64,6 +69,7 @@ export class ThinkTagParser {
     this.buffer = this.buffer.slice(bestIdx + bestOpen.length);
     this.inThinkBlock = true;
     this.activeClose = bestClose;
+    this.stripLeadingNewlineOnEntry = true;
     return false;
   }
 
@@ -73,6 +79,14 @@ export class ThinkTagParser {
    * Returns true if the while loop should break (buffer needs more data).
    */
   private handleInsideThink(onReasoning: (t: string) => void): boolean {
+    // Consume the one optional `\n` separator that follows the opener before any reasoning is
+    // emitted. Char-by-char safe: if the buffer is still empty, wait for the next char; if it
+    // starts with a non-newline, there was no separator — clear the flag and fall through.
+    if (this.stripLeadingNewlineOnEntry) {
+      if (this.buffer.length === 0) return true;
+      if (this.buffer[0] === '\n') this.buffer = this.buffer.slice(1);
+      this.stripLeadingNewlineOnEntry = false;
+    }
     const closeTag = this.activeClose;
     const idx = this.buffer.indexOf(closeTag);
     if (idx === -1) {

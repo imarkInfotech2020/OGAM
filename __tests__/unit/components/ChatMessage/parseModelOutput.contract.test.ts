@@ -33,6 +33,11 @@ describe('parseModelOutput — answer is clean by construction (the anti-leak co
     ['inline <think> + tool block', `<think>r</think>\n${toolBlock}`, null],
     ['separate channel + tool block in content', toolBlock, 'the reasoning'],
     ['Gemma channel', `<|channel>thought\nreasoning\n<channel|>The answer.`, null],
+    // DEVICE 2026-07-14: empty thought → Gemma drops the newline and goes STRAIGHT to a tool call
+    // (`<|channel>thought<|tool_call>…`), separate reasoning channel already extracted. The bare opener
+    // (no `\n`) used to survive stripping and render as visible pre-text above the tool card. The
+    // optional-newline grammar now strips it. reasoning present → the reasoning-channel branch.
+    ['Gemma bare opener before tool call (empty thought)', `<|channel>thought<|tool_call>call:calculator{expression:300 * 591}`, 'the reasoning'],
     ['Qwen channel', `<|channel|>analysis<|message|>reasoning<|channel|>final<|message|>The answer.`, null],
     ['gemma tool token', `Sure. <|tool_call>{"name":"x"}<tool_call|>`, null],
     ['answer only', `Just a plain answer.`, null],
