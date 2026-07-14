@@ -15,6 +15,7 @@
  */
 import { useAppStore } from '../stores';
 import { modelResidencyManager } from './modelResidency';
+import { activeModelService } from './activeModelService';
 import { LoadPolicy } from './memoryBudget';
 
 /** The one setting→policy mapping. Prefer the explicit 3-mode setting; fall back to
@@ -50,8 +51,17 @@ export function startLoadPolicySync(): () => void {
     // only when the effective policy actually changes.
     const policy = loadPolicyFromSettings(settings ?? {});
     if (policy === last) return;
+    const isInitialSeed = last === undefined;
     last = policy;
     modelResidencyManager.setLoadPolicy(policy);
+    // On a USER change of the loading mode (not the boot seed), eject EVERY resident so the new
+    // policy takes effect immediately — each selected model lazily reloads on next use under the
+    // new mode. setLoadPolicy only governs FUTURE loads, so without this, switching to Lean with
+    // several models already resident left them all in memory until the next load (device 2026-07-14).
+    // ejectAll keeps the selections (rows still show the chosen models); it only frees RAM.
+    if (!isInitialSeed) {
+      void activeModelService.ejectAll().catch(() => { /* eviction is best-effort; next load re-enforces */ });
+    }
   };
   // Seed from the (already hydrated) current value.
   apply(useAppStore.getState().settings);
