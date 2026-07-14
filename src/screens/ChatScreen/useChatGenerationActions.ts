@@ -21,7 +21,6 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
-import { DEFAULT_IMAGE_GUIDANCE } from '../../utils/imageGenAdvice';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
@@ -246,10 +245,13 @@ export async function handleImageGenerationFn(
   if (!deps.activeImageModel) { deps.setAlertState(showAlert('Error', 'No image model loaded.')); return; }
   // Keep attachments (e.g. a voice note) so the user message renders as a voice note.
   if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt, attachments }); }
+  // Do NOT thread steps/guidanceScale from deps.settings — that is a React render snapshot, one
+  // change stale (the off-by-one the user hit: change steps → next gen still used the old value).
+  // The service reads imageSteps/imageGuidanceScale FRESH from useAppStore.getState() at gen time,
+  // exactly as it already does for width/height (which is why size applied immediately and these
+  // didn't). Passing nothing here makes all four tunables read from the one fresh source.
   const result = await imageGenerationService.generateImage({
     prompt, conversationId,
-    steps: deps.settings.imageSteps || 8,
-    guidanceScale: deps.settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE,
     previewInterval: 2,
   });
   if (!result && deps.imageGenState.error && !deps.imageGenState.error.includes('cancelled')) {
