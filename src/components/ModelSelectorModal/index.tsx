@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
+import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../types';
 import { activeModelService, llmService, remoteServerManager } from '../../services';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
@@ -32,7 +33,6 @@ interface ModelSelectorModalProps {
   onUnloadModel: () => void;
   onUnloadImageModel?: () => void;
   isLoading: boolean;
-  currentModelPath: string | null;
   initialTab?: TabType;
   onAddServer?: () => void;
   onSelectionComplete?: () => void;
@@ -47,7 +47,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   onUnloadModel,
   onUnloadImageModel,
   isLoading,
-  currentModelPath,
   initialTab = 'text',
   onAddServer,
   onSelectionComplete,
@@ -56,6 +55,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
   const { downloadedModels, downloadedImageModels, activeImageModelId, activeModelId } = useAppStore();
+  // "Currently loaded" comes from the ONE reactive source (ActiveModelService's loaded state, projected to
+  // the store) — engine-agnostic and never stale. Callers no longer pass it, so the sheet can't disagree
+  // with the overview (which reads activeModelId, the SELECTION). See useLoadedTextModelPath.
+  const currentModelPath = useLoadedTextModelPath();
   // Under deferred loading no model is loaded until first send, so `currentModelPath`
   // (the loaded path) is null and the switcher would show "Available Models" with
   // nothing marked active. Fall back to the SELECTED model so the user can see and

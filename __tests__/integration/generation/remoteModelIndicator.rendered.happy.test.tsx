@@ -25,7 +25,7 @@ import { ModelSelectorModal } from '../../../src/components/ModelSelectorModal';
 import { useRemoteServerStore } from '../../../src/stores';
 
 const openSelector = () => render(
-  <ModelSelectorModal visible onClose={() => {}} onSelectModel={() => {}} onUnloadModel={() => {}} isLoading={false} currentModelPath={null} />,
+  <ModelSelectorModal visible onClose={() => {}} onSelectModel={() => {}} onUnloadModel={() => {}} isLoading={false} />,
 );
 
 describe('T053 (rendered) — remote model is marked in the selector (cloud/Remote indicator)', () => {

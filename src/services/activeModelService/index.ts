@@ -37,6 +37,12 @@ class ActiveModelService {
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
   private imageLoadPromise: Promise<void> | null = null;
+  /** The SINGLE writer for the loaded-text-model id: keeps the private field and the reactive store
+   *  projection (loadedTextModelId) in lockstep, so every surface reads one truth for "currently loaded". */
+  private setLoadedText(id: string | null): void {
+    this.loadedTextModelId = id;
+    useAppStore.getState().setLoadedTextModelId(id);
+  }
   getActiveModels(): ActiveModelInfo {
     const store = useAppStore.getState();
     const textModel =
@@ -173,7 +179,7 @@ class ActiveModelService {
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
-        this.loadedTextModelId = id;
+        this.setLoadedText(id);
         useAppStore.getState().setTextModelEvicted(false); // loaded → clear any prior eviction
         modelResidencyManager.register(
           { key: 'text', type: 'text', modelId, sizeMB: textSizeMB, dirtyMemory: textIsDirty },
@@ -181,7 +187,7 @@ class ActiveModelService {
         );
       },
       onError: () => {
-        this.loadedTextModelId = null;
+        this.setLoadedText(null);
       },
       onFinally: () => {
         this.loadingState.text = false;
@@ -229,7 +235,7 @@ class ActiveModelService {
     this.notifyListeners();
     try {
       if (isNativeLoaded) await getActiveEngineService()?.unloadModel();
-      this.loadedTextModelId = null;
+      this.setLoadedText(null);
       // Eviction (keepSelection) keeps the selection & flags "tap to continue"; user unload clears both.
       if (keepSelection) { if (isNativeLoaded) useAppStore.getState().setTextModelEvicted(true); }
       else { useAppStore.getState().setActiveModelId(null); useAppStore.getState().setTextModelEvicted(false); }
@@ -454,7 +460,7 @@ class ActiveModelService {
       loadedTextModelId: this.loadedTextModelId,
       loadedImageModelId: this.loadedImageModelId,
       setLoadedTextModelId: id => {
-        this.loadedTextModelId = id;
+        this.setLoadedText(id);
       },
       setLoadedImageModelId: id => {
         this.loadedImageModelId = id;
