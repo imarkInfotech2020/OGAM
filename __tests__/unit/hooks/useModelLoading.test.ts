@@ -39,16 +39,11 @@ jest.mock('../../../src/stores', () => ({
 }));
 
 const { activeModelService } = require('../../../src/services');
-const mockLoadTextModel: jest.Mock = activeModelService.loadTextModel;
 const mockUnloadTextModel: jest.Mock = activeModelService.unloadTextModel;
 const mockLoadImageModel: jest.Mock = activeModelService.loadImageModel;
 const mockUnloadImageModel: jest.Mock = activeModelService.unloadImageModel;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeTextModel(overrides: Partial<any> = {}): any {
-  return { id: 'text-1', name: 'Test LLM', filePath: '/path/model.gguf', ...overrides };
-}
 
 function makeImageModel(overrides: Partial<any> = {}): any {
   return { id: 'img-1', name: 'SDXL', ...overrides };
