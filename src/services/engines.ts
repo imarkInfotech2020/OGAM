@@ -176,11 +176,16 @@ export function isLiteRTAvailable(): boolean {
  */
 export function wantsLeadingThinkToken(
   model: DownloadedModel | null | undefined,
-  opts: { isRemote: boolean; thinkingEnabled: boolean },
+  opts: { isRemote: boolean },
 ): boolean {
   if (opts.isRemote) return false;
+  // Read the thinking setting FRESH from the store here — NOT from a value threaded in by the caller.
+  // The caller's copy comes from a React render snapshot (genDeps.settings) that lags by one render on a
+  // resend, which made the `<|think|>` activation follow the PREVIOUS toggle state → thinking was off-by-one
+  // (device 2026-07-14). Both engines now decide from the live value, so a toggle applies to the next turn.
+  const thinkingEnabled = useAppStore.getState().settings.thinkingEnabled;
   return !!model && isLiteRTModel(model) && liteRTService.isModelLoaded()
-    ? opts.thinkingEnabled
+    ? thinkingEnabled
     : llmService.isGemma4Model() && llmService.isThinkingEnabled();
 }
 

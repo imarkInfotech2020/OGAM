@@ -300,13 +300,11 @@ async function injectRagContext(projectId: string | undefined, query: string, pr
 }
 /** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT.
  *  The engine-specific decision lives in engines.wantsLeadingThinkToken (the seam), not here. */
-const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | undefined, opts: { isRemote: boolean; thinkingEnabled: boolean }): string => {
+const applyGemma4ThinkToken = (prompt: string, model: DownloadedModel | null | undefined, opts: { isRemote: boolean }): string => {
   const prepend = wantsLeadingThinkToken(model, opts);
-  // [THINK-SM] Validate the off-by-one report: does the <|think|> activation decision lag the toggle?
-  // depsThinkingEnabled = the value threaded from the screen's render snapshot (potentially stale);
-  // storeThinkingEnabled = the live store value RIGHT NOW (fresh). If prepend follows deps and deps
-  // lags store, that's the ON-lag (fresh enable_thinking says ON, but the activation token is missing).
-  logger.log(`[THINK-SM] prepend=${prepend} depsThinkingEnabled=${opts.thinkingEnabled} storeThinkingEnabled=${useAppStore.getState().settings.thinkingEnabled} isRemote=${opts.isRemote} engine=${model?.engine ?? 'none'}`);
+  // [THINK-SM] the activation decision now reads the LIVE thinking setting (no stale render snapshot),
+  // so a toggle takes effect on the very next turn (was off-by-one — device 2026-07-14).
+  logger.log(`[THINK-SM] prepend=${prepend} thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled} isRemote=${opts.isRemote} engine=${model?.engine ?? 'none'}`);
   return prepend ? `<|think|>\n${prompt}` : prompt;
 };
 
@@ -367,7 +365,7 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
       ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
       : basePrompt,
     deps.activeModel,
-    { isRemote, thinkingEnabled: !!deps.settings.thinkingEnabled },
+    { isRemote },
   );
   const messagesForContext = buildMessagesForContext(targetConversationId, messageText, systemPrompt);
   await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
@@ -552,7 +550,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
       ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
       : basePrompt,
     deps.activeModel,
-    { isRemote, thinkingEnabled: !!deps.settings.thinkingEnabled },
+    { isRemote },
   );
   const { prefix, filtered } = applyCompactionPrefix(conversation, systemPrompt, messagesUpToUser);
   try {
