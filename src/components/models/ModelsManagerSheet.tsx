@@ -6,10 +6,12 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { useResidentRows, ejectResident } from './useResidentRows';
+import { useResidentRows, ejectResident, type ModelRowType } from './useResidentRows';
 import logger from '../../utils/logger';
 
-export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
+// Defined in useResidentRows (breaks the sheet<->hook import cycle); re-exported here so existing
+// consumers (Home, Chat, ModelsSummaryRow) keep importing it from the sheet.
+export type { ModelRowType };
 
 /** Minimal loading shape so this sheet is screen-agnostic (home + chat). */
 type LoadingState = { isLoading: boolean; type?: string | null };

@@ -10,7 +10,11 @@
 import { useEffect, useState } from 'react';
 import { modelResidencyManager } from '../../services/modelResidency';
 import type { Resident, ResidentType } from '../../services/modelResidency/policy';
-import type { ModelRowType } from './ModelsManagerSheet';
+
+/** The manager sheet's modality rows. Defined HERE (the lower-level projection) rather than in
+ *  ModelsManagerSheet so the hook doesn't import the component — that was a dependency cycle
+ *  (ModelsManagerSheet → useResidentRows → ModelsManagerSheet). The sheet re-exports it. */
+export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
 
 /** Sheet row → residency type. Voice is the TTS output engine; Speech is the Whisper STT input. */
 export const ROW_RESIDENT_TYPE: Record<ModelRowType, ResidentType> = {
