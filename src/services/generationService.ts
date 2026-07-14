@@ -227,8 +227,11 @@ class GenerationService {
   private keepShownPartialOrClear(generationTimeMs?: number): void {
     const store = useChatStore.getState();
     const convId = store.streamingForConversationId;
-    if (convId && store.streamingMessage.trim()) {
-      store.finalizeStreamingMessage(convId, generationTimeMs, this.buildGenerationMeta());
+    const shownLen = store.streamingMessage.trim().length;
+    const decision = convId && shownLen > 0 ? 'finalize' : 'clear';
+    logger.log(`[STOP-SM] keepShownPartialOrClear convId=${convId ?? 'null'} shownMsg=${shownLen}ch → ${decision}`);
+    if (decision === 'finalize') {
+      store.finalizeStreamingMessage(convId!, generationTimeMs, this.buildGenerationMeta());
     } else {
       store.clearStreamingMessage();
     }
