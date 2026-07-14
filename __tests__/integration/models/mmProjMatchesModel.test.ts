@@ -5,7 +5,7 @@
  *
  * pickMmProjForModel must pick the projector that belongs to the model. Real function, no mocks.
  */
-import { pickMmProjForModel, mmProjBelongsToModel } from '../../../src/services/activeModelService/loaders';
+import { pickMmProjForModel, mmProjBelongsToModel } from '../../../src/services/mmproj';
 
 describe('pickMmProjForModel — the projector matches the model, not just the first mmproj in the dir', () => {
   const E2B = 'gemma-4-E2B-it-Q4_K_M.gguf';

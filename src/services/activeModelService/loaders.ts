@@ -15,54 +15,7 @@ import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
-
-function isMMProjFile(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  if (!lower.endsWith('.gguf')) return false;
-  return (
-    lower.includes('mmproj') ||
-    lower.includes('projector') ||
-    (lower.includes('clip') && lower.includes('vit'))
-  );
-}
-
-/**
- * The model-identity stem of a gguf/mmproj filename: lowercased, with the extension, any `mmproj` marker,
- * and the QUANTIZATION token removed. The projector is quant-independent — one mmproj serves every quant of
- * its model — so only the model family/variant identifies the pair (gemma-4-E2B-it-Q4_K_M.gguf and
- * gemma-4-E2B-it-Q8_0-mmproj.gguf both reduce to `gemma4e2bit`). Stripping the quant is what makes matching
- * on quant a non-issue: an E2B model never mispairs to an E4B projector just because their quants align.
- */
-function modelIdentityStem(fileName: string): string {
-  return fileName
-    .toLowerCase()
-    .replace(/\.gguf$/, '')
-    .replace(/[-_.]?mmproj/g, '')
-    // quant tokens: Q4_K_M, Q8_0, Q5_K_S, Q6_K, IQ4_XS, F16, F32, BF16, …
-    .replace(/[-_.]?(iq\d+[a-z0-9_]*|q\d+[a-z0-9_]*|f16|f32|bf16)/gi, '')
-    .replace(/[^a-z0-9]+/g, '');
-}
-
-/**
- * Pick the mmproj that belongs to THIS model when several share a directory. Grabbing the first mmproj
- * paired the wrong projector to the model (E2B model + E4B mmproj → initMultimodal returns false →
- * "Multimodal support not enabled"; device 2026-07-14). Match on the quant-stripped model stem so the
- * projector always follows its model family, across quantizations. Pure + exported for direct testing.
- */
-/** True when a projector filename belongs to a model filename (same quant-stripped model stem). */
-export function mmProjBelongsToModel(modelFileName: string, mmProjFileName: string): boolean {
-  return modelIdentityStem(modelFileName) === modelIdentityStem(mmProjFileName);
-}
-
-export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
-  const modelStem = modelIdentityStem(modelFileName);
-  // ONLY a projector whose quant-stripped model stem equals the model's belongs to it. Return undefined
-  // when none does — NEVER fall back to "closest" or "the only one". A near-name projector (E4B for an E2B
-  // model) is the wrong architecture: initMultimodal fails with "Multimodal support not enabled" and the
-  // send crashes. Undefined loads the model clean as text-only instead (device 2026-07-14: the E2B
-  // projector was absent, only E4B was on disk, and the old fallback paired it → the crash).
-  return candidateNames.find(name => modelIdentityStem(name) === modelStem);
-}
+import { isMMProjFile, mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));

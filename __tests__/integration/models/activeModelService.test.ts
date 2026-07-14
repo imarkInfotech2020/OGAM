@@ -1075,7 +1075,9 @@ describe('ActiveModelService Integration', () => {
 
       // Mock RNFS.readDir to return a mmproj file
       RNFS.readDir = jest.fn().mockResolvedValue([
-        { name: 'qwen3-vl-mmproj-f16.gguf', path: '/models/qwen3-vl-mmproj-f16.gguf', size: 500000000, isFile: () => true },
+        // Realistic on-disk name: downloads rename the projector to include the model base (name+variant),
+        // so the strict matcher pairs it. A generic 'qwen3-vl-mmproj-f16.gguf' (no size) never reaches disk.
+        { name: 'qwen3-vl-2b-mmproj-f16.gguf', path: '/models/qwen3-vl-2b-mmproj-f16.gguf', size: 500000000, isFile: () => true },
       ]);
 
       mockLlmService.isModelLoaded.mockReturnValue(true);

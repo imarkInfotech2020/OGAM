@@ -37,10 +37,9 @@ import {
   importLocalModel as scanImportLocalModel,
   reconcileFinishedImageDownloads as reconcileImageDownloads,
   isMMProjFile,
-  extractBaseName,
-  findMatchingMmProj,
   ImportLocalModelOpts,
 } from './scan';
+import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 import { resolveStoredPath, determineCredibility } from './storage';
 
 ;
@@ -83,14 +82,16 @@ class ModelManager {
     const toSave: typeof models = [];
     for (const m of models) {
       if (m.engine !== 'llama') continue;
-      const baseName = extractBaseName(m.fileName);
-      const match = findMatchingMmProj(baseName, mmProjFiles);
+      // Strict match (shared rule): the projector must belong to THIS model by name+variant. This is the
+      // SAME rule the loader uses, so link-time and load-time can no longer disagree (the E2B↔E4B split).
+      const chosenName = pickMmProjForModel(m.fileName, mmProjFiles.map(f => f.name));
+      const match = chosenName ? mmProjFiles.find(f => f.name === chosenName) : undefined;
 
       if (m.mmProjPath) {
-        // Clear link if the stored file no longer exists OR doesn't name-match this model
-        const nameMatch = findMatchingMmProj(baseName, [{ name: m.mmProjPath.split('/').pop() ?? '', path: m.mmProjPath, isFile: () => true } as RNFS.ReadDirResItemT]);
+        // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
+        const belongs = mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
         const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
-        if (!fileExists || !nameMatch) {
+        if (!fileExists || !belongs) {
           logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
           // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
           // still recognized as a vision model that NEEDS REPAIR (needsVisionRepair → true → the wrench and
