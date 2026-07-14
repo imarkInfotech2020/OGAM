@@ -80,6 +80,11 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // row, not the still-loaded old one. isLoading is the parent's signal; clear when it goes false.
   const [loadingTextModelId, setLoadingTextModelId] = useState<string | null>(null);
   useEffect(() => { if (!isLoading) setLoadingTextModelId(null); }, [isLoading]);
+  // Which text row shows the spinner: the row the user tapped, OR — when a load is in flight with no
+  // explicit tap — the active model being (re)loaded. The "model settings changed, reload" card opens
+  // this sheet and reloads the SAME active model (id unchanged), so without this fallback the sheet opens
+  // with a highlighted-but-idle row and no spinner, which reads as broken (device 2026-07-14).
+  const effectiveLoadingTextModelId = loadingTextModelId ?? (isLoading ? activeModelId : null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const filteredDownloadedModels = useMemo(
@@ -232,7 +237,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               selectedModelPath={selectedModelPath}
               currentRemoteModelId={activeRemoteTextModelId}
               isAnyLoading={isAnyLoading}
-              loadingModelId={loadingTextModelId}
+              loadingModelId={effectiveLoadingTextModelId}
               onSelectModel={handleSelectLocalModel}
               onSelectRemoteModel={handleSelectRemoteTextModel}
               onUnloadModel={handleUnloadModel}
