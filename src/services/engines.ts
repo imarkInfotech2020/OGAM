@@ -113,6 +113,17 @@ export function isModelReady(model: { engine?: string; filePath?: string } | nul
 }
 
 /**
+ * Whether a LOCAL model can accept an image RIGHT NOW — record-based, so it's valid BEFORE the model
+ * loads (used to gate image sends). llama needs a present projector (mmProjPath); LiteRT carries vision in
+ * the bundle (the liteRTVision flag). A missing/absent projector means the native completion would throw
+ * "Multimodal support not enabled" — so the send must be blocked here, not sent and crashed (device 2026-07-14).
+ */
+export function localModelAcceptsImages(model: DownloadedModel | null | undefined): boolean {
+  if (!model) return false;
+  return isLiteRTModel(model) ? !!model.liteRTVision : !!model.mmProjPath;
+}
+
+/**
  * A user-facing notice when a just-loaded LOCAL text model silently downgraded its backend
  * (GPU selected, 0 layers offloaded — the device-reported "Backend=GPU but meta says CPU" class).
  * Engine-dispatched here so callers never branch: LiteRT reports its backend through its own

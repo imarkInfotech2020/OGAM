@@ -92,7 +92,11 @@ class ModelManager {
         const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
         if (!fileExists || !nameMatch) {
           logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
-          toSave.push({ ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false });
+          // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
+          // still recognized as a vision model that NEEDS REPAIR (needsVisionRepair → true → the wrench and
+          // the "download the vision file" prompt appear). Wiping the vision flag made it look like a plain
+          // text model, hiding the repair path entirely (device 2026-07-14).
+          toSave.push({ ...m, mmProjPath: undefined, mmProjFileSize: undefined, isVisionModel: true });
         }
         // If link is valid, leave it alone
       } else if (match) {

@@ -9,7 +9,8 @@ import {
   contextCompactionService, ragService, retrievalService,
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken } from '../../services/engines';
+import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages } from '../../services/engines';
+import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
@@ -476,6 +477,20 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   const { text, attachments, imageMode, startGeneration } = call;
   abortPreload(); // user acted — stop background warming so it can't block them
   if (!deps.hasActiveModel) { deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
+  // Gate an image send on the model's ACTUAL vision capability — regardless of how the image was attached
+  // (the attach button, OR a share/"Explain this" pre-attached image that bypasses the button gate). Sending
+  // an image to a model without a working projector throws "Multimodal support not enabled" in native and
+  // crashes the turn; block it here with a repair-aware message instead (device 2026-07-14).
+  if (attachments?.some(a => a.type === 'image') && !deps.activeModelInfo?.isRemote && !localModelAcceptsImages(deps.activeModel)) {
+    const repair = needsVisionRepair(deps.activeModel);
+    deps.setAlertState(showAlert(
+      repair ? 'Vision File Missing' : 'Vision Not Supported',
+      repair
+        ? 'This model supports vision, but its vision file has not been installed.\n\nOpen Download Manager and tap the wrench next to the model to download it.'
+        : 'This model does not support image input.\n\nSwitch to a vision-capable model to send images.',
+    ));
+    return;
+  }
   callHook(HOOKS.audioStop); // stop stale TTS on the new turn (not a streaming-flag effect — see useChatScreen)
   await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before LLM+TTS so they don't OOM on tight devices
   let targetConversationId = deps.activeConversationId;
