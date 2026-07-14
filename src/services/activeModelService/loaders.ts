@@ -25,12 +25,33 @@ function isMMProjFile(fileName: string): boolean {
   );
 }
 
+/**
+ * Pick the mmproj that belongs to THIS model when several share a directory. Grabbing the first mmproj
+ * paired the wrong projector to the model (E2B model + E4B mmproj → initMultimodal returns false →
+ * "Multimodal support not enabled"; device 2026-07-14). The projector is named after its model
+ * (gemma-4-E2B-it-Q4_K_M.gguf ↔ gemma-4-E2B-it-Q4_K_M-mmproj.gguf), so the correct one shares the longest
+ * filename prefix with the model. Pure + exported so the E2B-vs-E4B disambiguation is directly testable.
+ */
+export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
+  if (candidateNames.length <= 1) return candidateNames[0];
+  const model = modelFileName.toLowerCase();
+  const commonPrefixLen = (a: string, b: string): number => {
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return i;
+  };
+  return candidateNames.reduce((best, name) =>
+    commonPrefixLen(model, name.toLowerCase()) > commonPrefixLen(model, best.toLowerCase()) ? name : best,
+  );
+}
+
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
+  const modelName = modelFilePath.substring(modelFilePath.lastIndexOf('/') + 1);
   const files = await RNFS.readDir(modelDir);
-  return files.find((f: { name: string; isFile: () => boolean }) =>
-    f.isFile() && isMMProjFile(f.name),
-  );
+  const mmProjFiles = files.filter((f: { name: string; isFile: () => boolean }) => f.isFile() && isMMProjFile(f.name));
+  const chosen = pickMmProjForModel(modelName, mmProjFiles.map(f => f.name));
+  return mmProjFiles.find(f => f.name === chosen);
 }
 
 export async function resolveMmProjPath(
