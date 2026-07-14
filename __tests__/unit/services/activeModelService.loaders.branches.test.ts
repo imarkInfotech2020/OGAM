@@ -93,28 +93,9 @@ function makeTextCtx(overrides: any = {}) {
 beforeEach(() => jest.clearAllMocks());
 
 describe('resolveMmProjPath — store map update + persistence', () => {
-  it('updates only the matching model, parses string size, and persists mmproj link', async () => {
-    mockedRNFS.exists.mockResolvedValue(false); // stored path stale / not used
-    mockedRNFS.readDir.mockResolvedValue([
-      { name: 'model-mmproj-f16.gguf', path: '/models/model-mmproj-f16.gguf', isFile: () => true, size: '2048' } as any,
-    ]);
-    const setDownloadedModels = jest.fn();
-    mockedGetState.mockReturnValue({
-      downloadedModels: [{ id: 'model-1' }, { id: 'other' }],
-      setDownloadedModels,
-    });
-    (modelManager.saveModelWithMmproj as jest.Mock).mockResolvedValue(undefined);
-
-    const model = { filePath: '/models/m.gguf', isVisionModel: true } as any;
-    const result = await resolveMmProjPath(model, 'model-1');
-
-    expect(result).toBe('/models/model-mmproj-f16.gguf');
-    const updated = setDownloadedModels.mock.calls[0][0];
-    // matching model gets the link + parsed numeric size; other model untouched
-    expect(updated[0]).toMatchObject({ id: 'model-1', mmProjFileName: 'model-mmproj-f16.gguf', mmProjFileSize: 2048, isVisionModel: true });
-    expect(updated[1]).toEqual({ id: 'other' });
-    expect(modelManager.saveModelWithMmproj).toHaveBeenCalledWith('model-1', '/models/model-mmproj-f16.gguf');
-  });
+  // (Removed: asserted the scan links ANY found mmproj. Strict matching now requires the projector's
+  // quant-stripped stem to equal the model's — toy 'm.gguf' vs 'model-mmproj-f16' ('m' != 'model') is
+  // correctly rejected. Same-stem linking/persistence is covered by mmProjMatchesModel.test.ts.)
 
   it('returns undefined (catch) when saveModelWithMmproj rejects', async () => {
     mockedRNFS.exists.mockResolvedValue(false);

@@ -395,23 +395,10 @@ describe('generateResponseImpl — LiteRT path', () => {
     expect(clear).toHaveBeenCalled();
   });
 
-  it('calls clearStreamingMessage on sendMessage onError', async () => {
-    const clear = jest.fn();
-    (useChatStore.getState as jest.Mock).mockReturnValue({
-      startStreaming: jest.fn(), clearStreamingMessage: clear,
-      appendToStreamingMessage: jest.fn(), finalizeStreamingMessage: jest.fn(),
-    });
-    mockedLiteRT.sendMessage.mockImplementation((_text: any, callbacks: any) => {
-      callbacks.onError(new Error('gpu error'));
-      return Promise.resolve();
-    });
-
-    await generateResponseImpl(makeLiteRTSvc(), {
-      conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
-    });
-    expect(clear).toHaveBeenCalled();
-  });
+  // (Removed: the mockist "clears streaming message on onError" tests asserted the SUPERSEDED
+  // clear-on-error behavior. The session's rule is never-discard-shown-output on error — the partial
+  // is flushed + finalized (keepShownPartialOnError). New behavior is covered by the rendered
+  // integration test errorKeepsPartial.rendered.redflow.test.tsx.)
 
   // PRODUCT RULE (modelMedia single source): a voice note is transcript-only — its audio is NEVER
   // model input, on ANY engine. These two tests replace the old ones that asserted the removed
@@ -512,28 +499,4 @@ describe('generateResponseImpl — llama.cpp path', () => {
     expect(finalize).toHaveBeenCalled();
   });
 
-  it('clears streaming message and rethrows on generateResponse error', async () => {
-    const { llmService: llm } = require('../../../src/services/llm');
-    llm.isModelLoaded.mockReturnValue(true);
-    llm.isCurrentlyGenerating.mockReturnValue(false);
-
-    const clear = jest.fn();
-    (useChatStore.getState as jest.Mock).mockReturnValue({
-      startStreaming: jest.fn(),
-      clearStreamingMessage: clear,
-      appendToStreamingMessage: jest.fn(),
-      finalizeStreamingMessage: jest.fn(),
-    });
-
-    llm.generateResponse.mockRejectedValue(new Error('gpu crash'));
-
-    await expect(
-      generateResponseImpl(makeLlmSvc(), {
-        conversationId: 'conv-1',
-        messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
-      }),
-    ).rejects.toThrow('gpu crash');
-
-    expect(clear).toHaveBeenCalled();
-  });
 });

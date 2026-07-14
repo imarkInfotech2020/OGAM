@@ -52,6 +52,9 @@ export interface ChatHarnessOptions {
    *  model identity (e.g. the name-based capability prediction for a selected-but-not-loaded gguf). */
   modelName?: string;
   modelFileName?: string;
+  /** Override the test model's declared fileSize (drives the residency budget). Default 2GB — a
+   *  realistic small model that fits the default 8GB-avail profile. Memory tests set this explicitly. */
+  modelFileSizeBytes?: number;
   /** (llama) GGUF chat_template on the model context's metadata — drives the REAL Thinking-capability
    *  detection. Omit for the reasoning-capable default; pass a marker-free template (Mistral's tool-use
    *  template) to model a model that does NOT support thinking so the Thinking toggle stays hidden. */
@@ -88,7 +91,13 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const fileName = opts.modelFileName ?? (opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm');
   const modelPath = `${docs}/models/${fileName}`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: opts.modelName ?? 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision, liteRTAudio: opts.audio });
+  // fileSize drives the residency budget. The factory default is 4GB, which under the GPU-aware text
+  // overhead (2.2× on a non-CPU backend, e.g. iOS METAL) needs ~8.8GB and no longer fits the default
+  // 8GB-avail profile — so a chat-flow test (not a memory test) would spuriously hit the fit refusal.
+  // A realistic small model (2GB) is device-faithful and loads under the budget; memory/OOM tests set
+  // their own explicit sizes + RAM profiles and are unaffected.
+  const fileSize = opts.modelFileSizeBytes ?? 2 * 1024 * 1024 * 1024;
+  const model = createDownloadedModel({ id: 'm', name: opts.modelName ?? 'Test Model', engine: opts.engine, filePath: modelPath, fileName, fileSize, liteRTVision: opts.vision, liteRTAudio: opts.audio });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
 

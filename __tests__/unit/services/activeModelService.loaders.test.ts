@@ -69,12 +69,10 @@ function makeCtx(overrides: any = {}) {
 describe('resolveMmProjPath', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns mmProjPath from model when file exists on disk', async () => {
-    mockedRNFS.exists.mockResolvedValue(true);
-    const model = { filePath: '/models/m.gguf', mmProjPath: '/models/mmproj.gguf' } as any;
-    const result = await resolveMmProjPath(model, 'model-1');
-    expect(result).toBe('/models/mmproj.gguf');
-  });
+  // (Removed: asserted a stored mmProjPath is trusted purely because the file exists. The strict
+  // model<->projector matching (device 2026-07-14) now validates the projector BELONGS to the model
+  // (quant-stripped stem equality) and self-heals otherwise. Toy names 'm.gguf' + 'mmproj.gguf' don't
+  // share a stem, so this is correctly rejected now. Belonging is covered by mmProjMatchesModel.test.ts.)
 
   it('returns undefined when no mmproj file found in directory', async () => {
     mockedRNFS.exists.mockResolvedValue(false);
@@ -84,23 +82,10 @@ describe('resolveMmProjPath', () => {
     expect(result).toBeUndefined();
   });
 
-  it('finds mmproj file via directory scan when stored path is stale (vision model)', async () => {
-    mockedRNFS.exists.mockResolvedValue(false);
-    mockedRNFS.readDir.mockResolvedValue([
-      { name: 'mmproj-model-f16.gguf', path: '/models/mmproj-model-f16.gguf', isFile: () => true, size: 500 } as any,
-    ]);
-    mockedGetState.mockReturnValue({
-      downloadedModels: [{ id: 'model-1' }],
-      setDownloadedModels: jest.fn(),
-    });
-    const { modelManager } = require('../../../src/services/modelManager');
-    modelManager.saveModelWithMmproj.mockResolvedValue(undefined);
-
-    // isVisionModel: true so the guard allows the scan
-    const model = { filePath: '/models/m.gguf', mmProjPath: '/stale/path.gguf', isVisionModel: true } as any;
-    const result = await resolveMmProjPath(model, 'model-1');
-    expect(result).toBe('/models/mmproj-model-f16.gguf');
-  });
+  // (Removed: asserted the dir scan returns ANY mmproj found. Strict matching now requires the
+  // projector's quant-stripped stem to equal the model's — toy names 'm.gguf' vs 'mmproj-model-f16'
+  // ('m' != 'model') are correctly rejected. The belongs-to-model scan is covered by
+  // mmProjMatchesModel.test.ts, which uses realistic same-stem names.)
 
   it('returns undefined for text-only model when no mmproj file exists in the directory', async () => {
     // Text-only model: neither isVisionModel nor mmProjFileName is set,

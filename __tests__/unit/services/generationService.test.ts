@@ -384,21 +384,9 @@ describe('generationService', () => {
       expect(state.streamingContent).toBe('');
     });
 
-    it('handles generation error', async () => {
-      const convId = setupWithConversation();
-      const clearStreamingSpy = jest.spyOn(useChatStore.getState(), 'clearStreamingMessage');
-
-      mockedLlmService.generateResponse.mockRejectedValue(new Error('Generation failed'));
-
-      await expect(
-        generationService.generateResponse(convId, [
-          createMessage({ role: 'user', content: 'Hi' }),
-        ])
-      ).rejects.toThrow('Generation failed');
-
-      expect(clearStreamingSpy).toHaveBeenCalled();
-      expect(generationService.getState().isGenerating).toBe(false);
-    });
+    // (Removed: "handles generation error" asserted clearStreamingMessage-on-error, the SUPERSEDED
+    // discard behavior. Error now flushes + finalizes the shown partial (keepShownPartialOnError);
+    // covered by errorKeepsPartial.rendered.redflow.test.tsx.)
 
     it('throws error on generation failure', async () => {
       const convId = setupWithConversation();
@@ -458,25 +446,9 @@ describe('generationService', () => {
       expect(partial).toBe('Partial content');
     });
 
-    it('clears streaming message when no content', async () => {
-      const convId = setupWithConversation();
-      const clearStreamingSpy = jest.spyOn(useChatStore.getState(), 'clearStreamingMessage');
-
-      // Start generation without any tokens
-      mockedLlmService.generateResponse.mockImplementation((async () => {
-        await new Promise(() => {});
-      }) as any);
-
-      generationService.generateResponse(convId, [
-        createMessage({ role: 'user', content: 'Hi' }),
-      ]);
-
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
-
-      await generationService.stopGeneration();
-
-      expect(clearStreamingSpy).toHaveBeenCalled();
-    });
+    // (Removed: "clears streaming message when no content" asserted clear-on-stop, superseded by
+    // never-discard — stop flushes + finalizes whatever is shown. Covered by the stopKeepsPartial
+    // rendered integration tests.)
 
     it('resets state after stopping', async () => {
       const convId = setupWithConversation();
