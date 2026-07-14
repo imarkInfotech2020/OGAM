@@ -493,9 +493,7 @@ export async function generateRemoteWithToolsImpl(
   } catch (error) {
     if (svc.abortRequested) return;
     logger.error('[GenerationService] Remote tool generation error:', error);
-    // Without this catch the throw propagated past the reset above, leaving isGenerating=true (red stop
-    // stuck, every next send blocked at prepareGeneration before hitting the server — device 2026-07-14).
-    // Keep any shown partial + reset the generating state; rethrow still surfaces the error dialog.
+    // Reset generating state on error, else isGenerating stays stuck → red stop, next send blocked (2026-07-14).
     keepShownPartialOnError(svc, conversationId);
     throw error;
   }
