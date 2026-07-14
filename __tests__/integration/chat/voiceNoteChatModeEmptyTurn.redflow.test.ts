@@ -1,22 +1,21 @@
 /**
- * Q20: a direct-audio model in CHAT (text-interface) mode records a standalone voice note. SPEC: the note
- * must carry the TRANSCRIBED text (never a content==='' turn to the model) — the same "always send a
- * transcript, never raw audio" rule the audio-mode path obeys.
+ * DEVICE 2026-07-14 — CHAT-mode STT must be identical on EVERY engine: transcribe and drop the text into the
+ * INPUT BOX (dictation), for the user to review/edit/send. A direct-audio (LiteRT) model used to diverge —
+ * chat-mode hold-to-talk dispatched a voice-note ATTACHMENT instead of filling the composer, unlike a
+ * non-audio (llama) model. This pins the unified behavior: LiteRT chat-mode STT → onTranscript (composer),
+ * NOT onAudioAttachment, NOT auto-send. (Voice/Audio interface mode still attaches audio — separate path.)
  *
- * The REAL useVoiceInput hook + REAL audioRecorderService + REAL activeModelService + REAL whisperService +
- * REAL stores run; only the device leaves are faked (react-native-audio-api recorder, whisper.rn, the
- * in-memory fs, the litert native module). supportsDirectAudio() is true (audio-capable model + recorder)
- * and interfaceMode is 'text', so stopRecording takes Voice.ts's chat-mode else branch — which now
- * transcribes the recorded FILE (ensureWhisper → transcribeFile), gates via resolveTranscription, and
- * attaches { uri, format, durationSeconds, transcription }. The assertion is fix-shape-agnostic: it holds
- * as long as the transcript reaches EITHER dispatch path (onAutoSend text arg, or the attachment's
- * `transcription`). Regressing the else-branch to drop the transcript makes it RED.
+ * REAL useVoiceInput + audioRecorderService + activeModelService + whisperService + stores; only device
+ * leaves are faked. supportsDirectAudio() is true (audio-capable model + recorder) and interfaceMode is
+ * 'text', so stopRecording takes Voice.ts's chat-mode else branch → transcribe the file → onTranscript.
+ *
+ * RED before the fix: the transcript went to onAudioAttachment (a dispatched voice note), not onTranscript.
  */
 import { installNativeBoundary } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
-describe('Q20 — chat-mode direct-audio voice note dispatches an empty-content turn (red-flow)', () => {
-  it('carries the transcribed text into the dispatched note instead of empty content', async () => {
+describe('chat-mode STT is dictation-to-the-input-box on every engine (LiteRT too) — device 2026-07-14', () => {
+  it('a LiteRT direct-audio model in chat mode puts the transcript in the composer, not a voice-note attachment', async () => {
     // fs + whisper boundaries installed: the chat-mode voice note transcribes the recorded FILE via the
     // REAL whisperService.loadModel → transcribeFile path, so whisper must be genuinely loadable. That means
     // the model file has to exist on the (in-memory) disk — the one legitimate device leaf we place. Setting
@@ -46,9 +45,10 @@ describe('Q20 — chat-mode direct-audio voice note dispatches an empty-content 
 
     const autoSendArgs: unknown[][] = [];
     const attachmentArgs: Array<Record<string, unknown>> = [];
+    const transcriptArgs: string[] = [];
     const { result } = renderHook(() => useVoiceInput({
       conversationId: 'c1',
-      onTranscript: () => {},
+      onTranscript: (t: string) => { transcriptArgs.push(t); },
       onAutoSend: (...a: unknown[]) => { autoSendArgs.push(a); },
       onAudioAttachment: (p: Record<string, unknown>) => { attachmentArgs.push(p); },
     }));
@@ -59,19 +59,12 @@ describe('Q20 — chat-mode direct-audio voice note dispatches an empty-content 
     await act(async () => { await result.current.stopRecording(); });
 
     void boundary;
-    // Proof the else branch (Voice.ts:149) fired: the note WAS dispatched as an audio attachment.
-    expect(attachmentArgs.length).toBeGreaterThan(0);
-    // The transcript must reach the model as content, via EITHER dispatch path. The attachment field is
-    // `transcription` — the exact key useVoiceInput emits (Voice.ts) AND the consumer reads
-    // (voiceNoteSend.ts onAudioAttachment → buildVoiceAttachment / addAudioAttachment). Asserting `transcript`
-    // here was a typo that never matched the real field.
-    const gotText =
-      autoSendArgs.some(a => typeof a[0] === 'string' && (a[0] as string).trim().length > 0) ||
-      attachmentArgs.some(p => typeof p.transcription === 'string' && (p.transcription as string).trim().length > 0);
-
-    // Fixed (was Q20's bug): chat mode transcribes the recorded file and attaches it as
-    // { uri, format, durationSeconds, transcription } → the note carries the text → GREEN. Regressing the
-    // else-branch (dropping transcription) makes onAudioAttachment carry no text → RED.
-    expect(gotText).toBe(true);
+    // NEW unified behavior: the transcript lands in the COMPOSER (onTranscript) — dictation-to-the-input-box,
+    // exactly like a non-audio (llama) model.
+    expect(transcriptArgs.some(t => t.trim() === 'draw a dog')).toBe(true);
+    // And it is NOT dispatched as a voice-note attachment, nor auto-sent — the user reviews/edits then sends.
+    // RED before the fix: the transcript went to onAudioAttachment (a dispatched note), composer stayed empty.
+    expect(attachmentArgs.length).toBe(0);
+    expect(autoSendArgs.length).toBe(0);
   });
 });

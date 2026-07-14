@@ -33,6 +33,9 @@ export interface ChatHarnessOptions {
   ram?: RamProfile;
   /** Make the (LiteRT) model vision-capable so the attach-photo gesture is allowed. */
   vision?: boolean;
+  /** Make the (LiteRT) model audio-capable (liteRTAudio) — so supportsDirectAudio() is true and chat-mode
+   *  hold-to-talk exercises the direct-audio recording path (not the whisper-realtime path). */
+  audio?: boolean;
   /** Install the driveable whisper.rn STT fake (for chat-mode voice input flows). */
   whisper?: boolean;
   /** Install the stateful background-download native fake (drive DownloadProgress/Complete/Error
@@ -81,7 +84,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const fileName = opts.modelFileName ?? (opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm');
   const modelPath = `${docs}/models/${fileName}`;
   boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  const model = createDownloadedModel({ id: 'm', name: opts.modelName ?? 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision });
+  const model = createDownloadedModel({ id: 'm', name: opts.modelName ?? 'Test Model', engine: opts.engine, filePath: modelPath, fileName, liteRTVision: opts.vision, liteRTAudio: opts.audio });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
 
@@ -291,6 +294,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         touchHistory: { touchBank: [], numberActiveTouches: 0, indexOfSingleActiveTouch: -1, mostRecentTimeStamp: 0 },
       };
       rtl.fireEvent(btn, 'responderGrant', evt);
+    },
+
+    /** REAL hold-to-talk RELEASE: fire the PanResponder release on the mic → onPanResponderRelease →
+     *  onStopRecording (the direct-audio path transcribes the recorded file, the whisper path finalizes). */
+    async releaseMic() {
+      const view = this.view!;
+      const btn = await rtl.waitFor(() => view.getByTestId('voice-record-button'));
+      const evt = {
+        nativeEvent: { touches: [], changedTouches: [], identifier: 1, pageX: 0, pageY: 0, timestamp: 0 },
+        touchHistory: { touchBank: [], numberActiveTouches: 0, indexOfSingleActiveTouch: -1, mostRecentTimeStamp: 0 },
+      };
+      rtl.fireEvent(btn, 'responderRelease', evt);
     },
 
     /**

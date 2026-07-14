@@ -152,18 +152,19 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
             setTimeout(() => setDirectError(null), 3000);
           }
         } else {
-          // CHAT mode with a direct-audio model: still transcribe (spec: in ANY mode we
-          // send a TRANSCRIPT, never raw audio to the model). Bypassing this dispatched
-          // the note with empty content, so the model got a contentless turn (Q20).
-          // Mirror the audio-mode path: transcribe, gate, attach WITH the transcript so
-          // sendVoiceNote sends the text (onAudioAttachment reads audio.transcription).
-          const { whisperReady, transcript } = await transcribeRecordedFile(path, '[Voice] chat-mode voice-note transcription error:');
+          // CHAT mode: STT is dictation-into-the-input-box on EVERY engine — the SAME behavior a non-audio
+          // (llama) model's hold-to-talk has. Transcribe the recording and drop the text into the composer
+          // for the user to review/edit/send; do NOT build a voice-note attachment (that was the litert-only
+          // divergence). Voice/Audio interface mode still attaches audio above. `durationSeconds`/`format`
+          // are unused here now (no attachment) — the temp recording file is transient.
+          const { whisperReady, transcript } = await transcribeRecordedFile(path, '[Voice] chat-mode dictation transcription error:');
           const outcome = resolveTranscription(whisperReady, transcript);
-          onAudioAttachmentRef.current?.(
-            outcome.dispatch
-              ? { uri: path, format, durationSeconds, transcription: outcome.text }
-              : { uri: path, format, durationSeconds },
-          );
+          if (outcome.dispatch) {
+            onTranscriptRef.current(outcome.text);
+          } else {
+            setDirectError(outcome.message);
+            setTimeout(() => setDirectError(null), 3000);
+          }
         }
       }
       recordingConversationIdRef.current = null;
