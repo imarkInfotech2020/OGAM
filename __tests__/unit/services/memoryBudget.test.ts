@@ -11,6 +11,7 @@ import {
   effectiveAvailableMB,
   MEMORY_RESERVE_MB,
   AGGRESSIVE_RESERVE_MB,
+  awaitMemoryReclaim,
 } from '../../../src/services/memoryBudget';
 
 const GB = 1024;
@@ -119,5 +120,35 @@ describe('load policy — aggressive vs balanced', () => {
   it('aggressive still never commits past its own reserve floor', () => {
     const total = 24 * GB;
     expect(modelMemoryBudgetMB(total, 'android', 'aggressive')).toBeLessThanOrEqual(total - AGGRESSIVE_RESERVE_MB);
+  });
+});
+
+describe('awaitMemoryReclaim — unload does not return until native memory is freed (device 2026-07-14)', () => {
+  const noSleep = () => Promise.resolve(); // no real timers; drives the loop instantly
+
+  it('returns as soon as the process footprint drops by the threshold', async () => {
+    // footprint: 5000 (before) → 4900 → 4700 (dropped 300 ≥ 200) — the reclaim landed on the 2nd poll.
+    const readings = [{ footprintMB: 5000 }, { footprintMB: 4900 }, { footprintMB: 4700 }, { footprintMB: 4700 }];
+    let i = 0;
+    const getProcessMemory = jest.fn(async () => readings[Math.min(i++, readings.length - 1)]);
+    await awaitMemoryReclaim(getProcessMemory, { sleep: noSleep });
+    // It polled the before + at least two more reads, and did NOT run to the full timeout.
+    expect(getProcessMemory.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(getProcessMemory.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('waits the full bounded window when the footprint never settles (then proceeds)', async () => {
+    const getProcessMemory = jest.fn(async () => ({ footprintMB: 5000 })); // never drops
+    await awaitMemoryReclaim(getProcessMemory, { sleep: noSleep, timeoutMs: 600, intervalMs: 120 });
+    // Polled before + one per interval across the window, then returned (never hangs).
+    expect(getProcessMemory.mock.calls.length).toBe(1 + 600 / 120);
+  });
+
+  it('falls back to a fixed beat when the RAM sensor is unavailable', async () => {
+    const sleep = jest.fn(async () => {});
+    const getProcessMemory = jest.fn(async () => null); // no sensor
+    await awaitMemoryReclaim(getProcessMemory, { sleep });
+    expect(getProcessMemory).toHaveBeenCalledTimes(1); // read once, saw null, bailed to the fixed wait
+    expect(sleep).toHaveBeenCalledWith(250);
   });
 });

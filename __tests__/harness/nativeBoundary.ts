@@ -229,7 +229,7 @@ export interface LlamaFake {
   calls: { completion: unknown[][] };
 }
 
-function makeLlamaFake(): LlamaFake {
+function makeLlamaFake(onRelease?: () => void): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
   let pending: { text: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; throwMessage?: string; throwAfter?: string; pauseAfter?: string; holdBeforeStream?: boolean; thinkingText?: string; reasoning?: string; completionMeta?: CompletionMeta } = { text: '' };
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
@@ -335,7 +335,10 @@ function makeLlamaFake(): LlamaFake {
       stopRequested = true;
       const f = releaseFn; releaseFn = null; f?.(); // release a held mid-stream pause so the abort lands
     }),
-    release: jest.fn().mockResolvedValue(undefined),
+    // Releasing the native context frees its memory — but the OS reclaims it SHORTLY AFTER release()
+    // returns (device-faithful), not synchronously. Defer the free so the reclaim barrier captures the
+    // still-high footprint as its baseline and then observes the drop on a later poll (as on device).
+    release: jest.fn(async () => { setTimeout(() => onRelease?.(), 50); }),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
     initMultimodal: jest.fn().mockResolvedValue(false),
     // The post-init multimodal probe. A scripted hold parks the caller here — the real device's
@@ -724,6 +727,17 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   // A single emitter registry shared by every NativeEventEmitter built over our fake modules.
   const { add, handle } = makeEmitterRegistry();
 
+  // LIVE process-memory state the RAM sensor reports from. Faithful to the device: releasing a model
+  // context FREES memory (footprint drops, available rises), so the post-unload reclaim barrier
+  // (memoryBudget.awaitMemoryReclaim) observes the drop and resolves — instead of timing out on a
+  // frozen snapshot. A released llama context frees roughly a heavy model's worth (~3GB).
+  const memState = { availBytes: ram.availBytes, footprintBytes: ram.totalBytes - ram.availBytes };
+  const freeModelMemory = () => {
+    const freed = Math.min(memState.footprintBytes, 3 * GB);
+    memState.footprintBytes -= freed;
+    memState.availBytes += freed;
+  };
+
   const litert = makeLiteRTFake(handle);
   const downloadFake = opts.download ? makeDownloadFake(handle) : undefined;
 
@@ -735,7 +749,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const diffusion = makeDiffusionFake(fsFake?.seedFile);
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
-  const llamaFake = opts.llama ? makeLlamaFake() : undefined;
+  const llamaFake = opts.llama ? makeLlamaFake(freeModelMemory) : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
   // Driveable whisper.rn: override the global stub so realtime/file transcription is under test control.
@@ -757,10 +771,12 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     RN.PermissionsAndroid.check = jest.fn().mockResolvedValue(true);
   }
   RN.NativeModules.DeviceMemoryModule = {
-    getMemoryInfo: jest.fn().mockResolvedValue({
-      processAvailableBytes: ram.availBytes,
-      footprintBytes: ram.totalBytes - ram.availBytes,
-    }),
+    // Live read from memState so a context release (freeModelMemory) is reflected — the reclaim barrier
+    // must be able to SEE the footprint drop, exactly as it does on device.
+    getMemoryInfo: jest.fn(async () => ({
+      processAvailableBytes: memState.availBytes,
+      footprintBytes: memState.footprintBytes,
+    })),
   };
   Object.defineProperty(RN.Platform, 'OS', { value: ram.platform, configurable: true });
   // OS version leaf: a supported device (Android API 34 / iOS 17). Engines gate feature support on
@@ -802,10 +818,8 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(ram.totalBytes - ram.availBytes);
 
   const setRam = (profile: RamProfile) => {
-    (RN.NativeModules.DeviceMemoryModule.getMemoryInfo as jest.Mock).mockResolvedValue({
-      processAvailableBytes: profile.availBytes,
-      footprintBytes: profile.totalBytes - profile.availBytes,
-    });
+    memState.availBytes = profile.availBytes;
+    memState.footprintBytes = profile.totalBytes - profile.availBytes;
     (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(profile.totalBytes);
     Object.defineProperty(RN.Platform, 'OS', { value: profile.platform, configurable: true });
     Object.defineProperty(RN.Platform, 'Version', { value: profile.platform === 'android' ? 34 : '17.0', configurable: true });

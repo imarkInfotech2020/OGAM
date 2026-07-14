@@ -184,3 +184,30 @@ const BYTES_PER_GB = 1024 ** 3;
 export function fileExceedsBudget(sizeBytes: number, ramGB: number): boolean {
   return sizeBytes / BYTES_PER_GB >= ramGB * modelBudgetFraction(ramGB);
 }
+
+/**
+ * Block until a just-released native model's memory is reclaimed (process footprint drops by
+ * ~minDropMB) or a bounded timeout — so the NEXT model load never allocates on top of the outgoing
+ * model. The native context.release() returns before the OS frees the weights + GPU/HTP buffers;
+ * without this barrier a reload stacked BOTH models' memory at once and OOM'd under pressure
+ * (device 2026-07-14: a reload with ~2GB free ground to 0 tok/s then the process was killed).
+ * Zero-IO over an injected memory reader so it is unit-testable; best-effort — if the RAM sensor is
+ * unavailable or the footprint never settles, wait a short fixed beat and proceed.
+ */
+export async function awaitMemoryReclaim(
+  getProcessMemory: () => Promise<{ footprintMB: number } | null>,
+  opts: { timeoutMs?: number; minDropMB?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<void> {
+  const { timeoutMs = 2500, minDropMB = 200, intervalMs = 120 } = opts;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const before = await getProcessMemory();
+  if (!before) { await sleep(250); return; }
+  let waited = 0;
+  while (waited < timeoutMs) {
+    await sleep(intervalMs);
+    waited += intervalMs;
+    const now = await getProcessMemory();
+    if (!now) return;
+    if (before.footprintMB - now.footprintMB >= minDropMB) return;
+  }
+}
