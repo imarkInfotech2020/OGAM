@@ -26,22 +26,42 @@ function isMMProjFile(fileName: string): boolean {
 }
 
 /**
+ * The model-identity stem of a gguf/mmproj filename: lowercased, with the extension, any `mmproj` marker,
+ * and the QUANTIZATION token removed. The projector is quant-independent — one mmproj serves every quant of
+ * its model — so only the model family/variant identifies the pair (gemma-4-E2B-it-Q4_K_M.gguf and
+ * gemma-4-E2B-it-Q8_0-mmproj.gguf both reduce to `gemma4e2bit`). Stripping the quant is what makes matching
+ * on quant a non-issue: an E2B model never mispairs to an E4B projector just because their quants align.
+ */
+function modelIdentityStem(fileName: string): string {
+  return fileName
+    .toLowerCase()
+    .replace(/\.gguf$/, '')
+    .replace(/[-_.]?mmproj/g, '')
+    // quant tokens: Q4_K_M, Q8_0, Q5_K_S, Q6_K, IQ4_XS, F16, F32, BF16, …
+    .replace(/[-_.]?(iq\d+[a-z0-9_]*|q\d+[a-z0-9_]*|f16|f32|bf16)/gi, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+/**
  * Pick the mmproj that belongs to THIS model when several share a directory. Grabbing the first mmproj
  * paired the wrong projector to the model (E2B model + E4B mmproj → initMultimodal returns false →
- * "Multimodal support not enabled"; device 2026-07-14). The projector is named after its model
- * (gemma-4-E2B-it-Q4_K_M.gguf ↔ gemma-4-E2B-it-Q4_K_M-mmproj.gguf), so the correct one shares the longest
- * filename prefix with the model. Pure + exported so the E2B-vs-E4B disambiguation is directly testable.
+ * "Multimodal support not enabled"; device 2026-07-14). Match on the quant-stripped model stem so the
+ * projector always follows its model family, across quantizations. Pure + exported for direct testing.
  */
 export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
   if (candidateNames.length <= 1) return candidateNames[0];
-  const model = modelFileName.toLowerCase();
+  const modelStem = modelIdentityStem(modelFileName);
+  // The projector whose (quant-stripped) model stem equals this model's — the correct pairing.
+  const exact = candidateNames.find(name => modelIdentityStem(name) === modelStem);
+  if (exact) return exact;
+  // Fallback for irregular naming: the projector stem sharing the longest prefix with the model stem.
   const commonPrefixLen = (a: string, b: string): number => {
     let i = 0;
     while (i < a.length && i < b.length && a[i] === b[i]) i++;
     return i;
   };
   return candidateNames.reduce((best, name) =>
-    commonPrefixLen(model, name.toLowerCase()) > commonPrefixLen(model, best.toLowerCase()) ? name : best,
+    commonPrefixLen(modelStem, modelIdentityStem(name)) > commonPrefixLen(modelStem, modelIdentityStem(best)) ? name : best,
   );
 }
 

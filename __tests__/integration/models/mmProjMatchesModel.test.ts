@@ -25,4 +25,19 @@ describe('pickMmProjForModel — the projector matches the model, not just the f
     expect(pickMmProjForModel(E2B, [E2B_MMPROJ])).toBe(E2B_MMPROJ);
     expect(pickMmProjForModel(E2B, [])).toBeUndefined();
   });
+
+  it('QUANT TRAP: E2B model (Q4_K_M) picks the E2B projector even when the ONLY same-quant projector is E4B', () => {
+    // The projector is quant-independent, so an E2B model with a Q8_0-named E2B projector must still beat an
+    // E4B projector that happens to share the model's Q4_K_M quant. Naive quant/token matching picks E4B here.
+    const E2B_MMPROJ_Q8 = 'gemma-4-E2B-it-Q8_0-mmproj.gguf';
+    expect(pickMmProjForModel(E2B, [E4B_MMPROJ, E2B_MMPROJ_Q8])).toBe(E2B_MMPROJ_Q8);
+  });
+
+  it('same model, different quantizations, one shared projector → that projector is used for every quant', () => {
+    // The user case: one mmproj, multiple model quants. Each quant resolves to the same (E2B) projector.
+    expect(pickMmProjForModel('gemma-4-E2B-it-Q4_K_M.gguf', [E2B_MMPROJ])).toBe(E2B_MMPROJ);
+    expect(pickMmProjForModel('gemma-4-E2B-it-Q8_0.gguf', [E2B_MMPROJ])).toBe(E2B_MMPROJ);
+    // …and with an E4B projector also present, each E2B quant still avoids it.
+    expect(pickMmProjForModel('gemma-4-E2B-it-Q8_0.gguf', [E4B_MMPROJ, E2B_MMPROJ])).toBe(E2B_MMPROJ);
+  });
 });
