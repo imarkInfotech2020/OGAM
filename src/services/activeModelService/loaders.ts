@@ -55,20 +55,13 @@ export function mmProjBelongsToModel(modelFileName: string, mmProjFileName: stri
 }
 
 export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
-  if (candidateNames.length <= 1) return candidateNames[0];
   const modelStem = modelIdentityStem(modelFileName);
-  // The projector whose (quant-stripped) model stem equals this model's — the correct pairing.
-  const exact = candidateNames.find(name => modelIdentityStem(name) === modelStem);
-  if (exact) return exact;
-  // Fallback for irregular naming: the projector stem sharing the longest prefix with the model stem.
-  const commonPrefixLen = (a: string, b: string): number => {
-    let i = 0;
-    while (i < a.length && i < b.length && a[i] === b[i]) i++;
-    return i;
-  };
-  return candidateNames.reduce((best, name) =>
-    commonPrefixLen(modelStem, modelIdentityStem(name)) > commonPrefixLen(modelStem, modelIdentityStem(best)) ? name : best,
-  );
+  // ONLY a projector whose quant-stripped model stem equals the model's belongs to it. Return undefined
+  // when none does — NEVER fall back to "closest" or "the only one". A near-name projector (E4B for an E2B
+  // model) is the wrong architecture: initMultimodal fails with "Multimodal support not enabled" and the
+  // send crashes. Undefined loads the model clean as text-only instead (device 2026-07-14: the E2B
+  // projector was absent, only E4B was on disk, and the old fallback paired it → the crash).
+  return candidateNames.find(name => modelIdentityStem(name) === modelStem);
 }
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {

@@ -21,9 +21,17 @@ describe('pickMmProjForModel — the projector matches the model, not just the f
     expect(pickMmProjForModel('gemma-4-E4B-it-Q4_K_M.gguf', [E2B_MMPROJ, E4B_MMPROJ])).toBe(E4B_MMPROJ);
   });
 
-  it('returns the only projector when a single one is present (unambiguous, unchanged behavior)', () => {
+  it('returns the belonging projector when it is the only one present', () => {
     expect(pickMmProjForModel(E2B, [E2B_MMPROJ])).toBe(E2B_MMPROJ);
     expect(pickMmProjForModel(E2B, [])).toBeUndefined();
+  });
+
+  it('MISSING-FILE (the actual device case): E2B projector absent, only E4B on disk → undefined, NOT E4B', () => {
+    // The E2B projector was never installed; only the E4B one was on disk. Pairing E4B makes initMultimodal
+    // fail and the vision send crash. Refuse it — the model then loads clean as text-only.
+    expect(pickMmProjForModel(E2B, [E4B_MMPROJ])).toBeUndefined();
+    // …and never grab an unrelated projector just because it's the only/closest candidate.
+    expect(pickMmProjForModel(E2B, ['Qwen3.5-0.8B-Q4_K_M-mmproj.gguf', 'SmolVLM2-2.2B-Instruct-Q4_K_M-mmproj.gguf', E4B_MMPROJ])).toBeUndefined();
   });
 
   it('QUANT TRAP: E2B model (Q4_K_M) picks the E2B projector even when the ONLY same-quant projector is E4B', () => {
