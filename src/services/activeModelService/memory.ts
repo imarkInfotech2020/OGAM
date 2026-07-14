@@ -11,9 +11,10 @@ import {
   ModelType,
   MemoryCheckResult,
   MemoryCheckSeverity,
-  TEXT_MODEL_OVERHEAD_MULTIPLIER,
+  textOverheadMultiplier,
   IMAGE_MODEL_OVERHEAD_MULTIPLIER,
 } from './types';
+import { useAppStore } from '../../stores';
 import { modelMemoryBudgetMB, modelWarningThresholdMB, LoadPolicy } from '../memoryBudget';
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,8 @@ function estimateModelMemoryGB(
   if (type === 'text') {
     const textModel = model as DownloadedModel;
     const sizeGB = (textModel.fileSize || 0) / (1024 * 1024 * 1024);
-    return sizeGB * TEXT_MODEL_OVERHEAD_MULTIPLIER;
+    // GPU-aware overhead — same single source the residency gate uses, so pre-check and gate agree.
+    return sizeGB * textOverheadMultiplier(useAppStore.getState().settings.inferenceBackend);
   }
   const imageModel = model as ONNXImageModel;
   // ONE image-RAM estimator: delegate to the authoritative load-gate estimator so the
