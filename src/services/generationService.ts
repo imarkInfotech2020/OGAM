@@ -227,11 +227,15 @@ class GenerationService {
   private keepShownPartialOrClear(generationTimeMs?: number): void {
     const store = useChatStore.getState();
     const convId = store.streamingForConversationId;
-    const shownLen = store.streamingMessage.trim().length;
-    const decision = convId && shownLen > 0 ? 'finalize' : 'clear';
-    logger.log(`[STOP-SM] keepShownPartialOrClear convId=${convId ?? 'null'} shownMsg=${shownLen}ch → ${decision}`);
-    if (decision === 'finalize') {
-      store.finalizeStreamingMessage(convId!, generationTimeMs, this.buildGenerationMeta());
+    // There is NO case to discard shown output. finalizeStreamingMessage persists whatever streamed —
+    // content OR reasoning (its own guard drops a genuinely-empty stream) — and resets the streaming state
+    // either way, so it's a strict superset of clear. ALWAYS finalize when a conversation is streaming; only
+    // clear when there is no streaming conversation at all (nothing was ever shown). The old check looked at
+    // streamingMessage ONLY, so a reasoning-only partial (LiteRT still THINKING at stop) was wrongly cleared.
+    const shownLen = (store.streamingMessage + store.streamingReasoningContent).trim().length;
+    logger.log(`[STOP-SM] keepShownPartialOrClear convId=${convId ?? 'null'} shown=${shownLen}ch → ${convId ? 'finalize' : 'clear'}`);
+    if (convId) {
+      store.finalizeStreamingMessage(convId, generationTimeMs, this.buildGenerationMeta());
     } else {
       store.clearStreamingMessage();
     }

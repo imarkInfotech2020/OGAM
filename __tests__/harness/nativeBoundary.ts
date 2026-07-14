@@ -122,6 +122,11 @@ export interface LiteRTFake {
    * Used to prove Stop keeps the partial (doesn't discard it). One-shot.
    */
   scriptPartialThenHang(content: string): void;
+  /**
+   * Emit a partial REASONING token (litert_thinking) then HANG — the model is mid-THINKING with reasoning on
+   * screen but no content yet, still in-flight. Proves Stop keeps a reasoning-only partial. One-shot.
+   */
+  scriptThinkingThenHang(reasoning: string): void;
 }
 
 /** Run fn on a macrotask so it lands after the current async chain (native call → awaited resolve). */
@@ -137,7 +142,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   let toolCallsRemaining = 0;
   let pendingError: string | null = null; // one-shot: next send emits litert_error instead of completing
   let pendingHang = false; // one-shot: next send never completes (generation stays in-flight)
-  let pendingPartialHang: string | null = null; // one-shot: next send emits a partial token then never completes
+  let pendingPartialHang: { content?: string; reasoning?: string } | null = null; // one-shot: emit a partial token/reasoning then never complete
 
   const emitCompletion = (turn: LiteRTTurn) => {
     if (turn.reasoning) handle.emit('litert_thinking', turn.reasoning);
@@ -146,7 +151,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   };
 
   const onSend = () => {
-    if (pendingPartialHang !== null) { const c = pendingPartialHang; pendingPartialHang = null; defer(() => handle.emit('litert_token', c)); return; } // partial shown, then in-flight
+    if (pendingPartialHang !== null) { const p = pendingPartialHang; pendingPartialHang = null; defer(() => { if (p.reasoning) handle.emit('litert_thinking', p.reasoning); if (p.content) handle.emit('litert_token', p.content); }); return; } // partial (content and/or reasoning) shown, then in-flight
     if (pendingHang) { pendingHang = false; return; } // accepted, never completes → generation in-flight
     if (pendingError) { const m = pendingError; pendingError = null; defer(() => handle.emit('litert_error', m)); return; }
     const turn = queue.length ? queue.shift()! : pending;
@@ -189,7 +194,8 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     scriptTurns: (turns: LiteRTTurn[]) => { queue.length = 0; queue.push(...turns); },
     scriptError: (message: string) => { pendingError = message; },
     scriptHang: () => { pendingHang = true; },
-    scriptPartialThenHang: (content: string) => { pendingPartialHang = content; },
+    scriptPartialThenHang: (content: string) => { pendingPartialHang = { content }; },
+    scriptThinkingThenHang: (reasoning: string) => { pendingPartialHang = { reasoning }; },
   };
 }
 
