@@ -136,7 +136,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Node 24: the RAG/knowledge-base suites run a REAL in-memory database via
+          # node's built-in `node:sqlite` (__tests__/harness/sqliteFake.ts). That module
+          # is unavailable on Node 20 and flag-gated on Node 22; it is available without a
+          # flag from Node 23.4+, so the test runtime is pinned to 24.
+          node-version: '24'
           cache: 'npm'
 
       - name: Setup Java
