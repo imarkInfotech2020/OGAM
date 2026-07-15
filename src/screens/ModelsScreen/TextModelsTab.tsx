@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
-import { modelBudgetFraction } from '../../services/memoryBudget';
+import { fileExceedsBudget } from '../../services/memoryBudget';
 import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -190,7 +190,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
         isRepairingVision={s.repairingVision}
-        isCompatible={item.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB)} testID={`file-card-${index}`}
+        isCompatible={!fileExceedsBudget(item.size, ramGB)} testID={`file-card-${index}`}
         onDownload={onDownload}
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
@@ -255,7 +255,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       ) : (
         <FlatList
           data={modelFiles
-            .filter(f => f.size > 0 && f.size / (1024 ** 3) < ramGB * modelBudgetFraction(ramGB) && (filterState.quant === 'all' || f.name.includes(filterState.quant)))
+            .filter(f => f.size > 0 && !fileExceedsBudget(f.size, ramGB) && (filterState.quant === 'all' || f.name.includes(filterState.quant)))
             .sort((a, b) => {
               if (selectedModel.id === LITERT_PARENT_ID) return a.size - b.size; // curated: small-first
               // Tier: Q4_K_M (CPU default, lowest size) → GPU/NPU Q4_0/Q8_0 → rest (CPU
