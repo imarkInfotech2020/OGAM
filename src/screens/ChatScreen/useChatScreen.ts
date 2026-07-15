@@ -413,7 +413,7 @@ export const useChatScreen = () => {
       // tick once it has faded out. Harmless on Android (no nested-modal conflict there).
       const uri = viewerImageUri;
       setViewerImageUri(null);
-      setTimeout(() => { void saveImageToGallery(uri, setAlertState); }, 350);
+      setTimeout(() => { saveImageToGallery(uri, setAlertState).catch(() => {}); }, 350);
     },
   };
 };
