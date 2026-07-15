@@ -334,6 +334,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
     <View style={styles.container}>
       {holding && (
         <Animated.View
+          testID="voice-cancel-hint"
           style={[styles.cancelHint, { opacity: cancelOffsetX.interpolate({ inputRange: [-CANCEL_DISTANCE, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }]}
         >
           <Text style={styles.cancelHintText} numberOfLines={1}>Slide to cancel</Text>
