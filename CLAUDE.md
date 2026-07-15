@@ -17,7 +17,10 @@ the Release config). The log sink is `__DEV__`-only, so you are almost always pu
 not hardcode one):
 
 ```sh
-DEVICE=$(xcrun devicectl list devices | awk '/connected/{print $NF; exit}')  # or paste the UDID
+# Read the connected device's UDID from devicectl's JSON (parsing the human-readable table with
+# awk is brittle — the last column is the device model, not the UDID). Or just paste the UDID.
+xcrun devicectl list devices --json-output /tmp/devs.json >/dev/null 2>&1
+DEVICE=$(python3 -c "import json;ds=json.load(open('/tmp/devs.json'))['result']['devices'];print(next(d['hardwareProperties']['udid'] for d in ds if d.get('connectionProperties',{}).get('tunnelState')=='connected'))")
 xcrun devicectl device copy from \
   --device "$DEVICE" \
   --domain-type appDataContainer --domain-identifier ai.offgridmobile.dev \

@@ -263,16 +263,10 @@ describe('AudioModeLayout — right zone voice picker', () => {
 });
 
 describe('AudioModeLayout — left/right trigger controls dispatch popover intents', () => {
-  it('pressing the attach (+) trigger dispatches the unified attach handler', () => {
-    // Voice mode routes + through onAttachPress (the same handler the text composer uses):
-    // iOS → native ActionSheetIOS, Android → attachPicker.show(). It must NOT open the JS
-    // <Modal> popover directly on iOS (that hung the main thread in voice mode; device 2026-07-15).
-    const onAttachPress = jest.fn();
-    const { getAllByTestId } = renderLayout({ onAttachPress });
-    // The attach ("plus") trigger is the outer TouchableOpacity carrying the feather-plus icon.
-    fireEvent.press(getAllByTestId('feather-plus')[0].parent as any);
-    expect(onAttachPress).toHaveBeenCalledTimes(1);
-  });
+  // NOTE: the "+ dispatches onAttachPress" case was removed — it was mockist (mounted with a
+  // jest.fn and asserted only toHaveBeenCalled), which our testing doctrine forbids. The voice-mode
+  // reroute (+ → native ActionSheetIOS on iOS, not the JS popover) is verified on-device; the native
+  // sheet can't be exercised in jsdom, so there is no honest unit assertion to keep here.
 
   it('opening quick settings calls its show()', () => {
     const quickSettings = popover();
