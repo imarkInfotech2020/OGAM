@@ -22,6 +22,24 @@ where noted. Mark P/F.
    generate one image. The first ANE compile (~120s) is the OOM-risk moment — confirm it doesn't hard-crash.
    If it crashes on first compile → SDXL is too heavy for the device (a real limit, not our bug).
 
+## HIGH — the voice/mic gesture fixes (newest; device-only, no jest layout)
+
+V1. **[both] "Slide to cancel" pill forms properly.** Empty composer (the send slot IS the mic).
+    Press and HOLD the mic. EXPECT: a "Slide to cancel" pill appears to the LEFT of the mic with the
+    full text on ONE line — not clipped, not wrapped into a smear, not overlapping the mic. (This is the
+    cut-off bug; jest can prove width+single-line but not the pixels — your eyes are the only proof.)
+
+V2. **[both] Slide-to-cancel actually cancels vs sends.** Hold to record and speak. (a) Slide LEFT
+    past ~1cm and release → EXPECT: recording discarded, NOTHING lands in the composer. (b) Hold, speak,
+    release WITHOUT sliding → EXPECT: it transcribes into the composer.
+
+V3. **[both] Cold-load gesture continuity + NO ghost recording.** Trigger a cold whisper load first:
+    fresh launch, or load a big text model so whisper was evicted. Now press-and-HOLD the mic. EXPECT:
+    the button shows a spinner but STAYS a button you can slide/release (not a dead spinner). Now RELEASE
+    while it is still spinning up (before recording starts). EXPECT: it cancels cleanly — mic returns to
+    idle, no transcript, and NOTHING keeps recording in the background. Press again → records normally.
+    FAIL = mic stuck recording/spinning forever, or a session you can never stop (the ghost).
+
 ## MEDIUM — the recovery/parity fixes
 
 4. **[both] Image download interrupted → Retry recovers.** Start a large image download, kill WiFi mid-way
