@@ -85,6 +85,7 @@ function renderLayout(overrides: Partial<React.ComponentProps<typeof AudioModeLa
     onThinkingToggle: jest.fn(),
     onVisionPress: jest.fn(),
     onPickDocument: jest.fn(),
+    onAttachPress: jest.fn(),
     attachPicker: popover(),
     voicePicker: popover(),
     quickSettings: popover(),
@@ -262,12 +263,15 @@ describe('AudioModeLayout — right zone voice picker', () => {
 });
 
 describe('AudioModeLayout — left/right trigger controls dispatch popover intents', () => {
-  it('opening the attach picker calls its show()', () => {
-    const attachPicker = popover();
-    const { getAllByTestId } = renderLayout({ attachPicker });
+  it('pressing the attach (+) trigger dispatches the unified attach handler', () => {
+    // Voice mode routes + through onAttachPress (the same handler the text composer uses):
+    // iOS → native ActionSheetIOS, Android → attachPicker.show(). It must NOT open the JS
+    // <Modal> popover directly on iOS (that hung the main thread in voice mode; device 2026-07-15).
+    const onAttachPress = jest.fn();
+    const { getAllByTestId } = renderLayout({ onAttachPress });
     // The attach ("plus") trigger is the outer TouchableOpacity carrying the feather-plus icon.
     fireEvent.press(getAllByTestId('feather-plus')[0].parent as any);
-    expect(attachPicker.show).toHaveBeenCalledTimes(1);
+    expect(onAttachPress).toHaveBeenCalledTimes(1);
   });
 
   it('opening quick settings calls its show()', () => {
