@@ -335,7 +335,9 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
       {holding && (
         <Animated.View
           testID="voice-cancel-hint"
-          style={[styles.cancelHint, { opacity: cancelOffsetX.interpolate({ inputRange: [-CANCEL_DISTANCE, 0], outputRange: [1, 0], extrapolate: 'clamp' }) }]}
+          // Visible the moment you hold (baseline 0.85), brightening to full as you slide toward
+          // cancel — NOT fading to 0 at rest, which made it barely visible (device 2026-07-15).
+          style={[styles.cancelHint, { opacity: cancelOffsetX.interpolate({ inputRange: [-CANCEL_DISTANCE, 0], outputRange: [1, 0.85], extrapolate: 'clamp' }) }]}
         >
           <Text style={styles.cancelHintText} numberOfLines={1}>Slide to cancel</Text>
         </Animated.View>
