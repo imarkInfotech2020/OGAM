@@ -5,7 +5,7 @@ import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
 import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
-import { ImageModelDescriptor } from './types';
+import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import { makeImageModelKey } from '../../utils/modelKey';
 import logger from '../../utils/logger';
@@ -86,27 +86,15 @@ async function cleanupInvalidArtifact(path: string): Promise<void> {
  *  "no such file" on every retry. Reconstructs the zip descriptor from the entry's persisted metadata. */
 async function reDownloadFromMetadata(ctx: ResumeCtx): Promise<void> {
   const { modelId, metadata, deps } = ctx;
-  const downloadUrl = metadata.imageModelDownloadUrl;
-  if (!downloadUrl) {
-    // No URL to re-fetch from — surface a clear, honest failure rather than a stale native error.
+  if (!metadata.imageModelDownloadUrl) {
+    // No URL to re-fetch from. Surface a clear, honest failure rather than a stale native error.
     useDownloadStore.getState().setStatus(ctx.entry.downloadId, 'failed', {
-      message: 'Download expired and could not be re-downloaded — remove and download again.',
+      message: 'Download could not be re-downloaded. Remove it and download again.',
     });
     return;
   }
-  const descriptor: ImageModelDescriptor = {
-    id: modelId,
-    name: metadata.imageModelName,
-    description: metadata.imageModelDescription ?? '',
-    downloadUrl,
-    size: metadata.imageModelSize ?? 0,
-    style: metadata.imageModelStyle ?? '',
-    backend: metadata.imageModelBackend ?? 'coreml',
-    attentionVariant: metadata.imageModelAttentionVariant,
-    repo: metadata.imageModelRepo,
-  };
   logger.log(`[ImageDownload] resumeImageDownload zip - staged bytes gone, re-downloading ${modelId}`);
-  await proceedWithDownload(descriptor, deps);
+  await proceedWithDownload(imageDescriptorFromMetadata(modelId, metadata), deps);
 }
 
 async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
@@ -180,6 +168,8 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
       await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
       return;
     }
+    // Completed bytes are gone and nothing valid survives — re-download instead of dead-ending
+    // on the same "no such file" every retry (the iOS temp-purge symptom). Does not rethrow.
     // Completed bytes are gone and nothing valid survives — re-download instead of dead-ending
     // on the same "no such file" every retry (the iOS temp-purge symptom). Does not rethrow.
     if (!recoveredZipValid) {
