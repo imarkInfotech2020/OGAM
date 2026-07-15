@@ -63,18 +63,22 @@ async function setupHome() {
     React.createElement(ResidentsProbe, {}),
     React.createElement(HomeScreen, { navigation: nav }),
   ));
-  await rtl.waitFor(() => { expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0); }, { timeout: 4000 });
+  await rtl.waitFor(() => { expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0); }, { timeout: 10000 });
 
   // GESTURE: select the text model the way a user does — open the picker, tap the row.
   rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
-  const rows = await rtl.waitFor(() => { const r = view.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 4000 });
+  const rows = await rtl.waitFor(() => { const r = view.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 10000 });
   rtl.fireEvent.press(rows[0]);
-  await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 4000 });
+  await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
 
   return { boundary, React, rtl, useAppStore, activeModelService, view };
 }
 
 describe('manager sheet residency — RAM chip + per-row eject (agreed design 2026-07-14)', () => {
+  // Heavy rendered residency flow (real modelResidencyManager + mounted Home). The per-step
+  // waitFor budgets and the overall timeout were raised after this flaked on a loaded CI runner
+  // (the residency state settled just past the old 4s window; passed everywhere else). Behaviour
+  // is unchanged — this only gives the async settling more headroom under load.
   it('shows the RAM chip + eject on a resident row, ejects it, and the row still opens the picker', async () => {
     const h = await setupHome();
     const { rtl, view } = h;
@@ -89,10 +93,10 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     // The REAL load path (residency manager registers the text resident) — the lazy load a send triggers.
     await rtl.act(async () => { await h.activeModelService.loadTextModel('m'); });
-    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toContain('text'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toContain('text'); }, { timeout: 10000 });
 
     // RED on HEAD: the resident text row shows a RAM chip + its own eject control; other rows do not.
-    await rtl.waitFor(() => { expect(view.queryByTestId('models-row-text-ram')).not.toBeNull(); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(view.queryByTestId('models-row-text-ram')).not.toBeNull(); }, { timeout: 10000 });
     expect(view.queryByTestId('models-row-text-eject')).not.toBeNull();
     for (const t of ['image', 'voice', 'speech']) {
       expect(view.queryByTestId(`models-row-${t}-ram`)).toBeNull();
@@ -101,13 +105,13 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     // GESTURE: eject the text row. The chip + eject clear; the resident is really gone (probe).
     await rtl.act(async () => { pressByWalkingUp(view.getByTestId('models-row-text-eject')); });
-    await rtl.waitFor(() => { expect(view.queryByTestId('models-row-text-ram')).toBeNull(); }, { timeout: 4000 });
-    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toBe('(none)'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(view.queryByTestId('models-row-text-ram')).toBeNull(); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toBe('(none)'); }, { timeout: 10000 });
 
     // The row itself still opens the text picker (eject must not swallow the row tap).
     await rtl.act(async () => { pressByWalkingUp(view.getByTestId('models-row-text')); });
-    await rtl.waitFor(() => { expect(view.queryAllByTestId('model-item').length).toBeGreaterThan(0); }, { timeout: 4000 });
-  }, 30000);
+    await rtl.waitFor(() => { expect(view.queryAllByTestId('model-item').length).toBeGreaterThan(0); }, { timeout: 10000 });
+  }, 60000);
 
   it('the Select Model picker no longer renders the In Memory section (moved to the manager sheet)', async () => {
     const h = await setupHome();
@@ -115,7 +119,7 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     await rtl.act(async () => { await h.activeModelService.loadTextModel('m'); });
     // Guard against the trivially-green null: a resident REALLY exists (the section would render on HEAD).
-    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toContain('text'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(view.getByTestId('probe-residents').props.children).toContain('text'); }, { timeout: 10000 });
 
     // The surface that carried "In Memory": the chat's ModelSelectorModal (mounted the way the
     // sibling memory suite does — with a resident live, the section rendered here on HEAD).
@@ -125,10 +129,10 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
       visible: true, onClose: () => {}, onSelectModel: () => {}, onUnloadModel: () => {}, isLoading: false,
       currentModelPath: null,
     }));
-    await rtl.waitFor(() => { expect(picker.queryByText('Select Model')).not.toBeNull(); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(picker.queryByText('Select Model')).not.toBeNull(); }, { timeout: 10000 });
     await new Promise((r) => setTimeout(r, 400)); // one poll tick of the section, so absence is real
 
     // RED on HEAD: the picker still shows "In Memory". The manager sheet is the residency surface now.
     expect(picker.queryByTestId('in-memory-section')).toBeNull();
-  }, 30000);
+  }, 60000);
 });
