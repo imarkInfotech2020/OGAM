@@ -1,44 +1,80 @@
 /**
- * DEFECT 2a — DOCUMENTED RED (intentionally NOT fixed; see the agent report).
+ * Download-time projector matching (#510 "one strict model<->projector rule").
  *
- * huggingface.findMatchingMMProj (the DOWNLOAD-time projector matcher, reached via getModelFiles) is still
- * the LOOSE quant-based matcher with the "closest/only one" fallback. #510 c815752f claimed to replace every
- * projector matcher with the ONE strict rule (mmproj.pickMmProjForModel — name+variant stem, quant ignored,
- * NO "closest" fallback), but it only migrated isMMProjFile here and left findMatchingMMProj on the loose
- * path. So the download-time matcher will pair a WRONG-ARCHITECTURE projector when it shares the model's
- * quant (E2B model Q4 ↔ E4B projector Q4) — the exact E2B↔E4B mispairing the strict rule exists to refuse.
+ * These drive the REAL huggingFaceService.getModelFiles over a FAKED HuggingFace network boundary
+ * (only global.fetch is faked — the whole huggingface service + mmproj rule run for real). The
+ * observable is the projector paired onto the downloadable ModelFile (file.mmProjFile): the thing the
+ * download flow then fetches and hands the loader, which decides whether vision works.
  *
- * This test asserts the STRICT-correct product outcome (the E4B projector must NOT be paired to an E2B model)
- * and is RED on HEAD because the loose matcher accepts it via the exact-quant branch. It is filed as
- * evidence of the drift, NOT wired to a fix: migrating findMatchingMMProj to the strict rule would REGRESS a
- * legitimate, currently-working path — the majority repo shape where a single GENERIC projector (bare
- * `mmproj-F16.gguf`, no model name) is the only projector. The strict stem match returns undefined for that
- * (no name overlap), so vision models with a generic projector would download text-only. The existing test
- * `huggingface.test.ts › getModelFiles › separates mmproj files from model files` (model-Q4_K_M.gguf paired
- * with mmproj-f16.gguf) encodes that working path and would break. See the report for the recommended fix
- * (a download-time matcher that keeps the generic-single-projector case AND refuses a name-mismatched one).
+ * Two behaviors must BOTH hold:
+ *   (A) GENERIC single projector (bare `mmproj-F16.gguf`, no model-name token, e.g. ggml-org/gemma-3-*)
+ *       must STILL pair → vision works. This is the anti-regression guard.
+ *   (B) A projector whose filename names a DIFFERENT model+variant (an E4B projector for an E2B model,
+ *       even at the same quant) must be REFUSED → the E2B never gets mispaired to the wrong architecture.
+ *
+ * Real repo shapes: unsloth/gemma-4-E2B-it-GGUF and unsloth/gemma-4-E4B-it-GGUF (src/constants/models.ts);
+ * ggml-org/gemma-3-*-GGUF ships a bare `mmproj-F16.gguf` (src/services/modelManager/download.ts comments).
  */
 import { huggingFaceService } from '../../../src/services/huggingface';
 
-describe('DEFECT 2a (documented, unfixed): download-time projector matching is still the loose rule', () => {
-  const originalFetch = global.fetch;
-  afterEach(() => { global.fetch = originalFetch; });
+const originalFetch = global.fetch;
 
-  it.failing('refuses to pair an E4B projector with an E2B model even at the same quant (strict rule)', async () => {
-    // Raw HF listing: an E2B model and a WRONG-ARCH E4B projector that shares the model's Q4_K_M quant.
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([
-        { type: 'file', path: 'gemma-4-E2B-it-Q4_K_M.gguf', size: 2_000_000_000 },
-        { type: 'file', path: 'gemma-4-E4B-it-Q4_K_M-mmproj.gguf', size: 800_000_000 },
-      ]),
-    }) as unknown as typeof fetch;
+function fakeTreeListing(files: Array<{ path: string; size: number }>) {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve(files.map(f => ({ type: 'file', path: f.path, size: f.size }))),
+  }) as unknown as typeof fetch;
+}
 
-    const files = await huggingFaceService.getModelFiles('google/gemma');
-    const e2b = files.find(f => f.name === 'gemma-4-E2B-it-Q4_K_M.gguf')!;
+afterEach(() => {
+  global.fetch = originalFetch;
+  jest.restoreAllMocks();
+});
 
-    // STRICT/product-correct: an E4B projector is the wrong architecture for an E2B model → refuse it (undefined).
-    // HEAD (loose): the exact-quant branch accepts 'gemma-4-E4B-it-Q4_K_M-mmproj.gguf' → this fails (RED).
-    expect(e2b.mmProjFile?.name).toBeUndefined();
+describe('download-time projector matching (#510)', () => {
+  // (A) ANTI-REGRESSION: a repo shipping ONE generic projector with no model-name token must still pair
+  // it with the model, or vision silently breaks for ggml-org/gemma-3-*-GGUF (and unsloth gemma-4, which
+  // also ships a bare mmproj-F16.gguf). MUST stay green before AND after the fix.
+  it('(A) pairs a generic single projector (no model-name token) with the model', async () => {
+    fakeTreeListing([
+      { path: 'gemma-3-4b-it-Q4_K_M.gguf', size: 4_000_000_000 },
+      { path: 'mmproj-F16.gguf', size: 800_000_000 },
+    ]);
+
+    const files = await huggingFaceService.getModelFiles('ggml-org/gemma-3-4b-it-GGUF');
+
+    const model = files.find(f => f.name === 'gemma-3-4b-it-Q4_K_M.gguf');
+    expect(model?.mmProjFile?.name).toBe('mmproj-F16.gguf');
+  });
+
+  // (B) WRONG-ARCHITECTURE REFUSAL: an E2B model listing that (mispackaged / user-mixed) contains a
+  // projector whose filename names E4B must NOT pair it — even though it is the same quant. Pairing it
+  // would crash initMultimodal ("Multimodal support not enabled") on device. The E2B must come back
+  // text-only (undefined mmProjFile) so it loads clean or takes the repair path.
+  it('(B) refuses a projector that names a DIFFERENT model+variant (E4B projector, E2B model)', async () => {
+    fakeTreeListing([
+      { path: 'gemma-4-E2B-it-Q4_K_M.gguf', size: 2_000_000_000 },
+      { path: 'gemma-4-E4B-it-mmproj-F16.gguf', size: 800_000_000 },
+    ]);
+
+    const files = await huggingFaceService.getModelFiles('unsloth/gemma-4-E2B-it-GGUF');
+
+    const e2b = files.find(f => f.name === 'gemma-4-E2B-it-Q4_K_M.gguf');
+    expect(e2b?.mmProjFile).toBeUndefined();
+  });
+
+  // (B, positive) When the correct E2B-named projector IS present alongside a wrong E4B one, the exact
+  // model+variant match is chosen — vision works, mispairing is avoided.
+  it('(B) prefers the exact model+variant projector over a wrong-arch one', async () => {
+    fakeTreeListing([
+      { path: 'gemma-4-E2B-it-Q4_K_M.gguf', size: 2_000_000_000 },
+      { path: 'gemma-4-E2B-it-mmproj-F16.gguf', size: 800_000_000 },
+      { path: 'gemma-4-E4B-it-mmproj-F16.gguf', size: 900_000_000 },
+    ]);
+
+    const files = await huggingFaceService.getModelFiles('unsloth/gemma-4-E2B-it-GGUF');
+
+    const e2b = files.find(f => f.name === 'gemma-4-E2B-it-Q4_K_M.gguf');
+    expect(e2b?.mmProjFile?.name).toBe('gemma-4-E2B-it-mmproj-F16.gguf');
   });
 });
