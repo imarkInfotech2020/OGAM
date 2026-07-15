@@ -78,4 +78,35 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     // Only turn #1's single text reply may exist — turn #2 must NOT have produced a second text reply.
     expect(view.queryAllByText(new RegExp(QUEUED_TEXT_LEAK)).length).toBe(1);
   });
+
+  it('COALESCE (M16): two sends queue together and one forced image — the merged dispatch draws an image', async () => {
+    // Exercises the multi-message branch (all.length > 1) where imageMode = all.some(force) ? force : all[0].
+    // My single-message test above only hits the all[0] shortcut; this pins the coalesce force-merge so a
+    // regression to `all[0].imageMode` (dropping the .some) is caught.
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.render();
+    const { rtl } = h;
+    const view = h.view!;
+    await h.placeImageModel({ backend: 'coreml' });
+
+    // Turn #1 holds in prefill → in-flight, so BOTH following sends queue behind it and coalesce.
+    h.boundary.llama!.scriptCompletion({ text: QUEUED_TEXT_LEAK, holdBeforeStream: true });
+    await h.tapSend('what is the weather like');
+    await rtl.waitFor(() => { expect(view.queryByTestId('stop-button')).not.toBeNull(); }, { timeout: 4000 });
+
+    // Queue #2 (auto/text) then #3 (force image) — both queue while #1 holds → coalesced on drain.
+    await h.tapSend('and how are you'); // auto, non-draw → queued
+    await h.settle(30);
+    await h.cycleImageMode();
+    await rtl.waitFor(() => { expect(view.queryByTestId('image-mode-force-badge')).not.toBeNull(); });
+    await h.tapSend('tell me about cats'); // force → queued (now 2 queued, one forced)
+    await h.settle(50);
+    expect(h.boundary.diffusion.calls.generateImage.length).toBe(0); // nothing drawn while #1 holds
+
+    // Drain: the 2 queued messages coalesce; because one was force, the merged dispatch must draw.
+    h.boundary.llama!.releaseStream();
+    await h.settle(400);
+    await rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 4000 });
+    expect(view.queryByTestId('generated-image')).not.toBeNull();
+  });
 });
