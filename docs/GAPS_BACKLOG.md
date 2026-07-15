@@ -325,3 +325,23 @@ stuck transition (a `phase X → <in-flight>` with no following reset) names the
 that seam + a rendered red-flow (image mode → trigger the stuck path → next generate must NOT report
 "already generating"). Candidate hardening once pinned: a top-level try/finally in generateImage so no
 throw can leave the phase in-flight, and/or a self-healing staleness check on the isInFlight rejection.
+
+---
+
+## #510 audit — remaining PARTIAL fixes (found during the finding→code verification, 2026-07-15)
+
+These are honestly NOT fully closed by the load-anyway batch — logged so they are not lost:
+
+- **STT terminal-failure has no override card.** The realtime dictation now RECOVERS via
+  ensureWhisperForTranscription (free the generation model → retry) — the common case. But if that retry
+  ALSO fails, transcriptionOutcome.ts returns a static "Couldn't load the voice model — free some memory
+  and try again" string, NOT a reportModelFailure('stt', {onLoadAnyway}) card. There is no generation
+  model left to free at that point, so there is genuinely nothing more to do — but the product rule
+  ("any memory refusal offers Load Anyway on any type") is only PARTIALLY met for STT: recovery yes,
+  terminal override no. reportModelFailure is now called for text/image/tts but NOT stt/embedding.
+- **Embedding-model load failure never surfaces a card.** modelFailureHandler reserves an 'embedding'
+  type but nothing calls reportModelFailure('embedding', …). A RAG/embedding load failure is still
+  silent. Low user impact (embedding is background) but it violates the "nothing is silent" promise.
+- **ModelPickerSheet:216 RAM display**: the fit VERDICT uses the owned fileExceedsBudget, but the
+  displayed "~X GB RAM" number is a separate 1.5x estimate — the "(may not fit)" tag and the number can
+  disagree at the margin. Assessed as by-design (verdict is authoritative; number is a hint) but noted.
