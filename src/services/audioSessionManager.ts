@@ -102,6 +102,28 @@ class AudioSessionManager {
     });
   }
 
+  /**
+   * Release the iOS AVAudioSession so a native modal that grabs audio/hardware — the
+   * camera / photo picker — can present without a conflict. Device 2026-07-15: opening
+   * the image picker in VOICE MODE, while the playback session was active, hung the app
+   * completely (main thread wedged on the audio-route handoff; you could not even
+   * navigate back). Deactivating first avoids the collision; TTS/recording re-assert the
+   * session on their next call (ensurePlayback re-activates on EVERY call), so no explicit
+   * restore is needed. iOS-only; no-op on Android (and harmless if nothing was active).
+   */
+  async deactivate(): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    await this.runSerial(async () => {
+      try {
+        await AudioManager.setAudioSessionActivity(false);
+        this.mode = null;
+        logger.log('[TTS-SM] iOS session deactivated (native-modal handoff)');
+      } catch (e) {
+        logger.warn('[AudioSession] failed to deactivate', e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
   /** @returns true if the session activated, false if activation threw (swallowed). */
   private async apply(mode: AudioSessionMode): Promise<boolean> {
     // Part of the [TTS-SM] trace: a silent/wrong AVAudioSession is a top cause of

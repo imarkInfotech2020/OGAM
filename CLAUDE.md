@@ -10,12 +10,24 @@
 
 Instead, a **dev-only persistent file sink** (`src/utils/debugLogFile.ts`, wired in `App.tsx` behind `__DEV__`) mirrors every `logger.*` line - which is where ALL the state-machine traces go (`[TTS-SM]`, `[GEN-SM]`, `[MODEL-SM]`, `[DL-SM]`, `[ROUTE-SM]`, `[IMG-SM]`, `[MEM-SM]`, `[FAIL-SM]`) - into a file in the app container. Pull it over the cable to read the real trace:
 
+The debug (Debug-config) build's bundle id is **`ai.offgridmobile.dev`** — Debug carries a
+`.dev` suffix so it installs alongside the App Store / TestFlight build (`ai.offgridmobile`,
+the Release config). The log sink is `__DEV__`-only, so you are almost always pulling from the
+`.dev` container. Get the device UDID from `xcrun devicectl list devices` (it is per-device — do
+not hardcode one):
+
 ```sh
+# Read the connected device's UDID from devicectl's JSON (parsing the human-readable table with
+# awk is brittle — the last column is the device model, not the UDID). Or just paste the UDID.
+xcrun devicectl list devices --json-output /tmp/devs.json >/dev/null 2>&1
+DEVICE=$(python3 -c "import json;ds=json.load(open('/tmp/devs.json'))['result']['devices'];print(next(d['hardwareProperties']['udid'] for d in ds if d.get('connectionProperties',{}).get('tunnelState')=='connected'))")
 xcrun devicectl device copy from \
-  --device 00008150-000225103CD8C01C \
-  --domain-type appDataContainer --domain-identifier ai.offgridmobile \
+  --device "$DEVICE" \
+  --domain-type appDataContainer --domain-identifier ai.offgridmobile.dev \
   --source Documents/offgrid-debug.log --destination /tmp/offgrid-debug.log
 ```
+
+(A Release/TestFlight build uses `--domain-identifier ai.offgridmobile` and has no dev log sink.)
 
 Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session start … =====` marker on each launch and is size-capped (rotates, keeping the tail). The in-app **Debug Logs** screen (Settings → Debug Logs) shows the same lines live for quick visual checks. **When diagnosing a device issue, pull this file rather than guessing.**
 

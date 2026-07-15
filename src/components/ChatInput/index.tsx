@@ -246,6 +246,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const handleQuickSettingsPress = () => quickSettings.show();
 
   const handleAttachPress = () => {
+    logger.log(`[COMPOSER-SM] attach pressed platform=${Platform.OS} supportsVision=${supportsVision}`);
     if (Platform.OS === 'ios') {
       const options = supportsVision
         ? ['Photo', 'Document', 'Cancel']
@@ -306,6 +307,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         mcpToolCount={mcpToolCount}
         onVisionPress={handleVisionPress}
         onPickDocument={handlePickDocument}
+        onAttachPress={handleAttachPress}
         attachPicker={attachPicker}
         voicePicker={voicePicker}
         quickSettings={quickSettings}

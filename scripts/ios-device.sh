@@ -58,7 +58,9 @@ if [ -z "$DEVICE_ID" ]; then
   exit 1
 fi
 TEAM="${IOS_TEAM:-84V6KCAC49}"
-BUNDLE_ID="ai.offgridmobile"
+# BUNDLE_ID is read from the built .app below, NOT hardcoded — the Debug config carries a
+# `.dev` suffix (ai.offgridmobile.dev) while Release is ai.offgridmobile, and hardcoding it
+# meant we installed the .dev build but launched the old ai.offgridmobile app.
 
 cd "$(dirname "$0")/../ios"
 
@@ -96,5 +98,8 @@ APP="build/device/Build/Products/Debug-iphoneos/OffgridMobile.app"
 echo "Installing $APP ..."
 xcrun devicectl device install app --device "$DEVICE_ID" "$APP"
 
+# Launch the SAME bundle we just built/installed — read its real CFBundleIdentifier from the
+# built Info.plist (Debug = ai.offgridmobile.dev). Fall back to the .dev id if the read fails.
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" 2>/dev/null || echo 'ai.offgridmobile.dev')"
 echo "Launching $BUNDLE_ID ..."
 xcrun devicectl device process launch --device "$DEVICE_ID" --terminate-existing "$BUNDLE_ID"

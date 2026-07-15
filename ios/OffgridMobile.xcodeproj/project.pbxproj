@@ -432,7 +432,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.offgridmobile.dev;
 				PRODUCT_NAME = OffgridMobile;
 				SWIFT_OBJC_BRIDGING_HEADER = "OffgridMobile/OffgridMobile-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
