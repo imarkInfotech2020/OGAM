@@ -53,6 +53,11 @@ async function restartIosTextDownload(entry: DownloadEntry): Promise<void> {
     downloadUrl: huggingFaceService.getDownloadUrl(entry.modelId, entry.fileName),
     ...(mmProjFile ? { mmProjFile } : {}),
   };
+  // Immediate feedback: mark the entry queued so its card shows "queued" instead of staying "failed"
+  // while the re-issued download waits for a free concurrency slot (device 2026-07-15: a retried item
+  // stuck behind the 3-download cap looked like retry did nothing). No-op if the store entry lost its
+  // downloadId; the re-issue below still restores it.
+  if (entry.downloadId) useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
   const info = await modelManager.downloadModelBackground(entry.modelId, file);
   reattach(info.downloadId);
 }
