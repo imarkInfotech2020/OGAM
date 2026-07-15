@@ -168,31 +168,6 @@ export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     backgroundColor: colors.textMuted,
     transform: [{ rotate: '-45deg' }],
   },
-  // A pill hint shown while holding to record. It floats ABOVE the mic (not beside it):
-  // beside-the-mic put it under the thumb and overlapping the mic/+ (device 2026-07-15).
-  // It carries an explicit width because an unsized absolute child shrink-fits to the
-  // ~44px button container and wraps/clips "Slide to cancel". Solid surface + emerald
-  // border so it reads clearly against the chat background (the faint tinted fill was
-  // barely visible).
-  cancelHint: {
-    position: 'absolute' as const,
-    bottom: 54,
-    right: 0,
-    width: 140,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 12,
-    alignItems: 'center' as const,
-  },
-  cancelHintText: {
-    color: colors.primary,
-    fontSize: 12,
-    fontWeight: '400' as const,
-    textAlign: 'center' as const,
-  },
   partialResultContainer: {
     position: 'absolute' as const,
     right: 50,

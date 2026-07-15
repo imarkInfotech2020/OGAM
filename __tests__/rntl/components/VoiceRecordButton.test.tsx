@@ -483,40 +483,20 @@ describe('VoiceRecordButton', () => {
   });
 
   // ============================================================================
-  // Slide-to-cancel hint layout — regression guard
+  // Gesture continuity through a cold model load
   //
-  // The reported bug: the "Slide to cancel" pill "doesn't form properly / is cut off".
-  // Root cause: styles.cancelHint was position:absolute with NO width, so as an absolute
-  // child of the ~44px button container it shrink-fit to that width and the label wrapped
-  // into a clipped multi-line smear. jsdom runs no real Yoga layout, so we can't measure
-  // pixels — but we CAN assert the two rendered properties that caused vs cure the clip:
-  // an explicit numeric width, and single-line text. Reverting either flips these red.
+  // The "Slide to cancel" hint now lives inline in the composer (ChatInput.RecordingHint),
+  // not on this button. What MUST hold here is that a cold model load does not swap the mic
+  // for a bare, gesture-less spinner: the hold-to-record wrapper (voice-record-button, which
+  // carries the PanResponder) stays mounted while loading, so hold + slide + release survive
+  // the load (and the release-during-load ghost recording can't happen). If the load render
+  // reverted to the old early-return spinner, voice-record-button would be absent here.
   // ============================================================================
-  describe('slide-to-cancel hint layout', () => {
-    const { StyleSheet } = require('react-native');
-
-    it('gives the cancel pill an explicit width and single-line text while recording (chat mode)', () => {
-      const { getByText, getByTestId } = render(
-        <VoiceRecordButton {...defaultProps} asSendButton={true} isRecording={true} />
-      );
-
-      // The pill carries a real numeric width (before the fix: undefined → shrink-fit → wrap).
-      const flat = StyleSheet.flatten(getByTestId('voice-cancel-hint').props.style);
-      expect(typeof flat.width).toBe('number');
-      expect(flat.width).toBeGreaterThan(100); // wide enough for "Slide to cancel" at 12px
-
-      // The label can never wrap into a multi-line smear (before the fix: numberOfLines undefined).
-      expect(getByText('Slide to cancel').props.numberOfLines).toBe(1);
-    });
-
-    it('shows the cancel pill during a cold model load too — the hold stays cancellable', () => {
-      // Chat mode + loading must keep the gesturable wrapper (and its hint) mounted, not swap
-      // to a bare spinner. If the load-time render reverted to the old early-return, the pill
-      // would be absent here.
+  describe('gesture continuity', () => {
+    it('keeps the gesturable mic wrapper mounted during a cold model load (chat mode)', () => {
       const { getByTestId } = render(
         <VoiceRecordButton {...defaultProps} asSendButton={true} isModelLoading={true} />
       );
-      expect(getByTestId('voice-cancel-hint')).toBeTruthy();
       expect(getByTestId('voice-record-button')).toBeTruthy();
     });
   });

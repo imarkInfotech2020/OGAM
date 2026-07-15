@@ -208,10 +208,13 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
   useEffect(() => {
     if (isRecording) {
+      // Jump the mic noticeably bigger the instant it's pressed (like WhatsApp), so it's obvious the
+      // hold registered, then breathe gently around that enlarged size while recording.
+      pulseAnim.setValue(1.4);
       const pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.5, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.4, duration: 600, useNativeDriver: true }),
         ]),
       );
       pulse.start();
@@ -324,24 +327,12 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   }
 
   // ── Chat mode: hold-to-record with slide-to-cancel ─────────────────────────
-  // The finger is down for the whole hold — a cold model load happens DURING the hold.
-  // So the cancel hint shows while loading too (you can slide to bail before it's ready),
-  // and the button face swaps between the spinner and the mic WITHOUT the gesturable
-  // wrapper ever unmounting, so the PanResponder (hold + slide-to-cancel + release) is
-  // continuous across the load.
-  const holding = isRecording || buttonState.kind === 'loading';
+  // The mic follows the finger (translateX) and scales up while pressed. The "Slide to cancel"
+  // hint is NOT drawn here — it lives inline in the composer (ChatInput), the WhatsApp pattern —
+  // so it's always visible and never overlaps the mic. The gesturable wrapper stays mounted across
+  // ready/loading so the hold + slide + release gesture is continuous even through a cold load.
   return (
     <View style={styles.container}>
-      {holding && (
-        <Animated.View
-          testID="voice-cancel-hint"
-          // Visible the moment you hold (baseline 0.85), brightening to full as you slide toward
-          // cancel — NOT fading to 0 at rest, which made it barely visible (device 2026-07-15).
-          style={[styles.cancelHint, { opacity: cancelOffsetX.interpolate({ inputRange: [-CANCEL_DISTANCE, 0], outputRange: [1, 0.85], extrapolate: 'clamp' }) }]}
-        >
-          <Text style={styles.cancelHintText} numberOfLines={1}>Slide to cancel</Text>
-        </Animated.View>
-      )}
       {isRecording && partialResult && (
         <View style={styles.partialResultContainer}>
           <Text style={styles.partialResultText} numberOfLines={1}>{partialResult}</Text>
