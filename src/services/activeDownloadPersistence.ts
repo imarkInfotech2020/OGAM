@@ -23,7 +23,7 @@ const ACTIVE_DOWNLOADS_KEY = '@offgrid/active_downloads';
 
 /** PURE: the in-flight subset worth persisting — active (running/processing) but NOT queued (the
  *  queue owns its own persistence) and not terminal (completed/failed/cancelled). Zero-IO. */
-export function serializeActiveDownloads(downloads: Record<ModelKey, DownloadEntry>): DownloadEntry[] {
+function serializeActiveDownloads(downloads: Record<ModelKey, DownloadEntry>): DownloadEntry[] {
   return Object.values(downloads).filter((e) => isActiveStatus(e.status) && !isQueuedStatus(e.status));
 }
 

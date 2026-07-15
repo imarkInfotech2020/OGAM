@@ -16,7 +16,7 @@ import { useWhisperStore } from '../stores/whisperStore';
 import { useDownloadStore } from '../stores/downloadStore';
 import { isActiveStatus, isQueuedStatus, isDownloadingStatus, type DownloadEntry } from '../utils/downloadStatus';
 
-export interface SttDownloadEntry {
+interface SttDownloadEntry {
   /** 0..1 transfer progress. */
   progress: number;
   /** In flight (downloading OR queued) — the row is busy and not tappable. */
@@ -38,7 +38,7 @@ const bareWhisperId = (modelId: string): string =>
  * entry. A fallback entry still at 0% is WAITING for a slot → queued; once a byte lands (p>0) it
  * is transferring (without this, queued STT models rendered "0%" instead of "Queued").
  */
-export function deriveSttDownloadState(
+function deriveSttDownloadState(
   downloads: Record<string, DownloadEntry>,
   downloadProgressById: Record<string, number>,
 ): { byId: Record<string, SttDownloadEntry>; anyDownloading: boolean } {
