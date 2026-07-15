@@ -47,7 +47,9 @@ command -v node   >/dev/null || error "node not installed"
 command -v gh     >/dev/null || error "gh CLI not installed"
 command -v bundle >/dev/null || error "bundler not installed (bundle install)"
 [ -f fastlane/Fastfile ]     || error "fastlane/Fastfile not found"
-[ -z "$(git status --porcelain)" ] || error "Working tree is dirty. Commit or stash first."
+# Ignore fastlane/README.md — fastlane regenerates it on every run, so it is dirty by the time a
+# second build starts (and after any prior run). It is not source we build from.
+[ -z "$(git status --porcelain | grep -vE 'fastlane/README\.md$' || true)" ] || error "Working tree is dirty. Commit or stash first."
 [ "$DO_ANDROID" = 0 ] || { [ -f android/gradlew ] || error "android/gradlew not found"; [ -n "${ANDROID_HOME:-}" ] || error "ANDROID_HOME not set"; }
 [ "$DO_IOS" = 0 ]     || command -v xcodebuild >/dev/null || error "xcodebuild not installed"
 
@@ -55,7 +57,11 @@ command -v bundle >/dev/null || error "bundler not installed (bundle install)"
 # A beta targets the NEXT version, not the live one (the live train is closed - see header).
 CURRENT_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.102 (live)
 TARGET_VERSION=$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a+'.'+b+'.'+(c+1))")   # 0.0.103
-git fetch --tags --quiet || error "Could not refresh tags. Refusing to pick a beta number from stale tag history (would risk reusing an already-published beta tag and failing the tag push after the store uploads)."
+# --no-recurse-submodules: this fetch only needs CORE tags to pick the next beta number. Recursing
+# into the pro submodule made it try to fetch pro commits referenced by old tag history that are no
+# longer on pro's remote (e.g. after a pro branch was deleted/rebased) → "not our ref" → the whole
+# tag refresh failed and blocked the build. The submodule is already checked out at the pinned commit.
+git fetch --tags --no-recurse-submodules --quiet || error "Could not refresh tags. Refusing to pick a beta number from stale tag history (would risk reusing an already-published beta tag and failing the tag push after the store uploads)."
 LAST_N=$(git tag -l "v${TARGET_VERSION}-beta.*" | sed -E "s/.*-beta\.([0-9]+)$/\1/" | sort -n | tail -1)
 N=$(( ${LAST_N:-0} + 1 ))
 BETA_VERSION="${TARGET_VERSION}-beta.${N}"
