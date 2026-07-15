@@ -458,7 +458,7 @@ let _msgIdSeq = 0; const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toStri
 /** The outcome of the shared post-decision dispatch: either the turn is fully HANDLED here (an image was
  *  generated, or the text route bailed because no text model could be provisioned), or the caller must run
  *  its own text executor with the (possibly image-fallback-augmented) messageText. */
-export type ResolvedDispatch = { handled: true } | { handled: false; messageText: string };
+type ResolvedDispatch = { handled: true } | { handled: false; messageText: string };
 
 /**
  * THE single post-decision dispatch seam — shared by send (dispatchGenerationFn) AND resend
@@ -470,7 +470,7 @@ export type ResolvedDispatch = { handled: true } | { handled: false; messageText
  * activeImageModel guard) and had no text-provision path, so the same prompt behaved differently on
  * resend vs send when no image model / no text model was loaded. This is now decided in ONE place.
  */
-export async function dispatchResolvedTurn(
+async function dispatchResolvedTurn(
   deps: GenerationDeps,
   kind: TurnKind,
   opts: {

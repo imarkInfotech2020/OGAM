@@ -32,7 +32,7 @@ export const TOOL_CALL_CLOSERS: string[] = ['<tool_call|>', '</tool_call>'];
  */
 export const XML_TOOL_CALL_FUNCTION_MARKER = String.raw`<function=(\w+)>`;
 export const XML_TOOL_CALL_PARAMETER_MARKER = String.raw`<parameter=(\w+)>`;
-export const XML_TOOL_CALL_FUNCTION_CLOSER = '</function>';
+const XML_TOOL_CALL_FUNCTION_CLOSER = '</function>';
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const CLOSERS_ALT = TOOL_CALL_CLOSERS.map(escapeRegExp).join('|');
@@ -211,7 +211,7 @@ export function stripStreamingControlTokens(content: string): string {
  * Strip markdown formatting for TTS speech. Preserves the readable text
  * but removes syntax that Kokoro would read aloud as literal characters.
  */
-export function stripMarkdownForSpeech(content: string): string {
+function stripMarkdownForSpeech(content: string): string {
   let result = content;
   // Headers: ### Title → Title
   result = result.replace(/^#{1,6}\s+/gm, '');
