@@ -15,7 +15,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20macOS-green.svg)](#install)
 [![codecov](https://codecov.io/gh/alichherawalla/off-grid-mobile/graph/badge.svg)](https://codecov.io/gh/alichherawalla/off-grid-mobile)
 [![Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack)](https://join.slack.com/t/off-grid-mobile/shared_invite/zt-411pbtz7r-lcOK4YCeY40vh_~FUdcvLA)
-[![Pro](https://img.shields.io/badge/Off%20Grid%20Pro-%2450%20lifetime-000000?style=flat)](https://offgridmobileai.co/pay/)
+[![Pro](https://img.shields.io/badge/Off%20Grid%20Pro-%2469%20lifetime%20and%20%2449%20annual-000000?style=flat)](https://offgridmobileai.co/pay/)
 
 </div>
 
