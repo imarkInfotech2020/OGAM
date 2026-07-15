@@ -9,6 +9,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { MediaAttachment } from '../../types';
 import { documentService } from '../../services/documentService';
+import { audioSessionManager } from '../../services/audioSessionManager';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
@@ -40,6 +41,10 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
 
   const pickFromLibrary = async () => {
     try {
+      // Release the iOS audio session first: in voice mode the active playback session
+      // collides with the native picker and hangs the app (device 2026-07-15). No-op on
+      // Android and when no session is active.
+      await audioSessionManager.deactivate();
       const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (_pickError) {
@@ -49,6 +54,9 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
 
   const pickFromCamera = async () => {
     try {
+      // Release the iOS audio session first (see pickFromLibrary): the camera grabs audio
+      // hardware and collides with an active voice-mode session. No-op on Android.
+      await audioSessionManager.deactivate();
       const result = await launchCamera({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
       if (result.assets && result.assets.length > 0) addAttachments(result.assets);
     } catch (_cameraError) {
