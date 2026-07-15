@@ -170,8 +170,6 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     }
     // Completed bytes are gone and nothing valid survives — re-download instead of dead-ending
     // on the same "no such file" every retry (the iOS temp-purge symptom). Does not rethrow.
-    // Completed bytes are gone and nothing valid survives — re-download instead of dead-ending
-    // on the same "no such file" every retry (the iOS temp-purge symptom). Does not rethrow.
     if (!recoveredZipValid) {
       logger.warn(`[ImageDownload] resumeImageDownload zip - completed bytes unrecoverable (${error?.message || error}) — re-downloading ${modelId}`);
       await reDownloadFromMetadata(ctx);
