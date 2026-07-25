@@ -47,12 +47,6 @@ const COREML_MODELS: TestImageModel[] = [
     backend: 'coreml',
   },
   {
-    id: 'coreml_apple_coreml-stable-diffusion-xl-base-ios',
-    name: 'SDXL (iOS)',
-    repo: 'apple/coreml-stable-diffusion-xl-base-ios',
-    backend: 'coreml',
-  },
-  {
     id: 'coreml_apple_coreml-stable-diffusion-v1-5',
     name: 'SD 1.5',
     repo: 'apple/coreml-stable-diffusion-v1-5',
@@ -90,36 +84,11 @@ describe('isRecommendedModel', () => {
   // ========================================================================
   // iOS Core ML recommendations
   // ========================================================================
-  describe('iOS Core ML — high-end (SDXL)', () => {
-    const rec: ImageModelRecommendation = {
-      recommendedBackend: 'coreml',
-      recommendedModels: ['sdxl', 'xl-base'],
-      bannerText: 'All models supported — SDXL for best quality',
-      compatibleBackends: ['coreml'],
-    };
+  // SDXL is no longer offered or recommended on iOS (its ~7 GB dirty Core ML footprint jetsams even
+  // a 12 GB device). High-end devices now get SD 2.1 Palettized as the top pick — covered by the
+  // mid-range/palettized block below and by hardware.test.ts's getImageModelRecommendation tiers.
 
-    it('matches SDXL model via repo (xl-base)', () => {
-      const sdxl = findModel(COREML_MODELS, 'xl-base');
-      expect(isRecommendedModel(sdxl, rec)).toBe(true);
-    });
-
-    it('does not match SD 1.5 Palettized', () => {
-      const sd15p = findModel(COREML_MODELS, 'v1-5-palettized');
-      expect(isRecommendedModel(sd15p, rec)).toBe(false);
-    });
-
-    it('does not match SD 2.1 Palettized', () => {
-      const sd21p = findModel(COREML_MODELS, '2-1-base-palettized');
-      expect(isRecommendedModel(sd21p, rec)).toBe(false);
-    });
-
-    it('does not match full-precision SD 1.5', () => {
-      const sd15 = COREML_MODELS.find(m => m.id === 'coreml_apple_coreml-stable-diffusion-v1-5')!;
-      expect(isRecommendedModel(sd15, rec)).toBe(false);
-    });
-  });
-
-  describe('iOS Core ML — mid-range (SD 1.5/2.1 Palettized)', () => {
+  describe('iOS Core ML — high-end + mid-range (SD 2.1 / 1.5 Palettized)', () => {
     const rec: ImageModelRecommendation = {
       recommendedBackend: 'coreml',
       recommendedModels: ['v1-5-palettized', '2-1-base-palettized'],
@@ -135,11 +104,6 @@ describe('isRecommendedModel', () => {
     it('matches SD 2.1 Palettized', () => {
       const sd21p = findModel(COREML_MODELS, '2-1-base-palettized');
       expect(isRecommendedModel(sd21p, rec)).toBe(true);
-    });
-
-    it('does not match SDXL', () => {
-      const sdxl = findModel(COREML_MODELS, 'xl-base');
-      expect(isRecommendedModel(sdxl, rec)).toBe(false);
     });
 
     it('does not match full-precision SD 1.5 (no "palettized" in repo)', () => {
@@ -164,11 +128,6 @@ describe('isRecommendedModel', () => {
     it('does not match SD 2.1 Palettized', () => {
       const sd21p = findModel(COREML_MODELS, '2-1-base-palettized');
       expect(isRecommendedModel(sd21p, rec)).toBe(false);
-    });
-
-    it('does not match SDXL', () => {
-      const sdxl = findModel(COREML_MODELS, 'xl-base');
-      expect(isRecommendedModel(sdxl, rec)).toBe(false);
     });
   });
 

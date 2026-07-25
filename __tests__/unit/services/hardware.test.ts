@@ -902,7 +902,8 @@ describe('HardwareService', () => {
     });
 
     describe('iOS recommendations', () => {
-      it('recommends SDXL for high-end devices (A17Pro+, 6GB+)', async () => {
+      it('recommends SD 2.1 Palettized (NOT SDXL) for high-end devices (A17Pro+, 6GB+)', async () => {
+        // SDXL jetsams even top-tier iOS devices (~7 GB dirty Core ML) → never recommended/offered.
         await setupDevice({
           totalGB: 8,
           platform: 'ios',
@@ -911,9 +912,11 @@ describe('HardwareService', () => {
         const rec = await hardwareService.getImageModelRecommendation();
         expect(rec.recommendedBackend).toBe('coreml');
         expect(rec.recommendedModels).toEqual(
-          expect.arrayContaining(['sdxl', 'xl-base']),
+          expect.arrayContaining(['2-1-base-palettized', 'v1-5-palettized']),
         );
-        expect(rec.bannerText).toContain('SDXL');
+        expect(rec.recommendedModels).not.toContain('sdxl');
+        expect(rec.recommendedModels).not.toContain('xl-base');
+        expect(rec.bannerText).not.toContain('SDXL');
       });
 
       it('recommends SD 1.5/2.1 palettized for mid-range (A15/A16, 6GB+)', async () => {

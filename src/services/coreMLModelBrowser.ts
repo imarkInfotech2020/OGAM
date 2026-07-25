@@ -31,7 +31,9 @@ interface HFTreeEntry {
 // All Apple Core ML Stable Diffusion repos.
 // Palettized = 6-bit quantized, ~50% smaller, have ZIP downloads.
 // Full precision = larger but higher quality, multi-file download required.
-// SDXL iOS = 4-bit mixed-bit palettized, 768×768, ANE-optimized.
+// NOTE: SDXL (apple/coreml-stable-diffusion-xl-base-ios) is intentionally NOT offered on iOS.
+// Its Core ML runtime footprint is ~7 GB of DIRTY (un-pageable) memory, which jetsams even a
+// 12 GB iPhone 17 Pro Max mid-load. The 512×512 palettized SD models are the ceiling we ship.
 interface RepoEntry {
   repo: string;
   name: string;
@@ -62,11 +64,6 @@ const REPOS: RepoEntry[] = [
     name: 'SD 2.1 Palettized (Low RAM)',
     description: '6-bit quantized, 512×512, CPU/GPU — fits ≤4 GB devices',
     variant: 'original',
-  },
-  {
-    repo: 'apple/coreml-stable-diffusion-xl-base-ios',
-    name: 'SDXL (iOS)',
-    description: '4-bit quantized, 768×768, ANE-optimized',
   },
   {
     repo: 'apple/coreml-stable-diffusion-v1-5',
