@@ -20,6 +20,7 @@ import { ImageTab } from './ImageTab';
 import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
+  isUnsupportedJetsamImageModel,
 } from '../../utils/modelSelectorFilters';
 import logger from '../../utils/logger';
 
@@ -95,7 +96,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     [downloadedModels],
   );
   const filteredDownloadedImageModels = useMemo(
-    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
+    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model) && !isUnsupportedJetsamImageModel(model)),
     [downloadedImageModels],
   );
 

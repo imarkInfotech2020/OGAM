@@ -370,7 +370,10 @@ class HardwareService {
   private getIosImageRec(chip: SoCInfo['appleChip'], ramGB: number): ImageModelRecommendation {
     const coreml = 'coreml';
     if ((chip === 'A17Pro' || chip === 'A18') && ramGB >= 6)
-      return { recommendedBackend: coreml, recommendedModels: ['sdxl', 'xl-base'], bannerText: 'All models supported \u2014 SDXL for best quality', compatibleBackends: [coreml] };
+      // SDXL is NOT recommended (nor offered) on iOS \u2014 its ~7 GB dirty Core ML footprint jetsams
+      // even top-tier devices (see coreMLModelBrowser). SD 2.1 Palettized (6-bit, ANE) is the
+      // best-quality model that loads safely, so big devices get it as the top pick.
+      return { recommendedBackend: coreml, recommendedModels: ['2-1-base-palettized', 'v1-5-palettized'], bannerText: 'SD 2.1 Palettized recommended \u2014 best quality for your device', compatibleBackends: [coreml] };
     if ((chip === 'A15' || chip === 'A16') && ramGB >= 6)
       return { recommendedBackend: coreml, recommendedModels: ['v1-5-palettized', '2-1-base-palettized'], bannerText: 'SD 1.5 or SD 2.1 Palettized recommended', compatibleBackends: [coreml] };
     if (ramGB < 4)

@@ -24,6 +24,7 @@ import { needsVisionRepair } from '../../utils/visionRepair';
 import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
+  isUnsupportedJetsamImageModel,
 } from '../../utils/modelSelectorFilters';
 
 export type { AlertState };
@@ -205,7 +206,7 @@ export const useChatScreen = () => {
     [downloadedModels],
   );
   const availableDownloadedImageModels = useMemo(
-    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model)),
+    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model) && !isUnsupportedJetsamImageModel(model)),
     [downloadedImageModels],
   );
   const hasAvailableModels =
