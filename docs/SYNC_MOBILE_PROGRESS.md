@@ -50,3 +50,17 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 
 ## Branch
 `feat/sync-integration-phase0` (mobile). Commits are small + each has tests + hygiene.
+
+## Prior-art decision (2026-07-26)
+`feature/sync` (based 2026-07-09, now **708 commits behind main**) has a full prior mobile
+Track-A implementation: `src/services/backup/{backupArchive,backupData,backupFiles,backupIo,
+backupService,types}.ts` (the four-port adapters over `@offgrid/sync/portable` — CURRENT API,
+`BackupEngine`/`BackupDataPort`/`BundleError`), a `BackupRestoreScreen`, `portableWorkspace/import
+journal`, and store/RAG changes. It's the impl the desktop plan mirrors.
+**Decision:** do NOT merge the stale branch (708 commits of store/screen/RAG drift = conflict mess).
+Instead, in **Phase 1**: reuse the four-port ARCHITECTURE + lift the near-pure adapters
+(archive/files/io) as reference, and REWRITE `backupData` against current stores (chatStore/
+projectStore/appStore/ragService have all drifted). The transport layer (Phase 0, this branch) is
+fresh + aligned to the current `@offgrid/sync` package — keep it. Envelope + ID-stability rules
+(projects/threads/conversations = merge-by-id; messages/chunks/memories = rebuild) come from the
+shared package, matching desktop.

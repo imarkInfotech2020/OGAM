@@ -325,6 +325,19 @@ function App() {
     initializeApp();
   }, [initializeApp]);
 
+  // DEV ONLY: prove the @offgrid/sync transport on real devices (discovery + NaCl handshake).
+  // Dynamically imported + double-gated so it never touches release builds. Removed once the Pro
+  // Sync UI drives the engine. Delayed so the app is interactive before the mDNS/TCP scan starts.
+  useEffect(() => {
+    if (!__DEV__) return;
+    const t = setTimeout(() => {
+      import('./src/services/sync/devHarness')
+        .then((m) => { if (m.SYNC_DEV_HARNESS) return m.startSyncDevHarness(); })
+        .catch(() => { /* dev harness is best-effort */ });
+    }, 4000);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleUnlock = useCallback(() => {
     setLocked(false);
   }, [setLocked]);
