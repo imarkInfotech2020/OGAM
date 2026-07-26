@@ -1,0 +1,82 @@
+// The ONE module that binds @offgrid/sync to React Native's real native networking. It injects
+// react-native-tcp-socket (transport) and react-native-zeroconf (mDNS) into the package's adapters
+// via the tested buildSyncEngine / buildDiscovery factories, and owns start/stop sequencing. Kept
+// deliberately thin: all logic worth testing lives in the factories (unit-tested off-device) and in
+// @offgrid/sync itself; this file is the app-level wiring that can only run on a device.
+import { Platform } from 'react-native';
+import TcpSocket from 'react-native-tcp-socket';
+import Zeroconf from 'react-native-zeroconf';
+import type { DeviceInfo, DiscoveredDevice, PairedDevice, Message } from '@offgrid/sync';
+import type { RnTcpModule } from '@offgrid/sync/rn';
+import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
+import { buildSyncEngine } from './engine';
+import { buildDiscovery } from './discovery';
+import logger from '../../utils/logger';
+
+export interface NativeSyncCallbacks {
+  /** Passphrase for an INBOUND pairing (UI prompt). Return null to refuse. */
+  getPassphrase?: (remote: DeviceInfo) => Promise<string | null | undefined> | string | null | undefined;
+  /** Stored shared secret for a device (for silent reconnect). */
+  getSharedSecret?: (deviceId: string) => string | undefined;
+  onPaired?: (device: PairedDevice) => void;
+  onPairingFailed?: (remote: DeviceInfo | undefined, error: string) => void;
+  onDiscovered?: (device: DiscoveredDevice) => void;
+  onLost?: (deviceId: string) => void;
+  onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
+  onMessage?: (deviceId: string, message: Message) => void;
+}
+
+export interface NativeSync {
+  readonly localDevice: DeviceInfo;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  pair(device: DeviceInfo, passphrase: string): Promise<void>;
+  sendApp(deviceId: string, channel: string, data: unknown): boolean;
+  isPaired(deviceId: string): boolean;
+}
+
+/** Construct (but don't start) the mobile Sync stack for a given local device. */
+export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbacks): NativeSync {
+  const { engine, transport } = buildSyncEngine({
+    localDevice,
+    tcpModule: TcpSocket as unknown as RnTcpModule,
+    getPassphrase: cbs.getPassphrase,
+    getSharedSecret: cbs.getSharedSecret,
+    onPaired: cbs.onPaired,
+    onPairingFailed: cbs.onPairingFailed,
+    onMessage: cbs.onMessage,
+    onAppMessage: cbs.onAppMessage,
+  });
+  const zeroconf = new Zeroconf() as unknown as RnZeroconf;
+  const orchestrator = buildDiscovery({
+    zeroconf,
+    engine,
+    localDevice,
+    getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
+    onDiscovered: cbs.onDiscovered,
+    onLost: cbs.onLost,
+  });
+
+  return {
+    localDevice,
+    async start() {
+      await engine.start(0); // ephemeral port
+      localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
+      await orchestrator.start();
+      logger.log(`[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`);
+    },
+    async stop() {
+      await orchestrator.stop();
+      await engine.stop();
+      logger.log('[SYNC] stopped');
+    },
+    pair: (device, passphrase) => engine.pair(device, passphrase),
+    sendApp: (deviceId, channel, data) => engine.sendApp(deviceId, channel, data),
+    isPaired: (deviceId) => engine.isPaired(deviceId),
+  };
+}
+
+/** Best-effort platform tag for DeviceInfo. */
+export function currentPlatform(): DeviceInfo['platform'] {
+  return Platform.OS === 'ios' ? 'ios' : 'android';
+}

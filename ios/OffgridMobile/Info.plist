@@ -52,6 +52,7 @@
 		<string>_http._tcp</string>
 		<string>_ollama._tcp</string>
 		<string>_lmstudio._tcp</string>
+		<string>_offgrid._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs access to your camera to take photos and attach them to conversations.</string>
