@@ -29,7 +29,7 @@ type Props = {
 function messageFor(reason: Extract<ActivateResult, { ok: false }>['reason']): string {
   switch (reason) {
     case 'limit':
-      return 'This key is already on its 5 devices. Remove one on a device where Pro is active, then try again.';
+      return 'This device could not replace the least recently seen device. Check your connection and try again.';
     case 'network':
       return 'Could not reach the licensing server. Check your connection and try again.';
     default:

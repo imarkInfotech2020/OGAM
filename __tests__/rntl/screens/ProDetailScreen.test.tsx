@@ -123,13 +123,13 @@ describe('ProDetailScreen', () => {
     await waitFor(() => expect(getByText(/isn't valid or active/)).toBeTruthy());
   });
 
-  it('shows the device-limit error when the key is on its 5 devices', async () => {
+  it('shows a retryable error when automatic device replacement fails', async () => {
     mockActivateProByKey.mockResolvedValueOnce({ ok: false, reason: 'limit' });
     const { getByText, getByTestId } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));
     fireEvent.changeText(getByTestId('license-key-input'), 'key/full');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() => expect(getByText(/already on its 5 devices/)).toBeTruthy());
+    await waitFor(() => expect(getByText(/could not replace the least recently seen device/)).toBeTruthy());
   });
 
   it('keeps the activate button disabled until a key is entered', async () => {
