@@ -18,6 +18,8 @@ import {
   loadDownloadedModels,
   loadDownloadedImageModels,
 } from './storage';
+import type { TransferredModelManifest } from '@offgrid/sync';
+import { registerTransferredModelFile } from './transferAdmission';
 import {
   performBackgroundDownload,
   watchBackgroundDownload,
@@ -377,6 +379,16 @@ class ModelManager {
   async importLocalModel(opts: Omit<ImportLocalModelOpts, 'modelsDir'>): Promise<DownloadedModel> {
     await this.initialize();
     return scanImportLocalModel({ ...opts, modelsDir: this.modelsDir });
+  }
+
+  getModelsDirectory(): string {
+    return this.modelsDir;
+  }
+
+  async registerTransferredModel(manifest: TransferredModelManifest): Promise<DownloadedModel> {
+    const model = await registerTransferredModelFile(manifest, this.modelsDir);
+    useAppStore.getState().setDownloadedModels(await this.getDownloadedModels());
+    return model;
   }
 
   async getDownloadedImageModels(): Promise<ONNXImageModel[]> {

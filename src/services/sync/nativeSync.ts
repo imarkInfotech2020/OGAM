@@ -20,6 +20,7 @@ export interface NativeSyncCallbacks {
   getSharedSecret?: (deviceId: string) => string | undefined;
   onPaired?: (device: PairedDevice) => void;
   onPairingFailed?: (remote: DeviceInfo | undefined, error: string) => void;
+  onDisconnected?: (deviceId: string) => void;
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
@@ -31,6 +32,7 @@ export interface NativeSync {
   start(): Promise<void>;
   stop(): Promise<void>;
   pair(device: DeviceInfo, passphrase: string): Promise<void>;
+  send(deviceId: string, message: Message): boolean;
   sendApp(deviceId: string, channel: string, data: unknown): boolean;
   isPaired(deviceId: string): boolean;
 }
@@ -44,6 +46,7 @@ export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbac
     getSharedSecret: cbs.getSharedSecret,
     onPaired: cbs.onPaired,
     onPairingFailed: cbs.onPairingFailed,
+    onDisconnected: cbs.onDisconnected,
     onMessage: cbs.onMessage,
     onAppMessage: cbs.onAppMessage,
   });
@@ -71,6 +74,7 @@ export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbac
       logger.log('[SYNC] stopped');
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),
+    send: (deviceId, message) => engine.send(deviceId, message),
     sendApp: (deviceId, channel, data) => engine.sendApp(deviceId, channel, data),
     isPaired: (deviceId) => engine.isPaired(deviceId),
   };
