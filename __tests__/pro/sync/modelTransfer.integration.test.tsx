@@ -1,3 +1,15 @@
+import React from 'react';
+import {
+  fireEvent,
+  render,
+  waitFor as waitForRender,
+} from '@testing-library/react-native';
+
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => ({ goBack: jest.fn() }),
+}));
+
 jest.mock('react-native-tcp-socket', () => {
   const {
     createNativeTcpBoundary,
@@ -23,7 +35,7 @@ jest.mock('react-native-fs', () => {
   };
 });
 
-const waitFor = async (
+const waitForCondition = async (
   condition: () => boolean,
   timeoutMs = 3000,
 ): Promise<void> => {
@@ -36,7 +48,7 @@ const waitFor = async (
 };
 
 describe('Pro mobile model transfer journey', () => {
-  it('receives an encrypted GGUF and exposes it through the real downloaded-model registry', async () => {
+  it('receives, registers, and sends an encrypted GGUF through the rendered Sync journey', async () => {
     const {
       modelTransferFsBoundary: boundary,
     } = require('../../utils/modelTransferFsBoundary');
@@ -54,6 +66,7 @@ describe('Pro mobile model transfer journey', () => {
     const {
       modelTransferService,
     } = require('../../../pro/sync/modelTransferService');
+    const { SyncScreen } = require('../../../pro/ui/SyncScreen');
     const { useSyncStore } = require('../../../pro/sync/syncStore');
     const { modelManager } = require('../../../src/services/modelManager');
     const {
@@ -97,7 +110,7 @@ describe('Pro mobile model transfer journey', () => {
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'green-river-52',
     );
-    await waitFor(() =>
+    await waitForCondition(() =>
       useSyncStore
         .getState()
         .paired.some((device: { id: string }) => device.id === remoteDevice.id),
@@ -108,10 +121,40 @@ describe('Pro mobile model transfer journey', () => {
     const checksum = new IncrementalChecksum();
     checksum.update(payload);
     const fileName = 'gemma-mobile-Q4_K_M.gguf';
+    let returnedModel: Buffer | undefined;
+    let returnedFileName: string | undefined;
     remoteTransfers = new FileTransferManager({
       send: (deviceId: string, message: unknown) =>
         remote.engine.send(deviceId, message),
-      createSink: async () => null,
+      createSink: async (
+        _deviceId: string,
+        request: {
+          payload: {
+            fileName: string;
+            fileSize: number;
+            checksum: string;
+          };
+        },
+      ) => {
+        const received = Buffer.alloc(request.payload.fileSize);
+        return {
+          prepare: async () => 0,
+          write: async (offset: number, data: Uint8Array) => {
+            Buffer.from(data).copy(received, offset);
+          },
+          finalize: async () => {
+            const receivedChecksum = new IncrementalChecksum();
+            receivedChecksum.update(received);
+            if (receivedChecksum.digest() !== request.payload.checksum) {
+              return false;
+            }
+            returnedModel = received;
+            returnedFileName = request.payload.fileName;
+            return true;
+          },
+          abort: async () => undefined,
+        };
+      },
     });
 
     await remoteTransfers.sendFile(mobile.id, {
@@ -177,9 +220,7 @@ describe('Pro mobile model transfer journey', () => {
         },
         checksum: async () => invalidChecksum.digest(),
         read: async (offset: number, length: number) =>
-          new Uint8Array(
-            invalidPayload.subarray(offset, offset + length),
-          ),
+          new Uint8Array(invalidPayload.subarray(offset, offset + length)),
       }),
     ).rejects.toThrow('receiver could not verify or register the file');
     expect(await modelManager.getDownloadedModels()).toHaveLength(1);
@@ -193,6 +234,40 @@ describe('Pro mobile model transfer journey', () => {
         `${boundary.DocumentDirectoryPath}/models/${invalidFileName}.part`,
       ),
     ).toBe(false);
+
+    const ui = render(<SyncScreen />);
+    fireEvent.press(ui.getByTestId(`sync-send-model-${remoteDevice.id}`));
+    await waitForRender(() =>
+      expect(
+        ui.getByTestId(`transfer-model-google/gemma-mobile/${fileName}`),
+      ).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByTestId('send-selected-model'));
+
+    await waitForRender(
+      () =>
+        expect(
+          ui.getByText(`Gemma Mobile is available on ${remoteDevice.name}.`),
+        ).toBeTruthy(),
+      { timeout: 5000 },
+    );
+    expect(returnedFileName).toBe(fileName);
+    expect(returnedModel).toEqual(payload);
+    expect(ui.getAllByText(`Sent ${fileName}`).length).toBeGreaterThanOrEqual(
+      1,
+    );
+    ui.unmount();
+
+    const transferredModelId = `google/gemma-mobile/${fileName}`;
+    for (let index = 0; index < 21; index += 1) {
+      await expect(
+        modelTransferService.sendModel(
+          `offline-device-${index}`,
+          transferredModelId,
+        ),
+      ).rejects.toThrow('device is not connected');
+    }
+    expect(modelTransferService.getProgressSnapshot()).toHaveLength(20);
 
     await remoteTransfers.dispose();
     await remote.engine.stop();
