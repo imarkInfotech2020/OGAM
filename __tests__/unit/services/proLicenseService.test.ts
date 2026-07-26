@@ -53,6 +53,8 @@ describe('proLicenseService (Keygen)', () => {
     setGenericPassword.mockResolvedValue(true);
     resetGenericPassword.mockResolvedValue(true);
     validateKey.mockResolvedValue({ valid: false, code: 'UNKNOWN', license: null });
+    listMachines.mockResolvedValue([]);
+    deactivateMachine.mockResolvedValue(false);
   });
 
   describe('readProFromKeychain()', () => {
@@ -111,9 +113,20 @@ describe('proLicenseService (Keygen)', () => {
       expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'limit' });
     });
 
-    it('reports limit when validate already says TOO_MANY_MACHINES', async () => {
+    it('replaces the least recently seen device when validate says TOO_MANY_MACHINES', async () => {
       validateKey.mockResolvedValueOnce({ valid: false, code: 'TOO_MANY_MACHINES', license: { id: 'lic-1', expiry: null, metadata: {}, name: null } });
-      expect(await activateProByKey('key/abc')).toEqual({ ok: false, reason: 'limit' });
+      activateMachine
+        .mockResolvedValueOnce({ ok: false, limitReached: true })
+        .mockResolvedValueOnce({ ok: true, limitReached: false });
+      listMachines.mockResolvedValueOnce([
+        { id: 'recent', fingerprint: 'fp-recent', platform: 'android', name: null, lastSeen: '2026-07-20T00:00:00Z' },
+        { id: 'oldest', fingerprint: 'fp-oldest', platform: 'ios', name: null, lastSeen: '2026-01-01T00:00:00Z' },
+      ]);
+      deactivateMachine.mockResolvedValueOnce(true);
+
+      expect(await activateProByKey('key/abc')).toEqual({ ok: true });
+      expect(deactivateMachine).toHaveBeenCalledWith('key/abc', 'oldest');
+      expect(activateMachine).toHaveBeenCalledTimes(2);
     });
 
     it('reports invalid for an unknown / not-found key', async () => {

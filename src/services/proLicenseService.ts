@@ -26,6 +26,7 @@ const KEYCHAIN_SERVICE = 'off-grid-pro-license';
 // Public web pay page (RevenueCat checkout). "Get Pro" opens this; the buyer is
 // emailed a license key by the issuance Worker and enters it via activateProByKey.
 export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
+export const PRO_DEVICE_LIMIT = 5;
 
 export type ActivateResult = { ok: true } | { ok: false; reason: 'invalid' | 'limit' | 'network' };
 
@@ -42,6 +43,47 @@ const EMPTY: ProLicense = { isPro: false, key: null, licenseId: null, expiry: nu
 const REVOKED_CODES = ['EXPIRED', 'SUSPENDED', 'BANNED', 'OVERDUE', 'NOT_FOUND'];
 const NEEDS_ACTIVATION = ['NO_MACHINE', 'NO_MACHINES', 'FINGERPRINT_SCOPE_MISMATCH'];
 
+function lastSeenTimestamp(machine: KeygenMachine): number {
+  if (!machine.lastSeen) return Number.NEGATIVE_INFINITY;
+  const timestamp = Date.parse(machine.lastSeen);
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+/**
+ * A sixth device replaces the machine least recently seen. Keygen's machine
+ * response uses lastHeartbeat when available and creation time otherwise, so
+ * this is stable for clients that do not heartbeat yet.
+ */
+function selectReplacementMachine(
+  machines: KeygenMachine[],
+  currentFingerprint: string,
+): KeygenMachine | undefined {
+  return machines
+    .filter((machine) => machine.fingerprint !== currentFingerprint)
+    .sort((left, right) => {
+      const timestampDifference = lastSeenTimestamp(left) - lastSeenTimestamp(right);
+      return timestampDifference || left.id.localeCompare(right.id);
+    })[0];
+}
+
+async function activateWithAutomaticReplacement(
+  key: string,
+  licenseId: string,
+  device: { fingerprint: string; platform: string },
+): Promise<{ ok: boolean; limitReached: boolean }> {
+  const activation = await activateMachine(key, licenseId, device);
+  if (activation.ok || !activation.limitReached) return activation;
+
+  const machines = await listMachines(key, licenseId);
+  const replacement = selectReplacementMachine(machines, device.fingerprint);
+  if (!replacement) return activation;
+
+  const removed = await deactivateMachine(key, replacement.id);
+  if (!removed) return activation;
+
+  logger.log(`[Pro] replaced least recently seen device ${replacement.id}`);
+  return activateMachine(key, licenseId, device);
+}
 
 function setProInStore(isPro: boolean): void {
   const { useAppStore } = require('../stores/appStore');
@@ -50,11 +92,9 @@ function setProInStore(isPro: boolean): void {
 
 /** Whether the cached license grants Pro right now (offline-safe). */
 function isProActive(lic: ProLicense): boolean {
-  if (!lic.isPro) return false;
   // Monthly keys carry an expiry — once it passes, no Pro even offline. Lifetime
   // keys have null expiry. Revocation propagates at the next online revalidate.
-  if (lic.expiry && Date.parse(lic.expiry) <= Date.now()) return false;
-  return true;
+  return lic.isPro && (!lic.expiry || Date.parse(lic.expiry) > Date.now());
 }
 
 async function writeLicense(lic: ProLicense): Promise<void> {
@@ -157,9 +197,14 @@ export async function revalidatePro(): Promise<void> {
     } else if (REVOKED_CODES.includes(r.code)) {
       await writeLicense({ ...lic, isPro: false, expiry: r.license?.expiry ?? lic.expiry, verifiedAt: Date.now() });
       setProInStore(false);
-    } else if (NEEDS_ACTIVATION.includes(r.code) && r.license) {
-      // Valid key but this device lost its slot — try to reclaim it.
-      const act = await activateMachine(lic.key, r.license.id, { fingerprint: fp, platform: getPlatformTag() });
+    } else if ((NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') && r.license) {
+      // Valid key but this device lost its slot. A full license replaces the
+      // least recently seen machine before claiming this device.
+      const act = await activateWithAutomaticReplacement(
+        lic.key,
+        r.license.id,
+        { fingerprint: fp, platform: getPlatformTag() },
+      );
       await writeLicense({
         isPro: act.ok,
         key: lic.key,
@@ -169,7 +214,7 @@ export async function revalidatePro(): Promise<void> {
       });
       setProInStore(act.ok);
     }
-    // TOO_MANY_MACHINES / UNKNOWN: leave the cached state untouched.
+    // UNKNOWN: leave the cached state untouched.
   } catch (e) {
     if (e instanceof KeygenNetworkError) return; // offline — keep cached access
     logger.error(`[Pro] revalidate error: ${e instanceof Error ? e.message : String(e)}`);
@@ -203,14 +248,18 @@ export async function activateProByKey(rawKey: string): Promise<ActivateResult> 
     setProInStore(true);
     return { ok: true };
   }
-  if (r.code === 'TOO_MANY_MACHINES') return { ok: false, reason: 'limit' };
   if (REVOKED_CODES.includes(r.code) || !r.license) return { ok: false, reason: 'invalid' };
 
-  // Valid key, this device not yet activated — claim a slot.
-  if (NEEDS_ACTIVATION.includes(r.code)) {
+  // Valid key, this device not yet activated. If all five slots are occupied,
+  // remove the least recently seen machine and claim its slot.
+  if (NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') {
     let act;
     try {
-      act = await activateMachine(key, r.license.id, { fingerprint: fp, platform: getPlatformTag() });
+      act = await activateWithAutomaticReplacement(
+        key,
+        r.license.id,
+        { fingerprint: fp, platform: getPlatformTag() },
+      );
     } catch {
       return { ok: false, reason: 'network' };
     }
