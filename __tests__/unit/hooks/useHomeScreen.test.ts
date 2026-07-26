@@ -64,41 +64,44 @@ const mockCreateConversation = jest.fn(() => 'conv-new');
 const mockSetActiveConversation = jest.fn();
 const mockDeleteConversation = jest.fn();
 
-jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn((selector?: any) => {
-    const state = {
-      downloadedModels: [],
-      setDownloadedModels: jest.fn(),
-      activeModelId: null,
-      setActiveModelId: jest.fn(),
-      downloadedImageModels: [],
-      setDownloadedImageModels: jest.fn(),
-      activeImageModelId: null,
-      setActiveImageModelId: jest.fn(),
-      deviceInfo: { deviceName: 'TestPhone' },
-      setDeviceInfo: jest.fn(),
-      generatedImages: [],
-      settings: { contextLength: 4096 },
-    };
-    return selector ? selector(state) : state;
-  }),
-  useChatStore: jest.fn(() => ({
-    conversations: [],
-    createConversation: mockCreateConversation,
-    setActiveConversation: mockSetActiveConversation,
-    deleteConversation: mockDeleteConversation,
-  })),
-  useRemoteServerStore: jest.fn((selector?: any) => {
-    const state = {
-      servers: [],
-      discoveredModels: {},
-      activeRemoteTextModelId: null,
-      activeRemoteImageModelId: null,
-      activeServerId: null,
-    };
-    return selector ? selector(state) : state;
-  }),
-}));
+jest.mock('../../../src/stores', () => {
+  const appState = {
+    downloadedModels: [],
+    setDownloadedModels: jest.fn(),
+    activeModelId: null,
+    setActiveModelId: jest.fn(),
+    downloadedImageModels: [],
+    setDownloadedImageModels: jest.fn(),
+    activeImageModelId: null,
+    setActiveImageModelId: jest.fn(),
+    deviceInfo: { deviceName: 'TestPhone' },
+    setDeviceInfo: jest.fn(),
+    generatedImages: [],
+    settings: { contextLength: 4096 },
+    updateSettings: jest.fn(),
+  };
+  const remoteState = {
+    servers: [] as any[],
+    discoveredModels: {},
+    activeRemoteTextModelId: null,
+    activeRemoteImageModelId: null,
+    activeServerId: null,
+  };
+  const useAppStore: any = jest.fn((selector?: any) => (selector ? selector(appState) : appState));
+  useAppStore.getState = () => appState;
+  const useRemoteServerStore: any = jest.fn((selector?: any) => (selector ? selector(remoteState) : remoteState));
+  useRemoteServerStore.getState = () => remoteState;
+  return {
+    useAppStore,
+    useChatStore: jest.fn(() => ({
+      conversations: [],
+      createConversation: mockCreateConversation,
+      setActiveConversation: mockSetActiveConversation,
+      deleteConversation: mockDeleteConversation,
+    })),
+    useRemoteServerStore,
+  };
+});
 
 jest.mock('../../../src/utils/logger', () => ({
   __esModule: true,

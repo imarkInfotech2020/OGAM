@@ -3,6 +3,8 @@ import { showAlert, hideAlert } from '../../../components';
 import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
+import { useAppStore } from '../../../stores/appStore';
+import { shouldAutoDiscoverRemoteModels } from '../../../utils/remoteAutoDiscovery';
 import type { HomeScreenNavigationProp } from './types';
 import type { RemoteServer } from '../../../types';
 import logger from '../../../utils/logger';
@@ -67,6 +69,14 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
   }, [navigation, setAlertState]);
 
   const runLANDiscovery = useCallback(async () => {
+    // The automatic LAN scan runs only when the user has enabled auto-discovery. Fresh installs are
+    // OFF — never scan the network unprompted. (The "Scan Network" button is a separate, explicit
+    // action and is NOT gated here.)
+    if (!shouldAutoDiscoverRemoteModels(useAppStore.getState().settings)) {
+      logger.log('[HomeScreen] LAN auto-discovery disabled in settings — skipping');
+      return;
+    }
+    logger.log('[HomeScreen] LAN auto-discovery enabled — scanning');
     let discovered: Awaited<ReturnType<typeof discoverLANServers>>;
     try {
       discovered = await discoverLANServers();

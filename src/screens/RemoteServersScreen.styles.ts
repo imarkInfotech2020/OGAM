@@ -31,6 +31,27 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     content: {
       padding: 16,
     },
+    autoDiscoverRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: SPACING.md,
+      padding: SPACING.md,
+      marginBottom: SPACING.md,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceLight,
+    },
+    autoDiscoverTextCol: {
+      flex: 1,
+    },
+    autoDiscoverTitle: {
+      ...TYPOGRAPHY.body,
+      color: colors.text,
+      marginBottom: 2,
+    },
+    autoDiscoverDesc: {
+      ...TYPOGRAPHY.bodySmall,
+      color: colors.textSecondary,
+    },
     emptyState: {
       alignItems: 'center' as const,
       paddingVertical: 40,
