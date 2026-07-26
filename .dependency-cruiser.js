@@ -106,6 +106,10 @@ module.exports = {
     },
   ],
   options: {
+    // Keep file-linked workspace packages under node_modules so dependency-cruiser can
+    // classify them from this package.json instead of treating their real paths as
+    // undeclared source files outside the mobile project.
+    preserveSymlinks: true,
     doNotFollow: { path: 'node_modules' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
