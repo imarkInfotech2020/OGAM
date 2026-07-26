@@ -13,7 +13,7 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 
 ## Devices (mobile side, on hand for real 2-device tests)
 - **iPhone 17 Pro Max** — hardware UDID `00008150-000225103CD8C01C` ("Mac's iPhone"), iOS 26.5.2.
-  Driven via WebDriverAgent (`http://192.168.1.14:8100`) + `devicectl`.
+  Driven via WebDriverAgent + `devicectl`; read the current WDA URL from `launchWda.ts`.
 - **Android** — `adb` id `505b53a0` (OnePlus). Driven via `adb`.
 - Both on the same LAN as the laptop. Can pair phone↔phone and phone↔desktop.
 
@@ -24,7 +24,7 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
   equivalent to its message store). Conflict resolution is the engine's LWW — not reimplemented.
 
 ## Phase progress
-### Phase 0 — Foundation (transport live) — IN PROGRESS
+### Phase 0 - Foundation (transport live) - COMPLETE
 - [x] Consume `@offgrid/sync` file: dep + pure-JS crypto deps (tweetnacl, tweetnacl-util, js-sha512).
 - [x] Metro resolves the package + `./rn` `./rn-discovery` `./portable` (watchFolder + subpath
       aliases; not global package-exports). Bundles on both platforms.
@@ -41,7 +41,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] **iOS transport LIVE on device:** `[SYNC] started ... port=51770 platform=ios`; the Mac's
       `dns-sd -B _offgrid._tcp` sees `OffGrid-<id>` → native Bonjour publish + service type confirmed
       on the real LAN.
-- [ ] Two-device handshake (discover → NaCl pair → app message): pending Android reinstall (peer).
+- [x] Two-device handshake (discover, NaCl pair, app message) verified manually on real devices.
+- [x] Pairing secrets persist in Keychain. A paired peer reconnects after the mobile Sync service
+      restarts without asking for the pairing code again.
 
 ### Phase 0.5 — Pro experience + licensed devices — COMPLETE
 - [x] Sync UI and lifecycle orchestration live in the private Pro package, registered through the
@@ -55,7 +57,18 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       current), and a rendered AppNavigator journey covers Settings → Sync → device deactivation.
 
 ### Phase 1 — State sync (chats/projects/settings) — NOT STARTED (needs mobile UUID migration first)
-### Phase 2 — Model transfer — NOT STARTED
+
+### Phase 2 - Model transfer - IN PROGRESS
+- [x] Receive one text GGUF over the encrypted paired channel. Mobile writes to a resumable `.part`
+      file, verifies byte count, checksum, and the `GGUF` header, then registers the model.
+- [x] Invalid files are rejected and both the final file and partial file are removed.
+- [x] Send an installed single-file GGUF from a paired device row. Sync shows transfer progress,
+      failure, cancellation, completion, and dismissal states.
+- [x] The rendered AppNavigator journey covers Settings to Sync, pairing-code entry, valid receive,
+      invalid receive, model admission, and sending the admitted model back.
+- [ ] Verify a full-size GGUF transfer in both directions on real iOS and Android devices.
+- [ ] Add multi-file transfer before exposing vision models or other model formats.
+
 ### Phase 3 — Ambient sharing — NOT STARTED
 
 ## Security note (logged for GA)
