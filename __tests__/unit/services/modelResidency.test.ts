@@ -728,6 +728,53 @@ describe('ModelResidencyManager', () => {
         expect(fits).toBe(false);
       });
     });
+
+    describe('already-resident reload must not double-count its dirty footprint (G4/B9)', () => {
+      // Reloading a model that is ALREADY resident (e.g. an image model re-selected after a thread
+      // change) must charge its dirty footprint ONCE, not twice: the incoming spec.sizeMB and the
+      // still-registered same-key resident are the SAME RAM. The old dirty-ceiling summed both and
+      // refused a model already sitting in memory. Size the model so 1x fits the balanced dirty
+      // ceiling but 2x (the double-count) exceeds it — pinning the bug precisely.
+      const TOTAL_GB = 12;
+      const ceilingMB = computeBudgetMB(TOTAL_GB * 1024, { policy: 'balanced' });
+      const sizeMB = Math.round(ceilingMB * 0.7); // 1x = 0.7*ceiling (fits), 2x = 1.4*ceiling (exceeds)
+      const origPlatform = Platform.OS;
+
+      beforeEach(() => {
+        Platform.OS = 'android';
+        modelResidencyManager._reset();
+        modelResidencyManager.setBudgetOverrideMB(null);
+        jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(TOTAL_GB);
+        jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(TOTAL_GB); // healthy free RAM — isolate the dirty-ceiling path
+        jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
+      });
+      // Don't leak Platform.OS into sibling suites (the override-survival tests read the ambient
+      // platform for Android reclaim credit).
+      afterEach(() => { Platform.OS = origPlatform; });
+
+      it('KEEPS an already-resident dirty image model on reload (fits — footprint counted once)', async () => {
+        modelResidencyManager.register(
+          { key: 'image', type: 'image', modelId: 'sdxl', sizeMB, dirtyMemory: true },
+          jest.fn().mockResolvedValue(undefined),
+          1,
+        );
+        // Reload the SAME key: with the bug, dirtyFootprint = sizeMB + sizeMB = 1.4*ceiling → refused.
+        const { fits, evicted } = await modelResidencyManager.makeRoomFor({
+          key: 'image', type: 'image', modelId: 'sdxl', sizeMB, dirtyMemory: true,
+        });
+        expect(fits).toBe(true);       // fails-before: was false (double-counted to 2x the ceiling)
+        expect(evicted).toEqual([]);   // the resident it replaces is never evicted
+      });
+
+      it('still REFUSES a genuinely oversized dirty model (no over-correction)', async () => {
+        // A fresh dirty model whose OWN footprint exceeds the balanced ceiling must still be refused —
+        // proves the fix only drops the same-key double-count, not the real physics guard.
+        const { fits } = await modelResidencyManager.makeRoomFor({
+          key: 'image', type: 'image', modelId: 'huge', sizeMB: ceilingMB + 500, dirtyMemory: true,
+        });
+        expect(fits).toBe(false);
+      });
+    });
   });
 
   describe('override survival floor (never force a load into a jetsam SIGKILL)', () => {

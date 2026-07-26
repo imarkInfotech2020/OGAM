@@ -327,8 +327,13 @@ class ModelResidencyManager {
     // INDEPENDENT of the total-budget check above, so it never changes the clean+dirty swap cases
     // (a large image still evicts a resident text via the total budget).
     const dirtyCeilingMB = computeBudgetMB(totalMB, { policy: 'balanced' });
+    // Sum the dirty residents that STAY — excluding the incoming's own same-key entry. On a reload
+    // (e.g. an image model re-loaded after a thread change) the incoming REPLACES that resident, so
+    // spec.sizeMB below already accounts for its footprint; counting the resident too double-charges
+    // the model and wrongly refuses one already sitting in RAM (G4). Mirrors planEviction's
+    // alreadyResident rule, which likewise charges the incoming 0 when it's already resident.
     const keptDirtyMB = residents
-      .filter(r => r.dirtyMemory && !plan.evict.some(e => e.key === r.key))
+      .filter(r => r.dirtyMemory && r.key !== spec.key && !plan.evict.some(e => e.key === r.key))
       .reduce((sum, r) => sum + r.sizeMB, 0);
     const dirtyFootprintMB = (spec.dirtyMemory ? spec.sizeMB : 0) + keptDirtyMB;
     const dirtyCeilingExceeded = !!spec.dirtyMemory && dirtyFootprintMB > dirtyCeilingMB;
