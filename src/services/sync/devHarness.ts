@@ -8,7 +8,7 @@ import { getOrCreateLocalDevice } from './localDevice';
 import logger from '../../utils/logger';
 
 /** Flip to true to exercise the on-device transport proof. Dev builds only. */
-export const SYNC_DEV_HARNESS = true;
+export const SYNC_DEV_HARNESS = false; // Sync screen drives the engine now; harness kept for headless transport probing
 const DEV_PASSPHRASE = 'offgrid-dev-pair';
 
 let harness: NativeSync | null = null;
