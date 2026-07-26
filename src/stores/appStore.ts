@@ -76,6 +76,11 @@ type AppSettings = {
   liteRTTemperature: number;
   liteRTTopP: number;
   liteRTMaxTokens: number;
+  /** Auto-discover remote LLMs: the background LAN scan that finds + auto-adds Ollama / LM Studio /
+   *  gateway servers. Fresh installs are OFF (never scan the network unprompted); a one-time
+   *  migration turns it ON for users who already had a gateway. `undefined` = never set (reads OFF).
+   *  Optional so the migration can distinguish "never set" from an explicit choice. */
+  autoDiscoverRemoteModels?: boolean;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';

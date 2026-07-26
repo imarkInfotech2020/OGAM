@@ -12,13 +12,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Linking,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, useThemedStyles } from '../theme';
-import { useRemoteServerStore } from '../stores';
+import { useRemoteServerStore, useAppStore } from '../stores';
 import { RemoteServerModal } from '../components/RemoteServerModal';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
@@ -37,6 +38,8 @@ export const RemoteServersScreen: React.FC = () => {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
   const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } = useRemoteServerStore();
+  const autoDiscover = useAppStore(s => s.settings.autoDiscoverRemoteModels === true);
+  const updateSettings = useAppStore(s => s.updateSettings);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -135,6 +138,21 @@ export const RemoteServersScreen: React.FC = () => {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <View style={styles.autoDiscoverRow}>
+          <View style={styles.autoDiscoverTextCol}>
+            <Text style={styles.autoDiscoverTitle}>Auto-discover on Wi-Fi</Text>
+            <Text style={styles.autoDiscoverDesc}>
+              Automatically find and add Ollama, LM Studio, and gateway servers on your network. Off by default — turn on to scan automatically.
+            </Text>
+          </View>
+          <Switch
+            testID="auto-discover-toggle"
+            value={autoDiscover}
+            onValueChange={(v) => updateSettings({ autoDiscoverRemoteModels: v })}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+          />
+        </View>
+
         {servers.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>

@@ -8,6 +8,7 @@ import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
+import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery';
 import logger from '../../../utils/logger';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
@@ -126,6 +127,22 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       }
       if (!hasRunLANDiscovery) {
         hasRunLANDiscovery = true;
+        // One-time default for the auto-discover toggle: fresh installs → OFF; grandfather users who
+        // already had a gateway → ON. Guard on the remote-server store being hydrated so we read the
+        // real (persisted) server list, not the empty initial state. runLANDiscovery self-gates on
+        // the resulting setting, so a slow hydration simply skips this launch (correct next launch).
+        const migrateAutoDiscover = (): void => {
+          const next = resolveAutoDiscoverMigration(
+            useAppStore.getState().settings.autoDiscoverRemoteModels,
+            useRemoteServerStore.getState().servers.length > 0,
+          );
+          if (next !== undefined) useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: next });
+        };
+        // `.persist` is a zustand-middleware addition; guard it so this is safe under test mocks
+        // that don't include it (treat "no persist API" as already-hydrated).
+        const persistApi = (useRemoteServerStore as { persist?: { hasHydrated?: () => boolean; onFinishHydration?: (cb: () => void) => void } }).persist;
+        if (!persistApi?.hasHydrated || persistApi.hasHydrated()) migrateAutoDiscover();
+        else persistApi.onFinishHydration?.(migrateAutoDiscover);
         // Delay LAN scan so the home screen is fully rendered and interactive first
         setTimeout(runLANDiscovery, 3000);
       }
