@@ -276,11 +276,7 @@ export async function activateProByKey(rawKey: string): Promise<ActivateResult> 
 export async function listProDevices(): Promise<KeygenMachine[]> {
   const lic = await readLicense();
   if (!lic.key || !lic.licenseId) return [];
-  try {
-    return await listMachines(lic.key, lic.licenseId);
-  } catch {
-    return [];
-  }
+  return listMachines(lic.key, lic.licenseId);
 }
 
 /** Free a device slot. */
