@@ -83,6 +83,8 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid AI is 
 
 **Text Generation** — Run Qwen 3, Llama 3.2, Gemma 3, Phi-4, and any GGUF model. Streaming responses, thinking mode, markdown rendering, 15-30 tok/s on flagship devices. Bring your own `.gguf` files too.
 
+**GPU & NPU Acceleration** — Your phone has silicon sitting idle. Off Grid uses it. Adreno GPUs via OpenCL run 20-40 tok/s on a Snapdragon 8 Gen 2+, against 15-30 on CPU; Apple Silicon uses Metal. The app detects what your device has and defaults to the fastest backend that works, and you can override it in Settings. The Hexagon NPU (Snapdragon) is there too, marked experimental because it is — it only accelerates `Q4_0` and `Q8_0` quants, a K-quant silently falls back to CPU, and some model architectures come out garbled on it. Models that can actually use the GPU or NPU are badged in the model list, so you pick the right quant before you download 4GB.
+
 **Remote LLM Servers** — Connect to any OpenAI-compatible server on your local network (Ollama, LM Studio, LocalAI). Discover models automatically, stream responses via SSE, store API keys securely in the system keychain. Switch seamlessly between local and remote models.
 
 **Tool Calling** — Models that support function calling can use built-in tools: web search, calculator, date/time, device info, and knowledge base search. Automatic tool loop with runaway prevention. Clickable links in search results.
@@ -99,13 +101,18 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid AI is 
 
 **AI Prompt Enhancement** — Simple prompt in, detailed Stable Diffusion prompt out. Your text model automatically enhances image generation prompts.
 
+**Memory You Can See and Control** — A phone has finite RAM, and a 4GB model does not politely share it. The model manager shows you what is resident right now and what each one is costing you in RAM, with a per-model eject. **Model Loading** picks the policy: *Lean* keeps one model in memory at a time, *Balanced* co-resides models that fit and swaps the ones that don't, *Aggressive* commits a larger share of RAM so bigger models load. If a load is refused, **Load Anyway** overrides it — your device, your call. When a model gets evicted mid-conversation, the chat says so and offers to bring it back rather than silently failing.
+
+**Download Manager** — Three downloads run at once, the rest FIFO-queue and show as *Queued* instead of quietly stalling. Pause, resume, retry, cancel. Downloads survive backgrounding the app.
+
 ---
 
 ## Performance
 
 | Task | Flagship | Mid-range |
 |------|----------|-----------|
-| Text generation | 15-30 tok/s | 5-15 tok/s |
+| Text generation (CPU) | 15-30 tok/s | 5-15 tok/s |
+| Text generation (GPU / OpenCL) | 20-40 tok/s | — |
 | Image gen (NPU) | 5-10s | — |
 | Image gen (CPU) | ~15s | ~30s |
 | Vision inference | ~7s | ~15s |
