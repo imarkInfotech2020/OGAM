@@ -61,6 +61,17 @@ module.exports = {
     // Mirrors the metro alias: 'react-native-fs' resolves to the maintained fork
     // (the only RNFS native module we ship — see metro.config.js).
     '^react-native-fs$': '<rootDir>/src/shims/react-native-fs.ts',
+    // @offgrid/sync: test against SOURCE (jest transforms the TS) rather than the tsup dist,
+    // which references @babel/runtime helpers not resolvable from the out-of-root package. Keep
+    // these subpaths in step with metro.config.js's aliases and the package's exports map.
+    '^@offgrid/sync$': '<rootDir>/../shared/packages/sync/src/index.ts',
+    '^@offgrid/sync/rn$': '<rootDir>/../shared/packages/sync/src/adapters/rn-tcp.ts',
+    '^@offgrid/sync/rn-discovery$': '<rootDir>/../shared/packages/sync/src/adapters/rn-discovery.ts',
+    '^@offgrid/sync/portable$': '<rootDir>/../shared/packages/sync/src/portable/index.ts',
+    // The sync source lives out-of-root; when jest transforms it, babel injects @babel/runtime
+    // helper imports that would otherwise resolve from ../shared (where they aren't installed).
+    // Pin them to mobile's own copy.
+    '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
   },
   transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@react-native-.*|moti|@motify|@gorhom|@shopify|@ronradtke|@op-engineering|@offgrid)/)',],
   testEnvironment: 'node',
