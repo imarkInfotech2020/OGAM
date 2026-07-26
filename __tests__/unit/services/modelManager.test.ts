@@ -2649,11 +2649,21 @@ describe('ModelManager', () => {
       expect(result).toHaveLength(0);
     });
 
-    it('re-unzips from valid zip when _zip_name present and zip valid', async () => {
+    // coreml-named dir → the mnn/qnn completeness gate (ensureImageExtractionComplete) is a no-op
+    // (coreml integrity is validated in coreMLModelUtils). Asserts the re-unzip→register RECOVERY
+    // mechanics; the mnn completeness gate on the re-unzip path is covered by
+    // reconcilePartialUnzipG7.test.ts (B15/G7).
+    it('re-unzips from valid zip when _zip_name present and zip valid (coreml — completeness-exempt)', async () => {
       setupInitialized();
+      // resetAllMocks (beforeEach) clears the module mock impl — re-establish it, like the coreml
+      // resolve test below.
+      (mockedResolveCoreML as jest.Mock).mockImplementation((dir: string) =>
+        Promise.resolve(`${dir}/model.mlpackage`),
+      );
       mockedAsyncStorage.getItem
-        .mockResolvedValueOnce('[]')
-        .mockResolvedValueOnce('[]');
+        .mockResolvedValueOnce('[]')   // reconciler read
+        .mockResolvedValueOnce('[]')   // addDownloadedImageModel read
+        .mockResolvedValueOnce(null);  // addDownloadedImageModel save
 
       mockedRNFS.exists
         .mockResolvedValueOnce(true)    // imageModelsDir scan
@@ -2663,13 +2673,13 @@ describe('ModelManager', () => {
 
       mockedRNFS.readDir
         .mockResolvedValueOnce([
-          { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
+          { name: 'sd_v15_coreml', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml`, size: 0, isFile: () => false, isDirectory: () => true },
         ] as any)
         .mockResolvedValueOnce([
-          { name: 'unet.mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn/unet.mnn`, size: 500000000, isFile: () => true, isDirectory: () => false },
+          { name: 'model.mlpackage', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml/model.mlpackage`, size: 500000000, isFile: () => true, isDirectory: () => false },
         ] as any);
 
-      mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_mnn.zip');
+      mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_coreml.zip');
       mockedRNFS.stat = jest.fn().mockResolvedValue({ size: 400000000, isFile: () => true } as any);
       mockedRNFS.read = jest.fn().mockResolvedValue('PK\x03\x04');
       mockedRNFS.writeFile = jest.fn().mockResolvedValue(undefined as any);
@@ -2678,11 +2688,11 @@ describe('ModelManager', () => {
       const result = await modelManager.reconcileFinishedImageDownloads(new Set());
 
       expect(mockedUnzip).toHaveBeenCalledWith(
-        `${IMAGE_MODELS_DIR}/sd_v15_mnn.zip`,
-        `${IMAGE_MODELS_DIR}/sd_v15_mnn`,
+        `${IMAGE_MODELS_DIR}/sd_v15_coreml.zip`,
+        `${IMAGE_MODELS_DIR}/sd_v15_coreml`,
       );
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('sd_v15_mnn');
+      expect(result[0].id).toBe('sd_v15_coreml');
     });
 
     it('deletes partial dir when _zip_name present but zip is missing', async () => {

@@ -258,7 +258,10 @@ describe('reconcileFinishedImageDownloads', () => {
     expect(out).toEqual([]);
   });
 
-  it('re-unzips when _zip_name present and zip valid', async () => {
+  // coreml-named dir → the mnn/qnn completeness gate is a no-op (coreml integrity is validated in
+  // coreMLModelUtils). The mnn completeness gate on the re-unzip path is covered by
+  // reconcilePartialUnzipG7.test.ts (B15). This test asserts the re-unzip→register recovery mechanics.
+  it('re-unzips when _zip_name present and zip valid (coreml — completeness-exempt)', async () => {
     const opts = base();
     mockedRNFS.exists
       .mockResolvedValueOnce(true) // dir
@@ -266,13 +269,13 @@ describe('reconcileFinishedImageDownloads', () => {
       .mockResolvedValueOnce(true) // _zip_name present
       .mockResolvedValueOnce(true); // isValidZip: zip exists
     mockedRNFS.readDir
-      .mockResolvedValueOnce([dir('Zipped', '/img/Zipped')])
-      .mockResolvedValueOnce([file('w', '/img/Zipped/w', 999)]); // getDirSize
+      .mockResolvedValueOnce([dir('coreml_Zipped', '/img/coreml_Zipped')])
+      .mockResolvedValueOnce([file('w', '/img/coreml_Zipped/w', 999)]); // getDirSize
     (mockedRNFS.readFile as jest.Mock).mockResolvedValueOnce('archive.zip');
     (mockedRNFS.stat as jest.Mock).mockResolvedValueOnce({ size: 1024 });
     (mockedRNFS.read as jest.Mock).mockResolvedValueOnce('PK');
     const out = await reconcileFinishedImageDownloads(opts);
-    expect(unzip).toHaveBeenCalledWith('/img/archive.zip', '/img/Zipped');
+    expect(unzip).toHaveBeenCalledWith('/img/archive.zip', '/img/coreml_Zipped');
     expect(out).toHaveLength(1);
     expect(out[0].size).toBe(999);
   });
