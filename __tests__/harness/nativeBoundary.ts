@@ -670,9 +670,7 @@ function makeFsFake(): FsFake {
   const seedFile = (path: string, sizeBytes: number) => {
     const p = norm(path);
     vol.mkdirSync(p.slice(0, p.lastIndexOf('/')) || '/', { recursive: true });
-    const contents = Buffer.alloc(sizeBytes);
-    if (/\.gguf$/i.test(p) && contents.length >= 4) contents.write('GGUF', 0, 'ascii');
-    vol.writeFileSync(p, contents);
+    vol.writeFileSync(p, Buffer.alloc(sizeBytes));
   };
   const seedDir = (path: string) => vol.mkdirSync(norm(path), { recursive: true });
 
@@ -689,33 +687,17 @@ function makeFsFake(): FsFake {
       });
     }),
     stat: jest.fn(async (p: string) => mkStat(p, vol.statSync(norm(p)) as never)),
-    writeFile: jest.fn(async (p: string, contents: string, encoding?: string) => {
+    writeFile: jest.fn(async (p: string, contents: string) => {
       const np = norm(p);
       vol.mkdirSync(np.slice(0, np.lastIndexOf('/')) || '/', { recursive: true });
-      vol.writeFileSync(np, Buffer.from(String(contents ?? ''), encoding === 'base64' ? 'base64' : 'utf8'));
+      vol.writeFileSync(np, String(contents ?? ''));
     }),
     readFile: jest.fn(async (p: string) => vol.readFileSync(norm(p), 'utf8')),
-    read: jest.fn(async (p: string, length?: number, position = 0, encoding?: string) => {
-      const contents = vol.readFileSync(norm(p)) as Buffer;
-      const selected = contents.subarray(position, length == null ? undefined : position + length);
-      return selected.toString(encoding === 'base64' ? 'base64' : encoding === 'ascii' ? 'ascii' : 'utf8');
-    }),
-    write: jest.fn(async (p: string, contents: string, position = 0, encoding?: string) => {
-      const np = norm(p);
-      const incoming = Buffer.from(contents, encoding === 'base64' ? 'base64' : 'utf8');
-      const current = vol.existsSync(np) ? (vol.readFileSync(np) as Buffer) : Buffer.alloc(0);
-      const next = Buffer.alloc(Math.max(current.length, position + incoming.length));
-      current.copy(next);
-      incoming.copy(next, position);
-      vol.writeFileSync(np, next);
-    }),
+    read: jest.fn(async () => 'GGUF'),
     unlink: jest.fn(async (p: string) => { vol.rmSync(norm(p), { recursive: true, force: true }); }),
     moveFile: jest.fn(async (from: string, to: string) => { vol.renameSync(norm(from), norm(to)); }),
     copyFile: jest.fn(async (from: string, to: string) => { vol.copyFileSync(norm(from), norm(to)); }),
-    hash: jest.fn(async (p: string, algorithm: string) => {
-      const { createHash } = require('node:crypto');
-      return createHash(algorithm).update(vol.readFileSync(norm(p))).digest('hex');
-    }),
+    hash: jest.fn(async () => 'deadbeef'),
     downloadFile: jest.fn(() => ({ jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 0 }) })),
     stopDownload: jest.fn(),
   };

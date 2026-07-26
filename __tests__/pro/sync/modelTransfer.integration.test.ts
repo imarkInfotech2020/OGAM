@@ -1,5 +1,3 @@
-import { installNativeBoundary } from '../../harness/nativeBoundary';
-
 jest.mock('react-native-tcp-socket', () => {
   const {
     createNativeTcpBoundary,
@@ -12,6 +10,17 @@ jest.mock('react-native-zeroconf', () => {
     createNativeDiscoveryBoundary,
   } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
+
+jest.mock('react-native-fs', () => {
+  const {
+    modelTransferFsBoundary,
+  } = require('../../utils/modelTransferFsBoundary');
+  return {
+    __esModule: true,
+    default: modelTransferFsBoundary.module,
+    ...modelTransferFsBoundary.module,
+  };
 });
 
 const waitFor = async (
@@ -28,7 +37,10 @@ const waitFor = async (
 
 describe('Pro mobile model transfer journey', () => {
   it('receives an encrypted GGUF and exposes it through the real downloaded-model registry', async () => {
-    const boundary = installNativeBoundary({ fs: true });
+    const {
+      modelTransferFsBoundary: boundary,
+    } = require('../../utils/modelTransferFsBoundary');
+    boundary.reset();
     const AsyncStorage = require('@react-native-async-storage/async-storage');
     const Keychain = require('react-native-keychain');
     const TcpSocket = require('react-native-tcp-socket').default;
@@ -133,18 +145,11 @@ describe('Pro mobile model transfer journey', () => {
         fileSize: payload.length,
       }),
     ]);
-    const readFile = boundary.fs!.module.read as (
-      path: string,
-      length: number,
-      position: number,
-      encoding: string,
-    ) => Promise<string>;
     expect(
-      await readFile(
-        `${boundary.fs!.DocumentDirectoryPath}/models/${fileName}`,
+      await boundary.readAscii(
+        `${boundary.DocumentDirectoryPath}/models/${fileName}`,
         4,
         0,
-        'ascii',
       ),
     ).toBe('GGUF');
 
@@ -178,17 +183,14 @@ describe('Pro mobile model transfer journey', () => {
       }),
     ).rejects.toThrow('receiver could not verify or register the file');
     expect(await modelManager.getDownloadedModels()).toHaveLength(1);
-    const exists = boundary.fs!.module.exists as (
-      path: string,
-    ) => Promise<boolean>;
     expect(
-      await exists(
-        `${boundary.fs!.DocumentDirectoryPath}/models/${invalidFileName}`,
+      await boundary.exists(
+        `${boundary.DocumentDirectoryPath}/models/${invalidFileName}`,
       ),
     ).toBe(false);
     expect(
-      await exists(
-        `${boundary.fs!.DocumentDirectoryPath}/models/${invalidFileName}.part`,
+      await boundary.exists(
+        `${boundary.DocumentDirectoryPath}/models/${invalidFileName}.part`,
       ),
     ).toBe(false);
 
