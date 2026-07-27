@@ -82,8 +82,10 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       Model Settings, a phone edit stays local while Model settings sharing is off, and re-enabling
       the category backfills the current value. A contract test round-trips every supported
       desktop↔mobile key and rejects malformed or unsafe peer values.
-- [ ] Prove offline same-record edits converge to the engine's LWW winner and rehydrate without
-      duplicate ops through a focused rendered/relaunch journey.
+- [x] The same rendered journey disconnects peers with identical histories, makes one temperature
+      edit on each side at the same Lamport, reconnects, and proves both sides select the shared
+      engine's higher-device-ID LWW winner. Restarting the mobile state service preserves the op
+      count, and remounting AppNavigator shows the winning value without duplicate backfill ops.
 - [ ] Resolve project-delete semantics before mobile emits project tombstones. Mobile deletion
       unfiles chats; desktop currently deletes the project's conversations and messages.
 - [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS

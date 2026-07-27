@@ -294,5 +294,88 @@ describe('Pro mobile state sync journey', () => {
         ),
       ).toMatchObject({ value_json: '1.25' }),
     );
+
+    await waitFor(() =>
+      expect(remoteLog.size()).toBe(stateSyncService.opCount()),
+    );
+    await remote.engine.stop();
+    await waitFor(() =>
+      expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
+    );
+
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByText('Model Settings'));
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('text-generation-accordion')),
+    );
+    fireEvent(
+      ui.getByTestId('llama-temperature-slider'),
+      'slidingComplete',
+      0.75,
+    );
+    remoteLog.record(CORE_SYNC_ENTITIES.modelSetting, 'temperature', 'put', {
+      value_json: '0.85',
+    });
+    expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
+      '0.75',
+    );
+    expect(
+      remoteRecords.records.get(
+        `${CORE_SYNC_ENTITIES.modelSetting}:temperature`,
+      ),
+    ).toMatchObject({ value_json: '0.85' });
+
+    await remote.engine.start(0);
+    await remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+      'violet-lake-27',
+    );
+    await waitFor(() =>
+      expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
+    );
+
+    const winningTemperature =
+      mobile.id > remoteDevice.id
+        ? { value: '0.75', json: '0.75' }
+        : {
+            value: '0.85',
+            json: '0.85',
+          };
+    await waitFor(() =>
+      expect(ui!.getByTestId('llama-temperature-value').props.children).toBe(
+        winningTemperature.value,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        remoteRecords.records.get(
+          `${CORE_SYNC_ENTITIES.modelSetting}:temperature`,
+        ),
+      ).toMatchObject({ value_json: winningTemperature.json }),
+    );
+
+    const persistedOpCount = stateSyncService.opCount();
+    ui.unmount();
+    ui = undefined;
+    await stateSyncService.stop();
+    await stateSyncService.start();
+    expect(stateSyncService.opCount()).toBe(persistedOpCount);
+    useAppStore
+      .getState()
+      .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
+
+    ui = render(
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>,
+    );
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(ui.getByText('Model Settings'));
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('text-generation-accordion')),
+    );
+    expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
+      winningTemperature.value,
+    );
   });
 });
