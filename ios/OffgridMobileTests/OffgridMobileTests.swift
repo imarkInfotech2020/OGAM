@@ -883,11 +883,15 @@ final class SyncClipboardObserverTests: XCTestCase {
     observer.writeText("received from desktop")
     notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
     XCTAssertEqual(pasteboard.string, "received from desktop")
-    XCTAssertEqual(observed.last?.text, "received from desktop")
+    XCTAssertEqual(
+      observed.map(\.text),
+      ["copied locally"],
+      "A programmatic Sync write must not be attributed as a local copy"
+    )
 
     observer.setEnabled(false)
     pasteboard.string = "must stay local"
     notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
-    XCTAssertEqual(observed.count, 2)
+    XCTAssertEqual(observed.count, 1)
   }
 }

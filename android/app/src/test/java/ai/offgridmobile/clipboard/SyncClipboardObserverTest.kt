@@ -34,10 +34,14 @@ class SyncClipboardObserverTest {
 
         observer.writeText("received from desktop")
         assertEquals("received from desktop", clipboard.primaryClip?.getItemAt(0)?.text)
-        assertEquals("received from desktop" to 42.0, observed.last())
+        assertEquals(
+            "A programmatic Sync write must not be attributed as a local copy",
+            listOf("copied locally" to 42.0),
+            observed,
+        )
 
         observer.setEnabled(false)
         clipboard.setPrimaryClip(ClipData.newPlainText("test", "must stay local"))
-        assertEquals(2, observed.size)
+        assertEquals(1, observed.size)
     }
 }

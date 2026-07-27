@@ -8,6 +8,7 @@ final class SyncClipboardObserver: NSObject {
   private let onText: (String, Double) -> Void
   private var enabled = false
   private var lastChangeCount = 0
+  private var isWritingSyncedText = false
 
   init(
     pasteboard: UIPasteboard = .general,
@@ -45,10 +46,20 @@ final class SyncClipboardObserver: NSObject {
   }
 
   func writeText(_ text: String) {
+    isWritingSyncedText = true
     pasteboard.string = text
+    // A Sync write updates the system pasteboard but is not a new local copy.
+    // Seed the observed generation so a delayed pasteboard/application
+    // notification cannot publish it back to the sender.
+    lastChangeCount = pasteboard.changeCount
+    isWritingSyncedText = false
   }
 
   @objc private func clipboardChanged() {
+    if isWritingSyncedText {
+      lastChangeCount = pasteboard.changeCount
+      return
+    }
     guard enabled, pasteboard.changeCount != lastChangeCount else { return }
     lastChangeCount = pasteboard.changeCount
     guard let text = pasteboard.string else { return }

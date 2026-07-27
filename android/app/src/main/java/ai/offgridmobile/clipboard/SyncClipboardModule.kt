@@ -18,7 +18,11 @@ internal class SyncClipboardObserver(
     private var enabled = false
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!enabled) return@OnPrimaryClipChangedListener
-        val item = clipboardManager.primaryClip?.getItemAt(0) ?: return@OnPrimaryClipChangedListener
+        val clip = clipboardManager.primaryClip ?: return@OnPrimaryClipChangedListener
+        if (clip.description.label?.toString() == SYNC_CLIP_LABEL) {
+            return@OnPrimaryClipChangedListener
+        }
+        val item = clip.getItemAt(0)
         val text = item.coerceToText(context)?.toString() ?: return@OnPrimaryClipChangedListener
         onText(text, now().toDouble())
     }
@@ -34,7 +38,11 @@ internal class SyncClipboardObserver(
     }
 
     fun writeText(text: String) {
-        clipboardManager.setPrimaryClip(ClipData.newPlainText("Off Grid Sync", text))
+        clipboardManager.setPrimaryClip(ClipData.newPlainText(SYNC_CLIP_LABEL, text))
+    }
+
+    private companion object {
+        const val SYNC_CLIP_LABEL = "Off Grid Sync"
     }
 }
 
