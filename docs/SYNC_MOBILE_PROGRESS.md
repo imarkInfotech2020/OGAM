@@ -61,6 +61,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       then retries activation. Revalidation follows the same replacement path.
 - [x] Boundary tests cover the real Keygen HTTP sequence (five active → delete oldest → activate
       current), and a rendered AppNavigator journey covers Settings → Sync → device deactivation.
+- [x] Debug-only Pro access is labeled as local development access instead of a Lifetime license.
+      Its Sync card explains that Keygen device slots require a license key and never renders a
+      misleading `0 of 5`; the pairing field uses an unmistakable instruction placeholder.
 
 ### Phase 1 - State sync (chats/projects/settings) - IN PROGRESS
 
@@ -118,7 +121,8 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 `feat/sync-integration-phase0` (mobile). State-sync checkpoints:
 `f50dea2c` (stable IDs), `b8abb869` (withhold unsafe project tombstones),
 Pro `07e06ee2` and core `78df85ba` (model settings), and `69f16ccb`
-(non-destructive project deletion).
+(non-destructive project deletion). Pro `afca0d7e` and core `9ced2a55` distinguish Debug Pro from
+real Keygen device activation.
 Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
