@@ -1,5 +1,6 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import type { Conversation, Message, Project } from '../../types';
+import { serializeMessageContext } from './messageContext';
 
 /** Stable wire entity names shared with Off Grid Desktop. */
 export const CORE_SYNC_ENTITIES = {
@@ -139,7 +140,7 @@ export function messagePutMutation(
       conversation_id: conversationId,
       role: message.role,
       content: message.content,
-      context: null,
+      context: serializeMessageContext(message),
       created_at: new Date(message.timestamp).toISOString(),
     },
   };

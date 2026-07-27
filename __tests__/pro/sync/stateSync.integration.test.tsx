@@ -178,6 +178,20 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: createdAt,
     });
+    remoteLog.record(
+      CORE_SYNC_ENTITIES.message,
+      'remote-reasoning-message',
+      'put',
+      {
+        conversation_id: 'remote-conversation',
+        role: 'assistant',
+        content: 'The field notes are ready.',
+        context: JSON.stringify({
+          reasoning: 'I should confirm the notes before answering.',
+        }),
+        created_at: createdAt,
+      },
+    );
     for (let revision = 0; revision < 20; revision += 1) {
       remoteLog.record(CORE_SYNC_ENTITIES.modelSetting, 'temperature', 'put', {
         value_json: revision === 19 ? '0.55' : '0.5',
@@ -242,8 +256,41 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() => expect(ui!.getByText('Desktop Research')).toBeTruthy());
     fireEvent.press(ui.getByTestId('chats-tab'));
     await waitFor(() => expect(ui!.getByText('Field planning')).toBeTruthy());
-    expect(ui.getByText('You: Bring the field notes')).toBeTruthy();
+    expect(ui.getByText('The field notes are ready.')).toBeTruthy();
     expect(ui.getByText('Desktop Research')).toBeTruthy();
+    fireEvent.press(ui.getByText('Field planning'));
+    await waitFor(() =>
+      expect(ui!.getByText('The field notes are ready.')).toBeTruthy(),
+    );
+    expect(ui.getByText('Thought process')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('thinking-block-toggle'));
+    expect(
+      ui.getByText('I should confirm the notes before answering.'),
+    ).toBeTruthy();
+    fireEvent.press(ui.getByLabelText('Back'));
+
+    useChatStore.getState().addMessage('remote-conversation', {
+      role: 'assistant',
+      content: 'The phone checked the notes.',
+      reasoningContent: 'I should send the reasoning back to Desktop.',
+    });
+    await waitFor(() =>
+      expect(
+        remoteRecords.records.get(
+          `${CORE_SYNC_ENTITIES.message}:${
+            useChatStore
+              .getState()
+              .conversations.find(item => item.id === 'remote-conversation')
+              ?.messages.at(-1)?.uuid
+          }`,
+        ),
+      ).toMatchObject({
+        content: 'The phone checked the notes.',
+        context: JSON.stringify({
+          reasoning: 'I should send the reasoning back to Desktop.',
+        }),
+      }),
+    );
 
     fireEvent.press(ui.getByTestId('projects-tab'));
     fireEvent.press(ui.getByText('New'));
@@ -303,7 +350,7 @@ describe('Pro mobile state sync journey', () => {
     ).toMatchObject({ content: 'Bring the field notes' });
     fireEvent.press(ui.getByTestId('chats-tab'));
     await waitFor(() => expect(ui!.getByText('Field planning')).toBeTruthy());
-    expect(ui.getByText('You: Bring the field notes')).toBeTruthy();
+    expect(ui.getByText('The phone checked the notes.')).toBeTruthy();
 
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
