@@ -2,9 +2,16 @@ import React from 'react';
 import { Alert } from 'react-native';
 import * as Keychain from 'react-native-keychain';
 import { NavigationContainer } from '@react-navigation/native';
-import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import {
+  render,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
 
-jest.mock('@react-navigation/native', () => jest.requireActual('@react-navigation/native'));
+jest.mock('@react-navigation/native', () =>
+  jest.requireActual('@react-navigation/native'),
+);
 
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
@@ -32,10 +39,12 @@ const mockTcpModule = {
       close: jest.Mock;
     };
     server.on = jest.fn(() => server);
-    server.listen = jest.fn((options: { port: number }, callback?: () => void) => {
-      boundPort = options.port || 42001;
-      callback?.();
-    });
+    server.listen = jest.fn(
+      (options: { port: number }, callback?: () => void) => {
+        boundPort = options.port || 42001;
+        callback?.();
+      },
+    );
     server.address = jest.fn(() => ({ port: boundPort }));
     server.close = jest.fn();
     return server;
@@ -85,6 +94,8 @@ describe('Settings to Sync licensed-device management', () => {
       hasCompletedOnboarding: true,
       downloadedModels: [createDownloadedModel()],
       themeMode: 'dark',
+      hasRegisteredPro: true,
+      isProActive: true,
     });
     useSyncStore.getState().reset();
     useLicensedDevicesStore.setState({
@@ -133,17 +144,19 @@ describe('Settings to Sync licensed-device management', () => {
         },
       },
     ];
-    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/licenses/lic-1/machines')) {
-        return response(200, { data: machines });
-      }
-      if (url.endsWith('/machines/old') && init?.method === 'DELETE') {
-        machines.splice(1, 1);
-        return response(204);
-      }
-      return response(404);
-    }) as typeof fetch;
+    global.fetch = jest.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/licenses/lic-1/machines')) {
+          return response(200, { data: machines });
+        }
+        if (url.endsWith('/machines/old') && init?.method === 'DELETE') {
+          machines.splice(1, 1);
+          return response(204);
+        }
+        return response(404);
+      },
+    ) as typeof fetch;
   });
 
   afterEach(async () => {
@@ -166,13 +179,15 @@ describe('Settings to Sync licensed-device management', () => {
     await waitFor(() => expect(ui.getByText('2 of 5 active')).toBeTruthy());
     expect(ui.getByText('My iPhone')).toBeTruthy();
     expect(
-      within(ui.getByTestId('licensed-device-current')).getByText('THIS DEVICE'),
+      within(ui.getByTestId('licensed-device-current')).getByText(
+        'THIS DEVICE',
+      ),
     ).toBeTruthy();
     expect(ui.getByText('Old Android')).toBeTruthy();
 
     fireEvent.press(ui.getByTestId('deactivate-device-old'));
     const destructiveAction = (alert.mock.calls[0][2] ?? []).find(
-      (button) => button.style === 'destructive',
+      button => button.style === 'destructive',
     );
     destructiveAction?.onPress?.();
 
@@ -180,6 +195,39 @@ describe('Settings to Sync licensed-device management', () => {
     expect(ui.queryByText('Old Android')).toBeNull();
     expect(ui.getByText('My iPhone')).toBeTruthy();
     alert.mockRestore();
+    ui.unmount();
+  });
+
+  it('labels Debug Pro without claiming a Keygen device slot', async () => {
+    storedSecrets.delete('off-grid-pro-license');
+    useAppStore.setState({
+      hasRegisteredPro: false,
+      isProActive: true,
+    });
+
+    const ui = render(
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>,
+    );
+
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    await waitFor(() =>
+      expect(ui.getByText('Development · active')).toBeTruthy(),
+    );
+    fireEvent.press(await waitFor(() => ui.getByTestId('open-sync-settings')));
+
+    await waitFor(() => expect(ui.getByText('DEVELOPMENT PRO')).toBeTruthy());
+    expect(ui.getByText('Local development access')).toBeTruthy();
+    expect(
+      ui.getByText(
+        'This Debug build unlocks Pro locally. Device slots appear after activating a license key.',
+      ),
+    ).toBeTruthy();
+    expect(ui.queryByText('0 of 5 active')).toBeNull();
+    expect(ui.queryByText('No licensed devices are active.')).toBeNull();
+    expect(ui.getByPlaceholderText('Enter a pairing code')).toBeTruthy();
+
     ui.unmount();
   });
 });
