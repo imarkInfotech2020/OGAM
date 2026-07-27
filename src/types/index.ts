@@ -203,6 +203,11 @@ export interface GenerationMeta {
 // Chat-related types
 export interface Message {
   id: string;
+  /**
+   * Stable cross-device identity. Persisted messages always carry this; transient
+   * prompt-only messages may omit it because they never enter the sync log.
+   */
+  uuid?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   /** Reasoning/thinking content parsed by llama.rn (separate from response content) */

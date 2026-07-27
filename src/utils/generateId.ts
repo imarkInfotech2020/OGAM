@@ -1,20 +1,36 @@
-/**
- * Generate a unique ID using crypto.getRandomValues when available,
- * with a Date.now()-based fallback for environments where the Web Crypto
- * API is not exposed (e.g. older Hermes builds on Android).
- */
-export function generateId(): string {
-  let random: string;
+let fallbackSequence = 0;
+
+function randomBytes(): Uint8Array {
+  const bytes = new Uint8Array(16);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const array = new Uint32Array(1);
-    crypto.getRandomValues(array);
-    random = array[0].toString(36);
-  } else {
-    // Fallback: combine high-resolution timer bits with a counter.
-    // Not cryptographically secure, but sufficient for local IDs.
-    random = ((Date.now() * 9301 + 49297) % 233280).toString(36); // NOSONAR
+    crypto.getRandomValues(bytes);
+    return bytes;
   }
-  return `${Date.now()}-${random}`;
+
+  // App bootstrap installs react-native-get-random-values. This fallback keeps
+  // isolated JS environments functional without weakening the persisted format.
+  fallbackSequence += 1;
+  let seed = Date.now() + fallbackSequence;
+  for (let index = 0; index < bytes.length; index += 1) {
+    seed = (seed * 1664525 + 1013904223) % 4294967296; // NOSONAR
+    bytes[index] = seed % 256;
+  }
+  return bytes;
+}
+
+/** Generate an RFC 4122 version-4 UUID for persisted cross-device identity. */
+export function generateId(): string {
+  const bytes = randomBytes();
+  bytes[6] = (bytes[6] % 16) + 64;
+  bytes[8] = (bytes[8] % 64) + 128;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'));
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join(''),
+  ].join('-');
 }
 
 /**

@@ -5,6 +5,7 @@ import { Message, Conversation, GenerationMeta } from '../types';
 import { stripStreamingControlTokens, parseModelOutput } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import { CHAT_STORAGE_VERSION, createPersistedMessage, migratePersistedChatState } from './chatPersistence';
 
 function nextUpdatedAt(previousUpdatedAt?: string): string {
   const now = Date.now();
@@ -167,11 +168,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       addMessage: (conversationId, messageData) => {
-        const message: Message = {
-          id: generateId(),
-          ...messageData,
-          timestamp: Date.now(),
-        };
+        const message = createPersistedMessage(messageData);
 
         set((state) => ({
           conversations: state.conversations.map((conv) =>
@@ -352,6 +349,8 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'local-llm-chat-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      version: CHAT_STORAGE_VERSION,
+      migrate: migratePersistedChatState,
       partialize: (state) => ({
         conversations: state.conversations,
         activeConversationId: state.activeConversationId,
