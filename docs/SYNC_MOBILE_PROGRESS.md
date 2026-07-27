@@ -4,27 +4,32 @@ Living log of the **mobile** side of `@offgrid/sync` integration so the desktop 
 coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as work lands.
 
 ## Shared contract (both apps consume the same public package → converge with no rework)
+
 - **Package:** `@offgrid/sync` (`shared/packages/sync`), consumed by mobile via `file:` dep. Never
   forked. Wire protocol, NaCl crypto, op-log schema, and mDNS service type all live in the package.
 - **mDNS service type:** `_offgrid._tcp.local` (mobile advertises + browses this; must match desktop).
 - **Transport:** length-prefixed NaCl-encrypted frames over TCP (ephemeral bound port, advertised
   over mDNS TXT). App messages ride the paired channel via `engine.sendApp(deviceId, channel, data)`.
-- **Feature gating:** the mobile Sync *experience* is Pro; the engine is public.
+- **Feature gating:** the mobile Sync _experience_ is Pro; the engine is public.
 
 ## Devices (mobile side, on hand for real 2-device tests)
+
 - **iPhone 17 Pro Max** — hardware UDID `00008150-000225103CD8C01C` ("Mac's iPhone"), iOS 26.5.2.
   Driven via WebDriverAgent + `devicectl`; read the current WDA URL from `launchWda.ts`.
 - **Android** — `adb` id `505b53a0` (OnePlus). Driven via `adb`.
 - Both on the same LAN as the laptop. Can pair phone↔phone and phone↔desktop.
 
 ## UUID coordination (agreed)
+
 - Synced entities keyed by **UUID** (conversations, projects, settings). **Mobile owns adding
   stable UUIDs on its side** (chatStore conversations, projects, per-message UUIDs). Message-content
   sync needs a per-message UUID (desktop is adding a UUID column on `rag_messages`; mobile adds the
   equivalent to its message store). Conflict resolution is the engine's LWW — not reimplemented.
 
 ## Phase progress
+
 ### Phase 0 - Foundation (transport live) - COMPLETE
+
 - [x] Consume `@offgrid/sync` file: dep + pure-JS crypto deps (tweetnacl, tweetnacl-util, js-sha512).
 - [x] Metro resolves the package + `./rn` `./rn-discovery` `./portable` (watchFolder + subpath
       aliases; not global package-exports). Bundles on both platforms.
@@ -46,6 +51,7 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       restarts without asking for the pairing code again.
 
 ### Phase 0.5 — Pro experience + licensed devices — COMPLETE
+
 - [x] Sync UI and lifecycle orchestration live in the private Pro package, registered through the
       existing core screen/settings registries. Core owns only reusable native transport glue.
 - [x] Settings → Sync exposes discoverability, pairing, peer state, and one licensed-device surface.
@@ -56,9 +62,31 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Boundary tests cover the real Keygen HTTP sequence (five active → delete oldest → activate
       current), and a rendered AppNavigator journey covers Settings → Sync → device deactivation.
 
-### Phase 1 — State sync (chats/projects/settings) — NOT STARTED (needs mobile UUID migration first)
+### Phase 1 - State sync (chats/projects/settings) - IN PROGRESS
+
+- [x] Stable RFC 4122 UUIDs for new conversations, projects, and messages. The persisted chat
+      migration backfills legacy message UUIDs once and preserves them across relaunch.
+- [x] Canonical mobile mutations reuse the desktop wire entities and field names for
+      `conversation`, `message`, and `project`; core data owners emit through one optional Pro hook.
+- [x] Pro persists the op-log and runs the shared `StateSync` anti-entropy protocol over the
+      encrypted `state` app channel. Existing local records backfill when the service starts.
+- [x] Settings to Sync exposes Chats and Projects sharing controls. A disabled category is filtered
+      before it can leave the phone; re-enabling it backfills current records.
+- [x] One rendered AppNavigator journey proves a pre-pair desktop project/chat/message arrives and
+      becomes visible, a project created through the phone UI stays local while Projects sharing is
+      off, and enabling Projects sends it over the real loopback transport.
+- [x] Focused persistence tests cover op de-duplication, corrupt op storage, and privacy-setting
+      rollback when AsyncStorage rejects a write.
+- [ ] Sync `model_setting` records; no mobile settings owner is wired yet.
+- [ ] Prove offline same-record edits converge to the engine's LWW winner and rehydrate without
+      duplicate ops through a focused rendered/relaunch journey.
+- [ ] Resolve project-delete semantics before mobile emits project tombstones. Mobile deletion
+      unfiles chats; desktop currently deletes the project's conversations and messages.
+- [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS
+      and Android devices.
 
 ### Phase 2 - Model transfer - IN PROGRESS
+
 - [x] Receive one text GGUF over the encrypted paired channel. Mobile writes to a resumable `.part`
       file, verifies byte count, checksum, and the `GGUF` header, then registers the model.
 - [x] Invalid files are rejected and both the final file and partial file are removed.
@@ -72,14 +100,19 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 ### Phase 3 — Ambient sharing — NOT STARTED
 
 ## Security note (logged for GA)
+
 Crypto is sound (NaCl secretbox authenticated encryption; passphrase never on the wire; LAN-only).
 Hardening item before GA: the KDF is a hand-rolled iterated SHA-512 ("PBKDF2-like") — pair with a
 high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphrase isn't brute-forceable.
 
 ## Branch
-`feat/sync-integration-phase0` (mobile). Commits are small + each has tests + hygiene.
+
+`feat/sync-integration-phase0` (mobile). State-sync checkpoints:
+`f50dea2c` (stable IDs), Pro `93cf8ce8`, core `857096a0`, and `f14dd836` (persistence tests).
+Commits are small + each has tests + hygiene.
 
 ## Prior-art decision (2026-07-26)
+
 `feature/sync` (based 2026-07-09, now **708 commits behind main**) has a full prior mobile
 Track-A implementation: `src/services/backup/{backupArchive,backupData,backupFiles,backupIo,
 backupService,types}.ts` (the four-port adapters over `@offgrid/sync/portable` — CURRENT API,
