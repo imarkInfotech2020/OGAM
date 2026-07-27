@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+import {
+  emitChangedModelSettings,
+  mobileModelSettingPatch,
+} from '../services/sync/mutation';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -129,6 +133,10 @@ interface AppState {
   setModelMaxContext: (ctx: number | null) => void;
   settings: AppSettings;
   updateSettings: (settings: Partial<AppSettings>) => void;
+  applySyncedModelSetting: (
+    wireKey: string,
+    fields: Record<string, unknown>,
+  ) => void;
   resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
   activeImageModelId: string | null;
@@ -345,11 +353,26 @@ export const useAppStore = create<AppState>()(
       modelMaxContext: null,
       setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
       settings: { ...DEFAULT_SETTINGS },
-      updateSettings: (newSettings) =>
-        set((state) => ({
-          settings: { ...state.settings, ...newSettings },
-        })),
-      resetSettings: () => set({ settings: { ...DEFAULT_SETTINGS } }),
+      updateSettings: (newSettings) => {
+        const before = get().settings;
+        const after = { ...before, ...newSettings };
+        set({ settings: after });
+        emitChangedModelSettings(before, after);
+      },
+      applySyncedModelSetting: (wireKey, fields) => {
+        const patch = mobileModelSettingPatch(wireKey, fields);
+        if (patch) {
+          set((state) => ({
+            settings: { ...state.settings, ...(patch as Partial<AppSettings>) },
+          }));
+        }
+      },
+      resetSettings: () => {
+        const before = get().settings;
+        const after = { ...DEFAULT_SETTINGS };
+        set({ settings: after });
+        emitChangedModelSettings(before, after);
+      },
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,

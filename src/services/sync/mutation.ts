@@ -19,6 +19,97 @@ export interface SyncMutation {
   fields?: Record<string, unknown>;
 }
 
+interface ModelSettingDescriptor {
+  localKey: string;
+  accepts: (value: unknown) => boolean;
+}
+
+const finiteInRange =
+  (minimum: number, maximum: number) =>
+  (value: unknown): boolean =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= minimum &&
+    value <= maximum;
+
+const integerInRange =
+  (minimum: number, maximum: number) =>
+  (value: unknown): boolean =>
+    Number.isInteger(value) &&
+    (value as number) >= minimum &&
+    (value as number) <= maximum;
+
+/** Desktop wire keys mapped once to the equivalent mobile setting owner keys. */
+const MODEL_SETTING_DESCRIPTORS: Readonly<
+  Record<string, ModelSettingDescriptor>
+> = {
+  temperature: { localKey: 'temperature', accepts: finiteInRange(0, 2) },
+  ctxSize: {
+    localKey: 'contextLength',
+    accepts: integerInRange(512, 1_048_576),
+  },
+  topP: { localKey: 'topP', accepts: finiteInRange(0, 1) },
+  repeatPenalty: {
+    localKey: 'repeatPenalty',
+    accepts: finiteInRange(0, 2),
+  },
+  maxTokens: { localKey: 'maxTokens', accepts: integerInRange(1, 1_048_576) },
+  systemPrompt: {
+    localKey: 'systemPrompt',
+    accepts: value => typeof value === 'string',
+  },
+  kvCacheType: {
+    localKey: 'cacheType',
+    accepts: value => value === 'f16' || value === 'q8_0' || value === 'q4_0',
+  },
+  flashAttn: {
+    localKey: 'flashAttn',
+    accepts: value => typeof value === 'boolean',
+  },
+  gpuLayers: { localKey: 'gpuLayers', accepts: integerInRange(-1, 999) },
+  threads: { localKey: 'nThreads', accepts: integerInRange(0, 256) },
+  batchSize: { localKey: 'nBatch', accepts: integerInRange(1, 65_536) },
+};
+
+export function modelSettingMutations(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): SyncMutation[] {
+  const mutations: SyncMutation[] = [];
+  for (const [wireKey, descriptor] of Object.entries(
+    MODEL_SETTING_DESCRIPTORS,
+  )) {
+    const value = after[descriptor.localKey];
+    if (
+      value === undefined ||
+      Object.is(value, before[descriptor.localKey]) ||
+      !descriptor.accepts(value)
+    )
+      continue;
+    mutations.push({
+      entity: CORE_SYNC_ENTITIES.modelSetting,
+      entityId: wireKey,
+      kind: 'put',
+      fields: { value_json: JSON.stringify(value) },
+    });
+  }
+  return mutations;
+}
+
+export function mobileModelSettingPatch(
+  wireKey: string,
+  fields: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const descriptor = MODEL_SETTING_DESCRIPTORS[wireKey];
+  if (!descriptor || typeof fields.value_json !== 'string') return null;
+  try {
+    const value = JSON.parse(fields.value_json) as unknown;
+    return descriptor.accepts(value) ? { [descriptor.localKey]: value } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function conversationPutMutation(
   conversation: Conversation,
 ): SyncMutation {
@@ -85,5 +176,14 @@ export function emitSyncMutation(mutation: SyncMutation | null): void {
     callHook(HOOKS.syncRecordLocalMutation, mutation);
   } catch {
     // Sync is additive. A Pro integration failure must not roll back local data.
+  }
+}
+
+export function emitChangedModelSettings(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): void {
+  for (const mutation of modelSettingMutations(before, after)) {
+    emitSyncMutation(mutation);
   }
 }

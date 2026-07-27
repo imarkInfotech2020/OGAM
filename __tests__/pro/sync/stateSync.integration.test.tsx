@@ -177,6 +177,11 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: createdAt,
     });
+    for (let revision = 0; revision < 20; revision += 1) {
+      remoteLog.record(CORE_SYNC_ENTITIES.modelSetting, 'temperature', 'put', {
+        value_json: revision === 19 ? '0.55' : '0.5',
+      });
+    }
 
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -252,6 +257,42 @@ describe('Pro mobile state sync journey', () => {
           `${CORE_SYNC_ENTITIES.project}:${phoneProject.id}`,
         ),
       ).toMatchObject({ name: 'Phone Notes' }),
+    );
+
+    fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', false);
+    await waitFor(() =>
+      expect(stateSyncService.preferences().settings).toBe(false),
+    );
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByText('Model Settings'));
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('text-generation-accordion')),
+    );
+    await waitFor(() =>
+      expect(ui!.getByTestId('llama-temperature-value').props.children).toBe(
+        '0.55',
+      ),
+    );
+    fireEvent(
+      ui.getByTestId('llama-temperature-slider'),
+      'slidingComplete',
+      1.25,
+    );
+    expect(
+      remoteRecords.records.get(
+        `${CORE_SYNC_ENTITIES.modelSetting}:temperature`,
+      ),
+    ).toMatchObject({ value_json: '0.55' });
+
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', true);
+    await waitFor(() =>
+      expect(
+        remoteRecords.records.get(
+          `${CORE_SYNC_ENTITIES.modelSetting}:temperature`,
+        ),
+      ).toMatchObject({ value_json: '1.25' }),
     );
   });
 });
