@@ -7,8 +7,6 @@ import { ragService } from '../services/rag';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
 import {
-  CORE_SYNC_ENTITIES,
-  deleteSyncMutation,
   emitSyncMutation,
   projectPutMutation,
 } from '../services/sync/mutation';
@@ -145,7 +143,6 @@ export const useProjectStore = create<ProjectState>()(
         set(state => ({
           projects: state.projects.filter(project => project.id !== id),
         }));
-        emitSyncMutation(deleteSyncMutation(CORE_SYNC_ENTITIES.project, id));
       },
 
       getProject: id => {
