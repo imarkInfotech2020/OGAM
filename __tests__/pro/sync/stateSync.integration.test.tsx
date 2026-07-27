@@ -259,6 +259,32 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ name: 'Phone Notes' }),
     );
 
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByTestId('projects-tab'));
+    fireEvent.press(ui.getByText('Desktop Research'));
+    fireEvent.press(await waitFor(() => ui!.getByText('Delete Project')));
+    fireEvent.press(await waitFor(() => ui!.getByText('Delete')));
+    await waitFor(() =>
+      expect(
+        remoteRecords.records.has(
+          `${CORE_SYNC_ENTITIES.project}:remote-project`,
+        ),
+      ).toBe(false),
+    );
+    expect(
+      remoteRecords.records.get(
+        `${CORE_SYNC_ENTITIES.conversation}:remote-conversation`,
+      ),
+    ).toMatchObject({ project_id: null });
+    expect(
+      remoteRecords.records.get(`${CORE_SYNC_ENTITIES.message}:remote-message`),
+    ).toMatchObject({ content: 'Bring the field notes' });
+    fireEvent.press(ui.getByTestId('chats-tab'));
+    await waitFor(() => expect(ui!.getByText('Field planning')).toBeTruthy());
+    expect(ui.getByText('You: Bring the field notes')).toBeTruthy();
+
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
     fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', false);
     await waitFor(() =>
       expect(stateSyncService.preferences().settings).toBe(false),

@@ -7,6 +7,7 @@ import { ragService } from '../services/rag';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
 import {
+  CORE_SYNC_ENTITIES,
   emitSyncMutation,
   projectPutMutation,
 } from '../services/sync/mutation';
@@ -127,6 +128,7 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       deleteProject: id => {
+        const projectExists = get().projects.some(project => project.id === id);
         ragService
           .deleteProjectDocuments(id)
           .catch(err =>
@@ -143,6 +145,13 @@ export const useProjectStore = create<ProjectState>()(
         set(state => ({
           projects: state.projects.filter(project => project.id !== id),
         }));
+        if (projectExists) {
+          emitSyncMutation({
+            entity: CORE_SYNC_ENTITIES.project,
+            entityId: id,
+            kind: 'delete',
+          });
+        }
       },
 
       getProject: id => {
