@@ -76,10 +76,10 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       becomes visible, a project created through the phone UI stays local while Projects sharing is
       off, and enabling Projects sends it over the real loopback transport.
 - [ ] Sync `model_setting` records; no mobile settings owner is wired yet.
-- [ ] Prove offline same-record edits converge to the engine's LWW winner and rehydrate without
-      duplicate ops through a focused rendered/relaunch journey.
-- [ ] Resolve project-delete semantics before mobile emits project tombstones. Mobile deletion
-      unfiles chats; desktop currently deletes the project's conversations and messages.
+- [x] The rendered relaunch journey proves offline same-record edits converge to the engine's LWW
+      winner, then rehydrate without duplicate ops.
+- [x] Mobile emits project tombstones and preserves its existing delete behavior: deleting a
+      project unfiles its chats. Remote project tombstones apply the same behavior locally.
 - [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS
       and Android devices.
 
