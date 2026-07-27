@@ -1,10 +1,13 @@
 import React from 'react';
 import {
+  Alert,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
+import TcpSocket from 'react-native-tcp-socket';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
@@ -23,11 +26,29 @@ import {
   clipboardSyncService,
 } from '../../../pro/sync/clipboardSyncService';
 import { ClipboardPreferences } from '../../../pro/sync/clipboardPreferences';
+import { ClipboardHistoryStore } from '../../../pro/sync/clipboardHistoryStore';
+import { syncService } from '../../../pro/sync/syncService';
+import { useSyncStore } from '../../../pro/sync/syncStore';
+import { ClipboardScreen } from '../../../pro/ui/ClipboardScreen';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
+import { ProRoot } from '../../../pro/ui/ProRoot';
+import { AppNavigator } from '../../../src/navigation/AppNavigator';
+import {
+  registerScreen,
+  _clearScreensForTesting,
+} from '../../../src/navigation/screenRegistry';
+import {
+  registerSettingsSection,
+  _clearSectionsForTesting,
+} from '../../../src/components/settings/sectionRegistry';
+import { useAppStore } from '../../../src/stores/appStore';
 import {
   createNativeTcpBoundary,
+  getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
+import { createDownloadedModel } from '../../utils/factories';
 
 jest.mock('@react-navigation/native', () =>
   jest.requireActual('@react-navigation/native'),
@@ -81,14 +102,36 @@ const device = (id: string, platform: DeviceInfo['platform']): DeviceInfo => ({
 });
 
 describe('mobile clipboard Sync journey', () => {
+  let remote: ReturnType<typeof buildSyncEngine> | undefined;
+  let ui: ReturnType<typeof render> | undefined;
+
   beforeEach(async () => {
     await clipboardSyncService.stop();
     await AsyncStorage.clear();
+    await clipboardSyncService.clearHistory();
+    await clipboardSyncService.stop();
     resetDiscoveryBoundaries();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
+    registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({ name: 'Clipboard', component: ClipboardScreen });
+    registerSettingsSection(SyncSettingsSection);
+    useAppStore.getState().setOnboardingComplete(true);
+    useAppStore
+      .getState()
+      .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
+    useSyncStore.getState().reset();
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+    (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });
 
   afterEach(async () => {
+    ui?.unmount();
+    await remote?.engine.stop();
+    await syncService.stop();
     await clipboardSyncService.stop();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
     jest.restoreAllMocks();
   });
 
@@ -122,13 +165,17 @@ describe('mobile clipboard Sync journey', () => {
       },
     });
     const nativeClipboard = new ClipboardBoundary();
+    const history = new ClipboardHistoryStore();
     const service = new MobileClipboardSyncService({
       nativeClipboard,
       preferences: new ClipboardPreferences(),
+      history,
       transport: {
         sendApp: (deviceId, channel, data) =>
           mobile.engine.sendApp(deviceId, channel, data),
         connectedDeviceIds: () => [...connected],
+        deviceName: deviceId =>
+          deviceId === desktopDevice.id ? 'Off Grid AI Desktop' : undefined,
         onAppMessage: listener => {
           mobileAppListeners.add(listener);
           return () => mobileAppListeners.delete(listener);
@@ -162,6 +209,20 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() =>
       expect(nativeClipboard.writes).toEqual(['copied on Mac']),
     );
+    await waitFor(() =>
+      expect(service.historySnapshot()).toEqual([
+        expect.objectContaining({
+          text: 'copied on Mac',
+          source: 'remote',
+          sourceDeviceName: 'Off Grid AI Desktop',
+        }),
+        expect.objectContaining({
+          text: 'copied on iPhone',
+          source: 'local',
+          sourceDeviceName: 'This phone',
+        }),
+      ]),
+    );
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(receivedByDesktop).toHaveLength(1);
 
@@ -187,6 +248,8 @@ describe('mobile clipboard Sync journey', () => {
         sendApp: (deviceId, channel, data) =>
           mobile.engine.sendApp(deviceId, channel, data),
         connectedDeviceIds: () => [...connected],
+        deviceName: deviceId =>
+          deviceId === desktopDevice.id ? 'Off Grid AI Desktop' : undefined,
         onAppMessage: listener => {
           mobileAppListeners.add(listener);
           return () => mobileAppListeners.delete(listener);
@@ -211,7 +274,8 @@ describe('mobile clipboard Sync journey', () => {
     await Promise.all([mobile.engine.stop(), desktop.engine.stop()]);
   });
 
-  it('exposes the persisted opt-in on the rendered Sync screen', async () => {
+  it('shows attributed clipboard history through Settings and manages it', async () => {
+    let nativeChange: ((change: NativeClipboardChange) => void) | undefined;
     const nativeModule = {
       setEnabled: jest.fn(),
       writeText: jest.fn(),
@@ -221,27 +285,115 @@ describe('mobile clipboard Sync journey', () => {
     NativeModules.SyncClipboardModule = nativeModule;
     jest
       .spyOn(NativeEventEmitter.prototype, 'addListener')
-      .mockReturnValue({ remove: jest.fn() } as unknown as EmitterSubscription);
+      .mockImplementation((eventName, listener) => {
+        if (eventName === 'SyncClipboardChanged') {
+          nativeChange = listener as (change: NativeClipboardChange) => void;
+        }
+        return { remove: jest.fn() } as unknown as EmitterSubscription;
+      });
 
-    const ui = render(
-      <NavigationContainer>
-        <SyncScreen />
-      </NavigationContainer>,
+    const remoteDevice: DeviceInfo = {
+      id: 'clipboard-desktop',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: TcpSocket as unknown as RnTcpModule,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
     );
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    await waitFor(() =>
+      expect(ui!.getByText('Discoverable on your Wi-Fi')).toBeTruthy(),
+    );
+
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    const pairing = remote.engine.pair(
+      {
+        ...mobile,
+        host: '127.0.0.1',
+        port: discovery.publishedPort,
+      },
+      'green-river-42',
+    );
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'green-river-42',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await pairing;
+
     const toggle = ui.getByTestId('sync-clipboard-toggle');
     expect(toggle.props.value).toBe(false);
-
     fireEvent(toggle, 'valueChange', true);
     await waitFor(() =>
       expect(nativeModule.setEnabled).toHaveBeenCalledWith(true),
     );
-    expect(ui.getByTestId('sync-clipboard-toggle').props.value).toBe(true);
-    expect(
-      JSON.parse(
-        (await AsyncStorage.getItem('offgrid-sync-clipboard-v1')) ?? '{}',
-      ),
-    ).toEqual({ enabled: true });
+    expect(nativeChange).toBeDefined();
 
-    ui.unmount();
+    nativeChange?.({ text: 'copied on iPhone', ts: 1000 });
+    await waitFor(() =>
+      expect(
+        remote!.engine.sendApp(mobile.id, 'clipboard-test-ready', {}),
+      ).toBe(true),
+    );
+    expect(
+      remote.engine.sendApp(mobile.id, CLIPBOARD_CHANNEL, {
+        t: 'text',
+        text: 'copied on Mac',
+        ts: 2000,
+      }),
+    ).toBe(true);
+    await waitFor(() =>
+      expect(nativeModule.writeText).toHaveBeenCalledWith('copied on Mac'),
+    );
+
+    fireEvent.press(ui.getByTestId('open-clipboard-history'));
+    await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
+    expect(ui.getByText('This phone')).toBeTruthy();
+    expect(ui.getByText('copied on Mac')).toBeTruthy();
+    expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();
+
+    fireEvent.press(
+      ui.getAllByLabelText('Copy text from Off Grid AI Desktop')[0],
+    );
+    await waitFor(() =>
+      expect(nativeModule.writeText).toHaveBeenLastCalledWith('copied on Mac'),
+    );
+
+    fireEvent.press(ui.getByLabelText('Delete text from Off Grid AI Desktop'));
+    await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull());
+
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    fireEvent.press(ui.getByTestId('clipboard-clear'));
+    const clear = (alert.mock.calls[0][2] ?? []).find(
+      button => button.style === 'destructive',
+    );
+    clear?.onPress?.();
+    await waitFor(() =>
+      expect(ui!.getByTestId('clipboard-empty')).toBeTruthy(),
+    );
   });
 });

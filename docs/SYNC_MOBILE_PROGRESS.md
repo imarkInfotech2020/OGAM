@@ -123,6 +123,13 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       text without echo loops. Payloads are deduplicated, validated, and capped at 256 KiB.
 - [x] Integration coverage proves opt-in persistence, encrypted paired delivery, receive/apply,
       duplicate suppression, malformed/oversized rejection, and the rendered toggle.
+- [x] Settings → Sync → View clipboard opens a persistent text history with source attribution
+      (`This phone` or the paired device name). Tapping restores a clip to the system clipboard;
+      individual delete and confirmed Clear are available. Retention is bounded to 100 entries and
+      1 MiB of text.
+- [x] The rendered AppNavigator journey pairs a real loopback peer, captures one local and one
+      encrypted remote clip, proves both source labels, restores the remote clip, deletes it, and
+      clears the remaining history.
 - [x] iOS native test, Android native test, and a signed physical-iPhone build all pass.
 - [ ] Verify clipboard text in both directions against a desktop build implementing the same
       `clipboard` app channel. iOS observes copies while active and rechecks on foreground.
