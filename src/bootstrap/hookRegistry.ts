@@ -57,4 +57,7 @@ export const HOOKS = {
   /** () => Promise<void> — warm the active TTS engine at boot if its model is
    *  downloaded and fits the residency budget (no-op otherwise). */
   audioPreload: 'audio.preload',
+  /** (mutation: SyncMutation) => void — a core data owner committed a record
+   *  change. Pro records it in the state-sync op-log; free builds do nothing. */
+  syncRecordLocalMutation: 'sync.recordLocalMutation',
 } as const;
