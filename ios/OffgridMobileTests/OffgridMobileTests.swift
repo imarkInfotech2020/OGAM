@@ -850,3 +850,44 @@ final class AppDelegateBackgroundSessionTests: XCTestCase {
     )
   }
 }
+
+// MARK: - Sync Clipboard Native Boundary Tests
+
+final class SyncClipboardObserverTests: XCTestCase {
+
+  func testObservesAndWritesTheRealPasteboardOnlyWhileEnabled() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observed: [(text: String, timestamp: Double)] = []
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter,
+      now: { 42 }
+    ) { text, timestamp in
+      observed.append((text, timestamp))
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "copied locally"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    XCTAssertEqual(observed.count, 1)
+    XCTAssertEqual(observed.first?.text, "copied locally")
+    XCTAssertEqual(observed.first?.timestamp, 42_000)
+
+    observer.writeText("received from desktop")
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+    XCTAssertEqual(pasteboard.string, "received from desktop")
+    XCTAssertEqual(observed.last?.text, "received from desktop")
+
+    observer.setEnabled(false)
+    pasteboard.string = "must stay local"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+    XCTAssertEqual(observed.count, 2)
+  }
+}
