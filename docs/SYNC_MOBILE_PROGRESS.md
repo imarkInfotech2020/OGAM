@@ -75,7 +75,13 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] One rendered AppNavigator journey proves a pre-pair desktop project/chat/message arrives and
       becomes visible, a project created through the phone UI stays local while Projects sharing is
       off, and enabling Projects sends it over the real loopback transport.
-- [ ] Sync `model_setting` records; no mobile settings owner is wired yet.
+- [x] Sync the shared `model_setting` keys through the canonical desktop wire names. The mobile
+      app store remains the settings owner; inbound values are validated and applied without
+      rebroadcast, while local changes and resets emit through the optional Pro hook.
+- [x] The rendered AppNavigator journey proves an inbound desktop temperature becomes visible in
+      Model Settings, a phone edit stays local while Model settings sharing is off, and re-enabling
+      the category backfills the current value. A contract test round-trips every supported
+      desktop↔mobile key and rejects malformed or unsafe peer values.
 - [ ] Prove offline same-record edits converge to the engine's LWW winner and rehydrate without
       duplicate ops through a focused rendered/relaunch journey.
 - [ ] Resolve project-delete semantics before mobile emits project tombstones. Mobile deletion
@@ -106,7 +112,8 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 ## Branch
 
 `feat/sync-integration-phase0` (mobile). State-sync checkpoints:
-`f50dea2c` (stable IDs), Pro `93cf8ce8`, and core `857096a0`.
+`f50dea2c` (stable IDs), `b8abb869` (withhold unsafe project tombstones),
+Pro `07e06ee2` and core `78df85ba` (model settings).
 Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
