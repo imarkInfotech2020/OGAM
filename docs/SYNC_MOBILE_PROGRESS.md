@@ -75,8 +75,6 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] One rendered AppNavigator journey proves a pre-pair desktop project/chat/message arrives and
       becomes visible, a project created through the phone UI stays local while Projects sharing is
       off, and enabling Projects sends it over the real loopback transport.
-- [x] Focused persistence tests cover op de-duplication, corrupt op storage, and privacy-setting
-      rollback when AsyncStorage rejects a write.
 - [ ] Sync `model_setting` records; no mobile settings owner is wired yet.
 - [ ] Prove offline same-record edits converge to the engine's LWW winner and rehydrate without
       duplicate ops through a focused rendered/relaunch journey.
@@ -108,8 +106,8 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 ## Branch
 
 `feat/sync-integration-phase0` (mobile). State-sync checkpoints:
-`f50dea2c` (stable IDs), Pro `93cf8ce8`, core `857096a0`, and `f14dd836` (persistence tests).
-Commits are small + each has tests + hygiene.
+`f50dea2c` (stable IDs), Pro `93cf8ce8`, and core `857096a0`.
+Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
 
