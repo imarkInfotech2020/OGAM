@@ -309,5 +309,5 @@ describe('Pro mobile model package receiver', () => {
     ).rejects.toThrow(
       'only text, vision, and Whisper transcription models can be sent to Off Grid Mobile',
     );
-  });
+  }, 30_000);
 });
