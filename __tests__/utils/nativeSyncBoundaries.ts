@@ -80,6 +80,8 @@ export function createNativeTcpBoundary(): RnTcpModule {
 
 export interface DiscoveryBoundary {
   publishedPort?: number;
+  scanCount: number;
+  stopCount: number;
   resolve(device: DeviceInfo): void;
 }
 
@@ -88,6 +90,8 @@ let boundaries: DiscoveryBoundary[] = [];
 export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
   return class NativeDiscoveryBoundary implements DiscoveryBoundary {
     publishedPort?: number;
+    scanCount = 0;
+    stopCount = 0;
     private readonly handlers = new Map<string, Handler>();
 
     constructor() {
@@ -98,8 +102,12 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
       this.handlers.set(event, callback);
     }
 
-    scan(): void {}
-    stop(): void {}
+    scan(): void {
+      this.scanCount += 1;
+    }
+    stop(): void {
+      this.stopCount += 1;
+    }
     removeDeviceListeners(): void {}
     publishService(
       _type: string,

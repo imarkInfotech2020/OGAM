@@ -6,7 +6,12 @@
 import { Platform } from 'react-native';
 import TcpSocket from 'react-native-tcp-socket';
 import Zeroconf from 'react-native-zeroconf';
-import type { DeviceInfo, DiscoveredDevice, PairedDevice, Message } from '@offgrid/sync';
+import type {
+  DeviceInfo,
+  DiscoveredDevice,
+  PairedDevice,
+  Message,
+} from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
 import { buildSyncEngine } from './engine';
@@ -15,7 +20,9 @@ import logger from '../../utils/logger';
 
 export interface NativeSyncCallbacks {
   /** Passphrase for an INBOUND pairing (UI prompt). Return null to refuse. */
-  getPassphrase?: (remote: DeviceInfo) => Promise<string | null | undefined> | string | null | undefined;
+  getPassphrase?: (
+    remote: DeviceInfo,
+  ) => Promise<string | null | undefined> | string | null | undefined;
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
   onPaired?: (device: PairedDevice) => void;
@@ -31,6 +38,7 @@ export interface NativeSync {
   readonly localDevice: DeviceInfo;
   start(): Promise<void>;
   stop(): Promise<void>;
+  rescan(): Promise<void>;
   pair(device: DeviceInfo, passphrase: string): Promise<void>;
   send(deviceId: string, message: Message): boolean;
   sendApp(deviceId: string, channel: string, data: unknown): boolean;
@@ -38,7 +46,10 @@ export interface NativeSync {
 }
 
 /** Construct (but don't start) the mobile Sync stack for a given local device. */
-export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbacks): NativeSync {
+export function createNativeSync(
+  localDevice: DeviceInfo,
+  cbs: NativeSyncCallbacks,
+): NativeSync {
   const { engine, transport } = buildSyncEngine({
     localDevice,
     tcpModule: TcpSocket as unknown as RnTcpModule,
@@ -59,6 +70,8 @@ export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbac
     onDiscovered: cbs.onDiscovered,
     onLost: cbs.onLost,
   });
+  let active = false;
+  let rescanTask: Promise<void> | null = null;
 
   return {
     localDevice,
@@ -66,17 +79,38 @@ export function createNativeSync(localDevice: DeviceInfo, cbs: NativeSyncCallbac
       await engine.start(0); // ephemeral port
       localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
       await orchestrator.start();
-      logger.log(`[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`);
+      active = true;
+      logger.log(
+        `[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`,
+      );
     },
     async stop() {
+      active = false;
+      await rescanTask?.catch(() => undefined);
       await orchestrator.stop();
       await engine.stop();
       logger.log('[SYNC] stopped');
     },
+    async rescan() {
+      if (!active) throw new Error('Sync is not running.');
+      if (rescanTask) return rescanTask;
+      rescanTask = (async () => {
+        await orchestrator.stop();
+        if (!active) return;
+        await orchestrator.start();
+        logger.log('[SYNC] discovery rescanned');
+      })();
+      try {
+        await rescanTask;
+      } finally {
+        rescanTask = null;
+      }
+    },
     pair: (device, passphrase) => engine.pair(device, passphrase),
     send: (deviceId, message) => engine.send(deviceId, message),
-    sendApp: (deviceId, channel, data) => engine.sendApp(deviceId, channel, data),
-    isPaired: (deviceId) => engine.isPaired(deviceId),
+    sendApp: (deviceId, channel, data) =>
+      engine.sendApp(deviceId, channel, data),
+    isPaired: deviceId => engine.isPaired(deviceId),
   };
 }
 

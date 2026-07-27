@@ -205,6 +205,12 @@ describe('Pro mobile state sync journey', () => {
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
     }
+    expect(discovery.scanCount).toBe(1);
+    fireEvent.press(ui.getByTestId('sync-rescan'));
+    await waitFor(() => expect(discovery.scanCount).toBe(2));
+    expect(discovery.stopCount).toBe(1);
+    expect(discovery.publishedPort).toBeGreaterThan(0);
+
     await remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'violet-lake-27',
