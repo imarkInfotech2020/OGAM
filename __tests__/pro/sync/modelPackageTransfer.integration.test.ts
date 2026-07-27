@@ -172,7 +172,10 @@ describe('Pro mobile model package receiver', () => {
     await waitForState(() =>
       useSyncStore
         .getState()
-        .paired.some(device => device.id === remoteDevice.id),
+        .knownDevices.some(
+          device =>
+            device.id === remoteDevice.id && device.status === 'connected',
+        ),
     );
 
     const primary = modelBytes(96 * 1024 + 4, 0x31);

@@ -40,6 +40,7 @@ export interface NativeSync {
   stop(): Promise<void>;
   rescan(): Promise<void>;
   pair(device: DeviceInfo, passphrase: string): Promise<void>;
+  disconnect(deviceId: string): boolean;
   send(deviceId: string, message: Message): boolean;
   sendApp(deviceId: string, channel: string, data: unknown): boolean;
   isPaired(deviceId: string): boolean;
@@ -107,6 +108,7 @@ export function createNativeSync(
       }
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),
+    disconnect: deviceId => engine.disconnect(deviceId),
     send: (deviceId, message) => engine.send(deviceId, message),
     sendApp: (deviceId, channel, data) =>
       engine.sendApp(deviceId, channel, data),

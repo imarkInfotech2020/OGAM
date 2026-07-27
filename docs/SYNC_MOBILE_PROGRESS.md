@@ -49,6 +49,12 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Two-device handshake (discover, NaCl pair, app message) verified manually on real devices.
 - [x] Pairing secrets persist in Keychain. A paired peer reconnects after the mobile Sync service
       restarts without asking for the pairing code again.
+- [x] Pairing metadata persists independently of discovery, so trusted devices remain visible while
+      offline. Sync distinguishes connected, reconnecting, offline, and needs-repair states.
+- [x] One-sided trust is recoverable through Pair again. Forget device clears the local secret,
+      disconnects the session, and notifies a connected peer to clear its trust too.
+- [x] The rendered persistence journey covers restart/reconnect, one-sided trust repair, re-pair,
+      and two-sided forget. Settings → Sync also proves an offline device remains manageable.
 
 ### Phase 0.5 — Pro experience + licensed devices — COMPLETE
 
@@ -103,12 +109,23 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Invalid files are rejected and both the final file and partial file are removed.
 - [x] Send an installed single-file GGUF from a paired device row. Sync shows transfer progress,
       failure, cancellation, completion, and dismissal states.
+- [x] Receive mobile-compatible multi-file packages for vision and Whisper models. Package
+      admission reuses the mobile model registry and rejects desktop-only image and Parakeet models.
 - [x] The rendered AppNavigator journey covers Settings to Sync, pairing-code entry, valid receive,
       invalid receive, model admission, and sending the admitted model back.
 - [ ] Verify a full-size GGUF transfer in both directions on real iOS and Android devices.
-- [ ] Add multi-file transfer before exposing vision models or other model formats.
 
-### Phase 3 — Ambient sharing — NOT STARTED
+### Phase 3 — Ambient sharing — IN PROGRESS
+
+- [x] Add explicit opt-in clipboard Sync on mobile. It sends text copied after the toggle is enabled
+      over the encrypted paired-device app channel and never sends images or files.
+- [x] Native iOS and Android clipboard observers bridge local copies into Sync and apply received
+      text without echo loops. Payloads are deduplicated, validated, and capped at 256 KiB.
+- [x] Integration coverage proves opt-in persistence, encrypted paired delivery, receive/apply,
+      duplicate suppression, malformed/oversized rejection, and the rendered toggle.
+- [x] iOS native test, Android native test, and a signed physical-iPhone build all pass.
+- [ ] Verify clipboard text in both directions against a desktop build implementing the same
+      `clipboard` app channel. iOS observes copies while active and rechecks on foreground.
 
 ## Security note (logged for GA)
 

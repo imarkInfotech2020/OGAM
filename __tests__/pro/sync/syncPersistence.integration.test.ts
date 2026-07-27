@@ -30,11 +30,12 @@ jest.mock('react-native-zeroconf', () => {
 const waitFor = async (
   condition: () => boolean,
   timeoutMs = 3000,
+  label = 'Sync state',
 ): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
   while (!condition()) {
     if (Date.now() >= deadline)
-      throw new Error('Timed out waiting for Sync state');
+      throw new Error(`Timed out waiting for ${label}`);
     await new Promise(resolve => setTimeout(resolve, 10));
   }
 };
@@ -108,12 +109,20 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await waitFor(
       () =>
         useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+      3000,
+      'initial incoming pairing',
     );
     syncService.acceptIncomingPairing('blue-otter-42');
-    await waitFor(() =>
-      useSyncStore
-        .getState()
-        .paired.some(device => device.id === remoteDevice.id),
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.some(
+            device =>
+              device.id === remoteDevice.id && device.status === 'connected',
+          ),
+      3000,
+      'initial connected device',
     );
     await waitFor(() => Boolean(persistedPairings));
 
@@ -125,12 +134,130 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     expect(discovery).toBeDefined();
     discovery!.resolve(remoteDevice);
 
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.some(
+            device =>
+              device.id === remoteDevice.id && device.status === 'connected',
+          ),
+      3000,
+      'reconnected device',
+    );
+    expect(useSyncStore.getState().discovered).toHaveLength(0);
+
+    await remote.engine.stop();
+  });
+
+  it('repairs one-sided trust and forgets the device locally and remotely', async () => {
+    let remoteSecret: string | undefined;
+    const trustMessages: unknown[] = [];
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    let remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getSharedSecret: deviceId =>
+        deviceId === useSyncStore.getState().thisDevice?.id
+          ? remoteSecret
+          : undefined,
+      onPaired: device => {
+        remoteSecret = device.sharedSecret;
+      },
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+
+    await syncService.start();
+    const mobile = useSyncStore.getState().thisDevice;
+    const firstDiscovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !firstDiscovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+
+    await remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
+      'blue-otter-42',
+    );
+    await waitFor(
+      () =>
+        useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+    );
+    syncService.acceptIncomingPairing('blue-otter-42');
     await waitFor(() =>
       useSyncStore
         .getState()
-        .paired.some(device => device.id === remoteDevice.id),
+        .knownDevices.some(
+          device =>
+            device.id === remoteDevice.id && device.status === 'connected',
+        ),
     );
-    expect(useSyncStore.getState().discovered).toHaveLength(0);
+
+    await remote.engine.stop();
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.find(device => device.id === remoteDevice.id)
+          ?.status === 'offline',
+      3000,
+      'disconnect before repair',
+    );
+    remoteSecret = undefined;
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: () => 'blue-otter-42',
+      getSharedSecret: () => undefined,
+      onPaired: device => {
+        remoteSecret = device.sharedSecret;
+      },
+      onAppMessage: (_deviceId, channel, data) => {
+        if (channel === 'device-trust-v1') trustMessages.push(data);
+      },
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+
+    getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.find(device => device.id === remoteDevice.id)
+          ?.status === 'needs_repair',
+      3000,
+      'one-sided trust repair state',
+    );
+
+    useSyncStore.getState().setPairingCode('blue-otter-42');
+    await syncService.pair(remoteDevice);
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.find(device => device.id === remoteDevice.id)
+          ?.status === 'connected',
+      3000,
+      'repaired connection',
+    );
+    expect(remoteSecret).toBeTruthy();
+
+    await syncService.forgetDevice(remoteDevice.id);
+    await waitFor(() => trustMessages.length === 1, 3000, 'remote forget');
+    expect(trustMessages).toEqual([{ type: 'forget' }]);
+    expect(useSyncStore.getState().knownDevices).toEqual([]);
+    expect(JSON.parse(persistedPairings ?? '{}')).toEqual({
+      version: 2,
+      pairings: {},
+    });
 
     await remote.engine.stop();
   });
