@@ -88,3 +88,22 @@ export async function validateModelFile(modelPath: string): Promise<void> {
 
   logger.log(`[Whisper] Model file validated: ${modelPath} (${Math.round(fileSize / (1024 * 1024))} MB)`);
 }
+
+/**
+ * Admit a transferred Whisper artifact into the disk-backed transcription catalog.
+ * The catalog identity and destination filename must agree before native code can see it.
+ */
+export async function registerTransferredModel(
+  filePath: string,
+  modelId: string,
+): Promise<void> {
+  if (
+    !modelId ||
+    modelId.includes('/') ||
+    modelId.includes('\\') ||
+    filePath !== getModelPath(modelId)
+  ) {
+    throw new Error('Transferred Whisper model identity is invalid');
+  }
+  await validateModelFile(filePath);
+}

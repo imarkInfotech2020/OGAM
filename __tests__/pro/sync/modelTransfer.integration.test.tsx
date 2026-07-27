@@ -195,13 +195,21 @@ describe('Pro mobile model transfer journey', () => {
       mimeType: MODEL_TRANSFER_MIME,
       metadata: {
         type: 'offgrid-model',
-        version: 1,
+        version: 2,
+        packageId: 'text-package',
+        fileIndex: 0,
         manifest: {
           id: 'google/gemma-mobile',
           name: 'Gemma Mobile',
           kind: 'text',
           source: 'downloaded',
-          files: [{ name: fileName, sizeBytes: payload.length }],
+          files: [
+            {
+              name: fileName,
+              sizeBytes: payload.length,
+              role: 'primary',
+            },
+          ],
         },
       },
       checksum: async () => checksum.digest(),
@@ -241,7 +249,9 @@ describe('Pro mobile model transfer journey', () => {
         mimeType: MODEL_TRANSFER_MIME,
         metadata: {
           type: 'offgrid-model',
-          version: 1,
+          version: 2,
+          packageId: 'invalid-package',
+          fileIndex: 0,
           manifest: {
             id: 'offgrid/invalid-model',
             name: 'Invalid model',
@@ -251,6 +261,7 @@ describe('Pro mobile model transfer journey', () => {
               {
                 name: invalidFileName,
                 sizeBytes: invalidPayload.length,
+                role: 'primary',
               },
             ],
           },

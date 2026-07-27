@@ -1,5 +1,8 @@
 import RNFS from 'react-native-fs';
-import type { TransferredModelManifest } from '@offgrid/sync';
+import {
+  ogamModelTransferBlocker,
+  type TransferredModelManifest,
+} from '@offgrid/sync';
 import type { DownloadedModel, ModelFile } from '../../types';
 import {
   buildDownloadedModel,
@@ -11,34 +14,66 @@ export async function registerTransferredModelFile(
   manifest: TransferredModelManifest,
   modelsDir: string,
 ): Promise<DownloadedModel> {
-  const file = manifest.files[0];
-  if (!file || file.name.includes('/') || file.name.includes('\\') || !/\.gguf$/i.test(file.name)) {
+  const blocker = ogamModelTransferBlocker(manifest);
+  if (blocker || (manifest.kind !== 'text' && manifest.kind !== 'vision')) {
     throw new Error('Transferred model manifest is invalid');
   }
 
-  const filePath = `${modelsDir}/${file.name}`;
-  const stat = await RNFS.stat(filePath);
-  const actualSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
-  if (!stat.isFile() || actualSize !== file.sizeBytes) {
-    throw new Error('Transferred model file does not match its manifest');
+  const primary =
+    manifest.files.find(file => file.role === 'primary') ??
+    manifest.files.find(file => file.role !== 'projector');
+  const projector = manifest.files.find(file => file.role === 'projector');
+  if (!primary) {
+    throw new Error('Transferred model manifest is invalid');
   }
 
-  const quantization = file.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i)?.[1]?.toUpperCase() ?? 'Unknown';
+  for (const file of manifest.files) {
+    const filePath = `${modelsDir}/${file.name}`;
+    const stat = await RNFS.stat(filePath);
+    const actualSize =
+      typeof stat.size === 'string'
+        ? Number.parseInt(stat.size, 10)
+        : stat.size;
+    if (!stat.isFile() || actualSize !== file.sizeBytes) {
+      throw new Error('Transferred model file does not match its manifest');
+    }
+  }
+
+  const primaryPath = `${modelsDir}/${primary.name}`;
+  const projectorPath = projector
+    ? `${modelsDir}/${projector.name}`
+    : undefined;
+  const quantization =
+    primary.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i)?.[1]?.toUpperCase() ??
+    'Unknown';
   const pseudoFile: ModelFile = {
-    name: file.name,
-    size: file.sizeBytes,
+    name: primary.name,
+    size: primary.sizeBytes,
     quantization,
     downloadUrl: '',
+    ...(projector
+      ? {
+          mmProjFile: {
+            name: projector.name,
+            size: projector.sizeBytes,
+            downloadUrl: '',
+          },
+        }
+      : {}),
   };
   const base = await buildDownloadedModel({
     modelId: manifest.id,
     file: pseudoFile,
-    resolvedLocalPath: filePath,
+    resolvedLocalPath: primaryPath,
+    mmProjPath: projectorPath,
   });
-  const author = manifest.source === 'local' ? 'Local Import' : (manifest.id.split('/')[0] || 'Unknown');
+  const author =
+    manifest.source === 'local'
+      ? 'Local Import'
+      : manifest.id.split('/')[0] || 'Unknown';
   const model: DownloadedModel = {
     ...base,
-    id: `${manifest.id}/${file.name}`,
+    id: `${manifest.id}/${primary.name}`,
     name: manifest.name,
     author,
     credibility: determineCredibility(author),
