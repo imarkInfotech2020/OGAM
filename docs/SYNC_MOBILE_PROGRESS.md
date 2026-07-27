@@ -86,8 +86,10 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       edit on each side at the same Lamport, reconnects, and proves both sides select the shared
       engine's higher-device-ID LWW winner. Restarting the mobile state service preserves the op
       count, and remounting AppNavigator shows the winning value without duplicate backfill ops.
-- [ ] Resolve project-delete semantics before mobile emits project tombstones. Mobile deletion
-      unfiles chats; desktop currently deletes the project's conversations and messages.
+- [x] Project deletion now has one non-destructive cross-lane contract: both apps remove the
+      project and unfile its conversations without deleting messages. The rendered journey deletes
+      an inbound project through mobile UI and proves the tombstone, unfiled conversation, and
+      preserved message all reach the peer.
 - [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS
       and Android devices.
 
@@ -115,7 +117,8 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 
 `feat/sync-integration-phase0` (mobile). State-sync checkpoints:
 `f50dea2c` (stable IDs), `b8abb869` (withhold unsafe project tombstones),
-Pro `07e06ee2` and core `78df85ba` (model settings).
+Pro `07e06ee2` and core `78df85ba` (model settings), and `69f16ccb`
+(non-destructive project deletion).
 Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
