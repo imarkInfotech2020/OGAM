@@ -28,6 +28,7 @@ import { useSyncStore } from '../../../pro/sync/syncStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
+import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -145,16 +146,18 @@ describe('Pro mobile model transfer journey', () => {
     await syncService.start();
 
     ui = render(
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>,
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
     await waitFor(() =>
       expect(ui!.getByText('Discoverable on your Wi-Fi')).toBeTruthy(),
     );
-    fireEvent.changeText(ui.getByTestId('sync-pairing-code'), 'green-river-52');
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -169,6 +172,14 @@ describe('Pro mobile model transfer journey', () => {
       },
       'green-river-52',
     );
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'green-river-52',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );

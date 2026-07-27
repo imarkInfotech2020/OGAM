@@ -38,6 +38,7 @@ import { stateSyncService } from '../../../pro/sync/stateSyncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
+import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -189,13 +190,15 @@ describe('Pro mobile state sync journey', () => {
     await syncService.start();
 
     ui = render(
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>,
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    fireEvent.changeText(ui.getByTestId('sync-pairing-code'), 'violet-lake-27');
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -206,6 +209,19 @@ describe('Pro mobile state sync journey', () => {
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'violet-lake-27',
     );
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    expect(
+      ui.getByText(
+        'Off Grid AI Desktop wants to pair with this phone. Enter the code shown on that device.',
+      ),
+    ).toBeTruthy();
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'violet-lake-27',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
@@ -356,6 +372,10 @@ describe('Pro mobile state sync journey', () => {
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'violet-lake-27',
     );
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
     );

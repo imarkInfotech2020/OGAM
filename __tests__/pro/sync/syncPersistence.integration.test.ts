@@ -100,12 +100,16 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     const firstDiscovery = getDiscoveryBoundaries().at(-1);
     expect(mobile).toBeDefined();
     expect(firstDiscovery?.publishedPort).toBeGreaterThan(0);
-    useSyncStore.getState().setPairingCode('blue-otter-42');
 
     await remote.engine.pair(
       { ...mobile!, host: '127.0.0.1', port: firstDiscovery!.publishedPort! },
       'blue-otter-42',
     );
+    await waitFor(
+      () =>
+        useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+    );
+    syncService.acceptIncomingPairing('blue-otter-42');
     await waitFor(() =>
       useSyncStore
         .getState()
