@@ -4,11 +4,14 @@
 
 import { generateId, generateRandomSeed } from '../../../src/utils/generateId';
 
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 describe('generateId', () => {
   describe('with crypto available', () => {
-    it('should generate a unique ID', () => {
+    it('should generate a UUID identity', () => {
       const id = generateId();
-      expect(id).toMatch(/^\d+-[a-z0-9]+$/);
+      expect(id).toMatch(UUID_V4);
     });
 
     it('should generate different IDs on subsequent calls', () => {
@@ -33,17 +36,17 @@ describe('generateId', () => {
       }
     });
 
-    it('should generate ID using fallback when crypto is not available', () => {
+    it('should generate a UUID identity when crypto is not available', () => {
       const id = generateId();
-      expect(id).toMatch(/^\d+-[a-z0-9]+$/);
+      expect(id).toMatch(UUID_V4);
     });
 
     it('should generate different IDs using fallback', () => {
       const id1 = generateId();
       const id2 = generateId();
-      // IDs might be same if called in same millisecond, but format should be valid
-      expect(id1).toMatch(/^\d+-[a-z0-9]+$/);
-      expect(id2).toMatch(/^\d+-[a-z0-9]+$/);
+      expect(id1).toMatch(UUID_V4);
+      expect(id2).toMatch(UUID_V4);
+      expect(id1).not.toBe(id2);
     });
   });
 });

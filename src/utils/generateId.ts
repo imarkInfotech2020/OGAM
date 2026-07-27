@@ -10,9 +10,9 @@ function randomBytes(): Uint8Array {
   // App bootstrap installs react-native-get-random-values. This fallback keeps
   // isolated JS environments functional without weakening the persisted format.
   fallbackSequence += 1;
-  let seed = Date.now() + fallbackSequence;
+  let seed = ((Date.now() >>> 0) ^ fallbackSequence) >>> 0;
   for (let index = 0; index < bytes.length; index += 1) {
-    seed = (seed * 1664525 + 1013904223) % 4294967296; // NOSONAR
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; // NOSONAR
     bytes[index] = seed % 256;
   }
   return bytes;
@@ -23,7 +23,7 @@ export function generateId(): string {
   const bytes = randomBytes();
   bytes[6] = (bytes[6] % 16) + 64;
   bytes[8] = (bytes[8] % 64) + 128;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'));
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0'));
   return [
     hex.slice(0, 4).join(''),
     hex.slice(4, 6).join(''),
@@ -43,5 +43,7 @@ export function generateRandomSeed(): number {
     return a[0] % 2147483647;
   }
   // Fallback for environments without crypto API
-  return Math.floor(((Date.now() * 9301 + 49297) % 233280) / 233280 * 2147483647); // NOSONAR
+  return Math.floor(
+    (((Date.now() * 9301 + 49297) % 233280) / 233280) * 2147483647,
+  ); // NOSONAR
 }
