@@ -7,9 +7,12 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 
 - **Package:** `@offgrid/sync` (`shared/packages/sync`), consumed by mobile via `file:` dep. Never
   forked. Wire protocol, NaCl crypto, op-log schema, and mDNS service type all live in the package.
-- **mDNS service type:** `_offgrid._tcp.local` (mobile advertises + browses this; must match desktop).
-- **Transport:** length-prefixed NaCl-encrypted frames over TCP (ephemeral bound port, advertised
-  over mDNS TXT). App messages ride the paired channel via `engine.sendApp(deviceId, channel, data)`.
+- **Discovery:** LAN uses `_offgrid._tcp.local`; Apple proximity uses MultipeerConnectivity service
+  `offgrid-sync` (`_offgrid-sync._tcp` + `_offgrid-sync._udp` privacy declarations).
+- **Transport:** shared `MultiTransportBridge` races eligible LAN TCP and reliable Apple proximity
+  routes. Shared Sync still owns length-prefixed NaCl encryption, framing, pairing, heartbeat, and
+  every app/file payload; native adapters only provide reliable bytes. App messages ride the paired
+  channel via `engine.sendApp(deviceId, channel, data)`.
 - **Feature gating:** the mobile Sync _experience_ is Pro; the engine is public.
 - **Desktop contract:** `shared/docs/DESKTOP_SYNC_INTEGRATION_PLAN.md`. This mobile record names each
   landed wire contract and the matching desktop requirement so the two integrations stay visible
@@ -36,12 +39,12 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Consume `@offgrid/sync` file: dep + pure-JS crypto deps (tweetnacl, tweetnacl-util, js-sha512).
 - [x] Metro resolves the package + `./rn` `./rn-discovery` `./portable` (watchFolder + subpath
       aliases; not global package-exports). Bundles on both platforms.
-- [x] RN glue (all unit/integration tested off-device, 11 tests):
-      `rnByteCodec` (Buffer/base64 codec), `buildSyncEngine` (RnTcpTransport + engine),
-      `buildDiscovery` (RnDiscovery + orchestrator). Real pairing + app-message test over an
-      in-memory base64 socket passes.
+- [x] RN glue: `rnByteCodec` (Buffer/base64 codec), `buildSyncEngine`
+      (MultiTransportBridge + SyncEngine), and `buildDiscovery`
+      (CompositeDiscoveryService + orchestrator).
 - [x] `createNativeSync` binding (injects react-native-tcp-socket + react-native-zeroconf).
-- [x] Native config: iOS `NSBonjourServices += _offgrid._tcp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
+- [x] Native config: iOS `NSBonjourServices += _offgrid._tcp, _offgrid-sync._tcp,
+    _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
 - [x] iOS `pod install` autolinked tcp-socket 6.4.1 + zeroconf 0.14.0 (+ CocoaAsyncSocket).
 - [x] Native rebuild: **iOS built + installed + launched** (autolinked tcp-socket + zeroconf).
       Android APK **built OK** but install failed (`No connected devices!` — phone dropped off adb
@@ -54,10 +57,19 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       restarts without asking for the pairing code again.
 - [x] Pairing metadata persists independently of discovery, so trusted devices remain visible while
       offline. Sync distinguishes connected, reconnecting, offline, and needs-repair states.
+- [x] Shared heartbeat marks a silent/dead peer offline instead of retaining stale connected state.
+      Mobile local-device rename persists, updates the active engine identity, and re-advertises it;
+      the same reusable sheet handles local names and saved peer aliases.
 - [x] One-sided trust is recoverable through Pair again. Forget device clears the local secret,
       disconnects the session, and notifies a connected peer to clear its trust too.
 - [x] The rendered persistence journey covers restart/reconnect, one-sided trust repair, re-pair,
       and two-sided forget. Settings → Sync also proves an offline device remains manageable.
+- [x] iOS reliable proximity adapter uses one MultipeerConnectivity session per peer and feeds the
+      same shared SyncEngine as LAN. Shared `MultiTransportBridge` and `CompositeDiscoveryService`
+      provide route racing and discovery fallback (`26c0b09`); Mobile Pro `8c1f599f`, core
+      `5762f0a5`. Root/Pro TypeScript and a full arm64 simulator app build are green.
+- [ ] Physically verify iPhone ↔ signed macOS discovery, pairing, reconnect, and data transfer with
+      Wi-Fi unavailable. Desktop proximity adapter: `e3406c3`.
 
 ### Phase 0.5 — Pro experience + licensed devices — COMPLETE
 
@@ -113,6 +125,11 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       input waits for project state, becomes visible in the project, a document picked on Mobile
       streams back with the same stable identity, and a Desktop tombstone removes it. Shared
       contracts `84cc414`, `e65086e`, `254c506`, `29dd19a`; Pro `f8b0e91a`; core `b51d80a4`.
+- [x] Shared short-document chunking keeps non-empty documents smaller than the overlap as one
+      searchable chunk (`ad9f92a`); Mobile consumes it through `@offgrid/rag` (`9e305d31`) and
+      resolves the built shared entry directly in Metro (`b6ff258d`).
+- [x] Portable tool/thinking artifacts materialize through the shared wire contract and render in
+      Mobile chats (shared `408bdf4`, Pro `866193f6`, core `6513b334`).
 - [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS
       and Android devices.
 
@@ -123,6 +140,10 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Invalid files are rejected and both the final file and partial file are removed.
 - [x] Send an installed single-file GGUF from a paired device row. Sync shows transfer progress,
       failure, cancellation, completion, and dismissal states.
+- [x] Knowledge/model byte sends are serialized per device through shared `KeyedSerialQueue`;
+      queued, active, failed, retry, and dismissal states are visible instead of silently dropping
+      invalid/missing sources (shared `0efce95`, Pro `273ba743`, core `46df6bbf`; activity/error
+      slice Pro `329762de`, core `b68e2b5e`).
 - [x] Receive mobile-compatible multi-file packages for vision and Whisper models. Package
       admission reuses the mobile model registry and rejects desktop-only image and Parakeet models.
 - [x] The rendered AppNavigator journey covers Settings to Sync, pairing-code entry, valid receive,
@@ -150,7 +171,8 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 
 ## Security note (logged for GA)
 
-Crypto is sound (NaCl secretbox authenticated encryption; passphrase never on the wire; LAN-only).
+Crypto is sound (NaCl secretbox authenticated encryption; passphrase never on the wire; local LAN
+or Apple peer-to-peer transport only).
 Hardening item before GA: the KDF is a hand-rolled iterated SHA-512 ("PBKDF2-like") — pair with a
 high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphrase isn't brute-forceable.
 
@@ -163,6 +185,8 @@ Pro `07e06ee2` and core `78df85ba` (model settings), and `69f16ccb`
 real Keygen device activation. Core `9deceba5` gives knowledge documents a stable cross-device
 identity and records their lifecycle at the RAG owner. Pro `f8b0e91a` and core `b51d80a4` complete
 knowledge-document state/file convergence using the shared coordinator and MIME registry.
+Recent reliability/proximity checkpoints: shared heartbeat `4dbcdd7`, shared scheduler `0efce95`,
+shared multi-transport `26c0b09`, Pro `8c1f599f`, and core `5762f0a5`.
 Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
