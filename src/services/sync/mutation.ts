@@ -1,5 +1,10 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import {
+  KNOWLEDGE_DOCUMENT_ENTITY,
+  createKnowledgeDocumentStateFields,
+} from '@offgrid/sync';
 import type { Conversation, Message, Project } from '../../types';
+import type { KnowledgeDocumentSnapshot } from './knowledgeDocument';
 import { serializeMessageContext } from './messageContext';
 
 /** Stable wire entity names shared with Off Grid Desktop. */
@@ -7,6 +12,7 @@ export const CORE_SYNC_ENTITIES = {
   conversation: 'conversation',
   message: 'message',
   project: 'project',
+  knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   modelSetting: 'model_setting',
 } as const;
 
@@ -160,6 +166,17 @@ export function projectPutMutation(project: Project): SyncMutation {
       created_at: project.createdAt,
       updated_at: project.updatedAt,
     },
+  };
+}
+
+export function knowledgeDocumentPutMutation(
+  document: KnowledgeDocumentSnapshot,
+): SyncMutation {
+  return {
+    entity: CORE_SYNC_ENTITIES.knowledgeDocument,
+    entityId: document.syncId,
+    kind: 'put',
+    fields: { ...createKnowledgeDocumentStateFields(document) },
   };
 }
 

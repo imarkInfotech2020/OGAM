@@ -1,16 +1,9 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import type { KnowledgeDocumentDescriptor } from '@offgrid/sync';
 
-export const KNOWLEDGE_DOCUMENT_MIME =
-  'application/vnd.offgrid.knowledge-document';
-
-export interface KnowledgeDocumentSnapshot {
-  syncId: string;
-  projectId: string;
-  name: string;
+export interface KnowledgeDocumentSnapshot extends KnowledgeDocumentDescriptor {
   filePath: string;
   fileSize: number;
-  createdAt: string;
-  enabled: boolean;
 }
 
 export type KnowledgeDocumentMutation =
