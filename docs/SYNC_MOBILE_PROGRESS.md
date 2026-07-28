@@ -94,7 +94,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       native viewer, and exposes Share plus screenshot/download deletion (Pro `634b033e`, root
       `3da42768`).
 - [x] Completed transfers confirm success in the live All view for five seconds, then archive out of
-      that surface without deleting the record; the Completed filter remains the transfer history.
+      that surface without deleting the record; the Completed filter remains durable across later
+      navigation and relaunch. The transfer service, rather than React, owns the bounded terminal
+      history (Pro `f618516c`).
 - [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
       immediate clean retry; the shared engine closes the failed session instead of retaining it.
 - [x] Keygen device management lists active machines, marks this device, and allows another machine
@@ -174,7 +176,8 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Receive mobile-compatible multi-file packages for vision and Whisper models. Package
       admission reuses the mobile model registry and rejects desktop-only image and Parakeet models.
 - [x] The rendered AppNavigator journey covers Settings to Sync, pairing-code entry, valid receive,
-      invalid receive, model admission, and sending the admitted model back.
+      invalid receive, model admission, opening Activity only after the receive completed, and
+      sending the admitted model back.
 - [ ] Verify a full-size GGUF transfer in both directions on real iOS and Android devices.
 
 ### Phase 3 — Ambient sharing — IN PROGRESS

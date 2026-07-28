@@ -16,9 +16,7 @@ import {
   registerScreen,
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { modelManager } from '../../../src/services/modelManager';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
@@ -26,6 +24,7 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -77,6 +76,7 @@ describe('Pro mobile model transfer journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
@@ -153,7 +153,7 @@ describe('Pro mobile model transfer journey', () => {
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
     await waitFor(() =>
-      expect(ui!.getByText('Discoverable on your Wi-Fi')).toBeTruthy(),
+      expect(ui!.getByText(/Discoverable on .*Wi-Fi/)).toBeTruthy(),
     );
 
     const mobile = useSyncStore.getState().thisDevice;
@@ -214,6 +214,7 @@ describe('Pro mobile model transfer journey', () => {
         new Uint8Array(payload.subarray(offset, offset + length)),
     });
 
+    fireEvent.press(ui.getByTestId('sync-open-activity'));
     await waitFor(() =>
       expect(ui!.getByText(`Received ${fileName}`)).toBeTruthy(),
     );
@@ -285,6 +286,7 @@ describe('Pro mobile model transfer journey', () => {
       ),
     ).resolves.toBe(false);
 
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByTestId(`sync-send-model-${remoteDevice.id}`));
     await waitFor(() =>
       expect(
