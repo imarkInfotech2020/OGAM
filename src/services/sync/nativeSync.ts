@@ -16,6 +16,7 @@ import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
 import { buildSyncEngine } from './engine';
 import { buildDiscovery } from './discovery';
+import { IosProximityAdapter } from './nativeProximity';
 import logger from '../../utils/logger';
 
 export interface NativeSyncCallbacks {
@@ -53,6 +54,18 @@ export function createNativeSync(
   localDevice: DeviceInfo,
   cbs: NativeSyncCallbacks,
 ): NativeSync {
+  let proximity: IosProximityAdapter | null = null;
+  if (Platform.OS === 'ios') {
+    try {
+      proximity = new IosProximityAdapter(localDevice);
+    } catch (error) {
+      logger.warn(
+        `[SYNC] proximity unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
   const { engine, transport } = buildSyncEngine({
     localDevice,
     tcpModule: TcpSocket as unknown as RnTcpModule,
@@ -63,6 +76,19 @@ export function createNativeSync(
     onDisconnected: cbs.onDisconnected,
     onMessage: cbs.onMessage,
     onAppMessage: cbs.onAppMessage,
+    additionalRoutes: proximity
+      ? [
+          {
+            id: 'proximity',
+            bridge: proximity,
+            canConnect: remote => proximity?.canConnect(remote) ?? false,
+            connectTimeoutMs: 12_000,
+          },
+        ]
+      : undefined,
+    onRouteError: (routeId, error) => {
+      logger.warn(`[SYNC] ${routeId} transport: ${error.message}`);
+    },
   });
   const zeroconf = new Zeroconf() as unknown as RnZeroconf;
   const orchestrator = buildDiscovery({
@@ -72,6 +98,12 @@ export function createNativeSync(
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
     onDiscovered: cbs.onDiscovered,
     onLost: cbs.onLost,
+    additionalSources: proximity
+      ? [{ id: 'proximity', service: proximity.discovery }]
+      : undefined,
+    onSourceError: (sourceId, error) => {
+      logger.warn(`[SYNC] ${sourceId} discovery: ${error.message}`);
+    },
   });
   let active = false;
   let rescanTask: Promise<void> | null = null;
@@ -112,6 +144,7 @@ export function createNativeSync(
     async renameLocalDevice(name: string) {
       localDevice.name = name;
       if (!active) return;
+      await proximity?.updateLocalDevice();
       await this.rescan();
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),

@@ -3,8 +3,16 @@
 // for peers advertising `_offgrid._tcp.local` — the same service the desktop Node adapter uses, so
 // phone and laptop find each other — and either auto-reconnects a known device or surfaces a new
 // one for the pairing UI. The Zeroconf module is injected so this stays testable off-device.
-import { DiscoveryOrchestrator } from '@offgrid/sync';
-import type { DeviceInfo, DiscoveredDevice, SyncEngine } from '@offgrid/sync';
+import {
+  CompositeDiscoveryService,
+  DiscoveryOrchestrator,
+} from '@offgrid/sync';
+import type {
+  DeviceInfo,
+  DiscoveredDevice,
+  DiscoverySource,
+  SyncEngine,
+} from '@offgrid/sync';
 import { RnDiscovery } from '@offgrid/sync/rn-discovery';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
 
@@ -18,10 +26,26 @@ export interface BuildDiscoveryArgs {
   /** A new (unpaired) device appeared — surface it for the pairing UI. */
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
+  additionalSources?: DiscoverySource[];
+  onSourceError?: (sourceId: string, error: Error) => void;
 }
 
-export function buildDiscovery(args: BuildDiscoveryArgs): DiscoveryOrchestrator {
-  const discovery = new RnDiscovery(args.zeroconf);
+export function buildDiscovery(
+  args: BuildDiscoveryArgs,
+): DiscoveryOrchestrator {
+  const lanDiscovery = new RnDiscovery(args.zeroconf);
+  const additionalSources = args.additionalSources ?? [];
+  const discovery = new CompositeDiscoveryService({
+    sources: [
+      {
+        id: 'lan',
+        service: lanDiscovery,
+        required: additionalSources.length === 0,
+      },
+      ...additionalSources,
+    ],
+    onSourceError: args.onSourceError,
+  });
   return new DiscoveryOrchestrator({
     engine: args.engine,
     discovery,
