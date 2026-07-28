@@ -33,7 +33,6 @@ import {
 } from '../../../src/navigation/screenRegistry';
 import {
   _clearSectionsForTesting,
-  registerSettingsSection,
 } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
@@ -43,7 +42,6 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ambientShareService } from '../../../pro/sync/ambientShareService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -113,7 +111,6 @@ describe('mobile ambient sharing journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
-    registerSettingsSection(SyncSettingsSection);
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()

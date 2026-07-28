@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { createHash } from 'node:crypto';
 import { Volume } from 'memfs';
 

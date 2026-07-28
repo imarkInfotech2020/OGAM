@@ -44,7 +44,7 @@ export function useSlot(name: string): ComponentType<any> | undefined {
   );
 }
 
-function _clearSlotsForTesting(): void {
+export function _clearSlotsForTesting(): void {
   for (const key of Object.keys(slots)) {
     delete slots[key];
   }
@@ -56,6 +56,8 @@ export const SLOTS = {
   /** Always-mounted root component(s) rendered near the app root (e.g. the TTS
    *  engine bridge). Mounted regardless of screen. */
   appRoot: 'app.root',
+  /** Optional first-class Home entry point for configuring cross-device Sync. */
+  homeSyncCard: 'home.syncCard',
   /** Replaces the chat input row when audio (voice) interface mode is active. */
   chatInputAudioMode: 'chatInput.audioMode',
   /** Voice-mode empty-state hero (big "tap to speak" mic) shown in the message

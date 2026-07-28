@@ -19,13 +19,11 @@ import {
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
 import {
-  registerSettingsSection,
   _clearSectionsForTesting,
 } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { createDownloadedModel } from '../../utils/factories';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { syncService } from '../../../pro/sync/syncService';
 import { useLicensedDevicesStore } from '../../../pro/sync/licensedDevicesStore';
@@ -90,7 +88,6 @@ describe('Settings to Sync licensed-device management', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
-    registerSettingsSection(SyncSettingsSection);
 
     useAppStore.setState({
       hasCompletedOnboarding: true,

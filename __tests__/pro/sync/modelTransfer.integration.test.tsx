@@ -17,7 +17,6 @@ import {
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
 import {
-  registerSettingsSection,
   _clearSectionsForTesting,
 } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
@@ -27,7 +26,6 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -79,7 +77,6 @@ describe('Pro mobile model transfer journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
-    registerSettingsSection(SyncSettingsSection);
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()

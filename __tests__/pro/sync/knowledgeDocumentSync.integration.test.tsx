@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { installRealSqlite } from '../../harness/sqliteFake';
 import { requireRTL } from '../../harness/nativeBoundary';
 
@@ -53,6 +54,11 @@ async function waitForCondition(
 
 describe('Pro mobile knowledge document sync journey', () => {
   it('stages file-first input, indexes it visibly, sends a picked file back, and applies a tombstone', async () => {
+    const globals = globalThis as unknown as {
+      Buffer: typeof Buffer | undefined;
+    };
+    const previousGlobalBuffer = globals.Buffer;
+    globals.Buffer = undefined;
     installRealSqlite();
     const React = require('react');
     const rtl = requireRTL();
@@ -383,6 +389,7 @@ describe('Pro mobile knowledge document sync journey', () => {
         expect(view!.queryByText('phone-notes.txt')).not.toBeNull();
       });
     } finally {
+      globals.Buffer = previousGlobalBuffer;
       view?.unmount();
       _clearHooksForTesting();
       await remoteTransfers.dispose();

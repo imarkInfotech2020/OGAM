@@ -30,6 +30,7 @@ import RNFS from 'react-native-fs';
 import { useAppStore, useRemoteServerStore } from '../stores';
 import { hardwareService } from '../services';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
+import { useHasRegisteredScreen } from '../navigation/screenRegistry';
 import { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL, shareOnX } from '../utils/sharePrompt';
 import { clearProForTesting } from '../services/proLicenseService';
 import { useProStatusLabel } from '../hooks/useProStatusLabel';
@@ -50,6 +51,7 @@ export const SettingsScreen: React.FC = () => {
   // Reactive: Pro sections registered at runtime (license-key activation re-runs
   // loadProFeatures) show up live without an app restart.
   const settingsSections = useSettingsSections();
+  const hasSync = useHasRegisteredScreen('Sync');
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
   const themeMode = useAppStore((s) => s.themeMode);
   const setThemeMode = useAppStore((s) => s.setThemeMode);
@@ -189,6 +191,15 @@ export const SettingsScreen: React.FC = () => {
             {[
               { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
               { icon: 'wifi', title: 'Remote Servers', desc: 'Connect to Off Grid AI Desktop, Ollama, LM Studio, and more', screen: 'RemoteServers' as const },
+              ...(hasSync
+                ? [{
+                    icon: 'refresh-cw',
+                    title: 'Sync',
+                    desc: 'Chats, projects, files, and copied text across your devices',
+                    screen: 'Sync' as const,
+                    testID: 'open-sync-settings',
+                  }]
+                : []),
             //  { icon: 'search', title: 'Web Search', desc: 'Configure search API key for reliable results', screen: 'WebSearchSettings' as const },
               { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
               { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
@@ -201,6 +212,7 @@ export const SettingsScreen: React.FC = () => {
                 trigger={focusTrigger}
                 style={[styles.navItem, index === arr.length - 1 && styles.navItemLast]}
                 onPress={() => navigation.navigate(item.screen)}
+                testID={'testID' in item ? item.testID : undefined}
               >
                 <View style={styles.navItemIcon}>
                   <Icon name={item.icon} size={16} color={colors.textSecondary} />

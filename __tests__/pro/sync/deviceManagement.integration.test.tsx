@@ -18,7 +18,11 @@ import {
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
 import {
-  registerSettingsSection,
+  _clearSlotsForTesting,
+  registerSlot,
+  SLOTS,
+} from '../../../src/bootstrap/slotRegistry';
+import {
   _clearSectionsForTesting,
 } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
@@ -26,7 +30,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
+import { SyncHomeCard } from '../../../pro/ui/SyncHomeCard';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -63,9 +67,10 @@ describe('Pro mobile saved-device management journey', () => {
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
     _clearScreensForTesting();
+    _clearSlotsForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
-    registerSettingsSection(SyncSettingsSection);
+    registerSlot(SLOTS.homeSyncCard, SyncHomeCard);
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
@@ -97,6 +102,7 @@ describe('Pro mobile saved-device management journey', () => {
     await remote?.engine.stop();
     await syncService.stop();
     _clearScreensForTesting();
+    _clearSlotsForTesting();
     _clearSectionsForTesting();
   });
 
@@ -130,8 +136,8 @@ describe('Pro mobile saved-device management journey', () => {
         </NavigationContainer>
       </>,
     );
-    fireEvent.press(ui.getByTestId('settings-tab'));
-    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    expect(await waitFor(() => ui!.getByTestId('sync-home-card'))).toBeTruthy();
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -181,8 +187,14 @@ describe('Pro mobile saved-device management journey', () => {
       expect(ui!.getByText('Rename Off Grid AI Desktop')).toBeTruthy(),
     );
     fireEvent.changeText(ui.getByTestId('sync-rename-input'), 'Studio Mac');
-    fireEvent.press(ui.getByTestId('sync-save-name'));
-    await waitFor(() => expect(ui!.getByText('Studio Mac')).toBeTruthy());
+    fireEvent.press(ui.getByTestId('sync-rename-save'));
+    await waitFor(() =>
+      expect(
+        within(
+          ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
+        ).getByText('Studio Mac'),
+      ).toBeTruthy(),
+    );
     expect(JSON.parse(storedPairings ?? '{}')).toEqual(
       expect.objectContaining({
         pairings: expect.objectContaining({
@@ -201,5 +213,85 @@ describe('Pro mobile saved-device management journey', () => {
       expect(ui!.queryByTestId(`sync-paired-${remoteDevice.id}`)).toBeNull(),
     );
     alert.mockRestore();
+  });
+
+  it('shows a mismatched incoming code and permits one clean corrected retry', async () => {
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-mismatch-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    let pairingFailure: string | undefined;
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      onPairingFailed: (_device, error) => {
+        pairingFailure = error;
+      },
+    });
+    await remote.engine.start(0);
+    await syncService.start();
+
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
+    );
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    const mobileEndpoint = {
+      ...mobile,
+      host: '127.0.0.1',
+      port: discovery.publishedPort,
+    };
+
+    await remote.engine.pair(mobileEndpoint, 'blue-otter-42');
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'wrong-code',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+
+    await waitFor(() =>
+      expect(
+        ui!.getByText(
+          'The pairing codes did not match. Start pairing again from the other device.',
+        ),
+      ).toBeTruthy(),
+    );
+    expect(pairingFailure).toBe('Passphrase mismatch');
+    fireEvent.press(ui.getByText('Close'));
+    await waitFor(() =>
+      expect(ui!.queryByText('Pair with Off Grid AI Desktop')).toBeNull(),
+    );
+
+    await remote.engine.pair(mobileEndpoint, 'blue-otter-42');
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'blue-otter-42',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await waitFor(() =>
+      expect(
+        useSyncStore
+          .getState()
+          .knownDevices.some(device => device.id === remoteDevice.id),
+      ).toBe(true),
+    );
   });
 });

@@ -32,7 +32,6 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ClipboardScreen } from '../../../pro/ui/ClipboardScreen';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
@@ -40,7 +39,6 @@ import {
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
 import {
-  registerSettingsSection,
   _clearSectionsForTesting,
 } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
@@ -116,7 +114,6 @@ describe('mobile clipboard Sync journey', () => {
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
     registerScreen({ name: 'Clipboard', component: ClipboardScreen });
-    registerSettingsSection(SyncSettingsSection);
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()

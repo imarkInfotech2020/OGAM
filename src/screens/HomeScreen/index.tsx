@@ -26,6 +26,7 @@ import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
+import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -39,6 +40,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
   const { sheetVisible, openSheet, closeSheet, showIcon } = useOnboardingSheet();
 
   const {
@@ -200,10 +202,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             )
           }
 
+          {SyncHomeCard ? (
+            <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
+              <SyncHomeCard onOpen={() => navigation.navigate('Sync')} />
+            </AnimatedEntry>
+          ) : null}
+
           {/* Recent Conversations */}
           {
             recentConversations.length > 0 && (
-              <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
+              <AnimatedEntry index={3} staggerMs={50} trigger={focusTrigger}>
                 <RecentConversations
                   conversations={recentConversations}
                   totalCount={conversations.length}

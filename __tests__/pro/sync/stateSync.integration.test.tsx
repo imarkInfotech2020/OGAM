@@ -17,7 +17,6 @@ import {
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
 import {
-  registerSettingsSection,
   _clearSectionsForTesting,
 } from '../../../src/components/settings/sectionRegistry';
 import {
@@ -37,7 +36,6 @@ import { syncService } from '../../../pro/sync/syncService';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -90,7 +88,6 @@ describe('Pro mobile state sync journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
-    registerSettingsSection(SyncSettingsSection);
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
