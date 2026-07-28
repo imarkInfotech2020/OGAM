@@ -219,14 +219,17 @@ describe('Pro mobile state sync journey', () => {
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
     }
-    expect(discovery.scanCount).toBe(1);
+    expect(ui.getByTestId('sync-no-devices')).toBeTruthy();
     fireEvent.press(ui.getByTestId('sync-rescan'));
-    await waitFor(() => expect(discovery.scanCount).toBe(2));
-    expect(
-      (await waitFor(() => ui!.getByTestId('sync-rescan-status'))).props
-        .children,
-    ).toContain('Discovery refreshed');
-    expect(discovery.stopCount).toBe(1);
+    discovery.resolve(remoteDevice);
+    await waitFor(() =>
+      expect(
+        ui!.getByTestId(`sync-discovered-${remoteDevice.id}`),
+      ).toBeTruthy(),
+    );
+    expect(ui.queryByTestId('sync-no-devices')).toBeNull();
+    expect(ui.queryByTestId('sync-scanning')).toBeNull();
+    expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
     expect(discovery.publishedPort).toBeGreaterThan(0);
 
     await remote.engine.pair(

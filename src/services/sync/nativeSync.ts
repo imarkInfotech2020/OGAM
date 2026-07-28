@@ -137,9 +137,7 @@ export function createNativeSync(
       if (!active) throw new Error('Sync is not running.');
       if (rescanTask) return rescanTask;
       rescanTask = (async () => {
-        await orchestrator.stop();
-        if (!active) return;
-        await orchestrator.start();
+        await orchestrator.rescan();
         logger.log('[SYNC] discovery rescanned');
       })();
       try {
@@ -152,7 +150,7 @@ export function createNativeSync(
       localDevice.name = name;
       if (!active) return;
       await proximity?.updateLocalDevice();
-      await this.rescan();
+      await orchestrator.refreshAdvertisement();
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),
     reconnect: (device, sharedSecret) => engine.reconnect(device, sharedSecret),

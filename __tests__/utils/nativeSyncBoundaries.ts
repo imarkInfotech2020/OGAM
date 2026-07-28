@@ -93,6 +93,7 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
     scanCount = 0;
     stopCount = 0;
     private readonly handlers = new Map<string, Handler>();
+    private nativeListenersActive = true;
 
     constructor() {
       boundaries.push(this);
@@ -108,7 +109,9 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
     stop(): void {
       this.stopCount += 1;
     }
-    removeDeviceListeners(): void {}
+    removeDeviceListeners(): void {
+      this.nativeListenersActive = false;
+    }
     publishService(
       _type: string,
       _protocol: string,
@@ -121,6 +124,7 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
     unpublishService(): void {}
 
     resolve(device: DeviceInfo): void {
+      if (!this.nativeListenersActive) return;
       this.handlers.get('resolved')?.({
         txt: createTxtRecord(device),
         addresses: [device.host],

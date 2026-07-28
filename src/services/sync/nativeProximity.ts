@@ -170,6 +170,7 @@ export class IosProximityAdapter implements TransportBridge {
 
   readonly discovery: DiscoveryService = {
     start: () => this.ensureStarted(),
+    rescan: () => this.ensureStarted(),
     advertise: () => this.ensureStarted(),
     stopAdvertising: () => Promise.resolve(),
     onDeviceFound: listener => {
