@@ -40,6 +40,7 @@ export interface NativeSyncCallbacks {
 
 export interface NativeSync {
   readonly localDevice: DeviceInfo;
+  readonly availableRouteIds: readonly string[];
   start(): Promise<void>;
   stop(): Promise<void>;
   rescan(): Promise<void>;
@@ -115,6 +116,7 @@ export function createNativeSync(
 
   return {
     localDevice,
+    availableRouteIds: proximity ? ['lan', 'proximity'] : ['lan'],
     async start() {
       await engine.start(0); // ephemeral port
       localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
