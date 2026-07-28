@@ -64,6 +64,12 @@ _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
       renders the shared connecting/waiting/failure/cancel/retry states and only reaches Paired
       after both Keychain adapters acknowledge durable trust (`9b4175a`, `3ff8f04`; Pro
       `3e66c628`, core `b070ca55`).
+- [x] A paired session becomes app-ready only after the final ordered pairing frame is sent, so
+      initial StateSync/file traffic emitted from `onPaired` cannot be lost while the peer is still
+      pairing. Outbound trust also retains the factual dial endpoint instead of a peer hello's
+      placeholder port (`81fd39e`). The combined Mobile regression gate is green: 12 suites / 19
+      real rendered, encrypted-engine, persistence, discovery, state, file, model, licensing,
+      device-management, ambient, and clipboard journeys (`212bf2d8`).
 - [x] One-sided trust is recoverable through Pair again. Eviction is now a bilateral, durable shared
       membership revocation rather than a Mobile app message: a random membership generation
       prevents stale deletion after re-pair, local capacity releases immediately, and a restricted
