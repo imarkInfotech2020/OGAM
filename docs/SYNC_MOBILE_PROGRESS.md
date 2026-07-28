@@ -198,16 +198,24 @@ _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
 - [x] Add explicit opt-in clipboard Sync on mobile. It sends text copied after the toggle is enabled
       over the encrypted paired-device app channel and never sends images or files.
 - [x] Native iOS and Android clipboard observers bridge local copies into Sync and apply received
-      text without echo loops. Payloads are deduplicated, validated, and capped at 256 KiB.
-- [x] Integration coverage proves opt-in persistence, encrypted paired delivery, receive/apply,
-      duplicate suppression, malformed/oversized rejection, and the rendered toggle.
+      text. Shared `ClipboardSyncCoordinator` owns portable message identity, Unix-ms admission,
+      repeated native-echo suppression, immutable origin provenance, routing, retention, migration,
+      restore/delete/clear intents, and the canonical history projection (`46e393c`, `5b2c157`);
+      Mobile owns only native observation/write, AsyncStorage, and visual rendering (Pro
+      `46e8db18`, core `98822509`).
+- [x] Real encrypted-engine and rendered AppNavigator coverage proves opt-in persistence,
+      paired delivery, receive/apply, two delayed native callbacks after one Desktop clip,
+      intentional same-text replacement after the echo window, malformed/oversized rejection,
+      and the rendered toggle. A persisted version-1 Mobile history is migrated through the shared
+      owner and retains Desktop attribution after the Mobile service restarts.
 - [x] Settings → Sync → View clipboard opens a persistent text history with source attribution
       (`This phone` or the paired device name). Tapping restores a clip to the system clipboard;
-      individual delete and confirmed Clear are available. Retention is bounded to 100 entries and
-      1 MiB of text.
+      individual delete and confirmed Clear are available. Clear preserves unexpired native-echo
+      tokens so a delayed callback cannot recreate or rebroadcast cleared history.
 - [x] The rendered AppNavigator journey pairs a real loopback peer, captures one local and one
-      encrypted remote clip, proves both source labels, restores the remote clip, deletes it, and
-      clears the remaining history.
+      encrypted remote clip, proves exactly one local label and immutable Desktop attribution
+      through repeated callbacks, restores the remote clip, deletes it, and clears the remaining
+      history.
 - [x] iOS native test, Android native test, and a signed physical-iPhone build all pass.
 - [x] Ambient file replication uses one shared `shared_file` StateSync entity and one
       `application/vnd.offgrid.shared-file` byte contract for `screenshot`, `download`,
