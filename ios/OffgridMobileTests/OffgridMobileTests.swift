@@ -908,6 +908,59 @@ final class AppDelegateBackgroundSessionTests: XCTestCase {
 
 final class SyncClipboardObserverTests: XCTestCase {
 
+  func testDefaultTimestampUsesUnixMilliseconds() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observedTimestamp: Double?
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter
+    ) { _, timestamp in
+      observedTimestamp = timestamp
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "unix timestamp"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    let earliestReasonableUnixMilliseconds = Date(timeIntervalSince1970: 1_700_000_000)
+      .timeIntervalSince1970 * 1_000
+    XCTAssertGreaterThanOrEqual(
+      observedTimestamp ?? 0,
+      earliestReasonableUnixMilliseconds,
+      "Clipboard events must use Unix milliseconds like the shared clipboard protocol"
+    )
+  }
+
+  func testRejectsInvalidNativeClipboardTimestamps() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observed: [String] = []
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter,
+      now: { -.infinity }
+    ) { text, _ in
+      observed.append(text)
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "invalid timestamp"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    XCTAssertEqual(observed, [])
+  }
+
   func testObservesAndWritesTheRealPasteboardOnlyWhileEnabled() {
     let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
     guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {

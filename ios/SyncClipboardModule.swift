@@ -13,7 +13,7 @@ final class SyncClipboardObserver: NSObject {
   init(
     pasteboard: UIPasteboard = .general,
     notificationCenter: NotificationCenter = .default,
-    now: @escaping () -> TimeInterval = { Date.timeIntervalSinceReferenceDate },
+    now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
     onText: @escaping (String, Double) -> Void
   ) {
     self.pasteboard = pasteboard
@@ -63,7 +63,9 @@ final class SyncClipboardObserver: NSObject {
     guard enabled, pasteboard.changeCount != lastChangeCount else { return }
     lastChangeCount = pasteboard.changeCount
     guard let text = pasteboard.string else { return }
-    onText(text, now() * 1_000)
+    let timestamp = now() * 1_000
+    guard timestamp.isFinite, timestamp >= 0 else { return }
+    onText(text, timestamp)
   }
 
   deinit {
