@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  Linking,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
@@ -347,10 +348,37 @@ describe('mobile clipboard Sync journey', () => {
 
     const toggle = ui.getByTestId('sync-clipboard-toggle');
     expect(toggle.props.value).toBe(false);
+    const openSettings = jest
+      .spyOn(Linking, 'openSettings')
+      .mockResolvedValue(undefined);
     fireEvent(toggle, 'valueChange', true);
     await waitFor(() =>
       expect(nativeModule.setEnabled).toHaveBeenCalledWith(true),
     );
+    await waitFor(() =>
+      expect(ui!.getByText('Allow clipboard access')).toBeTruthy(),
+    );
+    expect(
+      ui.getByText(
+        'Settings > Apps > Off Grid AI > Paste from Other Apps > Allow',
+      ),
+    ).toBeTruthy();
+    fireEvent.press(ui.getByTestId('open-clipboard-permission-settings'));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    fireEvent.press(ui.getByText('Done'));
+    await waitFor(() =>
+      expect(ui!.queryByText('Allow clipboard access')).toBeNull(),
+    );
+
+    fireEvent(toggle, 'valueChange', false);
+    await waitFor(() =>
+      expect(nativeModule.setEnabled).toHaveBeenCalledWith(false),
+    );
+    fireEvent(toggle, 'valueChange', true);
+    await waitFor(() =>
+      expect(nativeModule.setEnabled).toHaveBeenCalledTimes(3),
+    );
+    expect(ui.queryByText('Allow clipboard access')).toBeNull();
     expect(nativeChange).toBeDefined();
 
     nativeChange?.({ text: 'copied on iPhone', ts: 1000 });
