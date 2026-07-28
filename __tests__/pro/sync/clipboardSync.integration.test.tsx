@@ -96,6 +96,9 @@ const device = (id: string, platform: DeviceInfo['platform']): DeviceInfo => ({
   port: 0,
 });
 
+const BASE_TIME = Date.UTC(2026, 6, 28, 12, 0, 0);
+const CLIPBOARD_HISTORY_STORAGE_KEY = 'offgrid-sync-clipboard-history-v1';
+
 describe('mobile clipboard Sync journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
@@ -163,15 +166,34 @@ describe('mobile clipboard Sync journey', () => {
       },
     });
     const nativeClipboard = new ClipboardBoundary();
+    await AsyncStorage.setItem(
+      CLIPBOARD_HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            id: 'legacy-desktop-clip',
+            text: 'saved before the update',
+            copiedAt: BASE_TIME - 1_000,
+            source: 'remote',
+            sourceDeviceId: desktopDevice.id,
+            sourceDeviceName: 'Off Grid AI Desktop',
+          },
+        ],
+      }),
+    );
     const history = new ClipboardHistoryStore();
+    let clock = BASE_TIME;
     const service = new MobileClipboardSyncService({
       nativeClipboard,
       preferences: new ClipboardPreferences(),
       history,
+      localDevice: async () => mobileDevice,
       transport: {
         sendApp: (deviceId, channel, data) =>
           mobile.engine.sendApp(deviceId, channel, data),
         connectedDeviceIds: () => [...connected],
+        thisDeviceName: () => mobileDevice.name,
         deviceName: deviceId =>
           deviceId === desktopDevice.id ? 'Off Grid AI Desktop' : undefined,
         onAppMessage: listener => {
@@ -179,7 +201,7 @@ describe('mobile clipboard Sync journey', () => {
           return () => mobileAppListeners.delete(listener);
         },
       },
-      now: () => 10_000,
+      now: () => clock,
     });
 
     await Promise.all([mobile.engine.start(0), desktop.engine.start(0)]);
@@ -188,19 +210,29 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() => expect(connected.has(desktopDevice.id)).toBe(true));
     await service.start();
 
-    nativeClipboard.copy('disabled stays on phone', 1);
+    nativeClipboard.copy('disabled stays on phone', clock);
     expect(receivedByDesktop).toEqual([]);
 
     await service.setEnabled(true);
     expect(nativeClipboard.enabled).toBe(true);
-    nativeClipboard.copy('copied on iPhone', 2);
+    nativeClipboard.copy('copied on iPhone', clock);
     await waitFor(() =>
       expect(receivedByDesktop).toEqual([
-        { t: 'text', text: 'copied on iPhone', ts: 2 },
+        expect.objectContaining({
+          t: 'text',
+          v: 2,
+          text: 'copied on iPhone',
+          ts: BASE_TIME,
+          provenance: {
+            originDeviceId: mobileDevice.id,
+            originDeviceName: mobileDevice.name,
+          },
+        }),
       ]),
     );
 
-    const inbound = { t: 'text', text: 'copied on Mac', ts: 3 };
+    clock += 1_000;
+    const inbound = { t: 'text', text: 'copied on Mac', ts: clock };
     expect(
       desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound),
     ).toBe(true);
@@ -208,19 +240,36 @@ describe('mobile clipboard Sync journey', () => {
       expect(nativeClipboard.writes).toEqual(['copied on Mac']),
     );
     await waitFor(() =>
-      expect(service.historySnapshot()).toEqual([
-        expect.objectContaining({
-          text: 'copied on Mac',
-          source: 'remote',
-          sourceDeviceName: 'Off Grid AI Desktop',
-        }),
-        expect.objectContaining({
-          text: 'copied on iPhone',
-          source: 'local',
-          sourceDeviceName: 'This phone',
-        }),
-      ]),
+      expect(service.historySnapshot()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            text: 'saved before the update',
+            isLocal: false,
+            provenance: {
+              originDeviceId: desktopDevice.id,
+              originDeviceName: 'Off Grid AI Desktop',
+            },
+          }),
+          expect.objectContaining({
+            text: 'copied on Mac',
+            isLocal: false,
+            provenance: {
+              originDeviceId: desktopDevice.id,
+              originDeviceName: 'Off Grid AI Desktop',
+            },
+          }),
+          expect.objectContaining({
+            text: 'copied on iPhone',
+            isLocal: true,
+            provenance: {
+              originDeviceId: mobileDevice.id,
+              originDeviceName: mobileDevice.name,
+            },
+          }),
+        ]),
+      ),
     );
+    expect(service.historySnapshot()).toHaveLength(3);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(receivedByDesktop).toHaveLength(1);
 
@@ -242,10 +291,13 @@ describe('mobile clipboard Sync journey', () => {
     const restored = new MobileClipboardSyncService({
       nativeClipboard: restoredBoundary,
       preferences: new ClipboardPreferences(),
+      localDevice: async () => mobileDevice,
+      history: new ClipboardHistoryStore(),
       transport: {
         sendApp: (deviceId, channel, data) =>
           mobile.engine.sendApp(deviceId, channel, data),
         connectedDeviceIds: () => [...connected],
+        thisDeviceName: () => mobileDevice.name,
         deviceName: deviceId =>
           deviceId === desktopDevice.id ? 'Off Grid AI Desktop' : undefined,
         onAppMessage: listener => {
@@ -257,13 +309,31 @@ describe('mobile clipboard Sync journey', () => {
     await restored.start();
     expect(restored.enabled()).toBe(true);
     expect(restoredBoundary.enabled).toBe(true);
+    expect(restored.historySnapshot()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'saved before the update',
+          provenance: {
+            originDeviceId: desktopDevice.id,
+            originDeviceName: 'Off Grid AI Desktop',
+          },
+        }),
+        expect.objectContaining({
+          text: 'copied on Mac',
+          provenance: {
+            originDeviceId: desktopDevice.id,
+            originDeviceName: 'Off Grid AI Desktop',
+          },
+        }),
+      ]),
+    );
 
     await restored.setEnabled(false);
     expect(restoredBoundary.enabled).toBe(false);
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, {
       t: 'text',
       text: 'disabled receiver',
-      ts: 5,
+      ts: clock + 1_000,
     });
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(restoredBoundary.writes).toEqual([]);
@@ -338,7 +408,7 @@ describe('mobile clipboard Sync journey', () => {
       'green-river-42',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
     fireEvent.changeText(
       ui.getByTestId('incoming-pairing-code'),
@@ -372,7 +442,7 @@ describe('mobile clipboard Sync journey', () => {
     expect(ui.queryByText('Clipboard access')).toBeNull();
     expect(nativeChange).toBeDefined();
 
-    nativeChange?.({ text: 'copied on iPhone', ts: 1000 });
+    nativeChange?.({ text: 'copied on iPhone', ts: BASE_TIME });
     await waitFor(() =>
       expect(
         remote!.engine.sendApp(mobile.id, 'clipboard-test-ready', {}),
@@ -382,14 +452,16 @@ describe('mobile clipboard Sync journey', () => {
       remote.engine.sendApp(mobile.id, CLIPBOARD_CHANNEL, {
         t: 'text',
         text: 'copied on Mac',
-        ts: 2000,
+        ts: BASE_TIME + 1_000,
       }),
     ).toBe(true);
     await waitFor(() => expect(nativeClipboardText).toBe('copied on Mac'));
+    nativeChange?.({ text: 'copied on Mac', ts: BASE_TIME + 2_000 });
+    nativeChange?.({ text: 'copied on Mac', ts: BASE_TIME + 3_000 });
 
     fireEvent.press(ui.getByTestId('open-clipboard-history'));
     await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
-    expect(ui.getByText('This phone')).toBeTruthy();
+    expect(ui.getAllByText('This phone')).toHaveLength(1);
     expect(ui.getByText('copied on Mac')).toBeTruthy();
     expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();
 
