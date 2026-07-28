@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import * as Keychain from 'react-native-keychain';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   render,
@@ -18,57 +19,26 @@ import {
   registerScreen,
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { createDownloadedModel } from '../../utils/factories';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { syncService } from '../../../pro/sync/syncService';
-import { useLicensedDevicesStore } from '../../../pro/sync/licensedDevicesStore';
 
-const mockTcpModule = {
-  createServer: jest.fn(() => {
-    let boundPort = 0;
-    const server = {} as {
-      on: jest.Mock;
-      listen: jest.Mock;
-      address: jest.Mock;
-      close: jest.Mock;
-    };
-    server.on = jest.fn(() => server);
-    server.listen = jest.fn(
-      (options: { port: number }, callback?: () => void) => {
-        boundPort = options.port || 42001;
-        callback?.();
-      },
-    );
-    server.address = jest.fn(() => ({ port: boundPort }));
-    server.close = jest.fn();
-    return server;
-  }),
-  createConnection: jest.fn(),
-};
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
 
-jest.mock('react-native-tcp-socket', () => ({
-  __esModule: true,
-  default: mockTcpModule,
-}));
-
-class MockZeroconf {
-  on = jest.fn();
-  scan = jest.fn();
-  stop = jest.fn();
-  removeDeviceListeners = jest.fn();
-  publishService = jest.fn();
-  unpublishService = jest.fn();
-}
-
-jest.mock('react-native-zeroconf', () => ({
-  __esModule: true,
-  default: MockZeroconf,
-}));
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
 
 const originalFetch = global.fetch;
 const storedSecrets = new Map<string, string>();
@@ -84,25 +54,19 @@ function response(status: number, body: unknown = {}): Response {
 describe('Settings to Sync licensed-device management', () => {
   beforeEach(async () => {
     await syncService.stop();
+    await AsyncStorage.clear();
     jest.clearAllMocks();
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
 
-    useAppStore.setState({
-      hasCompletedOnboarding: true,
-      downloadedModels: [createDownloadedModel()],
-      themeMode: 'dark',
-      hasRegisteredPro: true,
-      isProActive: true,
-    });
+    const app = useAppStore.getState();
+    app.setOnboardingComplete(true);
+    app.setDownloadedModels([createDownloadedModel()]);
+    app.setThemeMode('dark');
+    app.setHasRegisteredPro(true);
+    app.setProActive(true);
     useSyncStore.getState().reset();
-    useLicensedDevicesStore.setState({
-      status: 'idle',
-      devices: [],
-      removingDeviceId: null,
-      error: undefined,
-    });
 
     storedSecrets.clear();
     storedSecrets.set(
@@ -210,10 +174,8 @@ describe('Settings to Sync licensed-device management', () => {
 
   it('labels Debug Pro without claiming a Keygen device slot', async () => {
     storedSecrets.delete('off-grid-pro-license');
-    useAppStore.setState({
-      hasRegisteredPro: false,
-      isProActive: true,
-    });
+    useAppStore.getState().setHasRegisteredPro(false);
+    useAppStore.getState().setProActive(true);
 
     const ui = render(
       <NavigationContainer>
