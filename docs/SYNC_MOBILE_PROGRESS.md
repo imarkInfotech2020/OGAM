@@ -75,10 +75,17 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 
 - [x] Sync UI and lifecycle orchestration live in the private Pro package, registered through the
       existing core screen/slot registries. Core owns only reusable native transport glue.
-- [x] Sync is a first-class primary Settings row, not a buried Pro section. Home shows a
-      `Set up Sync` card until the first paired device exists; both entry points open the same
-      existing Sync control center.
+- [x] Sync is a first-class primary Settings row, not a buried Pro section. Home always shows a
+      Sync card: `Set up Sync` before pairing, `Sync needs attention` when saved devices are
+      offline, and current connection counts when active. Both entry points open the same device
+      control center.
 - [x] Settings → Sync exposes discoverability, pairing, peer state, and one licensed-device surface.
+- [x] Consumer information architecture separates Devices, Sync sharing, and Sync activity.
+      Devices retains pairing, rescan, connection state, reconnect/disconnect, icon rename, model
+      send, forget, and licensed slots. Sharing owns category and ambient consent. Activity owns
+      queue/history with All, Pending, In progress, Failed, and Completed filters. Rescan reports a
+      persistent outcome instead of silently restarting discovery (Pro `0f38f9ee`, root
+      `bdc5000f`).
 - [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
       immediate clean retry; the shared engine closes the failed session instead of retaining it.
 - [x] Keygen device management lists active machines, marks this device, and allows another machine
@@ -133,6 +140,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] Mobile transfer owners import their byte codec explicitly, so knowledge/shared-file/model
       transfers work under Hermes without a global `Buffer`. The shared knowledge contract accepts
       exact legacy Desktop `proj_<uuid>` project identities while new IDs remain bare UUIDs.
+- [x] Shared file transfer retransmits the latest durable cumulative acknowledgement while a sender
+      waits, so one dropped proximity ACK cannot permanently stall a knowledge/model/media stream
+      (`346a39d`). Both hosts consume the same transfer owner.
 - [x] Shared short-document chunking keeps non-empty documents smaller than the overlap as one
       searchable chunk (`ad9f92a`); Mobile consumes it through `@offgrid/rag` (`9e305d31`) and
       resolves the built shared entry directly in Metro (`b6ff258d`).
