@@ -95,8 +95,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       `3da42768`).
 - [x] Completed transfers confirm success in the live All view for five seconds, then archive out of
       that surface without deleting the record; the Completed filter remains durable across later
-      navigation and relaunch. The transfer service, rather than React, owns the bounded terminal
-      history (Pro `f618516c`).
+      navigation and relaunch. Shared `CompletedTransferHistory` owns canonical identity, admission,
+      retention, the five-second projection, and byte limits (`2aec2f2`, `40d2a69`); Mobile supplies
+      only its AsyncStorage adapter and rendering (Pro `c3abeb32`).
 - [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
       immediate clean retry; the shared engine closes the failed session instead of retaining it.
 - [x] Keygen device management lists active machines, marks this device, and allows another machine
@@ -361,8 +362,10 @@ Recent personal-mesh/ambient checkpoints: shared provenance `a4bd0ff` + `abc49ce
 `b5fdc021`, `a770ddb9`, and core `ff2bea6e`, `cda022df`, `fa566a90`, `02edb640`,
 `fb3924c8`, plus shared ambient policy `306279a`, Pro `ef745bc5`, and core `621dc12b`.
 Latest pairing/knowledge/UI recovery checkpoints: shared `8f094f4` and `584f6aa`, Mobile Pro
-`8f6da549` and `3d1a2e2c`, root `f02cf775`. The current Debug app was rebuilt, installed, and
-launched on physical iOS without clearing its profile.
+`8f6da549`, `3d1a2e2c`, and `c3abeb32`, root `f02cf775`. Shared transfer-history checkpoints are
+`2aec2f2` and `40d2a69`. The current Debug app was rebuilt, installed, and launched on physical iOS
+without clearing its profile; it predates the final shared-history migration and requires one
+incremental rebuild before the next physical gate.
 Focused no-mockist coverage is green for the ambient Ask/refuse/retry journey and the native
 app-owned screenshot copy. Full hooks, pre-push, push, and automated device driving remain deferred
 until the manual iOS/macOS gate closes.
