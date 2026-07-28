@@ -1,4 +1,4 @@
-import type { SyncedToolArtifact } from '@offgrid/sync';
+import type { RecordProvenance, SyncedToolArtifact } from '@offgrid/sync';
 
 // Model source and credibility types
 export type ModelSource =
@@ -220,6 +220,8 @@ export interface Message {
    * prompt-only messages may omit it because they never enter the sync log.
    */
   uuid?: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   /** Reasoning/thinking content parsed by llama.rn (separate from response content) */
@@ -256,6 +258,8 @@ export interface Message {
 
 export interface Conversation {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   title: string;
   modelId: string;
   messages: Message[];
@@ -332,6 +336,8 @@ export type ImageModeState = 'auto' | 'force' | 'disabled';
 
 export interface GeneratedImage {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   prompt: string;
   negativePrompt?: string;
   imagePath: string;
@@ -361,6 +367,8 @@ export interface ImageGenerationProgress {
 }
 export interface Project {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   name: string;
   description: string;
   systemPrompt: string;

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RecordProvenance } from '@offgrid/sync';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
 import {
   emitChangedModelSettings,
@@ -132,10 +133,12 @@ interface AppState {
   modelMaxContext: number | null;
   setModelMaxContext: (ctx: number | null) => void;
   settings: AppSettings;
+  modelSettingProvenance: Record<string, RecordProvenance>;
   updateSettings: (settings: Partial<AppSettings>) => void;
   applySyncedModelSetting: (
     wireKey: string,
     fields: Record<string, unknown>,
+    provenance?: RecordProvenance,
   ) => void;
   resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
@@ -353,17 +356,25 @@ export const useAppStore = create<AppState>()(
       modelMaxContext: null,
       setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
       settings: { ...DEFAULT_SETTINGS },
+      modelSettingProvenance: {},
       updateSettings: (newSettings) => {
         const before = get().settings;
         const after = { ...before, ...newSettings };
         set({ settings: after });
         emitChangedModelSettings(before, after);
       },
-      applySyncedModelSetting: (wireKey, fields) => {
+      applySyncedModelSetting: (wireKey, fields, provenance) => {
         const patch = mobileModelSettingPatch(wireKey, fields);
         if (patch) {
           set((state) => ({
             settings: { ...state.settings, ...(patch as Partial<AppSettings>) },
+            modelSettingProvenance: provenance
+              ? {
+                  ...state.modelSettingProvenance,
+                  [wireKey]:
+                    state.modelSettingProvenance[wireKey] ?? provenance,
+                }
+              : state.modelSettingProvenance,
           }));
         }
       },
@@ -469,6 +480,7 @@ export const useAppStore = create<AppState>()(
         activeModelId: state.activeModelId,
         lastTextModelId: state.lastTextModelId,
         settings: state.settings,
+        modelSettingProvenance: state.modelSettingProvenance,
         activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,
         shownSpotlights: state.shownSpotlights,
