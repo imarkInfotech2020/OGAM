@@ -87,6 +87,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       persistent outcome instead of silently restarting discovery. Reconnect remains available for
       offline devices and waits for an authenticated session, then reports an actionable timeout
       instead of appearing to succeed early (Pro `0f38f9ee`, root `bdc5000f`).
+- [x] Devices and the Home Sync card consume the shared control-center projection rather than
+      deriving mesh slots, saved/available state, route labels, ordering, or action eligibility in
+      React. Shared `371bb2a`; Mobile Pro `6619d21a`.
 - [x] Sync also has a first-class Files destination. Activity is only the transient transfer
       workflow; Files is the persistent materialized library for screenshots, downloads, generated
       media, and message attachments that actually crossed devices. It filters by kind, shows
