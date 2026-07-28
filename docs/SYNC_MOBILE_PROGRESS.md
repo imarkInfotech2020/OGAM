@@ -11,6 +11,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - **Transport:** length-prefixed NaCl-encrypted frames over TCP (ephemeral bound port, advertised
   over mDNS TXT). App messages ride the paired channel via `engine.sendApp(deviceId, channel, data)`.
 - **Feature gating:** the mobile Sync _experience_ is Pro; the engine is public.
+- **Desktop contract:** `shared/docs/DESKTOP_SYNC_INTEGRATION_PLAN.md`. This mobile record names each
+  landed wire contract and the matching desktop requirement so the two integrations stay visible
+  to each other.
 
 ## Devices (mobile side, on hand for real 2-device tests)
 
@@ -99,6 +102,13 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       project and unfile its conversations without deleting messages. The rendered journey deletes
       an inbound project through mobile UI and proves the tombstone, unfiled conversation, and
       preserved message all reach the peer.
+- [x] Knowledge-base documents now have a stable RFC 4122 `sync_id`. The RAG migration backfills
+      existing autoincrement rows once, preserves that identity, and assigns it to new documents.
+      The RAG owner emits indexed, enabled, and deleted lifecycle intents through the existing
+      optional Pro hook. Real SQLite coverage: core `9deceba5`.
+- [ ] Send verified knowledge-document files through the shared streaming transfer manager, then
+      index them through each receiver's existing RAG owner. Mobile and Desktop must use the same
+      MIME metadata and stable `sync_id`; local paths and autoincrement row ids never cross the wire.
 - [ ] Verify conversation/project/message convergence with the real desktop app on physical iOS
       and Android devices.
 
@@ -146,7 +156,8 @@ high-entropy auto-generated code + a real KDF (scrypt/argon2) so a weak passphra
 `f50dea2c` (stable IDs), `b8abb869` (withhold unsafe project tombstones),
 Pro `07e06ee2` and core `78df85ba` (model settings), and `69f16ccb`
 (non-destructive project deletion). Pro `afca0d7e` and core `9ced2a55` distinguish Debug Pro from
-real Keygen device activation.
+real Keygen device activation. Core `9deceba5` gives knowledge documents a stable cross-device
+identity and records their lifecycle at the RAG owner.
 Commits are small + each has rendered integration coverage + hygiene.
 
 ## Prior-art decision (2026-07-26)
