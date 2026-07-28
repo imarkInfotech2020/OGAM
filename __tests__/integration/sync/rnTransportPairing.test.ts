@@ -20,8 +20,13 @@ class FakeSocket {
   peer?: FakeSocket;
   remoteAddress = '127.0.0.1';
   private handlers: Record<string, Handler[]> = {};
-  on(ev: string, cb: Handler) { (this.handlers[ev] ||= []).push(cb); return this; }
-  private emit(ev: string, ...a: any[]) { (this.handlers[ev] || []).forEach(h => h(...a)); }
+  on(ev: string, cb: Handler) {
+    (this.handlers[ev] ||= []).push(cb);
+    return this;
+  }
+  private emit(ev: string, ...a: any[]) {
+    (this.handlers[ev] || []).forEach(h => h(...a));
+  }
   write(data: unknown) {
     const buf = data as Buffer;
     const b64 = Buffer.from(buf).toString('base64');
@@ -29,13 +34,22 @@ class FakeSocket {
     setImmediate(() => this.peer?.emit('data', b64 as unknown));
     return true;
   }
-  destroy() { setImmediate(() => { this.emit('close'); this.peer?.emit('close'); }); }
-  _deliverOpen() {/* no-op */}
+  destroy() {
+    setImmediate(() => {
+      this.emit('close');
+      this.peer?.emit('close');
+    });
+  }
+  _deliverOpen() {
+    /* no-op */
+  }
 }
 
 // In-memory RnTcpModule: servers keyed by bound port; connect() wires a socket pair and hands the
 // server side to its onConnection.
-function makeFakeTcp(): RnTcpModule & { _servers: Map<number, (s: FakeSocket) => void> } {
+function makeFakeTcp(): RnTcpModule & {
+  _servers: Map<number, (s: FakeSocket) => void>;
+} {
   const servers = new Map<number, (s: FakeSocket) => void>();
   let nextPort = 41000;
   return {
@@ -43,31 +57,48 @@ function makeFakeTcp(): RnTcpModule & { _servers: Map<number, (s: FakeSocket) =>
     createServer(onConnection: (socket: any) => void) {
       let boundPort = 0;
       const srv: any = {
-        on() { return srv; },
+        on() {
+          return srv;
+        },
         listen(opts: { port: number }, cb?: () => void) {
           boundPort = opts.port && opts.port > 0 ? opts.port : nextPort++;
           servers.set(boundPort, onConnection as any);
           cb?.();
           return srv;
         },
-        address() { return { port: boundPort }; },
-        close() { servers.delete(boundPort); },
+        address() {
+          return { port: boundPort };
+        },
+        close() {
+          servers.delete(boundPort);
+        },
       };
       return srv;
     },
     createConnection(opts: { host: string; port: number }, cb?: () => void) {
       const client = new FakeSocket();
       const server = new FakeSocket();
-      client.peer = server; server.peer = client;
+      client.peer = server;
+      server.peer = client;
       const onConn = servers.get(opts.port);
       if (!onConn) throw new Error(`no server on port ${opts.port}`);
-      setImmediate(() => { onConn(server as any); cb?.(); });
+      setImmediate(() => {
+        onConn(server as any);
+        cb?.();
+      });
       return client as any;
     },
   };
 }
 
-const dev = (id: string, port: number) => ({ id, name: id, platform: 'android' as const, version: '1', host: '127.0.0.1', port });
+const dev = (id: string, port: number) => ({
+  id,
+  name: id,
+  platform: 'android' as const,
+  version: '1',
+  host: '127.0.0.1',
+  port,
+});
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 describe('mobile Sync wiring — pair + app message over the RN transport (base64 path)', () => {
@@ -76,17 +107,25 @@ describe('mobile Sync wiring — pair + app message over the RN transport (base6
     let aPaired: any, bPaired: any, appMsg: any;
 
     const a = buildSyncEngine({
-      localDevice: dev('dev-a', 0), tcpModule: tcp,
+      localDevice: dev('dev-a', 0),
+      tcpModule: tcp,
       getPassphrase: () => 'shared-secret',
-      onPaired: (d) => { aPaired = d; },
-      onAppMessage: (id, channel, data) => { appMsg = { id, channel, data }; },
+      onPaired: d => {
+        aPaired = d;
+      },
+      onAppMessage: (id, channel, data) => {
+        appMsg = { id, channel, data };
+      },
     });
     const b = buildSyncEngine({
-      localDevice: dev('dev-b', 0), tcpModule: tcp,
-      onPaired: (d) => { bPaired = d; },
+      localDevice: dev('dev-b', 0),
+      tcpModule: tcp,
+      onPaired: d => {
+        bPaired = d;
+      },
     });
 
-    await a.engine.start(0);
+    await Promise.all([a.engine.start(0), b.engine.start(0)]);
     const port = a.transport.boundPort!;
     expect(port).toBeGreaterThan(0);
 
@@ -102,7 +141,11 @@ describe('mobile Sync wiring — pair + app message over the RN transport (base6
     const ok = b.engine.sendApp('dev-a', 'state', { hello: 'world', n: 42 });
     await delay(120);
     expect(ok).toBe(true);
-    expect(appMsg).toEqual({ id: 'dev-b', channel: 'state', data: { hello: 'world', n: 42 } });
+    expect(appMsg).toEqual({
+      id: 'dev-b',
+      channel: 'state',
+      data: { hello: 'world', n: 42 },
+    });
 
     await a.engine.stop();
     await b.engine.stop();

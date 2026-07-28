@@ -260,7 +260,7 @@ describe('mobile ambient sharing journey', () => {
       'blue-otter-42',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
     fireEvent.changeText(
       ui.getByTestId('incoming-pairing-code'),

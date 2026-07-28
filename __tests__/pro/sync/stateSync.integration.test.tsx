@@ -230,23 +230,22 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
     expect(discovery.publishedPort).toBeGreaterThan(0);
 
-    await remote.engine.pair(
+    const firstPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'violet-lake-27',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
     expect(
-      ui.getByText(
-        'Off Grid AI Desktop wants to pair with this phone. Enter the code shown on that device.',
-      ),
+      ui.getByText('Confirm the same pairing code on both devices.'),
     ).toBeTruthy();
     fireEvent.changeText(
       ui.getByTestId('incoming-pairing-code'),
       'violet-lake-27',
     );
     fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await firstPairing;
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
@@ -434,14 +433,15 @@ describe('Pro mobile state sync journey', () => {
     ).toMatchObject({ value_json: '0.85' });
 
     await remote.engine.start(0);
-    await remote.engine.pair(
+    const secondPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
       'violet-lake-27',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
     fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await secondPairing;
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
     );

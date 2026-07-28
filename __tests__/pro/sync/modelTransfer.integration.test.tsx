@@ -159,7 +159,7 @@ describe('Pro mobile model transfer journey', () => {
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
     }
-    await remote.engine.pair(
+    const pairing = remote.engine.pair(
       {
         ...mobile,
         host: '127.0.0.1',
@@ -168,13 +168,14 @@ describe('Pro mobile model transfer journey', () => {
       'green-river-52',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
     fireEvent.changeText(
       ui.getByTestId('incoming-pairing-code'),
       'green-river-52',
     );
     fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await pairing;
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
