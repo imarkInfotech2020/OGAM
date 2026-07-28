@@ -306,6 +306,10 @@ describe('Pro mobile knowledge document sync journey', () => {
       view = renderProjectDetail();
       await rtl.waitFor(() => {
         expect(view!.queryByText('launch-brief.txt')).not.toBeNull();
+        expect(view!.queryByLabelText('Use launch-brief.txt')).not.toBeNull();
+        expect(
+          view!.queryByLabelText('Remove launch-brief.txt'),
+        ).not.toBeNull();
       });
 
       await RNFS.writeFile(
@@ -325,6 +329,10 @@ describe('Pro mobile knowledge document sync journey', () => {
       await rtl.waitFor(
         () => {
           expect(view!.queryByText('phone-notes.txt')).not.toBeNull();
+          expect(view!.queryByLabelText('Use phone-notes.txt')).not.toBeNull();
+          expect(
+            view!.queryByLabelText('Remove phone-notes.txt'),
+          ).not.toBeNull();
         },
         { timeout: 6000 },
       );
