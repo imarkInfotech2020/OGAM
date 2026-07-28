@@ -44,7 +44,7 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       (CompositeDiscoveryService + orchestrator).
 - [x] `createNativeSync` binding (injects react-native-tcp-socket + react-native-zeroconf).
 - [x] Native config: iOS `NSBonjourServices += _offgrid._tcp, _offgrid-sync._tcp,
-    _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
+  _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
 - [x] iOS `pod install` autolinked tcp-socket 6.4.1 + zeroconf 0.14.0 (+ CocoaAsyncSocket).
 - [x] Native rebuild: **iOS built + installed + launched** (autolinked tcp-socket + zeroconf).
       Android APK **built OK** but install failed (`No connected devices!` — phone dropped off adb
@@ -168,6 +168,73 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 - [x] iOS native test, Android native test, and a signed physical-iPhone build all pass.
 - [ ] Verify clipboard text in both directions against a desktop build implementing the same
       `clipboard` app channel. iOS observes copies while active and rechecks on foreground.
+
+## Post-proximity roadmap (authoritative cross-device order)
+
+Proximity is a transport milestone, not the end of Sync. Mobile and Desktop agreed this ordering on
+2026-07-28:
+
+### P0 — Joint physical iOS/macOS gate — CURRENT
+
+- Rebuild/install the iOS app with its native proximity module and launch the signed Desktop build.
+- Manually verify LAN and Wi-Fi-off nearby reconnection without re-pairing; stale peers must become
+  offline within about 30 seconds.
+- Verify chats/projects/messages/settings, tool artifacts, short RAG documents, both-direction
+  knowledge bytes and controls, queue/error visibility, rename, and clipboard.
+- Keep automated device driving, hooks, pre-push, and push deferred until this manual gate closes.
+
+### P1 — Security and reliability foundation
+
+- Shared: replace the hand-rolled KDF/weak-code path with a real KDF and high-entropy pairing flow;
+  validate every peer payload at the protocol boundary; expose true per-device session close/unpair;
+  prevent duplicate LAN/proximity sessions and make route handoff deterministic.
+- Hosts: retain pairing secrets in safeStorage/Keychain and own the pairing/unpair UI.
+- Do not independently change the shared boundary; agree the exact cross-host slice first.
+
+### P2 — Complete the live replicated corpus
+
+- Replicate memories, entities, and remaining workspace/tool/artifact metadata using stable UUIDs and
+  shared StateSync/LWW contracts.
+- Small searchable metadata/text replicates eagerly. Large artifact-library/generated image, audio,
+  video, and capture bytes do not.
+- Shared owns schemas and materialization coordinators; Mobile and Desktop own store adapters and UI.
+- Next Mobile slice: inventory current memory/entity/artifact/generated-media stores, stable IDs,
+  fields, and file ownership, then coordinate the shared schemas with Desktop before implementation.
+
+### P3 — Personal mesh and multi-device correctness
+
+- Support three to five devices, gossip/anti-entropy through non-origin peers, capabilities/presence,
+  per-peer policy, and duplicate-free route selection.
+- Shared owns topology/routing. Hosts surface peer status and capabilities.
+- This precedes using the mesh for remote-compute selection.
+
+### P4 — Track A portable backup/export-import
+
+- This remains intended and is separate from realtime Sync.
+- Desktop core implements the public BackupEngine adapters/UI. Mobile rewrites the stale Track-A
+  adapters against current stores instead of merging the old branch.
+- The versioned envelope is shared; host payloads may differ and imports regenerate embeddings.
+
+### P5 — Remote search, inference, and model routing
+
+- Shared provides streaming RPC with request IDs, cancellation, backpressure, and capabilities.
+- Desktop proxies universal search plus gateway/model runtimes.
+- Mobile prefers a capable nearby Desktop, falls back immediately on disconnect, and visibly labels
+  where execution occurred. No raw unauthenticated ports.
+
+### P6 — On-demand large media and files
+
+- Fetch generated images/audio/video/captures/artifact bytes only when opened.
+- Shared owns portable request/stream coordination. Hosts retain checksum, resume, size, admission,
+  storage, and rendering.
+- Complete physical full-size model transfer, interruption/resume, checksum, and receiver-load gates
+  in parallel.
+
+### P7 — Ambient sharing and platform parity
+
+- Port the shared policy/watcher/anti-loop layer, then add thin host watchers.
+- Add Android nearby transport and Windows firewall/transport packaging.
+- Close clipboard and background-lifecycle parity across platforms.
 
 ## Security note (logged for GA)
 
