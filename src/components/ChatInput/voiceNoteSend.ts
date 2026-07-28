@@ -1,4 +1,5 @@
 import { ImageModeState, MediaAttachment } from '../../types';
+import { generateId } from '../../utils/generateId';
 
 /**
  * Decides how a freshly recorded voice note is handled in Chat mode.
@@ -31,13 +32,15 @@ export function buildVoiceAttachment(opts: {
   transcription?: string;
 }): MediaAttachment {
   return {
-    id: `audio-${Date.now()}`,
+    id: generateId(),
     type: 'audio',
     uri: opts.uri,
     audioFormat: opts.format,
     audioDurationSeconds: opts.durationSeconds,
     fileName: opts.uri.split('/').pop(),
-    ...(opts.transcription?.trim() ? { textContent: opts.transcription.trim() } : {}),
+    ...(opts.transcription?.trim()
+      ? { textContent: opts.transcription.trim() }
+      : {}),
   };
 }
 
@@ -57,8 +60,17 @@ export interface VoiceNoteHandlerDeps {
   isAudioMode: boolean;
   /** Current image mode passed through to onSend. */
   imageMode: ImageModeState;
-  onSend: (message: string, attachments: MediaAttachment[], imageMode: ImageModeState) => void;
-  addAudioAttachment: (audio: { uri: string; audioFormat: 'wav' | 'mp3'; audioDurationSeconds?: number; transcription?: string }) => void;
+  onSend: (
+    message: string,
+    attachments: MediaAttachment[],
+    imageMode: ImageModeState,
+  ) => void;
+  addAudioAttachment: (audio: {
+    uri: string;
+    audioFormat: 'wav' | 'mp3';
+    audioDurationSeconds?: number;
+    transcription?: string;
+  }) => void;
   clearAttachments: () => void;
   appendTranscript: (text: string) => void;
   onHaptic: () => void;
@@ -109,14 +121,19 @@ export function buildVoiceNoteHandlers(deps: VoiceNoteHandlerDeps) {
       sendVoiceNote(audio.transcription?.trim() ?? '', audioAttachment);
     } else {
       deps.addAudioAttachment({
-        uri: audio.uri, audioFormat: audio.format, audioDurationSeconds: audio.durationSeconds, transcription: audio.transcription,
+        uri: audio.uri,
+        audioFormat: audio.format,
+        audioDurationSeconds: audio.durationSeconds,
+        transcription: audio.transcription,
       });
     }
   };
 
   const onAutoSend = deps.isAudioMode
-    ? (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) =>
-        sendVoiceNote(text, buildVoiceAttachment(audio))
+    ? (
+        text: string,
+        audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number },
+      ) => sendVoiceNote(text, buildVoiceAttachment(audio))
     : undefined;
 
   return { onTranscript, onAudioAttachment, onAutoSend };

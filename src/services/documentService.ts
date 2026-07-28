@@ -9,9 +9,41 @@ import { MediaAttachment } from '../types';
 import { pdfExtractor } from './pdfExtractor';
 import { useAppStore } from '../stores/appStore';
 import { APP_CONFIG } from '../constants';
+import { generateId } from '../utils/generateId';
 
 // File extensions we can read as text
-const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.log', '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.swift', '.kt', '.go', '.rs', '.rb', '.php', '.sql', '.sh', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf'];
+const TEXT_EXTENSIONS = [
+  '.txt',
+  '.md',
+  '.csv',
+  '.json',
+  '.xml',
+  '.html',
+  '.log',
+  '.py',
+  '.js',
+  '.ts',
+  '.jsx',
+  '.tsx',
+  '.java',
+  '.c',
+  '.cpp',
+  '.h',
+  '.swift',
+  '.kt',
+  '.go',
+  '.rs',
+  '.rb',
+  '.php',
+  '.sql',
+  '.sh',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.ini',
+  '.cfg',
+  '.conf',
+];
 
 // PDF extension handled separately via native module
 const PDF_EXTENSION = '.pdf';
@@ -36,7 +68,7 @@ class DocumentService {
    * Check if a file extension is supported
    */
   isSupported(fileName: string): boolean {
-    const extension = `.${  fileName.split('.').pop()?.toLowerCase()}`;
+    const extension = `.${fileName.split('.').pop()?.toLowerCase()}`;
     if (extension === PDF_EXTENSION && pdfExtractor.isAvailable()) {
       return true;
     }
@@ -49,7 +81,10 @@ class DocumentService {
    * - iOS: file:// URIs from document picker are security-scoped and need to be copied
    * - Note: Files from keepLocalCopy are already in app's Documents directory
    */
-  private async resolveContentUri(uri: string, fileName: string): Promise<string> {
+  private async resolveContentUri(
+    uri: string,
+    fileName: string,
+  ): Promise<string> {
     console.log(`[DocumentService] resolveContentUri input: ${uri}`);
 
     // Check if this is a file from keepLocalCopy - it would be in our app's Documents directory
@@ -67,7 +102,9 @@ class DocumentService {
     // Only skip copying if the file is exactly in our app's Documents directory
     // This must be a precise match to avoid security-scoped URLs from document picker
     if (cleanUri.startsWith(documentsPath)) {
-      console.log(`[DocumentService] File is in app Documents directory, using directly`);
+      console.log(
+        `[DocumentService] File is in app Documents directory, using directly`,
+      );
       return cleanUri;
     }
 
@@ -75,7 +112,9 @@ class DocumentService {
     if (Platform.OS === 'android' && uri.startsWith('content://')) {
       const tempPath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
       await RNFS.copyFile(uri, tempPath);
-      console.log(`[DocumentService] Copied Android content:// URI to: ${tempPath}`);
+      console.log(
+        `[DocumentService] Copied Android content:// URI to: ${tempPath}`,
+      );
       return tempPath;
     }
 
@@ -97,7 +136,9 @@ class DocumentService {
           return tempPath;
         } catch {
           console.error(`[DocumentService] Both copy attempts failed`);
-          throw new Error(`Could not access file. Please try selecting the file again.`);
+          throw new Error(
+            `Could not access file. Please try selecting the file again.`,
+          );
         }
       }
     }
@@ -108,39 +149,61 @@ class DocumentService {
 
   private validateFileType(extension: string, isPdf: boolean): void {
     if (!isPdf && !TEXT_EXTENSIONS.includes(extension)) {
-      throw new Error(`Unsupported file type: ${extension}. Supported: txt, md, csv, json, pdf, code files`);
+      throw new Error(
+        `Unsupported file type: ${extension}. Supported: txt, md, csv, json, pdf, code files`,
+      );
     }
     if (isPdf && !pdfExtractor.isAvailable()) {
       throw new Error('PDF extraction is not available on this device');
     }
   }
 
-  private async readContent(resolvedPath: string, isPdf: boolean, maxChars: number): Promise<string> {
-    console.log(`[DocumentService] readContent called - path: ${resolvedPath}, isPdf: ${isPdf}, maxChars: ${maxChars}`);
+  private async readContent(
+    resolvedPath: string,
+    isPdf: boolean,
+    maxChars: number,
+  ): Promise<string> {
+    console.log(
+      `[DocumentService] readContent called - path: ${resolvedPath}, isPdf: ${isPdf}, maxChars: ${maxChars}`,
+    );
     try {
       const raw = isPdf
         ? await pdfExtractor.extractText(resolvedPath, maxChars)
         : await RNFS.readFile(resolvedPath, 'utf8');
-      console.log(`[DocumentService] Successfully read ${raw.length} characters`);
+      console.log(
+        `[DocumentService] Successfully read ${raw.length} characters`,
+      );
       if (raw.length > maxChars) {
-        return `${raw.substring(0, maxChars)}\n\n... [Content truncated due to length]`;
+        return `${raw.substring(
+          0,
+          maxChars,
+        )}\n\n... [Content truncated due to length]`;
       }
       return raw;
     } catch (error: any) {
-      console.error(`[DocumentService] Error reading content:`, error?.message || error);
+      console.error(
+        `[DocumentService] Error reading content:`,
+        error?.message || error,
+      );
       throw error;
     }
   }
 
-  private async savePersistentCopy(resolvedPath: string, originalPath: string, name: string): Promise<{ id: string; uri: string }> {
+  private async savePersistentCopy(
+    resolvedPath: string,
+    originalPath: string,
+    name: string,
+  ): Promise<{ id: string; uri: string }> {
     await this.ensureAttachmentsDir();
-    const id = Date.now().toString();
+    const id = generateId();
     const persistentPath = `${ATTACHMENTS_DIR}/${id}_${name}`;
     let ok = false;
     try {
       await RNFS.copyFile(resolvedPath, persistentPath);
       ok = await RNFS.exists(persistentPath);
-    } catch { /* fall back to original path */ }
+    } catch {
+      /* fall back to original path */
+    }
     if (resolvedPath !== originalPath && ok) {
       RNFS.unlink(resolvedPath).catch(() => {});
     }
@@ -150,13 +213,21 @@ class DocumentService {
   /**
    * Process a document from a file path
    */
-  async processDocumentFromPath(filePath: string, fileName?: string, maxCharsOverride?: number): Promise<MediaAttachment | null> {
+  async processDocumentFromPath(
+    filePath: string,
+    fileName?: string,
+    maxCharsOverride?: number,
+  ): Promise<MediaAttachment | null> {
     try {
-      console.log(`[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`);
+      console.log(
+        `[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`,
+      );
       const name = fileName || filePath.split('/').pop() || 'document';
       const extension = `.${name.split('.').pop()?.toLowerCase()}`;
       const isPdf = extension === PDF_EXTENSION;
-      console.log(`[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`);
+      console.log(
+        `[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`,
+      );
       this.validateFileType(extension, isPdf);
 
       const resolvedPath = await this.resolveContentUri(filePath, name);
@@ -170,7 +241,9 @@ class DocumentService {
       } catch (existsError) {
         // RNFS.exists can fail on security-scoped URLs
         console.error(`[DocumentService] exists() threw error:`, existsError);
-        throw new Error('Could not access file. Please try selecting the file again.');
+        throw new Error(
+          'Could not access file. Please try selecting the file again.',
+        );
       }
 
       if (!fileExists) {
@@ -180,14 +253,36 @@ class DocumentService {
       const stat = await RNFS.stat(resolvedPath);
       console.log(`[DocumentService] File size: ${stat.size} bytes`);
       if (stat.size > MAX_FILE_SIZE) {
-        throw new Error(`File is too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+        throw new Error(
+          `File is too large. Maximum size is ${
+            MAX_FILE_SIZE / (1024 * 1024)
+          }MB`,
+        );
       }
 
-      const maxChars = maxCharsOverride ?? Math.floor((useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength) * 4 * 0.5);
+      const maxChars =
+        maxCharsOverride ??
+        Math.floor(
+          (useAppStore.getState().settings.contextLength ||
+            APP_CONFIG.maxContextLength) *
+            4 *
+            0.5,
+        );
       const textContent = await this.readContent(resolvedPath, isPdf, maxChars);
-      const { id, uri } = await this.savePersistentCopy(resolvedPath, filePath, name);
+      const { id, uri } = await this.savePersistentCopy(
+        resolvedPath,
+        filePath,
+        name,
+      );
 
-      return { id, type: 'document', uri, fileName: name, textContent, fileSize: stat.size };
+      return {
+        id,
+        type: 'document',
+        uri,
+        fileName: name,
+        textContent,
+        fileSize: stat.size,
+      };
     } catch (error: any) {
       throw error;
     }
@@ -197,15 +292,23 @@ class DocumentService {
    * Create a document attachment from pasted text.
    * Saves to a persistent file so it can be opened later from chat.
    */
-  async createFromText(text: string, fileName: string = 'pasted-text.txt'): Promise<MediaAttachment> {
-    const contextLength = useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength;
+  async createFromText(
+    text: string,
+    fileName: string = 'pasted-text.txt',
+  ): Promise<MediaAttachment> {
+    const contextLength =
+      useAppStore.getState().settings.contextLength ||
+      APP_CONFIG.maxContextLength;
     const maxChars = Math.floor(contextLength * 4 * 0.5);
     let textContent = text;
     if (textContent.length > maxChars) {
-      textContent = `${textContent.substring(0, maxChars)  }\n\n... [Content truncated due to length]`;
+      textContent = `${textContent.substring(
+        0,
+        maxChars,
+      )}\n\n... [Content truncated due to length]`;
     }
 
-    const id = Date.now().toString();
+    const id = generateId();
 
     // Write to persistent file so it can be opened from chat
     let uri = '';
@@ -248,8 +351,12 @@ class DocumentService {
       return attachment.fileName || 'Document';
     }
 
-    const preview = attachment.textContent.substring(0, maxLength).replaceAll('\n', ' ');
-    return preview.length < attachment.textContent.length ? `${preview  }...` : preview;
+    const preview = attachment.textContent
+      .substring(0, maxLength)
+      .replaceAll('\n', ' ');
+    return preview.length < attachment.textContent.length
+      ? `${preview}...`
+      : preview;
   }
 
   /**
