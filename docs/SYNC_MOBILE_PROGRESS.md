@@ -87,6 +87,8 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       persistent outcome instead of silently restarting discovery. Reconnect remains available for
       offline devices and waits for an authenticated session, then reports an actionable timeout
       instead of appearing to succeed early (Pro `0f38f9ee`, root `bdc5000f`).
+- [x] Completed transfers confirm success in the live All view for five seconds, then archive out of
+      that surface without deleting the record; the Completed filter remains the transfer history.
 - [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
       immediate clean retry; the shared engine closes the failed session instead of retaining it.
 - [x] Keygen device management lists active machines, marks this device, and allows another machine
