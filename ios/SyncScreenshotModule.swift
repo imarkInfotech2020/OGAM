@@ -96,11 +96,6 @@ final class SyncScreenshotModule: RCTEventEmitter {
     typeIdentifier: String?,
     asset: PHAsset
   ) {
-    let syncId = UUID().uuidString.lowercased()
-    let fileType = typeIdentifier.flatMap(UTType.init)
-    let fileExtension = fileType?.preferredFilenameExtension ?? "png"
-    let mimeType = fileType?.preferredMIMEType ?? "image/png"
-    let name = "Screenshot-\(syncId).\(fileExtension)"
     do {
       let documents = try FileManager.default.url(
         for: .documentDirectory,
@@ -108,29 +103,18 @@ final class SyncScreenshotModule: RCTEventEmitter {
         appropriateFor: nil,
         create: true
       )
-      let directory = documents.appendingPathComponent(
-        "sync_screenshots",
-        isDirectory: true
+      let capture = try SyncScreenshotFileWriter.persist(
+        data: data,
+        typeIdentifier: typeIdentifier,
+        createdAt: asset.creationDate ?? Date(),
+        width: asset.pixelWidth,
+        height: asset.pixelHeight,
+        documentsURL: documents
       )
-      try FileManager.default.createDirectory(
-        at: directory,
-        withIntermediateDirectories: true
-      )
-      let destination = directory.appendingPathComponent(name)
-      try data.write(to: destination, options: .atomic)
       guard hasListeners else { return }
       sendEvent(
         withName: "SyncScreenshotCaptured",
-        body: [
-          "syncId": syncId,
-          "name": name,
-          "mimeType": mimeType,
-          "filePath": destination.path,
-          "fileSize": data.count,
-          "createdAt": (asset.creationDate ?? Date()).iso8601String,
-          "width": asset.pixelWidth,
-          "height": asset.pixelHeight,
-        ]
+        body: capture
       )
     } catch {
       // The TypeScript owner retains queue/error state after a descriptor exists.
@@ -140,6 +124,44 @@ final class SyncScreenshotModule: RCTEventEmitter {
 
   deinit {
     NotificationCenter.default.removeObserver(self)
+  }
+}
+
+enum SyncScreenshotFileWriter {
+  static func persist(
+    data: Data,
+    typeIdentifier: String?,
+    createdAt: Date,
+    width: Int,
+    height: Int,
+    documentsURL: URL,
+    syncId: UUID = UUID()
+  ) throws -> [String: Any] {
+    let stableId = syncId.uuidString.lowercased()
+    let fileType = typeIdentifier.flatMap(UTType.init)
+    let fileExtension = fileType?.preferredFilenameExtension ?? "png"
+    let mimeType = fileType?.preferredMIMEType ?? "image/png"
+    let name = "Screenshot-\(stableId).\(fileExtension)"
+    let directory = documentsURL.appendingPathComponent(
+      "sync_screenshots",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(
+      at: directory,
+      withIntermediateDirectories: true
+    )
+    let destination = directory.appendingPathComponent(name)
+    try data.write(to: destination, options: .atomic)
+    return [
+      "syncId": stableId,
+      "name": name,
+      "mimeType": mimeType,
+      "filePath": destination.path,
+      "fileSize": data.count,
+      "createdAt": createdAt.iso8601String,
+      "width": width,
+      "height": height,
+    ]
   }
 }
 

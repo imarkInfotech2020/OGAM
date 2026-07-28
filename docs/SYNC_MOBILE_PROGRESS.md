@@ -166,8 +166,42 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       encrypted remote clip, proves both source labels, restores the remote clip, deletes it, and
       clears the remaining history.
 - [x] iOS native test, Android native test, and a signed physical-iPhone build all pass.
+- [x] Ambient file replication uses one shared `shared_file` StateSync entity and one
+      `application/vnd.offgrid.shared-file` byte contract for `screenshot`, `download`,
+      `generated_media`, and `message_attachment`. Shared `ControlledFileSync` owns state/file
+      ordering, tombstones, dependency gating, retry, and race serialization; Mobile owns durable
+      RNFS staging, admission, gallery/chat materialization, and the visible transfer queue.
+- [x] Generated images and message attachments have stable UUIDs, immutable origin provenance,
+      resumable verified bytes, reconnect resend, and delete propagation. Attachment import waits
+      until its owning conversation and message exist.
+- [x] Received screenshots and downloads are retained in app-owned storage and shown in the
+      existing Sync control center with kind, size, immutable source device, and an explicit iOS
+      Share/export action.
+- [x] The existing Sync control center uses the shared ambient policy for Screenshots, Downloads,
+      Generated media, and Attachments. Each source can be Off, Ask, or Auto for All devices or one
+      named device; a named-device rule overrides All devices. All rules default Off.
+- [x] Ask opens the global item-specific bottom sheet and sends no metadata or bytes until the user
+      approves. Auto sends silently with an ACTIVE indicator. Offline behavior is independently
+      Skip or Queue; queued items are checked against the current policy before reconnect delivery.
+- [x] Downloads and Attachments use the shared document-kind classifier and filter: PDF, text,
+      documents, spreadsheets, presentations, archives, images, audio, video, or other. Mobile does
+      not define a second host-only policy.
+- [x] iOS screenshot sharing listens only to the system's new-screenshot event after the user
+      enables Screenshots and grants Photos access. It copies that one new asset into app-owned
+      storage before creating a stable portable record; it does not scrape photo history.
+- [x] Mobile intentionally does not scrape the global iOS Files/Downloads folder. Outbound
+      `download` records require an explicit Off Grid-owned download completion event; Desktop
+      downloads can already arrive and be exported from Mobile.
+- [x] The adversarial rendered AppNavigator journey pairs a real loopback peer, selects a
+      device-specific Ask rule through visible controls, proves rejection sends no state or bytes,
+      forces a receiver refusal, shows the retained failure, and retries the verified transfer.
+- [x] Focused iOS native coverage proves screenshot bytes are copied into app-owned storage before
+      a transfer descriptor exists and that a failed copy produces no descriptor.
 - [ ] Verify clipboard text in both directions against a desktop build implementing the same
       `clipboard` app channel. iOS observes copies while active and rechecks on foreground.
+- [ ] Physically verify generated media, message attachments, screenshots, and downloads in both
+      directions against the signed Desktop build, including attribution, queue progress,
+      interruption/reconnect, retry/cancel/dismiss, and deletion.
 
 ## Post-proximity roadmap (authoritative cross-device order)
 
@@ -180,7 +214,8 @@ Proximity is a transport milestone, not the end of Sync. Mobile and Desktop agre
 - Manually verify LAN and Wi-Fi-off nearby reconnection without re-pairing; stale peers must become
   offline within about 30 seconds.
 - Verify chats/projects/messages/settings, tool artifacts, short RAG documents, both-direction
-  knowledge bytes and controls, queue/error visibility, rename, and clipboard.
+  knowledge bytes and controls, queue/error visibility, rename, clipboard, generated media,
+  message attachments, screenshots, and downloads.
 - Keep automated device driving, hooks, pre-push, and push deferred until this manual gate closes.
 
 ### P1 — Security and reliability foundation
@@ -193,11 +228,13 @@ Proximity is a transport milestone, not the end of Sync. Mobile and Desktop agre
 
 ### P2 — Complete the live replicated corpus
 
-- Replicate artifact-library records and generated-media metadata using stable UUIDs and shared
-  StateSync/LWW contracts. Memories and Entities are not part of the current Mobile Sync scope.
-- Small searchable metadata/text replicates eagerly. Large artifact-library/generated image, audio,
-  video, and capture bytes do not.
-- Shared owns schemas and materialization coordinators; Mobile and Desktop own store adapters and UI.
+- The release corpus is conversations/chats, messages, projects, model settings, model transfer,
+  copied text, screenshots, downloads, generated media, and message attachments. Memories,
+  Entities, todos, actions, Vault, backup/restore, and remote inference are explicitly excluded.
+- Shared portable-record provenance, `shared_file` state, and controlled byte coordination are
+  landed. Mobile and Desktop own their durable stores, admission, consent, materialization, and UI.
+- Remaining work here is physical cross-host validation plus any concrete media owners not yet
+  connected to the shared-file mutation boundary; do not add parallel record schemas.
 
 Mobile store inventory:
 
@@ -225,9 +262,10 @@ Mobile store inventory:
   chat removes generated images scoped by `conversationId`, but attachment and audio-file lifecycle
   is not yet centralized.
 
-Next cross-host step: compare Mobile's generated-media owner with Desktop's artifact-library and
-generated-media stores. Define stable shared record schemas and lifecycle coordinators before either
-host adds a materializer.
+Current cross-host state: generated media and message attachments use the shared portable-file
+contract and host materializers. Desktop also owns explicit completed Desktop/Downloads watchers;
+Mobile owns new iOS screenshot events and will only add downloads when an Off Grid download owner
+can emit a real completion event.
 
 ### P3 — Five-device personal mesh
 
@@ -253,15 +291,17 @@ host adds a materializer.
 
 ### P6 — On-demand large media and files
 
-- Fetch generated images/audio/video/captures/artifact bytes only when opened.
-- Shared owns portable request/stream coordination. Hosts retain checksum, resume, size, admission,
-  storage, and rendering.
+- In-scope shared-file bytes currently replicate through the visible resumable transfer queue after
+  category consent; they are not metadata-only placeholders.
+- Future media kinds may use on-demand fetch, but must reuse the shared controlled-file and transfer
+  owners. Hosts retain checksum, resume, size, admission, storage, and rendering.
 - Complete physical full-size model transfer, interruption/resume, checksum, and receiver-load gates
   in parallel.
 
 ### P7 — Ambient sharing and platform parity
 
-- Port the shared policy/watcher/anti-loop layer, then add thin host watchers.
+- Shared controlled-file policy/ordering, provenance, queue serialization, and anti-loop behavior
+  are landed. Finish physical iOS/macOS gates before adding Android native sources.
 - Add Android nearby transport and Windows firewall/transport packaging.
 - Close clipboard and background-lifecycle parity across platforms.
 
@@ -283,7 +323,13 @@ identity and records their lifecycle at the RAG owner. Pro `f8b0e91a` and core `
 knowledge-document state/file convergence using the shared coordinator and MIME registry.
 Recent reliability/proximity checkpoints: shared heartbeat `4dbcdd7`, shared scheduler `0efce95`,
 shared multi-transport `26c0b09`, Pro `8c1f599f`, and core `5762f0a5`.
-Commits are small + each has rendered integration coverage + hygiene.
+Recent personal-mesh/ambient checkpoints: shared provenance `a4bd0ff` + `abc49ce`, shared route/cap
+`be2106f`, shared controlled files `2c02b05`, Pro `11bae32f`, `5522acac`, `261e0092`,
+`b5fdc021`, `a770ddb9`, and core `ff2bea6e`, `cda022df`, `fa566a90`, `02edb640`,
+`fb3924c8`, plus shared ambient policy `306279a`, Pro `ef745bc5`, and core `621dc12b`.
+Focused no-mockist coverage is green for the ambient Ask/refuse/retry journey and the native
+app-owned screenshot copy. Full hooks, pre-push, push, and automated device driving remain deferred
+until the manual iOS/macOS gate closes.
 
 ## Prior-art decision (2026-07-26)
 

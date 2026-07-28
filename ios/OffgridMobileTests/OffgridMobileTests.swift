@@ -20,6 +20,59 @@ private func makeTempDirectory() -> URL {
   return url
 }
 
+// MARK: - Sync Screenshot Tests
+
+final class SyncScreenshotFileWriterTests: XCTestCase {
+
+  func testPersistsAnAppOwnedCopyAndReturnsTheTransferDescriptor() throws {
+    let documents = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: documents) }
+    let bytes = Data("screen bytes".utf8)
+    let syncId = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    let createdAt = Date(timeIntervalSince1970: 1_753_699_200)
+
+    let descriptor = try SyncScreenshotFileWriter.persist(
+      data: bytes,
+      typeIdentifier: "public.png",
+      createdAt: createdAt,
+      width: 1179,
+      height: 2556,
+      documentsURL: documents,
+      syncId: syncId
+    )
+
+    let filePath = try XCTUnwrap(descriptor["filePath"] as? String)
+    XCTAssertTrue(filePath.hasPrefix(documents.path))
+    XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: filePath)), bytes)
+    XCTAssertEqual(
+      descriptor["syncId"] as? String,
+      "11111111-1111-4111-8111-111111111111"
+    )
+    XCTAssertEqual(descriptor["mimeType"] as? String, "image/png")
+    XCTAssertEqual(descriptor["fileSize"] as? Int, bytes.count)
+    XCTAssertEqual(descriptor["width"] as? Int, 1179)
+    XCTAssertEqual(descriptor["height"] as? Int, 2556)
+  }
+
+  func testFailedAppOwnedCopyDoesNotProduceADescriptor() {
+    let regularFile = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    try! Data("not a directory".utf8).write(to: regularFile)
+    defer { try? FileManager.default.removeItem(at: regularFile) }
+
+    XCTAssertThrowsError(
+      try SyncScreenshotFileWriter.persist(
+        data: Data("screen bytes".utf8),
+        typeIdentifier: "public.png",
+        createdAt: Date(),
+        width: 1,
+        height: 1,
+        documentsURL: regularFile
+      )
+    )
+  }
+}
+
 // MARK: - PDFExtractorModule Tests
 
 final class PDFExtractorModuleTests: XCTestCase {
