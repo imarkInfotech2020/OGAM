@@ -3,15 +3,15 @@ import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
+import {
+  emitKnowledgeDocumentMutation,
+  type KnowledgeDocumentSnapshot,
+} from '../sync/knowledgeDocument';
 import logger from '../../utils/logger';
 
-;
 export type { RagDocument, RagSearchResult } from './database';
-;
 export { chunkDocument } from './chunking';
 export { retrievalService } from './retrieval';
-;
-
 interface IndexProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
   message: string;
@@ -22,6 +22,10 @@ interface IndexDocumentParams {
   filePath: string;
   fileName: string;
   fileSize: number;
+  syncId?: string;
+  createdAt?: string;
+  enabled?: boolean;
+  origin?: 'local' | 'sync';
   onProgress?: (progress: IndexProgress) => void;
 }
 
@@ -37,13 +41,22 @@ class RagService {
     // Prevent duplicate indexing of the same file
     const existing = ragDatabase.getDocumentsByProject(projectId);
     if (existing.some(d => d.path === filePath || d.name === fileName)) {
-      throw new Error(`Document "${fileName}" is already in the knowledge base`);
+      throw new Error(
+        `Document "${fileName}" is already in the knowledge base`,
+      );
     }
 
-    onProgress?.({ stage: 'extracting', message: `Extracting text from ${fileName}...` });
+    onProgress?.({
+      stage: 'extracting',
+      message: `Extracting text from ${fileName}...`,
+    });
     // Extract full document text for RAG — don't truncate based on context window
     const RAG_MAX_CHARS = 500_000;
-    const attachment = await documentService.processDocumentFromPath(filePath, fileName, RAG_MAX_CHARS);
+    const attachment = await documentService.processDocumentFromPath(
+      filePath,
+      fileName,
+      RAG_MAX_CHARS,
+    );
     if (!attachment?.textContent) {
       // A PDF that extracts to zero text is a scanned / image-only PDF (no text layer);
       // there is no on-device OCR, so name that cause instead of a generic failure (B-KB).
@@ -62,7 +75,15 @@ class RagService {
     }
 
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
-    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: filePath, size: fileSize });
+    const docId = ragDatabase.insertDocument({
+      projectId,
+      name: fileName,
+      path: attachment.uri || filePath,
+      size: attachment.fileSize ?? fileSize,
+      syncId: params.syncId,
+      createdAt: params.createdAt,
+      enabled: params.enabled,
+    });
     const rowIds = ragDatabase.insertChunks(docId, chunks);
 
     onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
@@ -76,18 +97,32 @@ class RagService {
         embedding: embeddings[i],
       }));
       ragDatabase.insertEmbeddingsBatch(entries);
-      logger.log(`[RAG] Generated ${embeddings.length} embeddings for ${fileName}`);
+      logger.log(
+        `[RAG] Generated ${embeddings.length} embeddings for ${fileName}`,
+      );
     } catch (err) {
       // A document with zero embeddings is invisible to semantic search and never
       // auto-backfilled — a permanent dead entry. Roll back the just-inserted doc + chunks
       // and surface the failure so the KB screen reports it, rather than swallowing it.
-      logger.error('[RAG] Embedding generation failed — rolling back index:', err);
+      logger.error(
+        '[RAG] Embedding generation failed — rolling back index:',
+        err,
+      );
       ragDatabase.deleteDocument(docId);
-      throw err instanceof Error ? err : new Error('Embedding generation failed');
+      throw err instanceof Error
+        ? err
+        : new Error('Embedding generation failed');
     }
 
     onProgress?.({ stage: 'done', message: 'Done' });
     logger.log(`[RAG] Indexed ${fileName}: ${chunks.length} chunks`);
+    const indexed = ragDatabase.getDocument(docId);
+    if (indexed && params.origin !== 'sync') {
+      emitKnowledgeDocumentMutation({
+        kind: 'indexed',
+        document: this.snapshot(indexed),
+      });
+    }
     return docId;
   }
 
@@ -113,7 +148,9 @@ class RagService {
         }));
         ragDatabase.insertEmbeddingsBatch(entries);
         total += embeddings.length;
-        logger.log(`[RAG] Backfilled ${embeddings.length} embeddings for ${doc.name}`);
+        logger.log(
+          `[RAG] Backfilled ${embeddings.length} embeddings for ${doc.name}`,
+        );
       } catch (err) {
         logger.error(`[RAG] Backfill failed for ${doc.name}:`, err);
       }
@@ -124,7 +161,14 @@ class RagService {
 
   async deleteDocument(docId: number): Promise<void> {
     await this.ensureReady();
+    const document = ragDatabase.getDocument(docId);
     ragDatabase.deleteDocument(docId);
+    if (document) {
+      emitKnowledgeDocumentMutation({
+        kind: 'deleted',
+        syncId: document.sync_id,
+      });
+    }
   }
 
   async getDocumentsByProject(projectId: string) {
@@ -135,19 +179,102 @@ class RagService {
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
     await this.ensureReady();
     ragDatabase.toggleEnabled(docId, enabled);
+    const document = ragDatabase.getDocument(docId);
+    if (document) {
+      emitKnowledgeDocumentMutation({
+        kind: 'enabled',
+        syncId: document.sync_id,
+        enabled,
+      });
+    }
   }
 
-  async searchProject(projectId: string, query: string, contextLength?: number) {
+  async searchProject(
+    projectId: string,
+    query: string,
+    contextLength?: number,
+  ) {
     await this.ensureReady();
     if (contextLength) {
-      return retrievalService.searchWithBudget({ projectId, query, contextLength });
+      return retrievalService.searchWithBudget({
+        projectId,
+        query,
+        contextLength,
+      });
     }
     return retrievalService.search(projectId, query);
   }
 
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
+    const documents = ragDatabase.getDocumentsByProject(projectId);
     ragDatabase.deleteDocumentsByProject(projectId);
+    for (const document of documents) {
+      emitKnowledgeDocumentMutation({
+        kind: 'deleted',
+        syncId: document.sync_id,
+      });
+    }
+  }
+
+  async getAllDocumentsForSync(): Promise<KnowledgeDocumentSnapshot[]> {
+    await this.ensureReady();
+    return ragDatabase
+      .getAllDocuments()
+      .map(document => this.snapshot(document));
+  }
+
+  async indexSyncedDocument(
+    document: KnowledgeDocumentSnapshot,
+  ): Promise<number> {
+    await this.ensureReady();
+    const existing = ragDatabase.getDocumentBySyncId(document.syncId);
+    if (existing) {
+      if (existing.enabled !== (document.enabled ? 1 : 0)) {
+        ragDatabase.toggleEnabled(existing.id, document.enabled);
+      }
+      return existing.id;
+    }
+
+    return this.indexDocument({
+      projectId: document.projectId,
+      filePath: document.filePath,
+      fileName: document.name,
+      fileSize: document.fileSize,
+      syncId: document.syncId,
+      createdAt: document.createdAt,
+      enabled: document.enabled,
+      origin: 'sync',
+    });
+  }
+
+  async setSyncedDocumentEnabled(
+    syncId: string,
+    enabled: boolean,
+  ): Promise<void> {
+    await this.ensureReady();
+    const document = ragDatabase.getDocumentBySyncId(syncId);
+    if (document) ragDatabase.toggleEnabled(document.id, enabled);
+  }
+
+  async deleteSyncedDocument(syncId: string): Promise<void> {
+    await this.ensureReady();
+    const document = ragDatabase.getDocumentBySyncId(syncId);
+    if (document) ragDatabase.deleteDocument(document.id);
+  }
+
+  private snapshot(
+    document: import('./database').RagDocument,
+  ): KnowledgeDocumentSnapshot {
+    return {
+      syncId: document.sync_id,
+      projectId: document.project_id,
+      name: document.name,
+      filePath: document.path,
+      fileSize: document.size,
+      createdAt: document.created_at,
+      enabled: document.enabled === 1,
+    };
   }
 }
 

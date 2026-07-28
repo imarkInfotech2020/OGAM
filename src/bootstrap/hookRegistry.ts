@@ -60,4 +60,7 @@ export const HOOKS = {
   /** (mutation: SyncMutation) => void — a core data owner committed a record
    *  change. Pro records it in the state-sync op-log; free builds do nothing. */
   syncRecordLocalMutation: 'sync.recordLocalMutation',
+  /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
+   *  a document lifecycle change. Pro transfers or reconciles it with peers. */
+  syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
 } as const;
