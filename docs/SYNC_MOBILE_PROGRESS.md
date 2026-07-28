@@ -87,6 +87,12 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       persistent outcome instead of silently restarting discovery. Reconnect remains available for
       offline devices and waits for an authenticated session, then reports an actionable timeout
       instead of appearing to succeed early (Pro `0f38f9ee`, root `bdc5000f`).
+- [x] Sync also has a first-class Files destination. Activity is only the transient transfer
+      workflow; Files is the persistent materialized library for screenshots, downloads, generated
+      media, and message attachments that actually crossed devices. It filters by kind, shows
+      immutable origin, destination count, timestamp, and size, opens the owning Gallery/chat or
+      native viewer, and exposes Share plus screenshot/download deletion (Pro `634b033e`, root
+      `3da42768`).
 - [x] Completed transfers confirm success in the live All view for five seconds, then archive out of
       that surface without deleting the record; the Completed filter remains the transfer history.
 - [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
@@ -196,8 +202,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       resumable verified bytes, reconnect resend, and delete propagation. Attachment import waits
       until its owning conversation and message exist.
 - [x] Received screenshots and downloads are retained in app-owned storage and shown in the
-      existing Sync control center with kind, size, immutable source device, and an explicit iOS
-      Share/export action.
+      first-class Sync Files library with kind, size, timestamp, immutable source device, Open,
+      Share/export, and Delete. Generated media and message attachments are listed there but open
+      in their owning Gallery or chat instead of creating duplicate media libraries.
 - [x] The existing Sync control center uses the shared ambient policy for Screenshots, Downloads,
       Generated media, and Attachments. Each source can be Off, Ask, or Auto for All devices or one
       named device; a named-device rule overrides All devices. All rules default Off.
@@ -215,7 +222,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       downloads can already arrive and be exported from Mobile.
 - [x] The adversarial rendered AppNavigator journey pairs a real loopback peer, selects a
       device-specific Ask rule through visible controls, proves rejection sends no state or bytes,
-      forces a receiver refusal, shows the retained failure, and retries the verified transfer.
+      forces a receiver refusal, shows the retained failure, retries exactly once, verifies the
+      exact bytes and control record, proves rejected captures do not leak into Files, and exercises
+      source attribution plus file-kind filters through the real navigator.
 - [x] Focused iOS native coverage proves screenshot bytes are copied into app-owned storage before
       a transfer descriptor exists and that a failed copy produces no descriptor.
 - [ ] Verify clipboard text in both directions against a desktop build implementing the same
