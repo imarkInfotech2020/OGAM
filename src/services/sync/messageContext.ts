@@ -1,35 +1,23 @@
+import {
+  parseSyncedMessageContext,
+  serializeSyncedMessageContext,
+  type SyncedMessageContext,
+} from '@offgrid/sync';
 import type { Message } from '../../types';
 
-interface SyncedMessageContext {
-  reasoning?: unknown;
-}
-
-/** Match Desktop's persisted message-context contract without leaking UI state onto the wire. */
+/** Serialize only the shared, peer-safe part of a persisted message context. */
 export function serializeMessageContext(
-  message: Pick<Message, 'reasoningContent'>,
+  message: Pick<Message, 'reasoningContent' | 'toolArtifacts'>,
 ): string | null {
-  const reasoning = message.reasoningContent;
-  return typeof reasoning === 'string' && reasoning.trim()
-    ? JSON.stringify({ reasoning })
-    : null;
+  return serializeSyncedMessageContext({
+    reasoning: message.reasoningContent,
+    toolCalls: message.toolArtifacts,
+  });
 }
 
-/** Peer-controlled context is optional JSON; malformed or empty reasoning is ignored. */
-export function reasoningFromMessageContext(
+/** Admit peer-controlled context through the shared cross-host contract. */
+export function parseMessageContext(
   value: unknown,
-): string | undefined {
-  let context: SyncedMessageContext;
-  try {
-    context =
-      typeof value === 'string'
-        ? (JSON.parse(value) as SyncedMessageContext)
-        : (value as SyncedMessageContext);
-  } catch {
-    return undefined;
-  }
-  if (!context || typeof context !== 'object') return undefined;
-  const reasoning = context.reasoning;
-  return typeof reasoning === 'string' && reasoning.trim()
-    ? reasoning
-    : undefined;
+): SyncedMessageContext | null {
+  return parseSyncedMessageContext(value);
 }

@@ -1,11 +1,17 @@
+import type { SyncedToolArtifact } from '@offgrid/sync';
+
 // Model source and credibility types
-export type ModelSource = 'lmstudio' | 'official' | 'verified-quantizer' | 'community';
+export type ModelSource =
+  | 'lmstudio'
+  | 'official'
+  | 'verified-quantizer'
+  | 'community';
 
 export interface ModelCredibility {
   source: ModelSource;
-  isOfficial: boolean;        // From the original model creator (Meta, Microsoft, etc.)
+  isOfficial: boolean; // From the original model creator (Meta, Microsoft, etc.)
   isVerifiedQuantizer: boolean; // From trusted quantization providers (LM Studio, TheBloke, etc.)
-  verifiedBy?: string;        // Who verified this (e.g., "LM Studio", "Original Author")
+  verifiedBy?: string; // Who verified this (e.g., "LM Studio", "Original Author")
 }
 // Model-related types
 export interface ModelInfo {
@@ -114,7 +120,13 @@ export interface DownloadProgress {
 }
 
 // SoC detection types
-export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
+export type SoCVendor =
+  | 'qualcomm'
+  | 'mediatek'
+  | 'exynos'
+  | 'tensor'
+  | 'apple'
+  | 'unknown';
 export interface SoCInfo {
   vendor: SoCVendor;
   hasNPU: boolean;
@@ -226,6 +238,8 @@ export interface Message {
   toolCallId?: string;
   /** Tool calls made by the assistant */
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
+  /** Completed, display-only tool artifacts admitted from synced message context. */
+  toolArtifacts?: SyncedToolArtifact[];
   /** Tool name (for tool result messages) */
   toolName?: string;
   /** True when this assistant message was generated while interfaceMode === 'audio' */
@@ -251,7 +265,6 @@ export interface Conversation {
   compactionSummary?: string;
   compactionCutoffMessageId?: string;
 }
-
 
 // Hugging Face API types
 export interface HFModelSearchResult {
@@ -285,7 +298,6 @@ interface HFModelFile {
     pointerSize: number;
   };
 }
-
 
 export interface ONNXImageModel {
   id: string;
@@ -400,9 +412,14 @@ export interface DebugInfo {
   originalMessageCount: number;
   managedMessageCount: number;
   truncatedCount: number;
-  formattedPrompt: string; estimatedTokens: number;
-  maxContextLength: number; contextUsagePercent: number;
+  formattedPrompt: string;
+  estimatedTokens: number;
+  maxContextLength: number;
+  contextUsagePercent: number;
 }
 // Remote server types
-export type { RemoteServer, RemoteModel, ServerTestResult } from './remoteServer';
-;
+export type {
+  RemoteServer,
+  RemoteModel,
+  ServerTestResult,
+} from './remoteServer';
