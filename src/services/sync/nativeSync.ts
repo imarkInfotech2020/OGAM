@@ -9,9 +9,12 @@ import Zeroconf from 'react-native-zeroconf';
 import type {
   DeviceInfo,
   DiscoveredDevice,
+  PairingPersistence,
   PairedDevice,
+  PairingAttemptSnapshot,
   Message,
   DeviceCap,
+  SyncEngineOptions,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
@@ -22,13 +25,13 @@ import logger from '../../utils/logger';
 
 export interface NativeSyncCallbacks {
   /** Passphrase for an INBOUND pairing (UI prompt). Return null to refuse. */
-  getPassphrase?: (
-    remote: DeviceInfo,
-  ) => Promise<string | null | undefined> | string | null | undefined;
+  getPassphrase?: SyncEngineOptions['getPassphrase'];
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
+  pairingPersistence?: PairingPersistence;
   onPaired?: (device: PairedDevice) => void;
   onPairingFailed?: (remote: DeviceInfo | undefined, error: string) => void;
+  onPairingAttemptChanged?: (attempt: PairingAttemptSnapshot) => void;
   onDisconnected?: (deviceId: string) => void;
   onRouteChanged?: (deviceId: string, routeId: string | undefined) => void;
   onDiscovered?: (device: DiscoveredDevice) => void;
@@ -45,7 +48,10 @@ export interface NativeSync {
   stop(): Promise<void>;
   rescan(): Promise<void>;
   renameLocalDevice(name: string): Promise<void>;
-  pair(device: DeviceInfo, passphrase: string): Promise<void>;
+  pair(device: DeviceInfo, passphrase: string): Promise<PairedDevice>;
+  cancelPairing(deviceId: string): Promise<boolean>;
+  listPairingAttempts(): PairingAttemptSnapshot[];
+  dismissPairingAttempt(attemptId: string): boolean;
   reconnect(device: DeviceInfo, sharedSecret: string): Promise<void>;
   disconnect(deviceId: string): boolean;
   send(deviceId: string, message: Message): boolean;
@@ -75,8 +81,10 @@ export function createNativeSync(
     tcpModule: TcpSocket as unknown as RnTcpModule,
     getPassphrase: cbs.getPassphrase,
     getSharedSecret: cbs.getSharedSecret,
+    pairingPersistence: cbs.pairingPersistence,
     onPaired: cbs.onPaired,
     onPairingFailed: cbs.onPairingFailed,
+    onPairingAttemptChanged: cbs.onPairingAttemptChanged,
     onDisconnected: cbs.onDisconnected,
     onRouteChanged: cbs.onRouteChanged,
     onMessage: cbs.onMessage,
@@ -153,6 +161,9 @@ export function createNativeSync(
       await orchestrator.refreshAdvertisement();
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),
+    cancelPairing: deviceId => engine.cancelPairing(deviceId),
+    listPairingAttempts: () => engine.listPairingAttempts(),
+    dismissPairingAttempt: attemptId => engine.dismissPairingAttempt(attemptId),
     reconnect: (device, sharedSecret) => engine.reconnect(device, sharedSecret),
     disconnect: deviceId => engine.disconnect(deviceId),
     send: (deviceId, message) => engine.send(deviceId, message),

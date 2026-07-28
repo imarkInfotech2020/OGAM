@@ -58,6 +58,7 @@ describe('Pro mobile saved-device management journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
   let storedPairings: string | undefined;
+  let failNextPairingSave = false;
 
   beforeEach(async () => {
     await AsyncStorage.clear();
@@ -73,6 +74,7 @@ describe('Pro mobile saved-device management journey', () => {
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     useSyncStore.getState().reset();
     storedPairings = undefined;
+    failNextPairingSave = false;
     (Keychain.getGenericPassword as jest.Mock).mockImplementation(
       async ({ service }: { service: string }) =>
         service === 'off-grid-sync-pairings' && storedPairings
@@ -86,6 +88,10 @@ describe('Pro mobile saved-device management journey', () => {
         options: { service: string },
       ) => {
         if (options.service === 'off-grid-sync-pairings') {
+          if (failNextPairingSave) {
+            failNextPairingSave = false;
+            throw new Error('Keychain unavailable');
+          }
           storedPairings = password;
         }
         return true;
@@ -148,8 +154,11 @@ describe('Pro mobile saved-device management journey', () => {
       'blue-otter-42',
     );
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
     );
+    expect(
+      ui.getByText('Confirm the same pairing code on both devices.'),
+    ).toBeTruthy();
     fireEvent.changeText(
       ui.getByTestId('incoming-pairing-code'),
       'blue-otter-42',
@@ -231,7 +240,7 @@ describe('Pro mobile saved-device management journey', () => {
     alert.mockRestore();
   });
 
-  it('shows a mismatched incoming code and permits one clean corrected retry', async () => {
+  it('shows Mobile-initiated cancel, code, and persistence failures before a clean retry', async () => {
     const remoteDevice: DeviceInfo = {
       id: 'desktop-mismatch-peer',
       name: 'Off Grid AI Desktop',
@@ -240,16 +249,23 @@ describe('Pro mobile saved-device management journey', () => {
       host: '127.0.0.1',
       port: 0,
     };
-    let pairingFailure: string | undefined;
+    const passphraseResolvers: Array<(passphrase: string | null) => void> = [];
     remote = buildSyncEngine({
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
-      onPairingFailed: (_device, error) => {
-        pairingFailure = error;
-      },
+      getPassphrase: (_device, context) =>
+        new Promise(resolve => {
+          passphraseResolvers.push(resolve);
+          context.signal.addEventListener('abort', () => resolve(null), {
+            once: true,
+          });
+        }),
     });
     await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
     await syncService.start();
+    const mobile = useSyncStore.getState().thisDevice;
+    if (!mobile) throw new Error('Sync did not create the Mobile device');
 
     ui = render(
       <>
@@ -259,46 +275,74 @@ describe('Pro mobile saved-device management journey', () => {
         </NavigationContainer>
       </>,
     );
-    const mobile = useSyncStore.getState().thisDevice;
-    const discovery = getDiscoveryBoundaries().at(-1);
-    if (!mobile || !discovery?.publishedPort) {
-      throw new Error('Sync did not publish the mobile device');
-    }
-    const mobileEndpoint = {
-      ...mobile,
-      host: '127.0.0.1',
-      port: discovery.publishedPort,
-    };
-
-    await remote.engine.pair(mobileEndpoint, 'blue-otter-42');
-    await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('open-sync-from-home')),
     );
-    fireEvent.changeText(ui.getByTestId('incoming-pairing-code'), 'wrong-code');
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
-
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!discovery) {
+      throw new Error('Sync did not start native discovery');
+    }
+    discovery.resolve(remoteDevice);
     await waitFor(() =>
       expect(
-        ui!.getByText(
-          'The pairing codes did not match. Start pairing again from the other device.',
-        ),
+        ui!.getByTestId(`sync-discovered-${remoteDevice.id}`),
       ).toBeTruthy(),
     );
-    expect(pairingFailure).toBe('Passphrase mismatch');
-    fireEvent.press(ui.getByText('Close'));
-    await waitFor(() =>
-      expect(ui!.queryByText('Pair with Off Grid AI Desktop')).toBeNull(),
-    );
+    fireEvent.changeText(ui.getByTestId('sync-pairing-code'), 'blue-otter-42');
+    fireEvent.press(ui.getByTestId(`sync-pair-${remoteDevice.id}`));
 
-    await remote.engine.pair(mobileEndpoint, 'blue-otter-42');
     await waitFor(() =>
-      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
     );
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'blue-otter-42',
+    expect(ui.getByTestId('cancel-pairing-attempt')).toBeTruthy();
+    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+    await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
+    fireEvent.press(ui.getByTestId('cancel-pairing-attempt'));
+
+    await waitFor(() =>
+      expect(ui!.getByText('Pairing cancelled')).toBeTruthy(),
     );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    expect(ui.getByText('Pairing was cancelled.')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('retry-pairing-attempt'));
+    await waitFor(() => expect(passphraseResolvers).toHaveLength(2));
+    await waitFor(() =>
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
+    );
+    passphraseResolvers[1]('wrong-code');
+
+    await waitFor(() => expect(ui!.getByText('Pairing failed')).toBeTruthy());
+    expect(ui.getByText('The pairing codes did not match.')).toBeTruthy();
+    expect(ui.getByTestId('retry-pairing-attempt')).toBeTruthy();
+    expect(
+      useSyncStore
+        .getState()
+        .knownDevices.some(device => device.id === remoteDevice.id),
+    ).toBe(false);
+
+    fireEvent.press(ui.getByTestId('retry-pairing-attempt'));
+    await waitFor(() => expect(passphraseResolvers).toHaveLength(3));
+    await waitFor(() =>
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
+    );
+    failNextPairingSave = true;
+    passphraseResolvers[2]('blue-otter-42');
+
+    await waitFor(() => expect(ui!.getByText('Pairing failed')).toBeTruthy());
+    expect(ui.getByText('The pairing could not be saved.')).toBeTruthy();
+    expect(remote.engine.isPaired(mobile.id)).toBe(false);
+    expect(
+      useSyncStore
+        .getState()
+        .knownDevices.some(device => device.id === remoteDevice.id),
+    ).toBe(false);
+
+    fireEvent.press(ui.getByTestId('retry-pairing-attempt'));
+    await waitFor(() => expect(passphraseResolvers).toHaveLength(4));
+    await waitFor(() =>
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
+    );
+    passphraseResolvers[3]('blue-otter-42');
+
     await waitFor(() =>
       expect(
         useSyncStore
@@ -306,5 +350,7 @@ describe('Pro mobile saved-device management journey', () => {
           .knownDevices.some(device => device.id === remoteDevice.id),
       ).toBe(true),
     );
+    expect(ui.queryByTestId('pairing-attempt-sheet')).toBeNull();
+    expect(ui.queryByText('Pairing failed')).toBeNull();
   });
 });

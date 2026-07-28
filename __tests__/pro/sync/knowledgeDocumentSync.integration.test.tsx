@@ -241,7 +241,18 @@ describe('Pro mobile knowledge document sync journey', () => {
       );
       await waitForCondition(
         () =>
-          useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+          useSyncStore
+            .getState()
+            .pairingAttempts.some(
+              (attempt: {
+                device: { id: string };
+                direction: string;
+                stage: string;
+              }) =>
+                attempt.device.id === remoteDevice.id &&
+                attempt.direction === 'incoming' &&
+                attempt.stage === 'waiting_for_confirmation',
+            ),
         'Mobile did not receive the Desktop pairing request',
       );
       syncService.acceptIncomingPairing('blue-otter-42');

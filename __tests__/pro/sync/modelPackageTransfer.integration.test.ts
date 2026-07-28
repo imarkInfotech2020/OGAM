@@ -163,9 +163,15 @@ describe('Pro mobile model package receiver', () => {
       },
       'blue-otter-42',
     );
-    await waitForState(
-      () =>
-        useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+    await waitForState(() =>
+      useSyncStore
+        .getState()
+        .pairingAttempts.some(
+          attempt =>
+            attempt.device.id === remoteDevice.id &&
+            attempt.direction === 'incoming' &&
+            attempt.stage === 'waiting_for_confirmation',
+        ),
     );
     syncService.acceptIncomingPairing('blue-otter-42');
     await pairing;

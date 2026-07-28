@@ -102,17 +102,25 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     expect(mobile).toBeDefined();
     expect(firstDiscovery?.publishedPort).toBeGreaterThan(0);
 
-    await remote.engine.pair(
+    const firstPairing = remote.engine.pair(
       { ...mobile!, host: '127.0.0.1', port: firstDiscovery!.publishedPort! },
       'blue-otter-42',
     );
     await waitFor(
       () =>
-        useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+        useSyncStore
+          .getState()
+          .pairingAttempts.some(
+            attempt =>
+              attempt.device.id === remoteDevice.id &&
+              attempt.direction === 'incoming' &&
+              attempt.stage === 'waiting_for_confirmation',
+          ),
       3000,
       'initial incoming pairing',
     );
     syncService.acceptIncomingPairing('blue-otter-42');
+    await firstPairing;
     await waitFor(
       () =>
         useSyncStore
@@ -182,15 +190,22 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       throw new Error('Sync did not publish the mobile device');
     }
 
-    await remote.engine.pair(
+    const secondPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
       'blue-otter-42',
     );
-    await waitFor(
-      () =>
-        useSyncStore.getState().incomingPairingDevice?.id === remoteDevice.id,
+    await waitFor(() =>
+      useSyncStore
+        .getState()
+        .pairingAttempts.some(
+          attempt =>
+            attempt.device.id === remoteDevice.id &&
+            attempt.direction === 'incoming' &&
+            attempt.stage === 'waiting_for_confirmation',
+        ),
     );
     syncService.acceptIncomingPairing('blue-otter-42');
+    await secondPairing;
     await waitFor(() =>
       useSyncStore
         .getState()

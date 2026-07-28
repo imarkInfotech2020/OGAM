@@ -19,7 +19,9 @@ export interface BuildSyncEngineArgs {
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   getSharedSecret?: SyncEngineOptions['getSharedSecret'];
   onPaired?: SyncEngineOptions['onPaired'];
+  pairingPersistence?: SyncEngineOptions['pairingPersistence'];
   onPairingFailed?: SyncEngineOptions['onPairingFailed'];
+  onPairingAttemptChanged?: SyncEngineOptions['onPairingAttemptChanged'];
   onDisconnected?: SyncEngineOptions['onDisconnected'];
   onRouteChanged?: SyncEngineOptions['onRouteChanged'];
   onMessage?: SyncEngineOptions['onMessage'];
@@ -55,7 +57,9 @@ export function buildSyncEngine(args: BuildSyncEngineArgs): {
     getPassphrase: args.getPassphrase,
     getSharedSecret: args.getSharedSecret,
     onPaired: args.onPaired,
+    pairingPersistence: args.pairingPersistence,
     onPairingFailed: args.onPairingFailed,
+    onPairingAttemptChanged: args.onPairingAttemptChanged,
     onDisconnected: args.onDisconnected,
     onRouteChanged: args.onRouteChanged,
     onMessage: args.onMessage,
