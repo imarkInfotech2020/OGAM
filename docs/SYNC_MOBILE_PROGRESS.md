@@ -44,7 +44,7 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       (CompositeDiscoveryService + orchestrator).
 - [x] `createNativeSync` binding (injects react-native-tcp-socket + react-native-zeroconf).
 - [x] Native config: iOS `NSBonjourServices += _offgrid._tcp, _offgrid-sync._tcp,
-  _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
+_offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
 - [x] iOS `pod install` autolinked tcp-socket 6.4.1 + zeroconf 0.14.0 (+ CocoaAsyncSocket).
 - [x] Native rebuild: **iOS built + installed + launched** (autolinked tcp-socket + zeroconf).
       Android APK **built OK** but install failed (`No connected devices!` — phone dropped off adb
@@ -287,7 +287,7 @@ Mobile store inventory:
   timestamp, but not the full prompt/model metadata.
 - Chat attachments are nested under the stable message UUID as
   `{id,type,uri,mimeType?,width?,height?,fileName?,textContent?,fileSize?,audioFormat?,
-  audioDurationSeconds?}`. Existing attachment IDs are timestamp-based rather than UUIDs. Document
+audioDurationSeconds?}`. Existing attachment IDs are timestamp-based rather than UUIDs. Document
   bytes live under `Documents/attachments`; picked images retain picker-owned URIs; voice notes
   retain recorder-owned paths.
 - Audio-mode messages store `{audioPath,waveformData,audioDurationSeconds}` on the message. Generated
@@ -369,9 +369,19 @@ Latest pairing/knowledge/UI recovery checkpoints: shared `8f094f4` and `584f6aa`
 `2aec2f2` and `40d2a69`. The current Debug app was rebuilt, installed, and launched on physical iOS
 without clearing its profile; it predates the final shared-history migration and requires one
 incremental rebuild before the next physical gate.
-Focused no-mockist coverage is green for the ambient Ask/refuse/retry journey and the native
-app-owned screenshot copy. Full hooks, pre-push, push, and automated device driving remain deferred
-until the manual iOS/macOS gate closes.
+Shared control-center ownership is now complete through `2fb787a`, `f3ef956`, `11ffe14`,
+`0246159`, `c7e7bea`, `6d44358`, and `5059057`; Mobile consumes it in Pro `f3dd039c` and core
+`91732689`. Shared owns category copy, policy projection, activity correlation, stable logical
+transfer IDs, filters, ordering, counts, action-owner sources, file grouping, and completed
+destination counts. Mobile retains only native capability facts, AsyncStorage/filesystem adapters,
+navigation, action execution, and React rendering.
+The full Mobile Sync integration suite is green (10 suites, 19 journeys) with real rendered
+navigation, encrypted engines, StateSync, FileTransferManager, and persistent stores. It covers
+ambient Ask/refuse/failed-byte-transfer/single-item retry, model package admission, state
+convergence, knowledge file-first/index/send/tombstone, clipboard attribution, device
+disconnect/reconnect/rename/forget, mismatched-code recovery, one-sided trust repair, and restart
+persistence. Full hooks, pre-push, push, and automated device driving remain deferred until the
+manual iOS/macOS gate closes.
 
 ## Prior-art decision (2026-07-26)
 

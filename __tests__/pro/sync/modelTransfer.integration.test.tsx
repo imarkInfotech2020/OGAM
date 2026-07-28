@@ -215,9 +215,8 @@ describe('Pro mobile model transfer journey', () => {
     });
 
     fireEvent.press(ui.getByTestId('sync-open-activity'));
-    await waitFor(() =>
-      expect(ui!.getByText(`Received ${fileName}`)).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByText(fileName)).toBeTruthy());
+    expect(ui.getByText('Received')).toBeTruthy();
     await expect(modelManager.getDownloadedModels()).resolves.toEqual([
       expect.objectContaining({
         id: `google/gemma-mobile/${fileName}`,
@@ -269,11 +268,8 @@ describe('Pro mobile model transfer journey', () => {
           new Uint8Array(invalidPayload.subarray(offset, offset + length)),
       }),
     ).rejects.toThrow('receiver could not verify or register the file');
-    await waitFor(() =>
-      expect(
-        ui!.getByText(`Could not receive ${invalidFileName}`),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByText(invalidFileName)).toBeTruthy());
+    expect(ui.getByText('Could not receive')).toBeTruthy();
     await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(1);
     await expect(
       modelTransferFsBoundary.exists(

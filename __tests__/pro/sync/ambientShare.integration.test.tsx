@@ -20,6 +20,7 @@ import {
   SHARED_FILE_ENTITY,
   SHARED_FILE_MIME,
   StateSync,
+  sharedFileActivityId,
   type DeviceInfo,
   type FileRequestMessage,
   type StateMsg,
@@ -294,9 +295,6 @@ describe('mobile ambient sharing journey', () => {
     expect(receivedFiles).toHaveLength(0);
     fireEvent.press(ui.getByTestId('ambient-share-reject'));
     await waitFor(() => expect(ui!.queryByText('Share this item?')).toBeNull());
-    expect(
-      ui.queryByTestId(`ambient-activity-${rejectedScreenshot.syncId}`),
-    ).toBeNull();
     expect(receivedFiles).toHaveLength(0);
 
     rejectTransfers = true;
@@ -310,18 +308,21 @@ describe('mobile ambient sharing journey', () => {
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByTestId('sync-open-activity'));
 
+    const activityId = sharedFileActivityId(
+      desktopDevice.id,
+      retriedScreenshot.syncId,
+    );
     await waitFor(() => {
-      const failedActivity = ui!.getByTestId(
-        `ambient-activity-${retriedScreenshot.syncId}`,
-      );
-      expect(within(failedActivity).getByText('Could not share')).toBeTruthy();
+      const failedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
+      expect(within(failedActivity).getByText('Could not send')).toBeTruthy();
+      expect(
+        within(failedActivity).getByText(retriedScreenshot.name),
+      ).toBeTruthy();
     });
     expect(receivedFiles).toHaveLength(0);
 
     rejectTransfers = false;
-    fireEvent.press(
-      ui.getByTestId(`ambient-retry-${retriedScreenshot.syncId}`),
-    );
+    fireEvent.press(ui.getByTestId(`sync-activity-retry-${activityId}`));
     await waitFor(() => expect(receivedFiles).toHaveLength(1));
     expect(receivedFiles[0]).toEqual({
       name: retriedScreenshot.name,
@@ -332,9 +333,10 @@ describe('mobile ambient sharing journey', () => {
         remoteRecords.has(`${SHARED_FILE_ENTITY}:${retriedScreenshot.syncId}`),
       ).toBe(true),
     );
-    expect(
-      ui.queryByTestId(`ambient-activity-${retriedScreenshot.syncId}`),
-    ).toBeNull();
+    await waitFor(() => {
+      const completedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
+      expect(within(completedActivity).getByText('Sent')).toBeTruthy();
+    });
     expect(ui.queryByText('SHARED FILES')).toBeNull();
 
     fireEvent.press(ui.getByLabelText('Back'));
@@ -348,7 +350,7 @@ describe('mobile ambient sharing journey', () => {
       ui.queryByTestId(`sync-file-${rejectedScreenshot.syncId}`),
     ).toBeNull();
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
-    expect(ui.getByText('From Off Grid Device')).toBeTruthy();
+    expect(ui.getByText('This phone')).toBeTruthy();
     expect(ui.getByText(/Shared with 1 device/)).toBeTruthy();
 
     fireEvent.press(ui.getByTestId('sync-file-filter-download'));
