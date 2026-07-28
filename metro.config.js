@@ -13,11 +13,12 @@ const proExists = fs.existsSync(path.resolve(proPackagePath, 'package.json'));
 // than enabling `unstable_enablePackageExports` globally (that flag changes resolution for every
 // dep and breaks libraries with malformed exports maps). The package ships prebuilt CJS in dist/.
 const syncPackagePath = path.resolve(__dirname, '../shared/packages/sync');
+const ragPackagePath = path.resolve(__dirname, '../shared/packages/rag');
 
 const config = {
   // pro/ is a submodule inside the project root, so Metro already watches it by default. The sync
   // package is out-of-root, so Metro must be told to watch it (for its dist) — nothing else needed.
-  watchFolders: [syncPackagePath],
+  watchFolders: [syncPackagePath, ragPackagePath],
   resolver: {
     // When resolving modules from outside the project root (i.e. @offgrid/pro),
     // Metro falls back here so @babel/runtime and all other peer deps are found.
@@ -26,6 +27,8 @@ const config = {
       // Exposes src/ as @offgrid/core so @offgrid/pro can import the design system,
       // stores, and registries without a circular package dependency.
       '@offgrid/core': path.resolve(__dirname, 'src'),
+      // Shared, pure-TS RAG decisions. Mobile supplies storage, extraction, and embeddings.
+      '@offgrid/rag': ragPackagePath,
       // Points to the real pro package when present on disk (store builds),
       // falls back to a null stub so free builds bundle cleanly.
       '@offgrid/pro': proExists ? proPackagePath : proStubPath,
