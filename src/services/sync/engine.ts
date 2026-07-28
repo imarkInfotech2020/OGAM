@@ -22,6 +22,9 @@ export interface BuildSyncEngineArgs {
   pairingPersistence?: SyncEngineOptions['pairingPersistence'];
   onPairingFailed?: SyncEngineOptions['onPairingFailed'];
   onPairingAttemptChanged?: SyncEngineOptions['onPairingAttemptChanged'];
+  membershipPersistence?: SyncEngineOptions['membershipPersistence'];
+  onMembershipRevocationChanged?: SyncEngineOptions['onMembershipRevocationChanged'];
+  onMembershipRevoked?: SyncEngineOptions['onMembershipRevoked'];
   onDisconnected?: SyncEngineOptions['onDisconnected'];
   onRouteChanged?: SyncEngineOptions['onRouteChanged'];
   onMessage?: SyncEngineOptions['onMessage'];
@@ -60,6 +63,9 @@ export function buildSyncEngine(args: BuildSyncEngineArgs): {
     pairingPersistence: args.pairingPersistence,
     onPairingFailed: args.onPairingFailed,
     onPairingAttemptChanged: args.onPairingAttemptChanged,
+    membershipPersistence: args.membershipPersistence,
+    onMembershipRevocationChanged: args.onMembershipRevocationChanged,
+    onMembershipRevoked: args.onMembershipRevoked,
     onDisconnected: args.onDisconnected,
     onRouteChanged: args.onRouteChanged,
     onMessage: args.onMessage,

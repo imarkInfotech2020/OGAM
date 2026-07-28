@@ -10,6 +10,7 @@ import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
+import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -73,7 +74,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
   });
 
   it('silently reconnects a paired device after the mobile Sync service restarts', async () => {
-    let remoteSecret: string | undefined;
+    const remotePersistence = new MembershipPersistenceBoundary();
     const remoteDevice: DeviceInfo = {
       id: 'desktop-peer',
       name: 'Off Grid AI Desktop',
@@ -86,12 +87,9 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
-        deviceId === useSyncStore.getState().thisDevice?.id
-          ? remoteSecret
-          : undefined,
-      onPaired: device => {
-        remoteSecret = device.sharedSecret;
-      },
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -159,8 +157,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
   });
 
   it('repairs one-sided trust and forgets the device locally and remotely', async () => {
-    let remoteSecret: string | undefined;
-    const trustMessages: unknown[] = [];
+    const remotePersistence = new MembershipPersistenceBoundary();
     const remoteDevice: DeviceInfo = {
       id: 'desktop-peer',
       name: 'Off Grid AI Desktop',
@@ -173,12 +170,9 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
-        deviceId === useSyncStore.getState().thisDevice?.id
-          ? remoteSecret
-          : undefined,
-      onPaired: device => {
-        remoteSecret = device.sharedSecret;
-      },
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -225,18 +219,15 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'disconnect before repair',
     );
-    remoteSecret = undefined;
+    remotePersistence.dropActive(mobile.id);
     remote = buildSyncEngine({
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getPassphrase: () => 'blue-otter-42',
-      getSharedSecret: () => undefined,
-      onPaired: device => {
-        remoteSecret = device.sharedSecret;
-      },
-      onAppMessage: (_deviceId, channel, data) => {
-        if (channel === 'device-trust-v1') trustMessages.push(data);
-      },
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -263,16 +254,141 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'repaired connection',
     );
-    expect(remoteSecret).toBeTruthy();
+    expect(remotePersistence.getActive(mobile.id)?.sharedSecret).toBeTruthy();
 
     await syncService.forgetDevice(remoteDevice.id);
-    await waitFor(() => trustMessages.length === 1, 3000, 'remote forget');
-    expect(trustMessages).toEqual([{ type: 'forget' }]);
+    await waitFor(
+      () => remotePersistence.getActive(mobile.id) === undefined,
+      3000,
+      'remote membership revocation',
+    );
     expect(useSyncStore.getState().knownDevices).toEqual([]);
-    expect(JSON.parse(persistedPairings ?? '{}')).toEqual({
-      version: 2,
-      pairings: {},
+    expect(JSON.parse(persistedPairings ?? '{}')).toEqual(
+      expect.objectContaining({
+        version: 3,
+        pairings: {},
+        pendingRevocations: {},
+      }),
+    );
+
+    await remote.engine.stop();
+  });
+
+  it('keeps an offline eviction pending across restart and completes it on rediscovery', async () => {
+    const remotePersistence = new MembershipPersistenceBoundary();
+    const remoteDevice: DeviceInfo = {
+      id: 'offline-desktop-peer',
+      name: 'Offline Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    let remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
     });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+
+    await syncService.start();
+    const mobile = useSyncStore.getState().thisDevice;
+    const firstDiscovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !firstDiscovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+
+    const pairing = remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
+      'blue-otter-42',
+    );
+    await waitFor(() =>
+      useSyncStore
+        .getState()
+        .pairingAttempts.some(
+          attempt =>
+            attempt.device.id === remoteDevice.id &&
+            attempt.stage === 'waiting_for_confirmation',
+        ),
+    );
+    syncService.acceptIncomingPairing('blue-otter-42');
+    await pairing;
+    await waitFor(() =>
+      useSyncStore
+        .getState()
+        .knownDevices.some(device => device.id === remoteDevice.id),
+    );
+
+    await remote.engine.stop();
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.find(device => device.id === remoteDevice.id)
+          ?.status === 'offline',
+      3000,
+      'offline peer',
+    );
+    await syncService.forgetDevice(remoteDevice.id);
+    await waitFor(() => {
+      const stored = JSON.parse(persistedPairings ?? '{}') as {
+        pendingRevocations?: Record<string, unknown>;
+      };
+      return Boolean(stored.pendingRevocations?.[remoteDevice.id]);
+    });
+    expect(useSyncStore.getState().knownDevices).toEqual([]);
+
+    await syncService.stop();
+    await syncService.start();
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .membershipRevocations.some(
+            revocation =>
+              revocation.device.id === remoteDevice.id &&
+              revocation.stage === 'failed',
+          ),
+      3000,
+      'restored pending eviction',
+    );
+
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
+
+    await waitFor(
+      () => remotePersistence.getActive(mobile.id) === undefined,
+      3000,
+      'rediscovered peer revocation',
+    );
+    await waitFor(() => {
+      const stored = JSON.parse(persistedPairings ?? '{}') as {
+        pendingRevocations?: Record<string, unknown>;
+      };
+      return Object.keys(stored.pendingRevocations ?? {}).length === 0;
+    });
+    expect(
+      useSyncStore
+        .getState()
+        .membershipRevocations.some(
+          revocation =>
+            revocation.device.id === remoteDevice.id &&
+            revocation.stage === 'completed',
+        ),
+    ).toBe(true);
 
     await remote.engine.stop();
   });

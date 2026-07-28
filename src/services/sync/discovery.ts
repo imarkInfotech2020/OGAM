@@ -20,9 +20,11 @@ export interface BuildDiscoveryArgs {
   /** react-native-zeroconf instance (or an in-memory fake in tests). */
   zeroconf: RnZeroconf;
   /** The SyncEngine — the orchestrator reads isPaired() and drives reconnect(). */
-  engine: Pick<SyncEngine, 'isPaired' | 'reconnect'>;
+  engine: Pick<SyncEngine, 'isPaired' | 'reconnect'> &
+    Partial<Pick<SyncEngine, 'retryMembershipRevocation'>>;
   localDevice: DeviceInfo;
   getSharedSecret: (deviceId: string) => string | undefined;
+  getMembershipId?: (deviceId: string) => string | undefined;
   /** A new (unpaired) device appeared — surface it for the pairing UI. */
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
@@ -51,6 +53,7 @@ export function buildDiscovery(
     discovery,
     localDevice: args.localDevice,
     getSharedSecret: args.getSharedSecret,
+    getMembershipId: args.getMembershipId,
     onDiscovered: args.onDiscovered,
     onLost: args.onLost,
   });

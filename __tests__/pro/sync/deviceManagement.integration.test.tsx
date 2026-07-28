@@ -35,6 +35,7 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { createDownloadedModel } from '../../utils/factories';
+import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
 
 jest.unmock('@react-navigation/native');
 
@@ -117,14 +118,14 @@ describe('Pro mobile saved-device management journey', () => {
       host: '127.0.0.1',
       port: 0,
     };
-    let remoteSecret: string | undefined;
+    const remotePersistence = new MembershipPersistenceBoundary();
     remote = buildSyncEngine({
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
-      getSharedSecret: () => remoteSecret,
-      onPaired: device => {
-        remoteSecret = device.sharedSecret;
-      },
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -228,14 +229,76 @@ describe('Pro mobile saved-device management journey', () => {
       }),
     );
 
+    await remote.engine.stop();
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Offline/,
+        ),
+      ).toBeTruthy(),
+    );
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     fireEvent.press(ui.getByTestId(`sync-forget-${remoteDevice.id}`));
+    expect(alert.mock.calls[0][0]).toBe('Evict Studio Mac?');
+    expect(alert.mock.calls[0][1]).toBe(
+      'This removes the pairing from both devices. Either device must pair again before Sync can reconnect.',
+    );
     const destructiveAction = (alert.mock.calls[0][2] ?? []).find(
       button => button.style === 'destructive',
     );
+    expect(destructiveAction?.text).toBe('Evict device');
     destructiveAction?.onPress?.();
     await waitFor(() =>
       expect(ui!.queryByTestId(`sync-paired-${remoteDevice.id}`)).toBeNull(),
+    );
+    await waitFor(() => expect(ui!.getByText(/Could not reach/)).toBeTruthy());
+    const pendingEviction = ui.getByTestId(
+      `sync-discovered-${remoteDevice.id}`,
+    );
+    expect(within(pendingEviction).getByText(/Could not reach/)).toBeTruthy();
+    expect(
+      within(pendingEviction).getByTestId(
+        `sync-retry-eviction-${remoteDevice.id}`,
+      ),
+    ).toBeTruthy();
+    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
+    await waitFor(() =>
+      expect(remotePersistence.getActive(mobile.id)).toBeUndefined(),
+    );
+    await waitFor(() =>
+      expect(
+        useSyncStore
+          .getState()
+          .membershipRevocations.some(
+            revocation =>
+              revocation.device.id === remoteDevice.id &&
+              revocation.stage === 'completed',
+          ),
+      ).toBe(true),
+    );
+    expect(
+      within(ui.getByTestId(`sync-discovered-${remoteDevice.id}`)).getByTestId(
+        `sync-pair-${remoteDevice.id}`,
+      ),
+    ).toBeTruthy();
+    expect(JSON.parse(storedPairings ?? '{}')).toEqual(
+      expect.objectContaining({
+        version: 3,
+        pairings: {},
+        pendingRevocations: {},
+      }),
     );
     alert.mockRestore();
   });

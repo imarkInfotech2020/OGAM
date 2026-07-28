@@ -12,6 +12,8 @@ import type {
   PairingPersistence,
   PairedDevice,
   PairingAttemptSnapshot,
+  MembershipRevocationPersistence,
+  MembershipRevocationSnapshot,
   Message,
   DeviceCap,
   SyncEngineOptions,
@@ -28,7 +30,13 @@ export interface NativeSyncCallbacks {
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
+  getMembershipId?: (deviceId: string) => string | undefined;
   pairingPersistence?: PairingPersistence;
+  membershipPersistence?: MembershipRevocationPersistence;
+  onMembershipRevocationChanged?: (
+    snapshot: MembershipRevocationSnapshot,
+  ) => void;
+  onMembershipRevoked?: SyncEngineOptions['onMembershipRevoked'];
   onPaired?: (device: PairedDevice) => void;
   onPairingFailed?: (remote: DeviceInfo | undefined, error: string) => void;
   onPairingAttemptChanged?: (attempt: PairingAttemptSnapshot) => void;
@@ -52,6 +60,9 @@ export interface NativeSync {
   cancelPairing(deviceId: string): Promise<boolean>;
   listPairingAttempts(): PairingAttemptSnapshot[];
   dismissPairingAttempt(attemptId: string): boolean;
+  forget(deviceId: string): Promise<MembershipRevocationSnapshot | undefined>;
+  retryMembershipRevocation(device: DeviceInfo): Promise<boolean>;
+  listMembershipRevocations(): MembershipRevocationSnapshot[];
   reconnect(device: DeviceInfo, sharedSecret: string): Promise<void>;
   disconnect(deviceId: string): boolean;
   send(deviceId: string, message: Message): boolean;
@@ -85,6 +96,9 @@ export function createNativeSync(
     onPaired: cbs.onPaired,
     onPairingFailed: cbs.onPairingFailed,
     onPairingAttemptChanged: cbs.onPairingAttemptChanged,
+    membershipPersistence: cbs.membershipPersistence,
+    onMembershipRevocationChanged: cbs.onMembershipRevocationChanged,
+    onMembershipRevoked: cbs.onMembershipRevoked,
     onDisconnected: cbs.onDisconnected,
     onRouteChanged: cbs.onRouteChanged,
     onMessage: cbs.onMessage,
@@ -110,6 +124,7 @@ export function createNativeSync(
     engine,
     localDevice,
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
+    getMembershipId: cbs.getMembershipId,
     onDiscovered: cbs.onDiscovered,
     onLost: cbs.onLost,
     additionalSources: proximity
@@ -164,7 +179,12 @@ export function createNativeSync(
     cancelPairing: deviceId => engine.cancelPairing(deviceId),
     listPairingAttempts: () => engine.listPairingAttempts(),
     dismissPairingAttempt: attemptId => engine.dismissPairingAttempt(attemptId),
-    reconnect: (device, sharedSecret) => engine.reconnect(device, sharedSecret),
+    forget: deviceId => engine.forget(deviceId),
+    retryMembershipRevocation: device =>
+      engine.retryMembershipRevocation(device),
+    listMembershipRevocations: () => engine.listMembershipRevocations(),
+    reconnect: (device, sharedSecret) =>
+      engine.reconnect(device, sharedSecret, cbs.getMembershipId?.(device.id)),
     disconnect: deviceId => engine.disconnect(deviceId),
     send: (deviceId, message) => engine.send(deviceId, message),
     sendApp: (deviceId, channel, data) =>
