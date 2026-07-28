@@ -1,19 +1,13 @@
 import { Buffer } from 'buffer';
 import { installRealSqlite } from '../../harness/sqliteFake';
-import { requireRTL } from '../../harness/nativeBoundary';
+import {
+  installNativeBoundary,
+  requireRTL,
+} from '../../harness/nativeBoundary';
 
-jest.mock('@react-navigation/native', () => ({
-  ...jest.requireActual('@react-navigation/native'),
-  useNavigation: () => ({
-    navigate: jest.fn(),
-    goBack: jest.fn(),
-    setOptions: jest.fn(),
-    addListener: jest.fn(() => () => undefined),
-  }),
-  useRoute: () => ({
-    params: { projectId: '11111111-1111-4111-8111-111111111111' },
-  }),
-}));
+jest.mock('@react-navigation/native', () =>
+  jest.requireActual('@react-navigation/native'),
+);
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -59,9 +53,11 @@ describe('Pro mobile knowledge document sync journey', () => {
     };
     const previousGlobalBuffer = globals.Buffer;
     globals.Buffer = undefined;
+    installNativeBoundary({ llama: true });
     installRealSqlite();
     const React = require('react');
     const rtl = requireRTL();
+    const { NavigationContainer } = require('@react-navigation/native');
     const asyncStorageModule = require('@react-native-async-storage/async-storage');
     const AsyncStorage = asyncStorageModule.default ?? asyncStorageModule;
     const Keychain = require('react-native-keychain');
@@ -78,9 +74,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       createKnowledgeDocumentStateFields,
       createKnowledgeDocumentTransferMetadata,
     } = require('@offgrid/sync');
-    const {
-      ProjectDetailScreen,
-    } = require('../../../src/screens/ProjectDetailScreen');
+    const { AppNavigator } = require('../../../src/navigation/AppNavigator');
     const {
       HOOKS,
       _clearHooksForTesting,
@@ -88,9 +82,7 @@ describe('Pro mobile knowledge document sync journey', () => {
     } = require('../../../src/bootstrap/hookRegistry');
     const { useAppStore } = require('../../../src/stores/appStore');
     const { useChatStore } = require('../../../src/stores/chatStore');
-    const { useProjectStore } = require('../../../src/stores/projectStore');
     const { ragService } = require('../../../src/services/rag');
-    const { embeddingService } = require('../../../src/services/rag/embedding');
     const { buildSyncEngine } = require('../../../src/services/sync/engine');
     const {
       knowledgeDocumentSyncService,
@@ -124,28 +116,32 @@ describe('Pro mobile knowledge document sync journey', () => {
       request: Record<string, any>;
       bytes: Buffer;
     }> = [];
-    const renderProjectDetail = () =>
-      rtl.render(React.createElement(ProjectDetailScreen));
+    const renderApp = () =>
+      rtl.render(
+        React.createElement(
+          NavigationContainer,
+          null,
+          React.createElement(AppNavigator),
+        ),
+      );
 
     modelTransferFsBoundary.reset();
+    await RNFS.writeFile(
+      `${RNFS.MainBundlePath}/all-MiniLM-L6-v2-Q8_0.gguf`,
+      'native embedding model fixture',
+      'utf8',
+    );
     resetDiscoveryBoundaries();
     await AsyncStorage.clear();
     _clearHooksForTesting();
     useSyncStore.getState().reset();
     useChatStore.getState().clearAllConversations();
-    useProjectStore.setState({ projects: [] });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     Keychain.getGenericPassword.mockResolvedValue(false);
     Keychain.setGenericPassword.mockResolvedValue(true);
-
-    jest.spyOn(embeddingService, 'load').mockResolvedValue(undefined);
-    jest
-      .spyOn(embeddingService, 'embedBatch')
-      .mockImplementation((async (texts: unknown) =>
-        (texts as string[]).map((_, index) => [1, index + 1])) as never);
 
     const remoteDevice = {
       id: 'desktop-knowledge-peer',
@@ -309,7 +305,12 @@ describe('Pro mobile knowledge document sync journey', () => {
         }),
       ]);
 
-      view = renderProjectDetail();
+      view = renderApp();
+      rtl.fireEvent.press(view.getByTestId('projects-tab'));
+      await rtl.waitFor(() => {
+        expect(view!.queryByText('OGAD')).not.toBeNull();
+      });
+      rtl.fireEvent.press(view.getByText('OGAD'));
       await rtl.waitFor(() => {
         expect(view!.queryByText('launch-brief.txt')).not.toBeNull();
         expect(view!.queryByLabelText('Use launch-brief.txt')).not.toBeNull();
@@ -382,8 +383,11 @@ describe('Pro mobile knowledge document sync journey', () => {
           ),
         'Mobile did not apply the Desktop knowledge tombstone',
       );
-      view.unmount();
-      view = renderProjectDetail();
+      rtl.fireEvent.press(view.getByLabelText('Back'));
+      await rtl.waitFor(() => {
+        expect(view!.queryByText('OGAD')).not.toBeNull();
+      });
+      rtl.fireEvent.press(view.getByText('OGAD'));
       await rtl.waitFor(() => {
         expect(view!.queryByText('launch-brief.txt')).toBeNull();
         expect(view!.queryByText('phone-notes.txt')).not.toBeNull();
