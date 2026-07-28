@@ -27,8 +27,10 @@ const config = {
       // Exposes src/ as @offgrid/core so @offgrid/pro can import the design system,
       // stores, and registries without a circular package dependency.
       '@offgrid/core': path.resolve(__dirname, 'src'),
-      // Shared, pure-TS RAG decisions. Mobile supplies storage, extraction, and embeddings.
-      '@offgrid/rag': ragPackagePath,
+      // Shared, pure-TS RAG decisions. Point Metro at the built CommonJS entry directly:
+      // resolving the external package directory can fail in an already-running dev server
+      // after the file dependency is added, even though Node can resolve the package.
+      '@offgrid/rag': path.resolve(ragPackagePath, 'dist/index.js'),
       // Points to the real pro package when present on disk (store builds),
       // falls back to a null stub so free builds bundle cleanly.
       '@offgrid/pro': proExists ? proPackagePath : proStubPath,
