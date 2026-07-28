@@ -173,6 +173,13 @@ describe('Pro mobile saved-device management journey', () => {
     );
     expect(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`)).toBeTruthy();
 
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-home-card')).toBeTruthy(),
+    );
+    expect(ui.getByText('Sync needs attention')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
+
     fireEvent.press(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`));
     await waitFor(() =>
       expect(
