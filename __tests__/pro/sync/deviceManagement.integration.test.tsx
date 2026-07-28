@@ -179,6 +179,9 @@ describe('Pro mobile saved-device management journey', () => {
     fireEvent.press(ui.getByLabelText('Back'));
     await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
     expect(ui.getByText('Sync needs attention')).toBeTruthy();
+    expect(
+      ui.getByText('2 of 5 devices saved. 1 peer is offline.'),
+    ).toBeTruthy();
     fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
     fireEvent.press(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`));
@@ -189,6 +192,11 @@ describe('Pro mobile saved-device management journey', () => {
         ),
       ).toBeTruthy(),
     );
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() =>
+      expect(ui!.getByText('2 of 5 devices saved. 1 connected.')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
     fireEvent.press(ui.getByTestId(`sync-rename-${remoteDevice.id}`));
     await waitFor(() =>
