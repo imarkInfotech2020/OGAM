@@ -1,7 +1,10 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
   KNOWLEDGE_DOCUMENT_ENTITY,
+  SHARED_FILE_ENTITY,
   createKnowledgeDocumentStateFields,
+  createSharedFileStateFields,
+  type SharedFileDescriptor,
 } from '@offgrid/sync';
 import type { Conversation, Message, Project } from '../../types';
 import type { KnowledgeDocumentSnapshot } from './knowledgeDocument';
@@ -13,6 +16,7 @@ export const CORE_SYNC_ENTITIES = {
   message: 'message',
   project: 'project',
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
+  sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
 } as const;
 
@@ -177,6 +181,17 @@ export function knowledgeDocumentPutMutation(
     entityId: document.syncId,
     kind: 'put',
     fields: { ...createKnowledgeDocumentStateFields(document) },
+  };
+}
+
+export function sharedFilePutMutation(
+  file: SharedFileDescriptor,
+): SyncMutation {
+  return {
+    entity: CORE_SYNC_ENTITIES.sharedFile,
+    entityId: file.syncId,
+    kind: 'put',
+    fields: { ...createSharedFileStateFields(file) },
   };
 }
 
