@@ -198,8 +198,36 @@ Proximity is a transport milestone, not the end of Sync. Mobile and Desktop agre
 - Small searchable metadata/text replicates eagerly. Large artifact-library/generated image, audio,
   video, and capture bytes do not.
 - Shared owns schemas and materialization coordinators; Mobile and Desktop own store adapters and UI.
-- Next Mobile slice: inventory current memory/entity/artifact/generated-media stores, stable IDs,
-  fields, and file ownership, then coordinate the shared schemas with Desktop before implementation.
+
+Mobile store inventory:
+
+- Mobile does not currently have a product Memory store, Entity store, or standalone artifact
+  library. Adding those surfaces requires new Mobile owners after the shared records are defined;
+  RAM budgeting code named `memory` is unrelated.
+- Completed tool results already live on a stable message UUID as text-only
+  `Message.toolArtifacts: {name,result}[]`. The shared message-context parser admits them today.
+- Generated-image metadata is persisted in `useAppStore.generatedImages` as
+  `{id,prompt,negativePrompt?,imagePath,width,height,steps,seed,modelId,createdAt,conversationId?}`.
+  Native generation assigns a UUID. PNG bytes remain local in `Documents/generated_images` on iOS
+  and `files/generated_images` on Android. A disk-only recovery can reconstruct the ID, path, and
+  timestamp, but not the full prompt/model metadata.
+- Chat attachments are nested under the stable message UUID as
+  `{id,type,uri,mimeType?,width?,height?,fileName?,textContent?,fileSize?,audioFormat?,
+  audioDurationSeconds?}`. Existing attachment IDs are timestamp-based rather than UUIDs. Document
+  bytes live under `Documents/attachments`; picked images retain picker-owned URIs; voice notes
+  retain recorder-owned paths.
+- Audio-mode messages store `{audioPath,waveformData,audioDurationSeconds}` on the message. Generated
+  PCM files live under `Documents/audio-cache/<conversationId>/<messageId>.pcm`. Clearing the audio
+  cache removes every clip; chat deletion does not currently own per-message audio cleanup.
+- Current StateSync message records carry content, reasoning, and completed tool artifacts. They do
+  not carry attachments, generation metadata, audio metadata, gallery records, or media bytes.
+- Generated-image deletion removes metadata and its PNG through the native generator. Deleting a
+  chat removes generated images scoped by `conversationId`, but attachment and audio-file lifecycle
+  is not yet centralized.
+
+Next cross-host step: compare this inventory with Desktop's Memory, Entity, artifact-library, and
+generated-media stores. Define stable shared record schemas and lifecycle coordinators before either
+host adds a materializer.
 
 ### P3 — Personal mesh and multi-device correctness
 
