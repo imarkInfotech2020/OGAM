@@ -193,8 +193,8 @@ Proximity is a transport milestone, not the end of Sync. Mobile and Desktop agre
 
 ### P2 — Complete the live replicated corpus
 
-- Replicate memories, entities, and remaining workspace/tool/artifact metadata using stable UUIDs and
-  shared StateSync/LWW contracts.
+- Replicate artifact-library records and generated-media metadata using stable UUIDs and shared
+  StateSync/LWW contracts. Memories and Entities are not part of the current Mobile Sync scope.
 - Small searchable metadata/text replicates eagerly. Large artifact-library/generated image, audio,
   video, and capture bytes do not.
 - Shared owns schemas and materialization coordinators; Mobile and Desktop own store adapters and UI.
@@ -225,14 +225,15 @@ Mobile store inventory:
   chat removes generated images scoped by `conversationId`, but attachment and audio-file lifecycle
   is not yet centralized.
 
-Next cross-host step: compare this inventory with Desktop's Memory, Entity, artifact-library, and
+Next cross-host step: compare Mobile's generated-media owner with Desktop's artifact-library and
 generated-media stores. Define stable shared record schemas and lifecycle coordinators before either
 host adds a materializer.
 
-### P3 — Personal mesh and multi-device correctness
+### P3 — Five-device personal mesh
 
-- Support three to five devices, gossip/anti-entropy through non-origin peers, capabilities/presence,
-  per-peer policy, and duplicate-free route selection.
+- Enforce a maximum of five active devices. Users can inspect and evict a device from either host.
+- Support gossip/anti-entropy through non-origin peers, capabilities/presence, per-peer policy, and
+  duplicate-free route selection across those five devices.
 - Shared owns topology/routing. Hosts surface peer status and capabilities.
 - This precedes using the mesh for remote-compute selection.
 
