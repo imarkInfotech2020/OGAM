@@ -32,15 +32,14 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ClipboardScreen } from '../../../pro/ui/ClipboardScreen';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
   registerScreen,
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import {
   createNativeTcpBoundary,
@@ -113,6 +112,10 @@ describe('mobile clipboard Sync journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({
+      name: 'SyncSharingSettings',
+      component: SyncSharingSettingsScreen,
+    });
     registerScreen({ name: 'Clipboard', component: ClipboardScreen });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
@@ -316,9 +319,7 @@ describe('mobile clipboard Sync journey', () => {
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    await waitFor(() =>
-      expect(ui!.getByText('Discoverable on your Wi-Fi')).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByText(/Discoverable on/)).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -343,6 +344,7 @@ describe('mobile clipboard Sync journey', () => {
     fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await pairing;
 
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     const toggle = ui.getByTestId('sync-clipboard-toggle');
     expect(toggle.props.value).toBe(false);
     const openSettings = jest
@@ -352,9 +354,7 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() =>
       expect(nativeModule.setEnabled).toHaveBeenCalledWith(true),
     );
-    await waitFor(() =>
-      expect(ui!.getByText('Allow clipboard access')).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByText('Clipboard access')).toBeTruthy());
     expect(
       ui.getByText(
         'Settings > Apps > Off Grid AI > Paste from Other Apps > Allow',
@@ -363,9 +363,7 @@ describe('mobile clipboard Sync journey', () => {
     fireEvent.press(ui.getByTestId('open-clipboard-permission-settings'));
     expect(openSettings).toHaveBeenCalledTimes(1);
     fireEvent.press(ui.getByText('Done'));
-    await waitFor(() =>
-      expect(ui!.queryByText('Allow clipboard access')).toBeNull(),
-    );
+    await waitFor(() => expect(ui!.queryByText('Clipboard access')).toBeNull());
 
     fireEvent(toggle, 'valueChange', false);
     await waitFor(() =>
@@ -375,7 +373,7 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() =>
       expect(nativeModule.setEnabled).toHaveBeenCalledTimes(3),
     );
-    expect(ui.queryByText('Allow clipboard access')).toBeNull();
+    expect(ui.queryByText('Clipboard access')).toBeNull();
     expect(nativeChange).toBeDefined();
 
     nativeChange?.({ text: 'copied on iPhone', ts: 1000 });

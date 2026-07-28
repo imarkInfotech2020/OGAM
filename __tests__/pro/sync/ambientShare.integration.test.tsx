@@ -31,9 +31,7 @@ import {
   _clearScreensForTesting,
   registerScreen,
 } from '../../../src/navigation/screenRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
@@ -42,6 +40,8 @@ import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ambientShareService } from '../../../pro/sync/ambientShareService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
+import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -111,6 +111,11 @@ describe('mobile ambient sharing journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({
+      name: 'SyncSharingSettings',
+      component: SyncSharingSettingsScreen,
+    });
+    registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
@@ -270,6 +275,7 @@ describe('mobile ambient sharing journey', () => {
       ).toBeTruthy(),
     );
 
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent.press(ui.getByTestId(`ambient-destination-${desktopDevice.id}`));
     fireEvent.press(ui.getByTestId('ambient-screenshot-ask'));
     await waitFor(() => expect(screenshotListener).toBeDefined());
@@ -299,6 +305,8 @@ describe('mobile ambient sharing journey', () => {
     });
     await waitFor(() => expect(ui!.getByText('Share this item?')).toBeTruthy());
     fireEvent.press(ui.getByTestId('ambient-share-accept'));
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByTestId('sync-open-activity'));
 
     await waitFor(() => {
       const failedActivity = ui!.getByTestId(

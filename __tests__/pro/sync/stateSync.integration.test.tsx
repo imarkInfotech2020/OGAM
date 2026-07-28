@@ -16,9 +16,7 @@ import {
   registerScreen,
   _clearScreensForTesting,
 } from '../../../src/navigation/screenRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import {
   HOOKS,
   _clearHooksForTesting,
@@ -36,6 +34,7 @@ import { syncService } from '../../../pro/sync/syncService';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -88,6 +87,10 @@ describe('Pro mobile state sync journey', () => {
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({
+      name: 'SyncSharingSettings',
+      component: SyncSharingSettingsScreen,
+    });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
@@ -219,6 +222,10 @@ describe('Pro mobile state sync journey', () => {
     expect(discovery.scanCount).toBe(1);
     fireEvent.press(ui.getByTestId('sync-rescan'));
     await waitFor(() => expect(discovery.scanCount).toBe(2));
+    expect(
+      (await waitFor(() => ui!.getByTestId('sync-rescan-status'))).props
+        .children,
+    ).toContain('Discovery refreshed');
     expect(discovery.stopCount).toBe(1);
     expect(discovery.publishedPort).toBeGreaterThan(0);
 
@@ -243,11 +250,13 @@ describe('Pro mobile state sync journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
 
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', false);
     await waitFor(() =>
       expect(stateSyncService.preferences().projects).toBe(false),
     );
 
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('projects-tab')));
     await waitFor(() => expect(ui!.getByText('Desktop Research')).toBeTruthy());
@@ -315,6 +324,7 @@ describe('Pro mobile state sync journey', () => {
 
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', true);
 
     await waitFor(() =>
@@ -325,6 +335,7 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ name: 'Phone Notes' }),
     );
 
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByTestId('projects-tab'));
     fireEvent.press(ui.getByText('Desktop Research'));
@@ -351,10 +362,12 @@ describe('Pro mobile state sync journey', () => {
 
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', false);
     await waitFor(() =>
       expect(stateSyncService.preferences().settings).toBe(false),
     );
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByText('Model Settings'));
     fireEvent.press(
@@ -378,6 +391,7 @@ describe('Pro mobile state sync journey', () => {
 
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', true);
     await waitFor(() =>
       expect(
@@ -395,6 +409,7 @@ describe('Pro mobile state sync journey', () => {
       expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
     );
 
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByText('Model Settings'));
     fireEvent.press(

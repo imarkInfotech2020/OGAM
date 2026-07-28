@@ -22,9 +22,7 @@ import {
   registerSlot,
   SLOTS,
 } from '../../../src/bootstrap/slotRegistry';
-import {
-  _clearSectionsForTesting,
-} from '../../../src/components/settings/sectionRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
@@ -138,6 +136,9 @@ describe('Pro mobile saved-device management journey', () => {
     );
     expect(await waitFor(() => ui!.getByTestId('sync-home-card'))).toBeTruthy();
     fireEvent.press(ui.getByTestId('open-sync-from-home'));
+    expect(ui.getByTestId('sync-open-sharing')).toBeTruthy();
+    expect(ui.getByTestId('sync-open-activity')).toBeTruthy();
+    expect(ui.queryByTestId('sync-chats-toggle')).toBeNull();
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -162,6 +163,10 @@ describe('Pro mobile saved-device management journey', () => {
       ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
     );
     expect(within(connectedRow).getByText(/Connected/)).toBeTruthy();
+    expect(
+      within(connectedRow).getByLabelText('Rename Off Grid AI Desktop'),
+    ).toBeTruthy();
+    expect(within(connectedRow).queryByText('Rename')).toBeNull();
 
     fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
     await waitFor(() =>
@@ -174,9 +179,7 @@ describe('Pro mobile saved-device management journey', () => {
     expect(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`)).toBeTruthy();
 
     fireEvent.press(ui.getByLabelText('Back'));
-    await waitFor(() =>
-      expect(ui!.getByTestId('sync-home-card')).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
     expect(ui.getByText('Sync needs attention')).toBeTruthy();
     fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
@@ -197,9 +200,9 @@ describe('Pro mobile saved-device management journey', () => {
     fireEvent.press(ui.getByTestId('sync-rename-save'));
     await waitFor(() =>
       expect(
-        within(
-          ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
-        ).getByText('Studio Mac'),
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          'Studio Mac',
+        ),
       ).toBeTruthy(),
     );
     expect(JSON.parse(storedPairings ?? '{}')).toEqual(
@@ -265,10 +268,7 @@ describe('Pro mobile saved-device management journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
     );
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'wrong-code',
-    );
+    fireEvent.changeText(ui.getByTestId('incoming-pairing-code'), 'wrong-code');
     fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
 
     await waitFor(() =>
