@@ -39,6 +39,7 @@ export interface NativeSync {
   start(): Promise<void>;
   stop(): Promise<void>;
   rescan(): Promise<void>;
+  renameLocalDevice(name: string): Promise<void>;
   pair(device: DeviceInfo, passphrase: string): Promise<void>;
   reconnect(device: DeviceInfo, sharedSecret: string): Promise<void>;
   disconnect(deviceId: string): boolean;
@@ -107,6 +108,11 @@ export function createNativeSync(
       } finally {
         rescanTask = null;
       }
+    },
+    async renameLocalDevice(name: string) {
+      localDevice.name = name;
+      if (!active) return;
+      await this.rescan();
     },
     pair: (device, passphrase) => engine.pair(device, passphrase),
     reconnect: (device, sharedSecret) => engine.reconnect(device, sharedSecret),
