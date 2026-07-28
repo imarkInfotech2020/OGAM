@@ -11,6 +11,7 @@ import type {
   DiscoveredDevice,
   PairedDevice,
   Message,
+  DeviceCap,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
@@ -29,10 +30,12 @@ export interface NativeSyncCallbacks {
   onPaired?: (device: PairedDevice) => void;
   onPairingFailed?: (remote: DeviceInfo | undefined, error: string) => void;
   onDisconnected?: (deviceId: string) => void;
+  onRouteChanged?: (deviceId: string, routeId: string | undefined) => void;
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
   onMessage?: (deviceId: string, message: Message) => void;
+  deviceCap?: DeviceCap;
 }
 
 export interface NativeSync {
@@ -74,8 +77,10 @@ export function createNativeSync(
     onPaired: cbs.onPaired,
     onPairingFailed: cbs.onPairingFailed,
     onDisconnected: cbs.onDisconnected,
+    onRouteChanged: cbs.onRouteChanged,
     onMessage: cbs.onMessage,
     onAppMessage: cbs.onAppMessage,
+    cap: cbs.deviceCap,
     additionalRoutes: proximity
       ? [
           {

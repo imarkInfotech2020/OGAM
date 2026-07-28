@@ -21,6 +21,7 @@ export interface BuildSyncEngineArgs {
   onPaired?: SyncEngineOptions['onPaired'];
   onPairingFailed?: SyncEngineOptions['onPairingFailed'];
   onDisconnected?: SyncEngineOptions['onDisconnected'];
+  onRouteChanged?: SyncEngineOptions['onRouteChanged'];
   onMessage?: SyncEngineOptions['onMessage'];
   onAppMessage?: SyncEngineOptions['onAppMessage'];
   cap?: SyncEngineOptions['cap'];
@@ -56,6 +57,7 @@ export function buildSyncEngine(args: BuildSyncEngineArgs): {
     onPaired: args.onPaired,
     onPairingFailed: args.onPairingFailed,
     onDisconnected: args.onDisconnected,
+    onRouteChanged: args.onRouteChanged,
     onMessage: args.onMessage,
     onAppMessage: args.onAppMessage,
     cap: args.cap,
