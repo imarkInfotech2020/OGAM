@@ -74,8 +74,13 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
 ### Phase 0.5 — Pro experience + licensed devices — COMPLETE
 
 - [x] Sync UI and lifecycle orchestration live in the private Pro package, registered through the
-      existing core screen/settings registries. Core owns only reusable native transport glue.
+      existing core screen/slot registries. Core owns only reusable native transport glue.
+- [x] Sync is a first-class primary Settings row, not a buried Pro section. Home shows a
+      `Set up Sync` card until the first paired device exists; both entry points open the same
+      existing Sync control center.
 - [x] Settings → Sync exposes discoverability, pairing, peer state, and one licensed-device surface.
+- [x] A wrong incoming pairing code stays visible as a specific, dismissible error and permits an
+      immediate clean retry; the shared engine closes the failed session instead of retaining it.
 - [x] Keygen device management lists active machines, marks this device, and allows another machine
       to be deactivated after confirmation.
 - [x] Activating a sixth device automatically deactivates the least-recently-seen existing machine,
@@ -125,6 +130,9 @@ coordinate. Path: `off-grid-ai/mobile/docs/SYNC_MOBILE_PROGRESS.md`. Updated as 
       input waits for project state, becomes visible in the project, a document picked on Mobile
       streams back with the same stable identity, and a Desktop tombstone removes it. Shared
       contracts `84cc414`, `e65086e`, `254c506`, `29dd19a`; Pro `f8b0e91a`; core `b51d80a4`.
+- [x] Mobile transfer owners import their byte codec explicitly, so knowledge/shared-file/model
+      transfers work under Hermes without a global `Buffer`. The shared knowledge contract accepts
+      exact legacy Desktop `proj_<uuid>` project identities while new IDs remain bare UUIDs.
 - [x] Shared short-document chunking keeps non-empty documents smaller than the overlap as one
       searchable chunk (`ad9f92a`); Mobile consumes it through `@offgrid/rag` (`9e305d31`) and
       resolves the built shared entry directly in Metro (`b6ff258d`).
@@ -327,6 +335,9 @@ Recent personal-mesh/ambient checkpoints: shared provenance `a4bd0ff` + `abc49ce
 `be2106f`, shared controlled files `2c02b05`, Pro `11bae32f`, `5522acac`, `261e0092`,
 `b5fdc021`, `a770ddb9`, and core `ff2bea6e`, `cda022df`, `fa566a90`, `02edb640`,
 `fb3924c8`, plus shared ambient policy `306279a`, Pro `ef745bc5`, and core `621dc12b`.
+Latest pairing/knowledge/UI recovery checkpoints: shared `8f094f4` and `584f6aa`, Mobile Pro
+`8f6da549` and `3d1a2e2c`, root `f02cf775`. The current Debug app was rebuilt, installed, and
+launched on physical iOS without clearing its profile.
 Focused no-mockist coverage is green for the ambient Ask/refuse/retry journey and the native
 app-owned screenshot copy. Full hooks, pre-push, push, and automated device driving remain deferred
 until the manual iOS/macOS gate closes.
