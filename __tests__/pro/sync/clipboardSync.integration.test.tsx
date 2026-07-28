@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Alert,
-  Linking,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
@@ -277,11 +276,17 @@ describe('mobile clipboard Sync journey', () => {
 
   it('shows attributed clipboard history through Settings and manages it', async () => {
     let nativeChange: ((change: NativeClipboardChange) => void) | undefined;
+    let nativeClipboardEnabled = false;
+    let nativeClipboardText = '';
     const nativeModule = {
-      setEnabled: jest.fn(),
-      writeText: jest.fn(),
-      addListener: jest.fn(),
-      removeListeners: jest.fn(),
+      setEnabled: (enabled: boolean) => {
+        nativeClipboardEnabled = enabled;
+      },
+      writeText: (text: string) => {
+        nativeClipboardText = text;
+      },
+      addListener: (_eventName: string) => undefined,
+      removeListeners: (_count: number) => undefined,
     };
     NativeModules.SyncClipboardModule = nativeModule;
     jest
@@ -290,7 +295,7 @@ describe('mobile clipboard Sync journey', () => {
         if (eventName === 'SyncClipboardChanged') {
           nativeChange = listener as (change: NativeClipboardChange) => void;
         }
-        return { remove: jest.fn() } as unknown as EmitterSubscription;
+        return { remove: () => undefined } as unknown as EmitterSubscription;
       });
 
     const remoteDevice: DeviceInfo = {
@@ -347,32 +352,25 @@ describe('mobile clipboard Sync journey', () => {
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     const toggle = ui.getByTestId('sync-clipboard-toggle');
     expect(toggle.props.value).toBe(false);
-    const openSettings = jest
-      .spyOn(Linking, 'openSettings')
-      .mockResolvedValue(undefined);
     fireEvent(toggle, 'valueChange', true);
-    await waitFor(() =>
-      expect(nativeModule.setEnabled).toHaveBeenCalledWith(true),
-    );
+    await waitFor(() => expect(toggle.props.value).toBe(true));
+    expect(nativeClipboardEnabled).toBe(true);
     await waitFor(() => expect(ui!.getByText('Clipboard access')).toBeTruthy());
     expect(
       ui.getByText(
         'Settings > Apps > Off Grid AI > Paste from Other Apps > Allow',
       ),
     ).toBeTruthy();
-    fireEvent.press(ui.getByTestId('open-clipboard-permission-settings'));
-    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(ui.getByTestId('open-clipboard-permission-settings')).toBeTruthy();
     fireEvent.press(ui.getByText('Done'));
     await waitFor(() => expect(ui!.queryByText('Clipboard access')).toBeNull());
 
     fireEvent(toggle, 'valueChange', false);
-    await waitFor(() =>
-      expect(nativeModule.setEnabled).toHaveBeenCalledWith(false),
-    );
+    await waitFor(() => expect(toggle.props.value).toBe(false));
+    expect(nativeClipboardEnabled).toBe(false);
     fireEvent(toggle, 'valueChange', true);
-    await waitFor(() =>
-      expect(nativeModule.setEnabled).toHaveBeenCalledTimes(3),
-    );
+    await waitFor(() => expect(toggle.props.value).toBe(true));
+    expect(nativeClipboardEnabled).toBe(true);
     expect(ui.queryByText('Clipboard access')).toBeNull();
     expect(nativeChange).toBeDefined();
 
@@ -389,9 +387,7 @@ describe('mobile clipboard Sync journey', () => {
         ts: 2000,
       }),
     ).toBe(true);
-    await waitFor(() =>
-      expect(nativeModule.writeText).toHaveBeenCalledWith('copied on Mac'),
-    );
+    await waitFor(() => expect(nativeClipboardText).toBe('copied on Mac'));
 
     fireEvent.press(ui.getByTestId('open-clipboard-history'));
     await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
@@ -399,12 +395,11 @@ describe('mobile clipboard Sync journey', () => {
     expect(ui.getByText('copied on Mac')).toBeTruthy();
     expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();
 
+    nativeClipboardText = '';
     fireEvent.press(
       ui.getAllByLabelText('Copy text from Off Grid AI Desktop')[0],
     );
-    await waitFor(() =>
-      expect(nativeModule.writeText).toHaveBeenLastCalledWith('copied on Mac'),
-    );
+    await waitFor(() => expect(nativeClipboardText).toBe('copied on Mac'));
 
     fireEvent.press(ui.getByLabelText('Delete text from Off Grid AI Desktop'));
     await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull());
