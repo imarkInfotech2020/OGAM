@@ -294,10 +294,10 @@ describe('Pro mobile saved-device management journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
     );
-    expect(ui.getByTestId('cancel-pairing-attempt')).toBeTruthy();
+    expect(ui.getAllByText('Cancel')).toHaveLength(1);
     expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
     await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
-    fireEvent.press(ui.getByTestId('cancel-pairing-attempt'));
+    fireEvent.press(ui.getByText('Cancel'));
 
     await waitFor(() =>
       expect(ui!.getByText('Pairing cancelled')).toBeTruthy(),
