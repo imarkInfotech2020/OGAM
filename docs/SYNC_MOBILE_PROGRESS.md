@@ -60,10 +60,19 @@ _offgrid-sync._udp`; Android `CHANGE_WIFI_MULTICAST_STATE`.
 - [x] Shared heartbeat marks a silent/dead peer offline instead of retaining stale connected state.
       Mobile local-device rename persists, updates the active engine identity, and re-advertises it;
       the same reusable sheet handles local names and saved peer aliases.
-- [x] One-sided trust is recoverable through Pair again. Forget device clears the local secret,
-      disconnects the session, and notifies a connected peer to clear its trust too.
+- [x] Shared Sync owns the full pairing attempt lifecycle and awaited trust persistence. Mobile
+      renders the shared connecting/waiting/failure/cancel/retry states and only reaches Paired
+      after both Keychain adapters acknowledge durable trust (`9b4175a`, `3ff8f04`; Pro
+      `3e66c628`, core `b070ca55`).
+- [x] One-sided trust is recoverable through Pair again. Eviction is now a bilateral, durable shared
+      membership revocation rather than a Mobile app message: a random membership generation
+      prevents stale deletion after re-pair, local capacity releases immediately, and a restricted
+      derived credential can carry only revoke/ack while the peer is offline.
 - [x] The rendered persistence journey covers restart/reconnect, one-sided trust repair, re-pair,
-      and two-sided forget. Settings → Sync also proves an offline device remains manageable.
+      canonical bilateral confirmation, online two-sided eviction, visible offline queued/failed
+      state, Retry, Keychain restart survival, and completion on rediscovery. Shared owns protocol,
+      state transitions, retry races, copy, and action eligibility (`64261b2`, `35783f7`,
+      `c9b3e7b`); Mobile supplies the atomic Keychain adapter and UI (`b3d6a5e9`, `85e61646`).
 - [x] iOS reliable proximity adapter uses one MultipeerConnectivity session per peer and feeds the
       same shared SyncEngine as LAN. Shared `MultiTransportBridge` and `CompositeDiscoveryService`
       provide route racing and discovery fallback (`26c0b09`); Mobile Pro `8c1f599f`, core
@@ -375,6 +384,9 @@ Shared control-center ownership is now complete through `2fb787a`, `f3ef956`, `1
 transfer IDs, filters, ordering, counts, action-owner sources, file grouping, and completed
 destination counts. Mobile retains only native capability facts, AsyncStorage/filesystem adapters,
 navigation, action execution, and React rendering.
+Shared pairing and membership ownership is current through `9b4175a`, `3ff8f04`, `64261b2`,
+`35783f7`, and `c9b3e7b`; Mobile consumes it in Pro `3e66c628`, `ae1b5b95`, `b3d6a5e9` and core
+`b070ca55`, `4dfbabc4`, `85e61646`. The old Mobile-only `device-trust-v1` channel no longer exists.
 The full Mobile Sync integration suite is green (10 suites, 19 journeys) with real rendered
 navigation, encrypted engines, StateSync, FileTransferManager, and persistent stores. It covers
 ambient Ask/refuse/failed-byte-transfer/single-item retry, model package admission, state
