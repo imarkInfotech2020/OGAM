@@ -42,6 +42,7 @@ import { ambientShareService } from '../../../pro/sync/ambientShareService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
 import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
+import { SyncFilesScreen } from '../../../pro/ui/SyncScreen/SyncFilesScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -116,6 +117,7 @@ describe('mobile ambient sharing journey', () => {
       component: SyncSharingSettingsScreen,
     });
     registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
+    registerScreen({ name: 'SyncFiles', component: SyncFilesScreen });
     useAppStore.getState().setOnboardingComplete(true);
     useAppStore
       .getState()
@@ -333,6 +335,28 @@ describe('mobile ambient sharing journey', () => {
     expect(
       ui.queryByTestId(`ambient-activity-${retriedScreenshot.syncId}`),
     ).toBeNull();
+    expect(ui.queryByText('SHARED FILES')).toBeNull();
+
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByTestId('sync-open-files'));
+    await waitFor(() =>
+      expect(
+        ui!.getByTestId(`sync-file-${retriedScreenshot.syncId}`),
+      ).toBeTruthy(),
+    );
+    expect(
+      ui.queryByTestId(`sync-file-${rejectedScreenshot.syncId}`),
+    ).toBeNull();
+    expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
+    expect(ui.getByText('From Off Grid Device')).toBeTruthy();
+    expect(ui.getByText(/Shared with 1 device/)).toBeTruthy();
+
+    fireEvent.press(ui.getByTestId('sync-file-filter-download'));
+    expect(
+      ui.getByText('No downloads have crossed your devices yet.'),
+    ).toBeTruthy();
+    fireEvent.press(ui.getByTestId('sync-file-filter-screenshot'));
+    expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
   });
 
   async function captureScreenshot(options: {
