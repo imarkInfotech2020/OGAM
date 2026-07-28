@@ -1,0 +1,205 @@
+import React from 'react';
+import { Alert } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import {
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
+import TcpSocket from 'react-native-tcp-socket';
+import type { DeviceInfo } from '@offgrid/sync';
+import type { RnTcpModule } from '@offgrid/sync/rn';
+import { AppNavigator } from '../../../src/navigation/AppNavigator';
+import {
+  registerScreen,
+  _clearScreensForTesting,
+} from '../../../src/navigation/screenRegistry';
+import {
+  registerSettingsSection,
+  _clearSectionsForTesting,
+} from '../../../src/components/settings/sectionRegistry';
+import { useAppStore } from '../../../src/stores/appStore';
+import { buildSyncEngine } from '../../../src/services/sync/engine';
+import { syncService } from '../../../pro/sync/syncService';
+import { useSyncStore } from '../../../pro/sync/syncStore';
+import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSettingsSection } from '../../../pro/ui/SyncSettingsSection';
+import { ProRoot } from '../../../pro/ui/ProRoot';
+import {
+  getDiscoveryBoundaries,
+  resetDiscoveryBoundaries,
+} from '../../utils/nativeSyncBoundaries';
+import { createDownloadedModel } from '../../utils/factories';
+
+jest.mock('@react-navigation/native', () =>
+  jest.requireActual('@react-navigation/native'),
+);
+
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
+
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
+
+const nativeTcpBoundary = TcpSocket as unknown as RnTcpModule;
+
+describe('Pro mobile saved-device management journey', () => {
+  let remote: ReturnType<typeof buildSyncEngine> | undefined;
+  let ui: ReturnType<typeof render> | undefined;
+  let storedPairings: string | undefined;
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    resetDiscoveryBoundaries();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
+    registerScreen({ name: 'Sync', component: SyncScreen });
+    registerSettingsSection(SyncSettingsSection);
+    useAppStore.getState().setOnboardingComplete(true);
+    useAppStore
+      .getState()
+      .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
+    useSyncStore.getState().reset();
+    storedPairings = undefined;
+    (Keychain.getGenericPassword as jest.Mock).mockImplementation(
+      async ({ service }: { service: string }) =>
+        service === 'off-grid-sync-pairings' && storedPairings
+          ? { username: 'sync-pairings', password: storedPairings }
+          : false,
+    );
+    (Keychain.setGenericPassword as jest.Mock).mockImplementation(
+      async (
+        _username: string,
+        password: string,
+        options: { service: string },
+      ) => {
+        if (options.service === 'off-grid-sync-pairings') {
+          storedPairings = password;
+        }
+        return true;
+      },
+    );
+  });
+
+  afterEach(async () => {
+    ui?.unmount();
+    await remote?.engine.stop();
+    await syncService.stop();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
+  });
+
+  it('disconnects, reconnects, renames persistently, and forgets a paired desktop', async () => {
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-managed-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    let remoteSecret: string | undefined;
+    remote = buildSyncEngine({
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getSharedSecret: () => remoteSecret,
+      onPaired: device => {
+        remoteSecret = device.sharedSecret;
+      },
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
+    );
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    const pairing = remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+      'blue-otter-42',
+    );
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(
+      ui.getByTestId('incoming-pairing-code'),
+      'blue-otter-42',
+    );
+    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    await pairing;
+
+    const connectedRow = await waitFor(() =>
+      ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
+    );
+    expect(within(connectedRow).getByText(/Connected/)).toBeTruthy();
+
+    fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Nearby/,
+        ),
+      ).toBeTruthy(),
+    );
+    expect(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`)).toBeTruthy();
+
+    fireEvent.press(ui.getByTestId(`sync-reconnect-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Connected/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId(`sync-rename-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(ui!.getByText('Rename Off Grid AI Desktop')).toBeTruthy(),
+    );
+    fireEvent.changeText(ui.getByTestId('sync-rename-input'), 'Studio Mac');
+    fireEvent.press(ui.getByTestId('sync-save-name'));
+    await waitFor(() => expect(ui!.getByText('Studio Mac')).toBeTruthy());
+    expect(JSON.parse(storedPairings ?? '{}')).toEqual(
+      expect.objectContaining({
+        pairings: expect.objectContaining({
+          [remoteDevice.id]: expect.objectContaining({ alias: 'Studio Mac' }),
+        }),
+      }),
+    );
+
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    fireEvent.press(ui.getByTestId(`sync-forget-${remoteDevice.id}`));
+    const destructiveAction = (alert.mock.calls[0][2] ?? []).find(
+      button => button.style === 'destructive',
+    );
+    destructiveAction?.onPress?.();
+    await waitFor(() =>
+      expect(ui!.queryByTestId(`sync-paired-${remoteDevice.id}`)).toBeNull(),
+    );
+    alert.mockRestore();
+  });
+});
