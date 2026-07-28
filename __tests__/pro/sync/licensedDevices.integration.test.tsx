@@ -10,10 +10,6 @@ import {
   within,
 } from '@testing-library/react-native';
 
-jest.mock('@react-navigation/native', () =>
-  jest.requireActual('@react-navigation/native'),
-);
-
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
   registerScreen,
@@ -25,6 +21,8 @@ import { createDownloadedModel } from '../../utils/factories';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { syncService } from '../../../pro/sync/syncService';
+
+jest.unmock('@react-navigation/native');
 
 jest.mock('react-native-tcp-socket', () => {
   const {

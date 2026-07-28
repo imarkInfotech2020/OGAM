@@ -33,9 +33,7 @@ import {
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
-jest.mock('@react-navigation/native', () =>
-  jest.requireActual('@react-navigation/native'),
-);
+jest.unmock('@react-navigation/native');
 
 jest.mock('react-native-tcp-socket', () => {
   const {

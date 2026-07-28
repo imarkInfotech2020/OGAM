@@ -47,9 +47,7 @@ import {
 } from '../../utils/nativeSyncBoundaries';
 import { createDownloadedModel } from '../../utils/factories';
 
-jest.mock('@react-navigation/native', () =>
-  jest.requireActual('@react-navigation/native'),
-);
+jest.unmock('@react-navigation/native');
 
 jest.mock('react-native-tcp-socket', () => {
   const {
