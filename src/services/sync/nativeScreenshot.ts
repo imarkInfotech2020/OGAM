@@ -50,6 +50,12 @@ function parse(value: unknown): NativeScreenshot | null {
 }
 
 export const nativeScreenshotBoundary = {
+  available(): boolean {
+    return (
+      Platform.OS === 'ios' && NativeModules.SyncScreenshotModule !== undefined
+    );
+  },
+
   observe(listener: (screenshot: NativeScreenshot) => void): () => void {
     const nativeModule = module();
     const emitter = new NativeEventEmitter(nativeModule);
