@@ -401,6 +401,14 @@ navigation, action execution, and React rendering.
 Shared pairing and membership ownership is current through `9b4175a`, `3ff8f04`, `64261b2`,
 `35783f7`, and `c9b3e7b`; Mobile consumes it in Pro `3e66c628`, `ae1b5b95`, `b3d6a5e9` and core
 `b070ca55`, `4dfbabc4`, `85e61646`. The old Mobile-only `device-trust-v1` channel no longer exists.
+The latest Mobile production consumer is Pro `0cb03c8a`: the visible sharing code now uses shared
+`PersistentPairingCode` with a thin AsyncStorage adapter, incoming pairing reads that stable code
+without a host-owned approval state machine, and outgoing pairing uses the other device's code.
+Files and file-backed Activity render shared origin-device filters. Missing `shared_file` controls
+or bytes are repaired through shared `SharedFileRepairCoordinator`; Mobile supplies only prior
+destination authorization, filesystem availability, and app-channel adapters. The shared portable
+message-turn projector `14ad594` was already consumed by Mobile serialization/materialization, so
+no parallel tool/thinking interpretation was added.
 The full Mobile Sync integration suite is green (10 suites, 19 journeys) with real rendered
 navigation, encrypted engines, StateSync, FileTransferManager, and persistent stores. It covers
 ambient Ask/refuse/failed-byte-transfer/single-item retry, model package admission, state
