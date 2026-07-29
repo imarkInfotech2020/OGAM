@@ -30,6 +30,9 @@ export function _clearHooksForTesting(): void {
 
 /** Known hook names, centralised so core and pro stay in sync. */
 export const HOOKS = {
+  /** () => readonly OnboardingSlide[] — optional feature-owned onboarding content. Core owns the
+   *  renderer and navigation; feature packages contribute data only. */
+  onboardingAdditionalSlides: 'onboarding.additionalSlides',
   /** () => boolean — whether a message can be spoken (TTS enabled + ready). */
   audioCanSpeak: 'audio.canSpeak',
   /** (text: string, messageId: string) => void — speak a message aloud. */

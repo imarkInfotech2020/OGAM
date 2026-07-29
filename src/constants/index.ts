@@ -116,8 +116,17 @@ If asked about yourself, you can mention you're a local AI assistant that priori
   maxContextLength: 4096, // Default context window; eliminates double-init on models that support ≥4096
 };
 
-// Onboarding slides
-export const ONBOARDING_SLIDES = [
+export interface OnboardingSlide {
+  id: string;
+  keyword: string;
+  title: string;
+  description: string;
+}
+
+// Core onboarding slides. Optional feature packages contribute additional slide data through the
+// onboarding.additionalSlides hook so Core keeps one renderer without advertising unavailable
+// features in free builds.
+export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: 'freedom',
     keyword: 'YOURS',

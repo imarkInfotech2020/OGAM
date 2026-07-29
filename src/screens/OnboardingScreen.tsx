@@ -23,11 +23,13 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import {
   ONBOARDING_SLIDES,
+  type OnboardingSlide,
   SPACING,
   TYPOGRAPHY,
   FONTS,
   WEDNESDAY_URL,
 } from '../constants';
+import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { useAppStore } from '../stores';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { discoverLANServers } from '../services/networkDiscovery';
@@ -44,7 +46,7 @@ const { width } = Dimensions.get('window');
 
 /** Animated slide with staggered entrance: keyword → title → description */
 const SlideContent: React.FC<{
-  item: (typeof ONBOARDING_SLIDES)[0];
+  item: OnboardingSlide;
   isActive: boolean;
   styles: ReturnType<typeof createStyles>;
   accentColor: string;
@@ -94,7 +96,16 @@ const SlideContent: React.FC<{
         withTiming(0, { duration: 400, easing: ease }),
       );
     }
-  }, [isActive]);
+  }, [
+    descOpacity,
+    descTranslateY,
+    isActive,
+    keywordOpacity,
+    keywordTranslateY,
+    lineWidth,
+    titleOpacity,
+    titleTranslateY,
+  ]);
 
   const keywordStyle = useAnimatedStyle(() => ({
     opacity: keywordOpacity.value,
@@ -155,6 +166,14 @@ const SlideContent: React.FC<{
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   navigation,
 }) => {
+  const additionalSlides =
+    callHook<readonly OnboardingSlide[]>(HOOKS.onboardingAdditionalSlides) ??
+    [];
+  const slides = [
+    ...ONBOARDING_SLIDES.slice(0, -1),
+    ...additionalSlides,
+    ONBOARDING_SLIDES[ONBOARDING_SLIDES.length - 1],
+  ];
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -169,7 +188,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     let cancelled = false;
     (async () => {
       try {
-        if (!shouldAutoDiscoverRemoteModels(useAppStore.getState().settings)) return;
+        if (!shouldAutoDiscoverRemoteModels(useAppStore.getState().settings))
+          return;
         const discovered = await discoverLANServers();
         if (cancelled || discovered.length === 0) return;
         const store = useRemoteServerStore.getState();
@@ -196,7 +216,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   }, []);
 
   const handleNext = () => {
-    if (currentIndex < ONBOARDING_SLIDES.length - 1) {
+    if (currentIndex < slides.length - 1) {
       flatListRef.current?.scrollToIndex({
         index: currentIndex + 1,
         animated: true,
@@ -219,7 +239,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     item,
     index,
   }: {
-    item: (typeof ONBOARDING_SLIDES)[0];
+    item: OnboardingSlide;
     index: number;
   }) => (
     <SlideContent
@@ -232,7 +252,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const renderDots = () => (
     <View testID="onboarding-dots" style={styles.dotsContainer}>
-      {ONBOARDING_SLIDES.map((_, index) => {
+      {slides.map((_, index) => {
         const inputRange = [
           (index - 1) * width,
           index * width,
@@ -261,7 +281,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     </View>
   );
 
-  const isLastSlide = currentIndex === ONBOARDING_SLIDES.length - 1;
+  const isLastSlide = currentIndex === slides.length - 1;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -279,7 +299,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         <FlatList
           ref={flatListRef}
-          data={ONBOARDING_SLIDES}
+          data={slides}
           renderItem={renderSlide}
           horizontal
           pagingEnabled
