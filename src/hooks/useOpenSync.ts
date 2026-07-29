@@ -14,6 +14,7 @@ import { useAppStore } from '../stores';
 export function useOpenSync(): {
   isSyncUnlocked: boolean;
   openSync: () => void;
+  openSyncNotifications: () => void;
 } {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -23,6 +24,9 @@ export function useOpenSync(): {
   const openSync = useCallback(() => {
     navigation.navigate(isSyncUnlocked ? 'Sync' : 'ProDetail');
   }, [isSyncUnlocked, navigation]);
+  const openSyncNotifications = useCallback(() => {
+    navigation.navigate(isSyncUnlocked ? 'Notifications' : 'ProDetail');
+  }, [isSyncUnlocked, navigation]);
 
-  return { isSyncUnlocked, openSync };
+  return { isSyncUnlocked, openSync, openSyncNotifications };
 }

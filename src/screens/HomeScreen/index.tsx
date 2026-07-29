@@ -46,7 +46,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const styles = useThemedStyles(createStyles);
   const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
   const HomeNotificationsButton = useSlot(SLOTS.homeNotificationsButton);
-  const { isSyncUnlocked, openSync } = useOpenSync();
+  const { isSyncUnlocked, openSync, openSyncNotifications } = useOpenSync();
   const { sheetVisible, openSheet, closeSheet, showIcon } =
     useOnboardingSheet();
 
@@ -160,9 +160,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </View>
             <View style={styles.headerActions}>
               {HomeNotificationsButton ? (
-                <HomeNotificationsButton
-                  onOpen={() => navigation.navigate('Notifications' as never)}
-                />
+                <HomeNotificationsButton onOpen={openSyncNotifications} />
               ) : null}
               <TouchableOpacity
                 onPress={() => navigation.navigate('ProDetail')}

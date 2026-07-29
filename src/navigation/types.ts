@@ -19,6 +19,7 @@ export type RootStackParamList = {
   StorageSettings: undefined;
   SecuritySettings: undefined;
   Sync: undefined;
+  Notifications: undefined;
   // Already in RootStack
   DownloadManager: undefined;
   Gallery: { conversationId?: string } | undefined;
@@ -32,6 +33,12 @@ export type MainTabParamList = {
   HomeTab: undefined;
   ChatsTab: undefined;
   ProjectsTab: undefined;
-  ModelsTab: { initialTab?: 'text' | 'image' | 'voice' | 'transcription'; repairModelId?: string; initialSearchQuery?: string } | undefined;
+  ModelsTab:
+    | {
+        initialTab?: 'text' | 'image' | 'voice' | 'transcription';
+        repairModelId?: string;
+        initialSearchQuery?: string;
+      }
+    | undefined;
   SettingsTab: undefined;
 };
