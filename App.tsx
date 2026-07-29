@@ -18,7 +18,6 @@ import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
-import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
@@ -261,23 +260,11 @@ function App() {
       // Initialize RAG database tables
       ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
 
-      // Read the cached Pro entitlement before Pro features load. checkProStatus
-      // returns the Keychain cache immediately and fires a background Keygen
-      // revalidation so the next launch stays fresh.
-      //
-      // Pro is optional: a failure here (keychain locked, no network) must never
-      // abort app init or hang the splash screen, so it is isolated and only logs.
       let isPro = false;
       try {
-        isPro = await checkProStatus();
-      } catch (proError) {
-        logger.error('[App] Pro check failed, continuing without entitlement:', proError);
-      }
-
-      try {
-        // Load pro features — only activates if the keychain entitlement is set
-        // (or in dev, where loadProFeatures force-unlocks).
-        await loadProFeatures(isPro);
+        // Register the private Pro entitlement provider before the first status
+        // read, then activate only the capabilities that entitlement permits.
+        isPro = await loadProFeatures();
 
         // Reconcile the persisted Pro flag with the actual entitlement on every
         // boot. Setting it to the resolved value (not only ever true) means a

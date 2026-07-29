@@ -3,17 +3,23 @@ import { registerScreen } from '../navigation/screenRegistry';
 import { registerSettingsSection } from '../components/settings/sectionRegistry';
 import { registerSlot } from './slotRegistry';
 import { registerHook } from './hookRegistry';
-import { readProFromKeychain } from '../services/proLicenseService';
+import {
+  checkProStatus,
+  registerProEntitlementProvider,
+} from '../services/proLicenseService';
 
-export async function loadProFeatures(isPro?: boolean): Promise<void> {
+export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
   try {
     pro = require('@offgrid/pro');
   } catch {
-    return; // free / contributor build: package not installed
+    return false; // free / contributor build: package not installed
   }
   if (!pro) {
-    return; // proStub.js returns null — free build via metro extraNodeModules
+    return false; // proStub.js returns null — free build via metro extraNodeModules
+  }
+  if (typeof pro.configureProEntitlementProvider === 'function') {
+    pro.configureProEntitlementProvider(registerProEntitlementProvider);
   }
 
   // DEV ONLY: unlock pro features locally (audio mode, MCP) without a purchase so
@@ -24,9 +30,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<void> {
   const { useAppStore } = require('../stores/appStore');
   const DEV_UNLOCK_PRO = __DEV__ && !useAppStore.getState().devProDisabled;
 
-  // The boot path already read the entitlement in checkProStatus(); reuse it to
-  // avoid a second keychain round-trip. Fall back to a read for standalone callers.
-  const active = (isPro ?? (await readProFromKeychain())) || DEV_UNLOCK_PRO;
+  const active = (isPro ?? (await checkProStatus())) || DEV_UNLOCK_PRO;
   // Single source of truth for "Pro is unlocked" — every upsell gate reads this, so a
   // keychain- or dev-unlocked Pro user never sees the upgrade prompt.
   useAppStore.getState().setProActive(active);
@@ -42,7 +46,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<void> {
     });
   }
   if (!active) {
-    return; // restricted Sync remains available; every other paid feature stays dormant
+    return false; // restricted Sync remains available; every other paid feature stays dormant
   }
 
   pro.activate({
@@ -68,4 +72,5 @@ export async function loadProFeatures(isPro?: boolean): Promise<void> {
       console.warn('[pro] MCP OAuth adapters not configured:', err);
     }
   }
+  return true;
 }

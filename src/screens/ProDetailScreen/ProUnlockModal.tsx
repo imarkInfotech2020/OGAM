@@ -12,36 +12,29 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import {
+  projectPersonalMeshActivationFailure,
+  type PersonalMeshActivationFailureProjection,
+} from '@offgrid/sync';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import {
   activateProByKey,
   PRO_PAY_PAGE_URL,
-  type ActivateResult,
 } from '../../services/proLicenseService';
 import { withUtm } from '../../utils/utm';
 
-type ErrorMsg = string | null;
+type ErrorMsg = Pick<
+  PersonalMeshActivationFailureProjection,
+  'title' | 'description'
+> | null;
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onUnlocked: () => void;
 };
-
-function messageFor(
-  reason: Extract<ActivateResult, { ok: false }>['reason'],
-): string {
-  switch (reason) {
-    case 'limit':
-      return 'This device could not replace the least recently seen device. Check your connection and try again.';
-    case 'network':
-      return 'Could not reach the licensing server. Check your connection and try again.';
-    default:
-      return "That license key isn't valid or active. Check it and try again.";
-  }
-}
 
 // Activation modal: the user pastes the license key from their email and we
 // activate it on this device. Paying is a separate path — "Get Pro" opens the
@@ -102,10 +95,10 @@ export const ProUnlockModal: React.FC<Props> = ({
         setSuccess(true);
         onUnlocked();
       } else {
-        setError(messageFor(res.reason));
+        setError(projectPersonalMeshActivationFailure(res.reason));
       }
     } catch {
-      setError('Activation failed. Check your connection and try again.');
+      setError(projectPersonalMeshActivationFailure('registration_failed'));
     } finally {
       setLoading(false);
     }
@@ -115,7 +108,10 @@ export const ProUnlockModal: React.FC<Props> = ({
   // to them after checkout, then pasted here.
   const handleGetPro = () => {
     Linking.openURL(withUtm(PRO_PAY_PAGE_URL, 'pro-unlock')).catch(() => {
-      setError('Could not open the Pro page. Please try again.');
+      setError({
+        title: 'Could not open Pro',
+        description: 'Please try again.',
+      });
     });
   };
 
@@ -201,7 +197,12 @@ export const ProUnlockModal: React.FC<Props> = ({
           />
 
           {/* Inline error */}
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? (
+            <View style={styles.errorBlock}>
+              <Text style={styles.errorTitle}>{error.title}</Text>
+              <Text style={styles.errorText}>{error.description}</Text>
+            </View>
+          ) : null}
 
           {/* Primary CTA */}
           <TouchableOpacity
@@ -288,12 +289,19 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     minHeight: 48,
   },
 
+  errorBlock: {
+    marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.xs,
+  },
+  errorTitle: {
+    ...TYPOGRAPHY.bodySmall,
+    color: '#E05252',
+    marginBottom: SPACING.xs,
+  },
   errorText: {
     fontSize: 13,
     fontWeight: '400' as const,
     color: '#E05252',
-    marginBottom: SPACING.md,
-    paddingHorizontal: SPACING.xs,
     lineHeight: 18,
   },
 

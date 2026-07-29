@@ -1,186 +1,17 @@
-/**
- * Pro entitlement, backed by Keygen license keys.
- *
- * Identity model: no login, no RevenueCat in the app. The buyer pays on the web
- * (RevenueCat checkout), an issuance Worker emails them a license key, and they
- * paste it into the app. We validate the key against Keygen (which enforces the
- * 5-device cap), cache { isPro, key, expiry } in the Keychain, and re-validate
- * when online so a revoked or expired key locks the app. Offline, the cached
- * state stands until a monthly key's expiry passes (lifetime keys never expire);
- * revocation is caught at the next online check.
- */
-import * as Keychain from 'react-native-keychain';
-import logger from '../utils/logger';
-import {
-  validateKey,
-  activateMachine,
-  listMachines,
-  deactivateMachine,
-  KeygenNetworkError,
-  type KeygenMachine,
-} from './keygenClient';
-import { getDeviceFingerprint, getPlatformTag } from './deviceFingerprint';
+import type {
+  PersonalMeshActivationResult,
+  PersonalMeshActivationFailureCode,
+} from '@offgrid/sync';
+import { PERSONAL_MESH_DEVICE_CAP } from '@offgrid/sync';
 
-const KEYCHAIN_SERVICE = 'off-grid-pro-license';
-
-// Public web pay page (RevenueCat checkout). "Get Pro" opens this; the buyer is
-// emailed a license key by the issuance Worker and enters it via activateProByKey.
 export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
-export const PRO_DEVICE_LIMIT = 5;
+export const PRO_DEVICE_LIMIT = PERSONAL_MESH_DEVICE_CAP;
 
-export type ActivateResult =
-  | { ok: true }
-  | { ok: false; reason: 'invalid' | 'limit' | 'network' };
-
-type ProLicense = {
-  isPro: boolean;
-  key: string | null;
-  licenseId: string | null;
-  expiry: string | null; // ISO timestamp, or null for a perpetual (lifetime) key
-  verifiedAt: number;
-};
-
-const EMPTY: ProLicense = {
-  isPro: false,
-  key: null,
-  licenseId: null,
-  expiry: null,
-  verifiedAt: 0,
-};
-
-const REVOKED_CODES = [
-  'EXPIRED',
-  'SUSPENDED',
-  'BANNED',
-  'OVERDUE',
-  'NOT_FOUND',
-];
-const NEEDS_ACTIVATION = [
-  'NO_MACHINE',
-  'NO_MACHINES',
-  'FINGERPRINT_SCOPE_MISMATCH',
-];
-
-function lastSeenTimestamp(machine: KeygenMachine): number {
-  if (!machine.lastSeen) return Number.NEGATIVE_INFINITY;
-  const timestamp = Date.parse(machine.lastSeen);
-  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-}
-
-/**
- * A sixth device replaces the machine least recently seen. Keygen's machine
- * response uses lastHeartbeat when available and creation time otherwise, so
- * this is stable for clients that do not heartbeat yet.
- */
-function selectReplacementMachine(
-  machines: KeygenMachine[],
-  currentFingerprint: string,
-): KeygenMachine | undefined {
-  return machines
-    .filter(machine => machine.fingerprint !== currentFingerprint)
-    .sort((left, right) => {
-      const timestampDifference =
-        lastSeenTimestamp(left) - lastSeenTimestamp(right);
-      return timestampDifference || left.id.localeCompare(right.id);
-    })[0];
-}
-
-async function activateWithAutomaticReplacement(
-  key: string,
-  licenseId: string,
-  device: { fingerprint: string; platform: string },
-): Promise<{ ok: boolean; limitReached: boolean }> {
-  const activation = await activateMachine(key, licenseId, device);
-  if (activation.ok || !activation.limitReached) return activation;
-
-  const machines = await listMachines(key, licenseId);
-  const replacement = selectReplacementMachine(machines, device.fingerprint);
-  if (!replacement) return activation;
-
-  const removed = await deactivateMachine(key, replacement.id);
-  if (!removed) return activation;
-
-  logger.log(`[Pro] replaced least recently seen device ${replacement.id}`);
-  return activateMachine(key, licenseId, device);
-}
-
-function setProInStore(isPro: boolean): void {
-  const { useAppStore } = require('../stores/appStore');
-  useAppStore.getState().setHasRegisteredPro(isPro);
-}
-
-/** Whether the cached license grants Pro right now (offline-safe). */
-function isProActive(lic: ProLicense): boolean {
-  // Monthly keys carry an expiry — once it passes, no Pro even offline. Lifetime
-  // keys have null expiry. Revocation propagates at the next online revalidate.
-  return lic.isPro && (!lic.expiry || Date.parse(lic.expiry) > Date.now());
-}
-
-async function writeLicense(lic: ProLicense): Promise<void> {
-  try {
-    await Keychain.setGenericPassword('license', JSON.stringify(lic), {
-      service: KEYCHAIN_SERVICE,
-      accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
-    });
-  } catch (e) {
-    logger.error(
-      `[Pro] writeLicense failed: ${
-        e instanceof Error ? e.message : String(e)
-      }`,
-    );
-  }
-}
-
-function parseLicenseCredential(value: unknown): ProLicense {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('The stored Pro license is malformed.');
-  }
-  const record = value as Record<string, unknown>;
-  return {
-    isPro: record.isPro === true,
-    key: typeof record.key === 'string' ? record.key : null,
-    licenseId: typeof record.licenseId === 'string' ? record.licenseId : null,
-    expiry: typeof record.expiry === 'string' ? record.expiry : null,
-    verifiedAt:
-      typeof record.verifiedAt === 'number' &&
-      Number.isFinite(record.verifiedAt) &&
-      record.verifiedAt >= 0
-        ? record.verifiedAt
-        : 0,
-  };
-}
-
-async function readLicenseStrict(): Promise<ProLicense> {
-  const result = await Keychain.getGenericPassword({
-    service: KEYCHAIN_SERVICE,
-  });
-  if (!result) return EMPTY;
-  return parseLicenseCredential(JSON.parse(result.password));
-}
-
-async function readLicense(): Promise<ProLicense> {
-  try {
-    return await readLicenseStrict();
-  } catch (e) {
-    logger.error(
-      `[Pro] readLicense failed: ${e instanceof Error ? e.message : String(e)}`,
-    );
-    return EMPTY;
-  }
-}
-
-export async function readProFromKeychain(): Promise<boolean> {
-  return isProActive(await readLicense());
-}
+export type ActivateResult = PersonalMeshActivationResult;
+export type ActivateFailureCode = PersonalMeshActivationFailureCode;
 
 export type ProTier = 'lifetime' | 'yearly';
 
-/**
- * Single source of truth for what each tier MEANS, as data. `label` is the display
- * noun; `renews` says whether it recurs (drives both the status line wording and
- * whether a "Manage subscription" affordance applies). Consumers render from these
- * flags instead of branching on the concrete tier — add a tier here, touch no caller.
- */
 export const PRO_TIER_META: Record<
   ProTier,
   { label: string; renews: boolean }
@@ -191,184 +22,58 @@ export const PRO_TIER_META: Record<
 
 export interface ProLicenseInfo {
   isPro: boolean;
-  tier: ProTier | null; // lifetime (no expiry) vs yearly (has expiry); null when not Pro
+  tier: ProTier | null;
   expiry: string | null;
   verifiedAt: number;
 }
 
-/** Cached license details for the Settings/Pro status UI (offline-safe). */
-export async function getProLicenseInfo(): Promise<ProLicenseInfo> {
-  const lic = await readLicense();
-  const isPro = isProActive(lic);
-  return {
-    isPro,
-    tier: !isPro ? null : lic.expiry ? 'yearly' : 'lifetime',
-    expiry: lic.expiry,
-    verifiedAt: lic.verifiedAt,
-  };
+export interface ProEntitlementProvider {
+  readActive(): Promise<boolean>;
+  getInfo(): Promise<ProLicenseInfo>;
+  checkStatus(): Promise<boolean>;
+  activate(rawCredential: string): Promise<PersonalMeshActivationResult>;
+  clearForTesting(): Promise<void>;
 }
 
-/** Returns the cached entitlement immediately and revalidates in the background. */
-export async function checkProStatus(): Promise<boolean> {
-  const lic = await readLicense();
-  revalidatePro().catch(() => {});
-  return isProActive(lic);
+const UNAVAILABLE_PROVIDER: ProEntitlementProvider = {
+  readActive: async () => false,
+  getInfo: async () => ({
+    isPro: false,
+    tier: null,
+    expiry: null,
+    verifiedAt: 0,
+  }),
+  checkStatus: async () => false,
+  activate: async () => ({ ok: false, reason: 'registration_failed' }),
+  clearForTesting: async () => undefined,
+};
+
+let provider: ProEntitlementProvider = UNAVAILABLE_PROVIDER;
+
+export function registerProEntitlementProvider(
+  nextProvider: ProEntitlementProvider,
+): void {
+  provider = nextProvider;
 }
 
-/**
- * Re-check the stored key with Keygen when online. The revocation/expiry path:
- * a revoked or expired key flips the cached flag to false and locks the app.
- * Network errors are swallowed so offline users keep cached access.
- */
-export async function revalidatePro(): Promise<void> {
-  const lic = await readLicense();
-  if (!lic.key) return; // nothing to revalidate (legacy/empty cache)
-  let fp: string;
-  try {
-    fp = await getDeviceFingerprint();
-  } catch {
-    return;
-  }
-  try {
-    const r = await validateKey(lic.key, fp);
-    if (r.valid && r.code === 'VALID') {
-      await writeLicense({
-        isPro: true,
-        key: lic.key,
-        licenseId: r.license?.id ?? lic.licenseId,
-        expiry: r.license?.expiry ?? null,
-        verifiedAt: Date.now(),
-      });
-      setProInStore(true);
-    } else if (REVOKED_CODES.includes(r.code)) {
-      await writeLicense({
-        ...lic,
-        isPro: false,
-        expiry: r.license?.expiry ?? lic.expiry,
-        verifiedAt: Date.now(),
-      });
-      setProInStore(false);
-    } else if (
-      (NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') &&
-      r.license
-    ) {
-      // Valid key but this device lost its slot. A full license replaces the
-      // least recently seen machine before claiming this device.
-      const act = await activateWithAutomaticReplacement(
-        lic.key,
-        r.license.id,
-        { fingerprint: fp, platform: getPlatformTag() },
-      );
-      await writeLicense({
-        isPro: act.ok,
-        key: lic.key,
-        licenseId: r.license.id,
-        expiry: r.license.expiry,
-        verifiedAt: Date.now(),
-      });
-      setProInStore(act.ok);
-    }
-    // UNKNOWN: leave the cached state untouched.
-  } catch (e) {
-    if (e instanceof KeygenNetworkError) return; // offline — keep cached access
-    logger.error(
-      `[Pro] revalidate error: ${e instanceof Error ? e.message : String(e)}`,
-    );
-  }
+export function readProFromKeychain(): Promise<boolean> {
+  return provider.readActive();
 }
 
-/**
- * Activate a license key on this device: validate, claim a device slot if
- * needed (Keygen enforces the 5-device cap), and cache the entitlement.
- */
-export async function activateProByKey(
-  rawKey: string,
-): Promise<ActivateResult> {
-  // Keygen license keys never contain whitespace. Email clients can insert a
-  // line break when a key is copied from a wrapped message, so normalize the
-  // pasted credential before validation instead of submitting a different key.
-  const key = rawKey.replace(/\s+/g, '');
-  if (!key) return { ok: false, reason: 'invalid' };
-  let fp: string;
-  try {
-    fp = await getDeviceFingerprint();
-  } catch {
-    return { ok: false, reason: 'network' };
-  }
-
-  let r;
-  try {
-    r = await validateKey(key, fp);
-  } catch {
-    return { ok: false, reason: 'network' };
-  }
-  logger.log(
-    `[Pro] activation validation code=${r.code} valid=${r.valid} license=${
-      r.license ? 'present' : 'absent'
-    }`,
-  );
-
-  // Already activated on this device.
-  if (r.valid && r.code === 'VALID' && r.license) {
-    await writeLicense({
-      isPro: true,
-      key,
-      licenseId: r.license.id,
-      expiry: r.license.expiry,
-      verifiedAt: Date.now(),
-    });
-    setProInStore(true);
-    return { ok: true };
-  }
-  if (REVOKED_CODES.includes(r.code) || !r.license)
-    return { ok: false, reason: 'invalid' };
-
-  // Valid key, this device not yet activated. If all five slots are occupied,
-  // remove the least recently seen machine and claim its slot.
-  if (NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') {
-    let act;
-    try {
-      act = await activateWithAutomaticReplacement(key, r.license.id, {
-        fingerprint: fp,
-        platform: getPlatformTag(),
-      });
-    } catch {
-      return { ok: false, reason: 'network' };
-    }
-    if (act.limitReached) return { ok: false, reason: 'limit' };
-    if (!act.ok) return { ok: false, reason: 'invalid' };
-    await writeLicense({
-      isPro: true,
-      key,
-      licenseId: r.license.id,
-      expiry: r.license.expiry,
-      verifiedAt: Date.now(),
-    });
-    setProInStore(true);
-    return { ok: true };
-  }
-  return { ok: false, reason: 'invalid' };
+export function getProLicenseInfo(): Promise<ProLicenseInfo> {
+  return provider.getInfo();
 }
 
-/** Devices registered on the active license (for the device-management screen). */
-export async function listProDevices(): Promise<KeygenMachine[]> {
-  const lic = await readLicense();
-  if (!lic.key || !lic.licenseId) return [];
-  return listMachines(lic.key, lic.licenseId);
+export function checkProStatus(): Promise<boolean> {
+  return provider.checkStatus();
 }
 
-/** Free a device slot. */
-export async function deactivateProDevice(machineId: string): Promise<boolean> {
-  const lic = await readLicense();
-  if (!lic.key) return false;
-  try {
-    return await deactivateMachine(lic.key, machineId);
-  } catch {
-    return false;
-  }
+export function activateProByKey(
+  rawCredential: string,
+): Promise<PersonalMeshActivationResult> {
+  return provider.activate(rawCredential);
 }
 
-export async function clearProForTesting(): Promise<void> {
-  await Keychain.resetGenericPassword({ service: KEYCHAIN_SERVICE });
-  setProInStore(false);
+export function clearProForTesting(): Promise<void> {
+  return provider.clearForTesting();
 }
