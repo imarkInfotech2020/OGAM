@@ -17,6 +17,7 @@ import type {
   MembershipRevocationSnapshot,
   Message,
   DeviceCap,
+  SyncDiscoverabilityHealthInput,
   SyncEngineOptions,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
@@ -46,6 +47,7 @@ export interface NativeSyncCallbacks {
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
   onDiscoveryStateChanged?: (snapshot: DiscoveryScanSnapshot) => void;
+  onHealthChanged?: (health: SyncDiscoverabilityHealthInput) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
   onMessage?: (deviceId: string, message: Message) => void;
   deviceCap?: DeviceCap;
@@ -54,6 +56,7 @@ export interface NativeSyncCallbacks {
 export interface NativeSync {
   readonly localDevice: DeviceInfo;
   readonly availableRouteIds: readonly string[];
+  getRuntimeHealth(): SyncDiscoverabilityHealthInput;
   start(): Promise<void>;
   stop(): Promise<void>;
   rescan(): Promise<void>;
@@ -64,6 +67,7 @@ export interface NativeSync {
   dismissPairingAttempt(attemptId: string): boolean;
   forget(deviceId: string): Promise<MembershipRevocationSnapshot | undefined>;
   retryMembershipRevocation(device: DeviceInfo): Promise<boolean>;
+  dismissMembershipRevocation(revocationId: string): Promise<boolean>;
   listMembershipRevocations(): MembershipRevocationSnapshot[];
   reconnect(device: DeviceInfo, sharedSecret: string): Promise<void>;
   disconnect(deviceId: string): boolean;
@@ -77,6 +81,7 @@ export function createNativeSync(
   localDevice: DeviceInfo,
   cbs: NativeSyncCallbacks,
 ): NativeSync {
+  const discoveredDeviceIds = new Set<string>();
   let proximity: IosProximityAdapter | null = null;
   if (Platform.OS === 'ios') {
     try {
@@ -118,6 +123,7 @@ export function createNativeSync(
       : undefined,
     onRouteError: (routeId, error) => {
       logger.warn(`[SYNC] ${routeId} transport: ${error.message}`);
+      publishHealth();
     },
   });
   const zeroconf = new Zeroconf() as unknown as RnZeroconf;
@@ -127,36 +133,71 @@ export function createNativeSync(
     localDevice,
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
     getMembershipId: cbs.getMembershipId,
-    onDiscovered: cbs.onDiscovered,
-    onLost: cbs.onLost,
-    onDiscoveryStateChanged: cbs.onDiscoveryStateChanged,
+    onDiscovered: device => {
+      discoveredDeviceIds.add(device.id);
+      cbs.onDiscovered?.(device);
+      publishHealth();
+    },
+    onLost: deviceId => {
+      discoveredDeviceIds.delete(deviceId);
+      cbs.onLost?.(deviceId);
+      publishHealth();
+    },
+    onDiscoveryStateChanged: snapshot => {
+      cbs.onDiscoveryStateChanged?.(snapshot);
+      publishHealth();
+    },
     additionalSources: proximity
       ? [{ id: 'proximity', service: proximity.discovery }]
       : undefined,
     onSourceError: (sourceId, error) => {
       logger.warn(`[SYNC] ${sourceId} discovery: ${error.message}`);
+      publishHealth();
     },
   });
   let active = false;
   let rescanTask: Promise<void> | null = null;
 
+  function healthSnapshot(): SyncDiscoverabilityHealthInput {
+    return {
+      transport: transport.getTransportHealthSnapshot?.(),
+      discovery: orchestrator.getDiscoveryHealthSnapshot(),
+      scan: orchestrator.getDiscoveryState(),
+      peerCount: discoveredDeviceIds.size,
+    };
+  }
+
+  function publishHealth(): void {
+    cbs.onHealthChanged?.(healthSnapshot());
+  }
+
   return {
     localDevice,
     availableRouteIds: proximity ? ['lan', 'proximity'] : ['lan'],
+    getRuntimeHealth: healthSnapshot,
     async start() {
-      await engine.start(0); // ephemeral port
-      localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
-      await orchestrator.start();
-      active = true;
-      logger.log(
-        `[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`,
-      );
+      publishHealth();
+      try {
+        await engine.start(0); // ephemeral port
+        localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
+        await orchestrator.start();
+        active = true;
+        publishHealth();
+        logger.log(
+          `[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`,
+        );
+      } catch (error) {
+        publishHealth();
+        throw error;
+      }
     },
     async stop() {
       active = false;
       await rescanTask?.catch(() => undefined);
       await orchestrator.stop();
       await engine.stop();
+      discoveredDeviceIds.clear();
+      publishHealth();
       logger.log('[SYNC] stopped');
     },
     async rescan() {
@@ -170,6 +211,7 @@ export function createNativeSync(
         await rescanTask;
       } finally {
         rescanTask = null;
+        publishHealth();
       }
     },
     async renameLocalDevice(name: string) {
@@ -185,6 +227,8 @@ export function createNativeSync(
     forget: deviceId => engine.forget(deviceId),
     retryMembershipRevocation: device =>
       engine.retryMembershipRevocation(device),
+    dismissMembershipRevocation: revocationId =>
+      engine.dismissMembershipRevocation(revocationId),
     listMembershipRevocations: () => engine.listMembershipRevocations(),
     reconnect: (device, sharedSecret) =>
       engine.reconnect(device, sharedSecret, cbs.getMembershipId?.(device.id)),

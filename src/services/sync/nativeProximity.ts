@@ -8,7 +8,10 @@ import { Buffer } from 'buffer';
 import type {
   DeviceInfo,
   DiscoveredDevice,
+  SyncDiscoveryHealthSnapshot,
+  SyncHealthFact,
   SyncConnection,
+  SyncTransportHealthSnapshot,
   TransportBridge,
 } from '@offgrid/sync';
 import type { DiscoveryService } from '@offgrid/sync';
@@ -162,6 +165,8 @@ export class IosProximityAdapter implements TransportBridge {
   private readonly pendingData = new Map<string, Uint8Array[]>();
   private started = false;
   private startTask: Promise<void> | null = null;
+  private runtimeHealth: SyncHealthFact = { state: 'idle' };
+  private browseHealth: SyncHealthFact = { state: 'idle' };
   private inboundConnection: ((connection: SyncConnection) => void) | null =
     null;
   private foundListener: ((device: DiscoveredDevice) => void) | null = null;
@@ -173,7 +178,19 @@ export class IosProximityAdapter implements TransportBridge {
     start: () => this.ensureStarted(),
     rescan: async () => {
       await this.ensureStarted();
-      await this.native.rescan();
+      this.browseHealth = { state: 'starting', updatedAt: Date.now() };
+      try {
+        await this.native.rescan();
+        this.browseHealth = { state: 'ready', updatedAt: Date.now() };
+      } catch (cause) {
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        this.browseHealth = {
+          state: 'failed',
+          error: error.message,
+          updatedAt: Date.now(),
+        };
+        throw error;
+      }
     },
     advertise: () => this.ensureStarted(),
     stopAdvertising: () => Promise.resolve(),
@@ -185,6 +202,7 @@ export class IosProximityAdapter implements TransportBridge {
       this.lostListener = listener;
     },
     stop: () => Promise.resolve(),
+    getDiscoveryHealthSnapshot: () => this.discoveryHealthSnapshot(),
   };
 
   canConnect(remote: DeviceInfo): boolean {
@@ -220,6 +238,8 @@ export class IosProximityAdapter implements TransportBridge {
     await this.native.stop();
     this.started = false;
     this.startTask = null;
+    this.runtimeHealth = { state: 'stopped', updatedAt: Date.now() };
+    this.browseHealth = { state: 'stopped', updatedAt: Date.now() };
     this.peers.clear();
     this.discoveredDevices.clear();
     for (const connection of this.connections.values()) {
@@ -237,16 +257,35 @@ export class IosProximityAdapter implements TransportBridge {
     await this.native.updateDevice(this.localDevice);
   }
 
+  getTransportHealthSnapshot(): SyncTransportHealthSnapshot {
+    return {
+      listener: { ...this.runtimeHealth },
+      routes: [{ id: 'proximity', ...this.runtimeHealth }],
+    };
+  }
+
   private ensureStarted(): Promise<void> {
     if (this.started) return Promise.resolve();
     if (this.startTask) return this.startTask;
     this.attachListeners();
+    this.runtimeHealth = { state: 'starting', updatedAt: Date.now() };
+    this.browseHealth = { state: 'starting', updatedAt: Date.now() };
     this.startTask = this.native
       .start(this.localDevice)
       .then(() => {
         this.started = true;
+        const ready = { state: 'ready' as const, updatedAt: Date.now() };
+        this.runtimeHealth = ready;
+        this.browseHealth = ready;
       })
       .catch(error => {
+        const failure = {
+          state: 'failed' as const,
+          error: error instanceof Error ? error.message : String(error),
+          updatedAt: Date.now(),
+        };
+        this.runtimeHealth = failure;
+        this.browseHealth = failure;
         for (const subscription of this.subscriptions.splice(0)) {
           subscription.remove();
         }
@@ -256,6 +295,19 @@ export class IosProximityAdapter implements TransportBridge {
         this.startTask = null;
       });
     return this.startTask;
+  }
+
+  private discoveryHealthSnapshot(): SyncDiscoveryHealthSnapshot {
+    return {
+      routes: [
+        {
+          id: 'proximity',
+          browse: { ...this.browseHealth },
+          advertise: { ...this.runtimeHealth },
+          peerCount: this.peers.size,
+        },
+      ],
+    };
   }
 
   private attachListeners(): void {
