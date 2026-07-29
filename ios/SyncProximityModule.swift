@@ -339,9 +339,10 @@ final class SyncProximityModule: RCTEventEmitter {
     record.timeout = nil
     record.resolve = nil
     record.reject = nil
-    record.session.disconnect()
+    record.session.delegate = nil
     sessionsById.removeValue(forKey: record.id)
     sessionsByObject.removeValue(forKey: ObjectIdentifier(record.session))
+    record.session.disconnect()
     if notify {
       emit(
         "SyncProximityConnectionClosed",
@@ -513,11 +514,13 @@ extension SyncProximityModule: MCSessionDelegate {
     peer peerID: MCPeerID,
     didChange state: MCSessionState
   ) {
+    let sessionIdentifier = ObjectIdentifier(session)
+    let peerDisplayName = peerID.displayName
     stateQueue.async { [weak self] in
       guard
         let self,
-        let record = sessionsByObject[ObjectIdentifier(session)],
-        record.peer == peerID
+        let record = sessionsByObject[sessionIdentifier],
+        record.peer.displayName == peerDisplayName
       else {
         return
       }
@@ -558,11 +561,14 @@ extension SyncProximityModule: MCSessionDelegate {
     didReceive data: Data,
     fromPeer peerID: MCPeerID
   ) {
+    let sessionIdentifier = ObjectIdentifier(session)
+    let peerDisplayName = peerID.displayName
+    let receivedData = Data(data)
     stateQueue.async { [weak self] in
       guard
         let self,
-        let record = sessionsByObject[ObjectIdentifier(session)],
-        record.peer == peerID
+        let record = sessionsByObject[sessionIdentifier],
+        record.peer.displayName == peerDisplayName
       else {
         return
       }
@@ -571,7 +577,7 @@ extension SyncProximityModule: MCSessionDelegate {
         [
           "connectionId": record.id,
           "deviceId": record.remote.id,
-          "data": data.base64EncodedString(),
+          "data": receivedData.base64EncodedString(),
         ]
       )
     }
