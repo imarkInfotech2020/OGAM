@@ -18,6 +18,7 @@ export interface BuildSyncEngineArgs {
   tcpModule: RnTcpModule;
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   getSharedSecret?: SyncEngineOptions['getSharedSecret'];
+  pairingEntitlement?: SyncEngineOptions['pairingEntitlement'];
   onPaired?: SyncEngineOptions['onPaired'];
   pairingPersistence?: SyncEngineOptions['pairingPersistence'];
   onPairingFailed?: SyncEngineOptions['onPairingFailed'];
@@ -59,6 +60,7 @@ export function buildSyncEngine(args: BuildSyncEngineArgs): {
     transport,
     getPassphrase: args.getPassphrase,
     getSharedSecret: args.getSharedSecret,
+    pairingEntitlement: args.pairingEntitlement,
     onPaired: args.onPaired,
     pairingPersistence: args.pairingPersistence,
     onPairingFailed: args.onPairingFailed,

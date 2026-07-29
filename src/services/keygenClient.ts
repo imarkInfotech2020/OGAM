@@ -59,6 +59,8 @@ export interface KeygenMachineMetadata {
   syncDeviceId?: string;
   membershipId?: string;
   deviceName?: string;
+  /** Factual authenticated pairing activity persisted with the provider registration. */
+  lastActiveAt?: string;
 }
 
 export interface KeygenMachineRegistration {

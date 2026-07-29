@@ -33,6 +33,7 @@ export interface NativeSyncCallbacks {
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
   getMembershipId?: (deviceId: string) => string | undefined;
+  pairingEntitlement?: SyncEngineOptions['pairingEntitlement'];
   pairingPersistence?: PairingPersistence;
   membershipPersistence?: MembershipRevocationPersistence;
   onMembershipRevocationChanged?: (
@@ -65,7 +66,10 @@ export interface NativeSync {
   cancelPairing(deviceId: string): Promise<boolean>;
   listPairingAttempts(): PairingAttemptSnapshot[];
   dismissPairingAttempt(attemptId: string): boolean;
-  forget(deviceId: string): Promise<MembershipRevocationSnapshot | undefined>;
+  forget(
+    deviceId: string,
+    expectedMembershipId?: string,
+  ): Promise<MembershipRevocationSnapshot | undefined>;
   retryMembershipRevocation(device: DeviceInfo): Promise<boolean>;
   dismissMembershipRevocation(revocationId: string): Promise<boolean>;
   listMembershipRevocations(): MembershipRevocationSnapshot[];
@@ -99,6 +103,7 @@ export function createNativeSync(
     tcpModule: TcpSocket as unknown as RnTcpModule,
     getPassphrase: cbs.getPassphrase,
     getSharedSecret: cbs.getSharedSecret,
+    pairingEntitlement: cbs.pairingEntitlement,
     pairingPersistence: cbs.pairingPersistence,
     onPaired: cbs.onPaired,
     onPairingFailed: cbs.onPairingFailed,
@@ -224,7 +229,8 @@ export function createNativeSync(
     cancelPairing: deviceId => engine.cancelPairing(deviceId),
     listPairingAttempts: () => engine.listPairingAttempts(),
     dismissPairingAttempt: attemptId => engine.dismissPairingAttempt(attemptId),
-    forget: deviceId => engine.forget(deviceId),
+    forget: (deviceId, expectedMembershipId) =>
+      engine.forget(deviceId, expectedMembershipId),
     retryMembershipRevocation: device =>
       engine.retryMembershipRevocation(device),
     dismissMembershipRevocation: revocationId =>
