@@ -23,7 +23,10 @@ function emitChange(): void {
   for (const l of listeners) l();
 }
 
-export function registerSlot(name: string, component: ComponentType<any>): void {
+export function registerSlot(
+  name: string,
+  component: ComponentType<any>,
+): void {
   if (slots[name] === component) return; // no-op re-register (dev Fast Refresh)
   slots[name] = component;
   emitChange();
@@ -36,7 +39,7 @@ export function getSlot(name: string): ComponentType<any> | undefined {
 /** Reactive read of a slot — re-renders when the slot is (de)registered. */
 export function useSlot(name: string): ComponentType<any> | undefined {
   return useSyncExternalStore(
-    (onStoreChange) => {
+    onStoreChange => {
       listeners.add(onStoreChange);
       return () => listeners.delete(onStoreChange);
     },
@@ -58,6 +61,8 @@ export const SLOTS = {
   appRoot: 'app.root',
   /** Optional first-class Home entry point for configuring cross-device Sync. */
   homeSyncCard: 'home.syncCard',
+  /** Optional Home-header entry point for actionable Pro notifications. */
+  homeNotificationsButton: 'home.notificationsButton',
   /** Replaces the chat input row when audio (voice) interface mode is active. */
   chatInputAudioMode: 'chatInput.audioMode',
   /** Voice-mode empty-state hero (big "tap to speak" mic) shown in the message
