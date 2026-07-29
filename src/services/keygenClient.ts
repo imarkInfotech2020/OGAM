@@ -128,20 +128,40 @@ export async function validateKey(
   key: string,
   fingerprint: string,
 ): Promise<ValidateResult> {
-  const res = await request('/licenses/actions/validate-key', {
-    method: 'POST',
-    headers: { 'Content-Type': JSON_API, Accept: JSON_API },
-    body: JSON.stringify({
-      meta: { key, scope: { product: KEYGEN_PRODUCT_ID, fingerprint } },
-    }),
-  });
+  const startedAt = Date.now();
+  logger.log('[Keygen] validate-key request method=POST');
+  let res: Response;
+  try {
+    res = await request('/licenses/actions/validate-key', {
+      method: 'POST',
+      headers: { 'Content-Type': JSON_API, Accept: JSON_API },
+      body: JSON.stringify({
+        meta: { key, scope: { product: KEYGEN_PRODUCT_ID, fingerprint } },
+      }),
+    });
+  } catch (error) {
+    logger.warn(
+      `[Keygen] validate-key network failure durationMs=${
+        Date.now() - startedAt
+      } error=${error instanceof Error ? error.name : 'UnknownError'}`,
+    );
+    throw error;
+  }
   const body = objectValue(await res.json().catch(() => ({}))) ?? {};
   const meta = objectValue(body.meta) ?? {};
-  return {
+  const result: ValidateResult = {
     valid: meta.valid === true,
     code: (stringValue(meta.code) ?? 'UNKNOWN') as ValidationCode,
     license: toLicense(body.data),
   };
+  logger.log(
+    `[Keygen] validate-key response status=${res.status} ok=${res.ok} code=${
+      result.code
+    } valid=${result.valid} license=${
+      result.license ? 'present' : 'absent'
+    } durationMs=${Date.now() - startedAt}`,
+  );
+  return result;
 }
 
 /** Register this device as a machine on the license. Enforces the device cap. */

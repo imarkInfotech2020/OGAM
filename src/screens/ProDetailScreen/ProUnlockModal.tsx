@@ -190,6 +190,7 @@ export const ProUnlockModal: React.FC<Props> = ({
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
+            multiline
             value={licenseKey}
             onChangeText={t => {
               setLicenseKey(t);
