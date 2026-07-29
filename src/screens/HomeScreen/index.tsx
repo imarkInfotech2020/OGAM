@@ -30,6 +30,7 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
+import { useOpenSync } from '../../hooks/useOpenSync';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -45,6 +46,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const styles = useThemedStyles(createStyles);
   const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
   const HomeNotificationsButton = useSlot(SLOTS.homeNotificationsButton);
+  const { isSyncUnlocked, openSync } = useOpenSync();
   const { sheetVisible, openSheet, closeSheet, showIcon } =
     useOnboardingSheet();
 
@@ -232,9 +234,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           {SyncHomeCard ? (
             <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
               <SyncHomeCard
-                onOpen={() => navigation.navigate('Sync')}
+                isUnlocked={isSyncUnlocked}
+                onOpen={openSync}
                 onOpenClipboard={() =>
-                  navigation.navigate('Clipboard' as never)
+                  isSyncUnlocked
+                    ? navigation.navigate('Clipboard' as never)
+                    : navigation.navigate('ProDetail')
                 }
               />
             </AnimatedEntry>
