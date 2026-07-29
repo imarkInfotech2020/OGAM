@@ -12,6 +12,7 @@ import ai.offgridmobile.pdf.PDFExtractorPackage
 import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
 import ai.offgridmobile.clipboard.SyncClipboardPackage
+import ai.offgridmobile.directory.SyncDirectorySourcePackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -27,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
           add(LiteRTPackage())
           add(DeviceMemoryPackage())
           add(SyncClipboardPackage())
+          add(SyncDirectorySourcePackage())
         },
     )
   }

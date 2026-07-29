@@ -25,6 +25,8 @@
 		0D2B00022F45000100C11A00 /* SyncProximityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B00042F45000100C11A00 /* SyncProximityModule.swift */; };
 		0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */; };
 		0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */; };
+		0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */; };
+		0F4D00022F47000100C11A00 /* SyncDirectorySourceModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		553E18B7CCC207C0885499E4 /* libPods-OffgridMobileTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D1B1541769AADA563D6CC44E /* libPods-OffgridMobileTests.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
@@ -62,6 +64,8 @@
 		0D2B00042F45000100C11A00 /* SyncProximityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProximityModule.swift; sourceTree = "<group>"; };
 		0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncScreenshotModule.m; sourceTree = "<group>"; };
 		0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScreenshotModule.swift; sourceTree = "<group>"; };
+		0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncDirectorySourceModule.m; sourceTree = "<group>"; };
+		0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDirectorySourceModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* OffgridMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OffgridMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OffgridMobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OffgridMobile/Info.plist; sourceTree = "<group>"; };
@@ -116,6 +120,8 @@
 				0D2B00042F45000100C11A00 /* SyncProximityModule.swift */,
 				0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */,
 				0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */,
+				0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */,
+				0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */,
 				04B9D6412F38EC7700F1A435 /* DownloadManagerModule.swift */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				761780EC2CA45674006654EE /* AppDelegate.swift */,
@@ -408,6 +414,8 @@
 				0D2B00022F45000100C11A00 /* SyncProximityModule.swift in Sources */,
 				0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */,
 				0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */,
+				0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */,
+				0F4D00022F47000100C11A00 /* SyncDirectorySourceModule.swift in Sources */,
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
