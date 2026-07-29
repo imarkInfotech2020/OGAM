@@ -28,7 +28,9 @@ const KEYCHAIN_SERVICE = 'off-grid-pro-license';
 export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
 export const PRO_DEVICE_LIMIT = 5;
 
-export type ActivateResult = { ok: true } | { ok: false; reason: 'invalid' | 'limit' | 'network' };
+export type ActivateResult =
+  | { ok: true }
+  | { ok: false; reason: 'invalid' | 'limit' | 'network' };
 
 type ProLicense = {
   isPro: boolean;
@@ -38,10 +40,26 @@ type ProLicense = {
   verifiedAt: number;
 };
 
-const EMPTY: ProLicense = { isPro: false, key: null, licenseId: null, expiry: null, verifiedAt: 0 };
+const EMPTY: ProLicense = {
+  isPro: false,
+  key: null,
+  licenseId: null,
+  expiry: null,
+  verifiedAt: 0,
+};
 
-const REVOKED_CODES = ['EXPIRED', 'SUSPENDED', 'BANNED', 'OVERDUE', 'NOT_FOUND'];
-const NEEDS_ACTIVATION = ['NO_MACHINE', 'NO_MACHINES', 'FINGERPRINT_SCOPE_MISMATCH'];
+const REVOKED_CODES = [
+  'EXPIRED',
+  'SUSPENDED',
+  'BANNED',
+  'OVERDUE',
+  'NOT_FOUND',
+];
+const NEEDS_ACTIVATION = [
+  'NO_MACHINE',
+  'NO_MACHINES',
+  'FINGERPRINT_SCOPE_MISMATCH',
+];
 
 function lastSeenTimestamp(machine: KeygenMachine): number {
   if (!machine.lastSeen) return Number.NEGATIVE_INFINITY;
@@ -59,9 +77,10 @@ function selectReplacementMachine(
   currentFingerprint: string,
 ): KeygenMachine | undefined {
   return machines
-    .filter((machine) => machine.fingerprint !== currentFingerprint)
+    .filter(machine => machine.fingerprint !== currentFingerprint)
     .sort((left, right) => {
-      const timestampDifference = lastSeenTimestamp(left) - lastSeenTimestamp(right);
+      const timestampDifference =
+        lastSeenTimestamp(left) - lastSeenTimestamp(right);
       return timestampDifference || left.id.localeCompare(right.id);
     })[0];
 }
@@ -104,24 +123,48 @@ async function writeLicense(lic: ProLicense): Promise<void> {
       accessible: Keychain.ACCESSIBLE.AFTER_FIRST_UNLOCK,
     });
   } catch (e) {
-    logger.error(`[Pro] writeLicense failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.error(
+      `[Pro] writeLicense failed: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
   }
+}
+
+function parseLicenseCredential(value: unknown): ProLicense {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('The stored Pro license is malformed.');
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    isPro: record.isPro === true,
+    key: typeof record.key === 'string' ? record.key : null,
+    licenseId: typeof record.licenseId === 'string' ? record.licenseId : null,
+    expiry: typeof record.expiry === 'string' ? record.expiry : null,
+    verifiedAt:
+      typeof record.verifiedAt === 'number' &&
+      Number.isFinite(record.verifiedAt) &&
+      record.verifiedAt >= 0
+        ? record.verifiedAt
+        : 0,
+  };
+}
+
+async function readLicenseStrict(): Promise<ProLicense> {
+  const result = await Keychain.getGenericPassword({
+    service: KEYCHAIN_SERVICE,
+  });
+  if (!result) return EMPTY;
+  return parseLicenseCredential(JSON.parse(result.password));
 }
 
 async function readLicense(): Promise<ProLicense> {
   try {
-    const res = await Keychain.getGenericPassword({ service: KEYCHAIN_SERVICE });
-    if (!res) return EMPTY;
-    const p = JSON.parse(res.password);
-    return {
-      isPro: p.isPro ?? false,
-      key: p.key ?? null,
-      licenseId: p.licenseId ?? null,
-      expiry: p.expiry ?? null,
-      verifiedAt: p.verifiedAt ?? 0,
-    };
+    return await readLicenseStrict();
   } catch (e) {
-    logger.error(`[Pro] readLicense failed: ${e instanceof Error ? e.message : String(e)}`);
+    logger.error(
+      `[Pro] readLicense failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return EMPTY;
   }
 }
@@ -138,7 +181,10 @@ export type ProTier = 'lifetime' | 'yearly';
  * whether a "Manage subscription" affordance applies). Consumers render from these
  * flags instead of branching on the concrete tier — add a tier here, touch no caller.
  */
-export const PRO_TIER_META: Record<ProTier, { label: string; renews: boolean }> = {
+export const PRO_TIER_META: Record<
+  ProTier,
+  { label: string; renews: boolean }
+> = {
   lifetime: { label: 'Lifetime', renews: false },
   yearly: { label: 'Yearly', renews: true },
 };
@@ -195,9 +241,17 @@ export async function revalidatePro(): Promise<void> {
       });
       setProInStore(true);
     } else if (REVOKED_CODES.includes(r.code)) {
-      await writeLicense({ ...lic, isPro: false, expiry: r.license?.expiry ?? lic.expiry, verifiedAt: Date.now() });
+      await writeLicense({
+        ...lic,
+        isPro: false,
+        expiry: r.license?.expiry ?? lic.expiry,
+        verifiedAt: Date.now(),
+      });
       setProInStore(false);
-    } else if ((NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') && r.license) {
+    } else if (
+      (NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') &&
+      r.license
+    ) {
       // Valid key but this device lost its slot. A full license replaces the
       // least recently seen machine before claiming this device.
       const act = await activateWithAutomaticReplacement(
@@ -217,7 +271,9 @@ export async function revalidatePro(): Promise<void> {
     // UNKNOWN: leave the cached state untouched.
   } catch (e) {
     if (e instanceof KeygenNetworkError) return; // offline — keep cached access
-    logger.error(`[Pro] revalidate error: ${e instanceof Error ? e.message : String(e)}`);
+    logger.error(
+      `[Pro] revalidate error: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 
@@ -225,7 +281,9 @@ export async function revalidatePro(): Promise<void> {
  * Activate a license key on this device: validate, claim a device slot if
  * needed (Keygen enforces the 5-device cap), and cache the entitlement.
  */
-export async function activateProByKey(rawKey: string): Promise<ActivateResult> {
+export async function activateProByKey(
+  rawKey: string,
+): Promise<ActivateResult> {
   const key = rawKey.trim();
   if (!key) return { ok: false, reason: 'invalid' };
   let fp: string;
@@ -244,28 +302,40 @@ export async function activateProByKey(rawKey: string): Promise<ActivateResult> 
 
   // Already activated on this device.
   if (r.valid && r.code === 'VALID' && r.license) {
-    await writeLicense({ isPro: true, key, licenseId: r.license.id, expiry: r.license.expiry, verifiedAt: Date.now() });
+    await writeLicense({
+      isPro: true,
+      key,
+      licenseId: r.license.id,
+      expiry: r.license.expiry,
+      verifiedAt: Date.now(),
+    });
     setProInStore(true);
     return { ok: true };
   }
-  if (REVOKED_CODES.includes(r.code) || !r.license) return { ok: false, reason: 'invalid' };
+  if (REVOKED_CODES.includes(r.code) || !r.license)
+    return { ok: false, reason: 'invalid' };
 
   // Valid key, this device not yet activated. If all five slots are occupied,
   // remove the least recently seen machine and claim its slot.
   if (NEEDS_ACTIVATION.includes(r.code) || r.code === 'TOO_MANY_MACHINES') {
     let act;
     try {
-      act = await activateWithAutomaticReplacement(
-        key,
-        r.license.id,
-        { fingerprint: fp, platform: getPlatformTag() },
-      );
+      act = await activateWithAutomaticReplacement(key, r.license.id, {
+        fingerprint: fp,
+        platform: getPlatformTag(),
+      });
     } catch {
       return { ok: false, reason: 'network' };
     }
     if (act.limitReached) return { ok: false, reason: 'limit' };
     if (!act.ok) return { ok: false, reason: 'invalid' };
-    await writeLicense({ isPro: true, key, licenseId: r.license.id, expiry: r.license.expiry, verifiedAt: Date.now() });
+    await writeLicense({
+      isPro: true,
+      key,
+      licenseId: r.license.id,
+      expiry: r.license.expiry,
+      verifiedAt: Date.now(),
+    });
     setProInStore(true);
     return { ok: true };
   }

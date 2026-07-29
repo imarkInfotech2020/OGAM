@@ -45,11 +45,60 @@ export interface KeygenMachine {
   fingerprint: string;
   platform: string | null;
   name: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+  updatedAt: string | null;
+  /** Factual Keygen activity. Registration time is deliberately not substituted. */
+  lastActiveAt: string | null;
+  /** Legacy presentation/replacement field. Prefer lastActiveAt for mesh policy. */
   lastSeen: string | null;
+}
+
+export interface KeygenMachineMetadata {
+  platform: string;
+  syncDeviceId?: string;
+  membershipId?: string;
+  deviceName?: string;
+}
+
+export interface KeygenMachineRegistration {
+  fingerprint: string;
+  platform: string;
+  metadata?: KeygenMachineMetadata;
+}
+
+export interface ActivateMachineResult {
+  ok: boolean;
+  limitReached: boolean;
+  machine?: KeygenMachine;
 }
 
 /** Raised on a network/transport failure (offline), never on a 4xx from Keygen. */
 export class KeygenNetworkError extends Error {}
+
+function safeResourceId(value: string, label: string): string {
+  const id = value.trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+    throw new Error(`Invalid Keygen ${label}.`);
+  }
+  return id;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function sanitizedProviderError(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, 1000);
+}
 
 async function request(path: string, init: RequestInit): Promise<Response> {
   try {
@@ -59,18 +108,24 @@ async function request(path: string, init: RequestInit): Promise<Response> {
   }
 }
 
-function toLicense(data: any): KeygenLicense | null {
-  if (!data || !data.id) return null;
+function toLicense(data: unknown): KeygenLicense | null {
+  const resource = objectValue(data);
+  const id = stringValue(resource?.id);
+  if (!resource || !id) return null;
+  const attributes = objectValue(resource.attributes) ?? {};
   return {
-    id: data.id,
-    expiry: data.attributes?.expiry ?? null,
-    metadata: data.attributes?.metadata ?? {},
-    name: data.attributes?.name ?? null,
+    id,
+    expiry: stringValue(attributes.expiry) ?? null,
+    metadata: objectValue(attributes.metadata) ?? {},
+    name: stringValue(attributes.name) ?? null,
   };
 }
 
 /** Validate a key, scoped to this product + device fingerprint. No auth needed. */
-export async function validateKey(key: string, fingerprint: string): Promise<ValidateResult> {
+export async function validateKey(
+  key: string,
+  fingerprint: string,
+): Promise<ValidateResult> {
   const res = await request('/licenses/actions/validate-key', {
     method: 'POST',
     headers: { 'Content-Type': JSON_API, Accept: JSON_API },
@@ -78,11 +133,12 @@ export async function validateKey(key: string, fingerprint: string): Promise<Val
       meta: { key, scope: { product: KEYGEN_PRODUCT_ID, fingerprint } },
     }),
   });
-  const body: any = await res.json().catch(() => ({}));
+  const body = objectValue(await res.json().catch(() => ({}))) ?? {};
+  const meta = objectValue(body.meta) ?? {};
   return {
-    valid: !!body?.meta?.valid,
-    code: (body?.meta?.code ?? 'UNKNOWN') as ValidationCode,
-    license: toLicense(body?.data),
+    valid: meta.valid === true,
+    code: (stringValue(meta.code) ?? 'UNKNOWN') as ValidationCode,
+    license: toLicense(body.data),
   };
 }
 
@@ -90,57 +146,112 @@ export async function validateKey(key: string, fingerprint: string): Promise<Val
 export async function activateMachine(
   key: string,
   licenseId: string,
-  device: { fingerprint: string; platform: string },
-): Promise<{ ok: boolean; limitReached: boolean }> {
+  device: KeygenMachineRegistration,
+): Promise<ActivateMachineResult> {
+  const admittedLicenseId = safeResourceId(licenseId, 'license ID');
   const { fingerprint, platform } = device;
+  const metadata = device.metadata ?? { platform };
   const res = await request('/machines', {
     method: 'POST',
-    headers: { 'Content-Type': JSON_API, Accept: JSON_API, Authorization: `License ${key}` },
+    headers: {
+      'Content-Type': JSON_API,
+      Accept: JSON_API,
+      Authorization: `License ${key}`,
+    },
     body: JSON.stringify({
       data: {
         type: 'machines',
-        attributes: { fingerprint, platform, metadata: { platform } },
-        relationships: { license: { data: { type: 'licenses', id: licenseId } } },
+        attributes: { fingerprint, platform, metadata },
+        relationships: {
+          license: { data: { type: 'licenses', id: admittedLicenseId } },
+        },
       },
     }),
   });
-  if (res.status === 201) return { ok: true, limitReached: false };
-  const body: any = await res.json().catch(() => ({}));
-  const errors: any[] = body?.errors ?? [];
+  const body = objectValue(await res.json().catch(() => ({}))) ?? {};
+  if (res.status === 201) {
+    return {
+      ok: true,
+      limitReached: false,
+      machine: toMachine(body.data),
+    };
+  }
+  const errors = Array.isArray(body.errors) ? body.errors : [];
   // Keygen returns 422 with a MACHINE_LIMIT_EXCEEDED code when over the cap.
   const limitReached =
     res.status === 422 &&
-    errors.some(
-      (e) =>
-        String(e?.code ?? '').includes('LIMIT') ||
-        String(e?.detail ?? '').toLowerCase().includes('machine limit'),
-    );
+    errors.some(error => {
+      const entry = objectValue(error);
+      return (
+        String(entry?.code ?? '').includes('LIMIT') ||
+        String(entry?.detail ?? '')
+          .toLowerCase()
+          .includes('machine limit')
+      );
+    });
   if (!limitReached) {
-    logger.error(`[Keygen] activate failed (${res.status}): ${JSON.stringify(errors)}`);
+    logger.error(
+      `[Keygen] activate failed (${res.status}): ${sanitizedProviderError(
+        errors,
+      )}`,
+    );
   }
   return { ok: false, limitReached };
 }
 
+function toMachine(machine: unknown): KeygenMachine | undefined {
+  const resource = objectValue(machine);
+  const id = stringValue(resource?.id);
+  if (!resource || !id) return undefined;
+  const attributes = objectValue(resource.attributes) ?? {};
+  const createdAt = stringValue(attributes.created) ?? null;
+  const updatedAt = stringValue(attributes.updated) ?? null;
+  const lastActiveAt = stringValue(attributes.lastHeartbeat) ?? null;
+  return {
+    id,
+    fingerprint: stringValue(attributes.fingerprint) ?? '',
+    platform: stringValue(attributes.platform) ?? null,
+    name: stringValue(attributes.name) ?? null,
+    metadata: objectValue(attributes.metadata) ?? {},
+    createdAt,
+    updatedAt,
+    lastActiveAt,
+    // Keep the old UI/API behavior until every caller consumes factual activity.
+    lastSeen: lastActiveAt ?? createdAt,
+  };
+}
+
 /** List the machines currently activated on a license. */
-export async function listMachines(key: string, licenseId: string): Promise<KeygenMachine[]> {
-  const res = await request(`/licenses/${licenseId}/machines`, {
+export async function listMachines(
+  key: string,
+  licenseId: string,
+): Promise<KeygenMachine[]> {
+  const admittedLicenseId = safeResourceId(licenseId, 'license ID');
+  const res = await request(`/licenses/${admittedLicenseId}/machines`, {
     method: 'GET',
     headers: { Accept: JSON_API, Authorization: `License ${key}` },
   });
-  const body: any = await res.json().catch(() => ({}));
-  const data: any[] = body?.data ?? [];
-  return data.map((m) => ({
-    id: m.id,
-    fingerprint: m.attributes?.fingerprint ?? '',
-    platform: m.attributes?.platform ?? null,
-    name: m.attributes?.name ?? null,
-    lastSeen: m.attributes?.lastHeartbeat ?? m.attributes?.created ?? null,
-  }));
+  const body = objectValue(await res.json().catch(() => ({}))) ?? {};
+  if (!res.ok) {
+    throw new Error(
+      `Keygen machine listing failed (${res.status}): ${sanitizedProviderError(
+        body.errors ?? [],
+      )}`,
+    );
+  }
+  const data = Array.isArray(body.data) ? body.data : [];
+  return data
+    .map(toMachine)
+    .filter((machine): machine is KeygenMachine => machine !== undefined);
 }
 
 /** Free a device slot. */
-export async function deactivateMachine(key: string, machineId: string): Promise<boolean> {
-  const res = await request(`/machines/${machineId}`, {
+export async function deactivateMachine(
+  key: string,
+  machineId: string,
+): Promise<boolean> {
+  const admittedMachineId = safeResourceId(machineId, 'machine ID');
+  const res = await request(`/machines/${admittedMachineId}`, {
     method: 'DELETE',
     headers: { Accept: JSON_API, Authorization: `License ${key}` },
   });
