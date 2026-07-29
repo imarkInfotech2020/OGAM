@@ -284,7 +284,10 @@ export async function revalidatePro(): Promise<void> {
 export async function activateProByKey(
   rawKey: string,
 ): Promise<ActivateResult> {
-  const key = rawKey.trim();
+  // Keygen license keys never contain whitespace. Email clients can insert a
+  // line break when a key is copied from a wrapped message, so normalize the
+  // pasted credential before validation instead of submitting a different key.
+  const key = rawKey.replace(/\s+/g, '');
   if (!key) return { ok: false, reason: 'invalid' };
   let fp: string;
   try {
@@ -299,6 +302,11 @@ export async function activateProByKey(
   } catch {
     return { ok: false, reason: 'network' };
   }
+  logger.log(
+    `[Pro] activation validation code=${r.code} valid=${r.valid} license=${
+      r.license ? 'present' : 'absent'
+    }`,
+  );
 
   // Already activated on this device.
   if (r.valid && r.code === 'VALID' && r.license) {

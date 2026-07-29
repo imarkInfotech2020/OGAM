@@ -15,7 +15,11 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
-import { activateProByKey, PRO_PAY_PAGE_URL, type ActivateResult } from '../../services/proLicenseService';
+import {
+  activateProByKey,
+  PRO_PAY_PAGE_URL,
+  type ActivateResult,
+} from '../../services/proLicenseService';
 import { withUtm } from '../../utils/utm';
 
 type ErrorMsg = string | null;
@@ -26,7 +30,9 @@ type Props = {
   onUnlocked: () => void;
 };
 
-function messageFor(reason: Extract<ActivateResult, { ok: false }>['reason']): string {
+function messageFor(
+  reason: Extract<ActivateResult, { ok: false }>['reason'],
+): string {
   switch (reason) {
     case 'limit':
       return 'This device could not replace the least recently seen device. Check your connection and try again.';
@@ -40,7 +46,11 @@ function messageFor(reason: Extract<ActivateResult, { ok: false }>['reason']): s
 // Activation modal: the user pastes the license key from their email and we
 // activate it on this device. Paying is a separate path — "Get Pro" opens the
 // web pay page; the buyer is then emailed a key to paste here.
-export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }) => {
+export const ProUnlockModal: React.FC<Props> = ({
+  visible,
+  onClose,
+  onUnlocked,
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -76,7 +86,9 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
     onClose();
   };
 
-  const clearError = () => { if (error) setError(null); };
+  const clearError = () => {
+    if (error) setError(null);
+  };
 
   const handleActivate = async () => {
     const trimmed = licenseKey.trim();
@@ -109,15 +121,26 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
 
   if (success) {
     return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={finishSuccess}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={finishSuccess}
+      >
         <View style={styles.overlay}>
           <View style={styles.card}>
             <View style={styles.successIconWrap}>
               <Icon name="check" size={26} color={colors.primary} />
             </View>
             <Text style={styles.successTitle}>Pro activated</Text>
-            <Text style={styles.successSub}>You're all set. Pro is active on this device.</Text>
-            <TouchableOpacity style={styles.successBtn} onPress={finishSuccess} activeOpacity={0.85}>
+            <Text style={styles.successSub}>
+              You're all set. Pro is active on this device.
+            </Text>
+            <TouchableOpacity
+              style={styles.successBtn}
+              onPress={finishSuccess}
+              activeOpacity={0.85}
+            >
               <Text style={styles.primaryBtnText}>Got it</Text>
             </TouchableOpacity>
           </View>
@@ -129,7 +152,12 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
   const hasInput = licenseKey.trim().length > 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={close}
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -139,9 +167,13 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
           <View style={styles.dismissArea} />
         </TouchableWithoutFeedback>
         <View style={styles.card}>
-
           {/* Close X */}
-          <TouchableOpacity style={styles.closeBtn} onPress={close} disabled={loading} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={close}
+            disabled={loading}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Icon name="x" size={18} color={colors.textMuted} />
           </TouchableOpacity>
 
@@ -158,22 +190,25 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
-            multiline
             value={licenseKey}
-            onChangeText={(t) => { setLicenseKey(t); clearError(); }}
+            onChangeText={t => {
+              setLicenseKey(t);
+              clearError();
+            }}
             editable={!loading}
             testID="license-key-input"
           />
 
           {/* Inline error */}
-          {error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           {/* Primary CTA */}
           <TouchableOpacity
             testID="unlock-cta"
-            style={[styles.primaryBtn, (loading || !hasInput) && styles.disabled]}
+            style={[
+              styles.primaryBtn,
+              (loading || !hasInput) && styles.disabled,
+            ]}
             onPress={handleActivate}
             disabled={loading || !hasInput}
             activeOpacity={0.85}
@@ -192,7 +227,6 @@ export const ProUnlockModal: React.FC<Props> = ({ visible, onClose, onUnlocked }
             <Text style={styles.toggleText}>Not a member yet? Get Pro</Text>
             <Icon name="external-link" size={13} color={colors.textSecondary} />
           </TouchableOpacity>
-
         </View>
       </KeyboardAvoidingView>
     </Modal>
