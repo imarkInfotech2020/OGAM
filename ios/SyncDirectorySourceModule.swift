@@ -116,7 +116,7 @@ final class SyncDirectorySourceModule: NSObject {
     var stale = false
     let root = try URL(
       resolvingBookmarkData: bookmark,
-      options: [.withSecurityScope],
+      options: [],
       relativeTo: nil,
       bookmarkDataIsStale: &stale
     )
