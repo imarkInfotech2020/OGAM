@@ -8,6 +8,8 @@ RCT_EXTERN_METHOD(start:(NSDictionary *)device
                   rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(stop:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(rescan:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(updateDevice:(NSDictionary *)device
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)

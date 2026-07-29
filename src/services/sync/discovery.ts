@@ -9,6 +9,7 @@ import {
 } from '@offgrid/sync';
 import type {
   DeviceInfo,
+  DiscoveryScanSnapshot,
   DiscoveredDevice,
   DiscoverySource,
   SyncEngine,
@@ -28,6 +29,7 @@ export interface BuildDiscoveryArgs {
   /** A new (unpaired) device appeared — surface it for the pairing UI. */
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
+  onDiscoveryStateChanged?: (snapshot: DiscoveryScanSnapshot) => void;
   additionalSources?: DiscoverySource[];
   onSourceError?: (sourceId: string, error: Error) => void;
 }
@@ -56,5 +58,6 @@ export function buildDiscovery(
     getMembershipId: args.getMembershipId,
     onDiscovered: args.onDiscovered,
     onLost: args.onLost,
+    onDiscoveryStateChanged: args.onDiscoveryStateChanged,
   });
 }

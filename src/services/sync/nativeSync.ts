@@ -8,6 +8,7 @@ import TcpSocket from 'react-native-tcp-socket';
 import Zeroconf from 'react-native-zeroconf';
 import type {
   DeviceInfo,
+  DiscoveryScanSnapshot,
   DiscoveredDevice,
   PairingPersistence,
   PairedDevice,
@@ -44,6 +45,7 @@ export interface NativeSyncCallbacks {
   onRouteChanged?: (deviceId: string, routeId: string | undefined) => void;
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
+  onDiscoveryStateChanged?: (snapshot: DiscoveryScanSnapshot) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
   onMessage?: (deviceId: string, message: Message) => void;
   deviceCap?: DeviceCap;
@@ -127,6 +129,7 @@ export function createNativeSync(
     getMembershipId: cbs.getMembershipId,
     onDiscovered: cbs.onDiscovered,
     onLost: cbs.onLost,
+    onDiscoveryStateChanged: cbs.onDiscoveryStateChanged,
     additionalSources: proximity
       ? [{ id: 'proximity', service: proximity.discovery }]
       : undefined,

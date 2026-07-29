@@ -163,6 +163,33 @@ final class SyncProximityModule: RCTEventEmitter {
   }
 
   @objc
+  func rescan(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    stateQueue.async { [weak self] in
+      guard let self, let peer = localPeer else {
+        reject(
+          "proximity_not_started",
+          "Sync proximity is not running.",
+          nil
+        )
+        return
+      }
+      browser?.stopBrowsingForPeers()
+      browser?.delegate = nil
+      let replacement = MCNearbyServiceBrowser(
+        peer: peer,
+        serviceType: proximityServiceType
+      )
+      browser = replacement
+      replacement.delegate = self
+      replacement.startBrowsingForPeers()
+      resolve(nil)
+    }
+  }
+
+  @objc
   func updateDevice(
     _ device: [String: Any],
     resolver resolve: @escaping RCTPromiseResolveBlock,
@@ -368,13 +395,14 @@ final class SyncProximityModule: RCTEventEmitter {
 
 extension SyncProximityModule: MCNearbyServiceBrowserDelegate {
   func browser(
-    _: MCNearbyServiceBrowser,
+    _ source: MCNearbyServiceBrowser,
     foundPeer peerID: MCPeerID,
     withDiscoveryInfo info: [String: String]?
   ) {
     stateQueue.async { [weak self] in
       guard
         let self,
+        source === browser,
         let device = ProximityDevice.parseDiscovery(info),
         device.id != localDevice?.id
       else {
@@ -386,10 +414,14 @@ extension SyncProximityModule: MCNearbyServiceBrowserDelegate {
     }
   }
 
-  func browser(_: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+  func browser(
+    _ source: MCNearbyServiceBrowser,
+    lostPeer peerID: MCPeerID
+  ) {
     stateQueue.async { [weak self] in
       guard
         let self,
+        source === browser,
         let device = devicesByPeerName.removeValue(
           forKey: peerID.displayName
         )
@@ -404,10 +436,16 @@ extension SyncProximityModule: MCNearbyServiceBrowserDelegate {
   }
 
   func browser(
-    _: MCNearbyServiceBrowser,
+    _ source: MCNearbyServiceBrowser,
     didNotStartBrowsingForPeers error: Error
   ) {
-    NSLog("[SYNC] proximity browsing failed: %@", error.localizedDescription)
+    stateQueue.async { [weak self] in
+      guard let self, source === browser else { return }
+      NSLog(
+        "[SYNC] proximity browsing failed: %@",
+        error.localizedDescription
+      )
+    }
   }
 }
 
