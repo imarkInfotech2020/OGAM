@@ -23,6 +23,8 @@
 		0C1A00022F44000100C11A00 /* SyncClipboardModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1A00042F44000100C11A00 /* SyncClipboardModule.swift */; };
 		0D2B00012F45000100C11A00 /* SyncProximityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B00032F45000100C11A00 /* SyncProximityModule.m */; };
 		0D2B00022F45000100C11A00 /* SyncProximityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B00042F45000100C11A00 /* SyncProximityModule.swift */; };
+		105E00012F48000100C11A00 /* MeshResidencyModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 105E00032F48000100C11A00 /* MeshResidencyModule.m */; };
+		105E00022F48000100C11A00 /* MeshResidencyModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E00042F48000100C11A00 /* MeshResidencyModule.swift */; };
 		0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */; };
 		0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */; };
 		0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */; };
@@ -62,6 +64,8 @@
 		0C1A00042F44000100C11A00 /* SyncClipboardModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncClipboardModule.swift; sourceTree = "<group>"; };
 		0D2B00032F45000100C11A00 /* SyncProximityModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncProximityModule.m; sourceTree = "<group>"; };
 		0D2B00042F45000100C11A00 /* SyncProximityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProximityModule.swift; sourceTree = "<group>"; };
+		105E00032F48000100C11A00 /* MeshResidencyModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MeshResidencyModule.m; sourceTree = "<group>"; };
+		105E00042F48000100C11A00 /* MeshResidencyModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshResidencyModule.swift; sourceTree = "<group>"; };
 		0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncScreenshotModule.m; sourceTree = "<group>"; };
 		0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScreenshotModule.swift; sourceTree = "<group>"; };
 		0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncDirectorySourceModule.m; sourceTree = "<group>"; };
@@ -118,6 +122,8 @@
 				0C1A00042F44000100C11A00 /* SyncClipboardModule.swift */,
 				0D2B00032F45000100C11A00 /* SyncProximityModule.m */,
 				0D2B00042F45000100C11A00 /* SyncProximityModule.swift */,
+				105E00032F48000100C11A00 /* MeshResidencyModule.m */,
+				105E00042F48000100C11A00 /* MeshResidencyModule.swift */,
 				0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */,
 				0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */,
 				0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */,
@@ -412,6 +418,8 @@
 				0C1A00022F44000100C11A00 /* SyncClipboardModule.swift in Sources */,
 				0D2B00012F45000100C11A00 /* SyncProximityModule.m in Sources */,
 				0D2B00022F45000100C11A00 /* SyncProximityModule.swift in Sources */,
+				105E00012F48000100C11A00 /* MeshResidencyModule.m in Sources */,
+				105E00022F48000100C11A00 /* MeshResidencyModule.swift in Sources */,
 				0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */,
 				0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */,
 				0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */,

@@ -93,5 +93,15 @@
           android:name="androidx.work.impl.foreground.SystemForegroundService"
           android:foregroundServiceType="dataSync"
           tools:node="merge" />
+
+      <!-- Personal Mesh residency: holds mDNS discovery, the TCP listener and in-flight
+           transfers open while Off Grid is backgrounded. Without it Android suspends the
+           process and the peer keeps showing this device as connected. Not exported - only
+           this app may start it. -->
+      <service
+          android:name="ai.offgridmobile.sync.MeshResidencyService"
+          android:enabled="true"
+          android:exported="false"
+          android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

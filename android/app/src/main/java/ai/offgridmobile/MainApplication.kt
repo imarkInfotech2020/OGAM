@@ -13,6 +13,7 @@ import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
 import ai.offgridmobile.clipboard.SyncClipboardPackage
 import ai.offgridmobile.directory.SyncDirectorySourcePackage
+import ai.offgridmobile.sync.MeshResidencyPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -29,6 +30,7 @@ class MainApplication : Application(), ReactApplication {
           add(DeviceMemoryPackage())
           add(SyncClipboardPackage())
           add(SyncDirectorySourcePackage())
+          add(MeshResidencyPackage())
         },
     )
   }
