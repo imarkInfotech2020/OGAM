@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
 import {
@@ -296,7 +297,9 @@ export const useChatScreen = () => {
   useChatModelStateSync({ activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking });
 
   const isGeneratingForThisConversation = generatingConversationId != null && generatingConversationId === activeConversationId;
-  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation });
+  // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
+  const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
+  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation, remotePreviews });
 
   useEffect(() => {
     const prev = lastMessageCountRef.current, curr = displayMessages.length;

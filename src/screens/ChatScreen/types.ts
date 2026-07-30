@@ -9,6 +9,13 @@ export type ChatMessageItem = {
   isStreaming?: boolean;
 };
 
+/** A reply generating on another device, mirrored into this conversation while it happens. */
+export type RemoteStreamItem = {
+  messageId: string;
+  content: string;
+  reasoning?: string;
+};
+
 export type StreamingState = {
   isThinking: boolean;
   streamingMessage: string;
@@ -17,10 +24,48 @@ export type StreamingState = {
   isModelLoading?: boolean;
   loadingModelName?: string;
   isGeneratingForThisConversation?: boolean;
+  /** Live previews from paired devices. Empty in free builds and when nothing is generating. */
+  remotePreviews?: readonly RemoteStreamItem[];
 };
+
+/**
+ * Append the replies other devices are generating right now.
+ *
+ * They render through the SAME synthetic-streaming-message path as the local reply, so there is one
+ * bubble implementation rather than a second renderer that would drift from it. Ids are namespaced
+ * per generation so the list keeps one row per in-flight reply and never collides with the local
+ * 'streaming' row - a device can be generating locally while a peer generates too.
+ */
+function withRemotePreviews(
+  base: (Message | ChatMessageItem)[],
+  remotePreviews: readonly RemoteStreamItem[] | undefined,
+): (Message | ChatMessageItem)[] {
+  if (!remotePreviews || remotePreviews.length === 0) return base;
+  return [
+    ...base,
+    ...remotePreviews.map(preview => ({
+      id: `remote-stream:${preview.messageId}`,
+      role: 'assistant' as const,
+      content: preview.content,
+      reasoningContent: preview.reasoning || undefined,
+      timestamp: Date.now(),
+      isStreaming: true,
+    })),
+  ];
+}
 
 let _lastDisplayBranch = '';
 export function getDisplayMessages(
+  allMessages: Message[],
+  streaming: StreamingState,
+): (Message | ChatMessageItem)[] {
+  return withRemotePreviews(
+    localDisplayMessages(allMessages, streaming),
+    streaming.remotePreviews,
+  );
+}
+
+function localDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
