@@ -393,3 +393,30 @@ model loaded text-only if loaded in the window before its mmProjPath is persiste
 reports vision failing right after a first download, instrument the load path: assert the model
 record's mmProjPath is set before the first load, and re-derive multimodal if a mmproj is linked after
 a text-only load.
+
+---
+
+## Personal Mesh (sync across macOS, iOS, Android) — 2026-07-30
+
+First entry for Personal Mesh in this doc. Found by auditing the shared state machines in
+`@offgrid/sync` against what the two apps actually wire, with Android in scope as a first-class
+target. The shared layer is largely complete; these are the app-side holes.
+
+**Closed in this pass (code + wired, NOT device-verified):**
+
+| ID | Gap | Status |
+|---|---|---|
+| PM1 | Public core minted a second device identity (`getOrCreateLocalDevice` persisted a random id), so op-log provenance and version vectors were keyed to an identity absent from every roster and membership. `stateSyncService` used it directly while pairing used the fingerprint. | Fixed: core exposes display facts only; `getCanonicalLocalSyncDevice` is the one place an id is attached; a one-time pure migration re-attributes persisted ops. Needs device verification (matrix rows 5-6). |
+| PM2 | Backgrounding Android suspended the process: mDNS, the TCP listener and in-flight transfers stopped while the peer still showed the device connected. Only WorkManager's download service was declared. | Fixed: `MeshResidencyService` dataSync foreground service + one TS contract both platforms satisfy, with the capability gap declared as data (iOS honestly reports `survivesBackground: false`). Needs device verification (matrix rows 18-21). |
+| PM3 | Dead `devHarness` was a second identity minter behind a permanently-false flag. | Deleted. |
+
+**Open:**
+
+| ID | Gap | Verdict |
+|---|---|---|
+| PM4 | **Android reinstall orphans a licensed seat.** Android wipes the Keystore on uninstall, so the protected fingerprint is lost and a reinstall mints a new one — silently consuming a second seat of five. iOS keeps the Keychain entry, so this is Android-only. | needs-a-decision: either reclaim-by-other-signal, or make the UI name the seat to replace. Matrix row 4. |
+| PM5 | **No license-key revocation or rotation anywhere** (not in `license-worker`, not in either app's licensing dir). Device eviction cannot answer a copied key; `license-service.ts` only notes revocation is caught at the next online check. | real gap, product-blocking for the security-conscious user in the brief. |
+| PM6 | **Two shared projections have zero callers in either app**: `projectMembershipEvictionConfirmation` and `projectMembershipRevocationCopy`. Both apps hand-roll eviction confirmation and revoked-state wording, so macOS/iOS/Android copy can drift — including the online vs offline "cleanup queued" distinction. | wire the projections. Matrix rows 23, 41. |
+| PM7 | **Devices UI never audited against the brief's state table.** Both platforms consume `projectSyncControlCenter`, but nobody has checked all six credential x registered x paired x connected rows render distinctly, that capacity reads "N of 5 registered", or that roster freshness is shown rather than stale data presented as authoritative. | audit. Matrix rows 39-42. |
+| PM8 | **The four riskiest areas have zero verified coverage.** The iOS/macOS manual gate (`desktop/outputs/ios-macos-sync-manual-gate-20260729`) is 8/108 verified: pairing 0/9, discovery 0/9, membership 0/7, persistence 0/5. It also has no Android axis at all, and defers the five-device cap as needing real multi-device hardware. | superseded by `docs/PERSONAL_MESH_TEST_MATRIX.csv` (42 rows, macOS/iOS/Android columns). |
+| PM9 | Pre-existing red: `stateSync.integration.test.tsx` fails at the devices assertion, and 10 typecheck errors sit in 4 test files. Both come from the in-flight Pro-access work in the tree, confirmed by re-running at baseline with my edits stashed. | not mine; flagging so it is not mistaken for mesh regression. |
