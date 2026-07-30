@@ -52,6 +52,30 @@ function speakableStreamingAnswer(
     : streamingMessage;
 }
 
+/**
+ * Tell Pro the in-progress reply grew, so paired devices can show it live.
+ *
+ * Defined once because both the answer and the reasoning appenders fire it, and both must report
+ * the SAME cumulative pair - a frame carrying one without the other would render a preview that
+ * disagrees with the device generating it. Sending cumulative text (not deltas) is what lets Pro
+ * throttle freely: any single frame is correct on its own.
+ *
+ * No-op in free builds. Nothing is emitted before the stream is bound to a conversation, since a
+ * preview with no conversation has nowhere to render.
+ */
+function emitStreamingUpdate(state: {
+  streamingForConversationId: string | null;
+  streamingMessage: string;
+  streamingReasoningContent: string;
+}): void {
+  if (!state.streamingForConversationId) return;
+  callHook(HOOKS.syncStreamingUpdate, {
+    conversationId: state.streamingForConversationId,
+    content: state.streamingMessage,
+    reasoning: state.streamingReasoningContent,
+  });
+}
+
 /** Derive conversation title from the first user message. */
 function deriveTitle(
   currentTitle: string,
@@ -297,6 +321,7 @@ export const useChatStore = create<ChatState>()(
             get().streamingReasoningContent,
           ),
         );
+        emitStreamingUpdate(get());
       },
 
       appendToStreamingReasoningContent: token => {
@@ -305,6 +330,7 @@ export const useChatStore = create<ChatState>()(
           isStreaming: true,
           isThinking: false,
         }));
+        emitStreamingUpdate(get());
       },
 
       setIsStreaming: streaming => {
@@ -354,9 +380,15 @@ export const useChatStore = create<ChatState>()(
           isStreaming: false,
           isThinking: false,
         });
+        // After addMessage, so the durable record is already on its way to peers when they
+        // retire the preview - otherwise the reply would blink out and back in.
+        callHook(HOOKS.syncStreamingComplete, conversationId);
       },
 
       clearStreamingMessage: () => {
+        // Cancel/abort also ends the stream. Without this a peer keeps showing a half-written
+        // reply until it goes stale, for a message that will never arrive.
+        const abandoned = get().streamingForConversationId;
         set({
           streamingMessage: '',
           streamingReasoningContent: '',
@@ -364,6 +396,7 @@ export const useChatStore = create<ChatState>()(
           isStreaming: false,
           isThinking: false,
         });
+        if (abandoned) callHook(HOOKS.syncStreamingComplete, abandoned);
       },
 
       getStreamingState: () => {

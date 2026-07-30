@@ -66,4 +66,13 @@ export const HOOKS = {
   /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
    *  a document lifecycle change. Pro transfers or reconciles it with peers. */
   syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
+  /** (update: { conversationId, content, reasoning }) => void — the assistant
+   *  reply grew while still generating. Pro streams it to paired devices so the
+   *  answer appears there token by token instead of only when it completes. This
+   *  is a live preview, never a durable record: the finished message still lands
+   *  once through syncRecordLocalMutation. Free builds do nothing. */
+  syncStreamingUpdate: 'sync.streamingUpdate',
+  /** (conversationId: string) => void — generation ended, so paired devices can
+   *  retire the preview in favour of the durable message. */
+  syncStreamingComplete: 'sync.streamingComplete',
 } as const;
