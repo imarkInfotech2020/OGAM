@@ -8,6 +8,7 @@ import {
 } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import logger from '../utils/logger';
 import {
   CHAT_STORAGE_VERSION,
   createPersistedMessage,
@@ -68,6 +69,17 @@ function emitStreamingUpdate(state: {
   streamingMessage: string;
   streamingReasoningContent: string;
 }): void {
+  // Once per stream, not per token. Distinguishes three faults that look identical from the
+  // Pro side: this never runs, it runs but no conversation is bound, or it runs and no hook
+  // is registered to receive it.
+  if (_loggedStreamEmit !== state.streamingForConversationId) {
+    _loggedStreamEmit = state.streamingForConversationId;
+    logger.log(
+      `[ChatStream] core emit conversation=${
+        state.streamingForConversationId?.slice(0, 8) ?? 'NONE-BAILING'
+      }`,
+    );
+  }
   if (!state.streamingForConversationId) return;
   callHook(HOOKS.syncStreamingUpdate, {
     conversationId: state.streamingForConversationId,
@@ -75,6 +87,8 @@ function emitStreamingUpdate(state: {
     reasoning: state.streamingReasoningContent,
   });
 }
+
+let _loggedStreamEmit: string | null | undefined;
 
 /** Derive conversation title from the first user message. */
 function deriveTitle(
