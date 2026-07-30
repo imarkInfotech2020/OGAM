@@ -260,20 +260,12 @@ function App() {
       // Initialize RAG database tables
       ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
 
-      let isPro = false;
       try {
         // Register the private Pro entitlement provider before the first status
         // read, then activate only the capabilities that entitlement permits.
-        isPro = await loadProFeatures();
-
-        // Reconcile the persisted Pro flag with the actual entitlement on every
-        // boot. Setting it to the resolved value (not only ever true) means a
-        // cleared/expired license also flips it back to false — previously it
-        // only ever went true, so a stale persisted true stuck forever.
-        // DEV builds force-unlock for local testing, unless the Settings
-        // "Turn off Pro (DEV)" toggle is set. Never force-unlocks in release.
-        const devUnlock = __DEV__ && !useAppStore.getState().devProDisabled;
-        useAppStore.getState().setHasRegisteredPro(isPro || devUnlock);
+        // loadProFeatures separately projects cached credential access from a
+        // Debug developer unlock; Sync reconciliation owns device admission.
+        await loadProFeatures();
       } catch (proError) {
         logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
       }
@@ -311,19 +303,6 @@ function App() {
   useEffect(() => {
     initializeApp();
   }, [initializeApp]);
-
-  // DEV ONLY: prove the @offgrid/sync transport on real devices (discovery + NaCl handshake).
-  // Dynamically imported + double-gated so it never touches release builds. Removed once the Pro
-  // Sync UI drives the engine. Delayed so the app is interactive before the mDNS/TCP scan starts.
-  useEffect(() => {
-    if (!__DEV__) return;
-    const t = setTimeout(() => {
-      import('./src/services/sync/devHarness')
-        .then((m) => { if (m.SYNC_DEV_HARNESS) return m.startSyncDevHarness(); })
-        .catch(() => { /* dev harness is best-effort */ });
-    }, 4000);
-    return () => clearTimeout(t);
-  }, []);
 
   const handleUnlock = useCallback(() => {
     setLocked(false);
