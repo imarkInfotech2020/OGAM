@@ -24,6 +24,7 @@ import { onnxImageGeneratorService, activeModelService, llmService, remoteServer
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
+import { byRecentActivity } from '../utils/conversationOrdering';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -211,10 +212,7 @@ export const ChatsListScreen: React.FC = () => {
     );
   };
 
-  // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = [...conversations].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  const sortedConversations = byRecentActivity(conversations);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

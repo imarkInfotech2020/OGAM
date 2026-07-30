@@ -10,6 +10,7 @@ import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
 import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery';
 import logger from '../../../utils/logger';
+import { mostRecentConversations } from '../../../utils/conversationOrdering';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
 import type { HomeScreenNavigationProp, ModelPickerType, LoadingState } from './types';
@@ -238,7 +239,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     : null;
 
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
-  const recentConversations = conversations.slice(0, 4);
+  // Ordered, not just the store's first four - otherwise "Recent" can list older chats than
+  // the ones just used, and disagrees with the Chats list and desktop.
+  const recentConversations = mostRecentConversations(conversations, 4);
 
   // Get all remote text models — includes vision-language models since they do text generation too
   const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
