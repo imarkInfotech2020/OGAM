@@ -1,6 +1,7 @@
 import type {
   PersonalMeshActivationResult,
   PersonalMeshActivationFailureCode,
+  PersonalMeshReconciliationReason,
 } from '@offgrid/sync';
 import { PERSONAL_MESH_DEVICE_CAP } from '@offgrid/sync';
 
@@ -30,7 +31,7 @@ export interface ProLicenseInfo {
 export interface ProEntitlementProvider {
   readActive(): Promise<boolean>;
   getInfo(): Promise<ProLicenseInfo>;
-  checkStatus(): Promise<boolean>;
+  revalidate(reason: PersonalMeshReconciliationReason): Promise<void>;
   activate(rawCredential: string): Promise<PersonalMeshActivationResult>;
   clearForTesting(): Promise<void>;
 }
@@ -43,7 +44,7 @@ const UNAVAILABLE_PROVIDER: ProEntitlementProvider = {
     expiry: null,
     verifiedAt: 0,
   }),
-  checkStatus: async () => false,
+  revalidate: async () => undefined,
   activate: async () => ({ ok: false, reason: 'registration_failed' }),
   clearForTesting: async () => undefined,
 };
@@ -64,8 +65,15 @@ export function getProLicenseInfo(): Promise<ProLicenseInfo> {
   return provider.getInfo();
 }
 
-export function checkProStatus(): Promise<boolean> {
-  return provider.checkStatus();
+export function revalidateProEntitlement(
+  reason: PersonalMeshReconciliationReason,
+): Promise<void> {
+  return provider.revalidate(reason);
+}
+
+export async function checkProStatus(): Promise<boolean> {
+  await revalidateProEntitlement('manual');
+  return readProFromKeychain();
 }
 
 export function activateProByKey(

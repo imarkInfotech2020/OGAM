@@ -4,9 +4,10 @@ import { registerSettingsSection } from '../components/settings/sectionRegistry'
 import { registerSlot } from './slotRegistry';
 import { registerHook } from './hookRegistry';
 import {
-  checkProStatus,
+  readProFromKeychain,
   registerProEntitlementProvider,
 } from '../services/proLicenseService';
+import { proEntitlementLifecycle } from '../services/proEntitlementLifecycle';
 
 export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
@@ -21,6 +22,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   if (typeof pro.configureProEntitlementProvider === 'function') {
     pro.configureProEntitlementProvider(registerProEntitlementProvider);
   }
+  await proEntitlementLifecycle.start();
 
   // DEV ONLY: unlock pro features locally (audio mode, MCP) without a purchase so
   // they can be tested on simulators/dev builds. __DEV__ is false in release
@@ -30,7 +32,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   const { useAppStore } = require('../stores/appStore');
   const DEV_UNLOCK_PRO = __DEV__ && !useAppStore.getState().devProDisabled;
 
-  const active = (isPro ?? (await checkProStatus())) || DEV_UNLOCK_PRO;
+  const active = (isPro ?? (await readProFromKeychain())) || DEV_UNLOCK_PRO;
   // Single source of truth for "Pro is unlocked" — every upsell gate reads this, so a
   // keychain- or dev-unlocked Pro user never sees the upgrade prompt.
   useAppStore.getState().setProActive(active);
