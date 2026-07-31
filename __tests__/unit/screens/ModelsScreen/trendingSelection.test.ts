@@ -51,6 +51,8 @@ jest.mock('../../../../src/services', () => ({
     getModelRecommendation: () => mockGetModelRecommendation(),
   },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadTextModel: jest.fn(() => Promise.resolve()),
   },
 }));

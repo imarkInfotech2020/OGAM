@@ -66,6 +66,8 @@ jest.mock('../../../src/services/generationService', () => ({
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadModel: jest.fn(() => Promise.resolve()),
     loadTextModel: jest.fn(() => Promise.resolve()),
     unloadModel: jest.fn(() => Promise.resolve()),

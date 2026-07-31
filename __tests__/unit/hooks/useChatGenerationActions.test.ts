@@ -39,7 +39,9 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
   backgroundDownloadService: { isAvailable: jest.fn(() => false), excludeFromBackup: jest.fn(() => Promise.resolve(true)) },
 }));
 jest.mock('../../../src/services/activeModelService/index', () => ({
-  activeModelService: { loadTextModel: jest.fn(), unloadTextModel: jest.fn() },
+  activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), loadTextModel: jest.fn(), unloadTextModel: jest.fn() },
 }));
 jest.mock('../../../src/services/intentClassifier', () => ({
   intentClassifier: { classifyIntent: jest.fn() },

@@ -84,6 +84,8 @@ jest.mock('../../src/components/CustomAlert', () => ({
 jest.mock('../../src/services', () => ({
   onnxImageGeneratorService: { deleteGeneratedImage: jest.fn(() => Promise.resolve()) },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(() => Promise.resolve()),
     loadImageModel: jest.fn(() => Promise.resolve()),
     unloadTextModel: jest.fn(() => Promise.resolve()),

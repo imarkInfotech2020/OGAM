@@ -8,7 +8,9 @@ import { renderHook, act } from '@testing-library/react-native';
 
 const mockEjectAll = jest.fn(async () => ({ count: 2 }));
 jest.mock('../../../src/services', () => ({
-  activeModelService: { ejectAll: () => mockEjectAll() },
+  activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), ejectAll: () => mockEjectAll() },
 }));
 
 let mockAppState: Record<string, unknown> = {};

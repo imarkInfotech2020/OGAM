@@ -134,6 +134,8 @@ jest.mock('../../../src/utils/coreMLModelUtils', () => ({
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadImageModel: jest.fn(() => Promise.resolve()),
   },
 }));

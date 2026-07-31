@@ -72,6 +72,8 @@ const mockCheckMemoryForModel = jest.fn(() => Promise.resolve({ canLoad: true, s
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: mockLoadTextModel,
     // Boundary mock mirrors the real selectTextModel (the single owner of the selection write).
     selectTextModel: jest.fn((id: string) => {
