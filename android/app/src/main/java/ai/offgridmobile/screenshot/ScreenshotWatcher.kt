@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Log
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -45,6 +46,12 @@ class ScreenshotWatcher(
     private val context: Context,
     private val onCaptured: (CapturedScreenshot) -> Unit,
 ) {
+    private companion object {
+        const val TAG = "SyncScreenshot"
+        /** Enough to catch up after the app was away, without dumping a month of screenshots. */
+        const val MAX_CATCH_UP = 20
+    }
+
     private val resolver: ContentResolver = context.contentResolver
     private var lastSeenId: Long = -1
     private var observer: ContentObserver? = null
@@ -69,6 +76,7 @@ class ScreenshotWatcher(
             next,
         )
         observer = next
+        Log.i(TAG, "watching from id=$lastSeenId")
     }
 
     private fun stop() {
@@ -78,45 +86,95 @@ class ScreenshotWatcher(
 
     private fun newestScreenshotId(): Long? = query { cursor, _ -> cursor.getLong(0) }
 
+    /**
+     * Everything in the bucket newer than the last one shared, oldest first.
+     *
+     * Reading only the single newest row was wrong twice over. The screenshot service inserts its row
+     * as PENDING and un-pends it once the bytes are written, and a pending row is invisible to other
+     * apps - so the change notification arrived, the query answered with the PREVIOUS screenshot, the
+     * id was not newer, and the capture was dropped. Nothing ever recovered it either, because a
+     * single-row read cannot catch up on anything missed while the app was away.
+     *
+     * Asking for every row above a watermark is immune to both: a late notification still finds the
+     * screenshot, and screenshots taken while the app was backgrounded arrive when it returns.
+     */
     private fun captureNew() {
-        val captured = query { cursor, columns -> read(cursor, columns) } ?: return
-        if (captured.id <= lastSeenId) return
-        lastSeenId = captured.id
-        val copied = copyIntoApp(captured) ?: return
-        onCaptured(copied)
+        val rows = screenshotsNewerThan(lastSeenId)
+        if (rows.isEmpty()) return
+        val batch = rows.take(MAX_CATCH_UP)
+        if (rows.size > batch.size) {
+            // Say what was skipped rather than let a silent cap read as "shared everything".
+            Log.i(TAG, "capture batch=${batch.size} skipped=${rows.size - batch.size}")
+        }
+        for (row in batch) {
+            lastSeenId = maxOf(lastSeenId, row.id)
+            val copied = copyIntoApp(row)
+            if (copied == null) {
+                Log.w(TAG, "capture could not copy id=${row.id}")
+                continue
+            }
+            Log.i(TAG, "capture emit id=${row.id} bytes=${row.fileSize}")
+            onCaptured(copied)
+        }
+        // The watermark advances past a row that could not be copied too: retrying it on every
+        // notification forever would be a loop, and the user can share it by hand.
+        rows.forEach { lastSeenId = maxOf(lastSeenId, it.id) }
     }
 
     /**
-     * The newest rows in the Screenshots bucket.
+     * The Screenshots bucket, filtered by the caller's clause.
      *
      * `RELATIVE_PATH` exists from API 29; below that the only locator is the file path, so the query
      * falls back to it rather than reporting no screenshots at all on an older device.
      */
-    private fun <T> query(read: (android.database.Cursor, Columns) -> T?): T? {
-        val columns = Columns()
-        val selection: String
-        val args: Array<String>
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            selection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
-            args = arrayOf("%Screenshots%")
+    private fun bucketSelection(): Pair<String, Array<String>> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // A row still being written is not shareable yet, and while pending it hides the real
+            // newest screenshot from us.
+            "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? AND " +
+                "${MediaStore.MediaColumns.IS_PENDING} = 0" to arrayOf("%Screenshots%")
         } else {
             @Suppress("DEPRECATION")
-            selection = "${MediaStore.Images.Media.DATA} LIKE ?"
-            args = arrayOf("%Screenshots%")
+            "${MediaStore.Images.Media.DATA} LIKE ?" to arrayOf("%Screenshots%")
         }
-        // Newest first; only the first row is read. No LIMIT clause - MediaStore is not obliged to
-        // honour one inside the sort order, and reading one row costs the same.
-        val order = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+    }
+
+    private fun screenshotsNewerThan(since: Long): List<Row> {
+        val columns = Columns()
+        val (bucket, bucketArgs) = bucketSelection()
+        val selection = "$bucket AND ${MediaStore.Images.Media._ID} > ?"
+        val args = bucketArgs + arrayOf(since.toString())
         return try {
             resolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 columns.projection,
                 selection,
                 args,
-                order,
-            )?.use { cursor -> if (cursor.moveToFirst()) read(cursor, columns) else null }
+                "${MediaStore.Images.Media._ID} ASC",
+            )?.use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) add(read(cursor, columns))
+                }
+            } ?: emptyList()
         } catch (error: SecurityException) {
             // No media permission: the capability is simply absent, not an error to surface here.
+            Log.w(TAG, "query refused: no media permission")
+            emptyList()
+        }
+    }
+
+    private fun <T> query(read: (android.database.Cursor, Columns) -> T?): T? {
+        val columns = Columns()
+        val (selection, args) = bucketSelection()
+        return try {
+            resolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                columns.projection,
+                selection,
+                args,
+                "${MediaStore.Images.Media._ID} DESC",
+            )?.use { cursor -> if (cursor.moveToFirst()) read(cursor, columns) else null }
+        } catch (error: SecurityException) {
             null
         }
     }
