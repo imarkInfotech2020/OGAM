@@ -3,6 +3,7 @@ import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
+import { writePastedNote } from './pastedNote';
 import {
   emitKnowledgeDocumentMutation,
   type KnowledgeDocumentSnapshot,
@@ -124,6 +125,31 @@ class RagService {
       });
     }
     return docId;
+  }
+
+  /**
+   * Index text the user pasted in, as a document of its own.
+   *
+   * Written to a .txt first and then handed to indexDocument, so a note gets the same dedupe,
+   * chunking, embedding, rollback-on-failure and sync emission as an imported file. Nothing here
+   * knows it was pasted.
+   */
+  async indexPastedText(params: {
+    projectId: string;
+    title: string;
+    text: string;
+    onProgress?: (progress: IndexProgress) => void;
+  }): Promise<number> {
+    const trimmed = params.text.trim();
+    if (!trimmed) throw new Error('There is no text to save.');
+    const note = await writePastedNote(params.title, trimmed);
+    return this.indexDocument({
+      projectId: params.projectId,
+      filePath: note.filePath,
+      fileName: note.fileName,
+      fileSize: note.fileSize,
+      onProgress: params.onProgress,
+    });
   }
 
   async backfillEmbeddings(projectId: string): Promise<number> {

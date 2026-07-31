@@ -18,6 +18,7 @@ import {
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
+import { PasteNoteSheet } from '../components/knowledge/PasteNoteSheet';
 import { ragService } from '../services/rag';
 import type { RagDocument } from '../services/rag';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
@@ -49,6 +50,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
   const [kbDocs, setKbDocs] = useState<RagDocument[]>([]);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
+  const [pasting, setPasting] = useState(false);
   const isPickingRef = useRef(false);
 
   const loadKbDocs = useCallback(async () => {
@@ -119,6 +121,19 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
     }
   };
 
+  const handleSavePastedNote = async (
+    title: string,
+    text: string,
+  ): Promise<void> => {
+    setIndexingFile(title.trim() || 'pasted text');
+    try {
+      await ragService.indexPastedText({ projectId, title, text });
+      await loadKbDocs();
+    } finally {
+      setIndexingFile(null);
+    }
+  };
+
   const handleToggleDocument = async (docId: number, enabled: boolean) => {
     try {
       await ragService.toggleDocument(docId, enabled);
@@ -173,6 +188,19 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           )}
         </View>
         <View style={styles.sectionActions}>
+          {/* Text you paste and files you import are the same kind of thing once saved, so they sit
+              side by side here rather than one being buried behind the other. */}
+          <Button
+            title="Paste"
+            variant="outline"
+            size="small"
+            onPress={() => setPasting(true)}
+            testID="kb-paste-text"
+            disabled={isPicking || !!indexingFile}
+            icon={
+              <Icon name="clipboard" size={16} color={colors.textSecondary} />
+            }
+          />
           <Button
             title="Add"
             variant="primary"
@@ -240,6 +268,12 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           ))}
         </ScrollView>
       )}
+
+      <PasteNoteSheet
+        visible={pasting}
+        onClose={() => setPasting(false)}
+        onSave={handleSavePastedNote}
+      />
     </View>
   );
 };
