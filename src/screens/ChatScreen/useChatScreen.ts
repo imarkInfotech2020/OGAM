@@ -7,7 +7,7 @@ import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
 import {
-  llmService, generationService, imageGenerationService, activeModelService,
+  llmService, generationService, imageGenerationService,
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
@@ -16,7 +16,8 @@ import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { reloadTextModel } from './reloadTextModel';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
@@ -337,21 +338,17 @@ export const useChatScreen = () => {
   // Whether settings changed since the model was loaded (drives the reload banner).
   const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
 
-  const handleReloadTextModel = useCallback(async () => {
-    if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
-    setShowModelSelector(true);
-    // Unload with keepSelection=true so a failed reload never clears activeModelId
-    // (the default unload cleared it, so an OOM stranded the chat: stuck banner +
-    // wedged send). The unload still nulls loadedTextModelId, so loadTextModel
-    // won't fast-path-skip. The memory gate — including the "Load Anyway" override
-    // — is owned by initiateModelLoad, so reload matches normal load exactly (no
-    // duplicated/stricter check in the view).
-    // activeModelService.unloadTextModel now unloads whichever engine is active (LiteRT or llama)
-    // and no-ops when nothing is loaded — so no engine branch here.
-    await activeModelService.unloadTextModel(true);
-    await initiateModelLoad(modelDeps, false);
+  const handleReloadTextModel = useCallback(
+    () =>
+      reloadTextModel({
+        modelDeps,
+        modelId: activeModelInfo.modelId,
+        isRemote: activeModelInfo.isRemote,
+        setAlertState,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
+    [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine],
+  );
 
   const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
     handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
