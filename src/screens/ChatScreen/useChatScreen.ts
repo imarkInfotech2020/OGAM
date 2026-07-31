@@ -4,8 +4,8 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
+import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import logger from '../../utils/logger';
 import {
   llmService, generationService, imageGenerationService,
   ImageGenerationState, hardwareService, QueuedMessage,
@@ -168,34 +168,10 @@ export const useChatScreen = () => {
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
-  // Compute active model from either local or remote source
-  const activeModelInfo = useMemo((): ActiveModelInfo => {
-    // Check for remote model first
-    if (activeServerId && activeRemoteTextModelId) {
-      const serverModels = discoveredModels[activeServerId] || [];
-      const remoteModel = serverModels.find(m => m.id === activeRemoteTextModelId);
-      if (remoteModel) {
-        return {
-          isRemote: true,
-          model: remoteModel,
-          modelId: remoteModel.id,
-          modelName: remoteModel.name,
-        };
-      }
-      logger.warn('[ChatScreen] Remote model not found:', activeServerId, activeRemoteTextModelId);
-    }
-    // Fall back to local model
-    const localModel = downloadedModels.find(m => m.id === activeModelId);
-    if (localModel) {
-      return {
-        isRemote: false,
-        model: localModel,
-        modelId: localModel.id,
-        modelName: localModel.name,
-      };
-    }
-    return { isRemote: false, model: null, modelId: null, modelName: 'Unknown' };
-  }, [activeServerId, activeRemoteTextModelId, discoveredModels, activeModelId, downloadedModels]);
+  // Which text model is active, from the ONE hook that answers it (remote preferred over local, local
+  // resolved by activeModelService). This screen used to re-derive it with its own copy of the rule,
+  // which is how it ended up refusing to send to a model the engine had loaded.
+  const activeModelInfo: ActiveModelInfo = useActiveTextModel();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote ? undefined : (activeModelInfo.model as DownloadedModel | undefined);
