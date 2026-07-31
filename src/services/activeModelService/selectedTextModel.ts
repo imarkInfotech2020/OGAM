@@ -33,3 +33,20 @@ export function createSelectedTextModelResolver(
     return model;
   };
 }
+
+/**
+ * The id to load for a turn: the current selection, or the remembered choice when a user unload
+ * cleared the selection. PURE.
+ *
+ * The ONE place that ordering is decided. Callers used to write `activeModelId ?? lastTextModelId`
+ * inline, and the chat's load path read `lastTextModelId` ALONE - which is only written when a model is
+ * picked from a sheet. So after a load that came from anywhere else the two disagreed, and chat loaded
+ * the older model while the newer one sat selected on screen (device, 2026-07-31: picked Qwen 3.5,
+ * loaded SmolVLM).
+ */
+export function selectedTextModelIdOf(state: {
+  activeModelId: string | null;
+  lastTextModelId: string | null;
+}): string | null {
+  return state.activeModelId ?? state.lastTextModelId;
+}

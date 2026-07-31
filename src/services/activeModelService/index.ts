@@ -11,7 +11,11 @@ import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { textOverheadMultiplier } from './types';
-import { createSelectedTextModelResolver } from './selectedTextModel';
+import {
+  createSelectedTextModelResolver,
+  selectedTextModelIdOf,
+} from './selectedTextModel';
+import { activeModelSnapshot } from './snapshot';
 import type { DownloadedModel } from '../../types';
 import type {
   ActiveModelInfo,
@@ -61,29 +65,26 @@ class ActiveModelService {
     return this.selectedTextModel();
   }
 
-  getActiveModels(): ActiveModelInfo {
-    const store = useAppStore.getState();
-    const textModel = this.resolveSelectedTextModel();
-    const imageModel =
-      store.downloadedImageModels.find(
-        m => m.id === store.activeImageModelId,
-      ) ?? null;
-    return {
-      text: {
-        model: textModel,
-        // Engine-aware: a text model lives in llmService (GGUF) or liteRTService
-        // (LiteRT). Checking only llmService reported a loaded LiteRT model as
-        // not-loaded, which made the preloader and UI treat it as absent.
-        isLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
-        isLoading: this.loadingState.text,
-      },
-      image: {
-        model: imageModel,
-        isLoaded: this.loadedImageModelId != null,
-        isLoading: this.loadingState.image,
-      },
-    };
+  /** The id to load for a turn (see selectedTextModelIdOf for why the order matters). */
+  selectedTextModelId(): string | null {
+    return selectedTextModelIdOf(useAppStore.getState());
   }
+
+  getActiveModels(): ActiveModelInfo {
+    return activeModelSnapshot({
+      textModel: this.resolveSelectedTextModel(),
+      imageModel:
+        useAppStore
+          .getState()
+          .downloadedImageModels.find(
+            m => m.id === useAppStore.getState().activeImageModelId,
+          ) ?? null,
+      textIsLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
+      imageIsLoaded: this.loadedImageModelId != null,
+      loading: this.loadingState,
+    });
+  }
+
   hasAnyModelLoaded(): boolean {
     const info = this.getActiveModels();
     return info.text.isLoaded || info.image.isLoaded;

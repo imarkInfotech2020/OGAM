@@ -193,15 +193,19 @@ export async function ensureTextModelForChatFn(deps: {
   setLoadingModel: (m: DownloadedModel | null) => void;
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
-  const { lastTextModelId, downloadedModels } = useAppStore.getState();
-  if (!lastTextModelId) {
+  // The SELECTION first, remembered choice second - from the service, which owns that order. Reading
+  // lastTextModelId alone loaded the previously-picked model and left the selected one on screen.
+  const modelId = activeModelService.selectedTextModelId();
+  if (!modelId) {
     deps.setShowModelSelector(true);
     return false;
   }
-  deps.setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
+  deps.setLoadingModel(
+    useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null,
+  );
   deps.setIsModelLoading(true);
   try {
-    await activeModelService.loadTextModel(lastTextModelId);
+    await activeModelService.loadTextModel(modelId);
     return true;
   } catch {
     return false;

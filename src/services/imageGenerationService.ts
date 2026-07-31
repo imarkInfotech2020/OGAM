@@ -197,8 +197,8 @@ class ImageGenerationService {
       // enhance; _ensureImageModelLoaded swaps back to the image model afterwards.
       // This costs two heavy model loads per enhanced generation — the accepted
       // price for the feature when one-at-a-time residency is in force.
-      const { activeModelId, lastTextModelId } = useAppStore.getState();
-      const textModelId = activeModelId ?? lastTextModelId;
+      // One owner for "which text model", so this cannot pick a different one than chat does.
+      const textModelId = activeModelService.selectedTextModelId();
       if (!textModelId) {
         logger.warn('[ImageGen] No text model available, skipping enhancement');
         this._noticeEnhancementSkipped('no text model is selected');
