@@ -119,6 +119,21 @@ jest.mock('../../../src/services/activeModelService', () => ({
     checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })) as any,
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: null })),
     subscribe: jest.fn(() => jest.fn()),
+    // The service owns "which text model is selected" (resolveSelectedTextModel) and "which id to
+    // load" (selectedTextModelId). Resolved from the store here, the way the real service does, so
+    // the stub answers what the app would answer instead of a constant.
+    resolveSelectedTextModel: () => {
+      const state = jest.requireActual('../../../src/stores').useAppStore.getState();
+      return (
+        state.downloadedModels.find(
+          (model: { id: string }) => model.id === state.activeModelId,
+        ) ?? null
+      );
+    },
+    selectedTextModelId: () => {
+      const state = jest.requireActual('../../../src/stores').useAppStore.getState();
+      return state.activeModelId ?? state.lastTextModelId ?? null;
+    },
   },
 }));
 
