@@ -1,3 +1,4 @@
+import type { ChatStreamPreviewRow } from '@offgrid/sync';
 import { Message } from '../../types';
 export type ChatMessageItem = {
   id: string;
@@ -9,12 +10,13 @@ export type ChatMessageItem = {
   isStreaming?: boolean;
 };
 
-/** A reply generating on another device, mirrored into this conversation while it happens. */
-export type RemoteStreamItem = {
-  messageId: string;
-  content: string;
-  reasoning?: string;
-};
+/**
+ * A reply generating on another device, mirrored into this conversation while it happens.
+ *
+ * Shaped by shared sync (`chatStreamPreviewRows`) rather than here, so the phone and the Mac append
+ * the same rows in the same order under the same ids.
+ */
+export type RemoteStreamItem = ChatStreamPreviewRow;
 
 export type StreamingState = {
   isThinking: boolean;
@@ -44,7 +46,8 @@ function withRemotePreviews(
   return [
     ...base,
     ...remotePreviews.map(preview => ({
-      id: `remote-stream:${preview.messageId}`,
+      // The id comes from the shared projection, so it is stable across frames.
+      id: preview.id,
       role: 'assistant' as const,
       content: preview.content,
       reasoningContent: preview.reasoning || undefined,

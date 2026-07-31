@@ -1,15 +1,13 @@
 import { create } from 'zustand';
+import type { ChatStreamPreview } from '@offgrid/sync';
 
-/** A reply currently generating on another device in the mesh. */
-export interface RemoteChatStreamPreview {
-  conversationId: string;
-  /** Stable per generation, so the list keeps one row per in-flight reply. */
-  messageId: string;
-  content: string;
-  reasoning?: string;
-  /** Which device is generating, so the bubble can attribute it. */
-  deviceId: string;
-}
+/**
+ * A reply currently generating on another device in the mesh.
+ *
+ * The shape is shared sync's own preview, not a copy of it: the projection that turns previews into
+ * message rows is shared too, and it needs the same fields (ordering, completion) the Mac has.
+ */
+export type RemoteChatStreamPreview = ChatStreamPreview;
 
 interface RemoteChatStreamState {
   previews: readonly RemoteChatStreamPreview[];
