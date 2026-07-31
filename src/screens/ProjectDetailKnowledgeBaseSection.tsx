@@ -191,15 +191,13 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           {/* Text you paste and files you import are the same kind of thing once saved, so they sit
               side by side here rather than one being buried behind the other. */}
           <Button
-            title="Paste"
+            title="Text"
             variant="outline"
             size="small"
             onPress={() => setPasting(true)}
             testID="kb-paste-text"
             disabled={isPicking || !!indexingFile}
-            icon={
-              <Icon name="clipboard" size={16} color={colors.textSecondary} />
-            }
+            icon={<Icon name="type" size={16} color={colors.textSecondary} />}
           />
           <Button
             title="Add"

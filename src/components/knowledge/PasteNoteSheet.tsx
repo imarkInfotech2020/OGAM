@@ -69,7 +69,7 @@ export const PasteNoteSheet: React.FC<PasteNoteSheetProps> = ({
       visible={visible}
       onClose={close}
       onHeaderClosePress={close}
-      title="Paste text"
+      title="Add text"
       closeLabel="Cancel"
       enableDynamicSizing
     >
