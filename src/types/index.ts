@@ -179,8 +179,14 @@ export interface MediaAttachment {
 
 // Generation metadata - details about how a message was generated
 export interface GenerationMeta {
-  /** Whether GPU was used for inference */
-  gpu: boolean;
+  /**
+   * Whether GPU was used for inference.
+   *
+   * Optional because a message SYNCED from another device carries the facts that travel (which tools
+   * it was offered) and none of the local ones - this device did not run that inference, so claiming
+   * gpu:false would be inventing a measurement.
+   */
+  gpu?: boolean;
   /** GPU backend name (e.g., 'Metal', 'CPU') */
   gpuBackend?: string;
   /** Number of GPU layers offloaded */

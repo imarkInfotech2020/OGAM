@@ -18,10 +18,14 @@ export function serializeMessageContext(
     | 'toolCallId'
     | 'toolName'
     | 'generationTimeMs'
+    | 'generationMeta'
   >,
 ): string | null {
   return serializeSyncedMessageContext({
     reasoning: message.reasoningContent,
+    // Which tools this turn was GIVEN, not just the ones it called: a reply that had three tools and
+    // used none is a different fact, and it is only known on the device that generated it.
+    toolsOffered: message.generationMeta?.routedToolNames,
     toolCalls: message.toolArtifacts,
     ...(message.role === 'tool'
       ? {
