@@ -21,6 +21,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Automatic screenshot and download sharing read the media the system already indexed.
+         Android 11 stopped granting the Download folder through the file picker, so MediaStore
+         with a media permission is the only path left for it. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
     <!-- For silent companion file downloads (e.g. mmproj for vision models) -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
