@@ -31,7 +31,11 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
-import { createDownloadedModel } from '../../utils/factories';
+import {
+  createDownloadedModel,
+  createVisionModel,
+} from '../../utils/factories';
+import { ModelTransferSheet } from '../../../pro/ui/ModelTransferSheet';
 
 jest.unmock('@react-navigation/native');
 
@@ -302,5 +306,61 @@ describe('Pro mobile model transfer journey', () => {
     expect(ui.getAllByText(`Sent ${fileName}`).length).toBeGreaterThanOrEqual(
       1,
     );
+  });
+
+  // A phone whose every model is vision-capable used to be told it had nothing to send: the send side
+  // refused any model with an mmproj, while the receiving side had installed those packages all along.
+  it('offers a vision package to a paired device and withholds a runtime that device cannot run', async () => {
+    const vision = createVisionModel({
+      id: 'google/gemma-4-E2B/gemma-4-E2B-it-Q4_K_M.gguf',
+      name: 'Gemma 4 E2B',
+      fileName: 'gemma-4-E2B-it-Q4_K_M.gguf',
+      mmProjFileName: 'gemma-4-e2b-it-mmproj-F16.gguf',
+    });
+    const liteRT = createDownloadedModel({
+      id: 'google/gemma-4-litert/gemma-4.task',
+      name: 'Gemma 4 LiteRT',
+      fileName: 'gemma-4.task',
+      engine: 'litert',
+    });
+    // Installed models are a device leaf: the rows the app persisted plus the files on disk. The
+    // service reads them back through its real storage, exactly as it does after a download.
+    const modelsDir = `${modelTransferFsBoundary.DocumentDirectoryPath}/models`;
+    await modelTransferFsBoundary.module.mkdir(modelsDir);
+    for (const name of [
+      vision.fileName,
+      'gemma-4-e2b-it-mmproj-F16.gguf',
+      liteRT.fileName,
+    ]) {
+      await modelTransferFsBoundary.module.writeFile(`${modelsDir}/${name}`, 'x');
+    }
+    await AsyncStorage.setItem(
+      '@local_llm/downloaded_models',
+      JSON.stringify([
+        {
+          ...vision,
+          filePath: `${modelsDir}/${vision.fileName}`,
+          mmProjPath: `${modelsDir}/gemma-4-e2b-it-mmproj-F16.gguf`,
+        },
+        { ...liteRT, filePath: `${modelsDir}/${liteRT.fileName}` },
+      ]),
+    );
+    const iPhone: DeviceInfo = {
+      id: 'paired-iphone',
+      name: 'iPhone',
+      platform: 'ios',
+      version: '1.0.0',
+      host: '192.168.1.20',
+      port: 51000,
+    };
+
+    ui = render(<ModelTransferSheet target={iPhone} progress={null} onClose={() => {}} />);
+
+    // The vision model is offerable: GGUF runs on any Off Grid AI device, mmproj included.
+    await waitFor(() => expect(ui!.getByTestId(`transfer-model-${vision.id}`)).toBeTruthy());
+    // LiteRT exists only on Android, so an iPhone is never offered one.
+    expect(ui.queryByTestId(`transfer-model-${liteRT.id}`)).toBeNull();
+    // Its size is the whole package, not just the primary file.
+    expect(ui.getByText(/4\.5 GB|4\.49 GB/)).toBeTruthy();
   });
 });
