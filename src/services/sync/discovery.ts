@@ -3,6 +3,7 @@
 // for peers advertising `_offgrid._tcp.local` — the same service the desktop Node adapter uses, so
 // phone and laptop find each other — and either auto-reconnects a known device or surfaces a new
 // one for the pairing UI. The Zeroconf module is injected so this stays testable off-device.
+import { Platform } from 'react-native';
 import {
   CompositeDiscoveryService,
   DiscoveryOrchestrator,
@@ -15,6 +16,7 @@ import type {
   SyncEngine,
 } from '@offgrid/sync';
 import { RnDiscovery } from '@offgrid/sync/rn-discovery';
+import logger from '../../utils/logger';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
 
 export interface BuildDiscoveryArgs {
@@ -37,7 +39,12 @@ export interface BuildDiscoveryArgs {
 export function buildDiscovery(
   args: BuildDiscoveryArgs,
 ): DiscoveryOrchestrator {
-  const lanDiscovery = new RnDiscovery(args.zeroconf);
+  // Android's TCP stack cannot resolve an mDNS `.local` name, so a peer that only advertises a
+  // hostname is not dialable there and must not be offered as a LAN route. Apple platforms resolve it.
+  const lanDiscovery = new RnDiscovery(args.zeroconf, {
+    allowHostname: Platform.OS !== 'android',
+    log: message => logger.log(message),
+  });
   const additionalSources = args.additionalSources ?? [];
   const discovery = new CompositeDiscoveryService({
     sources: [
