@@ -336,7 +336,14 @@ export const useChatScreen = () => {
     useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
   // Whether settings changed since the model was loaded (drives the reload banner).
-  const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
+  //
+  // Gated on there BEING a local model to reload. loadedSettings is persisted, so it outlives the
+  // model: with nothing selected the banner still appeared, and its tap correctly refused
+  // ("[ModelReload] ignored: modelId=none"), which reads as a dead button. One predicate for the
+  // offer and the action, so they cannot disagree. Nothing else consults this flag.
+  const canReloadTextModel = Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
+  const hasPendingSettings =
+    canReloadTextModel && computePendingSettings(activeModel?.engine, settings, loadedSettings);
 
   const handleReloadTextModel = useCallback(
     () =>
