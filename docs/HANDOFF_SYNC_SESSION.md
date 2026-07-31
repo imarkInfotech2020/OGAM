@@ -33,8 +33,8 @@ anything. The rules that governed this session:
 ## Verified working on real devices this session
 
 Chats (durable), projects, knowledge base, clipboard, Android screenshot capture -> macOS, live chat
-streaming across all pairs, the rebuilt Sync screen, the Mac's chat-list previews, desktop peer
-preview rows.
+streaming across all pairs, **Android -> macOS over LAN**, the rebuilt Sync screen, the Mac's
+chat-list previews, desktop peer preview rows.
 
 ## What landed (do not redo)
 
@@ -68,12 +68,10 @@ preview rows.
 
 ## Open, in the order I would take it
 
-1. **VERIFY Android <-> macOS over LAN.** Everything is committed but unverified: the phone needs a JS
-   reload (to pick up the rebuilt `@offgrid/sync`) and then Sync -> Rescan. Two possible outcomes:
-   it connects with route LAN, or the phone logs `[Discovery] resolved a peer with no dialable address
-   (addresses=N host=name)`. If the latter, Android's zeroconf is giving no address AND the peer
-   published no `addr` - resolve the name natively (NsdManager gives an InetAddress).
-   Facts already established: `ping <mac>.local` from the phone answers "unknown host"; the Mac's
+1. ~~Verify Android <-> macOS over LAN.~~ **DONE and verified on device 2026-07-31**: the phone dials
+   the Mac over LAN once the advertiser publishes a numeric address. Kept here for the reasoning, which
+   the next LAN bug will need.
+   Facts established: `ping <mac>.local` from the phone answers "unknown host"; the Mac's
    record was being announced on `utun0` (a VPN), not `en0`; **Android has NO proximity route**
    (`src/services/sync/nativeSync.ts:90` gates it on iOS), so LAN is the only route it has and a
    "Nearby" label for the Mac on Android is a lying route label.
